@@ -1,4 +1,4 @@
-const CACHE = 'lmchat-v1';
+const CACHE = 'lmchat-v2';
 const ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
