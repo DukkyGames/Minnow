@@ -1,0 +1,89 @@
+/* Slash skill picker above composer */
+.skill-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--surface-elevated, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 30;
+}
+
+.skill-picker.hidden {
+  display: none;
+}
+
+.skill-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+.skill-picker__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 0.15rem 0.5rem;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  align-items: baseline;
+}
+
+.skill-picker__item--active,
+.skill-picker__item:hover {
+  background: var(--surface-hover, #f1f5f9);
+}
+
+.skill-picker__badge {
+  grid-row: span 2;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  align-self: start;
+}
+
+.skill-picker__badge--builtin {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.skill-picker__badge--user {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.skill-picker__label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.skill-picker__id {
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
+}
+
+.skill-picker__desc {
+  grid-column: 2;
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-picker__empty {
+  padding: 0.75rem;
+  color: var(--text-muted, #64748b);
+  font-size: 0.875rem;
+}
+
+.input-wrap {
+  position: relative;
+}

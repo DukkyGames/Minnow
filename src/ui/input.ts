@@ -1,4 +1,5 @@
 import { sendMessage } from '../chat/messaging';
+import { handleSkillPickerKeydown, isSkillPickerOpen } from './skill-picker';
 
 export function autoResize(el: HTMLTextAreaElement): void {
   el.style.height = 'auto';
@@ -6,7 +7,9 @@ export function autoResize(el: HTMLTextAreaElement): void {
 }
 
 export function handleKey(e: KeyboardEvent): void {
+  if (handleSkillPickerKeydown(e)) return;
   if (e.key === 'Enter' && !e.shiftKey) {
+    if (isSkillPickerOpen()) return;
     e.preventDefault();
     void sendMessage();
   }

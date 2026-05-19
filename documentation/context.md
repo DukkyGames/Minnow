@@ -10,7 +10,7 @@ Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-su
 
 SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **34** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **23** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **39** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **30** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
@@ -42,10 +42,11 @@ SpeedChat/
 │   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
 │   ├── lib/list-directory-parse.ts
+│   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
-│   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
+│   │   ├── definitions.ts      # 39-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # speedchat.tools localStorage
-│   │   ├── browser-executor.ts # 9 browser-native handlers
+│   │   ├── browser-executor.ts # 9 browser-native handlers (not CDP)
 │   │   ├── client.ts           # ping, executeTool router, enabled defs
 │   │   └── loop.ts             # buildApiMessages, sendMessageWithTools
 │   ├── attachments/
@@ -95,11 +96,62 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   sub-agents.json          # sub-agent types, concurrency, tool allow/deny (Step 09)
   logs/sub-agents/         # optional per-run debug transcripts (Step 09)
   logs/terminal/           # full stdout/stderr per runId (Step 10)
+  screenshots/             # browser_screenshot PNGs (Step 12)
   skills/                  # user skills (Step 13)
   backups/                 # scaffold
 ```
 
-**Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13+). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+**Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+
+### Skills framework (Step 13)
+
+Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoked from the composer with **`/`** (slash picker) or by typing `/<skill-id>`.
+
+| Root | Path | Override |
+|------|------|----------|
+| Built-in | `src/skills/<id>/SKILL.md` | Shipped in repo |
+| User | `~/.speedchat/skills/<id>/SKILL.md` | Same `name` replaces built-in |
+
+**Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `skillBody` in `composeSystemPrompt()` (`skill` part). History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
+
+| Concern | Location |
+|---------|----------|
+| Types, merge, slash parse | `src/skills/` (`loader.ts`, `parse-slash.ts`, `parse-frontmatter.ts`) |
+| Catalog client + offline manifest | `src/skills/client.ts`, `src/skills/builtin-manifest.json` (from `npm run prebuild`) |
+| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` |
+| Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js` |
+
+**API** (same CORS as `/api/tools`; requires `npm start` for user skills):
+
+| Route | Response |
+|-------|----------|
+| `GET /api/skills/ping` | `{ ok: true }` |
+| `GET /api/skills` | `{ skills: SkillListItem[] }` (no body) |
+| `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 |
+
+**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `impeccable` (full Impeccable built-in — Step 14).
+
+### Skills → Impeccable built-in (Step 14)
+
+| Concern | Location |
+|---------|----------|
+| Built-in skill | `src/skills/impeccable/SKILL.md` (`name: impeccable` → `/impeccable`) |
+| Upstream snapshot | `src/skills/impeccable/SKILL.upstream.md` (auto-synced; do not edit) |
+| Command references | `src/skills/impeccable/reference/*.md` |
+| Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `speedchat-context.mjs`, …) |
+| Postinstall / sync | `scripts/sync-impeccable-skill.mjs` (vendors from `.agents/skills/impeccable` after `npx impeccable skills install -y`) |
+| npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
+| Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, `.impeccable/design.json` |
+
+`npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Override built-in: `~/.speedchat/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
+
+**Tests:** `npm run test:skills-impeccable`. Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
+
+**Step 15** UI Designer will invoke `/impeccable` workflows (critique → shape → implement) with optional dedicated model binding.
+
+**Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
+
+**Vite-only (`npm run dev`):** picker uses `builtin-manifest.json` + lazy `import.meta.glob` in `client.ts` for built-in bodies (glob is no-op under Node/tsx tests); user skills need `npm start`.
 
 ### Programmatic prompts (Step 04)
 
@@ -461,9 +513,24 @@ Docked **bottom panel** in `.main-column` (above `.input-bar`): live command out
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
-## Built-in tools (34)
+## Built-in tools (39)
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **11** `serverRequired: false` (browser, includes sub-agent tools), **23** `serverRequired: true` (Node). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **9** `serverRequired: false` (utility/web in tab), **30** `serverRequired: true` (Node, including **7** CDP `browser_*`). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
+
+### Browser CDP (7 server, Step 12)
+
+Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `SPEEDCHAT_BROWSER_URL`. Config: `~/.speedchat/config.json` → `browser` (enabled, defaultUrl, allowlist). Handlers: [`server/cdp/`](../server/cdp/).
+
+| id | Purpose |
+|----|---------|
+| `browser_list` | List page targets |
+| `browser_navigate` | Navigate (origin allowlist) |
+| `browser_snapshot` | A11y tree + uid cache |
+| `browser_click` / `browser_fill` | Act on snapshot uid |
+| `browser_eval` | `Runtime.evaluate` in page |
+| `browser_screenshot` | PNG + `attachments` for chat UI |
+
+**Screenshot route:** `GET /api/browser/screenshot/:id` serves `~/.speedchat/screenshots/{id}.png`.
 
 ### Web (4 browser)
 
@@ -498,7 +565,7 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **11** `serverRequi
 ### Tool loop and client
 
 - **`detectLocalServer()`** — `GET /api/tools/ping`, **800 ms** timeout ([`src/tools/client.ts`](../src/tools/client.ts)).
-- **`executeTool(name, args, context?)`** — browser executor, terminal stream for code tools, or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
+- **`executeTool(name, args, context?)`** — returns `{ content, attachments? }`; browser executor, terminal stream for code tools, or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
 - **`sendMessageWithTools()`** — up to **`MAX_TOOL_TURNS` = 8**; streams SSE, `mergeToolCallDelta` / `finalizeToolCalls`, runs enabled tools, appends assistant + tool messages ([`src/tools/loop.ts`](../src/tools/loop.ts)).
 - **Send entry:** [`src/chat/messaging.ts`](../src/chat/messaging.ts) exports `sendMessage` as alias of `sendMessageWithTools`; `sendMessagePlain` remains for non-tool chat ([`src/api/chat.ts`](../src/api/chat.ts)).
 
@@ -626,7 +693,7 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 | [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
-| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 34-tool catalog |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 39-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `speedchat.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |

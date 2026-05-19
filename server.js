@@ -17,6 +17,7 @@ import { createPromptConfigsMiddleware } from './server/prompt-configs/middlewar
 import { ensureSpeedChatLayout, getSpeedChatHome } from './server/config/home.js';
 import { createProviderMiddleware } from './server/providers/routes.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
+import { createSkillsMiddleware } from './server/skills/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 
 const execFileAsync = promisify(execFile);
@@ -745,6 +746,7 @@ async function main() {
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
           server.middlewares.use(createToolsMiddleware());
+          server.middlewares.use(createSkillsMiddleware());
           server.middlewares.use(createTerminalMiddleware(PROJECT_ROOT));
         },
       },
