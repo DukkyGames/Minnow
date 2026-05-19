@@ -1,0 +1,115 @@
+/* Live reasoning stage: sits between assistant label and main bubble */
+.thought-stage {
+  align-self: flex-start;
+  max-width: min(560px, 92%);
+  margin-bottom: 6px;
+  min-height: 0;
+}
+
+.thought-bubble {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-strong);
+  background: oklch(0.97 0.012 250 / 0.85);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-bottom-left-radius: var(--radius-sm);
+  animation: thoughtPopIn 0.2s var(--ease-out);
+}
+
+@keyframes thoughtPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.thought-bubble.thought-fade-out {
+  animation: thoughtFadeOut 0.22s var(--ease-out) forwards;
+}
+
+@keyframes thoughtFadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.thought-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  background: var(--text-muted);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+
+/* Per-message Thoughts toggle (after reply) */
+.thoughts-panel-wrap {
+  align-self: flex-start;
+  margin-bottom: 6px;
+  max-width: min(720px, 100%);
+}
+
+.thoughts-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.thoughts-toggle:hover {
+  color: var(--text);
+}
+
+.thoughts-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.thoughts-flow {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: oklch(0.98 0.008 250);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thoughts-flow[hidden] {
+  display: none !important;
+}
+
+.thoughts-segment {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: oklch(0.99 0.006 250);
+  border: 1px dashed var(--border2);
+}

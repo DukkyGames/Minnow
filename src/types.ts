@@ -59,6 +59,8 @@ export interface UserMessage {
 export interface AssistantMessage {
   role: 'assistant';
   content: string;
+  /** Ordered reasoning segments from LM Studio (when Developer reasoning split is on). */
+  thinking?: string[];
   stats?: Stats;
   usage?: Usage;
 }
@@ -209,12 +211,20 @@ export interface ChatCompletionsRequest {
 
 export interface ChatCompletionChoiceDelta {
   content?: string;
+  /** LM Studio 0.3.23+ (gpt-oss / o3-mini style). */
+  reasoning?: string;
+  /** LM Studio experimental DeepSeek-style separate reasoning field. */
+  reasoning_content?: string;
   tool_calls?: ChatCompletionToolCallDelta[];
 }
 
 export interface ChatCompletionChoice {
   delta?: ChatCompletionChoiceDelta;
-  message?: { content?: string };
+  message?: {
+    content?: string;
+    reasoning?: string;
+    reasoning_content?: string;
+  };
   finish_reason?: string | null;
 }
 

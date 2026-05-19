@@ -30,9 +30,10 @@ SpeedChat/
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── state/sessions.ts   # localStorage chat sessions
 │   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo
+│   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/messaging.ts   # sendMessage → sendMessageWithTools
-│   ├── ui/                 # sidebar, settings, stats, messages, tool-messages, …
+│   ├── ui/                 # sidebar, settings, stats, messages, tool-messages, thought-bubbles, …
 │   ├── tools/
 │   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # speedchat.tools localStorage
@@ -45,6 +46,9 @@ SpeedChat/
 │   │   └── reader.ts       # processFile — image, text, PDF
 │   ├── markdown/renderer.ts
 │   └── styles/
+│       ├── fonts.css tokens.css global.css topbar.css sidebar.css
+│       ├── messages.css input.css settings.css stats.css responsive.css
+│       └── thoughts.css    # live thought bubbles + Thoughts panel
 ├── dist/                   # Production build (gitignored)
 └── documentation/
 ```
@@ -88,13 +92,13 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 | Role | Stored shape | Notes |
 |------|----------------|-------|
 | **user** | `{ role: 'user', content: string }` | Plain string only in history. Attachments are **not** stored as binary: images → `[image: filename.jpg]`; text/PDF → `<file name="…">…</file>` blocks in `content`. |
-| **assistant** (text) | `{ role: 'assistant', content, stats?, usage? }` | Markdown-rendered in UI; optional metric chips. |
+| **assistant** (text) | `{ role: 'assistant', content, thinking?, stats?, usage? }` | Markdown-rendered in UI; optional metric chips. **`thinking`** is an optional `string[]` of reasoning segments when LM Studio streams separated reasoning (see **Message rendering**). |
 | **assistant** (tools) | `{ role: 'assistant', content: string \| null, tool_calls: ToolCall[] }` | OpenAI-style calls: `id`, `type: 'function'`, `function.name`, `function.arguments` (JSON string). |
 | **tool** | `{ role: 'tool', tool_call_id, content }` | Result string for one prior call; paired in UI via `tool_call_id`. |
 
 **API-only (not persisted as separate history rows):** `system` prompt; multimodal user `content` as `ContentPart[]` (`text` + `image_url`) for VLM models on the wire ([`buildApiMessages`](../src/tools/loop.ts)).
 
-**UI rendering:** [`renderChatFromHistory`](../src/ui/messages.ts) skips standalone `tool` rows, maps `tool_call_id` → result, and renders [`tool-messages.ts`](../src/ui/tool-messages.ts) bubbles for each `tool_calls` entry. The same bubble helpers are intended for **live** turns during `sendMessageWithTools` (see **Message rendering** below).
+**UI rendering:** [`renderChatFromHistory`](../src/ui/messages.ts) skips standalone `tool` rows, maps `tool_call_id` → result, and renders [`tool-messages.ts`](../src/ui/tool-messages.ts) bubbles for each `tool_calls` entry. Assistant rows with **`thinking`** get a **Thoughts** toggle ([`thought-bubbles.ts`](../src/ui/thought-bubbles.ts)) above the bubble. The same bubble helpers are intended for **live** turns during `sendMessageWithTools` (see **Message rendering** below).
 
 ## Multi-chat sessions
 
@@ -235,12 +239,16 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 ## API usage (LM Studio)
 
 - **Models:** `GET {serverUrl}/api/v0/models`
-- **Chat:** `POST {serverUrl}/api/v0/chat/completions` — streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`.
+- **Chat:** `POST {serverUrl}/api/v0/chat/completions` — streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`. Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
 
 ## Message rendering
 
 - **User:** plain `textContent` (includes literal markdown if typed).
 - **Assistant:** **marked** + **DOMPurify** + **highlight.js**; streaming debounced ~100 ms.
+- **Reasoning / “thinking”** (LM Studio **App Settings → Developer**: separate `reasoning_content` and/or `choices.delta.reasoning` for compatible models such as DeepSeek R1 / gpt-oss):
+  - **Live:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). When the model streams normal **`content`**, the live stage is torn down.
+  - **After reply:** a **Thoughts** text button above that assistant bubble expands a read-only list of all segments (same controller module). Segments are stored on the assistant message as **`thinking: string[]`** on the **final** text reply of a user send (tool-loop rounds accumulate into one list).
+  - **Parsing:** [`extractReasoningDelta`](../src/api/reasoning.ts) reads SSE chunks without mixing reasoning into `content` ([`extractStreamDelta`](../src/api/chat.ts) stays prose-only).
 - **Tool calls/results** ([`tool-messages.ts`](../src/ui/tool-messages.ts), used from history in [`messages.ts`](../src/ui/messages.ts) and intended during live tool turns in [`loop.ts`](../src/tools/loop.ts)):
   - **Collapsed (default):** tool **name** + **Success** or **Failed** (fail when result starts with `Error:` via `isToolResultFailure()`).
   - **Expanded (click):** **Arguments** and **Result** in the `<details>` body / monospace `<pre>` blocks; results capped at **2 KB** in the UI (`RESULT_DISPLAY_CAP`).

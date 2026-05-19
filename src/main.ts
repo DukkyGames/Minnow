@@ -8,6 +8,7 @@ import './styles/global.css';
 import './styles/topbar.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
+import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/settings.css';
 import './styles/stats.css';

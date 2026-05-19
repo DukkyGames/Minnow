@@ -26,6 +26,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
   cancelAssistantBubbleRenderDebounce,
@@ -41,6 +42,7 @@ import {
 import type {
   ApiMessage,
   ApiMessageContent,
+  AssistantMessage,
   AssistantToolCallMessage,
   Chat,
   ChatCompletionChunk,
@@ -51,6 +53,7 @@ import type {
   Usage,
 } from '../types';
 import { setSendLoading } from '../ui/input';
+import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { renderSidebar } from '../ui/sidebar';
 import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
@@ -337,6 +340,7 @@ async function streamCompletionTurn(
   bubble: HTMLDivElement,
   cursor: HTMLDivElement,
   signal: AbortSignal,
+  thoughtController: ThoughtBubbleController | null,
 ): Promise<StreamTurnResult> {
   const res = await fetch(`${base}/api/v0/chat/completions`, {
     method: 'POST',
@@ -363,11 +367,17 @@ async function streamCompletionTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    const reasoning = extractReasoningDelta(chunk);
+    if (reasoning) {
+      thoughtController?.appendReasoningDelta(reasoning);
+    }
     const delta = extractStreamDelta(chunk);
-    if (!delta) return;
-    if (tFirst == null) tFirst = performance.now();
-    fullText += delta;
-    scheduleAssistantBubbleRender(bubble, fullText, cursor);
+    if (delta) {
+      thoughtController?.endReasoningPhase();
+      if (tFirst == null) tFirst = performance.now();
+      fullText += delta;
+      scheduleAssistantBubbleRender(bubble, fullText, cursor);
+    }
     scrollBottom();
   }
 
@@ -383,6 +393,9 @@ async function streamCompletionTurn(
   }
 
   if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
+
+  // Flush any trailing reasoning when the stream ends (e.g. tool_calls with no prose yet).
+  thoughtController?.endReasoningPhase();
 
   const tEnd = performance.now();
   const finishReason = streamMeta.finish_reason;
@@ -463,8 +476,11 @@ export async function sendMessageWithTools(): Promise<void> {
 
   let completedNormally = false;
   let lastWrap = wrap;
+  let thoughtController: ThoughtBubbleController | null = null;
 
   try {
+    thoughtController = new ThoughtBubbleController(wrap);
+
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       const enabledTools = getEnabledToolDefinitions();
       const messages = buildApiMessages(chat, sysPrompt, {
@@ -484,7 +500,15 @@ export async function sendMessageWithTools(): Promise<void> {
         body.tool_choice = 'auto';
       }
 
-      const turnResult = await streamCompletionTurn(base, body, bubble, cursor, chatSignal);
+      thoughtController.setAssistantWrap(wrap);
+      const turnResult = await streamCompletionTurn(
+        base,
+        body,
+        bubble,
+        cursor,
+        chatSignal,
+        thoughtController,
+      );
 
       cancelAssistantBubbleRenderDebounce();
       cursor.remove();
@@ -570,7 +594,12 @@ export async function sendMessageWithTools(): Promise<void> {
           fallbackBody,
           chatSignal,
         );
-        fullText = extractMessageText(fallback.choices?.[0]?.message);
+        const fbMsg = fallback.choices?.[0]?.message;
+        fullText = extractMessageText(fbMsg);
+        const fbReason = extractReasoningMessage(fbMsg);
+        if (fbReason) {
+          thoughtController?.ingestCompletedReasoning(fbReason);
+        }
         streamMeta = mergeStreamMeta(streamMeta, fallback);
         setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', {
           streaming: false,
@@ -587,12 +616,16 @@ export async function sendMessageWithTools(): Promise<void> {
           turnResult.tEnd,
         );
         const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
-        const assistantMsg: Message = {
+        const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
+        const assistantMsg: AssistantMessage = {
           role: 'assistant',
           content: fullText,
           stats: meta.stats,
           usage: meta.usage,
         };
+        if (thinkingNorm.length > 0) {
+          assistantMsg.thinking = thinkingNorm;
+        }
         chat.history.push(assistantMsg);
         chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
         chat.modelInfo = { ...modelInfo };
@@ -600,6 +633,9 @@ export async function sendMessageWithTools(): Promise<void> {
           (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
         touchChat(chat);
         appendStats(lastWrap, meta.stats, meta.usage);
+        if (thinkingNorm.length > 0) {
+          renderThoughtsToggle(lastWrap, thinkingNorm);
+        }
         updateStrip(meta.stats, meta.usage, modelInfo);
         setStatus('ok', 'Ready');
         renderSidebar();
@@ -617,7 +653,10 @@ export async function sendMessageWithTools(): Promise<void> {
     }
   } catch (err) {
     const e = err as { name?: string; message?: string };
-    if (e && e.name === 'AbortError') return;
+    if (e && e.name === 'AbortError') {
+      thoughtController?.abort();
+      return;
+    }
     cancelAssistantBubbleRenderDebounce();
     if (cursor.parentElement) cursor.remove();
     bubble.classList.remove('msg-bubble--md');
@@ -629,6 +668,7 @@ export async function sendMessageWithTools(): Promise<void> {
       getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
     setStatus('err', statusMsg + attachHint);
   } finally {
+    thoughtController?.abort();
     if (completedNormally) {
       // Clear-on-success-only: retain chips after abort, errors, or max tool turns for retry.
       clearAttachments();

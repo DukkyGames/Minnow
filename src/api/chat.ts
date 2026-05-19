@@ -19,8 +19,8 @@ import {
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type {
   ApiMessage,
+  AssistantMessage,
   ChatCompletionChunk,
-  Message,
   ModelInfo,
   Stats,
   ToolCall,
@@ -28,6 +28,8 @@ import type {
   Usage,
 } from '../types';
 import { setSendLoading } from '../ui/input';
+import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
+import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { renderSidebar } from '../ui/sidebar';
 import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
@@ -59,7 +61,14 @@ function scrollBottom(): void {
 
 // ── Stream / stats helpers ──
 // LM Studio v0 streaming omits stats/model_info; usage arrives in a final chunk when requested.
-// Only surface assistant reply text — never chain-of-thought / reasoning_content.
+// Assistant prose uses `content` only; reasoning uses `extractReasoningDelta` (see `./reasoning`).
+
+/** Re-export reasoning helpers for callers that already import `chat.ts`. */
+export {
+  extractReasoningDelta,
+  extractReasoningMessage,
+  splitThinkingSegments,
+} from './reasoning';
 
 /** Pull visible assistant text from one SSE JSON chunk. */
 export function extractStreamDelta(chunk: ChatCompletionChunk): string {
@@ -374,6 +383,8 @@ export async function sendMessage(): Promise<void> {
   cursor.className = 'cursor';
   bubble.appendChild(cursor);
 
+  const thoughtController = new ThoughtBubbleController(wrap);
+
   setStreaming(true);
   setSendLoading(true);
   setStatus('spin', 'Generating reply…');
@@ -402,11 +413,17 @@ export async function sendMessage(): Promise<void> {
 
     function handleChunk(chunk: ChatCompletionChunk): void {
       streamMeta = mergeStreamMeta(streamMeta, chunk);
+      const reasoning = extractReasoningDelta(chunk);
+      if (reasoning) {
+        thoughtController.appendReasoningDelta(reasoning);
+      }
       const delta = extractStreamDelta(chunk);
-      if (!delta) return;
-      if (tFirst == null) tFirst = performance.now();
-      fullText += delta;
-      scheduleAssistantBubbleRender(bubble, fullText, cursor);
+      if (delta) {
+        thoughtController.endReasoningPhase();
+        if (tFirst == null) tFirst = performance.now();
+        fullText += delta;
+        scheduleAssistantBubbleRender(bubble, fullText, cursor);
+      }
       scrollBottom();
     }
 
@@ -423,6 +440,8 @@ export async function sendMessage(): Promise<void> {
 
     if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
 
+    thoughtController.endReasoningPhase();
+
     cancelAssistantBubbleRenderDebounce();
     cursor.remove();
 
@@ -438,7 +457,12 @@ export async function sendMessage(): Promise<void> {
         },
         chatSignal
       );
-      fullText = extractMessageText(fallback.choices?.[0]?.message);
+      const fbMsg = fallback.choices?.[0]?.message;
+      fullText = extractMessageText(fbMsg);
+      const fbReason = extractReasoningMessage(fbMsg);
+      if (fbReason) {
+        thoughtController.ingestCompletedReasoning(fbReason);
+      }
       streamMeta = mergeStreamMeta(streamMeta, fallback);
       setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', {
         streaming: false,
@@ -455,12 +479,16 @@ export async function sendMessage(): Promise<void> {
         performance.now()
       );
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
-      const assistantMsg: Message = {
+      const thinkingNorm = thoughtController.getSegmentsNormalized();
+      const assistantMsg: AssistantMessage = {
         role: 'assistant',
         content: fullText,
         stats: meta.stats,
         usage: meta.usage,
       };
+      if (thinkingNorm.length > 0) {
+        assistantMsg.thinking = thinkingNorm;
+      }
       chat.history.push(assistantMsg);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
@@ -468,6 +496,9 @@ export async function sendMessage(): Promise<void> {
         (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
       touchChat(chat);
       appendStats(wrap, meta.stats, meta.usage);
+      if (thinkingNorm.length > 0) {
+        renderThoughtsToggle(wrap, thinkingNorm);
+      }
       updateStrip(meta.stats, meta.usage, modelInfo);
       setStatus('ok', 'Ready');
       renderSidebar();
@@ -475,7 +506,10 @@ export async function sendMessage(): Promise<void> {
     }
   } catch (err) {
     const e = err as { name?: string; message?: string };
-    if (e && e.name === 'AbortError') return;
+    if (e && e.name === 'AbortError') {
+      thoughtController.abort();
+      return;
+    }
     cancelAssistantBubbleRenderDebounce();
     cursor.remove();
     bubble.classList.remove('msg-bubble--md');
@@ -484,7 +518,9 @@ export async function sendMessage(): Promise<void> {
     const msg = e.message ?? '';
     const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     setStatus('err', statusMsg);
+    thoughtController.abort();
   } finally {
+    thoughtController.abort();
     setStreaming(false);
     setSendLoading(false);
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {

@@ -8,6 +8,7 @@ import {
 } from '../state/sessions';
 import type {
   AssistantToolCallMessage,
+  AssistantMessage,
   Chat,
   Message,
   ModelInfo,
@@ -20,6 +21,7 @@ import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { renderSidebar } from './sidebar';
+import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
@@ -146,6 +148,10 @@ export function renderChatFromHistory(chat: Chat): void {
 
     const text = msg.content ?? '';
     const { wrap } = appendBubble('assistant', text);
+    const withThinking = msg as AssistantMessage;
+    if (withThinking.thinking && withThinking.thinking.length > 0) {
+      renderThoughtsToggle(wrap, withThinking.thinking);
+    }
     if (msg.stats || msg.usage) {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
