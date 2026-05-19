@@ -35,9 +35,13 @@ Chats can be **deleted** from the sidebar (trash control on each row). A browser
 
 - Below the top bar, **`.app-body`** is a flex row: **`.chat-sidebar`** (session list) and **`.main-column`** (messages, input, stats strip).
 - **Desktop:** the header **◀ / ▶** button toggles `sidebarCollapsed` (wide panel vs narrow rail with `+` only).
-- **Mobile (≤640px):** the sidebar is a **fixed overlay**; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar menu button toggles open/closed.
-- **Mobile stats (≤599px):** the stats strip shows a collapsed summary (TPS + total tokens); tap **Stats** to expand the full instrument panel (`.stats-strip.is-expanded`).
-- **Stats icons:** each metric in the bottom strip and per-message chips uses a small inline SVG (zap = TPS, play = TTFT, clock = generation time, layers = total tokens), tinted to match the metric color class.
+- **Mobile (≤640px):** the sidebar is a **fixed overlay** with safe-area padding; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar menu button toggles open/closed. The in-sidebar collapse control is hidden on phone (overlay only).
+- **Compact (≤600px):** top bar hides the wordmark, tightens model/status space, stacks settings drawer numeric fields, uses **16px** message input (avoids iOS zoom), and collapses the stats strip to a **Metrics** summary row (tap to expand `.stats-strip.is-expanded`).
+- **Narrow (≤380px):** top bar hides duplicate **New chat** and **Refresh models** to free space for the model picker.
+- **Tablet (641–899px):** session sidebar is **200px** when expanded.
+- **Touch:** rename/delete on session rows use **44×44px** targets; hover styles apply only when `(hover: hover) and (pointer: fine)`.
+- **Layout height:** `100dvh` on `html`/`body` for mobile browser chrome; horizontal/bottom safe areas on input bar, drawer, and mobile sidebar.
+- **Stats icons:** the bottom stats strip uses small inline SVGs per metric (zap = TPS, play = TTFT, clock = generation time, layers = total tokens), tinted to match the metric color class. Per-message chips under assistant replies are text-only (no icons).
 
 ### Other persisted settings
 
@@ -45,16 +49,47 @@ System prompt preset and textarea content use a separate key: `speedchat.systemP
 
 ## Service worker
 
-[`sw.js`](../sw.js) caches shell assets for offline/PWA use. The cache name is versioned (e.g. `speedchat-v2`) so bumps invalidate old caches.
+[`sw.js`](../sw.js) caches shell assets for offline/PWA use. The cache name is versioned (e.g. `speedchat-v4`) so bumps invalidate old caches.
 
 ## Design context
 
-Product and visual direction live in [`PRODUCT.md`](../PRODUCT.md) and [`DESIGN.md`](../DESIGN.md). The UI uses OKLCH tokens, inline SVG icon buttons, a semantic `<header>` top bar, `<main>` chat area, settings drawer with `role="dialog"` and focus trap, and a collapsible stats strip on narrow viewports.
+Product and visual direction live in [`PRODUCT.md`](../PRODUCT.md) and [`DESIGN.md`](../DESIGN.md). Machine-readable tokens also live in [`.impeccable/design.json`](../.impeccable/design.json).
+
+**Current theme (light):** OKLCH near-white `--bg` / `--surface`, graphite `--text`, ink-black `--accent` (logo, send, selection), soft green `--user-bg` for user bubbles, flat assistant bubbles on `--bg` with hairline borders. Semantic green / amber / red only on metrics (stats strip, chips, status dot). JetBrains Mono for instrumentation; system-ui at 14px for UI. No card stacks or gradient chrome; mobile sidebar uses the only routine shadow.
+
+PWA chrome: `theme-color` and `manifest.json` `theme_color` / `background_color` use `#fefefe` (near `--bg`); iOS status bar uses `default` for dark-on-light system chrome.
+
+Structural UI: inline SVG icon buttons, semantic `<header>` top bar, `<main>` chat area, settings drawer with `role="dialog"` and focus trap, collapsible stats strip on narrow viewports.
+
+## Hardening (production edge cases)
+
+- **Sidebar sessions:** Each chat is a `div.chat-item-row` with separate rename/delete buttons (no nested `<button>` elements). Rows support keyboard Enter/Space to switch chats.
+- **Overlays:** Settings and mobile sidebar backdrops are `<button type="button">` with labels; **Escape** closes the drawer or mobile chat list (`dismissOpenLayers`).
+- **Network:** `parseServerBaseUrl()` validates the LM Studio URL before fetch. Model list and chat requests use `AbortController` so rapid refresh/resend cancels the previous call.
+- **Send path:** Requires a selected model, temperature 0–2, and max tokens ≥ 1. Composer and send button disable while streaming (`aria-busy` on send).
+- **Rename:** Chat title input is capped at 120 characters.
+
+## Copy and labels (clarify pass)
+
+- **Accessible names:** Model select, message composer, and system prompt fields use `<label>` / `for` (visually hidden where space is tight). Sidebar rename/delete buttons use `aria-label` with the chat title.
+- **Settings:** Labels describe LM Studio URL, temperature, max tokens, and prompt presets; short hints explain defaults and preset behavior.
+- **Status pill:** Plain-language states (e.g. “Loading models…”, “Cannot reach LM Studio”, “Finish the current reply first”).
+- **Empty chat:** “No messages yet” plus guidance to pick a model and confirm LM Studio is running.
+- **Destructive actions:** Delete chat and clear messages use confirm dialogs that state what is lost; preset overwrite warns about losing edits.
 
 ## API usage
 
 - **Models:** `GET {serverUrl}/api/v0/models`
 - **Chat:** `POST {serverUrl}/api/v0/chat/completions` with streaming SSE; optional non-streaming fallback if the stream yields no text.
+
+## Message rendering
+
+- **User** bubbles show **plain text** (`textContent`), including literal markdown if the user types it.
+- **Assistant** bubbles render **GitHub-flavored markdown** in the browser: **marked** parses content, **DOMPurify** sanitizes HTML before `innerHTML`, and **highlight.js** (with the `github` theme) colors fenced ` ```language ` blocks. Inline `` `code` `` and prose (lists, bold, links, tables, blockquotes) use `.msg-bubble--md` styles in `index.html`.
+- **Streaming:** assistant HTML is **debounced** (~100 ms) while SSE deltas arrive so the UI stays responsive; a final synchronous render runs when the stream finishes. The blinking caret is a `.cursor` span re-appended after each render while streaming.
+- **Errors** on the assistant bubble use plain `textContent` again (no markdown) and strip the markdown modifier class so error styling stays predictable.
+
+CDN scripts and the hljs stylesheet are loaded in `index.html` immediately before the main app `<script>` block.
 
 ## Files
 

@@ -26,7 +26,7 @@ Calm, capable, technical without cosplay. Copy is short and direct. Stats read a
 ## Strategic principles
 
 1. Chat readability comes first; metrics stay visible but compact.
-2. Dark theme tuned for normal indoor lighting, not a bunker terminal.
+2. Light theme tuned for normal indoor lighting (desk, laptop): bright surfaces, ink-black accent, not a bunker terminal or neon HUD.
 3. Restrained accent: one primary color for actions and live state; semantic colors only for metrics.
 4. Familiar patterns: top bar, session sidebar, settings drawer, message composer.
 

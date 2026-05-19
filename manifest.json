@@ -4,8 +4,8 @@
   "description": "Local LM Studio chat client with inference stats",
   "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#1a1f2b",
-  "theme_color": "#1a1f2b",
+  "background_color": "#fefefe",
+  "theme_color": "#fefefe",
   "orientation": "any",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },

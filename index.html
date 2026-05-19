@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#1a1f2b">
+<meta name="theme-color" content="#fefefe">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="SpeedChat">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -39,6 +39,14 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Layout breakpoints (content-driven; used in @media below) */
+  --bp-compact: 600px;
+  --bp-mobile: 640px;
+  --bp-wide: 900px;
+  --topbar-h: 52px;
+  --sidebar-w: 240px;
+  --sidebar-rail: 48px;
+  --touch-min: 44px;
   /* Legacy aliases */
   --surface2: var(--surface-elevated);
   --border2: var(--border-strong);
@@ -56,7 +64,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  height: 100%; width: 100%;
+  /* dvh tracks mobile browser chrome; % alone leaves gaps under the URL bar */
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -69,6 +80,8 @@ body {
   line-height: 1.5;
   display: flex;
   flex-direction: column;
+  /* Keep chrome below the notch; fixed overlays use the same inset in top offsets */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .visually-hidden {
@@ -113,7 +126,8 @@ body {
   padding: 0 14px;
   padding-left: max(14px, env(safe-area-inset-left));
   padding-right: max(14px, env(safe-area-inset-right));
-  height: 52px;
+  height: var(--topbar-h);
+  min-height: var(--topbar-h);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
@@ -212,13 +226,16 @@ body {
   flex-shrink: 0;
 }
 
-.icon-btn:hover {
-  border-color: var(--border-strong);
-  color: var(--bg);
-  background: var(--text);
-}
-
 .icon-btn:active { background: var(--bg); }
+
+/* Hover affordances only when the device supports hover (not touch-primary) */
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--bg);
+    background: var(--accent);
+  }
+}
 
 .status-pill {
   display: flex;
@@ -271,18 +288,13 @@ body {
 
 /* Sidebar backdrop (mobile overlay) */
 .sidebar-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  top: 52px;
-  background: var(--overlay);
+  top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
   z-index: 35;
 }
-.sidebar-backdrop.open { display: block; }
 
 /* ─── CHAT SIDEBAR ─── */
 .chat-sidebar {
-  width: 240px;
+  width: var(--sidebar-w);
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -294,7 +306,7 @@ body {
 }
 
 .chat-sidebar.collapsed {
-  width: 48px;
+  width: var(--sidebar-rail);
   overflow: hidden;
 }
 
@@ -335,8 +347,7 @@ body {
 .chat-sidebar.collapsed .chat-sidebar-title,
 .chat-sidebar.collapsed .chat-new-wide,
 .chat-sidebar.collapsed .chat-item-meta,
-.chat-sidebar.collapsed .chat-item-title-row .chat-rename-btn,
-.chat-sidebar.collapsed .chat-item-title-row .chat-delete-btn {
+.chat-sidebar.collapsed .chat-item-actions {
   display: none;
 }
 
@@ -381,6 +392,7 @@ body {
 }
 .chat-new-compact:hover {
   background: var(--cyan-glow);
+  color: var(--bg);
 }
 
 .chat-list {
@@ -403,7 +415,8 @@ body {
   border-radius: 2px;
 }
 
-.chat-item {
+/* Session row: div shell + action buttons (no nested interactive controls) */
+.chat-item-row {
   text-align: left;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
@@ -416,14 +429,28 @@ body {
   width: 100%;
 }
 
-.chat-item:hover {
-  background: var(--surface-elevated);
-  border-color: var(--border);
+@media (hover: hover) and (pointer: fine) {
+  .chat-item-row:hover {
+    background: var(--surface-elevated);
+    border-color: var(--border);
+  }
 }
 
-.chat-item.active {
+.chat-item-row.active {
   border-color: var(--accent);
   background: var(--accent-dim);
+}
+
+.chat-item-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-item-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .chat-item-title-row {
@@ -431,6 +458,14 @@ body {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  flex: 1;
+}
+
+.chat-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .chat-item-name {
@@ -443,40 +478,34 @@ body {
   min-width: 0;
 }
 
-.chat-rename-btn {
+.chat-rename-btn,
+.chat-delete-btn {
   flex-shrink: 0;
-  width: 25px;
-  height: 25px;
+  width: var(--touch-min);
+  height: var(--touch-min);
   border: none;
   background: transparent;
-  color: var(--tex);
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   font-size: 18px;
   line-height: 1;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.chat-rename-btn:hover {
-  color: var(--success);
-  font-size: 20px;
+
+.chat-rename-btn {
+  color: var(--text-muted);
 }
 
 .chat-delete-btn {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
   color: var(--text);
-  cursor: pointer;
-  border-radius: 2px;
-  font-size: 18px;
-  line-height: 1;
-  padding: 0;
 }
-.chat-delete-btn:hover {
-  color: var(--red);
-  font-size: 20px;
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-rename-btn:hover { color: var(--success); }
+  .chat-delete-btn:hover { color: var(--red); }
 }
 
 .chat-item-model {
@@ -495,7 +524,7 @@ body {
   line-height: 1.35;
 }
 
-.chat-sidebar.collapsed .chat-item {
+.chat-sidebar.collapsed .chat-item-row {
   padding: 8px 4px;
   display: flex;
   justify-content: center;
@@ -509,7 +538,11 @@ body {
   flex-shrink: 0;
 }
 
-.chat-item.active .chat-item-dot {
+.chat-item-dot:hover {
+  color: var(--bg);
+}
+
+.chat-item-row.active .chat-item-dot {
   background: var(--accent);
 }
 
@@ -538,17 +571,20 @@ body {
 @media (max-width: 640px) {
   .chat-sidebar {
     position: fixed;
-    top: 52px;
+    top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
     left: 0;
     bottom: 0;
-    width: 260px;
+    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+    max-width: 100%;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     transform: translateX(-100%);
     transition: transform 0.22s var(--ease-out);
     box-shadow: 4px 0 24px oklch(0.1 0.02 250 / 0.4);
   }
 
   .chat-sidebar.collapsed:not(.mobile-open) {
-    width: 260px;
+    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
     transform: translateX(-100%);
   }
 
@@ -559,9 +595,8 @@ body {
   .chat-sidebar.collapsed.mobile-open .chat-sidebar-title,
   .chat-sidebar.collapsed.mobile-open .chat-new-wide,
   .chat-sidebar.collapsed.mobile-open .chat-item-meta,
-  .chat-sidebar.collapsed.mobile-open .chat-item-title-row .chat-rename-btn,
-  .chat-sidebar.collapsed.mobile-open .chat-item-title-row .chat-delete-btn {
-    display: revert;
+  .chat-sidebar.collapsed.mobile-open .chat-item-actions {
+    display: flex;
   }
 
   .chat-sidebar.collapsed.mobile-open .chat-new-compact {
@@ -579,28 +614,48 @@ body {
   }
 
   .chat-sidebar.collapsed.mobile-open {
-    width: 260px;
+    width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px));
+  }
+
+  /* Desktop collapse rail is hidden on phone; sessions open as a full drawer */
+  #btnSidebarCollapse {
+    display: none;
   }
 }
 
 /* ─── SETTINGS DRAWER ─── */
-.drawer-overlay {
+.drawer-overlay,
+.sidebar-backdrop {
   display: none;
   position: fixed;
   inset: 0;
+  padding: 0;
+  border: none;
+  margin: 0;
   background: var(--overlay);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.drawer-overlay {
   z-index: 50;
 }
 
-.drawer-overlay.open { display: block; }
+.drawer-overlay.open,
+.sidebar-backdrop.open {
+  display: block;
+}
 
 .drawer {
   position: fixed;
-  top: 52px;
+  top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
   right: 0;
   bottom: 0;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   /* Wider panel so settings and long system prompts are easier to use on all viewports */
-  width: min(420px, calc(100vw - 16px));
+  width: min(420px, calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
   max-width: 100%;
   background: var(--surface);
   border-left: 1px solid var(--border);
@@ -675,6 +730,11 @@ body {
   margin: -2px 0 2px;
 }
 
+.field-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .drawer-clear-btn {
@@ -739,9 +799,21 @@ body {
   color: var(--bg);
 }
 
+.empty-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .empty-hint {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.5;
+  max-width: 36ch;
+  margin: 0;
 }
 
 /* Messages */
@@ -798,6 +870,133 @@ body {
   border-bottom-left-radius: var(--radius-sm);
 }
 
+/* Assistant markdown: normal paragraph flow (user bubbles keep pre-wrap) */
+.msg-bubble.msg-bubble--md {
+  white-space: normal;
+  max-width: min(720px, 72ch);
+}
+
+.msg-bubble.msg-bubble--md > *:first-child {
+  margin-top: 0;
+}
+
+.msg-bubble.msg-bubble--md > *:last-child {
+  margin-bottom: 0;
+}
+
+.msg-bubble.msg-bubble--md p {
+  margin: 0.65em 0;
+}
+
+.msg-bubble.msg-bubble--md h1,
+.msg-bubble.msg-bubble--md h2,
+.msg-bubble.msg-bubble--md h3,
+.msg-bubble.msg-bubble--md h4 {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.msg-bubble.msg-bubble--md h1 { font-size: 1.25rem; }
+.msg-bubble.msg-bubble--md h2 { font-size: 1.12rem; }
+.msg-bubble.msg-bubble--md h3,
+.msg-bubble.msg-bubble--md h4 { font-size: 1.02rem; }
+
+.msg-bubble.msg-bubble--md ul,
+.msg-bubble.msg-bubble--md ol {
+  margin: 0.5em 0;
+  padding-left: 1.35em;
+}
+
+.msg-bubble.msg-bubble--md li {
+  margin: 0.25em 0;
+}
+
+.msg-bubble.msg-bubble--md blockquote {
+  margin: 0.65em 0;
+  padding: 0.35em 0 0.35em 0.85em;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.msg-bubble.msg-bubble--md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.msg-bubble.msg-bubble--md a:hover {
+  color: var(--text);
+}
+
+.msg-bubble.msg-bubble--md table {
+  border-collapse: collapse;
+  margin: 0.65em 0;
+  font-size: 13px;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg-bubble.msg-bubble--md th,
+.msg-bubble.msg-bubble--md td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.msg-bubble.msg-bubble--md th {
+  background: oklch(0.96 0.01 250);
+}
+
+/* Inline code inside prose */
+.msg-bubble.msg-bubble--md code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.12em 0.4em;
+  border-radius: var(--radius-sm);
+  background: oklch(0.94 0.015 250);
+  border: 1px solid oklch(0.88 0.02 250 / 0.5);
+}
+
+/* Fenced code blocks: shell around hljs theme */
+.msg-bubble.msg-bubble--md pre {
+  position: relative;
+  margin: 0.75em 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  /* Slight lift from bubble bg so fenced blocks stay readable (tokens file uses dark overlay elsewhere) */
+  background: oklch(0.97 0.012 250);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.msg-bubble.msg-bubble--md pre code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  display: block;
+  background: transparent !important;
+  border: none;
+  padding: 0;
+}
+
+.msg-bubble.msg-bubble--md pre .hljs {
+  background: transparent !important;
+}
+
+.msg-bubble.msg-bubble--md pre[data-lang]::before {
+  content: attr(data-lang);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
 /* Streaming cursor */
 .cursor {
   display: inline-block;
@@ -831,18 +1030,6 @@ body {
   white-space: nowrap;
 }
 
-.stat-chip .stat-icon {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  opacity: 0.9;
-}
-
-.stat-chip.c .stat-icon { color: var(--accent); }
-.stat-chip.g .stat-icon { color: var(--success); }
-.stat-chip.y .stat-icon { color: var(--warning); }
-.stat-chip.r .stat-icon { color: var(--danger); }
-
 .stat-chip span { font-weight: 700; }
 .stat-chip.c { color: var(--accent); border-color: oklch(0.72 0.12 220 / 0.35); }
 .stat-chip.g { color: var(--success); border-color: oklch(0.72 0.14 155 / 0.35); }
@@ -854,7 +1041,9 @@ body {
   border-top: 1px solid var(--border);
   background: var(--surface);
   padding: 12px 16px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   display: flex;
   gap: 10px;
   align-items: flex-end;
@@ -891,6 +1080,11 @@ body {
 }
 
 #msgInput::placeholder { color: var(--text-muted); }
+
+#msgInput:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .send-btn {
   display: flex;
@@ -969,8 +1163,10 @@ body {
   text-align: left;
 }
 
-.stats-expand-btn:hover {
-  background: var(--surface-elevated);
+@media (hover: hover) and (pointer: fine) {
+  .stats-expand-btn:hover {
+    background: var(--surface-elevated);
+  }
 }
 
 .stats-expand-label {
@@ -1092,7 +1288,7 @@ body {
   transition: width 0.5s var(--ease-out);
 }
 
-.token-fill.prompt { background: var(--accent); }
+.token-fill.prompt { background: var(--warning); }
 .token-fill.completion { background: var(--success); }
 
 .token-count {
@@ -1117,6 +1313,9 @@ body {
 .ival { color: var(--text-muted); }
 .ival.lit { color: var(--accent); }
 
+/* ─── Responsive adapt (mobile, tablet, touch, landscape) ─── */
+
+/* Tablet: stats grid reflows before desktop single row */
 @media (max-width: 899px) {
   .stats-panel {
     grid-template-columns: repeat(2, 1fr);
@@ -1140,11 +1339,54 @@ body {
   .stat-cell:nth-child(4) { border-right: none; }
 }
 
-@media (max-width: 599px) {
-  .topbar-sep.mid-hide { display: none; }
-  .status-pill #sText { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .topbar {
+    gap: 6px;
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
 
-  .stats-expand-btn { display: flex; }
+  .app-title {
+    display: none;
+  }
+
+  .topbar-sep.mid-hide { display: none; }
+
+  .model-wrap {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .status-pill {
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .status-pill #sText {
+    max-width: 5.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-area {
+    padding: 16px 12px;
+    gap: 16px;
+    /* Keep last message above composer when mobile keyboard opens */
+    scroll-padding-bottom: 12px;
+  }
+
+  #msgInput {
+    font-size: 16px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-expand-btn {
+    display: flex;
+    min-height: var(--touch-min);
+  }
 
   .stats-panel {
     display: none;
@@ -1169,6 +1411,67 @@ body {
 @media (min-width: 900px) {
   .model-wrap { max-width: 380px; }
 }
+
+/* Narrow phones: drop duplicate new-chat control; keep sidebar menu */
+@media (max-width: 380px) {
+  #btnNewChatTop {
+    display: none;
+  }
+
+  .status-pill #sText {
+    max-width: 4rem;
+  }
+
+  #btnRefreshModels {
+    display: none;
+  }
+}
+
+/* Tablet portrait: slightly narrower session panel */
+@media (min-width: 641px) and (max-width: 899px) {
+  .chat-sidebar:not(.collapsed) {
+    width: 200px;
+  }
+}
+
+/* Phone landscape: reclaim vertical space for messages */
+@media (max-height: 500px) and (orientation: landscape) {
+  .chat-area {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    gap: 12px;
+  }
+
+  .empty-state {
+    padding: 20px;
+  }
+
+  .stats-expand-btn {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .input-bar {
+    padding-top: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Coarse pointer: ensure tap targets without changing desktop density */
+@media (pointer: coarse) {
+  .chat-item-row {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .chat-new-wide {
+    min-height: var(--touch-min);
+  }
+
+  .drawer-clear-btn {
+    min-height: var(--touch-min);
+  }
+}
 </style>
 </head>
 <body>
@@ -1180,7 +1483,7 @@ body {
   <div class="app-title">SpeedChat</div>
   <div class="topbar-sep"></div>
 
-  <button class="icon-btn" id="btnSidebarToggle" type="button" aria-label="Chats" onclick="toggleSidebarLayout()">
+  <button class="icon-btn" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
   <button class="icon-btn" id="btnNewChatTop" type="button" aria-label="New chat" onclick="createChat()">
@@ -1189,7 +1492,8 @@ body {
   <div class="topbar-sep mid-hide"></div>
 
   <div class="model-wrap">
-    <select id="modelSelect" title="Select model" onchange="onModelSelectChange()"></select>
+    <label class="visually-hidden" for="modelSelect">Model</label>
+    <select id="modelSelect" onchange="onModelSelectChange()"></select>
   </div>
 
   <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
@@ -1206,12 +1510,12 @@ body {
 
   <div class="status-pill" role="status" aria-live="polite">
     <div class="s-dot" id="sDot" aria-hidden="true"></div>
-    <span id="sText">Connecting…</span>
+    <span id="sText">Loading models…</span>
   </div>
 </header>
 
 <!-- Settings drawer -->
-<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()" aria-hidden="true"></div>
+<button type="button" class="drawer-overlay" id="drawerOverlay" aria-label="Close settings" onclick="closeDrawer()" aria-hidden="true"></button>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert onkeydown="onDrawerKeydown(event)">
   <div class="drawer-header" id="drawerTitle">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1219,36 +1523,40 @@ body {
   </div>
   <div class="drawer-body">
     <div class="field">
-      <label>Server URL</label>
-      <input type="text" id="serverUrl" value="http://localhost:1234" onchange="fetchModels()">
+      <label for="serverUrl">LM Studio server URL</label>
+      <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" onchange="fetchModels()">
+      <p class="field-hint">Default is <code>http://localhost:1234</code> when LM Studio is running locally.</p>
     </div>
     <div class="field-row">
       <div class="field">
-        <label>Temperature</label>
+        <label for="temperature">Temperature</label>
         <input type="number" id="temperature" value="0.7" min="0" max="2" step="0.1">
+        <p class="field-hint">0 = more focused, 2 = more varied.</p>
       </div>
       <div class="field">
-        <label>Max Tokens</label>
+        <label for="maxTokens">Max tokens per reply</label>
         <input type="number" id="maxTokens" value="32768" min="1" max="131072">
+        <p class="field-hint">Upper bound for a single assistant message.</p>
       </div>
     </div>
     <div class="field">
-      <label>System Prompt</label>
-      <select id="systemPromptPreset" title="Load a preset into the system prompt" onchange="onSystemPromptPresetChange()">
-        <option value="">Custom</option>
+      <label for="systemPromptPreset">Prompt preset</label>
+      <select id="systemPromptPreset" onchange="onSystemPromptPresetChange()">
+        <option value="">Custom prompt</option>
       </select>
-      <p class="field-hint">For Roleplay / character, replace [CHARACTER NAME] and [brief description] after applying.</p>
-      <textarea id="systemPrompt" placeholder="You are a helpful assistant." rows="12"
+      <p class="field-hint" id="systemPromptHint">Presets fill the box below. For Roleplay, replace [CHARACTER NAME] and [brief description].</p>
+      <label for="systemPrompt" class="visually-hidden">System prompt</label>
+      <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"
         oninput="onSystemPromptInput()"></textarea>
     </div>
     <button class="drawer-clear-btn" type="button" onclick="clearChat()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:6px"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      Clear conversation
+      Clear messages in this chat
     </button>
   </div>
 </div>
 
-<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+<button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
 
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
@@ -1259,8 +1567,8 @@ body {
       </button>
     </div>
     <button type="button" class="chat-new-wide" onclick="createChat()">+ New chat</button>
-    <button type="button" class="chat-new-compact" title="New chat" onclick="createChat()">+</button>
-    <div class="chat-list" id="chatList"></div>
+    <button type="button" class="chat-new-compact" aria-label="New chat" onclick="createChat()">+</button>
+    <div class="chat-list" id="chatList" role="list"></div>
   </aside>
 
   <div class="main-column">
@@ -1270,15 +1578,16 @@ body {
         <div class="empty-icon" aria-hidden="true">
           <svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         </div>
-        <div>Connect to LM Studio and start chatting</div>
-        <div style="color:var(--border2); font-size:10px;">localhost:1234 · /api/v0/chat/completions</div>
+        <p class="empty-title">No messages yet</p>
+        <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
 
     <!-- Input bar -->
     <div class="input-bar">
       <div class="input-wrap">
-        <textarea id="msgInput" placeholder="Message…" rows="1"
+        <label for="msgInput" class="visually-hidden">Message</label>
+        <textarea id="msgInput" placeholder="Type a message…" rows="1"
           onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       </div>
       <button class="send-btn" id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">
@@ -1289,8 +1598,8 @@ body {
 
     <!-- Stats strip -->
     <div class="stats-strip" id="statsStrip">
-      <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Inference stats" aria-expanded="false" aria-controls="statsPanel" onclick="toggleStatsPanel()">
-        <span class="stats-expand-label">Stats</span>
+      <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel" onclick="toggleStatsPanel()">
+        <span class="stats-expand-label">Metrics</span>
         <span class="stats-expand-preview" id="statsExpandPreview">— t/s · — tokens</span>
         <svg class="stats-expand-chevron icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
@@ -1334,19 +1643,21 @@ body {
   </div>
 </div>
 
+<!-- Markdown + syntax highlighting (assistant bubbles only); loaded before app script -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/styles/github.min.css" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/highlight.min.js" crossorigin="anonymous"></script>
+
 <script>
 // ── State ──
 const ICON_CHEVRON_LEFT = '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
 const ICON_CHEVRON_RIGHT = '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 // Inference metric icons (stats strip + message chips)
-const ICON_STAT_TPS = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>';
-const ICON_STAT_TTFT = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></span>';
-const ICON_STAT_GEN = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>';
-const ICON_STAT_TOKENS = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>';
 const EMPTY_STATE_HTML =
   '<div class="empty-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>' +
-  '<div>Connect to LM Studio and start chatting</div>' +
-  '<div style="color:var(--border2); font-size:10px;">localhost:1234 · /api/v0/chat/completions</div>';
+  '<p class="empty-title">No messages yet</p>' +
+  '<p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>';
 
 const STORAGE_KEY = 'speedchat-sessions-v1';
 const MAX_CHATS = 50;
@@ -1357,7 +1668,15 @@ const AUTO_TITLE_MAX_LEN = 40;
 let sessionState = null;
 let saveTimer = null;
 let streaming = false;
+let modelsFetchAbort = null;
+let chatFetchAbort = null;
 const modelCache = new Map(); // model id -> metadata from /api/v0/models
+
+/** Debounce assistant markdown re-renders while SSE tokens arrive (keeps UI responsive). */
+const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
+let assistantRenderDebounceTimer = null;
+/** Run marked configuration once (GFM on, do not treat single newlines as hard breaks). */
+let speedchatMarkedConfigured = false;
 
 // Which preset the textarea is supposed to match (empty string = Custom).
 let activeSystemPromptPresetId = '';
@@ -1433,7 +1752,7 @@ function fillSystemPromptPresetSelect() {
   sel.replaceChildren();
   const optCustom = document.createElement('option');
   optCustom.value = '';
-  optCustom.textContent = 'Custom';
+  optCustom.textContent = 'Custom prompt';
   sel.appendChild(optCustom);
   for (const p of SYSTEM_PROMPT_PRESETS) {
     const o = document.createElement('option');
@@ -1503,7 +1822,7 @@ function onSystemPromptPresetChange() {
     saveSystemPromptSettings();
     return;
   }
-  if (dirty && !confirm('Replace your edited system prompt with this preset?')) {
+  if (dirty && !confirm('Replace your current system prompt with this preset? Unsaved edits will be lost.')) {
     suppressSystemPromptSelectChange = true;
     sel.value = activeSystemPromptPresetId;
     suppressSystemPromptSelectChange = false;
@@ -1634,7 +1953,7 @@ function saveSessionsNow() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionState));
   } catch (e) {
     if (e && e.name === 'QuotaExceededError') {
-      setStatus('err', 'Storage full — remove old chats');
+      setStatus('err', 'Storage full. Delete older chats.');
     }
   }
 }
@@ -1655,7 +1974,11 @@ function closeMobileSidebar() {
   const side = document.getElementById('chatSidebar');
   const bd = document.getElementById('sidebarBackdrop');
   if (side) side.classList.remove('mobile-open');
-  if (bd) bd.classList.remove('open');
+  if (bd) {
+    bd.classList.remove('open');
+    bd.setAttribute('aria-hidden', 'true');
+    bd.tabIndex = -1;
+  }
 }
 
 function openMobileSidebar() {
@@ -1663,7 +1986,11 @@ function openMobileSidebar() {
   const side = document.getElementById('chatSidebar');
   const bd = document.getElementById('sidebarBackdrop');
   if (side) side.classList.add('mobile-open');
-  if (bd) bd.classList.add('open');
+  if (bd) {
+    bd.classList.add('open');
+    bd.setAttribute('aria-hidden', 'false');
+    bd.tabIndex = 0;
+  }
 }
 
 function applySidebarVisuals() {
@@ -1810,17 +2137,38 @@ function renderSidebar() {
   list.innerHTML = '';
   const sorted = [...sessionState.chats].sort((a, b) => b.updatedAt - a.updatedAt);
   for (const chat of sorted) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chat-item' + (chat.id === sessionState.activeId ? ' active' : '');
-    btn.title = [chat.name, chat.modelId || '—', formatSidebarStatsPreview(chat.lastStats)].join('\n');
-    btn.addEventListener('click', () => switchChat(chat.id));
+    const isActive = chat.id === sessionState.activeId;
+    const modelLabel = chat.modelId || 'No model selected';
+    const statsPreview = formatSidebarStatsPreview(chat.lastStats);
+    const rowLabel = `${chat.name}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
+
+    const row = document.createElement('div');
+    row.className = 'chat-item-row' + (isActive ? ' active' : '');
+    row.setAttribute('role', 'listitem');
+    row.setAttribute('aria-label', rowLabel);
+    row.title = [chat.name, modelLabel, statsPreview].filter(Boolean).join('\n');
+    row.tabIndex = 0;
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.chat-item-actions')) return;
+      switchChat(chat.id);
+    });
+    row.addEventListener('keydown', (e) => {
+      if (e.target.closest('.chat-item-actions')) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        switchChat(chat.id);
+      }
+    });
+
+    const head = document.createElement('div');
+    head.className = 'chat-item-head';
 
     const titleRow = document.createElement('div');
     titleRow.className = 'chat-item-title-row';
 
     const dot = document.createElement('div');
     dot.className = 'chat-item-dot';
+    dot.setAttribute('aria-hidden', 'true');
     titleRow.appendChild(dot);
 
     const nameSpan = document.createElement('span');
@@ -1828,24 +2176,31 @@ function renderSidebar() {
     nameSpan.textContent = chat.name;
     titleRow.appendChild(nameSpan);
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'chat-delete-btn';
-    deleteBtn.textContent = '🗑';
-    deleteBtn.title = 'Delete chat';
-    deleteBtn.addEventListener('click', (e) => deleteChat(chat.id, e));
+    const actions = document.createElement('div');
+    actions.className = 'chat-item-actions';
 
     const renameBtn = document.createElement('button');
     renameBtn.type = 'button';
     renameBtn.className = 'chat-rename-btn';
     renameBtn.textContent = '✎';
-    renameBtn.title = 'Rename chat';
+    renameBtn.setAttribute('aria-label', `Rename chat: ${chat.name}`);
     renameBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      beginRenameChat(chat.id, nameSpan, renameBtn, deleteBtn);
+      beginRenameChat(chat.id, nameSpan, renameBtn, deleteBtn, actions);
     });
-    titleRow.appendChild(renameBtn);
-    titleRow.appendChild(deleteBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'chat-delete-btn';
+    deleteBtn.textContent = '🗑';
+    deleteBtn.setAttribute('aria-label', `Delete chat: ${chat.name}`);
+    deleteBtn.addEventListener('click', (e) => deleteChat(chat.id, e));
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(deleteBtn);
+
+    head.appendChild(titleRow);
+    head.appendChild(actions);
 
     const modelEl = document.createElement('div');
     modelEl.className = 'chat-item-model';
@@ -1855,23 +2210,28 @@ function renderSidebar() {
     statsEl.className = 'chat-item-stats';
     statsEl.textContent = formatSidebarStatsPreview(chat.lastStats);
 
-    btn.appendChild(titleRow);
-    btn.appendChild(modelEl);
-    btn.appendChild(statsEl);
-    list.appendChild(btn);
+    row.appendChild(head);
+    row.appendChild(modelEl);
+    row.appendChild(statsEl);
+    list.appendChild(row);
   }
 }
 
-function beginRenameChat(chatId, nameSpan, renameBtn, deleteBtn) {
+function beginRenameChat(chatId, nameSpan, renameBtn, deleteBtn, actionsEl) {
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   const inp = document.createElement('input');
   inp.type = 'text';
   inp.className = 'chat-rename-input';
   inp.value = chat.name;
+  inp.maxLength = 120;
+  inp.setAttribute('aria-label', 'Chat title');
   nameSpan.replaceWith(inp);
-  renameBtn.style.visibility = 'hidden';
-  if (deleteBtn) deleteBtn.style.visibility = 'hidden';
+  if (actionsEl) actionsEl.style.visibility = 'hidden';
+  else {
+    renameBtn.style.visibility = 'hidden';
+    if (deleteBtn) deleteBtn.style.visibility = 'hidden';
+  }
   inp.focus();
   inp.select();
 
@@ -1880,8 +2240,11 @@ function beginRenameChat(chatId, nameSpan, renameBtn, deleteBtn) {
     if (v) chat.name = v;
     inp.replaceWith(nameSpan);
     nameSpan.textContent = chat.name;
-    renameBtn.style.visibility = '';
-    if (deleteBtn) deleteBtn.style.visibility = '';
+    if (actionsEl) actionsEl.style.visibility = '';
+    else {
+      renameBtn.style.visibility = '';
+      if (deleteBtn) deleteBtn.style.visibility = '';
+    }
     touchChat(chat);
     renderSidebar();
     scheduleSaveSessions();
@@ -1903,13 +2266,13 @@ function beginRenameChat(chatId, nameSpan, renameBtn, deleteBtn) {
 function deleteChat(chatId, evt) {
   if (evt) evt.stopPropagation();
   if (streaming) {
-    setStatus('spin', 'Wait for generation to finish');
+    setStatus('spin', 'Finish the current reply first');
     return;
   }
   const idx = sessionState.chats.findIndex((c) => c.id === chatId);
   if (idx < 0) return;
   const victim = sessionState.chats[idx];
-  if (!confirm(`Delete "${victim.name}"? This cannot be undone.`)) return;
+  if (!confirm(`Delete "${victim.name}"? Messages in this chat cannot be recovered.`)) return;
 
   const wasActive = sessionState.activeId === chatId;
   sessionState.chats.splice(idx, 1);
@@ -1940,7 +2303,7 @@ function deleteChat(chatId, evt) {
 
 function switchChat(id) {
   if (streaming) {
-    setStatus('spin', 'Wait for generation to finish');
+    setStatus('spin', 'Finish the current reply first');
     return;
   }
   if (!sessionState || id === sessionState.activeId) {
@@ -1962,7 +2325,7 @@ function switchChat(id) {
 
 function createChat() {
   if (streaming) {
-    setStatus('spin', 'Wait for generation to finish');
+    setStatus('spin', 'Finish the current reply first');
     return;
   }
   const modelId = document.getElementById('modelSelect').value || '';
@@ -1988,6 +2351,32 @@ function serverUrl() {
   return document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
 }
 
+/** Validate LM Studio base URL before network calls. */
+function parseServerBaseUrl(raw) {
+  const trimmed = (raw || '').trim().replace(/\/$/, '');
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.origin;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Close settings drawer or mobile chat list when Escape is pressed. */
+function dismissOpenLayers() {
+  const drawer = document.getElementById('drawer');
+  if (drawer && drawer.classList.contains('open')) {
+    closeDrawer();
+    return;
+  }
+  const side = document.getElementById('chatSidebar');
+  if (side && side.classList.contains('mobile-open')) {
+    closeMobileSidebar();
+  }
+}
+
 function setStatus(state, msg) {
   document.getElementById('sDot').className = `s-dot ${state}`;
   document.getElementById('sText').textContent = msg;
@@ -2007,7 +2396,9 @@ function toggleDrawer() {
   document.getElementById('drawerOverlay').classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
   drawer.removeAttribute('inert');
-  document.getElementById('drawerOverlay').setAttribute('aria-hidden', 'false');
+  const overlay = document.getElementById('drawerOverlay');
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.tabIndex = 0;
   document.getElementById('btnSettings').setAttribute('aria-expanded', 'true');
   const first = drawer.querySelector(DRAWER_FOCUSABLE);
   if (first) first.focus();
@@ -2019,7 +2410,9 @@ function closeDrawer() {
   document.getElementById('drawerOverlay').classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
   drawer.setAttribute('inert', '');
-  document.getElementById('drawerOverlay').setAttribute('aria-hidden', 'true');
+  const overlay = document.getElementById('drawerOverlay');
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.tabIndex = -1;
   document.getElementById('btnSettings').setAttribute('aria-expanded', 'false');
   if (drawerReturnFocus && typeof drawerReturnFocus.focus === 'function') {
     drawerReturnFocus.focus();
@@ -2083,8 +2476,114 @@ function scrollBottom() {
   area.scrollTop = area.scrollHeight;
 }
 
+/** Cancel any pending debounced assistant bubble render (call before final paint or errors). */
+function cancelAssistantBubbleRenderDebounce() {
+  if (assistantRenderDebounceTimer != null) {
+    clearTimeout(assistantRenderDebounceTimer);
+    assistantRenderDebounceTimer = null;
+  }
+}
+
+/** Configure marked once for GitHub-flavored markdown without single-line breaks. */
+function ensureMarkedOptionsConfigured() {
+  if (speedchatMarkedConfigured) return;
+  speedchatMarkedConfigured = true;
+  if (typeof marked === 'undefined') return;
+  try {
+    if (typeof marked.use === 'function') {
+      marked.use({ gfm: true, breaks: false });
+      return;
+    }
+    if (typeof marked.setOptions === 'function') {
+      marked.setOptions({ gfm: true, breaks: false });
+    }
+  } catch (_) {
+    /* Some CDN builds differ; defaults are usually acceptable for chat. */
+  }
+}
+
+/**
+ * Render assistant markdown into a bubble: marked → DOMPurify → optional highlight.js.
+ * When streaming, re-appends the live cursor element after innerHTML updates.
+ */
+function setAssistantBubbleContent(bubble, markdown, options = {}) {
+  const streaming = options.streaming === true;
+  const streamCursor = options.streamCursor || null;
+
+  bubble.classList.add('msg-bubble--md');
+
+  const libsReady = typeof marked !== 'undefined' && typeof marked.parse === 'function'
+    && typeof DOMPurify !== 'undefined' && typeof DOMPurify.sanitize === 'function';
+
+  const raw = markdown == null ? '' : String(markdown);
+
+  if (!libsReady) {
+    bubble.textContent = raw;
+    if (streaming && streamCursor) bubble.appendChild(streamCursor);
+    return;
+  }
+
+  ensureMarkedOptionsConfigured();
+
+  if (!raw.trim() && streaming && streamCursor) {
+    bubble.textContent = '';
+    bubble.appendChild(streamCursor);
+    return;
+  }
+
+  if (!raw.trim() && !streaming) {
+    bubble.innerHTML = '';
+    return;
+  }
+
+  let html;
+  try {
+    html = marked.parse(raw);
+  } catch (_) {
+    bubble.textContent = raw;
+    if (streaming && streamCursor) bubble.appendChild(streamCursor);
+    return;
+  }
+
+  const clean = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  bubble.innerHTML = clean;
+
+  // Optional language label for fenced blocks (from class="language-foo" on <code>)
+  bubble.querySelectorAll('pre').forEach((pre) => {
+    const code = pre.querySelector('code');
+    if (!code) return;
+    const m = /\blanguage-([\w-]+)\b/.exec(code.className || '');
+    if (m) pre.setAttribute('data-lang', m[1]);
+    else pre.removeAttribute('data-lang');
+  });
+
+  if (typeof hljs !== 'undefined' && typeof hljs.highlightElement === 'function') {
+    bubble.querySelectorAll('pre code').forEach((block) => {
+      try {
+        if (!block.classList.contains('hljs')) hljs.highlightElement(block);
+      } catch (_) { /* unknown language or partial fence during stream */ }
+    });
+  }
+
+  if (streaming && streamCursor) bubble.appendChild(streamCursor);
+}
+
+/** Schedule a debounced markdown refresh while the assistant reply is still streaming. */
+function scheduleAssistantBubbleRender(bubble, markdown, streamCursor) {
+  cancelAssistantBubbleRenderDebounce();
+  assistantRenderDebounceTimer = setTimeout(() => {
+    assistantRenderDebounceTimer = null;
+    setAssistantBubbleContent(bubble, markdown, { streaming: true, streamCursor });
+    scrollBottom();
+  }, ASSISTANT_RENDER_DEBOUNCE_MS);
+}
+
 function clearChat() {
-  if (streaming) return;
+  if (streaming) {
+    setStatus('spin', 'Finish the current reply first');
+    return;
+  }
+  if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   chat.history = [];
   chat.lastStats = null;
@@ -2100,24 +2599,36 @@ function clearChat() {
 // ── Model fetching ──
 async function fetchModels() {
   const sel = document.getElementById('modelSelect');
-  sel.innerHTML = '<option value="">Loading…</option>';
-  setStatus('spin', 'Connecting…');
+  const base = parseServerBaseUrl(serverUrl());
+  if (!base) {
+    sel.innerHTML = '<option value="">Invalid server URL</option>';
+    setStatus('err', 'Check server URL in Settings');
+    return;
+  }
+
+  if (modelsFetchAbort) modelsFetchAbort.abort();
+  modelsFetchAbort = new AbortController();
+  const { signal } = modelsFetchAbort;
+
+  sel.innerHTML = '<option value="">Loading models…</option>';
+  setStatus('spin', 'Loading models…');
   try {
-    const res = await fetch(`${serverUrl()}/api/v0/models`);
+    const res = await fetch(`${base}/api/v0/models`, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const models = (data.data || []).filter(m => m.type === 'llm' || m.type === 'vlm');
 
     if (!models.length) {
-      sel.innerHTML = '<option value="">No LLMs found</option>';
-      setStatus('err', 'No models');
+      sel.innerHTML = '<option value="">No models found</option>';
+      setStatus('err', 'No models in LM Studio');
       return;
     }
 
     sel.innerHTML = models.map(m => {
       const loaded = m.state === 'loaded';
       const tag = m.quantization ? ` · ${m.quantization}` : '';
-      return `<option value="${m.id}">${loaded ? '● ' : '○ '}${m.id}${tag}</option>`;
+      const stateLabel = loaded ? 'loaded' : 'not loaded';
+      return `<option value="${m.id}">${m.id}${tag} (${stateLabel})</option>`;
     }).join('');
 
     modelCache.clear();
@@ -2134,13 +2645,18 @@ async function fetchModels() {
     }
 
     const nLoaded = models.filter(m => m.state === 'loaded').length;
-    setStatus('ok', `${models.length} models · ${nLoaded} loaded`);
+    setStatus('ok', `${models.length} models, ${nLoaded} loaded`);
     showCachedModelInfo();
     renderSidebar();
     scheduleSaveSessions();
   } catch (err) {
-    sel.innerHTML = '<option value="">Unreachable</option>';
-    setStatus('err', 'Server unreachable');
+    if (err && err.name === 'AbortError') return;
+    sel.innerHTML = '<option value="">Cannot reach server</option>';
+    setStatus('err', 'Cannot reach LM Studio');
+  } finally {
+    if (modelsFetchAbort && modelsFetchAbort.signal === signal) {
+      modelsFetchAbort = null;
+    }
   }
 }
 
@@ -2158,7 +2674,11 @@ function appendBubble(role, content) {
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.textContent = content;
+  if (role === 'assistant') {
+    setAssistantBubbleContent(bubble, content, { streaming: false });
+  } else {
+    bubble.textContent = content;
+  }
 
   wrap.appendChild(label);
   wrap.appendChild(bubble);
@@ -2176,10 +2696,10 @@ function appendStats(wrap, stats, usage) {
   chips.className = 'msg-stats';
 
   const defs = [
-    ['c', s.tokens_per_second != null, `${ICON_STAT_TPS}<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
-    ['g', s.time_to_first_token != null, `${ICON_STAT_TTFT}TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
-    ['y', s.generation_time != null, `${ICON_STAT_GEN}gen <span>${s.generation_time?.toFixed(3)}s</span>`],
-    ['r', u.total_tokens != null, `${ICON_STAT_TOKENS}<span>${u.total_tokens}</span> tokens`],
+    ['c', s.tokens_per_second != null, `<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
+    ['g', s.time_to_first_token != null, `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
+    ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
+    ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
   ];
 
   defs.forEach(([cls, show, html]) => {
@@ -2287,8 +2807,30 @@ async function sendMessage() {
   const chat = getActiveChat();
   const modelId   = document.getElementById('modelSelect').value;
   const temp      = parseFloat(document.getElementById('temperature').value);
-  const maxTok    = parseInt(document.getElementById('maxTokens').value);
+  const maxTok    = parseInt(document.getElementById('maxTokens').value, 10);
   const sysPrompt = document.getElementById('systemPrompt').value.trim();
+
+  if (!modelId) {
+    setStatus('err', 'Select a model first');
+    return;
+  }
+  if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+    setStatus('err', 'Temperature must be 0 to 2');
+    return;
+  }
+  if (!Number.isFinite(maxTok) || maxTok < 1) {
+    setStatus('err', 'Max tokens must be at least 1');
+    return;
+  }
+  const base = parseServerBaseUrl(serverUrl());
+  if (!base) {
+    setStatus('err', 'Check server URL in Settings');
+    return;
+  }
+
+  if (chatFetchAbort) chatFetchAbort.abort();
+  chatFetchAbort = new AbortController();
+  const chatSignal = chatFetchAbort.signal;
 
   chat.modelId = modelId || chat.modelId;
   maybeAutoTitleFromFirstUserMessage(chat, text);
@@ -2326,7 +2868,7 @@ async function sendMessage() {
 
   streaming = true;
   setSendLoading(true);
-  setStatus('spin', 'Generating…');
+  setStatus('spin', 'Generating reply…');
 
   let fullText = '';
   let streamMeta = {};
@@ -2334,10 +2876,11 @@ async function sendMessage() {
   let tFirst = null;
 
   try {
-    const res = await fetch(`${serverUrl()}/api/v0/chat/completions`, {
+    const res = await fetch(`${base}/api/v0/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: chatSignal,
     });
 
     if (!res.ok) {
@@ -2355,8 +2898,7 @@ async function sendMessage() {
       if (!delta) return;
       if (tFirst == null) tFirst = performance.now();
       fullText += delta;
-      bubble.textContent = fullText;
-      bubble.appendChild(cursor);
+      scheduleAssistantBubbleRender(bubble, fullText, cursor);
       scrollBottom();
     }
 
@@ -2374,20 +2916,23 @@ async function sendMessage() {
     // Process any trailing bytes left in the SSE buffer.
     if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
 
+    cancelAssistantBubbleRenderDebounce();
     cursor.remove();
 
     // If streaming yielded nothing, fall back to non-streaming.
     if (!fullText) {
-      bubble.textContent = '';
-      const fallback = await tryNonStreamingFallback(serverUrl(), {
+      setAssistantBubbleContent(bubble, '', { streaming: false });
+      const fallback = await tryNonStreamingFallback(base, {
         model: modelId || undefined,
         messages,
         temperature: temp,
         max_tokens: maxTok,
-      });
+      }, chatSignal);
       fullText = extractMessageText(fallback.choices?.[0]?.message);
       streamMeta = mergeStreamMeta(streamMeta, fallback);
-      bubble.textContent = fullText || '(empty response)';
+      setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', { streaming: false });
+    } else {
+      setAssistantBubbleContent(bubble, fullText, { streaming: false });
     }
 
     if (fullText) {
@@ -2405,30 +2950,38 @@ async function sendMessage() {
       touchChat(chat);
       appendStats(wrap, meta.stats, meta.usage);
       updateStrip(meta.stats, meta.usage, modelInfo);
-      setStatus('ok', modelId || 'done');
+      setStatus('ok', 'Ready');
       renderSidebar();
       scheduleSaveSessions();
     }
 
   } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    cancelAssistantBubbleRenderDebounce();
     cursor.remove();
-    bubble.textContent = `Error: ${err.message}`;
+    bubble.classList.remove('msg-bubble--md');
+    bubble.textContent = `Could not complete this reply: ${err.message}`;
     bubble.style.color = 'var(--red)';
-    setStatus('err', err.message.slice(0, 40));
+    const statusMsg = err.message.length > 48 ? `${err.message.slice(0, 45)}…` : err.message;
+    setStatus('err', statusMsg);
   } finally {
     streaming = false;
     setSendLoading(false);
+    if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
+      chatFetchAbort = null;
+    }
     scrollBottom();
   }
 }
 
 // Handle non-streaming response body (LM Studio sometimes returns full JSON even with stream:true)
 // Override fetch to also attempt plain JSON parse if SSE yields nothing
-async function tryNonStreamingFallback(serverUrl, body) {
-  const res = await fetch(`${serverUrl}/api/v0/chat/completions`, {
+async function tryNonStreamingFallback(serverBase, body, signal) {
+  const res = await fetch(`${serverBase}/api/v0/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, stream: false })
+    body: JSON.stringify({ ...body, stream: false }),
+    signal,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
@@ -2492,9 +3045,13 @@ function updateStrip(stats, usage, modelInfo) {
 }
 
 function setSendLoading(loading) {
-  document.getElementById('sendBtn').disabled = loading;
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = loading;
+  sendBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
   document.getElementById('sendIcon').classList.toggle('hidden', loading);
   document.getElementById('sendSpinner').classList.toggle('hidden', !loading);
+  const input = document.getElementById('msgInput');
+  if (input) input.disabled = loading;
 }
 
 // ── Init ──
@@ -2514,10 +3071,13 @@ async function initApp() {
     applySidebarVisuals();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.getElementById('drawer').classList.contains('open')) {
-      closeDrawer();
-    }
+    if (e.key === 'Escape') dismissOpenLayers();
   });
+
+  const drawerOverlay = document.getElementById('drawerOverlay');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  if (drawerOverlay) drawerOverlay.tabIndex = -1;
+  if (sidebarBackdrop) sidebarBackdrop.tabIndex = -1;
   updateStatsExpandPreview();
 }
 window.addEventListener('load', initApp);
