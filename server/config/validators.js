@@ -251,3 +251,59 @@ export function mergeConfigMeta(existing, patch) {
 
   return base;
 }
+
+const DEFAULT_SUB_AGENTS = {
+  version: 1,
+  enabled: true,
+  globalMaxConcurrent: 3,
+  defaultTimeoutMs: 300000,
+  types: {},
+};
+
+/**
+ * Normalize sub-agents.json user overrides (warn on unknown tool ids).
+ * @param {unknown} body
+ * @returns {{ config: object, warnings: string[] }}
+ */
+export function normalizeSubAgentsConfig(body) {
+  const warnings = [];
+  const base =
+    body && typeof body === 'object'
+      ? { ...DEFAULT_SUB_AGENTS, .../** @type {Record<string, unknown>} */ (body) }
+      : { ...DEFAULT_SUB_AGENTS };
+
+  if (typeof base.enabled !== 'boolean') base.enabled = true;
+  if (typeof base.globalMaxConcurrent !== 'number' || base.globalMaxConcurrent < 1) {
+    base.globalMaxConcurrent = 3;
+  }
+  if (typeof base.defaultTimeoutMs !== 'number' || base.defaultTimeoutMs < 1000) {
+    base.defaultTimeoutMs = 300000;
+  }
+  if (typeof base.version !== 'number') base.version = 1;
+
+  if (!base.types || typeof base.types !== 'object') {
+    base.types = {};
+  }
+
+  const types = /** @type {Record<string, unknown>} */ (base.types);
+  for (const [typeId, rawType] of Object.entries(types)) {
+    if (!rawType || typeof rawType !== 'object') continue;
+    const row = /** @type {Record<string, unknown>} */ (rawType);
+
+    const checkToolList = (key) => {
+      const list = row[key];
+      if (!Array.isArray(list)) return;
+      for (const name of list) {
+        if (typeof name !== 'string') continue;
+        if (!ALL_TOOL_IDS.includes(name)) {
+          warnings.push(`Unknown tool id "${name}" in types.${typeId}.${key}`);
+        }
+      }
+    };
+
+    checkToolList('allowedTools');
+    checkToolList('deniedTools');
+  }
+
+  return { config: base, warnings };
+}

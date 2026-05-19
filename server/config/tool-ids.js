@@ -32,4 +32,6 @@ export const ALL_TOOL_IDS = [
   'execute_command',
   'run_javascript',
   'run_python',
+  'spawn_sub_agent',
+  'cancel_sub_agent',
 ];

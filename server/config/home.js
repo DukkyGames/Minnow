@@ -42,6 +42,7 @@ const SCAFFOLD_DIRS = [
   'prompts',
   'skills',
   'backups',
+  'logs/sub-agents',
 ];
 
 const DEFAULT_META = {

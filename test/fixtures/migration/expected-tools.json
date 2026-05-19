@@ -31,7 +31,9 @@
     "git_checkout": false,
     "execute_command": false,
     "run_javascript": false,
-    "run_python": false
+    "run_python": false,
+    "spawn_sub_agent": false,
+    "cancel_sub_agent": false
   },
   "keys": {
     "braveApiKey": "fixture-brave-key-12345"
