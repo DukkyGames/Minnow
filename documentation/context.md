@@ -35,7 +35,7 @@ SpeedChat/
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/messaging.ts   # sendMessage → sendMessageWithTools
-│   ├── ui/                 # sidebar, settings, stats, messages, tool-messages, thought-bubbles, …
+│   ├── ui/                 # sidebar, settings, stats, messages, stream-status, tool-messages, thought-bubbles, …
 │   ├── tools/
 │   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # speedchat.tools localStorage
@@ -115,7 +115,8 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 - **Desktop:** header toggle collapses sidebar (wide vs narrow rail).
 - **Mobile (≤640px):** sidebar overlay + backdrop; safe-area padding.
 - **Compact (≤600px):** 16px input (iOS zoom), collapsible stats strip.
-- **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
+- **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
+- **Top bar:** **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail.
 
 ## Dev server architecture (`server.js`)
 
@@ -248,9 +249,11 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 - **User:** plain `textContent` (includes literal markdown if typed).
 - **Assistant:** **marked** + **DOMPurify** + **highlight.js**; streaming debounced ~100 ms.
 - **Reasoning / “thinking”** (LM Studio **App Settings → Developer**: separate `reasoning_content` and/or `choices.delta.reasoning` for compatible models such as DeepSeek R1 / gpt-oss):
-  - **Live:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). When the model streams normal **`content`**, the live stage is torn down.
+  - **Live stream phases** ([`stream-status.ts`](../src/ui/stream-status.ts), wired from [`messages.ts`](../src/ui/messages.ts), [`loop.ts`](../src/tools/loop.ts), [`chat.ts`](../src/api/chat.ts)): `generating` → optional `thinking` (first reasoning delta) → `generating` again after `endReasoningPhase()` until prose → `prose`. A `.stream-status` row (sibling **before** the hidden prose bubble) shows **Generating response…** or **Thinking…** with animated dots; `role="status"`, `aria-live="polite"`, `aria-busy` until prose. Hidden after [`revealAssistantProseBubble`](../src/ui/messages.ts). Respects `prefers-reduced-motion` (static dots).
+  - **Live thought bubbles:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). When the model streams normal **`content`**, the live stage is torn down.
   - **After reply:** a **Thoughts** text button above that assistant bubble expands a read-only list of all segments (same controller module). Segments are stored on the assistant message as **`thinking: string[]`** on the **final** text reply of a user send (tool-loop rounds accumulate into one list).
   - **Parsing:** [`extractReasoningDelta`](../src/api/reasoning.ts) reads SSE chunks without mixing reasoning into `content` ([`extractStreamDelta`](../src/api/chat.ts) stays prose-only).
+  - **Prose caret:** inline `.cursor.cursor--prose` (2px accent bar) during markdown stream; not the old solid block cursor.
 - **Tool calls/results** ([`tool-messages.ts`](../src/ui/tool-messages.ts), used from history in [`messages.ts`](../src/ui/messages.ts) and intended during live tool turns in [`loop.ts`](../src/tools/loop.ts)):
   - **Collapsed (default):** tool **name** + **Success** or **Failed** (fail when result starts with `Error:` via `isToolResultFailure()`).
   - **Expanded (click):** **Arguments** and **Result** in the `<details>` body / monospace `<pre>` blocks; results capped at **2 KB** in the UI (`RESULT_DISPLAY_CAP`).
@@ -271,6 +274,14 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 ### Testing
 
 E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification.md`](plans/tool-usage-verification.md).
+
+**Step 01 (chat UX / streaming):** [`documentation/plans/verification/step-01.md`](plans/verification/step-01.md) — `npm test`, `npm run build`, `scripts/step01-ui-smoke.mjs`.
+
+```bash
+npm test
+npm run build
+npx tsx scripts/step01-ui-smoke.mjs http://localhost:<port>   # requires npm start
+```
 
 With **`npm start`** running, automated API/browser-unit smoke:
 

@@ -97,12 +97,15 @@
   .model-wrap { max-width: 380px; }
 }
 
-/* Narrow phones: drop duplicate new-chat control; keep sidebar menu */
-@media (max-width: 380px) {
-  #btnNewChatTop {
+/* Desktop: sidebar collapse lives in the rail; hamburger is mobile-only */
+@media (min-width: 641px) {
+  .topbar-sidebar-toggle {
     display: none;
   }
+}
 
+/* Narrow phones: trim top-bar chrome */
+@media (max-width: 380px) {
   .status-pill #sText {
     max-width: 4rem;
   }
