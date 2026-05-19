@@ -320,14 +320,23 @@ export async function sendMessage(): Promise<void> {
     stream_options: { include_usage: true },
   };
 
-  const { wrap, bubble, cursor } = appendStreamingAssistantRow();
-  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
+  const { wrap, bubble, cursor, streamStatus } = appendStreamingAssistantRow();
+  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble, streamStatus);
 
-  const thoughtController = new ThoughtBubbleController(wrap);
+  const thoughtController = new ThoughtBubbleController(wrap, {
+    onThinkingStart: (): void => {
+      streamStatus.setPhase('thinking');
+    },
+    onReasoningEnded: (): void => {
+      if (wrap.classList.contains('msg--awaiting-prose')) {
+        streamStatus.setPhase('generating');
+      }
+    },
+  });
 
   setStreaming(true);
   setSendLoading(true);
-  setStatus('spin', 'Generating replyâ€¦');
+  setStatus('spin', 'Generating reply…');
 
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
@@ -450,6 +459,7 @@ export async function sendMessage(): Promise<void> {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
       thoughtController.abort();
+      streamStatus.dispose();
       return;
     }
     cancelAssistantBubbleRenderDebounce();
@@ -459,7 +469,7 @@ export async function sendMessage(): Promise<void> {
     bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
     bubble.style.color = 'var(--red)';
     const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}â€¦` : msg;
+    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     setStatus('err', statusMsg);
     thoughtController.abort();
   } finally {

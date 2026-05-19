@@ -13,6 +13,12 @@ const TYPEWRITER_CHARS_PER_TICK = 4;
 /** How long a completed thought stays fully visible before fading into the next one. */
 const THOUGHT_GAP_MS = 1000;
 
+/** Optional hooks so the parent row can sync stream-status labels with reasoning. */
+export interface ThoughtPhaseCallbacks {
+  onThinkingStart?: () => void;
+  onReasoningEnded?: () => void;
+}
+
 /**
  * Controller for one user send: one live bubble at a time, paragraph boundaries
  * finalize a thought; `endReasoningPhase` flushes the open segment when prose starts.
@@ -47,14 +53,24 @@ export class ThoughtBubbleController {
 
   private disposed = false;
 
-  constructor(assistantWrap: HTMLElement) {
+  private phaseCallbacks: ThoughtPhaseCallbacks;
+
+  private thinkingStartNotified = false;
+
+  constructor(assistantWrap: HTMLElement, phaseCallbacks: ThoughtPhaseCallbacks = {}) {
     this.assistantWrap = assistantWrap;
+    this.phaseCallbacks = phaseCallbacks;
   }
 
   /**
    * Point the controller at the active assistant row (e.g. after a tool round
    * replaces the streaming bubble wrapper).
    */
+  /** Reset phase callbacks for a new streaming shell in the same user send (e.g. after tools). */
+  resetStreamPhaseHints(): void {
+    this.thinkingStartNotified = false;
+  }
+
   setAssistantWrap(wrap: HTMLElement): void {
     this.assistantWrap = wrap;
     if (this.stageEl && !this.stageEl.isConnected) {
@@ -86,6 +102,10 @@ export class ThoughtBubbleController {
   /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
+    if (!this.thinkingStartNotified) {
+      this.thinkingStartNotified = true;
+      this.phaseCallbacks.onThinkingStart?.();
+    }
     this.tailWork = this.tailWork.then(() => this.applyReasoningDeltaInQueue(delta));
   }
 
@@ -140,6 +160,7 @@ export class ThoughtBubbleController {
     this.stopTypewriter();
     this.teardownStage();
     this.displayedLen = 0;
+    this.phaseCallbacks.onReasoningEnded?.();
   }
 
   /** Drop timers and remove the live stage (abort / error / new send). */

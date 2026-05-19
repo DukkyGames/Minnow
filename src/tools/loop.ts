@@ -408,18 +408,31 @@ export async function sendMessageWithTools(): Promise<void> {
 
   setStreaming(true);
   setSendLoading(true);
-  setStatus('spin', 'Generating replyâ€¦');
+  setStatus('spin', 'Generating reply…');
 
   let streamRow = appendStreamingAssistantRow();
-  let { wrap, bubble, cursor } = streamRow;
-  let revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
+  let { wrap, bubble, cursor, streamStatus } = streamRow;
+  const streamCtx = { wrap, streamStatus };
+  let revealProse = (): void =>
+    revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
 
   let completedNormally = false;
   let lastWrap = wrap;
   let thoughtController: ThoughtBubbleController | null = null;
 
+  const thoughtPhaseCallbacks = {
+    onThinkingStart: (): void => {
+      streamCtx.streamStatus.setPhase('thinking');
+    },
+    onReasoningEnded: (): void => {
+      if (streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
+        streamCtx.streamStatus.setPhase('generating');
+      }
+    },
+  };
+
   try {
-    thoughtController = new ThoughtBubbleController(wrap);
+    thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       const enabledTools = getEnabledToolDefinitions();
@@ -475,7 +488,7 @@ export async function sendMessageWithTools(): Promise<void> {
         touchChat(chat);
         scheduleSaveSessions();
 
-        setStatus('spin', 'Running toolsâ€¦');
+        setStatus('spin', 'Running tools…');
 
         const area = document.getElementById('chatArea')!;
         for (const tc of turnResult.toolCalls) {
@@ -505,12 +518,16 @@ export async function sendMessageWithTools(): Promise<void> {
         }
 
         streamRow = appendStreamingAssistantRow();
-        ({ wrap, bubble, cursor } = streamRow);
+        ({ wrap, bubble, cursor, streamStatus } = streamRow);
+        streamCtx.wrap = wrap;
+        streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
-        revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
+        revealProse = (): void =>
+          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
         thoughtController.setAssistantWrap(wrap);
+        thoughtController.resetStreamPhaseHints();
 
-        setStatus('spin', 'Generating replyâ€¦');
+        setStatus('spin', 'Generating reply…');
         continue;
       }
 
@@ -596,6 +613,7 @@ export async function sendMessageWithTools(): Promise<void> {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
       thoughtController?.abort();
+      streamCtx.streamStatus.dispose();
       return;
     }
     cancelAssistantBubbleRenderDebounce();
@@ -605,7 +623,7 @@ export async function sendMessageWithTools(): Promise<void> {
     bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
     bubble.style.color = 'var(--red)';
     const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}â€¦` : msg;
+    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     const attachHint =
       getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
     setStatus('err', statusMsg + attachHint);
