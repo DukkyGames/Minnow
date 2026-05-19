@@ -10,7 +10,7 @@ Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-su
 
 SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **32** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **23** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **34** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **23** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected.
 
 ## Repository layout (Vite)
 
@@ -90,6 +90,8 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   prompt-configs/          # scaffold (Step 04)
   prompts/                 # user prompt overrides (Step 04; work-agents/ subdir Step 08)
   work-agents.json         # per-agent provider/model/disabled overrides (Step 08)
+  sub-agents.json          # sub-agent types, concurrency, tool allow/deny (Step 09)
+  logs/sub-agents/         # optional per-run debug transcripts (Step 09)
   skills/                  # user skills (Step 13)
   backups/                 # scaffold
 ```
@@ -183,7 +185,39 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 **Tests:** `test/work-agents/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
 
-**APIs (`npm start`):**
+### Sub-agent orchestration (Step 09)
+
+Parent tool loop can spawn **isolated sub-agents** (separate messages, model, tool subset). Results return as JSON aggregate tool results; child transcripts are **not** appended to parent `chat.history`.
+
+| Concern | Location |
+|---------|----------|
+| Types | `src/agents/types.ts` |
+| Config merge | `src/agents/sub-agent-config.ts`, `src/agents/defaults/sub-agents.json` |
+| Orchestrator | `src/agents/orchestrator.ts` — spawn, cancel, queue, `restartSubAgent`, `cancelAllForParentTurn` |
+| Runner | `src/agents/sub-agent-runner.ts` — headless tool loop (`MAX_SUB_AGENT_TOOL_TURNS = 6`) |
+| Tool subset | `src/agents/sub-agent-tools.ts` |
+| Prompts | `src/agents/shipped-sub-agent-prompts.ts`, `src/agents/prompts/sub-agents/*.md` |
+| Parent tools | `spawn_sub_agent`, `cancel_sub_agent` in `src/tools/definitions.ts` |
+| Executor | `src/tools/sub-agent-executor.ts`; routed in `src/tools/client.ts` |
+| Parent abort | `src/tools/loop.ts` — `parentTurnId` + `cancelAllForParentTurn` on `AbortError` |
+
+**Built-in types:** `generalPurpose`, `explore`, `shell`, `explorer` (Step 19 self-heal stub, `maxConcurrent: 1`).
+
+**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`.
+
+**Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue).
+
+**Step 19 hooks (exported, not wired):** `restartSubAgent`, `recordToolCallForRun`, `getRunToolCallFingerprint`.
+
+**Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `speedchat.subAgents` in `localStorage` when Vite-only.
+
+**Tests:** `test/sub-agents/**/*.test.mts`. Verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET/PUT` | `/api/config/sub-agents` | User overrides for `sub-agents.json` |
+
+### Programmatic prompts API (Step 04)
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -209,6 +243,7 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 | `GET/PUT` | `/api/config/sessions` | `SessionState` ↔ `sessions/state.json` |
 | `GET/PUT` | `/api/config/tools` | `ToolConfig` ↔ `tools.json` |
 | `GET/PUT` | `/api/config/system-prompt` | `SystemPromptSettings` ↔ `system-prompt.json` |
+| `GET/PUT` | `/api/config/sub-agents` | `sub-agents.json` (Step 09) |
 | `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
 | `POST` | `/api/config/migrate` | Browser → disk one-time import |
 | `GET/PUT` | `/api/config/file?key=…` | Whitelisted keys only; traversal → **400** |
@@ -380,9 +415,9 @@ Browser (same origin :5173)
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
-## Built-in tools (32)
+## Built-in tools (34)
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **9** `serverRequired: false` (browser), **23** `serverRequired: true` (Node). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **11** `serverRequired: false` (browser, includes sub-agent tools), **23** `serverRequired: true` (Node). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
 
 ### Web (4 browser)
 
@@ -545,7 +580,7 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 | [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
-| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 32-tool catalog |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 34-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `speedchat.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |

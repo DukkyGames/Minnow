@@ -4,6 +4,7 @@
  */
 
 import { executeBrowserTool } from './browser-executor';
+import { executeSubAgentTool } from './sub-agent-executor';
 import {
   isLocalServerAvailable,
   isToolEnabled,
@@ -64,6 +65,10 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
 ): Promise<string> {
+  if (name === 'spawn_sub_agent' || name === 'cancel_sub_agent') {
+    return executeSubAgentTool(name, args);
+  }
+
   const config = loadToolConfig();
   const enrichedArgs = mergeConfigKeysIntoArgs(name, args, config);
 

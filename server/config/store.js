@@ -9,6 +9,7 @@ import { ensureSpeedChatLayout } from './home.js';
 import {
   mergeConfigMeta,
   normalizeToolConfig,
+  normalizeSubAgentsConfig,
   validateSessionState,
   validateSystemPromptSettings,
 } from './validators.js';
@@ -99,6 +100,10 @@ export async function readResource(resource) {
     await ensureSpeedChatLayout();
     return readConfigJson(key);
   }
+  if (resource === 'sub-agents') {
+    const data = await readConfigJson(key);
+    return data ?? { version: 1, enabled: true, globalMaxConcurrent: 3, defaultTimeoutMs: 300000, types: {} };
+  }
 
   return readConfigJson(key);
 }
@@ -131,6 +136,11 @@ export async function writeResource(resource, body) {
     const merged = mergeConfigMeta(existing, body);
     await writeConfigJson(key, merged);
     return merged;
+  }
+  if (resource === 'sub-agents') {
+    const { config } = normalizeSubAgentsConfig(body);
+    await writeConfigJson(key, config);
+    return config;
   }
 
   await writeConfigJson(key, body);

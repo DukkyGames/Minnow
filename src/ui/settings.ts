@@ -31,6 +31,7 @@ const DRAWER_FOCUSABLE =
 const TOOL_CATEGORY_ORDER: ToolCategory[] = [
   'web',
   'utility',
+  'agents',
   'files',
   'git',
   'code',
@@ -39,6 +40,7 @@ const TOOL_CATEGORY_ORDER: ToolCategory[] = [
 const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   web: 'Web',
   utility: 'Utility',
+  agents: 'Sub-agents',
   files: 'Files',
   git: 'Git',
   code: 'Code',

@@ -76,10 +76,15 @@ import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import {
+  cancelAllForParentTurn,
+} from '../agents/orchestrator';
+import { createSubAgentRunId } from '../agents/sub-agent-run-id';
+import {
   detectLocalServer,
   executeTool,
   getEnabledToolDefinitionsForMode,
 } from './client';
+import { setSubAgentExecutorContext } from './sub-agent-executor';
 
 /** Maximum assistantâ†’tool rounds before aborting with an error. */
 export const MAX_TOOL_TURNS = 8;
@@ -404,6 +409,11 @@ export async function sendMessageWithTools(): Promise<void> {
   const controller = new AbortController();
   setChatFetchAbort(controller);
   const chatSignal = controller.signal;
+  const parentTurnId = createSubAgentRunId();
+  setSubAgentExecutorContext({
+    parentTurnId,
+    modeId: normalizeModeId(chat.modeId),
+  });
 
   chat.modelId = modelId || chat.modelId;
   const historyContent = buildHistoryUserContent(text, validAttachments);
@@ -676,6 +686,7 @@ export async function sendMessageWithTools(): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
+      cancelAllForParentTurn(parentTurnId);
       thoughtController?.abort();
       streamCtx.streamStatus.dispose();
       return;
@@ -692,6 +703,7 @@ export async function sendMessageWithTools(): Promise<void> {
       getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
     setStatus('err', statusMsg + attachHint);
   } finally {
+    setSubAgentExecutorContext(null);
     thoughtController?.abort();
     if (completedNormally) {
       // Clear-on-success-only: retain chips after abort, errors, or max tool turns for retry.

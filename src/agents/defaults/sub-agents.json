@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "enabled": true,
+  "globalMaxConcurrent": 3,
+  "defaultTimeoutMs": 300000,
+  "types": {
+    "generalPurpose": {
+      "label": "General purpose",
+      "enabled": true,
+      "providerId": "lm-studio-local",
+      "modelId": "",
+      "maxConcurrent": 2,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": null,
+      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
+      "systemPromptPath": null
+    },
+    "explore": {
+      "label": "Explore",
+      "enabled": true,
+      "providerId": "lm-studio-local",
+      "modelId": "",
+      "maxConcurrent": 2,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": [
+        "list_directory",
+        "read_file",
+        "read_file_range",
+        "find_files",
+        "search_in_file",
+        "get_file_metadata",
+        "git_status",
+        "git_log",
+        "web_search",
+        "wikipedia_search",
+        "fetch_web_content"
+      ],
+      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent", "execute_command", "git_commit"],
+      "systemPromptPath": null
+    },
+    "shell": {
+      "label": "Shell",
+      "enabled": true,
+      "providerId": "lm-studio-local",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": [
+        "execute_command",
+        "get_datetime",
+        "read_file",
+        "list_directory"
+      ],
+      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
+      "systemPromptPath": null
+    },
+    "explorer": {
+      "label": "Explorer (self-heal)",
+      "enabled": true,
+      "providerId": "lm-studio-local",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": null,
+      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
+      "systemPromptPath": null
+    }
+  }
+}

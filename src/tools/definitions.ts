@@ -4,7 +4,7 @@
  */
 
 /** Tool grouping for settings UI and documentation. */
-export type ToolCategory = 'web' | 'utility' | 'files' | 'git' | 'code';
+export type ToolCategory = 'web' | 'utility' | 'files' | 'git' | 'code' | 'agents';
 
 /** OpenAI-compatible function tool schema sent to chat completions. */
 export interface OpenAIFunctionDefinition {
@@ -568,6 +568,47 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         code: { type: 'string', description: 'Python source to execute' },
       },
       ['code'],
+    ),
+  },
+  // --- Sub-agents (browser orchestrator, Step 09) ---
+  {
+    id: 'spawn_sub_agent',
+    label: 'Spawn sub-agent',
+    description:
+      'Starts an isolated sub-agent with its own model, tools, and context; returns a JSON summary.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'spawn_sub_agent',
+      'Spawn a sub-agent of the given type to complete a task in isolation.',
+      {
+        type: {
+          type: 'string',
+          description: 'Sub-agent type id (e.g. generalPurpose, explore, shell)',
+        },
+        task: { type: 'string', description: 'Task description for the sub-agent' },
+        wait: {
+          type: 'boolean',
+          description: 'If true (default), block until the sub-agent finishes',
+        },
+      },
+      ['type', 'task'],
+    ),
+  },
+  {
+    id: 'cancel_sub_agent',
+    label: 'Cancel sub-agent',
+    description: 'Cancels a running or queued sub-agent by run id.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'cancel_sub_agent',
+      'Cancel a sub-agent run by run_id.',
+      {
+        run_id: { type: 'string', description: 'Run id returned from spawn_sub_agent' },
+        reason: { type: 'string', description: 'Optional cancellation reason' },
+      },
+      ['run_id'],
     ),
   },
 ];
