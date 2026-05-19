@@ -1,0 +1,18 @@
+{
+  "id": "context7",
+  "label": "Context7",
+  "description": "Up-to-date library documentation and code examples",
+  "transport": {
+    "type": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@upstash/context7-mcp@latest"
+    ],
+    "env": {
+      "CONTEXT7_API_KEY": "${secret:context7ApiKey}"
+    }
+  },
+  "enabled": true,
+  "builtin": true
+}

@@ -25,6 +25,8 @@ import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
 import { createMemoryMiddleware } from './server/memory/middleware.js';
 import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
+import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
+import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -635,6 +637,10 @@ const SERVER_TOOL_HANDLERS = {
  */
 async function executeServerTool(name, args) {
   try {
+    if (isMcpToolName(name)) {
+      const result = await callMcpTool(name, args ?? {});
+      return { result: String(result) };
+    }
     const handler = SERVER_TOOL_HANDLERS[name];
     if (!handler) {
       return { result: `Not implemented: ${name}` };
@@ -768,6 +774,7 @@ async function main() {
           server.middlewares.use(createConfigMiddleware());
           server.middlewares.use(createMemoryMiddleware());
           server.middlewares.use(createLspMiddleware(PROJECT_ROOT));
+          server.middlewares.use(createMcpMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
@@ -784,6 +791,7 @@ async function main() {
   await ensureProviderRegistry();
   await initMemoryApi();
   await initLspConfig();
+  await initMcpApi();
   const homePath = getSpeedChatHome();
   console.log(`SpeedChat data: ${homePath}`);
 
@@ -797,6 +805,7 @@ async function main() {
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
+  console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   openBrowser(localUrl);
