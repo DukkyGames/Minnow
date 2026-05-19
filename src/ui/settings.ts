@@ -33,6 +33,7 @@ const TOOL_CATEGORY_ORDER: ToolCategory[] = [
   'utility',
   'browser',
   'agents',
+  'lsp',
   'files',
   'git',
   'code',
@@ -46,6 +47,7 @@ const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   files: 'Files',
   git: 'Git',
   code: 'Code',
+  lsp: 'LSP',
 };
 
 let drawerReturnFocus: HTMLElement | null = null;

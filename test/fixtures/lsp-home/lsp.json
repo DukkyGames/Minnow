@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "lsp": {
+    "fake": {
+      "disabled": false,
+      "command": [
+        "node",
+        "test/fixtures/fake-lsp.mjs"
+      ],
+      "extensions": [
+        ".fake"
+      ]
+    }
+  }
+}

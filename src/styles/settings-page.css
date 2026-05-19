@@ -1,0 +1,117 @@
+/**
+ * Full settings page layout (Step 20).
+ */
+
+.settings-page {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg, #fefefe);
+  color: var(--text, #111);
+}
+
+.settings-page.is-open {
+  display: flex;
+}
+
+.settings-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+}
+
+.settings-page-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-nav {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border, #e5e5e5);
+  padding: 12px 8px;
+  overflow-y: auto;
+}
+
+.settings-nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.settings-nav button[aria-current='page'] {
+  background: var(--accent-soft, #eef2ff);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: none;
+  max-width: 720px;
+}
+
+.settings-section.is-active {
+  display: block;
+}
+
+.settings-section h2 {
+  margin: 0 0 16px;
+  font-size: 1.25rem;
+}
+
+.settings-profile-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.settings-profile-tabs button {
+  padding: 6px 14px;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.settings-profile-tabs button.is-active {
+  background: var(--accent, #4f46e5);
+  color: #fff;
+  border-color: var(--accent, #4f46e5);
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+}
+
+@media (max-width: 768px) {
+  .settings-page-body {
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #e5e5e5);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-05-19T23:33:29.930Z",
+  "createdAt": "2026-05-19T23:41:07.740Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -36,6 +36,19 @@
     "providerId": "",
     "modelId": "",
     "fallbackToChatModel": true
+  },
+  "selfHealing": {
+    "enabled": false,
+    "tier1": {
+      "maxRestartsPerParentTurn": 2,
+      "duplicateToolCallThreshold": 3,
+      "sameErrorThreshold": 3,
+      "noProgressTurnThreshold": 4
+    },
+    "tier2": {
+      "enabled": true,
+      "requireScriptApproval": true
+    }
   },
   "memory": {
     "enabled": true,
