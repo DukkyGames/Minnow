@@ -16,7 +16,17 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
-import type { Message, ModelInfo, Stats, Usage } from '../types';
+import type { OpenAIFunctionDefinition } from '../tools/definitions';
+import type {
+  ApiMessage,
+  ChatCompletionChunk,
+  Message,
+  ModelInfo,
+  Stats,
+  ToolCall,
+  ToolCallAccumulator,
+  Usage,
+} from '../types';
 import { setSendLoading } from '../ui/input';
 import { renderSidebar } from '../ui/sidebar';
 import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
@@ -31,24 +41,14 @@ export interface StreamMetaAccumulator {
   finish_reason?: string;
 }
 
-/** OpenAI-style streaming chunk shape (subset used by LM Studio). */
-interface ChatCompletionChunk {
-  choices?: Array<{
-    delta?: { content?: string };
-    message?: { content?: string };
-    finish_reason?: string;
-  }>;
-  stats?: Stats;
-  usage?: Usage;
-  model_info?: ModelInfo;
+/** Non-streaming completion body (multimodal messages + optional tools). */
+export interface ChatCompletionBody {
   model?: string;
-}
-
-interface ChatCompletionBody {
-  model?: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  tools?: OpenAIFunctionDefinition[];
+  tool_choice?: 'auto';
 }
 
 /** Scroll the message list to the latest content. */
@@ -69,6 +69,64 @@ export function extractStreamDelta(chunk: ChatCompletionChunk): string {
   if (delta?.content) return delta.content;
   if (choice.message?.content) return choice.message.content;
   return '';
+}
+
+/** Merge streaming `tool_calls` fragments into an accumulator keyed by `index`. */
+export function mergeToolCallDelta(
+  acc: ToolCallAccumulator,
+  chunk: ChatCompletionChunk
+): ToolCallAccumulator {
+  const deltas = chunk.choices?.[0]?.delta?.tool_calls;
+  if (!deltas?.length) return acc;
+
+  const next: ToolCallAccumulator = { ...acc };
+  for (const d of deltas) {
+    const idx = d.index;
+    const existing = next[idx] || { type: 'function' as const, function: { name: '', arguments: '' } };
+    const merged: Partial<ToolCall> = {
+      ...existing,
+      type: 'function',
+      function: {
+        name: existing.function?.name || '',
+        arguments: existing.function?.arguments || '',
+      },
+    };
+    if (d.id) merged.id = d.id;
+    if (d.function?.name) {
+      merged.function = {
+        ...merged.function!,
+        name: (merged.function?.name || '') + d.function.name,
+      };
+    }
+    if (d.function?.arguments) {
+      merged.function = {
+        ...merged.function!,
+        arguments: (merged.function?.arguments || '') + d.function.arguments,
+      };
+    }
+    next[idx] = merged;
+  }
+  return next;
+}
+
+/** Turn a streaming accumulator into complete `ToolCall` rows (sorted by index). */
+export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[] {
+  return Object.keys(acc)
+    .map((k) => Number(k))
+    .filter((idx) => Number.isFinite(idx))
+    .sort((a, b) => a - b)
+    .map((idx) => {
+      const partial = acc[idx];
+      return {
+        id: partial?.id || `call_${idx}`,
+        type: 'function' as const,
+        function: {
+          name: partial?.function?.name || '',
+          arguments: partial?.function?.arguments || '',
+        },
+      };
+    })
+    .filter((tc) => Boolean(tc.function.name));
 }
 
 /** Plain message content from a non-streaming completion. */
@@ -277,10 +335,29 @@ export async function sendMessage(): Promise<void> {
   input.value = '';
   input.style.height = 'auto';
 
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages: ApiMessage[] = [];
   if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
   for (const m of chat.history) {
-    messages.push({ role: m.role, content: m.content });
+    if (m.role === 'tool') {
+      messages.push({
+        role: 'tool',
+        tool_call_id: m.tool_call_id,
+        content: m.content,
+      });
+      continue;
+    }
+    if (m.role === 'assistant' && 'tool_calls' in m && m.tool_calls?.length) {
+      messages.push({
+        role: 'assistant',
+        content: m.content ?? null,
+        tool_calls: m.tool_calls,
+      });
+      continue;
+    }
+    messages.push({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    });
   }
 
   const body = {

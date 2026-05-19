@@ -85,6 +85,17 @@
       <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"
         oninput="onSystemPromptInput()"></textarea>
     </div>
+    <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
+      <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
+      <p class="field-hint tools-section-hint">Enable function calling for the model. Server tools require <code>npm start</code> (local tool server).</p>
+      <p id="toolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+      <div id="toolsList" class="tools-list"></div>
+      <div class="tool-key-row field">
+        <label for="braveApiKey">Brave Search API key</label>
+        <input type="password" id="braveApiKey" autocomplete="off" spellcheck="false" placeholder="Optional — for web_search">
+        <p class="field-hint">When set, web search uses Brave; otherwise DuckDuckGo via the local server.</p>
+      </div>
+    </section>
     <button class="drawer-clear-btn" type="button" onclick="clearChat()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:6px"><path d="M18 6L6 18M6 6l12 12"/></svg>
       Clear messages in this chat
@@ -121,10 +132,19 @@
 
     <!-- Input bar -->
     <div class="input-bar">
-      <div class="input-wrap">
-        <label for="msgInput" class="visually-hidden">Message</label>
-        <textarea id="msgInput" placeholder="Type a message…" rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <input type="file" id="fileInput" class="visually-hidden" multiple tabindex="-1" aria-hidden="true">
+      <div class="input-bar-composer">
+        <div id="attachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
+        <div class="input-row">
+          <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div class="input-wrap">
+            <label for="msgInput" class="visually-hidden">Message</label>
+            <textarea id="msgInput" placeholder="Type a message…" rows="1"
+              onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          </div>
+        </div>
       </div>
       <button class="send-btn" id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">
         <span id="sendIcon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>

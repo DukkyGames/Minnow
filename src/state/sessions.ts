@@ -6,7 +6,15 @@ import {
   STORAGE_KEY,
 } from '../constants';
 import { setSaveTimer, saveTimer } from '../app-state';
-import type { Chat, Message, SessionState } from '../types';
+import type {
+  AssistantMessage,
+  AssistantToolCallMessage,
+  Chat,
+  Message,
+  SessionState,
+  ToolCall,
+  ToolResultMessage,
+} from '../types';
 
 /** In-memory session blob mirrored to localStorage. */
 export let sessionState: SessionState | null = null;
@@ -45,14 +53,62 @@ export function createEmptyChatObject(modelId: string): Chat {
   };
 }
 
+function ensureToolCall(raw: unknown): ToolCall | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id : '';
+  const fn = row.function;
+  if (!id || !fn || typeof fn !== 'object') return null;
+  const func = fn as Record<string, unknown>;
+  const name = typeof func.name === 'string' ? func.name : '';
+  if (!name) return null;
+  const args = typeof func.arguments === 'string' ? func.arguments : '';
+  return { id, type: 'function', function: { name, arguments: args } };
+}
+
+function ensureToolCalls(raw: unknown): ToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(ensureToolCall).filter((tc): tc is ToolCall => Boolean(tc));
+}
+
 function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | null {
-  if (!m || (m.role !== 'user' && m.role !== 'assistant')) return null;
-  const content = m.content != null ? String(m.content) : '';
-  if (m.role === 'user') return { role: 'user', content };
-  const o: Message = { role: 'assistant', content };
-  if (m.stats && typeof m.stats === 'object') o.stats = m.stats;
-  if (m.usage && typeof m.usage === 'object') o.usage = m.usage;
-  return o;
+  if (!m || !m.role) return null;
+
+  if (m.role === 'tool') {
+    const toolMsg = m as Partial<ToolResultMessage>;
+    const toolCallId =
+      typeof toolMsg.tool_call_id === 'string' ? toolMsg.tool_call_id.trim() : '';
+    if (!toolCallId) return null;
+    const content = toolMsg.content != null ? String(toolMsg.content) : '';
+    return { role: 'tool', tool_call_id: toolCallId, content };
+  }
+
+  if (m.role === 'user') {
+    const content = m.content != null ? String(m.content) : '';
+    return { role: 'user', content };
+  }
+
+  if (m.role !== 'assistant') return null;
+
+  const toolCalls = ensureToolCalls((m as Partial<AssistantToolCallMessage>).tool_calls);
+  if (toolCalls.length) {
+    const withTools: AssistantToolCallMessage = {
+      role: 'assistant',
+      content: m.content == null ? null : String(m.content),
+      tool_calls: toolCalls,
+    };
+    if (m.stats && typeof m.stats === 'object') withTools.stats = m.stats;
+    if (m.usage && typeof m.usage === 'object') withTools.usage = m.usage;
+    return withTools;
+  }
+
+  const assistant: AssistantMessage = {
+    role: 'assistant',
+    content: m.content != null ? String(m.content) : '',
+  };
+  if (m.stats && typeof m.stats === 'object') assistant.stats = m.stats;
+  if (m.usage && typeof m.usage === 'object') assistant.usage = m.usage;
+  return assistant;
 }
 
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {

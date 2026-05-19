@@ -9,10 +9,31 @@ export const SESSION_SCHEMA_VERSION = 1 as const;
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
 /** Roles stored in chat history (UI + localStorage). */
-export type ChatRole = 'user' | 'assistant';
+export type ChatRole = 'user' | 'assistant' | 'tool';
 
 /** Roles sent to LM Studio chat completions (includes ephemeral system prompt). */
 export type ApiChatRole = 'system' | ChatRole;
+
+/** OpenAI-compatible function tool invocation (complete, after streaming finalize). */
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+/** One fragment of a streaming `tool_calls` delta (indexed by `index`). */
+export interface ChatCompletionToolCallDelta {
+  index: number;
+  id?: string;
+  type?: 'function';
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
 
 /** Token usage from LM Studio completion chunks or non-streaming responses. */
 export interface Usage {
@@ -42,7 +63,68 @@ export interface AssistantMessage {
   usage?: Usage;
 }
 
-export type Message = UserMessage | AssistantMessage;
+/** Assistant turn that requested one or more tool calls (`finish_reason: tool_calls`). */
+export interface AssistantToolCallMessage {
+  role: 'assistant';
+  content: string | null;
+  tool_calls: ToolCall[];
+  stats?: Stats;
+  usage?: Usage;
+}
+
+/** Tool execution result correlated to `tool_call_id` from the prior assistant turn. */
+export interface ToolResultMessage {
+  role: 'tool';
+  tool_call_id: string;
+  content: string;
+}
+
+export type Message =
+  | UserMessage
+  | AssistantMessage
+  | AssistantToolCallMessage
+  | ToolResultMessage;
+
+/** Multimodal user/assistant payload part (attachments use in later waves). */
+export interface TextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageUrlContentPart {
+  type: 'image_url';
+  image_url: {
+    url: string;
+    detail?: 'auto' | 'low' | 'high';
+  };
+}
+
+export type ContentPart = TextContentPart | ImageUrlContentPart;
+
+/** API message body: plain string or multimodal parts. */
+export type ApiMessageContent = string | ContentPart[] | null;
+
+export interface ApiSystemMessage {
+  role: 'system';
+  content: string;
+}
+
+export interface ApiUserMessage {
+  role: 'user';
+  content: ApiMessageContent;
+}
+
+export interface ApiAssistantMessage {
+  role: 'assistant';
+  content: ApiMessageContent;
+  tool_calls?: ToolCall[];
+}
+
+export interface ApiToolMessage {
+  role: 'tool';
+  tool_call_id: string;
+  content: string;
+}
 
 /**
  * Flat snapshot of the last completed assistant turn for sidebar preview
@@ -110,10 +192,11 @@ export interface LmModelsListResponse {
 }
 
 /** Outbound chat message (system prompt is not persisted in session history). */
-export interface ApiMessage {
-  role: ApiChatRole;
-  content: string;
-}
+export type ApiMessage =
+  | ApiSystemMessage
+  | ApiUserMessage
+  | ApiAssistantMessage
+  | ApiToolMessage;
 
 export interface ChatCompletionsRequest {
   model?: string;
@@ -126,6 +209,7 @@ export interface ChatCompletionsRequest {
 
 export interface ChatCompletionChoiceDelta {
   content?: string;
+  tool_calls?: ChatCompletionToolCallDelta[];
 }
 
 export interface ChatCompletionChoice {
@@ -142,6 +226,9 @@ export interface ChatCompletionChunk {
   model_info?: ModelInfo;
   model?: string;
 }
+
+/** Partial tool calls keyed by stream `index` while merging SSE deltas. */
+export type ToolCallAccumulator = Record<number, Partial<ToolCall>>;
 
 /** Accumulator while parsing a streaming completion (`mergeStreamMeta`). */
 export interface StreamMeta {

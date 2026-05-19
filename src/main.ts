@@ -15,8 +15,10 @@ import './styles/responsive.css';
 
 import 'highlight.js/styles/github.min.css';
 
+import { initAttachments, onFileSelected } from './attachments/store';
 import { fetchModels } from './api/models';
 import { sendMessage } from './chat/messaging';
+import { detectLocalServer } from './tools/client';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { autoResize, handleKey } from './ui/input';
@@ -30,12 +32,15 @@ import {
 import {
   closeDrawer,
   fillSystemPromptPresetSelect,
+  fillToolsSection,
   loadSystemPromptSettings,
   onDrawerKeydown,
   onSystemPromptInput,
   onSystemPromptPresetChange,
+  registerToolHandlers,
   toggleDrawer,
 } from './ui/settings';
+import { loadToolConfigIntoDrawer } from './tools/config';
 import {
   createChat,
   onModelSelectChange,
@@ -63,6 +68,7 @@ function registerWindowHandlers(): void {
   window.onSystemPromptInput = onSystemPromptInput;
   window.handleKey = handleKey;
   window.autoResize = autoResize;
+  window.onFileSelected = onFileSelected;
 }
 
 /** Register PWA service worker (shell cache); failures are ignored. */
@@ -77,6 +83,11 @@ export async function initApp(): Promise<void> {
   loadSessionsFromStorage();
   fillSystemPromptPresetSelect();
   loadSystemPromptSettings();
+  fillToolsSection();
+  registerToolHandlers();
+  initAttachments();
+  await detectLocalServer();
+  loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();
   await fetchModels();

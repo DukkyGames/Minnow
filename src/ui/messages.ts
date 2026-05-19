@@ -6,12 +6,45 @@ import {
   touchChat,
   scheduleSaveSessions,
 } from '../state/sessions';
-import type { Chat, ModelInfo, Stats, Usage } from '../types';
+import type {
+  AssistantToolCallMessage,
+  Chat,
+  Message,
+  ModelInfo,
+  Stats,
+  ToolResultMessage,
+  Usage,
+} from '../types';
 import { scrollBottom } from './input';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { renderSidebar } from './sidebar';
+import { renderToolCall, renderToolResult } from './tool-messages';
+
+/** Parse stored tool `arguments` JSON for display in the args <details> block. */
+function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return { value: parsed };
+  } catch {
+    return { _raw: raw };
+  }
+}
+
+function isAssistantToolCallMessage(msg: Message): msg is AssistantToolCallMessage {
+  return (
+    msg.role === 'assistant' &&
+    'tool_calls' in msg &&
+    Array.isArray((msg as AssistantToolCallMessage).tool_calls) &&
+    (msg as AssistantToolCallMessage).tool_calls.length > 0
+  );
+}
 
 export function resolveModelInfo(
   modelId: string,
@@ -74,10 +107,46 @@ export function renderChatFromHistory(chat: Chat): void {
     area.appendChild(empty);
     return;
   }
+  const toolResultMap = new Map<string, string>();
+  for (const msg of chat.history) {
+    if (msg?.role !== 'tool') continue;
+    const toolMsg = msg as ToolResultMessage;
+    toolResultMap.set(toolMsg.tool_call_id, toolMsg.content);
+  }
+
   for (const msg of chat.history) {
     if (!msg || !msg.role) continue;
-    const { wrap } = appendBubble(msg.role, msg.content);
-    if (msg.role === 'assistant' && (msg.stats || msg.usage)) {
+    if (msg.role === 'tool') continue;
+
+    if (msg.role === 'user') {
+      appendBubble('user', msg.content);
+      continue;
+    }
+
+    if (isAssistantToolCallMessage(msg)) {
+      const prose = msg.content != null ? String(msg.content).trim() : '';
+      if (prose) {
+        const { wrap } = appendBubble('assistant', prose);
+        if (msg.stats || msg.usage) {
+          appendStats(wrap, msg.stats || {}, msg.usage || {});
+        }
+      }
+
+      for (const tc of msg.tool_calls) {
+        const argsObj = parseToolArgsForDisplay(tc.function.arguments);
+        const toolWrap = renderToolCall(tc.function.name, argsObj);
+        area.appendChild(toolWrap);
+        const result = toolResultMap.get(tc.id);
+        if (result !== undefined) {
+          renderToolResult(toolWrap, result);
+        }
+      }
+      continue;
+    }
+
+    const text = msg.content ?? '';
+    const { wrap } = appendBubble('assistant', text);
+    if (msg.stats || msg.usage) {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
   }

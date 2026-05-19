@@ -22,5 +22,6 @@ declare global {
     onSystemPromptInput: () => void;
     handleKey: (e: KeyboardEvent) => void;
     autoResize: (el: HTMLTextAreaElement) => void;
+    onFileSelected: (event: Event) => void;
   }
 }

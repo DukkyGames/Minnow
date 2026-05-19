@@ -1,14 +1,21 @@
 # SpeedChat — project context
 
+User-facing setup and quick start: [`README.md`](../README.md).
+
+Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
+
 ## What it is
 
 SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
+
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **32** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **23** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected.
 
 ## Repository layout (Vite)
 
 ```
 SpeedChat/
 ├── index.html              # Vite shell: markup + <script type="module" src="/src/main.ts">
+├── server.js               # Dev server: Vite + /api/tools (npm start)
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts          # base: './', outDir: dist
@@ -18,128 +25,283 @@ SpeedChat/
 │   └── icons/              # icon-192.png, icon-512.png
 ├── src/
 │   ├── main.ts             # Entry: CSS imports, window handlers, initApp()
-│   ├── types.ts
-│   ├── constants.ts
+│   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
+│   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── state/sessions.ts   # localStorage chat sessions
-│   ├── api/models.ts       # fetchModels, modelCache re-export, resolveModelInfo
-│   ├── api/chat.ts         # sendMessage, SSE/stream helpers, non-streaming fallback
-│   ├── chat/messaging.ts   # Re-exports sendMessage from api/chat
-│   ├── ui/                 # sidebar, settings, stats, messages, layout, status, …
+│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo
+│   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
+│   ├── chat/messaging.ts   # sendMessage → sendMessageWithTools
+│   ├── ui/                 # sidebar, settings, stats, messages, tool-messages, …
+│   ├── tools/
+│   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
+│   │   ├── config.ts           # speedchat.tools localStorage
+│   │   ├── browser-executor.ts # 9 browser-native handlers
+│   │   ├── client.ts           # ping, executeTool router, enabled defs
+│   │   └── loop.ts             # buildApiMessages, sendMessageWithTools
+│   ├── attachments/
+│   │   ├── types.ts
+│   │   ├── store.ts        # pending list, preview chips, initAttachments()
+│   │   └── reader.ts       # processFile — image, text, PDF
 │   ├── markdown/renderer.ts
-│   └── styles/             # tokens, global, topbar, sidebar, …
+│   └── styles/
 ├── dist/                   # Production build (gitignored)
 └── documentation/
 ```
 
+## localStorage keys
+
+| Key | Module | Purpose |
+|-----|--------|---------|
+| `speedchat-sessions-v1` | `src/constants.ts` → `src/state/sessions.ts` | Multi-chat sessions: `version`, `activeId`, `sidebarCollapsed`, `chats[]` with `history`, `modelId`, `lastStats`, … |
+| `speedchat.systemPrompt` | `PRESET_STORAGE_KEY` in `src/constants.ts` | System prompt preset + textarea content |
+| `speedchat.tools` | `TOOL_CONFIG_STORAGE_KEY` in `src/tools/config.ts` | Tool toggles + `keys.braveApiKey` |
+
+Server URL, temperature, and max tokens live in the settings drawer DOM (not in the session blob).
+
+### `speedchat.tools` shape
+
+```json
+{
+  "enabled": {
+    "get_datetime": true,
+    "calculate": true,
+    "web_search": true,
+    "wikipedia_search": true,
+    "read_file": false
+  },
+  "keys": {
+    "braveApiKey": ""
+  }
+}
+```
+
+- **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search` **on**; every other catalog id **off** (`defaultToolConfig()` in [`src/tools/config.ts`](../src/tools/config.ts)).
+- **UI:** Settings drawer **Tools** section — `fillToolsSection()`, `registerToolHandlers()` (delegated `change` on `#toolsList` → `onToolToggle(id)` from [`src/tools/config.ts`](../src/tools/config.ts)), `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)).
+- **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
+- **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables checkboxes, and sets `title` on each. `onToolToggle` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
+
+## Persisted message types (`chat.history`)
+
+Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `Message` union; LM Studio uses `ApiMessage` (built in `buildApiMessages`).
+
+| Role | Stored shape | Notes |
+|------|----------------|-------|
+| **user** | `{ role: 'user', content: string }` | Plain string only in history. Attachments are **not** stored as binary: images → `[image: filename.jpg]`; text/PDF → `<file name="…">…</file>` blocks in `content`. |
+| **assistant** (text) | `{ role: 'assistant', content, stats?, usage? }` | Markdown-rendered in UI; optional metric chips. |
+| **assistant** (tools) | `{ role: 'assistant', content: string \| null, tool_calls: ToolCall[] }` | OpenAI-style calls: `id`, `type: 'function'`, `function.name`, `function.arguments` (JSON string). |
+| **tool** | `{ role: 'tool', tool_call_id, content }` | Result string for one prior call; paired in UI via `tool_call_id`. |
+
+**API-only (not persisted as separate history rows):** `system` prompt; multimodal user `content` as `ContentPart[]` (`text` + `image_url`) for VLM models on the wire ([`buildApiMessages`](../src/tools/loop.ts)).
+
+**UI rendering:** [`renderChatFromHistory`](../src/ui/messages.ts) skips standalone `tool` rows, maps `tool_call_id` → result, and renders [`tool-messages.ts`](../src/ui/tool-messages.ts) bubbles for each `tool_calls` entry. The same bubble helpers are intended for **live** turns during `sendMessageWithTools` (see **Message rendering** below).
+
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar** listing each chat. Sessions are persisted in the browser via **`localStorage`**.
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. See **`speedchat-sessions-v1`** above.
 
-### Storage key and shape
+- At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
+- **QuotaExceededError** → status pill hint.
+- Delete chat: confirm dialog; deleting active chat switches to latest other or creates a new empty session.
 
-- **Key:** `speedchat-sessions-v1`
-- **JSON shape:**
-  - `version` — currently `1` (reserved for future migrations).
-  - `activeId` — id of the chat shown in the main column.
-  - `sidebarCollapsed` — desktop narrow-rail mode when `true`.
-  - `chats` — array of chat objects, each with:
-    - `id` — stable string (UUID when available).
-    - `name` — display title; starts as `New chat`, then auto-titled from the first user message (truncated), or user-renamed via the pencil control in the sidebar.
-    - `modelId` — last model id used with this chat (synced with the top bar model `<select>` when that chat is active).
-    - `history` — ordered messages for the API/UI: `user` entries are `{ role, content }`; `assistant` entries may also include `stats` and `usage` so per-message chips can be rebuilt when reopening a chat.
-    - `lastStats` — flat snapshot of the last completed assistant turn (TPS, TTFT, generation time, token counts, stop reason) for the sidebar row and the bottom stats strip.
-    - `modelInfo` — merged arch / quant / context metadata for the stats strip when restoring a chat.
-    - `updatedAt` — ms timestamp for ordering and pruning.
+### Layout (summary)
 
-Chats can be **deleted** from the sidebar (trash control on each row). A browser **confirm** runs first. Deleting the active chat switches to the most recently updated remaining chat; deleting the last chat creates a new empty session so the app always has at least one chat.
+- **Desktop:** header toggle collapses sidebar (wide vs narrow rail).
+- **Mobile (≤640px):** sidebar overlay + backdrop; safe-area padding.
+- **Compact (≤600px):** 16px input (iOS zoom), collapsible stats strip.
+- **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
 
-### Limits and errors
+## Dev server architecture (`server.js`)
 
-- At most **50** chats are kept; oldest by `updatedAt` are dropped on save (the active chat is never removed).
-- If `localStorage` throws **QuotaExceededError**, the status pill shows a short error hint.
+Use **`npm start`** for the full stack. **`npm run dev`** is Vite-only (no tool API).
 
-### Layout
+```text
+Browser (same origin :5173)
+    │
+    ├─► GET  /api/tools/ping     → { ok: true }
+    ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
+    │
+    ├─► LM Studio (localhost, not proxied) — models + chat/completions
+    │
+    └─► Vite SPA (index.html, /src/*, hashed assets)
+```
 
-- Below the top bar, **`.app-body`** is a flex row: **`.chat-sidebar`** (session list) and **`.main-column`** (messages, input, stats strip).
-- **Desktop:** the header **◀ / ▶** button toggles `sidebarCollapsed` (wide panel vs narrow rail with `+` only).
-- **Mobile (≤640px):** the sidebar is a **fixed overlay** with safe-area padding; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar menu button toggles open/closed. The in-sidebar collapse control is hidden on phone (overlay only).
-- **Compact (≤600px):** top bar hides the wordmark, tightens model/status space, stacks settings drawer numeric fields, uses **16px** message input (avoids iOS zoom), and collapses the stats strip to a **Metrics** summary row (tap to expand `.stats-strip.is-expanded`).
-- **Narrow (≤380px):** top bar hides duplicate **New chat** and **Refresh models** to free space for the model picker.
-- **Tablet (641–899px):** session sidebar is **200px** when expanded.
-- **Touch:** rename/delete on session rows use **44×44px** targets; hover styles apply only when `(hover: hover) and (pointer: fine)`.
-- **Layout height:** `100dvh` on `html`/`body` for mobile browser chrome; horizontal/bottom safe areas on input bar, drawer, and mobile sidebar.
-- **Stats icons:** the bottom stats strip uses small inline SVGs per metric (zap = TPS, play = TTFT, clock = generation time, layers = total tokens), tinted to match the metric color class. Per-message chips under assistant replies are text-only (no icons).
+`node server.js` uses Vite’s programmatic API (`createServer` + [`vite.config.ts`](../vite.config.ts)), registers **`configureServer`** middleware **before** the SPA handler, listens on **`PORT`** (default **5173**), logs the URL, and opens the default browser (`start` / `open` / `xdg-open`).
 
-### Other persisted settings
+| Route | Method | Response |
+|-------|--------|----------|
+| `/api/tools/ping` | GET | `{ "ok": true }` |
+| `/api/tools` | POST | `{ "name", "args" }` → `{ "result": "<string>" }` |
 
-System prompt preset and textarea content use a separate key: `speedchat.systemPrompt` (see `PRESET_STORAGE_KEY` in `src/constants.ts`). Server URL, temperature, and max tokens remain in the DOM / settings drawer and are not part of the session blob unless changed elsewhere later.
+- **CORS:** `*` for local dev; **OPTIONS** → 204.
+- **Path guard:** `resolveSafePath()` — paths under `process.cwd()` unless `TOOLS_ALLOW_ALL_PATHS=1`.
+- **Errors:** Handlers return **strings**; failures use `Error: …` prefix (not thrown to the client).
+- **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected — the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
+- **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
+
+**Executor extras (not in the 32-tool settings catalog):**
+
+| Name | Purpose |
+|------|---------|
+| `web_search_ddg` | DuckDuckGo HTML snippets when Brave key missing (`web_search` routes here via [`client.ts`](../src/tools/client.ts)) |
+| `send_notification` | OS notification / dialog |
+| `read_document` | PDF attachment extraction (base64 in `args.content`, max **10MB** decoded) |
+
+### PDF attachments (`read_document` + `pdf-parse`)
+
+- Invoked by [`src/attachments/reader.ts`](../src/attachments/reader.ts) when user picks a `.pdf` and `npm start` is up.
+- POST `{ name: 'read_document', args: { filename, content } }` where `content` is base64 file bytes.
+- Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
+- Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
+
+## Built-in tools (32)
+
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **9** `serverRequired: false` (browser), **23** `serverRequired: true` (Node). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
+
+### Web (4 browser)
+
+| id | Runs on |
+|----|---------|
+| `web_search` | Browser (Brave API if `braveApiKey` / `api_key`; else client routes to `web_search_ddg` when server up) |
+| `wikipedia_search` | Browser |
+| `fetch_web_content` | Browser (fetch + strip HTML, ~8KB cap; CORS limits apply) |
+| `rag_web_content` | Browser (fetch + sentence scoring by query) |
+
+### Utility (5 browser)
+
+| id | Runs on |
+|----|---------|
+| `get_datetime` | Browser |
+| `calculate` | Browser (whitelist math + `Math`) |
+| `read_clipboard` / `write_clipboard` | Browser |
+| `get_system_info` | Browser (`navigator`, `screen`, timezone JSON) |
+
+### Files (14 server)
+
+`list_directory`, `read_file`, `read_file_range`, `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `search_in_file`, `make_directory`, `move_file`, `copy_file`, `delete_path`, `find_files`, `get_file_metadata`
+
+### Git (6 server)
+
+`git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_checkout`
+
+### Code (3 server)
+
+`execute_command`, `run_javascript`, `run_python`
+
+### Tool loop and client
+
+- **`detectLocalServer()`** — `GET /api/tools/ping`, **800 ms** timeout ([`src/tools/client.ts`](../src/tools/client.ts)).
+- **`executeTool(name, args)`** — browser executor or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
+- **`sendMessageWithTools()`** — up to **`MAX_TOOL_TURNS` = 8**; streams SSE, `mergeToolCallDelta` / `finalizeToolCalls`, runs enabled tools, appends assistant + tool messages ([`src/tools/loop.ts`](../src/tools/loop.ts)).
+- **Send entry:** [`src/chat/messaging.ts`](../src/chat/messaging.ts) exports `sendMessage` as alias of `sendMessageWithTools`; `sendMessagePlain` remains for non-tool chat ([`src/api/chat.ts`](../src/api/chat.ts)).
+
+### Browser executor summary
+
+[`executeBrowserTool`](../src/tools/browser-executor.ts) implements all nine browser tools; returns strings, `Error: …` on failure.
+
+## File attachments
+
+| Concern | Detail |
+|---------|--------|
+| **Module** | [`src/attachments/`](../src/attachments/) — `types.ts`, `store.ts`, `reader.ts` |
+| **UI** | Hidden `#fileInput` (multiple), paperclip button, `#attachPreview` chips |
+| **Max size** | **10 MB** per file (`MAX_ATTACHMENT_BYTES`; aligns with `read_document`) |
+| **Images** | `dataUrl` in memory; API: `image_url` parts when model type is **vlm** (`modelCache`) |
+| **Text/code** | Many extensions in `reader.ts`; soft warn if **> 32 KB** (`largeTextWarning` chip) |
+| **PDF** | Server `read_document` when `npm start`; else error chip |
+| **Other binary** | Unsupported error chip |
+| **After send** | `clearAttachments()` only when the send completes **normally** (`completedNormally` in [`sendMessageWithTools`](../src/tools/loop.ts)); abort, errors, and max-tool-turn exits **keep** preview chips so the user can retry |
+| **History** | User `content` string with `[image: …]` and/or `<file name="…">` blocks |
 
 ## Service worker
 
-[`public/sw.js`](../public/sw.js) is copied to `dist/sw.js` on build. Cache name **`speedchat-v5`** (bump to invalidate old caches).
+[`public/sw.js`](../public/sw.js) → `dist/sw.js`. Cache **`speedchat-v5`**.
 
 | Request | Strategy |
 |---------|----------|
-| `localhost` / `127.0.0.1` (LM Studio API) | **Not intercepted** |
-| Navigation (`mode: navigate`) | **Network-first**, fallback to cached `./index.html` |
+| `localhost` / `127.0.0.1` (LM Studio) | **Not intercepted** |
+| Navigation | **Network-first**, fallback cached `./index.html` |
 | `index.html`, `manifest.json` | **Cache-first** |
-| Hashed JS/CSS from Vite | **Network only** (default browser fetch) |
+| Hashed JS/CSS | **Network only** |
 
-Registration: `navigator.serviceWorker.register('sw.js')` in `src/main.ts`.
+Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.register('sw.js')`.
 
 ## Design context
 
-Product and visual direction live in [`PRODUCT.md`](../PRODUCT.md) and [`DESIGN.md`](../DESIGN.md). Machine-readable tokens also live in [`.impeccable/design.json`](../.impeccable/design.json).
+[`PRODUCT.md`](../PRODUCT.md), [`DESIGN.md`](../DESIGN.md), [`.impeccable/design.json`](../.impeccable/design.json).
 
-**Current theme (light):** OKLCH near-white `--bg` / `--surface`, graphite `--text`, ink-black `--accent` (logo, send, selection), soft green `--user-bg` for user bubbles, flat assistant bubbles on `--bg` with hairline borders. Semantic green / amber / red only on metrics (stats strip, chips, status dot). JetBrains Mono for instrumentation (loaded via [`src/styles/fonts.css`](../src/styles/fonts.css), imported in `main.ts` — not from a CDN link in `index.html`); system-ui at 14px for UI. No card stacks or gradient chrome; mobile sidebar uses the only routine shadow.
+**Theme:** OKLCH light surfaces, ink `--accent`, soft green user bubbles, JetBrains Mono for code/metrics ([`fonts.css`](../src/styles/fonts.css)). Tool bubbles: `.tool-call-*` in [`messages.css`](../src/styles/messages.css); settings tools UI in [`settings.css`](../src/styles/settings.css).
 
-PWA chrome: `theme-color` and `manifest.json` `theme_color` / `background_color` use `#fefefe` (near `--bg`); iOS status bar uses `default` for dark-on-light system chrome. Manifest `start_url` is `./` for relative hosting with `vite.config.ts` `base: './'`.
-
-Structural UI: inline SVG icon buttons, semantic `<header>` top bar, `<main>` chat area, settings drawer with `role="dialog"` and focus trap, collapsible stats strip on narrow viewports.
-
-## Hardening (production edge cases)
-
-- **Sidebar sessions:** Each chat is a `div.chat-item-row` with separate rename/delete buttons (no nested `<button>` elements). Rows support keyboard Enter/Space to switch chats.
-- **Overlays:** Settings and mobile sidebar backdrops are `<button type="button">` with labels; **Escape** closes the drawer or mobile chat list (`dismissOpenLayers`).
-- **Network:** `parseServerBaseUrl()` validates the LM Studio URL before fetch. Model list and chat requests use `AbortController` so rapid refresh/resend cancels the previous call.
-- **Send path:** Requires a selected model, temperature 0–2, and max tokens ≥ 1. Composer and send button disable while streaming (`aria-busy` on send).
-- **Rename:** Chat title input is capped at 120 characters.
-
-## Copy and labels (clarify pass)
-
-- **Accessible names:** Model select, message composer, and system prompt fields use `<label>` / `for` (visually hidden where space is tight). Sidebar rename/delete buttons use `aria-label` with the chat title.
-- **Settings:** Labels describe LM Studio URL, temperature, max tokens, and prompt presets; short hints explain defaults and preset behavior.
-- **Status pill:** Plain-language states (e.g. “Loading models…”, “Cannot reach LM Studio”, “Finish the current reply first”).
-- **Empty chat:** “No messages yet” plus guidance to pick a model and confirm LM Studio is running.
-- **Destructive actions:** Delete chat and clear messages use confirm dialogs that state what is lost; preset overwrite warns about losing edits.
-
-## API usage
+## API usage (LM Studio)
 
 - **Models:** `GET {serverUrl}/api/v0/models`
-- **Chat:** `POST {serverUrl}/api/v0/chat/completions` with streaming SSE; optional non-streaming fallback if the stream yields no text.
+- **Chat:** `POST {serverUrl}/api/v0/chat/completions` — streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`.
 
 ## Message rendering
 
-- **User** bubbles show **plain text** (`textContent`), including literal markdown if the user types it.
-- **Assistant** bubbles render **GitHub-flavored markdown** in the browser: **marked** parses content, **DOMPurify** sanitizes HTML before `innerHTML`, and **highlight.js** (with the `github` theme) colors fenced code blocks. Inline `` `code` `` and prose (lists, bold, links, tables, blockquotes) use `.msg-bubble--md` styles.
-- **Streaming:** assistant HTML is **debounced** (~100 ms) while SSE deltas arrive; a final synchronous render runs when the stream finishes. The blinking caret is a `.cursor` span re-appended after each render while streaming.
-- **Errors** on the assistant bubble use plain `textContent` again (no markdown) and strip the markdown modifier class so error styling stays predictable.
+- **User:** plain `textContent` (includes literal markdown if typed).
+- **Assistant:** **marked** + **DOMPurify** + **highlight.js**; streaming debounced ~100 ms.
+- **Tool calls/results** ([`tool-messages.ts`](../src/ui/tool-messages.ts), used from history in [`messages.ts`](../src/ui/messages.ts) and intended during live tool turns in [`loop.ts`](../src/tools/loop.ts)):
+  - **Collapsed (default):** tool **name** + **Success** or **Failed** (fail when result starts with `Error:` via `isToolResultFailure()`).
+  - **Expanded (click):** **Arguments** and **Result** in the `<details>` body / monospace `<pre>` blocks; results capped at **2 KB** in the UI (`RESULT_DISPLAY_CAP`).
+  - **Accessibility:** On completion, `.tool-call-msg` gets `role="status"` and `aria-live="polite"`; summary `aria-label` includes name + status + “show details”; success/fail glyphs expose `aria-label` (not `aria-hidden`); visible **Failed** / **Success** label text for assistive tech.
+  - **History:** `renderChatFromHistory` pairs each `tool_calls` entry with its `tool` row via `tool_call_id` and paints completed bubbles (no spinner).
+  - **Live:** on `finishReason === 'tool_calls'`, append `renderToolCall` before `executeTool`, then `renderToolResult` with the result string (replacing the interim “Calling tools…” assistant-only state where applicable).
+- **Errors:** plain text, no markdown class.
 
-Dependencies are npm packages (`marked`, `dompurify`, `highlight.js`); the hljs theme is imported in `src/main.ts`.
+## Development commands
 
-## Development
+| Command | What runs | Tools API | Typical use |
+|---------|-----------|-------------|---------------|
+| **`npm start`** | `node server.js` — Vite + `/api/tools` | Yes | Default dev: tools, git/file ops, PDF attachments, server tool toggles enabled after ping |
+| **`npm run dev`** | `vite` only | No | UI/HMR without Node tool handlers; server tools stay disabled in Settings |
+| **`npm run build`** | `tsc` + `vite build` → `dist/` | N/A (static deploy; no `server.js` in production unless you host it separately) |
+| **`npm run preview`** | `vite preview` | No | Smoke-test production bundle |
 
-- `npm run dev` — Vite dev server with HMR
-- `npm run build` — `tsc` then `vite build` → `dist/`
-- `npm run preview` — serve production build locally
+### Testing
 
-## Files
+E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification.md`](plans/tool-usage-verification.md).
+
+With **`npm start`** running, automated API/browser-unit smoke:
+
+```bash
+npx tsx scripts/sa16-smoke.mjs http://localhost:<port>
+```
+
+Use the port printed by `server.js` (default **5173**; another port if busy).
+
+### App bootstrap (`initApp`)
+
+Order in [`src/main.ts`](../src/main.ts) `initApp()`:
+
+1. `loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `loadSystemPromptSettings()`.
+2. `fillToolsSection()` + `registerToolHandlers()`.
+3. `initAttachments()` — file picker and `#attachPreview` strip.
+4. `await detectLocalServer()` → `loadToolConfigIntoDrawer()`.
+5. `applySidebarVisuals()` + `renderSidebar()`.
+6. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
+
+## Hardening (production edge cases)
+
+- Sidebar rows: no nested buttons; keyboard Enter/Space to switch chats.
+- Overlays: Escape closes drawer / mobile sidebar (`dismissOpenLayers`).
+- `parseServerBaseUrl()` before LM Studio fetch; `AbortController` on model list and chat.
+- Send requires model, temperature 0–2, max tokens ≥ 1; composer disabled while streaming.
+- Rename capped at 120 characters.
+
+## Key files
 
 | File | Role |
 |------|------|
-| [`index.html`](../index.html) | Vite HTML shell and static markup |
-| [`src/main.ts`](../src/main.ts) | Application entry point |
+| [`server.js`](../server.js) | Vite + `/api/tools` middleware |
+| [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
+| [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
+| [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 32-tool catalog |
+| [`src/tools/config.ts`](../src/tools/config.ts) | `speedchat.tools` |
+| [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
+| [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` |
+| [`src/attachments/reader.ts`](../src/attachments/reader.ts) | File processing + PDF POST |
 | [`public/sw.js`](../public/sw.js) | PWA service worker |
-| [`public/manifest.json`](../public/manifest.json) | Web app manifest |
 | [`documentation/context.md`](context.md) | This document |
+| [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md) | Sub-agent implementation plan |

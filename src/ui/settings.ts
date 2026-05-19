@@ -2,6 +2,11 @@ import {
   PRESET_STORAGE_KEY,
   SYSTEM_PROMPT_PRESETS,
 } from '../constants';
+import { onToolToggle, saveBraveApiKeyFromDrawer } from '../tools/config';
+import {
+  BUILT_IN_TOOLS,
+  type ToolCategory,
+} from '../tools/definitions';
 import {
   activeSystemPromptPresetId,
   setActiveSystemPromptPresetId,
@@ -12,7 +17,25 @@ import {
 const DRAWER_FOCUSABLE =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+/** Category order and labels for the Tools drawer section. */
+const TOOL_CATEGORY_ORDER: ToolCategory[] = [
+  'web',
+  'utility',
+  'files',
+  'git',
+  'code',
+];
+
+const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
+  web: 'Web',
+  utility: 'Utility',
+  files: 'Files',
+  git: 'Git',
+  code: 'Code',
+};
+
 let drawerReturnFocus: HTMLElement | null = null;
+let toolHandlersRegistered = false;
 
 function systemPromptPresetById(id: string) {
   return SYSTEM_PROMPT_PRESETS.find((p) => p.id === id);
@@ -110,6 +133,84 @@ export function onSystemPromptPresetChange(): void {
   }
   applySystemPromptPreset(targetId);
   saveSystemPromptSettings();
+}
+
+/** Build tool toggle rows from BUILT_IN_TOOLS (single source of truth). */
+export function fillToolsSection(): void {
+  const container = document.getElementById('toolsList');
+  if (!container) return;
+
+  container.replaceChildren();
+
+  for (const category of TOOL_CATEGORY_ORDER) {
+    const tools = BUILT_IN_TOOLS.filter((tool) => tool.category === category);
+    if (tools.length === 0) continue;
+
+    const header = document.createElement('h3');
+    header.className = 'tool-group-header';
+    header.textContent = TOOL_CATEGORY_LABELS[category];
+    container.appendChild(header);
+
+    for (const tool of tools) {
+      const row = document.createElement('div');
+      row.className = 'tool-row';
+      row.setAttribute('data-tool-id', tool.id);
+      if (tool.serverRequired) {
+        row.setAttribute('data-server-required', '');
+      }
+
+      const label = document.createElement('label');
+      label.className = 'tool-toggle-wrap';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'tool-toggle';
+      checkbox.id = `tool-${tool.id}`;
+      checkbox.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'tool-label';
+      nameSpan.textContent = tool.label;
+
+      label.appendChild(checkbox);
+      label.appendChild(nameSpan);
+
+      const desc = document.createElement('p');
+      desc.className = 'tool-desc';
+      desc.id = `tool-desc-${tool.id}`;
+      desc.textContent = tool.description;
+
+      row.appendChild(label);
+      row.appendChild(desc);
+      container.appendChild(row);
+    }
+  }
+}
+
+/** Bind tool checkboxes and Brave API key field to config handlers. */
+export function registerToolHandlers(): void {
+  if (toolHandlersRegistered) return;
+  toolHandlersRegistered = true;
+
+  const list = document.getElementById('toolsList');
+  if (list) {
+    list.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+        return;
+      }
+      const row = target.closest<HTMLElement>('[data-tool-id]');
+      const id = row?.getAttribute('data-tool-id');
+      if (!id) return;
+      onToolToggle(id);
+    });
+  }
+
+  const braveInput = document.getElementById('braveApiKey');
+  if (braveInput) {
+    braveInput.addEventListener('input', saveBraveApiKeyFromDrawer);
+    braveInput.addEventListener('change', saveBraveApiKeyFromDrawer);
+  }
 }
 
 export function onSystemPromptInput(): void {

@@ -1,0 +1,14 @@
+- Add terminal to run and view commands run by the ai. 
+- every chat has a empty chat bubble to start
+- add a file viewer and browser. - should be able to split the chat window and have the file view on the right side. we should add a new file tree side bar - it should pop out like the chat list and display the current directory stucture. we should be able to open and collapse folders, see all the files and click on them to open in the file viewer. 
+- Programatic prompts - experts, Tool usage, Info - set it up similar to cursor or opencode
+- Build, Plan, Orchistrate and research modes (I will provide prompts) (Research how opencode does this) (selection should be in t)
+- programatic prompts based on input (have prompts for each experts in each specific field auto asign prompt based on input (in the settings we will call these experts) the user will should have a drop down where they can manually select an expert or leave it in auto )
+- titles should generate programaticly as an inital prompt to the agent
+- Different agents for specific tasks like opencode lite - we will call these Work Agents - Will provide prompts for them
+- Add the ability to set a specific model and provider to specific agents
+- add the ability to view and set the prompt for each agent
+- Ability to call sub agents
+- settings for sub agent usage (Model & provider, max concurrent, sub agent tool usage )
+- fix spacing on chat bar tools.
+- clean up redundent buttons on top bar. (open chat pannel and new chat)
