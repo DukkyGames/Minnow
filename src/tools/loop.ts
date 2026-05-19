@@ -60,8 +60,11 @@ import {
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { renderSidebar } from '../ui/sidebar';
-import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
+import { postChatCompletions } from '../providers/fetch-chat';
+import { getActiveProvider } from '../providers/store';
+import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
+import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
 import { detectLocalServer, executeTool, getEnabledToolDefinitions } from './client';
 
 /** Maximum assistantâ†’tool rounds before aborting with an error. */
@@ -73,6 +76,8 @@ export interface BuildApiMessagesOptions {
   modelId?: string;
   /** Raw user text from the composer for the in-flight turn (not history placeholders). */
   pendingUserText?: string;
+  /** Pre-composed system prompt (Step 04); overrides legacy sysPrompt when set. */
+  composedSystemPrompt?: string;
 }
 
 interface ChatCompletionBody {
@@ -189,8 +194,10 @@ export function buildApiMessages(
   options?: BuildApiMessagesOptions,
 ): ApiMessage[] {
   const messages: ApiMessage[] = [];
-  if (sysPrompt.trim()) {
-    messages.push({ role: 'system', content: sysPrompt.trim() });
+  const systemContent =
+    options?.composedSystemPrompt?.trim() || sysPrompt.trim();
+  if (systemContent) {
+    messages.push({ role: 'system', content: systemContent });
   }
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
@@ -274,7 +281,7 @@ interface StreamTurnResult {
  * Stream one completion request; accumulate text, tool_call deltas, and usage meta.
  */
 async function streamCompletionTurn(
-  base: string,
+  provider: Awaited<ReturnType<typeof getActiveProvider>>,
   body: ChatCompletionBody,
   bubble: HTMLDivElement,
   cursor: HTMLDivElement,
@@ -282,12 +289,7 @@ async function streamCompletionTurn(
   thoughtController: ThoughtBubbleController | null,
   onFirstProseDelta?: () => void,
 ): Promise<StreamTurnResult> {
-  const res = await fetch(`${base}/api/v0/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
+  const res = await postChatCompletions(provider, body, signal);
 
   if (!res.ok) {
     const err = await res.text();
@@ -366,7 +368,9 @@ export async function sendMessageWithTools(): Promise<void> {
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
   const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
-  const sysPrompt = (document.getElementById('systemPrompt') as HTMLTextAreaElement).value.trim();
+  const legacySysPrompt = (
+    document.getElementById('systemPrompt') as HTMLTextAreaElement
+  ).value.trim();
 
   if (!modelId) {
     setStatus('err', 'Select a model first');
@@ -380,12 +384,6 @@ export async function sendMessageWithTools(): Promise<void> {
     setStatus('err', 'Max tokens must be at least 1');
     return;
   }
-  const base = parseServerBaseUrl(serverUrl());
-  if (!base) {
-    setStatus('err', 'Check server URL in Settings');
-    return;
-  }
-
   await detectLocalServer();
 
   if (chatFetchAbort) chatFetchAbort.abort();
@@ -431,7 +429,18 @@ export async function sendMessageWithTools(): Promise<void> {
     },
   };
 
+  let composedSystemPrompt = '';
   try {
+    composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
+      userMessagePreview: text,
+    });
+  } catch {
+    composedSystemPrompt = '';
+  }
+  const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
+
+  try {
+    const provider = await getActiveProvider(chat.providerId);
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
@@ -439,6 +448,7 @@ export async function sendMessageWithTools(): Promise<void> {
       const messages = buildApiMessages(chat, sysPrompt, {
         modelId,
         pendingUserText: text,
+        composedSystemPrompt: sysPrompt,
       });
       const body: ChatCompletionBody = {
         model: modelId || undefined,
@@ -455,7 +465,7 @@ export async function sendMessageWithTools(): Promise<void> {
 
       thoughtController.setAssistantWrap(wrap);
       const turnResult = await streamCompletionTurn(
-        base,
+        provider,
         body,
         bubble,
         cursor,
@@ -536,7 +546,7 @@ export async function sendMessageWithTools(): Promise<void> {
 
       if (!fullText) {
         revealProse();
-        const fallbackBody: Parameters<typeof tryNonStreamingFallback>[1] = {
+        const fallbackBody: ChatCompletionBody = {
           model: modelId || undefined,
           messages,
           temperature: temp,
@@ -547,9 +557,9 @@ export async function sendMessageWithTools(): Promise<void> {
           fallbackBody.tool_choice = 'auto';
         }
         const fallback = await tryNonStreamingFallback(
-          base,
           fallbackBody,
           chatSignal,
+          chat.providerId,
         );
         const fbMsg = fallback.choices?.[0]?.message;
         fullText = extractMessageText(fbMsg);

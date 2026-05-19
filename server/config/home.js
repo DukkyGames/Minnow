@@ -51,6 +51,10 @@ const DEFAULT_META = {
   migratedAt: null,
   localStorageKeysMigrated: [],
   layoutVersion: 1,
+  activeProviderId: 'lm-studio-local',
+  activePromptProfile: 'full',
+  activePromptConfigId: null,
+  activeInfoPresetId: 'general-assistant',
 };
 
 const DEFAULT_SYSTEM_PROMPT = {

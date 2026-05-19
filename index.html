@@ -56,10 +56,16 @@
   </div>
   <div class="drawer-body">
     <p id="configStorageBanner" class="tools-server-banner hidden" role="status">File-backed config requires <code>npm start</code> (not <code>npm run dev</code>). Using browser storage until then.</p>
+    <p id="providersServerBanner" class="tools-server-banner hidden" role="status">Provider management requires <code>npm start</code> (not <code>npm run dev</code>).</p>
     <div class="field">
-      <label for="serverUrl">LM Studio server URL</label>
-      <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" onchange="fetchModels()">
-      <p class="field-hint">Default is <code>http://localhost:1234</code> when LM Studio is running locally.</p>
+      <label for="providerSelect">Provider</label>
+      <select id="providerSelect" aria-describedby="providerSelectHint"></select>
+      <p class="field-hint" id="providerSelectHint">Switch the active LLM endpoint. Full provider CRUD arrives in a future settings page.</p>
+    </div>
+    <div class="field">
+      <label for="serverUrl">Provider base URL</label>
+      <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" readonly>
+      <p class="field-hint">Read-only display of the active provider URL. API keys are stored under <code>~/.speedchat/providers/</code>.</p>
     </div>
     <div class="field-row">
       <div class="field">

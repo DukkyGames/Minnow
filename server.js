@@ -10,7 +10,10 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createConfigMiddleware } from './server/config/middleware.js';
+import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
 import { ensureSpeedChatLayout, getSpeedChatHome } from './server/config/home.js';
+import { createProviderMiddleware } from './server/providers/routes.js';
+import { ensureProviderRegistry } from './server/providers/store.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -796,6 +799,8 @@ async function main() {
         name: 'speedchat-api',
         configureServer(server) {
           server.middlewares.use(createConfigMiddleware());
+          server.middlewares.use(createPromptConfigsMiddleware());
+          server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createToolsMiddleware());
         },
       },
@@ -803,6 +808,7 @@ async function main() {
   });
 
   await ensureSpeedChatLayout();
+  await ensureProviderRegistry();
   const homePath = getSpeedChatHome();
   console.log(`SpeedChat data: ${homePath}`);
 
@@ -811,6 +817,7 @@ async function main() {
   const localUrl = urls[0];
   console.log(`SpeedChat dev server: ${localUrl}`);
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
+  console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   openBrowser(localUrl);
 }

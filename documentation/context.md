@@ -34,7 +34,9 @@ SpeedChat/
 │   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
-│   ├── chat/messaging.ts   # sendMessage → sendMessageWithTools
+│   ├── chat/
+│   │   ├── messaging.ts    # sendMessage → sendMessageWithTools
+│   │   └── prompts/        # Step 04: composer, loader, configs
 │   ├── ui/                 # sidebar, settings, stats, messages, stream-status, tool-messages, thought-bubbles, …
 │   ├── tools/
 │   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
@@ -72,12 +74,15 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
 
 ```text
 ~/.speedchat/
-  config.json              # schemaVersion, migration flags
+  config.json              # schemaVersion, activeProviderId, migration flags
   sessions/state.json      # full SessionState blob (all chats — canonical)
   tools.json               # ToolConfig (enabled + braveApiKey)
   system-prompt.json       # { presetId, text }
   memory/                  # scaffold (Step 16)
-  providers/               # scaffold (Step 03)
+  providers/               # one dir per provider (Step 03)
+    lm-studio-local/
+      profile.json         # label, baseUrl, apiKind, connectionMode, paths
+      secrets.json         # apiKey, bearerToken (0o600 on Unix; never in git)
   mcp/                     # scaffold (Step 18)
   lsp/                     # scaffold (Step 17)
   prompt-configs/          # scaffold (Step 04)
@@ -86,7 +91,36 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   backups/                 # scaffold
 ```
 
-**Built-in prompts** ship under `src/chat/prompts/` (Step 04+). **Built-in skills** under `src/skills/` (Step 13+). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+**Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13+). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+
+### Programmatic prompts (Step 04)
+
+Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts)).
+
+| Profile | `config.json` | Behavior |
+|---------|---------------|----------|
+| **full** | `activePromptProfile: "full"` | All applicable parts, full templates |
+| **lite** | `activePromptProfile: "lite"` | Short/lite bodies, `info`/`memory` off by default |
+| **custom** | `"custom"` + `activePromptConfigId` | Per-part enable + `contentOverride` from `prompt-configs/<id>.json` |
+
+**Composition order** (single `system` message, `\n\n---\n\n` separators):
+
+`base → mode → expert → work-agent → tool-usage → info → skill → memory`
+
+**Shipped tree:** `src/chat/prompts/` (`base/`, `tool-usage/`, `info/` presets from `SYSTEM_PROMPT_PRESETS`, stubs for `modes/`, `experts/`, …). Reference-only: `_example/PROMPT_TEMPLATE.md`, `_example/README.md`.
+
+**APIs (`npm start`):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/prompts/registry` | Built-in + user prompt files parsed |
+| `GET` | `/api/prompt-configs` | List custom profiles |
+| `GET/PUT/DELETE` | `/api/prompt-configs/:id` | CRUD custom profile JSON |
+| `POST` | `/api/prompt-configs/:id/duplicate` | Copy profile |
+
+**Send path:** `resolveComposedSystemPrompt()` → `buildApiMessages(..., { composedSystemPrompt })` in [`loop.ts`](../src/tools/loop.ts). Legacy `#systemPrompt` textarea is fallback when compose returns empty. Settings UI for profiles deferred to Step 20.
+
+**Tests:** `test/prompts/*.test.mjs` + `test/prompts/*.test.js`. Verification: [`documentation/plans/verification/step-04.md`](plans/verification/step-04.md).
 
 ### Config API (`npm start` only)
 
@@ -102,6 +136,30 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 | `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
 | `POST` | `/api/config/migrate` | Browser → disk one-time import |
 | `GET/PUT` | `/api/config/file?key=…` | Whitelisted keys only; traversal → **400** |
+
+### Providers API (`npm start` only)
+
+Registered in [`server/providers/routes.js`](../server/providers/routes.js) before Vite SPA. LLM **secrets never** returned from GET; proxy routes attach auth server-side.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/providers` | `{ providers: ProviderPublic[], activeProviderId }` |
+| `GET` | `/api/providers/:id` | Public profile + `hasApiKey` / `hasBearer` flags |
+| `POST` | `/api/providers` | Create provider dir + `profile.json` |
+| `PUT` | `/api/providers/:id` | Update profile (non-secret) |
+| `DELETE` | `/api/providers/:id` | Remove provider (**409** if last) |
+| `PUT` | `/api/providers/:id/secrets` | Update `secrets.json`; response redacts values |
+| `POST` | `/api/providers/:id/set-active` | Sets `config.json` `activeProviderId` |
+| `GET` | `/api/providers/:id/models` | Proxy upstream models (auth injected) |
+| `POST` | `/api/providers/:id/chat/completions` | Proxy SSE/JSON chat (auth injected) |
+
+**`apiKind`:** `lm-studio-v0` (default paths `/api/v0/...`) or `openai-v1` (`/v1/...`). **`connectionMode`:** `direct` (browser → `baseUrl`, localhost) or `proxy` (browser → SpeedChat server → upstream with secrets).
+
+**Seed:** On first `npm start` with empty `providers/`, creates `lm-studio-local` from legacy `config.json` `serverUrl` or `http://localhost:1234`. Non-localhost providers default to `proxy`.
+
+Client: [`src/providers/`](../src/providers/) (`store.ts`, `resolve.ts`, `fetch-models.ts`, `fetch-chat.ts`). Chat/models use [`postChatCompletions`](../src/providers/fetch-chat.ts) instead of hard-coded `#serverUrl`.
+
+**Vite-only (`npm run dev`):** No `/api/providers`; client uses a single **direct** fallback from read-only (or editable) `#serverUrl`. Settings shows **Provider management requires npm start**.
 
 Client modules: [`src/config/storage-mode.ts`](../src/config/storage-mode.ts), [`api-client.ts`](../src/config/api-client.ts), [`migrate.ts`](../src/config/migrate.ts).
 
@@ -187,8 +245,9 @@ Browser (same origin :5173)
     ├─► GET/PUT /api/config/*    → ~/.speedchat JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
+    ├─► GET/POST /api/providers/* → registry + proxy (secrets on server only)
     │
-    ├─► LM Studio (localhost, not proxied) — models + chat/completions
+    ├─► LLM upstream (direct localhost or proxied /api/providers/:id/*)
     │
     └─► Vite SPA (index.html, /src/*, hashed assets)
 ```
@@ -299,10 +358,11 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 **Theme:** OKLCH light surfaces, ink `--accent`, soft green user bubbles, JetBrains Mono for code/metrics ([`fonts.css`](../src/styles/fonts.css)). Tool bubbles: `.tool-call-*` in [`messages.css`](../src/styles/messages.css); settings tools UI in [`settings.css`](../src/styles/settings.css).
 
-## API usage (LM Studio)
+## API usage (providers)
 
-- **Models:** `GET {serverUrl}/api/v0/models`
-- **Chat:** `POST {serverUrl}/api/v0/chat/completions` — streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`. Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
+- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`.
+- **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`. Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
+- **Settings UI:** `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up).
 
 ## Message rendering
 
@@ -339,6 +399,8 @@ E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification
 
 **Step 02 (`~/.speedchat`):** [`documentation/plans/verification/step-02.md`](plans/verification/step-02.md) — config API + migration tests with `SPEEDCHAT_HOME`.
 
+**Step 03 (providers + auth):** [`documentation/plans/verification/step-03.md`](plans/verification/step-03.md) — `test/providers/*.test.js`, provider select UI.
+
 ```bash
 npm test
 npm run build
@@ -358,11 +420,13 @@ Use the port printed by `server.js` (default **5173**; another port if busy).
 Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 
 1. `await detectConfigServer()` → `runMigrationIfNeeded()` if server mode.
-2. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
-3. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`.
-4. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
-5. `applySidebarVisuals()` + `renderSidebar()`.
-6. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
+2. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
+3. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
+4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`.
+5. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
+6. `applySidebarVisuals()` + `renderSidebar()`.
+7. `await loadProviderSelect()` + `registerProviderHandlers()`.
+8. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
 
 ## Hardening (production edge cases)
 
@@ -383,7 +447,13 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 | [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 32-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `speedchat.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
-| [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` |
+| [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |
+| [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts) | `composeSystemPrompt`, profile/lite rules |
+| [`src/chat/prompts/compose-context.ts`](../src/chat/prompts/compose-context.ts) | `buildComposeContext`, `resolveComposedSystemPrompt` |
+| [`src/chat/prompts/prompt-configs.ts`](../src/chat/prompts/prompt-configs.ts) | Custom profile CRUD client |
+| [`src/providers/store.ts`](../src/providers/store.ts) | List/active provider via `/api/providers` |
+| [`src/providers/fetch-chat.ts`](../src/providers/fetch-chat.ts) | `postChatCompletions` (direct/proxy) |
+| [`server/providers/routes.js`](../server/providers/routes.js) | Provider CRUD + proxy HTTP |
 | [`src/attachments/reader.ts`](../src/attachments/reader.ts) | File processing + PDF POST |
 | [`public/sw.js`](../public/sw.js) | PWA service worker |
 | [`documentation/context.md`](context.md) | This document |

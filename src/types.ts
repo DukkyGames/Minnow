@@ -153,6 +153,8 @@ export interface Chat {
   id: string;
   name: string;
   modelId: string;
+  /** Optional per-chat provider override (Step 03). */
+  providerId?: string;
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
