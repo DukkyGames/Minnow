@@ -1,11 +1,11 @@
 {
-  "name": "LM Studio Chat",
-  "short_name": "LMChat",
+  "name": "SpeedChat",
+  "short_name": "SpeedChat",
   "description": "Local LM Studio chat client with inference stats",
   "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#0a0b0d",
-  "theme_color": "#00d4ff",
+  "background_color": "#1a1f2b",
+  "theme_color": "#1a1f2b",
   "orientation": "any",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },

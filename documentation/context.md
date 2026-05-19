@@ -35,7 +35,8 @@ Chats can be **deleted** from the sidebar (trash control on each row). A browser
 
 - Below the top bar, **`.app-body`** is a flex row: **`.chat-sidebar`** (session list) and **`.main-column`** (messages, input, stats strip).
 - **Desktop:** the header **◀ / ▶** button toggles `sidebarCollapsed` (wide panel vs narrow rail with `+` only).
-- **Mobile (≤640px):** the sidebar is a **fixed overlay**; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar **☰** toggles open/closed.
+- **Mobile (≤640px):** the sidebar is a **fixed overlay**; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar menu button toggles open/closed.
+- **Mobile stats (≤599px):** the stats strip shows a collapsed summary (TPS + total tokens); tap **Stats** to expand the full instrument panel (`.stats-strip.is-expanded`).
 
 ### Other persisted settings
 
@@ -43,7 +44,11 @@ System prompt preset and textarea content use a separate key: `speedchat.systemP
 
 ## Service worker
 
-[`sw.js`](../sw.js) caches shell assets for offline/PWA use. The cache name is versioned (e.g. `lmchat-v2`) so bumps invalidate old caches.
+[`sw.js`](../sw.js) caches shell assets for offline/PWA use. The cache name is versioned (e.g. `speedchat-v2`) so bumps invalidate old caches.
+
+## Design context
+
+Product and visual direction live in [`PRODUCT.md`](../PRODUCT.md) and [`DESIGN.md`](../DESIGN.md). The UI uses OKLCH tokens, inline SVG icon buttons, a semantic `<header>` top bar, `<main>` chat area, settings drawer with `role="dialog"` and focus trap, and a collapsible stats strip on narrow viewports.
 
 ## API usage
 
