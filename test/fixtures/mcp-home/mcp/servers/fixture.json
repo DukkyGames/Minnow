@@ -1,0 +1,14 @@
+{
+  "id": "fixture",
+  "label": "Fixture MCP (tests)",
+  "description": "Deterministic echo tool for automated tests",
+  "transport": {
+    "type": "stdio",
+    "command": "node",
+    "args": [
+      "test/fixtures/mock-mcp-server.mjs"
+    ]
+  },
+  "enabled": true,
+  "builtin": true
+}

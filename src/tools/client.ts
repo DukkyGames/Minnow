@@ -24,6 +24,9 @@ import {
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
 
+/** Cached MCP tool definitions from GET /api/mcp/tools. */
+let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
+
 /**
  * Probes the dev server tools API with a short timeout and updates availability in config.
  */
@@ -43,6 +46,11 @@ export async function detectLocalServer(): Promise<boolean> {
     const body = (await response.json()) as { ok?: boolean };
     const available = body?.ok === true;
     setLocalServerAvailable(available);
+    if (available) {
+      await refreshMcpToolCache();
+    } else {
+      cachedMcpToolDefinitions = [];
+    }
     return available;
   } catch {
     setLocalServerAvailable(false);
@@ -75,11 +83,36 @@ export { getLocalServerAvailable as localServerAvailable };
 /**
  * Runs a tool by name: browser executor, server POST, or web_search → web_search_ddg fallback.
  */
+/** Refresh MCP tool definitions when the local server is available. */
+export async function refreshMcpToolCache(): Promise<void> {
+  try {
+    const response = await fetch('/api/mcp/tools');
+    if (!response.ok) {
+      cachedMcpToolDefinitions = [];
+      return;
+    }
+    const body = (await response.json()) as { tools?: OpenAIFunctionDefinition[] };
+    cachedMcpToolDefinitions = Array.isArray(body.tools) ? body.tools : [];
+  } catch {
+    cachedMcpToolDefinitions = [];
+  }
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
+  if (name.startsWith('mcp__')) {
+    if (!isLocalServerAvailable()) {
+      return {
+        content:
+          'Error: MCP tools require the local server. Run `npm start` (not Vite-only dev).',
+      };
+    }
+    return executeServerTool(name, args);
+  }
+
   if (name === 'spawn_sub_agent' || name === 'cancel_sub_agent') {
     const text = await executeSubAgentTool(name, args);
     return { content: text };
@@ -142,7 +175,10 @@ export function getEnabledToolCatalogEntries(): ToolDefinition[] {
  * Server-required tools are omitted when the local server was not detected.
  */
 export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
-  return getEnabledToolCatalogEntries().map((tool) => tool.definition);
+  return [
+    ...getEnabledToolCatalogEntries().map((tool) => tool.definition),
+    ...cachedMcpToolDefinitions,
+  ];
 }
 
 /**
