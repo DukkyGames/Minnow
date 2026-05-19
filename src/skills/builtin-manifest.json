@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-05-19T22:25:07.953Z",
+  "skills": [
+    {
+      "id": "browser-automation",
+      "label": "Browser Automation",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "code-review",
+      "label": "Code Review",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "debug-error",
+      "label": "Debug Error",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "docs-update",
+      "label": "Docs Update",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "explain-code",
+      "label": "Explain Code",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "git-commit",
+      "label": "Git Commit",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "impeccable",
+      "label": "Impeccable",
+      "description": "Design, critique, audit, and refine SpeedChat UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.",
+      "source": "builtin"
+    },
+    {
+      "id": "refactor-safe",
+      "label": "Refactor Safe",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "security-review",
+      "label": "Security Review",
+      "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "write-tests",
+      "label": "Write Tests",
+      "description": ">-",
+      "source": "builtin"
+    }
+  ]
+}

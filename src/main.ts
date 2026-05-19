@@ -17,6 +17,7 @@ import './styles/mode-selector.css';
 import './styles/composer-controls.css';
 import './styles/file-panel.css';
 import './styles/terminal.css';
+import './styles/skill-picker.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -28,6 +29,8 @@ import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
+import { refreshSkillCatalog } from './skills/client';
+import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
@@ -129,6 +132,9 @@ export async function initApp(): Promise<void> {
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  await refreshSkillCatalog();
+  const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  if (msgInput) mountSlashPicker(msgInput);
   await initFilePanel();
   onTerminalServerAvailabilityChanged();
   await loadToolConfigFromStorage();

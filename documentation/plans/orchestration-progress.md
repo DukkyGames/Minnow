@@ -16,15 +16,35 @@ Each step: **Implementer** ? **Verifier** (separate agent) ? mark PASS/FAIL. Git
 | 1 | 02 | done | **PASS** (verifier 2026-05-19; `npm test` 14+6, build OK, temp `SPEEDCHAT_HOME`, manual @ :5180/:5181) | pending |
 | 2 | 03 | done | **PASS** (verifier 2026-05-19; providers 12/12, build OK, temp `SPEEDCHAT_HOME`, manual API/UI @ :5182) | pending |
 | 3 | 04?09 | done | **04 PASS**; **05 PASS** (verifier re-run 2026-05-19; modeId round-trip); **06 PASS**; **07 PASS** (verifier 2026-05-19); **08 PASS** (verifier re-run 2026-05-19; registry parser fix); **09 PASS** (verifier 2026-05-19 @ :5187) | **done** (Step 09 sub-agents) |
-| 4 | 10–11 | done | **10 PASS** (verifier 2026-05-19 @ :5189); **11 PASS** (verifier 2026-05-19 @ :5190) | **done** (Wave 4: terminal + file viewer) |
-| 5 | 12 | pending | pending | pending |
-| 6 | 13?15 | pending | pending | pending |
+| 4 | 10?11 | done | **10 PASS** (verifier 2026-05-19 @ :5189); **11 PASS** (verifier 2026-05-19 @ :5190) | **done** (Wave 4: terminal + file viewer) |
+| 5 | 12 | done | **PASS** (verifier 2026-05-19) | **done** (Step 12: CDP browser) |
+| 6 | 13–15 | done | **13 PASS** (verifier re-run 2026-05-19); 14–15 pending | **done** (Step 13 skills) |
 | 7 | 16?18 | pending | pending | pending |
 | 8 | 19 | pending | pending | pending |
 | 9 | 20 | pending | pending | pending |
 | Final | all | ? | pending | ? |
 
 ## Step log
+
+
+### Step 13 — Skills framework
+- **Status:** **PASS** (verifier re-run 2026-05-19; post glob + smoke fixes)
+- **Plan:** `Build out/step-13-skills-framework.md`
+- **Verification:** [erification/step-13.md](verification/step-13.md)
+- **Fixes:** `src/skills/client.ts` — lazy/guarded `import.meta.glob` (Node/tsx safe). `scripts/s13-skills-smoke.mjs` — reuse preset `SPEEDCHAT_HOME` for S6; document coordinated start; skip S6 with hint when server home differs.
+- **Automated:** `npm test` **141/141** (node **43/43**, tsx **98/98**); `npm run test:skills` **10/10**; `generate-skills-manifest.mjs` OK (10 skills); `npm run build` OK.
+- **Smoke (verifier):** `s13-skills-smoke.mjs` S1–S3 pass (offline). S4–S6 **PASS** @ `http://localhost:5196` with coordinated `SPEEDCHAT_HOME` before `npm start`.
+- **Docs:** `documentation/context.md` Step 13 skills; verification doc updated for S6 coordination.
+- **Manual (deferred):** slash picker, send footer `[skill: …]`, custom `~/.speedchat/skills/`.
+- **Commit:** `a593b6d` — ?? Step 13: Skills framework, slash picker, dual-root loader
+### Step 12 ? CDP browser automation
+- **Status:** **PASS** (verifier 2026-05-19)
+- **Plan:** `Build out/step-12-cdp-browser.md`
+- **Verification:** [`verification/step-12.md`](verification/step-12.md)
+- **Automated:** `npm test` **131/131** (node **43/43** incl. CDP **9/9**; tsx **88/88**); `npm run test:browser` **9/9** (mock CDP, no real Chrome); `npm run build` OK (`tsc` + Vite).
+- **Spot-check (tests):** `browser_list` targets; `browser_navigate` blocked URL `Error:` prefix; snapshot uid cache + click; `browser_screenshot` attachments shape; allowlist localhost vs external; `SPEEDCHAT_BROWSER_URL` default.
+- **Docs:** `documentation/context.md` ? **39** tools, **7** CDP `browser_*`, `GET /api/browser/screenshot/:id` documented.
+- **Manual (deferred):** Chrome `--remote-debugging-port=9222`, Settings Browser (CDP) toggle, `browser_list` / navigate / screenshot / evil URL block (per verification doc §Manual).
 
 ### Step 10 ? Bottom terminal panel
 - **Status:** **PASS** (verifier 2026-05-19)

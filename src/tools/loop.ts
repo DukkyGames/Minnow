@@ -85,6 +85,11 @@ import {
   getEnabledToolDefinitionsForMode,
 } from './client';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
+import {
+  formatHistoryWithSkillTag,
+  parseSlashCommand,
+  resolveActiveSkill,
+} from '../skills';
 
 /** Maximum assistantâ†’tool rounds before aborting with an error. */
 export const MAX_TOOL_TURNS = 8;
@@ -378,10 +383,13 @@ async function streamCompletionTurn(
 export async function sendMessageWithTools(): Promise<void> {
   if (streaming) return;
   const input = document.getElementById('msgInput') as HTMLTextAreaElement;
-  const text = input.value.trim();
+  const rawText = input.value.trim();
   const pending = getPendingAttachments();
   const validAttachments = pending.filter((a) => a.kind !== 'error');
-  if (!text && validAttachments.length === 0) return;
+  const { skillId, userText } = parseSlashCommand(rawText);
+  const hasUserText = Boolean(userText.trim());
+  if (!rawText && validAttachments.length === 0) return;
+  if (!skillId && !hasUserText && validAttachments.length === 0) return;
 
   const chat = getActiveChat();
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
@@ -405,6 +413,21 @@ export async function sendMessageWithTools(): Promise<void> {
   }
   await detectLocalServer();
 
+  let skillBody: string | null = null;
+  if (skillId) {
+    const skill = await resolveActiveSkill(skillId);
+    if (!skill?.body?.trim()) {
+      setStatus('err', `Unknown skill: ${skillId}`);
+      return;
+    }
+    skillBody = skill.body;
+  }
+
+  if (!hasUserText && validAttachments.length === 0 && !skillBody?.trim()) {
+    setStatus('err', 'Add a message or attachment');
+    return;
+  }
+
   if (chatFetchAbort) chatFetchAbort.abort();
   const controller = new AbortController();
   setChatFetchAbort(controller);
@@ -416,8 +439,11 @@ export async function sendMessageWithTools(): Promise<void> {
   });
 
   chat.modelId = modelId || chat.modelId;
-  const historyContent = buildHistoryUserContent(text, validAttachments);
-  const titleSeed = text || validAttachments[0]?.name || 'Attachment';
+  const displayText = skillId
+    ? formatHistoryWithSkillTag(userText, skillId)
+    : userText || rawText;
+  const historyContent = buildHistoryUserContent(displayText, validAttachments);
+  const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: historyContent });
   if (shouldScheduleTitle) {
@@ -489,8 +515,9 @@ export async function sendMessageWithTools(): Promise<void> {
   let composedSystemPrompt = '';
   try {
     composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
-      userMessagePreview: text,
-      routeUserText: text,
+      userMessagePreview: userText || rawText,
+      routeUserText: userText || rawText,
+      overrides: { skillBody },
     });
   } catch {
     composedSystemPrompt = '';
@@ -511,7 +538,7 @@ export async function sendMessageWithTools(): Promise<void> {
       }
       const messages = buildApiMessages(chat, sysPrompt, {
         modelId: sendModelId,
-        pendingUserText: text,
+        pendingUserText: userText || rawText,
         composedSystemPrompt: sysPrompt,
       });
       const body: ChatCompletionBody = {
@@ -571,16 +598,19 @@ export async function sendMessageWithTools(): Promise<void> {
           area.appendChild(toolWrap);
           scrollBottom();
 
-          const result = await executeTool(tc.function.name, args, {
+          const toolOut = await executeTool(tc.function.name, args, {
             chatId: chat.id,
             toolCallId: tc.id,
           });
-          renderToolResult(toolWrap, result);
+          renderToolResult(toolWrap, toolOut.content, toolOut.attachments);
 
           chat.history.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: result,
+            content: toolOut.content,
+            ...(toolOut.attachments?.length
+              ? { attachments: toolOut.attachments }
+              : {}),
           });
           scrollBottom();
         }
