@@ -41,7 +41,9 @@
     "browser_fill": false,
     "browser_eval": false,
     "browser_screenshot": false,
-    "run_impeccable": false
+    "run_impeccable": false,
+    "get_lsp_diagnostics": false,
+    "list_lsp_servers": false
   },
   "keys": {
     "braveApiKey": "fixture-brave-key-12345"

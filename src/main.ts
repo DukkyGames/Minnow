@@ -18,6 +18,7 @@ import './styles/composer-controls.css';
 import './styles/file-panel.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
+import './styles/settings-page.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -55,6 +56,10 @@ import {
   registerToolHandlers,
   toggleDrawer,
 } from './ui/settings';
+import {
+  initSettingsPage,
+  openSettingsFromTopbar,
+} from './ui/settings-page';
 import { loadToolConfigIntoDrawer } from './tools/config';
 import {
   createChat,
@@ -89,6 +94,7 @@ function registerWindowHandlers(): void {
   window.createChat = createChat;
   window.fetchModels = fetchModels;
   window.toggleDrawer = toggleDrawer;
+  window.openSettingsFromTopbar = openSettingsFromTopbar;
   window.closeDrawer = closeDrawer;
   window.onDrawerKeydown = onDrawerKeydown;
   window.clearChat = clearChat;
@@ -146,6 +152,7 @@ export async function initApp(): Promise<void> {
   await refreshTerminalHistoryForActiveChat();
   await loadProviderSelect();
   registerProviderHandlers();
+  initSettingsPage();
   await fetchModels();
   syncModelSelectForActiveChat();
   renderChatFromHistory(getActiveChat());

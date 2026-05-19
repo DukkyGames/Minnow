@@ -10,6 +10,7 @@ declare global {
     createChat: () => void;
     fetchModels: () => Promise<void>;
     toggleDrawer: () => void;
+    openSettingsFromTopbar: () => void;
     closeDrawer: () => void;
     onDrawerKeydown: (e: KeyboardEvent) => void;
     clearChat: () => void;

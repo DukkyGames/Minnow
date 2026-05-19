@@ -166,6 +166,60 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 
 **Tests:** `npm run test:ui-designer`; `node scripts/step15-smoke.mjs`. Verification: [`documentation/plans/verification/step-15.md`](plans/verification/step-15.md).
 
+### Memory system (Step 16)
+
+Persistent notes under `~/.speedchat/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part and `{{memory}}` when enabled.
+
+| API | Purpose |
+|-----|---------|
+| `GET /api/memory/ping` | Health |
+| `GET/POST/PUT/DELETE /api/memory/entries` | CRUD |
+| `POST /api/memory/retrieve` | Keyword-ranked block for injection |
+| `POST /api/memory/clear` | Clear (optional archive) |
+| `POST /api/memory/backup` / `restore` | Folder backup under `backups/` |
+
+**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts`. **Tests:** `npm run test:memory`.
+
+### LSP integration (Step 17)
+
+Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`; user overrides `~/.speedchat/lsp.json`.
+
+| Tool | Description |
+|------|-------------|
+| `get_lsp_diagnostics` | Formatted diagnostics for a relative path |
+| `list_lsp_servers` | Configured servers + running state |
+
+**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `/api/config/lsp`. **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files).
+
+### MCP + Context7 (Step 18)
+
+MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabledToolDefinitions()` when the local server is up. **Context7** seeded enabled under `~/.speedchat/mcp/`.
+
+| API | Purpose |
+|-----|---------|
+| `GET /api/mcp/tools` | OpenAI-style defs for enabled servers |
+| `POST /api/mcp/tools/call` | Execute namespaced tool |
+| `GET /api/mcp/servers` | Server list + enabled flags |
+
+**Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
+
+### Self-healing (Step 19)
+
+Off by default (`config.json` → `selfHealing.enabled`). When enabled, duplicate sub-agent tool calls trigger tier-1 **restart** via `restartSubAgent()`.
+
+| Module | Role |
+|--------|------|
+| `src/agents/self-healing/detector.ts` | Pure repetition heuristics |
+| `src/agents/self-healing/controller.ts` | Observe tool log → restart |
+
+**Tests:** `npx tsx --test test/self-healing/**/*.test.mts`.
+
+### Settings page (Step 20)
+
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/styles/settings-page.css`). Topbar gear opens settings (replaces drawer-only flow for primary navigation). Sections: General, Prompting (Full/Lite/Custom tabs), Providers, Memory, Features, Tools, MCP, LSP.
+
+**Tests:** `npm test`, `npm run build`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
+
 **Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
 
 **Vite-only (`npm run dev`):** picker uses `builtin-manifest.json` + lazy `import.meta.glob` in `client.ts` for built-in bodies (glob is no-op under Node/tsx tests); user skills need `npm start`.

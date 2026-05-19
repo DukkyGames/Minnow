@@ -43,7 +43,7 @@
   <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
   </button>
-  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" aria-expanded="false" aria-controls="drawer" onclick="toggleDrawer()">
+  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
 
@@ -126,6 +126,77 @@
 
 <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
 <button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" onclick="closeMobileFileSidebar()" aria-hidden="true"></button>
+
+<main id="settingsView" class="settings-page" aria-label="Settings">
+  <header class="settings-page-header">
+    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">← Back to chat</button>
+    <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
+  </header>
+  <div class="settings-page-body">
+    <nav class="settings-nav" aria-label="Settings sections">
+      <button type="button" data-settings-nav="general" aria-current="page">General</button>
+      <button type="button" data-settings-nav="prompting">Prompting</button>
+      <button type="button" data-settings-nav="providers">Providers</button>
+      <button type="button" data-settings-nav="memory">Memory</button>
+      <button type="button" data-settings-nav="features">Features</button>
+      <button type="button" data-settings-nav="tools">Tools</button>
+      <button type="button" data-settings-nav="mcp">MCP</button>
+      <button type="button" data-settings-nav="lsp">LSP</button>
+    </nav>
+    <div class="settings-content">
+      <section id="settingsSection-general" class="settings-section is-active">
+        <h2>General</h2>
+        <p>Use the providers section for API endpoints. Chat model and temperature remain in the composer drawer until migrated.</p>
+      </section>
+      <section id="settingsSection-prompting" class="settings-section">
+        <h2>Prompting</h2>
+        <p>Active profile controls which prompt templates are composed on send.</p>
+        <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
+          <button type="button" data-profile-tab="full" class="is-active">Full</button>
+          <button type="button" data-profile-tab="lite">Lite</button>
+          <button type="button" data-profile-tab="custom">Custom</button>
+        </div>
+        <p class="field-hint">Custom named configurations: use <code>~/.speedchat/prompt-configs/</code> (API from Step 04).</p>
+      </section>
+      <section id="settingsSection-providers" class="settings-section">
+        <h2>Providers</h2>
+        <p>Provider CRUD uses the settings drawer fields when <code>npm start</code> is running. Open drawer via legacy path if needed.</p>
+      </section>
+      <section id="settingsSection-memory" class="settings-section">
+        <h2>Memory</h2>
+        <label class="settings-toggle-row">
+          <span>Enable memory injection</span>
+          <input type="checkbox" id="settingsMemoryEnabled" checked>
+        </label>
+        <button type="button" id="settingsMemoryBackup">Backup memory</button>
+        <button type="button" id="settingsMemoryClear">Clear memory (archive)</button>
+      </section>
+      <section id="settingsSection-features" class="settings-section">
+        <h2>Features</h2>
+        <label class="settings-toggle-row">
+          <span>Self-healing (sub-agents)</span>
+          <input type="checkbox" id="settingsSelfHealingEnabled">
+        </label>
+        <label class="settings-toggle-row">
+          <span>Memory injection (feature flag)</span>
+          <input type="checkbox" id="settingsFeatureMemoryInjection" checked>
+        </label>
+      </section>
+      <section id="settingsSection-tools" class="settings-section">
+        <h2>Tools</h2>
+        <p>Per-tool toggles: use the settings drawer Tools section or <code>~/.speedchat/tools.json</code>.</p>
+      </section>
+      <section id="settingsSection-mcp" class="settings-section">
+        <h2>MCP servers</h2>
+        <p>Context7 is enabled by default under <code>~/.speedchat/mcp/</code>. Set <code>CONTEXT7_API_KEY</code> for live docs.</p>
+      </section>
+      <section id="settingsSection-lsp" class="settings-section">
+        <h2>Language servers</h2>
+        <p>Configure <code>~/.speedchat/lsp.json</code>. Use <code>get_lsp_diagnostics</code> when <code>npm start</code> is running.</p>
+      </section>
+    </div>
+  </div>
+</main>
 
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
