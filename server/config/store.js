@@ -13,7 +13,12 @@ import {
   validateSessionState,
   validateSystemPromptSettings,
 } from './validators.js';
-import { defaultSessionStateJson, defaultToolsJson, DEFAULT_SYSTEM_PROMPT } from './home.js';
+import {
+  DEFAULT_META,
+  defaultSessionStateJson,
+  defaultToolsJson,
+  DEFAULT_SYSTEM_PROMPT,
+} from './home.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
@@ -95,10 +100,15 @@ export async function readResource(resource) {
     return data ?? DEFAULT_SYSTEM_PROMPT;
   }
   if (resource === 'meta') {
-    const data = await readConfigJson(key);
-    if (data) return data;
-    await ensureSpeedChatLayout();
-    return readConfigJson(key);
+    let data = await readConfigJson(key);
+    if (!data) {
+      await ensureSpeedChatLayout();
+      data = await readConfigJson(key);
+    }
+    if (!data?.uiDesigner) {
+      return mergeConfigMeta(data ?? {}, { uiDesigner: DEFAULT_META.uiDesigner });
+    }
+    return data;
   }
   if (resource === 'sub-agents') {
     const data = await readConfigJson(key);

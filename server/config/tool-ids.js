@@ -34,4 +34,12 @@ export const ALL_TOOL_IDS = [
   'run_python',
   'spawn_sub_agent',
   'cancel_sub_agent',
+  'browser_list',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_fill',
+  'browser_eval',
+  'browser_screenshot',
+  'run_impeccable',
 ];

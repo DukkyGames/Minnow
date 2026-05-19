@@ -123,17 +123,19 @@ function escapeHtml(text: string): string {
 }
 
 async function loadFileContent(path: string): Promise<string> {
-  const raw = await executeTool('read_file', { path });
+  const raw = (await executeTool('read_file', { path })).content;
   if (raw.startsWith('Error:')) {
     throw new Error(raw.replace(/^Error:\s*/i, '').trim());
   }
 
   if (raw.length > LARGE_FILE_BYTES) {
-    const rangeRaw = await executeTool('read_file_range', {
-      path,
-      start_line: 1,
-      end_line: RANGE_LINE_COUNT,
-    });
+    const rangeRaw = (
+      await executeTool('read_file_range', {
+        path,
+        start_line: 1,
+        end_line: RANGE_LINE_COUNT,
+      })
+    ).content;
     if (rangeRaw.startsWith('Error:')) {
       throw new Error(rangeRaw.replace(/^Error:\s*/i, '').trim());
     }

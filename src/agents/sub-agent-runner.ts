@@ -145,11 +145,14 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
         for (const tc of turnResult.toolCalls) {
           const args = parseToolArguments(tc.function.arguments);
-          const result = await input.executeTool(tc.function.name, args);
+          const toolOut = await input.executeTool(tc.function.name, args);
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: result,
+            content: toolOut.content,
+            ...(toolOut.attachments?.length
+              ? { attachments: toolOut.attachments }
+              : {}),
           });
         }
         continue;

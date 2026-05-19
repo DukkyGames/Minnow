@@ -129,7 +129,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `GET /api/skills` | `{ skills: SkillListItem[] }` (no body) |
 | `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 |
 
-**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `impeccable` (full Impeccable built-in — Step 14).
+**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `impeccable` (Step 14), `ui-designer` (Step 15).
 
 ### Skills → Impeccable built-in (Step 14)
 
@@ -147,7 +147,24 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 
 **Tests:** `npm run test:skills-impeccable`. Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
 
-**Step 15** UI Designer will invoke `/impeccable` workflows (critique → shape → implement) with optional dedicated model binding.
+### UI Designer (Step 15)
+
+Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-designer`). Single runner in `src/agents/ui-designer/` with Impeccable preflight, plan/implement modes, restricted tools, and optional CDP screenshots.
+
+| Concern | Location |
+|---------|----------|
+| Slash skill | `src/skills/ui-designer/SKILL.md` |
+| Work Agent prompts | `src/chat/prompts/work-agents/ui-designer/agent.{full,lite}.md` |
+| Model binding | `config.json` → `uiDesigner.providerId`, `uiDesigner.modelId`, `fallbackToChatModel` (default true) |
+| Config API | `GET/PUT /api/config/meta` merges `uiDesigner` |
+| Runner / preflight | `src/agents/ui-designer/runner.ts`, `preflight.ts` |
+| Tool allowlist | `src/agents/ui-designer/tools.ts` — plan mode blocks writes |
+| Send wiring | `src/tools/loop.ts` — binding, tool filter, one-turn `workAgentId` pin |
+| Impeccable CLI tool | `run_impeccable` → `server/impeccable/run-impeccable.js` |
+
+**Modes:** `plan` (default, no file mutations) or `implement` (UI paths only). Composer hint after picking `/ui-designer`.
+
+**Tests:** `npm run test:ui-designer`; `node scripts/step15-smoke.mjs`. Verification: [`documentation/plans/verification/step-15.md`](plans/verification/step-15.md).
 
 **Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
 

@@ -4,7 +4,27 @@
  */
 
 /** Tool grouping for settings UI and documentation. */
-export type ToolCategory = 'web' | 'utility' | 'files' | 'git' | 'code' | 'agents';
+export type ToolCategory =
+  | 'web'
+  | 'utility'
+  | 'files'
+  | 'git'
+  | 'code'
+  | 'agents'
+  | 'browser';
+
+/** Shared CDP tool parameters (browser_url, target_id). */
+const BROWSER_CDP_PROPERTIES: Record<string, unknown> = {
+  browser_url: {
+    type: 'string',
+    description:
+      'CDP HTTP endpoint (e.g. http://127.0.0.1:9222). Omit to use SPEEDCHAT_BROWSER_URL or ~/.speedchat config.',
+  },
+  target_id: {
+    type: 'string',
+    description: 'Tab target id from browser_list; omit for the first page target.',
+  },
+};
 
 /** OpenAI-compatible function tool schema sent to chat completions. */
 export interface OpenAIFunctionDefinition {
@@ -54,7 +74,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (9 browser-native, 23 server-required).
+ * All built-in tools (9 browser-native, 30 server-required including 7 CDP browser tools).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
@@ -609,6 +629,131 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         reason: { type: 'string', description: 'Optional cancellation reason' },
       },
       ['run_id'],
+    ),
+  },
+  // --- Browser CDP (server; Chrome --remote-debugging-port) ---
+  {
+    id: 'browser_list',
+    label: 'Browser list tabs',
+    description: 'Lists open page targets via Chrome DevTools Protocol.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_list',
+      'List page targets from a CDP browser endpoint.',
+      { ...BROWSER_CDP_PROPERTIES },
+    ),
+  },
+  {
+    id: 'browser_navigate',
+    label: 'Browser navigate',
+    description: 'Navigate the selected tab (allowlist enforced).',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_navigate',
+      'Navigate a CDP page target to a URL.',
+      {
+        ...BROWSER_CDP_PROPERTIES,
+        url: { type: 'string', description: 'URL to navigate to' },
+      },
+      ['url'],
+    ),
+  },
+  {
+    id: 'browser_snapshot',
+    label: 'Browser snapshot',
+    description: 'Accessibility tree snapshot with [uid] markers for click/fill.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_snapshot',
+      'Capture an accessibility snapshot of the page (required before click/fill).',
+      { ...BROWSER_CDP_PROPERTIES },
+    ),
+  },
+  {
+    id: 'browser_click',
+    label: 'Browser click',
+    description: 'Click an element by snapshot uid.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_click',
+      'Click an element identified by uid from browser_snapshot.',
+      {
+        ...BROWSER_CDP_PROPERTIES,
+        uid: { type: 'number', description: 'Element uid from snapshot' },
+      },
+      ['uid'],
+    ),
+  },
+  {
+    id: 'browser_fill',
+    label: 'Browser fill',
+    description: 'Fill an input by snapshot uid.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_fill',
+      'Fill an input identified by uid from browser_snapshot.',
+      {
+        ...BROWSER_CDP_PROPERTIES,
+        uid: { type: 'number', description: 'Element uid from snapshot' },
+        value: { type: 'string', description: 'Text to enter' },
+      },
+      ['uid', 'value'],
+    ),
+  },
+  {
+    id: 'browser_eval',
+    label: 'Browser eval',
+    description: 'Evaluate JavaScript in the page context.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_eval',
+      'Run JavaScript in the connected page (full page context).',
+      {
+        ...BROWSER_CDP_PROPERTIES,
+        expression: { type: 'string', description: 'JavaScript expression to evaluate' },
+      },
+      ['expression'],
+    ),
+  },
+  {
+    id: 'browser_screenshot',
+    label: 'Browser screenshot',
+    description: 'Capture a PNG screenshot of the page.',
+    category: 'browser',
+    serverRequired: true,
+    definition: toolSchema(
+      'browser_screenshot',
+      'Capture a PNG screenshot via CDP.',
+      { ...BROWSER_CDP_PROPERTIES },
+    ),
+  },
+  {
+    id: 'run_impeccable',
+    label: 'Run Impeccable',
+    description: 'Run an Impeccable CLI sub-command (audit, shape, craft, polish, …).',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'run_impeccable',
+      'Spawn npx impeccable <command> in the project root (60s timeout).',
+      {
+        command: {
+          type: 'string',
+          description:
+            'Impeccable sub-command: audit, critique, shape, craft, polish, teach, document, extract, detect, live',
+        },
+        target: {
+          type: 'string',
+          description: 'Optional target path or URL passed to the command',
+        },
+      },
+      ['command'],
     ),
   },
 ];

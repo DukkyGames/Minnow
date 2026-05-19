@@ -15,7 +15,8 @@
     "test:skills-impeccable": "node --test test/skills-impeccable.test.mjs",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js test/file/*.test.mjs test/cdp/*.test.js test/browser-cdp.test.mjs test/skills-impeccable.test.mjs && tsx --test test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/skills-loader.test.ts",
+    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js test/file/*.test.mjs test/cdp/*.test.js test/browser-cdp.test.mjs test/skills-impeccable.test.mjs && tsx --test test/ui-designer/**/*.test.mts test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/skills-loader.test.ts",
+    "test:ui-designer": "tsx --test test/ui-designer/**/*.test.mts && node scripts/step15-smoke.mjs",
     "test:browser": "node --test test/cdp/*.test.js test/browser-cdp.test.mjs"
   },
   "dependencies": {

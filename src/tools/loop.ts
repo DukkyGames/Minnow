@@ -73,6 +73,14 @@ import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
 import { normalizeModeId } from '../chat/modes/types';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
+import { UI_DESIGNER_AGENT_ID } from '../agents/ui-designer/constants';
+import { resolveUiDesignerBinding } from '../agents/ui-designer/config';
+import {
+  applyUiDesignerToolFilter,
+  augmentSkillBodyForUiDesigner,
+  prepareUiDesignerTurn,
+} from '../agents/ui-designer/runner';
+import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import {
@@ -423,8 +431,24 @@ export async function sendMessageWithTools(): Promise<void> {
     skillBody = skill.body;
   }
 
+  const uiDesignerCtx = prepareUiDesignerTurn(chat, {
+    skillId,
+    userText,
+    workAgentId: chat.workAgentId,
+  });
+  const savedWorkAgentId = chat.workAgentId;
+  if (uiDesignerCtx.active) {
+    chat.workAgentId = UI_DESIGNER_AGENT_ID;
+  }
+  if (skillBody && uiDesignerCtx.active) {
+    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
+  }
+
   if (!hasUserText && validAttachments.length === 0 && !skillBody?.trim()) {
     setStatus('err', 'Add a message or attachment');
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
     return;
   }
 
@@ -463,33 +487,54 @@ export async function sendMessageWithTools(): Promise<void> {
 
   try {
     const sendProvider = await getActiveProvider(chat.providerId);
-    const binding = await resolveWorkAgentBinding(
-      activeWorkAgent,
-      chat,
-      { providerId: sendProvider.id, modelId: sendModelId },
-      {
-        userOverride: activeWorkAgent
-          ? getUserWorkAgentOverride(activeWorkAgent.id)
-          : undefined,
-      },
-    );
-    sendModelId = binding.modelId;
-    sendProviderId = binding.providerId;
+    if (uiDesignerCtx.active) {
+      const binding = await resolveUiDesignerBinding(chat, {
+        providerId: sendProvider.id,
+        modelId: sendModelId,
+      });
+      sendModelId = binding.modelId;
+      sendProviderId = binding.providerId;
+    } else {
+      const binding = await resolveWorkAgentBinding(
+        activeWorkAgent,
+        chat,
+        { providerId: sendProvider.id, modelId: sendModelId },
+        {
+          userOverride: activeWorkAgent
+            ? getUserWorkAgentOverride(activeWorkAgent.id)
+            : undefined,
+        },
+      );
+      sendModelId = binding.modelId;
+      sendProviderId = binding.providerId;
+    }
   } catch (err) {
     if (err instanceof WorkAgentConfigError) {
       setStatus('err', err.message);
+      if (uiDesignerCtx.active) {
+        chat.workAgentId = savedWorkAgentId;
+      }
       return;
     }
     throw err;
   }
 
-  const agentStatusSuffix = activeWorkAgent?.label ? ` (${activeWorkAgent.label})` : '';
+  const agentStatusSuffix = uiDesignerCtx.active
+    ? ' (UI Designer)'
+    : activeWorkAgent?.label
+      ? ` (${activeWorkAgent.label})`
+      : '';
 
   setStreaming(true);
   refreshModeSelectorDisabled();
   refreshExpertSelectDisabled();
   setSendLoading(true);
-  setStatus('spin', `Generating reply${agentStatusSuffix}…`);
+  setStatus(
+    'spin',
+    uiDesignerCtx.active
+      ? `${uiDesignerCtx.statusHint}…`
+      : `Generating reply${agentStatusSuffix}…`,
+  );
 
   let streamRow = appendStreamingAssistantRow();
   let { wrap, bubble, cursor, streamStatus } = streamRow;
@@ -536,6 +581,7 @@ export async function sendMessageWithTools(): Promise<void> {
         const allow = new Set(activeWorkAgent.allowedTools);
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
       }
+      enabledTools = applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
       const messages = buildApiMessages(chat, sysPrompt, {
         modelId: sendModelId,
         pendingUserText: userText || rawText,
@@ -598,10 +644,15 @@ export async function sendMessageWithTools(): Promise<void> {
           area.appendChild(toolWrap);
           scrollBottom();
 
-          const toolOut = await executeTool(tc.function.name, args, {
-            chatId: chat.id,
-            toolCallId: tc.id,
-          });
+          const planBlock = uiDesignerCtx.active
+            ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
+            : null;
+          const toolOut = planBlock
+            ? { content: planBlock }
+            : await executeTool(tc.function.name, args, {
+                chatId: chat.id,
+                toolCallId: tc.id,
+              });
           renderToolResult(toolWrap, toolOut.content, toolOut.attachments);
 
           chat.history.push({
@@ -736,6 +787,9 @@ export async function sendMessageWithTools(): Promise<void> {
       getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
     setStatus('err', statusMsg + attachHint);
   } finally {
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
     setSubAgentExecutorContext(null);
     thoughtController?.abort();
     if (completedNormally) {

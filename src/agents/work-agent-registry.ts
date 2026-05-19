@@ -18,6 +18,7 @@ export const DEFAULT_REGISTRY_IDS = [
   'planner',
   'reviewer',
   'researcher',
+  'ui-designer',
 ] as const;
 
 export interface WorkAgentRegistryIndex {

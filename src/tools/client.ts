@@ -14,6 +14,7 @@ import {
 } from './config';
 import { filterToolsByMode } from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import type { ToolExecutionResult } from '../types';
 import {
   BUILT_IN_TOOLS,
   type OpenAIFunctionDefinition,
@@ -78,9 +79,10 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   if (name === 'spawn_sub_agent' || name === 'cancel_sub_agent') {
-    return executeSubAgentTool(name, args);
+    const text = await executeSubAgentTool(name, args);
+    return { content: text };
   }
 
   const config = loadToolConfig();
@@ -92,31 +94,34 @@ export async function executeTool(
         query: enrichedArgs.query,
       });
     }
-    return executeBrowserTool(name, enrichedArgs);
+    return { content: await executeBrowserTool(name, enrichedArgs) };
   }
 
   const tool = findToolByFunctionName(name);
   if (!tool) {
-    return `Error: unknown tool "${name}"`;
+    return { content: `Error: unknown tool "${name}"` };
   }
 
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {
-      return (
-        'Error: local tool server is not available. Run `npm start` for file, git, and code tools.'
-      );
+      return {
+        content:
+          'Error: local tool server is not available. Run `npm start` for file, git, and code tools.',
+      };
     }
     if (
       STREAMING_TOOL_NAMES.has(name) &&
       context.chatId &&
       typeof enrichedArgs === 'object'
     ) {
-      return executeStreamingCodeTool(name, enrichedArgs, context);
+      return {
+        content: await executeStreamingCodeTool(name, enrichedArgs, context),
+      };
     }
     return executeServerTool(name, enrichedArgs);
   }
 
-  return executeBrowserTool(name, enrichedArgs);
+  return { content: await executeBrowserTool(name, enrichedArgs) };
 }
 
 /** User + server gating only (no mode filter). */
@@ -222,7 +227,7 @@ async function executeStreamingCodeTool(
 async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   let response: Response;
   try {
     response = await fetch('/api/tools', {
@@ -232,21 +237,40 @@ async function executeServerTool(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error: failed to reach tool server (${message})`;
+    return { content: `Error: failed to reach tool server (${message})` };
   }
 
-  let payload: { result?: string; error?: string };
+  let payload: {
+    result?: string;
+    error?: string;
+    attachments?: ToolExecutionResult['attachments'];
+  };
   try {
-    payload = (await response.json()) as { result?: string; error?: string };
+    payload = (await response.json()) as typeof payload;
   } catch {
-    return `Error: invalid JSON from tool server (HTTP ${response.status})`;
+    return {
+      content: `Error: invalid JSON from tool server (HTTP ${response.status})`,
+    };
   }
 
   if (!response.ok) {
-    return `Error: ${payload.error ?? `tool server HTTP ${response.status}`}`;
+    return {
+      content: `Error: ${payload.error ?? `tool server HTTP ${response.status}`}`,
+    };
   }
 
-  return String(payload.result ?? '');
+  const content = String(payload.result ?? '');
+  const attachments = Array.isArray(payload.attachments)
+    ? payload.attachments.filter(
+        (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
+          a != null &&
+          a.type === 'image' &&
+          typeof a.url === 'string' &&
+          a.mime === 'image/png',
+      )
+    : undefined;
+
+  return attachments?.length ? { content, attachments } : { content };
 }
 
 /** Resolves catalog entry by OpenAI function name. */

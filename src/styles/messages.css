@@ -500,3 +500,13 @@
   max-height: 240px;
   overflow-y: auto;
 }
+
+.tool-call-screenshot {
+  display: block;
+  max-width: 100%;
+  max-height: min(480px, 70vh);
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  object-fit: contain;
+}

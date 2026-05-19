@@ -31,6 +31,7 @@ const DRAWER_FOCUSABLE =
 const TOOL_CATEGORY_ORDER: ToolCategory[] = [
   'web',
   'utility',
+  'browser',
   'agents',
   'files',
   'git',
@@ -40,6 +41,7 @@ const TOOL_CATEGORY_ORDER: ToolCategory[] = [
 const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   web: 'Web',
   utility: 'Utility',
+  browser: 'Browser (CDP)',
   agents: 'Sub-agents',
   files: 'Files',
   git: 'Git',
@@ -266,6 +268,14 @@ export function fillToolsSection(): void {
     header.className = 'tool-group-header';
     header.textContent = TOOL_CATEGORY_LABELS[category];
     container.appendChild(header);
+
+    if (category === 'browser') {
+      const hint = document.createElement('p');
+      hint.className = 'tool-group-hint';
+      hint.textContent =
+        'Requires Chrome with --remote-debugging-port and npm start.';
+      container.appendChild(hint);
+    }
 
     for (const tool of tools) {
       const row = document.createElement('div');

@@ -308,6 +308,24 @@ export function mergeConfigMeta(existing, patch) {
     base.filePanel = existingPanel;
   }
 
+  if (p.uiDesigner && typeof p.uiDesigner === 'object') {
+    const existingUi =
+      base.uiDesigner && typeof base.uiDesigner === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.uiDesigner) }
+        : {
+            providerId: '',
+            modelId: '',
+            fallbackToChatModel: true,
+          };
+    const u = /** @type {Record<string, unknown>} */ (p.uiDesigner);
+    if (typeof u.providerId === 'string') existingUi.providerId = u.providerId;
+    if (typeof u.modelId === 'string') existingUi.modelId = u.modelId;
+    if (typeof u.fallbackToChatModel === 'boolean') {
+      existingUi.fallbackToChatModel = u.fallbackToChatModel;
+    }
+    base.uiDesigner = existingUi;
+  }
+
   return base;
 }
 
