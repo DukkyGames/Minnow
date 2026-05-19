@@ -38,6 +38,10 @@ Clone or download this repo, then from the project root:
 npm install
 ```
 
+**Impeccable (UI design skill):** `postinstall` vendors the [Impeccable](https://impeccable.style) skill into `src/skills/impeccable/` (reference docs + scripts). With `npm start`, use **`/impeccable`** in the composer for design critique, polish, and related commands — context comes from [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md), and [`.impeccable/design.json`](.impeccable/design.json). Docs: https://impeccable.style/docs — optional Chrome extension for Live Mode. Before UI-heavy PRs: `npm run impeccable:detect` (exit code `2` = issues found). Re-sync: `npm run impeccable:sync`; update upstream: `npm run impeccable:update`.
+
+**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** Work Agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional dedicated binding in `~/.speedchat/config.json` under `uiDesigner`.
+
 Optional: PDF text extraction uses `pdf-parse` (listed under `optionalDependencies`). A normal `npm install` should pull it in; if PDF attachments fail, run:
 
 ```bash
@@ -102,6 +106,10 @@ $env:PORT=3000; npm start
 | `npm run dev` | Vite only (UI/HMR; no server tools) |
 | `npm run build` | Typecheck + production build → `dist/` |
 | `npm run preview` | Preview the production build (no tool API) |
+| `npm run impeccable:sync` | Re-vendor Impeccable `reference/` + `scripts/` into `src/skills/impeccable/` |
+| `npm run impeccable:update` | Update upstream Impeccable skill + re-sync |
+| `npm run impeccable:detect` | Anti-pattern scan on `src/` and `index.html` |
+| `npm run test:skills-impeccable` | Step 14 tests for `/impeccable` built-in |
 
 Production output in `dist/` is a **static** SPA. Host it on any static file server. The tool API is **not** included in `dist/` unless you deploy `server.js` separately or run `npm start` against a built app.
 
@@ -114,13 +122,30 @@ When you run `npm start`, the browser talks to the same origin for tools:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/tools/ping` | GET | Health check (`{ "ok": true }`) |
-| `/api/tools` | POST | Execute a tool — body: `{ "name": "...", "args": { ... } }` → `{ "result": "..." }` |
+| `/api/tools` | POST | Execute a tool — body: `{ "name": "...", "args": { ... } }` → `{ "result": "..." }` (optional `attachments` for screenshots) |
+| `/api/browser/screenshot/:id` | GET | PNG from `~/.speedchat/screenshots/` (Step 12) |
 
 - **Path safety:** File/git tools resolve paths under the **project root** unless you set `TOOLS_ALLOW_ALL_PATHS=1`.
 - **Brave Search:** Optional API key in Settings → Tools for `web_search`; without it, the client may use a DuckDuckGo fallback when the server is up.
 - **Timeouts:** `execute_command`, `run_javascript`, and `run_python` time out after **30 seconds**.
 
 Browser-only tools (`get_datetime`, `calculate`, clipboard, etc.) run in the page and do not need the Node server.
+
+### Browser automation (CDP, optional)
+
+Enable **Browser (CDP)** tools in Settings. Start Chrome with remote debugging:
+
+```bash
+# Windows (typical)
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+
+# macOS / Linux
+google-chrome --remote-debugging-port=9222
+```
+
+Optional: `SPEEDCHAT_BROWSER_URL=http://127.0.0.1:9222` or `browser.defaultUrl` in `~/.speedchat/config.json`.
+
+Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). `browser_eval` runs full page JavaScript — use only on trusted pages.
 
 ---
 
@@ -144,7 +169,8 @@ Browser-only tools (`get_datetime`, `calculate`, clipboard, etc.) run in the pag
 | “Server tools need npm start” | Stop `npm run dev`; run `npm start` instead. |
 | Tool can’t read a file outside the repo | Expected unless `TOOLS_ALLOW_ALL_PATHS=1`. |
 | PDF attachment fails | Run `npm start`; install `pdf-parse` if prompted. |
-| CORS / fetch errors on web tools | Some sites block browser `fetch`; try server-side tools or different URLs. |
+| CORS / fetch errors on web tools | Some sites block browser `fetch`; use CDP `browser_navigate` + `browser_snapshot`, or server file tools. |
+| CDP browser tools fail | Chrome running with `--remote-debugging-port=9222`? `npm start`? Tools enabled in Settings? |
 | Port already in use | Set `PORT` to another value and open the printed URL. |
 
 Smoke test (with `npm start` running):
@@ -155,7 +181,18 @@ npx tsx scripts/sa16-smoke.mjs http://localhost:5173
 
 Use the port shown in your terminal if it is not 5173.
 
+Terminal stream API (with `npm start` running):
+
+```bash
+node test/terminal-stream.test.mjs http://localhost:5173
+```
+
 ---
+
+Read lints on edited ts files
+
+
+ReadLints
 
 ## Project layout (short)
 

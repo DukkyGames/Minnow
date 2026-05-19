@@ -76,11 +76,26 @@ export interface AssistantToolCallMessage {
   usage?: Usage;
 }
 
+/** Inline image attachment from server tools (e.g. browser_screenshot). */
+export interface ToolImageAttachment {
+  type: 'image';
+  url: string;
+  mime: 'image/png';
+  alt?: string;
+}
+
 /** Tool execution result correlated to `tool_call_id` from the prior assistant turn. */
 export interface ToolResultMessage {
   role: 'tool';
   tool_call_id: string;
   content: string;
+  attachments?: ToolImageAttachment[];
+}
+
+/** Result returned from executeTool (text + optional UI attachments). */
+export interface ToolExecutionResult {
+  content: string;
+  attachments?: ToolImageAttachment[];
 }
 
 export type Message =
@@ -188,6 +203,8 @@ export interface Chat {
   workAgentId?: string | null;
   /** When true, mode switch picks defaultForModes agent (Step 08). */
   workAgentAuto?: boolean;
+  /** UI Designer plan vs implement (Step 15); default plan. */
+  uiDesignerMode?: 'plan' | 'implement';
   /** Per-chat terminal command history (Step 10). */
   terminalHistory?: TerminalRunRecord[];
   history: Message[];

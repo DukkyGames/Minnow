@@ -107,6 +107,9 @@ export interface SubAgentRunner {
     providerId: string;
     modelId: string;
     signal: AbortSignal;
-    executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
+    executeTool: (
+      name: string,
+      args: Record<string, unknown>,
+    ) => Promise<import('../types').ToolExecutionResult>;
   }): Promise<SubAgentRunnerOutput>;
 }

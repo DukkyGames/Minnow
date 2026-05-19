@@ -156,9 +156,11 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
   const filteredExecute = async (
     name: string,
     args: Record<string, unknown>,
-  ): Promise<string> => {
+  ) => {
     if (!allowedNames.has(name)) {
-      return `Error: tool "${name}" is not allowed for sub-agent type ${run.type}`;
+      return {
+        content: `Error: tool "${name}" is not allowed for sub-agent type ${run.type}`,
+      };
     }
     recordToolCallForRun(run.runId, name, args);
     return executeTool(name, args);

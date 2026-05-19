@@ -23,7 +23,7 @@ async function fetchListing(relativePath: string): Promise<ParsedListing | { err
   const cached = listingCache.get(relativePath);
   if (cached) return cached;
 
-  const raw = await executeTool('list_directory', { path: relativePath });
+  const raw = (await executeTool('list_directory', { path: relativePath })).content;
   const parsed = parseListDirectoryResult(raw);
   if ('error' in parsed) {
     return parsed;

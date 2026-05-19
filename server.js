@@ -19,6 +19,9 @@ import { createProviderMiddleware } from './server/providers/routes.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
+import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
+import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
+import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -611,6 +614,8 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
+  run_impeccable: (args) => toolRunImpeccable(args, PROJECT_ROOT),
+  ...BROWSER_TOOL_HANDLERS,
 };
 
 /**
@@ -621,12 +626,16 @@ async function executeServerTool(name, args) {
   try {
     const handler = SERVER_TOOL_HANDLERS[name];
     if (!handler) {
-      return `Not implemented: ${name}`;
+      return { result: `Not implemented: ${name}` };
     }
-    return await handler(args ?? {});
+    const out = await handler(args ?? {});
+    if (out && typeof out === 'object' && 'result' in out) {
+      return out;
+    }
+    return { result: String(out) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error: ${message}`;
+    return { result: `Error: ${message}` };
   }
 }
 
@@ -692,9 +701,13 @@ function createToolsMiddleware() {
           res.end(JSON.stringify({ error: 'Missing or invalid "name"' }));
           return;
         }
-        const result = await executeServerTool(name, args);
+        const out = await executeServerTool(name, args);
         res.statusCode = 200;
-        res.end(JSON.stringify({ result: String(result) }));
+        const payload = { result: String(out.result ?? '') };
+        if (Array.isArray(out.attachments) && out.attachments.length > 0) {
+          payload.attachments = out.attachments;
+        }
+        res.end(JSON.stringify(payload));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         res.statusCode = 400;
@@ -745,6 +758,7 @@ async function main() {
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
+          server.middlewares.use(createBrowserScreenshotMiddleware());
           server.middlewares.use(createToolsMiddleware());
           server.middlewares.use(createSkillsMiddleware());
           server.middlewares.use(createTerminalMiddleware(PROJECT_ROOT));
@@ -766,6 +780,7 @@ async function main() {
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
+  console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   openBrowser(localUrl);
 }

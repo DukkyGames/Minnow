@@ -114,11 +114,17 @@ export function renderChatFromHistory(chat: Chat): void {
     area.appendChild(empty);
     return;
   }
-  const toolResultMap = new Map<string, string>();
+  const toolResultMap = new Map<
+    string,
+    { content: string; attachments?: ToolResultMessage['attachments'] }
+  >();
   for (const msg of chat.history) {
     if (msg?.role !== 'tool') continue;
     const toolMsg = msg as ToolResultMessage;
-    toolResultMap.set(toolMsg.tool_call_id, toolMsg.content);
+    toolResultMap.set(toolMsg.tool_call_id, {
+      content: toolMsg.content,
+      attachments: toolMsg.attachments,
+    });
   }
 
   for (const msg of chat.history) {
@@ -143,9 +149,9 @@ export function renderChatFromHistory(chat: Chat): void {
         const argsObj = parseToolArgsForDisplay(tc.function.arguments);
         const toolWrap = renderToolCall(tc.function.name, argsObj);
         area.appendChild(toolWrap);
-        const result = toolResultMap.get(tc.id);
-        if (result !== undefined) {
-          renderToolResult(toolWrap, result);
+        const stored = toolResultMap.get(tc.id);
+        if (stored !== undefined) {
+          renderToolResult(toolWrap, stored.content, stored.attachments);
         }
       }
       continue;

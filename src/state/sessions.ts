@@ -106,7 +106,21 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
       typeof toolMsg.tool_call_id === 'string' ? toolMsg.tool_call_id.trim() : '';
     if (!toolCallId) return null;
     const content = toolMsg.content != null ? String(toolMsg.content) : '';
-    return { role: 'tool', tool_call_id: toolCallId, content };
+    const attachments = Array.isArray(toolMsg.attachments)
+      ? toolMsg.attachments.filter(
+          (a) =>
+            a &&
+            typeof a === 'object' &&
+            a.type === 'image' &&
+            typeof a.url === 'string',
+        )
+      : undefined;
+    return {
+      role: 'tool',
+      tool_call_id: toolCallId,
+      content,
+      ...(attachments?.length ? { attachments } : {}),
+    };
   }
 
   if (m.role === 'user') {

@@ -1,0 +1,29 @@
+{
+  "dedicated": {
+    "uiDesigner": {
+      "providerId": "lm-studio-local",
+      "modelId": "vision-model-fixed-id",
+      "fallbackToChatModel": true
+    },
+    "chatProviderId": "openai-remote",
+    "chatModelId": "gpt-4o-mini"
+  },
+  "fallback": {
+    "uiDesigner": {
+      "providerId": "",
+      "modelId": "",
+      "fallbackToChatModel": true
+    },
+    "chatProviderId": "lm-studio-local",
+    "chatModelId": "local-chat-model"
+  },
+  "noFallback": {
+    "uiDesigner": {
+      "providerId": "",
+      "modelId": "",
+      "fallbackToChatModel": false
+    },
+    "chatProviderId": "lm-studio-local",
+    "chatModelId": "local-chat-model"
+  }
+}

@@ -43,6 +43,8 @@ const SCAFFOLD_DIRS = [
   'skills',
   'backups',
   'logs/sub-agents',
+  'logs/terminal',
+  'screenshots',
 ];
 
 const DEFAULT_META = {
@@ -62,6 +64,27 @@ const DEFAULT_META = {
     providerId: '',
     maxTokens: 24,
     temperature: 0.3,
+  },
+  terminal: {
+    open: false,
+    heightPx: 240,
+    autoOpenOnAgentRun: true,
+  },
+  browser: {
+    enabled: true,
+    defaultUrl: 'http://127.0.0.1:9222',
+    allowNavigate: true,
+    allowedOriginPatterns: [
+      'http://localhost:*',
+      'http://127.0.0.1:*',
+      'https://localhost:*',
+    ],
+    screenshotDir: 'screenshots',
+  },
+  uiDesigner: {
+    providerId: '',
+    modelId: '',
+    fallbackToChatModel: true,
   },
 };
 

@@ -33,7 +33,15 @@
     "run_javascript": false,
     "run_python": false,
     "spawn_sub_agent": false,
-    "cancel_sub_agent": false
+    "cancel_sub_agent": false,
+    "browser_list": false,
+    "browser_navigate": false,
+    "browser_snapshot": false,
+    "browser_click": false,
+    "browser_fill": false,
+    "browser_eval": false,
+    "browser_screenshot": false,
+    "run_impeccable": false
   },
   "keys": {
     "braveApiKey": "fixture-brave-key-12345"

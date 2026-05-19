@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-19T22:25:07.953Z",
+  "generatedAt": "2026-05-19T23:23:01.529Z",
   "skills": [
     {
       "id": "browser-automation",
@@ -53,6 +53,12 @@
       "id": "security-review",
       "label": "Security Review",
       "description": ">-",
+      "source": "builtin"
+    },
+    {
+      "id": "ui-designer",
+      "label": "UI Designer",
+      "description": "Impeccable-guided UI audit, screenshot capture, plan or implement SpeedChat surfaces.",
       "source": "builtin"
     },
     {
