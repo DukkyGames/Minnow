@@ -83,6 +83,8 @@ export interface ComposeContext {
   cwd: string;
   modeId: string | null;
   expertId: string | null;
+  /** Human label for {{expert}} interpolation (Step 06). */
+  expertLabel?: string | null;
   workAgentId: string | null;
   skillBody: string | null;
   memoryBlock: string | null;
@@ -96,6 +98,8 @@ export interface ComposeContext {
 /** Tokens replaced in composed bodies via interpolate.ts. */
 export interface InterpolationVars {
   mode: string;
+  mode_label: string;
+  profile: string;
   expert: string;
   enabled_tools: string;
   cwd: string;

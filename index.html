@@ -89,6 +89,17 @@
       <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"
         oninput="onSystemPromptInput()"></textarea>
     </div>
+    <section class="tools-section" id="expertsSection" aria-labelledby="expertsSectionTitle">
+      <h2 class="tools-section-title" id="expertsSectionTitle">Experts</h2>
+      <div class="field-row">
+        <label class="tool-toggle-label">
+          <input type="checkbox" id="expertsEnabled" checked>
+          Enable experts
+        </label>
+      </div>
+      <p class="field-hint">Choose an expert in the chat bar (Auto or manual). Built-in ids:</p>
+      <div id="expertsBuiltinList"></div>
+    </section>
     <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
       <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
       <p class="field-hint tools-section-hint">Enable function calling for the model. Server tools require <code>npm start</code> (local tool server).</p>
@@ -138,6 +149,14 @@
     <div class="input-bar">
       <input type="file" id="fileInput" class="visually-hidden" multiple tabindex="-1" aria-hidden="true">
       <div class="input-bar-composer">
+        <div class="composer-controls" id="composerControls" role="toolbar" aria-label="Composer options">
+          <div id="modeSelector" class="mode-segmented" role="radiogroup" aria-label="Operating mode"></div>
+          <div class="composer-control">
+            <label class="visually-hidden" for="expertSelect">Expert</label>
+            <select id="expertSelect" aria-label="Expert: Auto"></select>
+            <span id="expertAutoHint" class="expert-auto-hint hidden" aria-live="polite"></span>
+          </div>
+        </div>
         <div id="attachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
         <div class="input-row">
           <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">

@@ -34,8 +34,11 @@ import {
   setAssistantBubbleContent,
 } from '../markdown/renderer';
 import {
+  isFirstUserMessagePending,
+  scheduleChatTitleGeneration,
+} from '../chat/titles/schedule';
+import {
   getActiveChat,
-  maybeAutoTitleFromFirstUserMessage,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
@@ -51,6 +54,8 @@ import type {
   ToolCallAccumulator,
 } from '../types';
 import { setSendLoading } from '../ui/input';
+import { refreshExpertSelectDisabled } from '../ui/expert-select';
+import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import {
   appendBubble,
   appendStats,
@@ -65,7 +70,12 @@ import { getActiveProvider } from '../providers/store';
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
-import { detectLocalServer, executeTool, getEnabledToolDefinitions } from './client';
+import { normalizeModeId } from '../chat/modes/types';
+import {
+  detectLocalServer,
+  executeTool,
+  getEnabledToolDefinitionsForMode,
+} from './client';
 
 /** Maximum assistantâ†’tool rounds before aborting with an error. */
 export const MAX_TOOL_TURNS = 8;
@@ -87,7 +97,7 @@ interface ChatCompletionBody {
   max_tokens: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
-  tools?: ReturnType<typeof getEnabledToolDefinitions>;
+  tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;
   tool_choice?: 'auto';
 }
 
@@ -394,8 +404,11 @@ export async function sendMessageWithTools(): Promise<void> {
   chat.modelId = modelId || chat.modelId;
   const historyContent = buildHistoryUserContent(text, validAttachments);
   const titleSeed = text || validAttachments[0]?.name || 'Attachment';
-  maybeAutoTitleFromFirstUserMessage(chat, titleSeed);
+  const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: historyContent });
+  if (shouldScheduleTitle) {
+    scheduleChatTitleGeneration(chat.id, titleSeed);
+  }
   touchChat(chat);
   scheduleSaveSessions();
   renderSidebar();
@@ -405,6 +418,8 @@ export async function sendMessageWithTools(): Promise<void> {
   input.style.height = 'auto';
 
   setStreaming(true);
+  refreshModeSelectorDisabled();
+  refreshExpertSelectDisabled();
   setSendLoading(true);
   setStatus('spin', 'Generating reply…');
 
@@ -433,6 +448,7 @@ export async function sendMessageWithTools(): Promise<void> {
   try {
     composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
       userMessagePreview: text,
+      routeUserText: text,
     });
   } catch {
     composedSystemPrompt = '';
@@ -443,8 +459,10 @@ export async function sendMessageWithTools(): Promise<void> {
     const provider = await getActiveProvider(chat.providerId);
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
+    const activeModeId = normalizeModeId(chat.modeId);
+
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-      const enabledTools = getEnabledToolDefinitions();
+      const enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
       const messages = buildApiMessages(chat, sysPrompt, {
         modelId,
         pendingUserText: text,
@@ -644,6 +662,8 @@ export async function sendMessageWithTools(): Promise<void> {
       clearAttachments();
     }
     setStreaming(false);
+    refreshModeSelectorDisabled();
+  refreshExpertSelectDisabled();
     setSendLoading(false);
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);

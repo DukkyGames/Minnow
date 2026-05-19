@@ -47,6 +47,18 @@ describe('config API CRUD', () => {
     assert.deepEqual(get.json, expected);
   });
 
+  test('PUT sessions round-trip preserves modeId', async () => {
+    const base = JSON.parse(await readFixture('expected-sessions-state.json'));
+    base.chats[0].modeId = 'plan';
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', base);
+    assert.equal(put.status, 200);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/sessions');
+    assert.equal(get.status, 200);
+    const chat = get.json.chats.find((c) => c.id === base.chats[0].id);
+    assert.equal(chat?.modeId, 'plan');
+  });
+
   test('PUT tools with brave key round-trips', async () => {
     const expected = JSON.parse(await readFixture('expected-tools.json'));
     const put = await httpRequest(baseUrl, 'PUT', '/api/config/tools', expected);

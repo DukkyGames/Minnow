@@ -2,6 +2,8 @@
  * Assemble the system prompt from enabled parts and profile rules.
  */
 
+import { getMode } from '../modes/registry';
+import { isModeId } from '../modes/types';
 import { interpolatePromptBody } from './interpolate';
 import { loadPromptById } from './prompt-loader';
 import type {
@@ -157,9 +159,18 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
   const includeSummary =
     profile !== 'lite' || ctx.includeChatHistorySummary === true;
 
+  const modeId = ctx.modeId ?? '';
+  const modeLabel =
+    modeId && isModeId(modeId) ? getMode(modeId).label : modeId;
+
+  const profileLabel =
+    ctx.profile === 'custom' ? 'custom' : ctx.profile === 'lite' ? 'lite' : 'full';
+
   return {
-    mode: ctx.modeId ?? '',
-    expert: ctx.expertId ?? '',
+    mode: modeId,
+    mode_label: modeLabel,
+    profile: profileLabel,
+    expert: ctx.expertLabel?.trim() || ctx.expertId || '',
     enabled_tools: ctx.enabledToolSummaries ?? '',
     cwd: ctx.cwd,
     memory: ctx.memoryBlock ?? '',

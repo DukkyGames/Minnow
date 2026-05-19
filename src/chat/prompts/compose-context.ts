@@ -2,9 +2,15 @@
  * Build ComposeContext from app config, tools, and session state.
  */
 
+import { listExperts } from '../experts/registry';
+import { resolveExpertForTurn } from '../experts/resolve';
+import { normalizeModeId } from '../modes/types';
+import { loadExpertsConfig } from '../../config/experts-config';
 import { loadPromptMetaSettings } from '../../config/prompt-meta';
+import { getExpertSelection } from '../../state/sessions';
+import { updateExpertAutoHint } from '../../ui/expert-select';
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
-import { getEnabledToolDefinitions } from '../../tools/client';
+import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { isLocalServerAvailable, loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
 import { loadPromptConfig } from './prompt-configs';
@@ -18,15 +24,11 @@ export function resolveComposeCwd(): string {
   return '.';
 }
 
-function getEnabledToolIds(): string[] {
+function getEnabledToolIdsForChat(chat: Chat): string[] {
   loadToolConfig();
-  const serverUp = isLocalServerAvailable();
-  return BUILT_IN_TOOLS.filter((tool) => {
-    const config = loadToolConfig();
-    if (!config.enabled[tool.id]) return false;
-    if (tool.serverRequired && !serverUp) return false;
-    return true;
-  }).map((tool) => tool.id);
+  const modeId = normalizeModeId(chat.modeId);
+  const defs = getEnabledToolDefinitionsForMode(modeId);
+  return defs.map((d) => d.function.name);
 }
 
 /** Full-profile tool list with one-line descriptions for {{enabled_tools}}. */
@@ -52,7 +54,15 @@ export function formatEnabledToolsLite(ids: string[]): string {
 
 export interface BuildComposeContextOptions {
   userMessagePreview?: string;
+  /** When set, used for expert routing instead of last history message. */
+  routeUserText?: string;
   overrides?: Partial<ComposeContext>;
+}
+
+export interface ResolvedExpertContext {
+  expertId: string | null;
+  expertLabel: string | null;
+  routeSource: string;
 }
 
 /**
@@ -73,9 +83,9 @@ export async function buildComposeContext(
     }
   }
 
-  const enabledToolIds = getEnabledToolIds();
-  // Ensure tool definitions are loaded for downstream tool loop
-  void getEnabledToolDefinitions();
+  const modeId = normalizeModeId(chat.modeId);
+  const enabledToolIds = getEnabledToolIdsForChat(chat);
+  void getEnabledToolDefinitionsForMode(modeId);
 
   const infoPresetId =
     options?.overrides?.infoPresetId ??
@@ -87,7 +97,7 @@ export async function buildComposeContext(
     customConfigId: meta.activePromptConfigId,
     customConfig,
     cwd: resolveComposeCwd(),
-    modeId: null,
+    modeId,
     expertId: null,
     workAgentId: null,
     skillBody: null,
@@ -114,6 +124,38 @@ export async function buildComposeContext(
 }
 
 /**
+ * Resolve expert for this turn (rules-first; LLM classifier skipped on send for latency).
+ */
+export async function resolveExpertContextForSend(
+  chat: Chat,
+  userText: string,
+): Promise<ResolvedExpertContext> {
+  const expertsConfig = await loadExpertsConfig();
+  if (!expertsConfig.enabled) {
+    return { expertId: null, expertLabel: null, routeSource: 'none' };
+  }
+
+  const registry = listExperts();
+  const selection = getExpertSelection(chat);
+  const route = resolveExpertForTurn({
+    selection,
+    userText,
+    registry,
+    config: expertsConfig,
+  });
+
+  if (selection.mode === 'auto') {
+    chat.lastResolvedExpertId = route.expertId;
+  }
+
+  return {
+    expertId: route.expertId,
+    expertLabel: route.label ?? route.expertId,
+    routeSource: route.source,
+  };
+}
+
+/**
  * Resolve composed system prompt for send path (async config + compose).
  */
 export async function resolveComposedSystemPrompt(
@@ -121,6 +163,20 @@ export async function resolveComposedSystemPrompt(
   options?: BuildComposeContextOptions,
 ): Promise<string> {
   const { composeSystemPrompt } = await import('./prompt-composer');
-  const ctx = await buildComposeContext(chat, options);
+  const routeText =
+    options?.routeUserText ??
+    options?.userMessagePreview ??
+  '';
+
+  const expertCtx = await resolveExpertContextForSend(chat, routeText);
+  updateExpertAutoHint(expertCtx);
+  const ctx = await buildComposeContext(chat, {
+    ...options,
+    overrides: {
+      expertId: expertCtx.expertId,
+      expertLabel: expertCtx.expertLabel,
+      ...options?.overrides,
+    },
+  });
   return composeSystemPrompt(ctx);
 }

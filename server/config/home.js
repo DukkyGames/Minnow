@@ -55,6 +55,13 @@ const DEFAULT_META = {
   activePromptProfile: 'full',
   activePromptConfigId: null,
   activeInfoPresetId: 'general-assistant',
+  titles: {
+    enabled: true,
+    modelId: '',
+    providerId: '',
+    maxTokens: 24,
+    temperature: 0.3,
+  },
 };
 
 const DEFAULT_SYSTEM_PROMPT = {

@@ -7,6 +7,33 @@ import { ALL_TOOL_IDS } from './tool-ids.js';
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
 
+/** Valid operating mode ids (mirror src/chat/modes/types.ts). */
+const MODE_IDS = ['build', 'plan', 'orchestrate', 'research'];
+const DEFAULT_MODE_ID = 'build';
+
+/** Normalize persisted or unknown mode ids. */
+function normalizeModeId(value) {
+  if (typeof value === 'string' && MODE_IDS.includes(value)) return value;
+  return DEFAULT_MODE_ID;
+}
+
+/** Default expert picker when missing on older chats. */
+function defaultExpertSelection() {
+  return { mode: 'auto', expertId: null };
+}
+
+/** Coerce expert picker shape (mirror src/state/sessions.ts). */
+function ensureExpertSelection(raw) {
+  if (!raw || typeof raw !== 'object') return defaultExpertSelection();
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const mode = row.mode === 'manual' ? 'manual' : 'auto';
+  const expertId =
+    mode === 'manual' && typeof row.expertId === 'string' && row.expertId.trim()
+      ? row.expertId.trim()
+      : null;
+  return { mode, expertId };
+}
+
 function newChatId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -20,6 +47,9 @@ function ensureChatShape(raw) {
       id: newChatId(),
       name: PLACEHOLDER_CHAT_NAME,
       modelId: '',
+      modeId: DEFAULT_MODE_ID,
+      expertSelection: defaultExpertSelection(),
+      lastResolvedExpertId: null,
       history: [],
       lastStats: null,
       modelInfo: {},
@@ -27,21 +57,28 @@ function ensureChatShape(raw) {
     };
   }
 
-  const history = Array.isArray(raw.history)
-    ? raw.history.filter((m) => m && typeof m === 'object' && m.role)
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const history = Array.isArray(row.history)
+    ? row.history.filter((m) => m && typeof m === 'object' && m.role)
     : [];
 
   return {
-    id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
+    id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
-      typeof raw.name === 'string' && raw.name.trim()
-        ? raw.name.trim()
+      typeof row.name === 'string' && row.name.trim()
+        ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
-    modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
+    modelId: typeof row.modelId === 'string' ? row.modelId : '',
+    modeId: normalizeModeId(
+      typeof row.modeId === 'string' ? row.modeId : undefined,
+    ),
+    expertSelection: ensureExpertSelection(row.expertSelection),
+    lastResolvedExpertId:
+      typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     history,
-    lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
-    modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
-    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
+    lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
+    modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},
+    updatedAt: typeof row.updatedAt === 'number' ? row.updatedAt : Date.now(),
   };
 }
 
@@ -186,6 +223,30 @@ export function mergeConfigMeta(existing, patch) {
   }
   if (typeof p.schemaVersion === 'number') {
     base.schemaVersion = p.schemaVersion;
+  }
+
+  if (p.titles && typeof p.titles === 'object') {
+    const existingTitles =
+      base.titles && typeof base.titles === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.titles) }
+        : {
+            enabled: true,
+            modelId: '',
+            providerId: '',
+            maxTokens: 24,
+            temperature: 0.3,
+          };
+    const t = /** @type {Record<string, unknown>} */ (p.titles);
+    if (typeof t.enabled === 'boolean') existingTitles.enabled = t.enabled;
+    if (typeof t.modelId === 'string') existingTitles.modelId = t.modelId;
+    if (typeof t.providerId === 'string') existingTitles.providerId = t.providerId;
+    if (typeof t.maxTokens === 'number' && Number.isFinite(t.maxTokens)) {
+      existingTitles.maxTokens = Math.min(32, Math.max(16, Math.round(t.maxTokens)));
+    }
+    if (typeof t.temperature === 'number' && Number.isFinite(t.temperature)) {
+      existingTitles.temperature = Math.min(0.4, Math.max(0.2, t.temperature));
+    }
+    base.titles = existingTitles;
   }
 
   return base;

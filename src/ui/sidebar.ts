@@ -15,6 +15,8 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
+import { syncExpertSelectForActiveChat } from './expert-select';
+import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
 
@@ -223,6 +225,8 @@ export function switchChat(id: string): void {
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncExpertSelectForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();
@@ -242,6 +246,8 @@ export function createChat(): void {
   touchChat(chat);
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncExpertSelectForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();

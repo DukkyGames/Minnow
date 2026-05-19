@@ -10,6 +10,8 @@ import {
   loadToolConfig,
   setLocalServerAvailable,
 } from './config';
+import { filterToolsByMode } from '../chat/modes/tool-policy';
+import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   BUILT_IN_TOOLS,
   type OpenAIFunctionDefinition,
@@ -91,11 +93,8 @@ export async function executeTool(
   return executeBrowserTool(name, enrichedArgs);
 }
 
-/**
- * Returns OpenAI function definitions for tools the user enabled and that can run here.
- * Server-required tools are omitted when the local server was not detected.
- */
-export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
+/** User + server gating only (no mode filter). */
+export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
     if (!isToolEnabled(tool.id)) {
       return false;
@@ -104,7 +103,29 @@ export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
       return false;
     }
     return true;
-  }).map((tool) => tool.definition);
+  });
+}
+
+/**
+ * Returns OpenAI function definitions for tools the user enabled and that can run here.
+ * Server-required tools are omitted when the local server was not detected.
+ */
+export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
+  return getEnabledToolCatalogEntries().map((tool) => tool.definition);
+}
+
+/**
+ * Enabled tools after operating mode policy (Step 05).
+ */
+export function getEnabledToolDefinitionsForMode(
+  modeId: ModeId | string | null | undefined,
+): OpenAIFunctionDefinition[] {
+  const normalized = normalizeModeId(
+    typeof modeId === 'string' ? modeId : modeId ?? undefined,
+  );
+  return filterToolsByMode(getEnabledToolCatalogEntries(), normalized).map(
+    (tool) => tool.definition,
+  );
 }
 
 /** POST { name, args } to the Node tools middleware. */
