@@ -86,6 +86,14 @@ const DEFAULT_META = {
     modelId: '',
     fallbackToChatModel: true,
   },
+  memory: {
+    enabled: true,
+    maxEntries: 500,
+    maxInjectCharsFull: 4000,
+    maxInjectCharsLite: 800,
+    retrieveLimit: 20,
+    defaultTags: [],
+  },
 };
 
 const DEFAULT_SYSTEM_PROMPT = {

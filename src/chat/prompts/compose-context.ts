@@ -17,6 +17,8 @@ import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { isLocalServerAvailable, loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
+import { retrieveMemoryBlock } from '../../memory/client';
+import { shouldInjectMemory } from '../../memory/config';
 import { loadPromptConfig } from './prompt-configs';
 import type { ComposeContext, PromptProfile } from './types';
 
@@ -96,6 +98,20 @@ export async function buildComposeContext(
     meta.activeInfoPresetId ??
     'general-assistant';
 
+  let memoryBlock: string | null = null;
+  const injectMemory = await shouldInjectMemory(chat);
+  if (injectMemory) {
+    const query =
+      options?.routeUserText ??
+      options?.userMessagePreview ??
+      '';
+    memoryBlock =
+      (await retrieveMemoryBlock({
+        query,
+        profile,
+      })) || null;
+  }
+
   const ctx: ComposeContext = {
     profile,
     customConfigId: meta.activePromptConfigId,
@@ -105,7 +121,7 @@ export async function buildComposeContext(
     expertId: null,
     workAgentId: null,
     skillBody: null,
-    memoryBlock: null,
+    memoryBlock,
     enabledToolIds,
     enabledToolSummaries:
       profile === 'lite'

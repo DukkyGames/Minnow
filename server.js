@@ -22,6 +22,9 @@ import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
 import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
+import { createMemoryMiddleware } from './server/memory/middleware.js';
+import { initMemoryApi } from './server/memory/routes.js';
+import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -615,6 +618,14 @@ const SERVER_TOOL_HANDLERS = {
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
   run_impeccable: (args) => toolRunImpeccable(args, PROJECT_ROOT),
+  get_lsp_diagnostics: async (args) => {
+    const { getLspDiagnostics } = await import('./server/lsp/manager.js');
+    return getLspDiagnostics(String(args?.path ?? ''));
+  },
+  list_lsp_servers: async () => {
+    const { listLspServers } = await import('./server/lsp/manager.js');
+    return JSON.stringify(await listLspServers(), null, 2);
+  },
   ...BROWSER_TOOL_HANDLERS,
 };
 
@@ -755,6 +766,8 @@ async function main() {
         name: 'speedchat-api',
         configureServer(server) {
           server.middlewares.use(createConfigMiddleware());
+          server.middlewares.use(createMemoryMiddleware());
+          server.middlewares.use(createLspMiddleware(PROJECT_ROOT));
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
@@ -769,6 +782,8 @@ async function main() {
 
   await ensureSpeedChatLayout();
   await ensureProviderRegistry();
+  await initMemoryApi();
+  await initLspConfig();
   const homePath = getSpeedChatHome();
   console.log(`SpeedChat data: ${homePath}`);
 
@@ -780,6 +795,8 @@ async function main() {
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
+  console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
+  console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   openBrowser(localUrl);

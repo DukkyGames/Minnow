@@ -42,8 +42,8 @@ const LITE_TRUNCATE_CAPS: Record<PromptPartId, number> = {
   memory: 0,
 };
 
-/** Default lite part gating. */
-const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info', 'memory']);
+/** Default lite part gating (memory uses shorter retrieve cap when enabled). */
+const LITE_DISABLED_PARTS = new Set<PromptPartId>(['info']);
 
 function truncateForLite(text: string, maxChars: number): string {
   if (maxChars <= 0 || !text.trim()) return '';

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "TEST-TARGET-11111111",
+    "type": "page",
+    "title": "Test Page",
+    "url": "http://127.0.0.1:8080/",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:PORT/devtools/page/TEST-TARGET-11111111"
+  },
+  {
+    "id": "OTHER-TARGET-22222222",
+    "type": "page",
+    "title": "Other Tab",
+    "url": "about:blank",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:PORT/devtools/page/OTHER-TARGET-22222222"
+  }
+]
