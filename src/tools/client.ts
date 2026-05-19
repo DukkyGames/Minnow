@@ -5,6 +5,7 @@
 
 import { executeBrowserTool } from './browser-executor';
 import { executeSubAgentTool } from './sub-agent-executor';
+import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
   isLocalServerAvailable,
   isToolEnabled,
@@ -55,6 +56,18 @@ export function getLocalServerAvailable(): boolean {
   return isLocalServerAvailable();
 }
 
+/** Optional context for streaming terminal runs from the tool loop. */
+export interface ExecuteToolContext {
+  chatId?: string;
+  toolCallId?: string;
+}
+
+const STREAMING_TOOL_NAMES = new Set([
+  'execute_command',
+  'run_javascript',
+  'run_python',
+]);
+
 /** Plan alias: readable flag after detectLocalServer(). */
 export { getLocalServerAvailable as localServerAvailable };
 
@@ -64,6 +77,7 @@ export { getLocalServerAvailable as localServerAvailable };
 export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
+  context: ExecuteToolContext = {},
 ): Promise<string> {
   if (name === 'spawn_sub_agent' || name === 'cancel_sub_agent') {
     return executeSubAgentTool(name, args);
@@ -91,6 +105,13 @@ export async function executeTool(
       return (
         'Error: local tool server is not available. Run `npm start` for file, git, and code tools.'
       );
+    }
+    if (
+      STREAMING_TOOL_NAMES.has(name) &&
+      context.chatId &&
+      typeof enrichedArgs === 'object'
+    ) {
+      return executeStreamingCodeTool(name, enrichedArgs, context);
     }
     return executeServerTool(name, enrichedArgs);
   }
@@ -131,6 +152,70 @@ export function getEnabledToolDefinitionsForMode(
   return filterToolsByMode(getEnabledToolCatalogEntries(), normalized).map(
     (tool) => tool.definition,
   );
+}
+
+/** Map code tools to process argv for the terminal runner. */
+function mapCodeToolToCommand(
+  name: string,
+  args: Record<string, unknown>,
+): { command: string; argv: string[]; shell?: boolean; label: string } | null {
+  if (name === 'execute_command') {
+    const command = args.command;
+    if (typeof command !== 'string' || !command.trim()) {
+      return null;
+    }
+    const isWin =
+      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
+    return {
+      command: command.trim(),
+      argv: [],
+      shell: isWin,
+      label: command.trim(),
+    };
+  }
+  if (name === 'run_javascript') {
+    const code = args.code;
+    if (typeof code !== 'string' || !code.trim()) {
+      return null;
+    }
+    return { command: 'node', argv: ['-e', code], label: 'node -e …' };
+  }
+  if (name === 'run_python') {
+    const code = args.code;
+    if (typeof code !== 'string' || !code.trim()) {
+      return null;
+    }
+    const isWin =
+      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
+    const bin = isWin ? 'python' : 'python3';
+    return { command: bin, argv: ['-c', code], label: `${bin} -c …` };
+  }
+  return null;
+}
+
+async function executeStreamingCodeTool(
+  name: string,
+  args: Record<string, unknown>,
+  context: ExecuteToolContext,
+): Promise<string> {
+  const mapped = mapCodeToolToCommand(name, args);
+  if (!mapped) {
+    return `Error: ${name} requires valid arguments`;
+  }
+
+  try {
+    return await runCommandWithTerminalStream(mapped.command, {
+      chatId: context.chatId!,
+      source: 'agent',
+      toolCallId: context.toolCallId,
+      displayLabel: mapped.label,
+      args: mapped.argv,
+      shell: mapped.shell,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
 }
 
 /** POST { name, args } to the Node tools middleware. */

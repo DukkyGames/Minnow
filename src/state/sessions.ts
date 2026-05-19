@@ -13,6 +13,7 @@ import type {
   ExpertSelection,
   Message,
   SessionState,
+  TerminalRunRecord,
   ToolCall,
   ToolResultMessage,
 } from '../types';
@@ -136,6 +137,30 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
   return assistant;
 }
 
+function ensureTerminalHistory(raw: unknown): TerminalRunRecord[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const rows = raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => {
+      const row = r as Partial<TerminalRunRecord>;
+      if (typeof row.id !== 'string' || typeof row.command !== 'string') return null;
+      return {
+        id: row.id,
+        command: row.command,
+        cwd: typeof row.cwd === 'string' ? row.cwd : '.',
+        source: row.source === 'user' ? 'user' : 'agent',
+        ...(row.toolCallId ? { toolCallId: row.toolCallId } : {}),
+        startedAt: typeof row.startedAt === 'number' ? row.startedAt : 0,
+        finishedAt: typeof row.finishedAt === 'number' ? row.finishedAt : 0,
+        exitCode: typeof row.exitCode === 'number' ? row.exitCode : null,
+        timedOut: row.timedOut === true,
+        logPath: typeof row.logPath === 'string' ? row.logPath : '',
+      } satisfies TerminalRunRecord;
+    })
+    .filter((x): x is TerminalRunRecord => Boolean(x));
+  return rows.length ? rows : undefined;
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
@@ -157,6 +182,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         ? raw.workAgentId.trim()
         : null,
     workAgentAuto: raw.workAgentAuto !== false,
+    terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},

@@ -39,7 +39,9 @@ SpeedChat/
 │   │   ├── modes/          # Step 05: registry, tool-policy
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
-│   ├── ui/                 # sidebar, settings, stats, messages, stream-status, tool-messages, thought-bubbles, …
+│   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, …
+│   ├── state/file-panel.ts # file sidebar + viewer prefs
+│   ├── lib/list-directory-parse.ts
 │   ├── tools/
 │   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # speedchat.tools localStorage
@@ -53,7 +55,7 @@ SpeedChat/
 │   ├── markdown/renderer.ts
 │   └── styles/
 │       ├── fonts.css tokens.css global.css topbar.css sidebar.css
-│       ├── messages.css input.css settings.css stats.css responsive.css
+│       ├── messages.css input.css settings.css stats.css file-panel.css responsive.css
 │       └── thoughts.css    # live thought bubbles + Thoughts panel
 ├── dist/                   # Production build (gitignored)
 └── documentation/
@@ -92,6 +94,7 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   work-agents.json         # per-agent provider/model/disabled overrides (Step 08)
   sub-agents.json          # sub-agent types, concurrency, tool allow/deny (Step 09)
   logs/sub-agents/         # optional per-run debug transcripts (Step 09)
+  logs/terminal/           # full stdout/stderr per runId (Step 10)
   skills/                  # user skills (Step 13)
   backups/                 # scaffold
 ```
@@ -184,6 +187,26 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 | `PUT` | `/api/work-agents/:id/prompt` | Write `~/.speedchat/prompts/work-agents/...` |
 
 **Tests:** `test/work-agents/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
+
+### File panel (Step 11)
+
+Project file explorer (right) and read-only CodeMirror viewer in a horizontal split with chat.
+
+| Concern | Location |
+|---------|----------|
+| File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse |
+| Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range`, CodeMirror 6 |
+| Layout | `src/ui/file-layout.ts`, `src/ui/init-file-panel.ts` |
+| Parser | `src/lib/list-directory-parse.ts` |
+| State / prefs | `src/state/file-panel.ts` → `config.json` `filePanel` via `GET/PUT /api/config/meta` |
+| Styles | `src/styles/file-panel.css` |
+| Markup | `index.html` — `#fileSidebar`, `#workspaceSplit`, `#fileViewerPane` |
+
+**Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”.
+
+**Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
+
+**Tests:** `test/file/list-directory-parse.test.mjs`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
 
 ### Sub-agent orchestration (Step 09)
 
@@ -380,6 +403,9 @@ Browser (same origin :5173)
     ├─► GET/PUT /api/config/*    → ~/.speedchat JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
+    ├─► POST /api/terminal/run   → { runId, startedAt }
+    ├─► GET  /api/terminal/stream/:runId → SSE (stdout/stderr/exit)
+    ├─► GET  /api/terminal/history?chatId= → { runs }
     ├─► GET/POST /api/providers/* → registry + proxy (secrets on server only)
     │
     ├─► LLM upstream (direct localhost or proxied /api/providers/:id/*)
@@ -393,12 +419,32 @@ Browser (same origin :5173)
 |-------|--------|----------|
 | `/api/tools/ping` | GET | `{ "ok": true }` |
 | `/api/tools` | POST | `{ "name", "args" }` → `{ "result": "<string>" }` |
+| `/api/terminal/run` | POST | `{ command, chatId?, args?, shell?, source? }` → `{ runId, startedAt }` |
+| `/api/terminal/stream/:runId` | GET | `text/event-stream` — `meta`, `stdout`, `stderr`, `exit` |
+| `/api/terminal/history` | GET | `?chatId=` → `{ runs: TerminalRunRecord[] }` |
+| `/api/terminal/log/:runId` | GET | `{ text }` log tail |
+| `/api/terminal/cancel/:runId` | POST | `{ ok: true }` (SIGTERM when supported) |
 
 - **CORS:** `*` for local dev; **OPTIONS** → 204.
 - **Path guard:** `resolveSafePath()` — paths under `process.cwd()` unless `TOOLS_ALLOW_ALL_PATHS=1`.
 - **Errors:** Handlers return **strings**; failures use `Error: …` prefix (not thrown to the client).
 - **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected — the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
 - **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
+- **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking `POST /api/tools` still uses the same runner via `executeCommandBlocking()` (no SSE).
+
+### Terminal panel (Step 10)
+
+Docked **bottom panel** in `.main-column` (above `.input-bar`): live command output, per-chat history, user **Run** input. Toggle: `#btnTerminal` or **Ctrl+`**.
+
+| Concern | Location |
+|---------|----------|
+| UI | `src/ui/terminal-panel.ts`, `src/styles/terminal.css`, `#terminalPanel` in `index.html` |
+| Stream client | `src/api/terminal.ts` — `startTerminalRun`, `streamTerminalRun` (fetch + SSE parser) |
+| Tool integration | `executeTool(..., { chatId, toolCallId })` streams `execute_command` / `run_javascript` / `run_python` when server is up |
+| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
+| Persistence | `Chat.terminalHistory` (last **50** runs) in `sessions/state.json`; full logs in `~/.speedchat/logs/terminal/<runId>.log` |
+
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>` (server must be running). Verification: [`documentation/plans/verification/step-10.md`](plans/verification/step-10.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 
@@ -452,7 +498,7 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **11** `serverRequi
 ### Tool loop and client
 
 - **`detectLocalServer()`** — `GET /api/tools/ping`, **800 ms** timeout ([`src/tools/client.ts`](../src/tools/client.ts)).
-- **`executeTool(name, args)`** — browser executor or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
+- **`executeTool(name, args, context?)`** — browser executor, terminal stream for code tools, or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
 - **`sendMessageWithTools()`** — up to **`MAX_TOOL_TURNS` = 8**; streams SSE, `mergeToolCallDelta` / `finalizeToolCalls`, runs enabled tools, appends assistant + tool messages ([`src/tools/loop.ts`](../src/tools/loop.ts)).
 - **Send entry:** [`src/chat/messaging.ts`](../src/chat/messaging.ts) exports `sendMessage` as alias of `sendMessageWithTools`; `sendMessagePlain` remains for non-tool chat ([`src/api/chat.ts`](../src/api/chat.ts)).
 

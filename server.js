@@ -6,6 +6,9 @@
 
 import { createServer } from 'vite';
 import { spawn, execFile } from 'node:child_process';
+import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from './server/process-runner.js';
+import { createTerminalMiddleware } from './server/terminal/middleware.js';
+import { executeCommandBlocking } from './server/terminal-runner.js';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -20,7 +23,6 @@ const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
 const PROJECT_ROOT = process.cwd();
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
-const COMMAND_TIMEOUT_MS = 30_000;
 const FIND_FILES_MAX = 500;
 const DDG_MAX_SNIPPETS = 8;
 /** Max decoded PDF size for read_document (aligns with attachment limit). */
@@ -77,65 +79,6 @@ function stripHtml(html) {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-/** Run a subprocess; collect stdout/stderr; enforce timeout. */
-function runProcess(command, args, options = {}) {
-  const { cwd = PROJECT_ROOT, timeout = COMMAND_TIMEOUT_MS, env, shell = false } = options;
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      shell,
-      windowsHide: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, timeout);
-
-    child.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (timedOut) {
-        reject(new Error(`Command timed out after ${timeout / 1000}s`));
-        return;
-      }
-      resolve({ code: code ?? 1, stdout, stderr });
-    });
-  });
-}
-
-/** Format process output for tool results. */
-function formatProcessOutput(label, { code, stdout, stderr }) {
-  const parts = [`${label} (exit ${code})`];
-  if (stdout.trim()) {
-    parts.push(`stdout:\n${stdout.trimEnd()}`);
-  }
-  if (stderr.trim()) {
-    parts.push(`stderr:\n${stderr.trimEnd()}`);
-  }
-  if (!stdout.trim() && !stderr.trim()) {
-    parts.push('(no output)');
-  }
-  return parts.join('\n\n');
 }
 
 /** Run git with arguments in the project root. */
@@ -477,13 +420,11 @@ async function toolExecuteCommand(args) {
   }
 
   try {
-    const shell = process.platform === 'win32';
-    const result = await runProcess(command, [], {
+    return await executeCommandBlocking({
+      command,
       cwd: PROJECT_ROOT,
-      timeout: COMMAND_TIMEOUT_MS,
-      shell,
+      shell: process.platform === 'win32',
     });
-    return formatProcessOutput(command, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
@@ -804,6 +745,7 @@ async function main() {
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
           server.middlewares.use(createToolsMiddleware());
+          server.middlewares.use(createTerminalMiddleware(PROJECT_ROOT));
         },
       },
     ],
@@ -822,6 +764,7 @@ async function main() {
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
+  console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   openBrowser(localUrl);
 }
 

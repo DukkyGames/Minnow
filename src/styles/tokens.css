@@ -31,6 +31,10 @@
   --topbar-h: 52px;
   --sidebar-w: 240px;
   --sidebar-rail: 48px;
+  --file-sidebar-w: 260px;
+  --file-sidebar-rail: 48px;
+  --viewer-min-w: 280px;
+  --split-ratio: 0.55;
   --touch-min: 44px;
   /* Legacy aliases */
   --surface2: var(--surface-elevated);
