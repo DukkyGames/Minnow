@@ -16,21 +16,22 @@
 :root {
   --bg: oklch(100% 0.00011 271.152);
   --surface: oklch(100% 0.00011 271.152);
-  --surface-elevated: oklch(100% 0.00011 271.152 / 0);
+  --surface-elevated: oklch(0% 0 0 / 0.84);
   --border: oklch(28.094% 0.00003 271.152);
   --border-strong: oklch(0.34 0.028 250);
   --text: oklch(31.714% 0.00004 271.152);
   --text-muted: oklch(0.62 0.025 250);
-  --accent: oklch(23.503% 0.00003 271.152);
+  --text-hover: oklch(100% 0.00011 271.152);
+  --accent: oklch(0% 0 0);
   --accent-dim: oklch(0% 0 0 / 0);
-  --accent-subtle: oklch(38.288% 0.00004 271.152);
+  --accent-subtle: oklch(27.685% 0.00003 271.152);
   --success: oklch(0.72 0.14 155);
   --warning: oklch(0.8 0.12 85);
   --danger: oklch(0.62 0.18 15);
   --overlay: oklch(0.12 0.02 250 / 0.65);
   --user-bg: oklch(88.769% 0.2563 138.508 / 0.336);
   --user-bdr: oklch(0.72 0.12 220 / 0.28);
-  --asst-bg: var(--surface-elevated);
+  --asst-bg: var(--bg);
   --asst-bdr: var(--border);
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -49,6 +50,7 @@
   --red: var(--danger);
   --muted: var(--text-muted);
   --text-dim: var(--text-muted);
+
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -122,8 +124,8 @@ body {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -179,7 +181,7 @@ body {
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-.model-wrap select option { background: var(--surface-elevated); }
+.model-wrap select option { background: var(--bg); }
 
 .model-wrap::after {
   content: '';
@@ -204,7 +206,7 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   flex-shrink: 0;
@@ -212,8 +214,8 @@ body {
 
 .icon-btn:hover {
   border-color: var(--border-strong);
-  color: var(--text);
-  background: var(--surface-elevated);
+  color: var(--bg);
+  background: var(--text);
 }
 
 .icon-btn:active { background: var(--bg); }
@@ -347,7 +349,8 @@ body {
   margin: 8px 10px 6px;
   padding: 9px 12px;
   background: var(--accent-dim);
-  border: 1px solid transparent;
+  border: 1px solid;
+  border-color: var(--accent);
   border-radius: var(--radius-sm);
   color: var(--accent);
   font-family: var(--font-ui);
@@ -358,8 +361,8 @@ body {
 }
 
 .chat-new-wide:hover {
-  background: var(--accent-subtle);
-  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
 }
 
 .chat-new-compact {
@@ -442,19 +445,20 @@ body {
 
 .chat-rename-btn {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
   border: none;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--tex);
   cursor: pointer;
   border-radius: 2px;
-  font-size: 11px;
+  font-size: 18px;
   line-height: 1;
   padding: 0;
 }
 .chat-rename-btn:hover {
-  color: var(--cyan);
+  color: var(--success);
+  font-size: 20px;
 }
 
 .chat-delete-btn {
@@ -463,15 +467,16 @@ body {
   height: 22px;
   border: none;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text);
   cursor: pointer;
   border-radius: 2px;
-  font-size: 12px;
+  font-size: 18px;
   line-height: 1;
   padding: 0;
 }
 .chat-delete-btn:hover {
   color: var(--red);
+  font-size: 20px;
 }
 
 .chat-item-model {
@@ -725,13 +730,13 @@ body {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md);
-  background: var(--surface-elevated);
+  background: var(--accent);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 8px;
-  color: var(--text-muted);
+  color: var(--bg);
 }
 
 .empty-hint {
@@ -814,6 +819,9 @@ body {
 }
 
 .stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 9px;
   letter-spacing: .06em;
   padding: 2px 7px;
@@ -822,6 +830,18 @@ body {
   color: var(--text-dim);
   white-space: nowrap;
 }
+
+.stat-chip .stat-icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.stat-chip.c .stat-icon { color: var(--accent); }
+.stat-chip.g .stat-icon { color: var(--success); }
+.stat-chip.y .stat-icon { color: var(--warning); }
+.stat-chip.r .stat-icon { color: var(--danger); }
 
 .stat-chip span { font-weight: 700; }
 .stat-chip.c { color: var(--accent); border-color: oklch(0.72 0.12 220 / 0.35); }
@@ -888,7 +908,8 @@ body {
 }
 
 .send-btn:hover:not(:disabled) {
-  opacity: 0.92;
+  background: var(--bg);
+  border: 1px solid var(--accent);
 }
 
 .send-btn:active:not(:disabled) {
@@ -901,7 +922,14 @@ body {
 }
 
 .send-btn .icon-svg {
-  stroke: oklch(0.18 0.02 250);
+  stroke: oklch(100% 0.00011 271.152);
+  width: 20px;
+  height: 20px;
+}
+.send-btn:hover:not(:disabled) .icon-svg {
+  stroke: var(--text);
+  width: 27px;
+  height: 27px;
 }
 
 .spinner {
@@ -984,12 +1012,28 @@ body {
 }
 
 .stat-name {
+  display: flex;
+  align-items: center;
+  gap: 15px;
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
+
+.stat-name .stat-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.9;
+  margin-bottom: 5px;
+}
+
+.stat-cell.cyan .stat-name .stat-icon { color: var(--accent); }
+.stat-cell.green .stat-name .stat-icon { color: var(--success); }
+.stat-cell.yellow .stat-name .stat-icon { color: var(--warning); }
+.stat-cell.red .stat-name .stat-icon { color: var(--danger); }
 
 .stat-val {
   font-size: 17px;
@@ -1252,19 +1296,19 @@ body {
       </button>
       <div class="stats-panel" id="statsPanel">
       <div class="stat-cell cyan">
-        <div class="stat-name">Tokens / Second</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>Tokens / Second</div>
         <div class="stat-val blank" id="stripTPS">—</div>
       </div>
       <div class="stat-cell green">
-        <div class="stat-name">Time to First Token</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></span>Time to First Token</div>
         <div class="stat-val blank" id="stripTTFT">—</div>
       </div>
       <div class="stat-cell yellow">
-        <div class="stat-name">Generation Time</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>Generation Time</div>
         <div class="stat-val blank" id="stripGen">—</div>
       </div>
       <div class="stat-cell red">
-        <div class="stat-name">Total Tokens</div>
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>Total Tokens</div>
         <div class="stat-val blank" id="stripTotal">—</div>
       </div>
       <div class="token-cell">
@@ -1294,6 +1338,11 @@ body {
 // ── State ──
 const ICON_CHEVRON_LEFT = '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
 const ICON_CHEVRON_RIGHT = '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+// Inference metric icons (stats strip + message chips)
+const ICON_STAT_TPS = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>';
+const ICON_STAT_TTFT = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></span>';
+const ICON_STAT_GEN = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>';
+const ICON_STAT_TOKENS = '<span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>';
 const EMPTY_STATE_HTML =
   '<div class="empty-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>' +
   '<div>Connect to LM Studio and start chatting</div>' +
@@ -2127,10 +2176,10 @@ function appendStats(wrap, stats, usage) {
   chips.className = 'msg-stats';
 
   const defs = [
-    ['c', s.tokens_per_second != null, `<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
-    ['g', s.time_to_first_token != null, `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
-    ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
-    ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
+    ['c', s.tokens_per_second != null, `${ICON_STAT_TPS}<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
+    ['g', s.time_to_first_token != null, `${ICON_STAT_TTFT}TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
+    ['y', s.generation_time != null, `${ICON_STAT_GEN}gen <span>${s.generation_time?.toFixed(3)}s</span>`],
+    ['r', u.total_tokens != null, `${ICON_STAT_TOKENS}<span>${u.total_tokens}</span> tokens`],
   ];
 
   defs.forEach(([cls, show, html]) => {

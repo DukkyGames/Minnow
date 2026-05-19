@@ -37,6 +37,7 @@ Chats can be **deleted** from the sidebar (trash control on each row). A browser
 - **Desktop:** the header **◀ / ▶** button toggles `sidebarCollapsed` (wide panel vs narrow rail with `+` only).
 - **Mobile (≤640px):** the sidebar is a **fixed overlay**; the dimmed **`.sidebar-backdrop`** closes it on tap. The top bar menu button toggles open/closed.
 - **Mobile stats (≤599px):** the stats strip shows a collapsed summary (TPS + total tokens); tap **Stats** to expand the full instrument panel (`.stats-strip.is-expanded`).
+- **Stats icons:** each metric in the bottom strip and per-message chips uses a small inline SVG (zap = TPS, play = TTFT, clock = generation time, layers = total tokens), tinted to match the metric color class.
 
 ### Other persisted settings
 
