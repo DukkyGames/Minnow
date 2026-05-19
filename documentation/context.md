@@ -4,6 +4,8 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
+**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.speedchat/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test`.
+
 ## What it is
 
 SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
@@ -98,7 +100,7 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 **API-only (not persisted as separate history rows):** `system` prompt; multimodal user `content` as `ContentPart[]` (`text` + `image_url`) for VLM models on the wire ([`buildApiMessages`](../src/tools/loop.ts)).
 
-**UI rendering:** [`renderChatFromHistory`](../src/ui/messages.ts) skips standalone `tool` rows, maps `tool_call_id` → result, and renders [`tool-messages.ts`](../src/ui/tool-messages.ts) bubbles for each `tool_calls` entry. Assistant rows with **`thinking`** get a **Thoughts** toggle ([`thought-bubbles.ts`](../src/ui/thought-bubbles.ts)) above the bubble. The same bubble helpers are intended for **live** turns during `sendMessageWithTools` (see **Message rendering** below).
+**UI rendering:** [`renderChatFromHistory`](../src/ui/messages.ts) skips standalone `tool` rows, maps `tool_call_id` → result, and renders [`tool-messages.ts`](../src/ui/tool-messages.ts) bubbles for each `tool_calls` entry. Empty assistant prose (no text, no `thinking`) is not painted. Assistant rows with **`thinking`** get a **Thoughts** toggle ([`thought-bubbles.ts`](../src/ui/thought-bubbles.ts)) above the bubble. **Live** turns use [`appendStreamingAssistantRow`](../src/ui/messages.ts) / [`revealAssistantProseBubble`](../src/ui/messages.ts) so the prose bubble stays hidden until the first streamed token (see **Message rendering** below).
 
 ## Multi-chat sessions
 
@@ -254,7 +256,7 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
   - **Expanded (click):** **Arguments** and **Result** in the `<details>` body / monospace `<pre>` blocks; results capped at **2 KB** in the UI (`RESULT_DISPLAY_CAP`).
   - **Accessibility:** On completion, `.tool-call-msg` gets `role="status"` and `aria-live="polite"`; summary `aria-label` includes name + status + “show details”; success/fail glyphs expose `aria-label` (not `aria-hidden`); visible **Failed** / **Success** label text for assistive tech.
   - **History:** `renderChatFromHistory` pairs each `tool_calls` entry with its `tool` row via `tool_call_id` and paints completed bubbles (no spinner).
-  - **Live:** on `finishReason === 'tool_calls'`, append `renderToolCall` before `executeTool`, then `renderToolResult` with the result string (replacing the interim “Calling tools…” assistant-only state where applicable).
+  - **Live:** on `finishReason === 'tool_calls'`, append `renderToolCall` before `executeTool`, then `renderToolResult` with the result string. Tool-only assistant rounds remove the hidden streaming shell when there is no prose; the next model round gets a fresh hidden shell until prose arrives.
 - **Errors:** plain text, no markdown class.
 
 ## Development commands

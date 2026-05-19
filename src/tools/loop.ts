@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tool-aware chat send path (SA-7): streams completions, runs tool_calls loop,
  * and persists assistant / tool messages in session history.
  */
@@ -48,11 +48,15 @@ import type {
   ChatCompletionChunk,
   ContentPart,
   Message,
-  Stats,
   ToolCallAccumulator,
-  Usage,
 } from '../types';
 import { setSendLoading } from '../ui/input';
+import {
+  appendBubble,
+  appendStats,
+  appendStreamingAssistantRow,
+  revealAssistantProseBubble,
+} from '../ui/messages';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { renderSidebar } from '../ui/sidebar';
@@ -60,7 +64,7 @@ import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { detectLocalServer, executeTool, getEnabledToolDefinitions } from './client';
 
-/** Maximum assistant→tool rounds before aborting with an error. */
+/** Maximum assistantâ†’tool rounds before aborting with an error. */
 export const MAX_TOOL_TURNS = 8;
 
 /** Options for {@link buildApiMessages} when the composer has pending files. */
@@ -177,7 +181,7 @@ function indexOfLastUserMessage(history: Message[]): number {
 /**
  * Serialize session history for LM Studio, including tool_calls and tool results.
  * Pending attachments on the last user turn become multimodal API content (VLM) or
- * inlined file blocks; history stays string-only with `[image: …]` placeholders.
+ * inlined file blocks; history stays string-only with `[image: â€¦]` placeholders.
  */
 export function buildApiMessages(
   chat: Chat,
@@ -242,71 +246,6 @@ function scrollBottom(): void {
   area.scrollTop = area.scrollHeight;
 }
 
-/** Append a user or assistant bubble to the chat area. */
-function appendBubble(
-  role: 'user' | 'assistant',
-  content: string,
-): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.remove();
-
-  const wrap = document.createElement('div');
-  wrap.className = `msg ${role}`;
-
-  const label = document.createElement('div');
-  label.className = 'msg-label';
-  label.textContent = role === 'user' ? 'You' : 'Assistant';
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble';
-  if (role === 'assistant') {
-    setAssistantBubbleContent(bubble, content, { streaming: false });
-  } else {
-    bubble.textContent = content;
-  }
-
-  wrap.appendChild(label);
-  wrap.appendChild(bubble);
-  document.getElementById('chatArea')!.appendChild(wrap);
-  scrollBottom();
-  return { wrap, bubble };
-}
-
-/** Add inference metric chips under an assistant message row. */
-function appendStats(
-  wrap: HTMLElement,
-  stats: Stats | undefined,
-  usage: Usage | undefined,
-): void {
-  const s = stats || {};
-  const u = usage || {};
-
-  const chips = document.createElement('div');
-  chips.className = 'msg-stats';
-
-  const defs: Array<[string, boolean, string]> = [
-    ['c', s.tokens_per_second != null, `<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
-    [
-      'g',
-      s.time_to_first_token != null,
-      `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`,
-    ],
-    ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
-    ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
-  ];
-
-  defs.forEach(([cls, show, html]) => {
-    if (!show) return;
-    const chip = document.createElement('div');
-    chip.className = `stat-chip ${cls}`;
-    chip.innerHTML = html;
-    chips.appendChild(chip);
-  });
-
-  if (chips.children.length) wrap.appendChild(chips);
-}
-
-/** Parse tool arguments JSON from the model; fall back to empty object. */
 function parseToolArguments(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) return {};
@@ -341,6 +280,7 @@ async function streamCompletionTurn(
   cursor: HTMLDivElement,
   signal: AbortSignal,
   thoughtController: ThoughtBubbleController | null,
+  onFirstProseDelta?: () => void,
 ): Promise<StreamTurnResult> {
   const res = await fetch(`${base}/api/v0/chat/completions`, {
     method: 'POST',
@@ -374,6 +314,7 @@ async function streamCompletionTurn(
     const delta = extractStreamDelta(chunk);
     if (delta) {
       thoughtController?.endReasoningPhase();
+      onFirstProseDelta?.();
       if (tFirst == null) tFirst = performance.now();
       fullText += delta;
       scheduleAssistantBubbleRender(bubble, fullText, cursor);
@@ -467,12 +408,11 @@ export async function sendMessageWithTools(): Promise<void> {
 
   setStreaming(true);
   setSendLoading(true);
-  setStatus('spin', 'Generating reply…');
+  setStatus('spin', 'Generating replyâ€¦');
 
-  let { wrap, bubble } = appendBubble('assistant', '');
-  let cursor = document.createElement('div');
-  cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  let streamRow = appendStreamingAssistantRow();
+  let { wrap, bubble, cursor } = streamRow;
+  let revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
 
   let completedNormally = false;
   let lastWrap = wrap;
@@ -508,6 +448,7 @@ export async function sendMessageWithTools(): Promise<void> {
         cursor,
         chatSignal,
         thoughtController,
+        revealProse,
       );
 
       cancelAssistantBubbleRenderDebounce();
@@ -519,6 +460,7 @@ export async function sendMessageWithTools(): Promise<void> {
 
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
         if (turnResult.fullText) {
+          revealProse();
           setAssistantBubbleContent(bubble, turnResult.fullText, { streaming: false });
         } else {
           wrap.remove();
@@ -533,7 +475,7 @@ export async function sendMessageWithTools(): Promise<void> {
         touchChat(chat);
         scheduleSaveSessions();
 
-        setStatus('spin', 'Running tools…');
+        setStatus('spin', 'Running toolsâ€¦');
 
         const area = document.getElementById('chatArea')!;
         for (const tc of turnResult.toolCalls) {
@@ -562,15 +504,13 @@ export async function sendMessageWithTools(): Promise<void> {
           break;
         }
 
-        const next = appendBubble('assistant', '');
-        wrap = next.wrap;
-        bubble = next.bubble;
+        streamRow = appendStreamingAssistantRow();
+        ({ wrap, bubble, cursor } = streamRow);
         lastWrap = wrap;
-        cursor = document.createElement('div');
-        cursor.className = 'cursor';
-        bubble.appendChild(cursor);
+        revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
+        thoughtController.setAssistantWrap(wrap);
 
-        setStatus('spin', 'Generating reply…');
+        setStatus('spin', 'Generating replyâ€¦');
         continue;
       }
 
@@ -578,7 +518,7 @@ export async function sendMessageWithTools(): Promise<void> {
       let streamMeta = turnResult.streamMeta;
 
       if (!fullText) {
-        setAssistantBubbleContent(bubble, '', { streaming: false });
+        revealProse();
         const fallbackBody: Parameters<typeof tryNonStreamingFallback>[1] = {
           model: modelId || undefined,
           messages,
@@ -605,6 +545,7 @@ export async function sendMessageWithTools(): Promise<void> {
           streaming: false,
         });
       } else {
+        revealProse();
         setAssistantBubbleContent(bubble, fullText, { streaming: false });
       }
 
@@ -659,11 +600,12 @@ export async function sendMessageWithTools(): Promise<void> {
     }
     cancelAssistantBubbleRenderDebounce();
     if (cursor.parentElement) cursor.remove();
+    revealProse();
     bubble.classList.remove('msg-bubble--md');
     bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
     bubble.style.color = 'var(--red)';
     const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
+    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}â€¦` : msg;
     const attachHint =
       getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
     setStatus('err', statusMsg + attachHint);

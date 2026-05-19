@@ -1,10 +1,9 @@
 - Add terminal to run and view commands run by the ai. should be an openable pannel at the bottom of the screen below the chat. 
-- every chat has a empty chat bubble to start - fix this
 - switch from using browser local storage to a folder in the users home folder called .speedchat .  this will contain all the config, saved prompts, memory, user data, etc. we can install and save our setup files to here.
 - add the ability to add multiple providers
 - add the ability to use API keys / auth (some servers require it)
 - add a file viewer and browser. - should be able to split the chat window and have the file view on the right side. we should add a new file tree side bar - it should pop out like the chat list and display the current directory stucture. we should be able to open and collapse folders, see all the files and click on them to open in the file viewer. 
-- Programatic prompts - experts, Tool usage, Info - set it up similar to cursor or opencode
+- Programatic prompts - experts, Tool usage, Info - set it up similar to cursor or opencode. **Shipped prompts in `src/chat/prompts/`** (include `_example` template); refs: [system-prompts-and-models-of-ai-tools](https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools), [opencode](https://github.com/anomalyco/opencode), [oh-my-opencode-slim](https://github.com/alvinunreal/oh-my-opencode-slim). Settings: **separate editable prompt parts per Full / Lite / Custom**; enable/disable each part; Custom = save/load named configs in `~/.speedchat/prompt-configs/`
 - Build, Plan, Orchistrate and research modes (I will provide prompts) (Research how opencode does this) (selection should be in t)
 - programatic prompts based on input (have prompts for each experts in each specific field auto asign prompt based on input (in the settings we will call these experts) the user will should have a drop down where they can manually select an expert or leave it in auto )
 - titles should generate programaticly as an inital prompt to the agent
@@ -16,15 +15,15 @@
 - fix spacing on chat bar tools.
 - clean up redundent buttons on top bar. (open chat pannel and new chat)
 - screenshot tools (agent can take screenshots and parse them)(display the screenshots in the chat)
-- full browser control tools (nav, click, view, parse, etc)
-- add skills and skill usage. lets build out a system for users to add and create new skills. Lets build out a full set of default skills. skills are called by typing / then the skill. When we type / list all the availible skills. skills will live in the /skills folder
+- full browser control tools (nav, click, view, parse, etc) — reference [opencode-browser](https://github.com/different-ai/opencode-browser) CDP tools
+- add skills and skill usage. lets build out a system for users to add and create new skills. Lets build out a full set of default skills. skills are called by typing / then the skill. When we type / list all the availible skills. **default skills live in `src/skills/`** (add folders there to ship more built-ins); user/agent skills in `~/.speedchat/skills/`
 - impeccable built in. (https://impeccable.style) review their documentation for implementation. should be installed as part of our setup process. crucial for UI designer called as a skill with /impeccable
 - UI Designer tool (can be an /skill) (runs impeccable, Can take screenshots of UI, follows impeccables tasking and workflow. builds out new ui or plan for new ui) provider and model can be manually set for this in settings
 - full settings page flesh out. will need to include settings for all the things here
 - memory system (Can be enabled, disabled, cleared and backed up)
 - improve generating response display animation. currently just a square
 - once thoughts are done and repsonse is being generated. display generating response instead of just the black square. 
-- LSP Servers
+- LSP Servers — OpenCode built-ins enabled by default ([docs](https://opencode.ai/docs/lsp/#custom-lsp-servers)); per-server toggle + custom servers in settings
 - MCP Servers
 - Context7 MCP built in and enabled by default
 - add buttons in the top bar for (expert selection, tool toggles (for each tool), mcp toggles (for each server))

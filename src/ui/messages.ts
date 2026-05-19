@@ -147,8 +147,14 @@ export function renderChatFromHistory(chat: Chat): void {
     }
 
     const text = msg.content ?? '';
-    const { wrap } = appendBubble('assistant', text);
+    const trimmed = text.trim();
     const withThinking = msg as AssistantMessage;
+    const hasThinking =
+      withThinking.thinking != null && withThinking.thinking.length > 0;
+    if (!trimmed && !hasThinking) {
+      continue;
+    }
+    const { wrap } = appendBubble('assistant', trimmed);
     if (withThinking.thinking && withThinking.thinking.length > 0) {
       renderThoughtsToggle(wrap, withThinking.thinking);
     }
@@ -186,6 +192,51 @@ export function appendBubble(
   document.getElementById('chatArea')!.appendChild(wrap);
   scrollBottom();
   return { wrap, bubble };
+}
+
+/** DOM row for an in-flight assistant reply (prose bubble hidden until first token). */
+export interface StreamingAssistantRow {
+  wrap: HTMLDivElement;
+  bubble: HTMLDivElement;
+  cursor: HTMLDivElement;
+}
+
+/**
+ * Create an assistant message shell for SSE streaming without showing an empty bubble.
+ * Thought bubbles attach to `wrap`; call {@link revealAssistantProseBubble} on first prose delta.
+ */
+export function appendStreamingAssistantRow(): StreamingAssistantRow {
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg assistant msg--awaiting-prose';
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'Assistant';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble msg-bubble--awaiting';
+
+  const cursor = document.createElement('div');
+  cursor.className = 'cursor';
+
+  wrap.appendChild(label);
+  wrap.appendChild(bubble);
+  bubble.appendChild(cursor);
+  document.getElementById('chatArea')!.appendChild(wrap);
+  scrollBottom();
+  return { wrap, bubble, cursor };
+}
+
+/** Show the assistant prose bubble once streamed content (or fallback text) is ready. */
+export function revealAssistantProseBubble(
+  wrap: HTMLElement,
+  bubble: HTMLElement,
+): void {
+  wrap.classList.remove('msg--awaiting-prose');
+  bubble.classList.remove('msg-bubble--awaiting');
 }
 
 /** Add per-turn metric chips under an assistant bubble. */

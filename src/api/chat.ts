@@ -1,4 +1,4 @@
-import {
+﻿import {
   chatFetchAbort,
   setChatFetchAbort,
   setStreaming,
@@ -28,6 +28,12 @@ import type {
   Usage,
 } from '../types';
 import { setSendLoading } from '../ui/input';
+import {
+  appendBubble,
+  appendStats,
+  appendStreamingAssistantRow,
+  revealAssistantProseBubble,
+} from '../ui/messages';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { renderSidebar } from '../ui/sidebar';
@@ -59,7 +65,7 @@ function scrollBottom(): void {
   area.scrollTop = area.scrollHeight;
 }
 
-// ── Stream / stats helpers ──
+// â”€â”€ Stream / stats helpers â”€â”€
 // LM Studio v0 streaming omits stats/model_info; usage arrives in a final chunk when requested.
 // Assistant prose uses `content` only; reasoning uses `extractReasoningDelta` (see `./reasoning`).
 
@@ -233,70 +239,6 @@ export async function tryNonStreamingFallback(
   return res.json() as Promise<ChatCompletionChunk>;
 }
 
-/** Append a user or assistant bubble to the chat area. */
-function appendBubble(
-  role: 'user' | 'assistant',
-  content: string
-): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.remove();
-
-  const wrap = document.createElement('div');
-  wrap.className = `msg ${role}`;
-
-  const label = document.createElement('div');
-  label.className = 'msg-label';
-  label.textContent = role === 'user' ? 'You' : 'Assistant';
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble';
-  if (role === 'assistant') {
-    setAssistantBubbleContent(bubble, content, { streaming: false });
-  } else {
-    bubble.textContent = content;
-  }
-
-  wrap.appendChild(label);
-  wrap.appendChild(bubble);
-  document.getElementById('chatArea')!.appendChild(wrap);
-  scrollBottom();
-  return { wrap, bubble };
-}
-
-/** Add inference metric chips under an assistant message row. */
-function appendStats(
-  wrap: HTMLElement,
-  stats: Stats | undefined,
-  usage: Usage | undefined
-): void {
-  const s = stats || {};
-  const u = usage || {};
-
-  const chips = document.createElement('div');
-  chips.className = 'msg-stats';
-
-  const defs: Array<[string, boolean, string]> = [
-    ['c', s.tokens_per_second != null, `<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
-    [
-      'g',
-      s.time_to_first_token != null,
-      `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`,
-    ],
-    ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
-    ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
-  ];
-
-  defs.forEach(([cls, show, html]) => {
-    if (!show) return;
-    const chip = document.createElement('div');
-    chip.className = `stat-chip ${cls}`;
-    chip.innerHTML = html;
-    chips.appendChild(chip);
-  });
-
-  if (chips.children.length) wrap.appendChild(chips);
-}
-
 /** Send the composer text to LM Studio with SSE streaming and optional JSON fallback. */
 export async function sendMessage(): Promise<void> {
   if (streaming) return;
@@ -378,16 +320,14 @@ export async function sendMessage(): Promise<void> {
     stream_options: { include_usage: true },
   };
 
-  const { wrap, bubble } = appendBubble('assistant', '');
-  const cursor = document.createElement('div');
-  cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  const { wrap, bubble, cursor } = appendStreamingAssistantRow();
+  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
 
   const thoughtController = new ThoughtBubbleController(wrap);
 
   setStreaming(true);
   setSendLoading(true);
-  setStatus('spin', 'Generating reply…');
+  setStatus('spin', 'Generating replyâ€¦');
 
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
@@ -420,6 +360,7 @@ export async function sendMessage(): Promise<void> {
       const delta = extractStreamDelta(chunk);
       if (delta) {
         thoughtController.endReasoningPhase();
+        revealProse();
         if (tFirst == null) tFirst = performance.now();
         fullText += delta;
         scheduleAssistantBubbleRender(bubble, fullText, cursor);
@@ -446,7 +387,7 @@ export async function sendMessage(): Promise<void> {
     cursor.remove();
 
     if (!fullText) {
-      setAssistantBubbleContent(bubble, '', { streaming: false });
+      revealProse();
       const fallback = await tryNonStreamingFallback(
         base,
         {
@@ -468,6 +409,7 @@ export async function sendMessage(): Promise<void> {
         streaming: false,
       });
     } else {
+      revealProse();
       setAssistantBubbleContent(bubble, fullText, { streaming: false });
     }
 
@@ -512,11 +454,12 @@ export async function sendMessage(): Promise<void> {
     }
     cancelAssistantBubbleRenderDebounce();
     cursor.remove();
+    revealProse();
     bubble.classList.remove('msg-bubble--md');
     bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
     bubble.style.color = 'var(--red)';
     const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
+    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}â€¦` : msg;
     setStatus('err', statusMsg);
     thoughtController.abort();
   } finally {

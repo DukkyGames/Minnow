@@ -76,6 +76,11 @@
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
 
+/* In-flight assistant reply: hide prose shell until the first streamed token */
+.msg.assistant.msg--awaiting-prose .msg-bubble.msg-bubble--awaiting {
+  display: none;
+}
+
 .msg-label {
   position: absolute;
   width: 1px;
