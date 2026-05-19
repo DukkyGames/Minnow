@@ -1,0 +1,201 @@
+/**
+ * HTTP routes for /api/providers/* (Vite configureServer middleware).
+ */
+
+import { ensureProviderRegistry } from './store.js';
+import {
+  createProvider,
+  deleteProvider,
+  getProvider,
+  listProviders,
+  setActiveProviderId,
+  updateProvider,
+  updateProviderSecrets,
+} from './store.js';
+import { proxyChatCompletions, proxyModels } from './proxy.js';
+import { isSafeProviderPathSegment } from './validate.js';
+
+/** CORS headers aligned with /api/config and /api/tools. */
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
+}
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {string} pathname
+ * @returns {Promise<boolean>}
+ */
+export async function handleProviderRequest(req, res, pathname) {
+  if (!pathname.startsWith('/api/providers')) {
+    return false;
+  }
+
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+
+  try {
+    await ensureProviderRegistry();
+
+    if (pathname === '/api/providers' && req.method === 'GET') {
+      const data = await listProviders();
+      sendJson(res, 200, data);
+      return true;
+    }
+
+    if (pathname === '/api/providers' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const created = await createProvider(body);
+      sendJson(res, 201, created);
+      return true;
+    }
+
+    const idMatch = pathname.match(/^\/api\/providers\/([^/]+)$/);
+    if (idMatch) {
+      const id = idMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+
+      if (req.method === 'GET') {
+        sendJson(res, 200, await getProvider(id));
+        return true;
+      }
+      if (req.method === 'PUT') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, await updateProvider(id, body));
+        return true;
+      }
+      if (req.method === 'DELETE') {
+        try {
+          await deleteProvider(id);
+          res.statusCode = 204;
+          res.end();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const status = message.includes('last provider') ? 409 : 404;
+          sendJson(res, status, { error: message });
+        }
+        return true;
+      }
+    }
+
+    const secretsMatch = pathname.match(/^\/api\/providers\/([^/]+)\/secrets$/);
+    if (secretsMatch && req.method === 'PUT') {
+      const id = secretsMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      sendJson(res, 200, await updateProviderSecrets(id, body));
+      return true;
+    }
+
+    const activeMatch = pathname.match(/^\/api\/providers\/([^/]+)\/set-active$/);
+    if (activeMatch && req.method === 'POST') {
+      const id = activeMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      await setActiveProviderId(id);
+      sendJson(res, 200, { ok: true, activeProviderId: id });
+      return true;
+    }
+
+    const modelsMatch = pathname.match(/^\/api\/providers\/([^/]+)\/models$/);
+    if (modelsMatch && req.method === 'GET') {
+      const id = modelsMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      sendJson(res, 200, await proxyModels(id));
+      return true;
+    }
+
+    const chatMatch = pathname.match(/^\/api\/providers\/([^/]+)\/chat\/completions$/);
+    if (chatMatch && req.method === 'POST') {
+      const id = chatMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      await proxyChatCompletions(id, req, res);
+      return true;
+    }
+
+    if (pathname.includes('..')) {
+      sendJson(res, 400, { error: 'Invalid path' });
+      return true;
+    }
+
+    sendJson(res, 404, { error: 'Not found' });
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      message === 'Invalid provider id' ||
+      message === 'Invalid baseUrl' ||
+      message.includes('Invalid apiKind') ||
+      message.includes('Invalid connectionMode')
+    ) {
+      sendJson(res, 400, { error: message });
+      return true;
+    }
+    if (message === 'Provider not found' || message.includes('not found')) {
+      sendJson(res, 404, { error: message });
+      return true;
+    }
+    console.error('[providers]', message);
+    sendJson(res, 500, { error: message });
+    return true;
+  }
+}
+
+/** Connect middleware for Vite dev server. */
+export function createProviderMiddleware() {
+  return async (req, res, next) => {
+    const url = req.url?.split('?')[0] ?? '';
+    if (!url.startsWith('/api/providers')) {
+      next();
+      return;
+    }
+
+    const handled = await handleProviderRequest(req, res, url);
+    if (!handled) {
+      next();
+    }
+  };
+}

@@ -18,6 +18,7 @@ import 'highlight.js/styles/github.min.css';
 
 import { initAttachments, onFileSelected } from './attachments/store';
 import { fetchModels } from './api/models';
+import { initPromptSystem } from './chat/prompts/init-prompts';
 import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
@@ -41,6 +42,8 @@ import {
   onDrawerKeydown,
   onSystemPromptInput,
   onSystemPromptPresetChange,
+  loadProviderSelect,
+  registerProviderHandlers,
   registerToolHandlers,
   toggleDrawer,
 } from './ui/settings';
@@ -87,6 +90,7 @@ export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
   await runMigrationIfNeeded();
+  await initPromptSystem();
   await loadSessionsFromStorage();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
@@ -98,6 +102,8 @@ export async function initApp(): Promise<void> {
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();
+  await loadProviderSelect();
+  registerProviderHandlers();
   await fetchModels();
   syncModelSelectForActiveChat();
   renderChatFromHistory(getActiveChat());
