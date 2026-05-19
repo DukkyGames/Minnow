@@ -1,8 +1,10 @@
-import {
-  PRESET_STORAGE_KEY,
-  SYSTEM_PROMPT_PRESETS,
-} from '../constants';
+import { PRESET_STORAGE_KEY, SYSTEM_PROMPT_PRESETS } from '../constants';
+import { getSystemPrompt, putSystemPrompt } from '../config/api-client';
+import { defaultSystemPromptSettings } from '../config/defaults';
+import { isServerStorageMode } from '../config/storage-mode';
+import { setStatus } from './status';
 import { onToolToggle, saveBraveApiKeyFromDrawer } from '../tools/config';
+import type { SystemPromptSettings } from '../types';
 import {
   BUILT_IN_TOOLS,
   type ToolCategory,
@@ -62,40 +64,67 @@ export function fillSystemPromptPresetSelect(): void {
   }
 }
 
+function currentSystemPromptSettings(): SystemPromptSettings {
+  return {
+    presetId: activeSystemPromptPresetId,
+    text: (document.getElementById('systemPrompt') as HTMLTextAreaElement).value,
+  };
+}
+
+function applySystemPromptSettingsToDom(data: SystemPromptSettings): void {
+  const text = typeof data.text === 'string' ? data.text : '';
+  const presetId = typeof data.presetId === 'string' ? data.presetId : '';
+  const ta = document.getElementById('systemPrompt') as HTMLTextAreaElement;
+  const sel = document.getElementById('systemPromptPreset') as HTMLSelectElement;
+  ta.value = text;
+  const template = getActivePresetText(presetId).trim();
+  if (presetId && template !== '' && text.trim() === template) {
+    setActiveSystemPromptPresetId(presetId);
+    sel.value = presetId;
+  } else {
+    setActiveSystemPromptPresetId('');
+    sel.value = '';
+  }
+}
+
 export function saveSystemPromptSettings(): void {
+  const payload = currentSystemPromptSettings();
+
+  if (isServerStorageMode()) {
+    void putSystemPrompt(payload).catch(() => {
+      setStatus('err', 'Could not save system prompt to ~/.speedchat');
+    });
+    return;
+  }
+
   try {
-    localStorage.setItem(
-      PRESET_STORAGE_KEY,
-      JSON.stringify({
-        presetId: activeSystemPromptPresetId,
-        text: (document.getElementById('systemPrompt') as HTMLTextAreaElement).value,
-      })
-    );
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(payload));
   } catch {
     /* ignore quota / private mode */
   }
 }
 
-export function loadSystemPromptSettings(): void {
+export async function loadSystemPromptSettings(): Promise<void> {
+  if (isServerStorageMode()) {
+    try {
+      const data = await getSystemPrompt();
+      applySystemPromptSettingsToDom(data);
+      return;
+    } catch {
+      setStatus('err', 'Could not load system prompt from ~/.speedchat');
+    }
+  }
+
   try {
     const raw = localStorage.getItem(PRESET_STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw) as { text?: string; presetId?: string };
-    const text = typeof data.text === 'string' ? data.text : '';
-    const presetId = typeof data.presetId === 'string' ? data.presetId : '';
-    const ta = document.getElementById('systemPrompt') as HTMLTextAreaElement;
-    const sel = document.getElementById('systemPromptPreset') as HTMLSelectElement;
-    ta.value = text;
-    const template = getActivePresetText(presetId).trim();
-    if (presetId && template !== '' && text.trim() === template) {
-      setActiveSystemPromptPresetId(presetId);
-      sel.value = presetId;
-    } else {
-      setActiveSystemPromptPresetId('');
-      sel.value = '';
+    if (!raw) {
+      applySystemPromptSettingsToDom(defaultSystemPromptSettings());
+      return;
     }
+    const data = JSON.parse(raw) as SystemPromptSettings;
+    applySystemPromptSettingsToDom(data);
   } catch {
-    /* ignore corrupt storage */
+    applySystemPromptSettingsToDom(defaultSystemPromptSettings());
   }
 }
 

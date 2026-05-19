@@ -55,15 +55,73 @@ SpeedChat/
 └── documentation/
 ```
 
-## localStorage keys
+## Persistence (`~/.speedchat`)
 
-| Key | Module | Purpose |
-|-----|--------|---------|
-| `speedchat-sessions-v1` | `src/constants.ts` → `src/state/sessions.ts` | Multi-chat sessions: `version`, `activeId`, `sidebarCollapsed`, `chats[]` with `history`, `modelId`, `lastStats`, … |
-| `speedchat.systemPrompt` | `PRESET_STORAGE_KEY` in `src/constants.ts` | System prompt preset + textarea content |
-| `speedchat.tools` | `TOOL_CONFIG_STORAGE_KEY` in `src/tools/config.ts` | Tool toggles + `keys.braveApiKey` |
+When **`npm start`** is running, the Node dev server is the **source of truth** for durable config. Data lives under:
 
-Server URL, temperature, and max tokens live in the settings drawer DOM (not in the session blob).
+| Platform | Path |
+|----------|------|
+| Linux / macOS | `$HOME/.speedchat` |
+| Windows | `%USERPROFILE%\.speedchat` (via `os.homedir()`) |
+
+**Override for tests/CI:** set `SPEEDCHAT_HOME` to a temp directory (never run destructive tests against the real profile).
+
+On first `npm start`, the server logs `SpeedChat data: <path>` and creates the layout if missing.
+
+### Layout (Step 02)
+
+```text
+~/.speedchat/
+  config.json              # schemaVersion, migration flags
+  sessions/state.json      # full SessionState blob (all chats — canonical)
+  tools.json               # ToolConfig (enabled + braveApiKey)
+  system-prompt.json       # { presetId, text }
+  memory/                  # scaffold (Step 16)
+  providers/               # scaffold (Step 03)
+  mcp/                     # scaffold (Step 18)
+  lsp/                     # scaffold (Step 17)
+  prompt-configs/          # scaffold (Step 04)
+  prompts/                 # user prompt overrides (Step 04)
+  skills/                  # user skills (Step 13)
+  backups/                 # scaffold
+```
+
+**Built-in prompts** ship under `src/chat/prompts/` (Step 04+). **Built-in skills** under `src/skills/` (Step 13+). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+
+### Config API (`npm start` only)
+
+Registered in [`server/config/middleware.js`](../server/config/middleware.js) before Vite SPA (same CORS as `/api/tools`). Service worker does **not** cache `/api/config/*` (network-only).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/config/ping` | `{ ok, home: ".speedchat", homeResolved: true }` |
+| `GET` | `/api/config/status` | `{ ok, storage: "home", migrated, schemaVersion }` |
+| `GET/PUT` | `/api/config/sessions` | `SessionState` ↔ `sessions/state.json` |
+| `GET/PUT` | `/api/config/tools` | `ToolConfig` ↔ `tools.json` |
+| `GET/PUT` | `/api/config/system-prompt` | `SystemPromptSettings` ↔ `system-prompt.json` |
+| `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
+| `POST` | `/api/config/migrate` | Browser → disk one-time import |
+| `GET/PUT` | `/api/config/file?key=…` | Whitelisted keys only; traversal → **400** |
+
+Client modules: [`src/config/storage-mode.ts`](../src/config/storage-mode.ts), [`api-client.ts`](../src/config/api-client.ts), [`migrate.ts`](../src/config/migrate.ts).
+
+### Migration from `localStorage`
+
+On first load with config API available, the client reads legacy keys and `POST /api/config/migrate`, then removes:
+
+| localStorage key | File |
+|------------------|------|
+| `speedchat-sessions-v1` | `sessions/state.json` |
+| `speedchat.tools` | `tools.json` |
+| `speedchat.systemPrompt` | `system-prompt.json` |
+
+Re-run is **idempotent** (`skipped: true` when `config.json` has `migratedFromLocalStorage: true`).
+
+### Vite-only fallback (`npm run dev`)
+
+No `/api/config/*` → client uses **`storageMode: 'localStorage'`** (same keys as before). Settings drawer shows **`#configStorageBanner`**: file-backed config requires `npm start`. **No dual-write.**
+
+Server URL, temperature, and max tokens remain in the settings drawer DOM (not in the session blob).
 
 ### `speedchat.tools` shape
 
@@ -104,7 +162,7 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. See **`speedchat-sessions-v1`** above.
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `speedchat-sessions-v1` in `localStorage`.
 
 - At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
@@ -125,6 +183,8 @@ Use **`npm start`** for the full stack. **`npm run dev`** is Vite-only (no tool 
 ```text
 Browser (same origin :5173)
     │
+    ├─► GET  /api/config/ping    → { ok: true, homeResolved: true }
+    ├─► GET/PUT /api/config/*    → ~/.speedchat JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
     │
@@ -277,6 +337,8 @@ E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification
 
 **Step 01 (chat UX / streaming):** [`documentation/plans/verification/step-01.md`](plans/verification/step-01.md) — `npm test`, `npm run build`, `scripts/step01-ui-smoke.mjs`.
 
+**Step 02 (`~/.speedchat`):** [`documentation/plans/verification/step-02.md`](plans/verification/step-02.md) — config API + migration tests with `SPEEDCHAT_HOME`.
+
 ```bash
 npm test
 npm run build
@@ -295,10 +357,10 @@ Use the port printed by `server.js` (default **5173**; another port if busy).
 
 Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 
-1. `loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `loadSystemPromptSettings()`.
-2. `fillToolsSection()` + `registerToolHandlers()`.
-3. `initAttachments()` — file picker and `#attachPreview` strip.
-4. `await detectLocalServer()` → `loadToolConfigIntoDrawer()`.
+1. `await detectConfigServer()` → `runMigrationIfNeeded()` if server mode.
+2. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
+3. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`.
+4. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
 5. `applySidebarVisuals()` + `renderSidebar()`.
 6. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
 

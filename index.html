@@ -55,6 +55,7 @@
     Settings
   </div>
   <div class="drawer-body">
+    <p id="configStorageBanner" class="tools-server-banner hidden" role="status">File-backed config requires <code>npm start</code> (not <code>npm run dev</code>). Using browser storage until then.</p>
     <div class="field">
       <label for="serverUrl">LM Studio server URL</label>
       <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" onchange="fetchModels()">
