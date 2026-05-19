@@ -1,0 +1,38 @@
+{
+  "lsp": {
+    "typescript": {
+      "disabled": false,
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+      "defaultEnabled": true,
+      "label": "TypeScript/JavaScript"
+    },
+    "eslint": {
+      "disabled": true,
+      "extensions": [".ts", ".js", ".tsx", ".jsx", ".vue"],
+      "defaultEnabled": false,
+      "label": "ESLint"
+    },
+    "pyright": {
+      "disabled": true,
+      "command": ["pyright-langserver", "--stdio"],
+      "extensions": [".py", ".pyi"],
+      "defaultEnabled": false,
+      "label": "Pyright"
+    },
+    "rust": {
+      "disabled": true,
+      "command": ["rust-analyzer"],
+      "extensions": [".rs"],
+      "defaultEnabled": false,
+      "label": "Rust Analyzer"
+    },
+    "fake": {
+      "disabled": false,
+      "command": ["node", "test/fixtures/fake-lsp.mjs"],
+      "extensions": [".fake"],
+      "defaultEnabled": true,
+      "label": "Fake LSP (tests)"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+/**
+ * Memory retrieve formatting — static expected strings.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { formatMemoryBlock, retrieveMemoryBlock } from '../../server/memory/retrieve.js';
+
+const META_A = {
+  id: '11111111-1111-1111-1111-111111111111',
+  title: 'npm workflow',
+  tags: ['npm'],
+  updatedAt: '2026-05-19T12:00:00.000Z',
+  pinned: false,
+};
+
+const META_B = {
+  id: '22222222-2222-2222-2222-222222222222',
+  title: 'Python only',
+  tags: ['python'],
+  updatedAt: '2026-05-19T11:00:00.000Z',
+  pinned: false,
+};
+
+describe('memory retrieve', () => {
+  test('formatMemoryBlock static shape', () => {
+    const block = formatMemoryBlock(
+      [{ meta: META_A, body: 'Use npm start for tests.' }],
+      4000,
+    );
+    const expected = `## Retrieved memory
+- [npm workflow] (tags: npm)
+  Use npm start for tests.`;
+    assert.equal(block, expected);
+  });
+
+  test('retrieveMemoryBlock ranks npm over python', () => {
+    const all = [
+      { meta: META_A, body: 'Use npm start for integration tests.' },
+      { meta: META_B, body: 'Use poetry for Python projects.' },
+    ];
+    const { block, ids } = retrieveMemoryBlock(all, {
+      query: 'npm',
+      limit: 4,
+      maxChars: 4000,
+    });
+    assert.match(block, /npm workflow/);
+    assert.doesNotMatch(block, /Python only/);
+    assert.ok(ids.includes(META_A.id));
+  });
+});

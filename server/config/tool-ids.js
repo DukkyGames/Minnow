@@ -42,4 +42,6 @@ export const ALL_TOOL_IDS = [
   'browser_eval',
   'browser_screenshot',
   'run_impeccable',
+  'get_lsp_diagnostics',
+  'list_lsp_servers',
 ];

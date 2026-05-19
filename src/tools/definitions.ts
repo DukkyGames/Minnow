@@ -11,7 +11,8 @@ export type ToolCategory =
   | 'git'
   | 'code'
   | 'agents'
-  | 'browser';
+  | 'browser'
+  | 'lsp';
 
 /** Shared CDP tool parameters (browser_url, target_id). */
 const BROWSER_CDP_PROPERTIES: Record<string, unknown> = {
@@ -754,6 +755,36 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['command'],
+    ),
+  },
+  {
+    id: 'get_lsp_diagnostics',
+    label: 'LSP diagnostics',
+    description: 'Formatted language-server diagnostics for a project file.',
+    category: 'lsp',
+    serverRequired: true,
+    definition: toolSchema(
+      'get_lsp_diagnostics',
+      'Returns LSP diagnostics for a relative file path (requires npm start).',
+      {
+        path: {
+          type: 'string',
+          description: 'Project-relative file path (e.g. src/main.ts)',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'list_lsp_servers',
+    label: 'List LSP servers',
+    description: 'List configured language servers and running state.',
+    category: 'lsp',
+    serverRequired: true,
+    definition: toolSchema(
+      'list_lsp_servers',
+      'JSON list of LSP server ids, labels, enabled flags, and running state.',
+      {},
     ),
   },
 ];
