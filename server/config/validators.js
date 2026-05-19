@@ -62,6 +62,10 @@ function ensureChatShape(raw) {
     ? row.history.filter((m) => m && typeof m === 'object' && m.role)
     : [];
 
+  const terminalHistory = Array.isArray(row.terminalHistory)
+    ? row.terminalHistory.filter((r) => r && typeof r === 'object')
+    : undefined;
+
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
@@ -75,6 +79,7 @@ function ensureChatShape(raw) {
     expertSelection: ensureExpertSelection(row.expertSelection),
     lastResolvedExpertId:
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
+    ...(terminalHistory?.length ? { terminalHistory } : {}),
     history,
     lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
     modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},
@@ -247,6 +252,60 @@ export function mergeConfigMeta(existing, patch) {
       existingTitles.temperature = Math.min(0.4, Math.max(0.2, t.temperature));
     }
     base.titles = existingTitles;
+  }
+
+  if (p.terminal && typeof p.terminal === 'object') {
+    const existingTerminal =
+      base.terminal && typeof base.terminal === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.terminal) }
+        : {
+            open: false,
+            heightPx: 240,
+            autoOpenOnAgentRun: true,
+          };
+    const t = /** @type {Record<string, unknown>} */ (p.terminal);
+    if (typeof t.open === 'boolean') existingTerminal.open = t.open;
+    if (typeof t.heightPx === 'number' && Number.isFinite(t.heightPx)) {
+      existingTerminal.heightPx = Math.min(800, Math.max(120, Math.round(t.heightPx)));
+    }
+    if (typeof t.autoOpenOnAgentRun === 'boolean') {
+      existingTerminal.autoOpenOnAgentRun = t.autoOpenOnAgentRun;
+    }
+    base.terminal = existingTerminal;
+  }
+
+  if (p.filePanel && typeof p.filePanel === 'object') {
+    const existingPanel =
+      base.filePanel && typeof base.filePanel === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.filePanel) }
+        : {
+            fileSidebarCollapsed: false,
+            viewerOpen: false,
+            splitRatio: 0.55,
+            expandedDirs: [],
+            selectedPath: null,
+            treeRoot: '.',
+          };
+    const fp = /** @type {Record<string, unknown>} */ (p.filePanel);
+    if (typeof fp.fileSidebarCollapsed === 'boolean') {
+      existingPanel.fileSidebarCollapsed = fp.fileSidebarCollapsed;
+    }
+    if (typeof fp.viewerOpen === 'boolean') {
+      existingPanel.viewerOpen = fp.viewerOpen;
+    }
+    if (typeof fp.splitRatio === 'number' && Number.isFinite(fp.splitRatio)) {
+      existingPanel.splitRatio = Math.min(0.75, Math.max(0.35, fp.splitRatio));
+    }
+    if (Array.isArray(fp.expandedDirs)) {
+      existingPanel.expandedDirs = fp.expandedDirs.filter((d) => typeof d === 'string');
+    }
+    if (fp.selectedPath === null || typeof fp.selectedPath === 'string') {
+      existingPanel.selectedPath = fp.selectedPath;
+    }
+    if (typeof fp.treeRoot === 'string' && fp.treeRoot.trim()) {
+      existingPanel.treeRoot = fp.treeRoot;
+    }
+    base.filePanel = existingPanel;
   }
 
   return base;

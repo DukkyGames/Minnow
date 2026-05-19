@@ -157,6 +157,21 @@ export interface ExpertSelection {
   expertId: string | null;
 }
 
+/** One completed terminal run persisted on the chat (Step 10). */
+export interface TerminalRunRecord {
+  id: string;
+  command: string;
+  cwd: string;
+  source: 'user' | 'agent';
+  toolCallId?: string;
+  startedAt: number;
+  finishedAt: number;
+  exitCode: number | null;
+  timedOut: boolean;
+  /** Path relative to ~/.speedchat (e.g. logs/terminal/<runId>.log). */
+  logPath: string;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -173,6 +188,8 @@ export interface Chat {
   workAgentId?: string | null;
   /** When true, mode switch picks defaultForModes agent (Step 08). */
   workAgentAuto?: boolean;
+  /** Per-chat terminal command history (Step 10). */
+  terminalHistory?: TerminalRunRecord[];
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;

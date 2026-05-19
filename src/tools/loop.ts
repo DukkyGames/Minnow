@@ -571,7 +571,10 @@ export async function sendMessageWithTools(): Promise<void> {
           area.appendChild(toolWrap);
           scrollBottom();
 
-          const result = await executeTool(tc.function.name, args);
+          const result = await executeTool(tc.function.name, args, {
+            chatId: chat.id,
+            toolCallId: tc.id,
+          });
           renderToolResult(toolWrap, result);
 
           chat.history.push({

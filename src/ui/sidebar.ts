@@ -20,6 +20,7 @@ import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
+import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 
 /** Keep model picker aligned with the active chat's stored model id. */
 export function syncModelSelectForActiveChat(): void {
@@ -238,6 +239,7 @@ export function switchChat(id: string): void {
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
   syncWorkAgentDevFromActiveChat();
+  void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();
@@ -259,6 +261,7 @@ export function createChat(): void {
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
+  void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();

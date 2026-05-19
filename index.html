@@ -29,6 +29,9 @@
     <select id="modelSelect" onchange="onModelSelectChange()"></select>
   </div>
 
+  <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+  </button>
   <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M20 4v4h-4"/>
@@ -36,6 +39,9 @@
       <path d="M4 20v-4h4"/>
       <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
     </svg>
+  </button>
+  <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
   </button>
   <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" aria-expanded="false" aria-controls="drawer" onclick="toggleDrawer()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -119,6 +125,7 @@
 </div>
 
 <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
+<button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" onclick="closeMobileFileSidebar()" aria-hidden="true"></button>
 
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
@@ -133,7 +140,8 @@
     <div class="chat-list" id="chatList" role="list"></div>
   </aside>
 
-  <div class="main-column">
+  <div id="workspaceSplit" class="workspace-split">
+  <div class="main-column" id="mainColumn">
     <!-- Chat messages -->
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
@@ -144,6 +152,27 @@
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
+
+    <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
+      <header class="terminal-header">
+        <span class="terminal-header-title">Terminal</span>
+        <div class="terminal-header-actions">
+          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear</button>
+          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Collapse terminal">Collapse</button>
+        </div>
+      </header>
+      <p id="terminalOfflineBanner" class="terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
+      <div class="terminal-body">
+        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
+        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
+      </div>
+      <form class="terminal-input-row" id="terminalForm">
+        <label class="visually-hidden" for="terminalInput">Terminal command</label>
+        <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
+        <button type="submit">Run</button>
+      </form>
+    </section>
 
     <!-- Input bar -->
     <div class="input-bar">
@@ -228,6 +257,37 @@
       </div>
     </div>
   </div>
+
+  <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
+
+  <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
+    <header class="file-viewer-header">
+      <span class="file-viewer-path" id="fileViewerPath"></span>
+      <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close file viewer">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="file-viewer-body" id="fileViewerHost"></div>
+  </section>
+  </div>
+
+  <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">
+    <div class="file-sidebar-header">
+      <span class="file-sidebar-title">Files</span>
+      <button type="button" class="icon-btn" id="btnFileSidebarCollapse" aria-label="Collapse file tree" onclick="toggleFileSidebarCollapsed()">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 4v4h-4"/>
+          <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
+          <path d="M4 20v-4h4"/>
+          <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
+        </svg>
+      </button>
+    </div>
+    <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
+  </aside>
 </div>
 <script type="module" src="/src/main.ts"></script>
 </body>

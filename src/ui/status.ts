@@ -1,5 +1,6 @@
 import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
+import { closeMobileFileSidebar } from './init-file-panel';
 
 /** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
 export function serverUrl(): string {
@@ -39,6 +40,11 @@ export function dismissOpenLayers(): void {
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     closeDrawer();
+    return;
+  }
+  const fileSide = document.getElementById('fileSidebar');
+  if (fileSide && fileSide.classList.contains('mobile-open')) {
+    closeMobileFileSidebar();
     return;
   }
   const side = document.getElementById('chatSidebar');

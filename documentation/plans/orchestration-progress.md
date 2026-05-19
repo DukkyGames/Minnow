@@ -16,7 +16,7 @@ Each step: **Implementer** ? **Verifier** (separate agent) ? mark PASS/FAIL. Git
 | 1 | 02 | done | **PASS** (verifier 2026-05-19; `npm test` 14+6, build OK, temp `SPEEDCHAT_HOME`, manual @ :5180/:5181) | pending |
 | 2 | 03 | done | **PASS** (verifier 2026-05-19; providers 12/12, build OK, temp `SPEEDCHAT_HOME`, manual API/UI @ :5182) | pending |
 | 3 | 04?09 | done | **04 PASS**; **05 PASS** (verifier re-run 2026-05-19; modeId round-trip); **06 PASS**; **07 PASS** (verifier 2026-05-19); **08 PASS** (verifier re-run 2026-05-19; registry parser fix); **09 PASS** (verifier 2026-05-19 @ :5187) | **done** (Step 09 sub-agents) |
-| 4 | 10?11 | pending | pending | pending |
+| 4 | 10–11 | done | **10 PASS** (verifier 2026-05-19 @ :5189); **11 PASS** (verifier 2026-05-19 @ :5190) | **done** (Wave 4: terminal + file viewer) |
 | 5 | 12 | pending | pending | pending |
 | 6 | 13?15 | pending | pending | pending |
 | 7 | 16?18 | pending | pending | pending |
@@ -25,6 +25,25 @@ Each step: **Implementer** ? **Verifier** (separate agent) ? mark PASS/FAIL. Git
 | Final | all | ? | pending | ? |
 
 ## Step log
+
+### Step 10 ? Bottom terminal panel
+- **Status:** **PASS** (verifier 2026-05-19)
+- **Plan:** `Build out/step-10-terminal-panel.md`
+- **Verification:** [`verification/step-10.md`](verification/step-10.md)
+- **Automated:** `npm test` **122/122** (node **34/34**; tsx **88/88**); `npm run build` OK (`tsc` + Vite).
+- **Terminal API (verifier):** **PASS** @ `http://localhost:5189` (`npm start`, `SPEEDCHAT_HOME` = `%TEMP%\speedchat-terminal-test-28556`; **:5173** occupied by Vite ? not `npm start`). `node test/terminal-stream.test.mjs` **12/12** (`run_returns_runId`, `stream_emits_stdout_and_exit`, `unknown_run_404`, `invalid_command_400`, `history_scoped_to_chat`).
+- **Regression:** `POST /api/tools` `execute_command` **PASS** (exit 0, stdout `42`). Full `sa16-smoke.mjs` **partial** ? server tools ping/read/git/datetime/calculate OK; attachment section fails Node import `src/app-state` from `loop.ts` (Step 11 / smoke harness scope, not terminal).
+- **Docs:** `documentation/context.md` Step 10 terminal panel + `/api/terminal/*` documented.
+- **Manual (deferred):** M1?M7 panel toggle, agent stream, chat history, reload, collapse prefs, offline banner, 30s timeout (per verification doc §Manual).
+
+### Step 11 ? File tree + split viewer
+- **Status:** **PASS** (verifier 2026-05-19)
+- **Plan:** `Build out/step-11-file-tree-viewer.md`
+- **Verification:** [`verification/step-11.md`](verification/step-11.md)
+- **Automated:** `npm test` **122/122** (node **34/34** incl. `parseListDirectoryResult` **4/4**, file API traversal; tsx **88/88**); `npm run build` OK (`tsc` + Vite).
+- **API smoke (verifier):** **PASS** @ `http://localhost:5190` (`SPEEDCHAT_HOME` = `%TEMP%\speedchat-step11-verify-20260519`; `PORT=5188` bumped to **5190**). `node scripts/step-11-smoke.mjs` ? P0?P6 all **PASS** (tools ping, `list_directory`, `read_file`, `read_file_range`, `fileSidebar` / `fileViewerPane` / `btnFileTreeToggle` in `index.html`).
+- **Docs:** `documentation/context.md` Step 11 file panel section present.
+- **Manual (deferred):** M1?M8 sidebar/viewer/split/mobile; M9?M10 large file + traversal UI (per verification doc).
 
 ### Step 09 ? Sub-agent orchestration
 - **Status:** **PASS** (verifier 2026-05-19)

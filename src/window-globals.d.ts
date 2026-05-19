@@ -23,5 +23,8 @@ declare global {
     handleKey: (e: KeyboardEvent) => void;
     autoResize: (el: HTMLTextAreaElement) => void;
     onFileSelected: (event: Event) => void;
+    toggleFileSidebarLayout: () => void;
+    toggleFileSidebarCollapsed: () => void;
+    closeMobileFileSidebar: () => void;
   }
 }

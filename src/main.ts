@@ -15,6 +15,8 @@ import './styles/stats.css';
 import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/composer-controls.css';
+import './styles/file-panel.css';
+import './styles/terminal.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -65,6 +67,18 @@ import {
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { dismissOpenLayers } from './ui/status';
+import {
+  initFilePanel,
+  closeMobileFileSidebar,
+  toggleFileSidebarCollapsed,
+  toggleFileSidebarLayout,
+} from './ui/init-file-panel';
+import {
+  initTerminalPanel,
+  onTerminalServerAvailabilityChanged,
+  refreshTerminalHistoryForActiveChat,
+  registerTerminalKeyboardShortcut,
+} from './ui/terminal-panel';
 
 /** Expose inline HTML event handlers on `window` for the static markup. */
 function registerWindowHandlers(): void {
@@ -85,6 +99,9 @@ function registerWindowHandlers(): void {
   window.handleKey = handleKey;
   window.autoResize = autoResize;
   window.onFileSelected = onFileSelected;
+  window.toggleFileSidebarLayout = toggleFileSidebarLayout;
+  window.toggleFileSidebarCollapsed = toggleFileSidebarCollapsed;
+  window.closeMobileFileSidebar = closeMobileFileSidebar;
 }
 
 /** Register PWA service worker (shell cache); failures are ignored. */
@@ -112,10 +129,15 @@ export async function initApp(): Promise<void> {
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  await initFilePanel();
+  onTerminalServerAvailabilityChanged();
   await loadToolConfigFromStorage();
+  await initTerminalPanel();
+  registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();
+  await refreshTerminalHistoryForActiveChat();
   await loadProviderSelect();
   registerProviderHandlers();
   await fetchModels();
@@ -127,7 +149,10 @@ export async function initApp(): Promise<void> {
   renderSidebar();
 
   window.addEventListener('resize', () => {
-    if (!isMobileLayout()) closeMobileSidebar();
+    if (!isMobileLayout()) {
+      closeMobileSidebar();
+      closeMobileFileSidebar();
+    }
     applySidebarVisuals();
   });
 
@@ -137,8 +162,10 @@ export async function initApp(): Promise<void> {
 
   const drawerOverlay = document.getElementById('drawerOverlay');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const fileSidebarBackdrop = document.getElementById('fileSidebarBackdrop');
   if (drawerOverlay) drawerOverlay.tabIndex = -1;
   if (sidebarBackdrop) sidebarBackdrop.tabIndex = -1;
+  if (fileSidebarBackdrop) fileSidebarBackdrop.tabIndex = -1;
   updateStatsExpandPreview();
 }
 

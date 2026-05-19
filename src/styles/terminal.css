@@ -1,0 +1,178 @@
+/* Bottom docked terminal panel (Step 10) */
+
+.terminal-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border, #e5e5e5);
+  background: var(--surface-elevated, #fafafa);
+  min-height: 0;
+}
+
+.terminal-panel.hidden {
+  display: none;
+}
+
+.terminal-panel.is-collapsed .terminal-body,
+.terminal-panel.is-collapsed .terminal-input-row,
+.terminal-panel.is-collapsed .terminal-resize-handle {
+  display: none;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  user-select: none;
+}
+
+.terminal-header-title {
+  flex: 1;
+}
+
+.terminal-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-header-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.terminal-header-btn:hover {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+}
+
+.terminal-resize-handle {
+  height: 5px;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border, #e5e5e5) 40%,
+    transparent
+  );
+}
+
+.terminal-offline-banner {
+  margin: 0 10px 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: var(--warn-bg, #fff8e6);
+  color: var(--warn-text, #7a5c00);
+}
+
+.terminal-offline-banner.hidden {
+  display: none;
+}
+
+.terminal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-history {
+  width: 180px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border, #e5e5e5);
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+.terminal-history-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text, #222);
+  font-family: inherit;
+}
+
+.terminal-history-item:hover,
+.terminal-history-item.is-active {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+}
+
+.terminal-history-item .cmd {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, monospace;
+}
+
+.terminal-output {
+  flex: 1;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text, #1a1a1a);
+  background: var(--terminal-bg, #f4f4f4);
+}
+
+.terminal-output .stderr-line {
+  color: var(--stderr, #a11);
+}
+
+.terminal-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border, #e5e5e5);
+}
+
+.terminal-input-row input {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+}
+
+.terminal-input-row button {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #ccc);
+  background: var(--btn-bg, #fff);
+  cursor: pointer;
+}
+
+.terminal-input-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .terminal-panel {
+    max-height: 40vh;
+  }
+
+  .terminal-history {
+    width: 120px;
+  }
+}
