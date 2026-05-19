@@ -1,0 +1,64 @@
+/**
+ * Operating mode segmented control above the composer.
+ */
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-height: 28px;
+}
+
+.mode-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-2, oklch(0.96 0.01 260));
+  border: 1px solid var(--border-subtle, oklch(0.88 0.02 260));
+}
+
+.mode-segment {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md, 8px) - 2px);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-segment:hover:not(:disabled) {
+  color: var(--ink, oklch(0.25 0.02 260));
+  background: var(--surface-1, oklch(0.99 0 260));
+}
+
+.mode-segment[aria-checked='true'] {
+  background: var(--accent, oklch(0.55 0.18 250));
+  color: var(--on-accent, oklch(0.99 0 260));
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.08);
+}
+
+.mode-segment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mode-segment:focus-visible {
+  outline: 2px solid var(--accent, oklch(0.55 0.18 250));
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .mode-segment {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+}

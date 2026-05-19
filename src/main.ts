@@ -13,6 +13,8 @@ import './styles/input.css';
 import './styles/settings.css';
 import './styles/stats.css';
 import './styles/responsive.css';
+import './styles/mode-selector.css';
+import './styles/composer-controls.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -55,6 +57,11 @@ import {
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
 import { toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
+import {
+  bindExpertsSettingsCheckbox,
+  initExpertSelect,
+} from './ui/expert-select';
+import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { dismissOpenLayers } from './ui/status';
 
 /** Expose inline HTML event handlers on `window` for the static markup. */
@@ -97,6 +104,9 @@ export async function initApp(): Promise<void> {
   fillToolsSection();
   registerToolHandlers();
   initAttachments();
+  initModeSelector();
+  await initExpertSelect();
+  await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   await loadToolConfigFromStorage();
   loadToolConfigIntoDrawer();
@@ -108,6 +118,7 @@ export async function initApp(): Promise<void> {
   syncModelSelectForActiveChat();
   renderChatFromHistory(getActiveChat());
   renderStatsForChat(getActiveChat());
+  syncModeSelectorFromActiveChat();
   renderSidebar();
 
   window.addEventListener('resize', () => {

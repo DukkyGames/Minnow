@@ -18,6 +18,7 @@ function registryKey(kind: PromptKind, id: string): string {
 function shouldSkipPath(relativePath: string): boolean {
   const norm = relativePath.replace(/\\/g, '/');
   if (norm.includes('/_example/') || norm.startsWith('_example/')) return true;
+  if (norm.includes('/_template/') || norm.startsWith('_template/')) return true;
   if (norm.includes('/__tests__/')) return true;
   return false;
 }

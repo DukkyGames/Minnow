@@ -7,6 +7,9 @@
       "id": "11111111-1111-1111-1111-111111111111",
       "name": "Fixture chat",
       "modelId": "test-model",
+      "modeId": "build",
+      "expertSelection": { "mode": "auto", "expertId": null },
+      "lastResolvedExpertId": null,
       "history": [
         {
           "role": "user",

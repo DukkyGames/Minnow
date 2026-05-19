@@ -1,27 +1,45 @@
-import {
-  AUTO_TITLE_MAX_LEN,
-  MAX_CHATS,
-  PLACEHOLDER_CHAT_NAME,
-  SAVE_DEBOUNCE_MS,
-  STORAGE_KEY,
-} from '../constants';
+import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
+import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { setSaveTimer, saveTimer } from '../app-state';
 import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
+import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { setStatus } from '../ui/status';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
   Chat,
+  ExpertSelection,
   Message,
   SessionState,
   ToolCall,
   ToolResultMessage,
 } from '../types';
 
+/** Default expert picker when missing on older chats. */
+export function defaultExpertSelection(): ExpertSelection {
+  return { mode: 'auto', expertId: null };
+}
+
+function ensureExpertSelection(raw: unknown): ExpertSelection {
+  if (!raw || typeof raw !== 'object') return defaultExpertSelection();
+  const row = raw as Partial<ExpertSelection>;
+  const mode = row.mode === 'manual' ? 'manual' : 'auto';
+  const expertId =
+    mode === 'manual' && typeof row.expertId === 'string' && row.expertId.trim()
+      ? row.expertId.trim()
+      : null;
+  return { mode, expertId };
+}
+
 /** In-memory session blob mirrored to ~/.speedchat or localStorage fallback. */
 export let sessionState: SessionState | null = null;
+
+/** Replace in-memory session blob (unit tests). */
+export function setSessionStateForTests(state: SessionState | null): void {
+  sessionState = state;
+}
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
 
@@ -50,6 +68,7 @@ export function createEmptyChatObject(modelId: string): Chat {
     id: newChatId(),
     name: PLACEHOLDER_CHAT_NAME,
     modelId: modelId || '',
+    modeId: DEFAULT_MODE_ID,
     history: [],
     lastStats: null,
     modelInfo: {},
@@ -127,11 +146,20 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         ? raw.name.trim()
         : PLACEHOLDER_CHAT_NAME,
     modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
+    modeId: normalizeModeId(raw.modeId),
+    expertSelection: ensureExpertSelection(raw.expertSelection),
+    lastResolvedExpertId:
+      typeof raw.lastResolvedExpertId === 'string' ? raw.lastResolvedExpertId : null,
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
   };
+}
+
+/** Read expert selection for a chat (defaults to Auto). */
+export function getExpertSelection(chat: Chat): ExpertSelection {
+  return chat.expertSelection ?? defaultExpertSelection();
 }
 
 function parseSessionStateFromJson(parsed: Partial<SessionState> | null): SessionState {
@@ -309,6 +337,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   const victim = state.chats[idx];
+  abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
   state.chats.splice(idx, 1);
 
@@ -333,11 +362,15 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   };
 }
 
-/** Auto-title from first user message when still on placeholder name. */
-export function maybeAutoTitleFromFirstUserMessage(chat: Chat, userText: string): void {
-  if (chat.name !== PLACEHOLDER_CHAT_NAME) return;
-  const line = userText.replace(/\s+/g, ' ').trim();
-  if (!line) return;
-  const extra = line.length > AUTO_TITLE_MAX_LEN ? '…' : '';
-  chat.name = line.slice(0, AUTO_TITLE_MAX_LEN) + extra;
+/**
+ * Apply a model-generated title when the chat still uses the placeholder name.
+ * Returns false if the chat is missing or was renamed.
+ */
+export function applyGeneratedChatTitle(chatId: string, title: string): boolean {
+  const chat = findChatById(chatId);
+  if (!chat || chat.name !== PLACEHOLDER_CHAT_NAME) return false;
+  const trimmed = title.trim();
+  if (!trimmed) return false;
+  chat.name = trimmed;
+  return true;
 }

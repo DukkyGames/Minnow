@@ -11,8 +11,11 @@ import {
 } from '../markdown/renderer';
 import { resolveModelInfo } from './models';
 import {
+  isFirstUserMessagePending,
+  scheduleChatTitleGeneration,
+} from '../chat/titles/schedule';
+import {
   getActiveChat,
-  maybeAutoTitleFromFirstUserMessage,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
@@ -273,8 +276,11 @@ export async function sendMessage(): Promise<void> {
   const chatSignal = controller.signal;
 
   chat.modelId = modelId || chat.modelId;
-  maybeAutoTitleFromFirstUserMessage(chat, text);
+  const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
+  if (shouldScheduleTitle) {
+    scheduleChatTitleGeneration(chat.id, text);
+  }
   touchChat(chat);
   scheduleSaveSessions();
   renderSidebar();
@@ -287,6 +293,7 @@ export async function sendMessage(): Promise<void> {
   try {
     composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
       userMessagePreview: text,
+      routeUserText: text,
     });
   } catch {
     composedSystemPrompt = '';

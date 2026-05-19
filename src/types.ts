@@ -3,6 +3,8 @@
  * Mirrors structures in `scripts/_extracted-app.js` / legacy `index.html`.
  */
 
+import type { ModeId } from './chat/modes/types';
+
 /** Persisted session blob schema version (`speedchat-sessions-v1`). */
 export const SESSION_SCHEMA_VERSION = 1 as const;
 
@@ -149,12 +151,24 @@ export interface ModelInfo {
   context_length?: number;
 }
 
+/** Per-chat expert picker state (Step 06). */
+export interface ExpertSelection {
+  mode: 'auto' | 'manual';
+  expertId: string | null;
+}
+
 export interface Chat {
   id: string;
   name: string;
   modelId: string;
   /** Optional per-chat provider override (Step 03). */
   providerId?: string;
+  /** Operating mode for prompt + tool policy (Step 05); default build. */
+  modeId?: ModeId;
+  /** Expert auto/manual selection (Step 06). */
+  expertSelection?: ExpertSelection;
+  /** Last auto-routed expert id (UI hint / debug). */
+  lastResolvedExpertId?: string | null;
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;

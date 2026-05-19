@@ -36,7 +36,9 @@ SpeedChat/
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/
 │   │   ├── messaging.ts    # sendMessage → sendMessageWithTools
-│   │   └── prompts/        # Step 04: composer, loader, configs
+│   │   ├── modes/          # Step 05: registry, tool-policy
+│   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
+│   │   └── titles/         # Step 07: schedule, generate, sanitize
 │   ├── ui/                 # sidebar, settings, stats, messages, stream-status, tool-messages, thought-bubbles, …
 │   ├── tools/
 │   │   ├── definitions.ts      # 32-tool catalog (OpenAI function schemas)
@@ -107,7 +109,45 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 
 `base → mode → expert → work-agent → tool-usage → info → skill → memory`
 
-**Shipped tree:** `src/chat/prompts/` (`base/`, `tool-usage/`, `info/` presets from `SYSTEM_PROMPT_PRESETS`, stubs for `modes/`, `experts/`, …). Reference-only: `_example/PROMPT_TEMPLATE.md`, `_example/README.md`.
+**Shipped tree:** `src/chat/prompts/` (`base/`, `tool-usage/`, `info/` presets from `SYSTEM_PROMPT_PRESETS`, `modes/` full+lite pairs, `experts/`, …). Reference-only: `_example/`, `modes/_template/MODE_TEMPLATE.md`.
+
+### Operating modes (Step 05)
+
+Four primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**.
+
+| Concern | Location |
+|---------|----------|
+| Registry + tool policy | `src/chat/modes/registry.ts`, `tool-policy.ts` |
+| Prompt bodies | `src/chat/prompts/modes/{id}.full.md`, `{id}.lite.md` |
+| Template pack | `src/chat/prompts/modes/_template/` |
+| UI selector | `src/ui/mode-selector.ts` (above composer in `index.html`) |
+| Persistence | `Chat.modeId` in `sessions/state.json` (default `build`) |
+
+**Send path:** `buildComposeContext()` sets `modeId` from active chat → `composeSystemPrompt()` loads `kind: mode` fragment → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
+
+**Plan / Research** deny destructive tools at the API (shell, file writes, git mutations per `registry.ts`).
+
+**Tests:** `test/modes/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md). OpenCode mapping: [`documentation/plans/references/mode-sources.md`](plans/references/mode-sources.md).
+
+### Expert system (Step 06)
+
+Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `expert.lite.md`). User overrides: `~/.speedchat/prompts/experts/<id>/`.
+
+| Concern | Location |
+|---------|----------|
+| Registry + routing | `src/chat/experts/registry.ts`, `rules-router.ts`, `resolve.ts` |
+| Optional LLM classify | `src/chat/experts/llm-classifier.ts` (not awaited on send — latency) |
+| Config | `config.json` → `experts` block; loader `src/config/experts-config.ts` |
+| UI | `#expertSelect` in composer strip (`src/ui/expert-select.ts`) |
+| Persistence | `Chat.expertSelection`, `Chat.lastResolvedExpertId` in session blob |
+
+**Behavior:** **Auto** re-runs rules router each send; **Manual** pins `expertId` until user selects Auto. `resolveExpertForTurn()` → `resolveComposedSystemPrompt()` sets `expertId` / `expertLabel` for `{{expert}}` interpolation.
+
+**Built-in ids:** `general` (default), `software-engineer`, `technical-writer`, `data-analyst`, `creative-writer`, `security-reviewer`. Template: `src/chat/prompts/experts/_template/`.
+
+**Config keys (`experts`):** `enabled`, `classifier` (`rules` \| `llm` \| `rules+llm`), `llmFallbackBelow`, `rulesMinScore`, `autoOmitWhenNoMatch`, `classifierModel`.
+
+**Tests:** `test/experts/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-06.md`](plans/verification/step-06.md).
 
 **APIs (`npm start`):**
 
@@ -118,9 +158,11 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 | `GET/PUT/DELETE` | `/api/prompt-configs/:id` | CRUD custom profile JSON |
 | `POST` | `/api/prompt-configs/:id/duplicate` | Copy profile |
 
-**Send path:** `resolveComposedSystemPrompt()` → `buildApiMessages(..., { composedSystemPrompt })` in [`loop.ts`](../src/tools/loop.ts). Legacy `#systemPrompt` textarea is fallback when compose returns empty. Settings UI for profiles deferred to Step 20.
+**Send path:** `resolveComposedSystemPrompt()` (expert routing + compose) → `buildApiMessages(..., { composedSystemPrompt })` in [`loop.ts`](../src/tools/loop.ts). Legacy `#systemPrompt` textarea is fallback when compose returns empty. Settings UI for profiles deferred to Step 20.
 
 **Tests:** `test/prompts/*.test.mjs` + `test/prompts/*.test.js`. Verification: [`documentation/plans/verification/step-04.md`](plans/verification/step-04.md).
+
+**Step 05 tests:** `test/modes/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md).
 
 ### Config API (`npm start` only)
 
@@ -226,11 +268,31 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 - **QuotaExceededError** → status pill hint.
 - Delete chat: confirm dialog; deleting active chat switches to latest other or creates a new empty session.
 
+### Programmatic chat titles (Step 07)
+
+On the **first user message** while the chat is still named **`New chat`**, an async **non-streaming** title job runs (`scheduleChatTitleGeneration` in [`src/chat/titles/schedule.ts`](../src/chat/titles/schedule.ts)). The main send path is **not** awaited.
+
+| Topic | Detail |
+|-------|--------|
+| **Trigger** | First `role: 'user'` row only; `chat.name === 'New chat'` at schedule time |
+| **Prompt** | Shipped [`src/chat/prompts/titles/default.md`](../src/chat/prompts/titles/default.md); override `~/.speedchat/prompts/titles/default.md` via prompt registry when `npm start` |
+| **Config** | `config.json` → `titles.enabled`, `titles.modelId`, `titles.providerId`, `titles.maxTokens`, `titles.temperature` (see [`src/config/titles-meta.ts`](../src/config/titles-meta.ts)) |
+| **Provider** | Step 03 `postChatCompletions` / active provider; empty `titles.modelId` → chat `modelId` |
+| **Apply** | `applyGeneratedChatTitle` only if still placeholder (rename/delete races discard) |
+| **UI** | `renderSidebar()` after successful apply only |
+| **Delete** | `removeChatById` aborts in-flight title job for that `chatId` |
+
+**Removed:** synchronous first-line truncation (`maybeAutoTitleFromFirstUserMessage`).
+
+**Tests:** `test/titles/*.test.mjs`. Verification: [`documentation/plans/verification/step-07.md`](plans/verification/step-07.md).
+
 ### Layout (summary)
 
 - **Desktop:** header toggle collapses sidebar (wide vs narrow rail).
 - **Mobile (≤640px):** sidebar overlay + backdrop; safe-area padding.
 - **Compact (≤600px):** 16px input (iOS zoom), collapsible stats strip.
+- **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
+- **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
 - **Top bar:** **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail.
 
@@ -361,7 +423,7 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 ## API usage (providers)
 
 - **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`.
-- **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitions()`. Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
+- **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitionsForMode(chat.modeId)` (user toggles + server ping + mode policy). Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
 - **Settings UI:** `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up).
 
 ## Message rendering
@@ -422,7 +484,7 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 1. `await detectConfigServer()` → `runMigrationIfNeeded()` if server mode.
 2. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
 3. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
-4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`.
+4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`.
 5. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
 6. `applySidebarVisuals()` + `renderSidebar()`.
 7. `await loadProviderSelect()` + `registerProviderHandlers()`.
