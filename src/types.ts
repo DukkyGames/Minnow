@@ -169,6 +169,10 @@ export interface Chat {
   expertSelection?: ExpertSelection;
   /** Last auto-routed expert id (UI hint / debug). */
   lastResolvedExpertId?: string | null;
+  /** Active Work Agent; null = default / auto from mode (Step 08). */
+  workAgentId?: string | null;
+  /** When true, mode switch picks defaultForModes agent (Step 08). */
+  workAgentAuto?: boolean;
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;

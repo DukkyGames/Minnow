@@ -17,6 +17,7 @@ import {
 } from './messages';
 import { syncExpertSelectForActiveChat } from './expert-select';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
+import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
 
@@ -82,6 +83,15 @@ export function renderSidebar(): void {
     nameSpan.className = 'chat-item-name';
     nameSpan.textContent = chat.name;
     titleRow.appendChild(nameSpan);
+
+    const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
+    if (agentAbbrev) {
+      const badge = document.createElement('span');
+      badge.className = 'chat-item-agent-badge';
+      badge.textContent = agentAbbrev;
+      badge.title = `Work agent: ${chat.workAgentId}`;
+      titleRow.appendChild(badge);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'chat-item-actions';
@@ -227,6 +237,7 @@ export function switchChat(id: string): void {
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
+  syncWorkAgentDevFromActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();

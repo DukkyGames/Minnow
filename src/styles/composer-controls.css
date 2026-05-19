@@ -49,6 +49,39 @@
   color: var(--ink-muted, oklch(0.45 0.02 260));
 }
 
+.work-agent-dev.hidden {
+  display: none;
+}
+
+.work-agent-dev #workAgentSelect {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, oklch(0.88 0.02 260));
+  max-width: 10rem;
+}
+
+.work-agent-auto-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  white-space: nowrap;
+}
+
+.chat-item-agent-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-2, oklch(0.94 0.01 260));
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  margin-left: 6px;
+}
+
 @media (max-width: 600px) {
   .composer-controls {
     flex-wrap: wrap;

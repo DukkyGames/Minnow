@@ -69,6 +69,8 @@ export function createEmptyChatObject(modelId: string): Chat {
     name: PLACEHOLDER_CHAT_NAME,
     modelId: modelId || '',
     modeId: DEFAULT_MODE_ID,
+    workAgentId: null,
+    workAgentAuto: true,
     history: [],
     lastStats: null,
     modelInfo: {},
@@ -150,6 +152,11 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     expertSelection: ensureExpertSelection(raw.expertSelection),
     lastResolvedExpertId:
       typeof raw.lastResolvedExpertId === 'string' ? raw.lastResolvedExpertId : null,
+    workAgentId:
+      typeof raw.workAgentId === 'string' && raw.workAgentId.trim()
+        ? raw.workAgentId.trim()
+        : null,
+    workAgentAuto: raw.workAgentAuto !== false,
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},

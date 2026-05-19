@@ -71,6 +71,10 @@ import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
 import { normalizeModeId } from '../chat/modes/types';
+import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
+import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
+import { WorkAgentConfigError } from '../agents/work-agent-types';
+import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import {
   detectLocalServer,
   executeTool,
@@ -417,11 +421,39 @@ export async function sendMessageWithTools(): Promise<void> {
   input.value = '';
   input.style.height = 'auto';
 
+  const activeWorkAgent = resolveActiveWorkAgent(chat);
+  let sendModelId = modelId || chat.modelId;
+  let sendProviderId = chat.providerId;
+
+  try {
+    const sendProvider = await getActiveProvider(chat.providerId);
+    const binding = await resolveWorkAgentBinding(
+      activeWorkAgent,
+      chat,
+      { providerId: sendProvider.id, modelId: sendModelId },
+      {
+        userOverride: activeWorkAgent
+          ? getUserWorkAgentOverride(activeWorkAgent.id)
+          : undefined,
+      },
+    );
+    sendModelId = binding.modelId;
+    sendProviderId = binding.providerId;
+  } catch (err) {
+    if (err instanceof WorkAgentConfigError) {
+      setStatus('err', err.message);
+      return;
+    }
+    throw err;
+  }
+
+  const agentStatusSuffix = activeWorkAgent?.label ? ` (${activeWorkAgent.label})` : '';
+
   setStreaming(true);
   refreshModeSelectorDisabled();
   refreshExpertSelectDisabled();
   setSendLoading(true);
-  setStatus('spin', 'Generating reply…');
+  setStatus('spin', `Generating reply${agentStatusSuffix}…`);
 
   let streamRow = appendStreamingAssistantRow();
   let { wrap, bubble, cursor, streamStatus } = streamRow;
@@ -456,20 +488,24 @@ export async function sendMessageWithTools(): Promise<void> {
   const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
 
   try {
-    const provider = await getActiveProvider(chat.providerId);
+    const provider = await getActiveProvider(sendProviderId);
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
     const activeModeId = normalizeModeId(chat.modeId);
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-      const enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
+      let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
+      if (activeWorkAgent?.allowedTools?.length) {
+        const allow = new Set(activeWorkAgent.allowedTools);
+        enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
+      }
       const messages = buildApiMessages(chat, sysPrompt, {
-        modelId,
+        modelId: sendModelId,
         pendingUserText: text,
         composedSystemPrompt: sysPrompt,
       });
       const body: ChatCompletionBody = {
-        model: modelId || undefined,
+        model: sendModelId || undefined,
         messages,
         temperature: temp,
         max_tokens: maxTok,
@@ -565,7 +601,7 @@ export async function sendMessageWithTools(): Promise<void> {
       if (!fullText) {
         revealProse();
         const fallbackBody: ChatCompletionBody = {
-          model: modelId || undefined,
+          model: sendModelId || undefined,
           messages,
           temperature: temp,
           max_tokens: maxTok,
@@ -577,7 +613,7 @@ export async function sendMessageWithTools(): Promise<void> {
         const fallback = await tryNonStreamingFallback(
           fallbackBody,
           chatSignal,
-          chat.providerId,
+          sendProviderId,
         );
         const fbMsg = fallback.choices?.[0]?.message;
         fullText = extractMessageText(fbMsg);

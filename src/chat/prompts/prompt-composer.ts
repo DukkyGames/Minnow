@@ -84,7 +84,8 @@ function isPartEnabled(
     return Boolean(ctx.expertId);
   }
   if (partId === 'work-agent') {
-    return Boolean(ctx.workAgentId);
+    const id = ctx.workAgentId?.trim();
+    return Boolean(id && id !== 'default');
   }
   if (partId === 'tool-usage') {
     return ctx.enabledToolIds.length > 0;
@@ -177,6 +178,7 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
     user_message: ctx.userMessagePreview ?? '',
     chat_history_summary: includeSummary ? '' : '',
     work_agent: ctx.workAgentId ?? '',
+    work_agent_label: ctx.workAgentLabel?.trim() || ctx.workAgentId || '',
     skill: ctx.skillBody ?? '',
     date: new Date().toISOString().slice(0, 10),
     os: typeof navigator !== 'undefined' ? navigator.platform : 'node',
