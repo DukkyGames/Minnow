@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js && tsx --test test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs"
+    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js && tsx --test test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs"
   },
   "dependencies": {
     "dompurify": "^3.1.6",

@@ -88,7 +88,8 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   mcp/                     # scaffold (Step 18)
   lsp/                     # scaffold (Step 17)
   prompt-configs/          # scaffold (Step 04)
-  prompts/                 # user prompt overrides (Step 04)
+  prompts/                 # user prompt overrides (Step 04; work-agents/ subdir Step 08)
+  work-agents.json         # per-agent provider/model/disabled overrides (Step 08)
   skills/                  # user skills (Step 13)
   backups/                 # scaffold
 ```
@@ -149,6 +150,39 @@ Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `exper
 
 **Tests:** `test/experts/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-06.md`](plans/verification/step-06.md).
 
+### Work Agents (Step 08)
+
+Task-specific agents with per-agent prompts, optional provider/model binding, and composer `work-agent` part.
+
+| Concern | Location |
+|---------|----------|
+| Types + registry | `src/agents/work-agent-types.ts`, `work-agent-registry.ts` |
+| Binding resolver | `src/agents/resolve-work-agent-binding.ts` |
+| Turn resolution | `src/agents/resolve-work-agent.ts`, `set-work-agent.ts` (S09 hook) |
+| Shipped prompts | `src/chat/prompts/work-agents/<id>/agent.{full,lite}.md`, `registry.json` |
+| Prompt API client | `src/agents/work-agent-prompt-api.ts` |
+| Dev UI | `src/ui/work-agent-dev.ts` (`?dev=1` shows `#workAgentSelect`) |
+| Persistence | `Chat.workAgentId`, `Chat.workAgentAuto` in `sessions/state.json` |
+| User overrides | `~/.speedchat/work-agents.json`, `~/.speedchat/prompts/work-agents/<id>/` |
+
+**Built-in ids:** `default`, `builder`, `plan` → `planner`, `research` → `researcher`, plus `reviewer`. Mode auto-map via `defaultForModes` when `workAgentAuto` is true (default).
+
+**Send path:** `resolveActiveWorkAgent()` → `resolveComposedSystemPrompt()` sets `workAgentId` / `workAgentLabel` → `resolveWorkAgentBinding()` picks provider + model **per turn** (does not overwrite `chat.modelId`). Optional `allowedTools` filters the tool list. Status pill: `Generating reply (Builder)…`.
+
+**Legacy system prompt:** `#systemPrompt` textarea remains fallback when composed prompt is empty. Full per-agent editor UI deferred to **Step 20**.
+
+**APIs (`npm start`):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/work-agents` | `{ agents, overrides }` |
+| `GET` | `/api/work-agents/:id` | Single merged agent |
+| `PUT` | `/api/work-agents/:id` | Patch `work-agents.json` override |
+| `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content, source }` |
+| `PUT` | `/api/work-agents/:id/prompt` | Write `~/.speedchat/prompts/work-agents/...` |
+
+**Tests:** `test/work-agents/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
+
 **APIs (`npm start`):**
 
 | Method | Path | Purpose |
@@ -178,6 +212,10 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 | `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
 | `POST` | `/api/config/migrate` | Browser → disk one-time import |
 | `GET/PUT` | `/api/config/file?key=…` | Whitelisted keys only; traversal → **400** |
+
+### Work Agents API (`npm start` only)
+
+Registered in [`server/work-agents/routes.js`](../server/work-agents/routes.js). See **Work Agents (Step 08)** above for paths and behavior.
 
 ### Providers API (`npm start` only)
 
@@ -483,8 +521,9 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 
 1. `await detectConfigServer()` → `runMigrationIfNeeded()` if server mode.
 2. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
+2b. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
 3. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
-4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`.
+4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
 5. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
 6. `applySidebarVisuals()` + `renderSidebar()`.
 7. `await loadProviderSelect()` + `registerProviderHandlers()`.

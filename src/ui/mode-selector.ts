@@ -3,6 +3,8 @@
  */
 
 import { streaming } from '../app-state';
+import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
+import { syncWorkAgentDevFromActiveChat } from './work-agent-dev';
 import { listModes } from '../chat/modes/registry';
 import type { ModeId } from '../chat/modes/types';
 import {
@@ -80,9 +82,14 @@ function selectMode(modeId: ModeId): void {
   if (chat.modeId === modeId) return;
 
   chat.modeId = modeId;
+  if (chat.workAgentAuto !== false) {
+    const agent = getDefaultWorkAgentForMode(modeId);
+    chat.workAgentId = agent?.id ?? null;
+  }
   touchChat(chat);
   scheduleSaveSessions();
   syncModeSelectorFromActiveChat();
+  syncWorkAgentDevFromActiveChat();
 
   const mode = listModes().find((m) => m.id === modeId);
   if (mode) showModeStatusPill(mode.label);

@@ -1,0 +1,39 @@
+/**
+ * Bootstrap Work Agent registry (built-in glob + server overrides).
+ */
+
+import { BUILTIN_RAW } from '../chat/prompts/builtin-globs';
+import registryIndex from '../chat/prompts/work-agents/registry.json';
+import {
+  initBuiltinWorkAgentRegistry,
+  setUserWorkAgentOverrides,
+  setWorkAgentRegistryIndex,
+} from './work-agent-registry';
+import type { WorkAgentUserOverride } from './work-agent-types';
+
+/** Load built-ins and optional ~/.speedchat overrides from API. */
+export async function initWorkAgentSystem(): Promise<void> {
+  setWorkAgentRegistryIndex(registryIndex as { ids: string[] });
+
+  const workAgentRaw: Record<string, string> = {};
+  for (const [globPath, content] of Object.entries(BUILTIN_RAW)) {
+    if (globPath.includes('work-agents/')) {
+      workAgentRaw[globPath] = content;
+    }
+  }
+  initBuiltinWorkAgentRegistry(workAgentRaw);
+
+  try {
+    const res = await fetch('/api/work-agents', { cache: 'no-store' });
+    if (!res.ok) return;
+    const body = (await res.json()) as {
+      agents?: unknown[];
+      overrides?: Record<string, WorkAgentUserOverride>;
+    };
+    if (body.overrides) {
+      setUserWorkAgentOverrides(body.overrides);
+    }
+  } catch {
+    /* Vite-only: built-ins from glob only */
+  }
+}

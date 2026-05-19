@@ -20,6 +20,7 @@ import 'highlight.js/styles/github.min.css';
 
 import { initAttachments, onFileSelected } from './attachments/store';
 import { fetchModels } from './api/models';
+import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
 import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
@@ -62,6 +63,7 @@ import {
   initExpertSelect,
 } from './ui/expert-select';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
+import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { dismissOpenLayers } from './ui/status';
 
 /** Expose inline HTML event handlers on `window` for the static markup. */
@@ -98,6 +100,7 @@ export async function initApp(): Promise<void> {
   refreshConfigStorageBanner();
   await runMigrationIfNeeded();
   await initPromptSystem();
+  await initWorkAgentSystem();
   await loadSessionsFromStorage();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
@@ -105,6 +108,7 @@ export async function initApp(): Promise<void> {
   registerToolHandlers();
   initAttachments();
   initModeSelector();
+  initWorkAgentDevUi();
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
@@ -119,6 +123,7 @@ export async function initApp(): Promise<void> {
   renderChatFromHistory(getActiveChat());
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
+  syncWorkAgentDevFromActiveChat();
   renderSidebar();
 
   window.addEventListener('resize', () => {

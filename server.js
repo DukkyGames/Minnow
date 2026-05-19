@@ -13,6 +13,7 @@ import { createConfigMiddleware } from './server/config/middleware.js';
 import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
 import { ensureSpeedChatLayout, getSpeedChatHome } from './server/config/home.js';
 import { createProviderMiddleware } from './server/providers/routes.js';
+import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 
 const execFileAsync = promisify(execFile);
@@ -801,6 +802,7 @@ async function main() {
           server.middlewares.use(createConfigMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
+          server.middlewares.use(createWorkAgentsMiddleware());
           server.middlewares.use(createToolsMiddleware());
         },
       },
@@ -818,6 +820,7 @@ async function main() {
   console.log(`SpeedChat dev server: ${localUrl}`);
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
+  console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   openBrowser(localUrl);
 }

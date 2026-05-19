@@ -2,6 +2,10 @@
  * Build ComposeContext from app config, tools, and session state.
  */
 
+import {
+  resolveActiveWorkAgent,
+  resolveActiveWorkAgentId,
+} from '../../agents/resolve-work-agent';
 import { listExperts } from '../experts/registry';
 import { resolveExpertForTurn } from '../experts/resolve';
 import { normalizeModeId } from '../modes/types';
@@ -170,11 +174,17 @@ export async function resolveComposedSystemPrompt(
 
   const expertCtx = await resolveExpertContextForSend(chat, routeText);
   updateExpertAutoHint(expertCtx);
+
+  const activeWorkAgent = resolveActiveWorkAgent(chat);
+  const workAgentId = resolveActiveWorkAgentId(chat);
+
   const ctx = await buildComposeContext(chat, {
     ...options,
     overrides: {
       expertId: expertCtx.expertId,
       expertLabel: expertCtx.expertLabel,
+      workAgentId,
+      workAgentLabel: activeWorkAgent?.label ?? null,
       ...options?.overrides,
     },
   });

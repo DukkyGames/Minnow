@@ -86,6 +86,8 @@ export interface ComposeContext {
   /** Human label for {{expert}} interpolation (Step 06). */
   expertLabel?: string | null;
   workAgentId: string | null;
+  /** Human label for {{work_agent_label}} interpolation (Step 08). */
+  workAgentLabel?: string | null;
   skillBody: string | null;
   memoryBlock: string | null;
   enabledToolIds: string[];
@@ -107,6 +109,7 @@ export interface InterpolationVars {
   user_message: string;
   chat_history_summary: string;
   work_agent: string;
+  work_agent_label: string;
   skill: string;
   date: string;
   os: string;
