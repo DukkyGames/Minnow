@@ -86,6 +86,19 @@ const DEFAULT_META = {
     modelId: '',
     fallbackToChatModel: true,
   },
+  selfHealing: {
+    enabled: false,
+    tier1: {
+      maxRestartsPerParentTurn: 2,
+      duplicateToolCallThreshold: 3,
+      sameErrorThreshold: 3,
+      noProgressTurnThreshold: 4,
+    },
+    tier2: {
+      enabled: true,
+      requireScriptApproval: true,
+    },
+  },
   memory: {
     enabled: true,
     maxEntries: 500,

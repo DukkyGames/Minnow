@@ -9,6 +9,7 @@ import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
 import { createSubAgentRunId } from './sub-agent-run-id';
 import { getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentTools } from './sub-agent-tools';
+import { observeSubAgentToolCall } from './self-healing/controller';
 import type {
   AggregateResult,
   CancelSubAgentResult,
@@ -451,6 +452,11 @@ export function recordToolCallForRun(
     name,
     args: JSON.stringify(args),
   });
+  observeSubAgentToolCall(
+    runId,
+    internals.run.type,
+    internals.toolCallLog.map((e) => ({ name: e.name, argsJson: e.args })),
+  );
 }
 
 /** Stable fingerprint hash for repetition detection (Step 19). */
