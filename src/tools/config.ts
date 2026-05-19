@@ -1,12 +1,15 @@
 /**
- * Tool enablement and API keys persisted in localStorage (`speedchat.tools`).
- * Settings drawer rows use `data-tool-id` (SA-9 markup); safe no-op when absent.
+ * Tool enablement and API keys — ~/.speedchat/tools.json when npm start,
+ * else localStorage (`speedchat.tools`). Settings drawer uses `data-tool-id`.
  */
 
+import { getTools, putTools } from '../config/api-client';
+import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
+import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS } from './definitions';
 
-/** localStorage key for tool toggles and optional API keys. */
+/** @deprecated Direct localStorage use — migration read / Vite-only fallback only. */
 export const TOOL_CONFIG_STORAGE_KEY = 'speedchat.tools';
 
 /** Persisted tool settings: per-tool enabled flags and optional keys. */
@@ -17,34 +20,15 @@ export interface ToolConfig {
   };
 }
 
-/** Tool ids enabled on first run (datetime, calc, web, wiki). */
-const DEFAULT_ENABLED_IDS = new Set([
-  'get_datetime',
-  'calculate',
-  'web_search',
-  'wikipedia_search',
-]);
-
 let cachedConfig: ToolConfig | null = null;
+let toolConfigLoaded = false;
 
 /** Whether `npm start` tool server responded to ping (set by client / init). */
 let localServerAvailable = false;
 
-/** Build defaults from the catalog so every tool id has an explicit flag. */
-function defaultToolConfig(): ToolConfig {
-  const enabled: Record<string, boolean> = {};
-  for (const tool of BUILT_IN_TOOLS) {
-    enabled[tool.id] = DEFAULT_ENABLED_IDS.has(tool.id);
-  }
-  return {
-    enabled,
-    keys: { braveApiKey: '' },
-  };
-}
-
 /** Merge stored JSON with defaults; ignore unknown shapes. */
-function normalizeToolConfig(raw: unknown): ToolConfig {
-  const config = defaultToolConfig();
+export function normalizeToolConfig(raw: unknown): ToolConfig {
+  const config = buildDefaultToolConfig();
   if (!raw || typeof raw !== 'object') return config;
 
   const stored = raw as { enabled?: unknown; keys?: unknown };
@@ -68,20 +52,38 @@ function normalizeToolConfig(raw: unknown): ToolConfig {
   return config;
 }
 
-/** Read config from memory or localStorage. */
-export function loadToolConfig(): ToolConfig {
-  if (cachedConfig) return cachedConfig;
+/** Load tool config from API or localStorage (call during initApp). */
+export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
+  if (isServerStorageMode()) {
+    try {
+      cachedConfig = normalizeToolConfig(await getTools());
+      toolConfigLoaded = true;
+      return cachedConfig;
+    } catch {
+      setStatus('err', 'Could not load tool settings from ~/.speedchat');
+    }
+  }
 
   try {
     const raw = localStorage.getItem(TOOL_CONFIG_STORAGE_KEY);
     cachedConfig = raw
       ? normalizeToolConfig(JSON.parse(raw) as unknown)
-      : defaultToolConfig();
+      : buildDefaultToolConfig();
   } catch {
-    cachedConfig = defaultToolConfig();
+    cachedConfig = buildDefaultToolConfig();
   }
 
+  toolConfigLoaded = true;
   return cachedConfig;
+}
+
+/** Read config from memory cache (loads defaults if init skipped). */
+export function loadToolConfig(): ToolConfig {
+  if (cachedConfig) return cachedConfig;
+  if (!toolConfigLoaded) {
+    void loadToolConfigFromStorage();
+  }
+  return buildDefaultToolConfig();
 }
 
 /** Current config (loads from storage on first access). */
@@ -89,9 +91,17 @@ export function getToolConfig(): ToolConfig {
   return loadToolConfig();
 }
 
-/** Persist config and keep the in-memory cache in sync. */
+/** Persist config to API or localStorage. */
 export function saveToolConfig(config: ToolConfig): void {
   cachedConfig = config;
+
+  if (isServerStorageMode()) {
+    void putTools(config).catch(() => {
+      setStatus('err', 'Could not save tool settings to ~/.speedchat');
+    });
+    return;
+  }
+
   try {
     localStorage.setItem(TOOL_CONFIG_STORAGE_KEY, JSON.stringify(config));
   } catch {

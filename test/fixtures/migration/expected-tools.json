@@ -1,0 +1,39 @@
+{
+  "enabled": {
+    "web_search": true,
+    "wikipedia_search": false,
+    "fetch_web_content": false,
+    "rag_web_content": false,
+    "get_datetime": true,
+    "calculate": true,
+    "read_clipboard": false,
+    "write_clipboard": false,
+    "get_system_info": false,
+    "list_directory": false,
+    "read_file": false,
+    "read_file_range": false,
+    "save_file": false,
+    "append_file": false,
+    "insert_at_line": false,
+    "replace_text_in_file": false,
+    "search_in_file": false,
+    "make_directory": false,
+    "move_file": false,
+    "copy_file": false,
+    "delete_path": false,
+    "find_files": false,
+    "get_file_metadata": false,
+    "git_status": false,
+    "git_diff": false,
+    "git_log": false,
+    "git_add": false,
+    "git_commit": false,
+    "git_checkout": false,
+    "execute_command": false,
+    "run_javascript": false,
+    "run_python": false
+  },
+  "keys": {
+    "braveApiKey": "fixture-brave-key-12345"
+  }
+}

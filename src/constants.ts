@@ -21,11 +21,13 @@ export const EMPTY_STATE_HTML =
   '<p class="empty-title">No messages yet</p>' +
   '<p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>';
 
+/** @deprecated Use config API / ~/.speedchat — kept for migration and Vite-only fallback. */
 export const STORAGE_KEY = 'speedchat-sessions-v1';
 export const MAX_CHATS = 50;
 export const SAVE_DEBOUNCE_MS = 300;
 export const PLACEHOLDER_CHAT_NAME = 'New chat';
 export const AUTO_TITLE_MAX_LEN = 40;
+/** @deprecated Use config API / ~/.speedchat — kept for migration and Vite-only fallback. */
 export const PRESET_STORAGE_KEY = 'speedchat.systemPrompt';
 export const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 

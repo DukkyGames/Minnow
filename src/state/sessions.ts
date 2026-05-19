@@ -6,6 +6,10 @@ import {
   STORAGE_KEY,
 } from '../constants';
 import { setSaveTimer, saveTimer } from '../app-state';
+import { getSessions, putSessions } from '../config/api-client';
+import { defaultSessionState } from '../config/defaults';
+import { isServerStorageMode } from '../config/storage-mode';
+import { setStatus } from '../ui/status';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
@@ -16,7 +20,7 @@ import type {
   ToolResultMessage,
 } from '../types';
 
-/** In-memory session blob mirrored to localStorage. */
+/** In-memory session blob mirrored to ~/.speedchat or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
@@ -130,33 +134,42 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   };
 }
 
-function defaultSessionState(): SessionState {
-  const chat = createEmptyChatObject('');
-  return { version: 1, activeId: chat.id, sidebarCollapsed: false, chats: [chat] };
+function parseSessionStateFromJson(parsed: Partial<SessionState> | null): SessionState {
+  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.chats)) {
+    return defaultSessionState();
+  }
+  const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
+  const state: SessionState = {
+    version: 1,
+    activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
+    sidebarCollapsed: !!parsed.sidebarCollapsed,
+    chats: chats.length ? chats : [createEmptyChatObject('')],
+  };
+  if (!state.chats.some((c) => c.id === state.activeId)) {
+    state.activeId = state.chats[0].id;
+  }
+  return state;
 }
 
-export function loadSessionsFromStorage(): void {
+/** Load sessions from API or localStorage (after detectConfigServer). */
+export async function loadSessionsFromStorage(): Promise<void> {
+  if (isServerStorageMode()) {
+    try {
+      const remote = await getSessions();
+      sessionState = parseSessionStateFromJson(remote);
+      return;
+    } catch {
+      setStatus('err', 'Could not load sessions from ~/.speedchat');
+    }
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       sessionState = defaultSessionState();
       return;
     }
-    const parsed = JSON.parse(raw) as Partial<SessionState>;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.chats)) {
-      sessionState = defaultSessionState();
-      return;
-    }
-    const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
-    sessionState = {
-      version: 1,
-      activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
-      sidebarCollapsed: !!parsed.sidebarCollapsed,
-      chats: chats.length ? chats : [createEmptyChatObject('')],
-    };
-    if (!sessionState.chats.some((c) => c.id === sessionState!.activeId)) {
-      sessionState.activeId = sessionState.chats[0].id;
-    }
+    sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
   } catch {
     sessionState = defaultSessionState();
   }
@@ -197,6 +210,15 @@ function trimChatsIfNeeded(): void {
 
 export function saveSessionsNow(): SaveSessionsResult {
   trimChatsIfNeeded();
+  if (!sessionState) return 'ok';
+
+  if (isServerStorageMode()) {
+    void putSessions(sessionState).catch(() => {
+      setStatus('err', 'Could not save sessions to ~/.speedchat');
+    });
+    return 'ok';
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionState));
     return 'ok';

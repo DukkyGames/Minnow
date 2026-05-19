@@ -12,8 +12,8 @@ Each step: **Implementer** → **Verifier** (separate agent) → mark PASS/FAIL.
 
 | Wave | Steps | Implement | Verify | Commit |
 |------|-------|-----------|--------|--------|
-| 0 | 01 | done | **PASS** (verifier 2026-05-19 @ :5179) | done |
-| 1 | 02 | pending | pending | pending |
+| 0 | 01 | done | **PASS** (verifier 2026-05-19 @ :5179) | pending |
+| 1 | 02 | done | **PASS** (verifier 2026-05-19; `npm test` 14+6, build OK, temp `SPEEDCHAT_HOME`, manual @ :5180/:5181) | done |
 | 2 | 03 | pending | pending | pending |
 | 3 | 04–09 | pending | pending | pending |
 | 4 | 10–11 | pending | pending | pending |

@@ -19,7 +19,10 @@ import 'highlight.js/styles/github.min.css';
 import { initAttachments, onFileSelected } from './attachments/store';
 import { fetchModels } from './api/models';
 import { sendMessage } from './chat/messaging';
+import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
+import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
+import { loadToolConfigFromStorage } from './tools/config';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { autoResize, handleKey } from './ui/input';
@@ -81,13 +84,17 @@ function registerServiceWorker(): void {
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
-  loadSessionsFromStorage();
+  await detectConfigServer();
+  refreshConfigStorageBanner();
+  await runMigrationIfNeeded();
+  await loadSessionsFromStorage();
   fillSystemPromptPresetSelect();
-  loadSystemPromptSettings();
+  await loadSystemPromptSettings();
   fillToolsSection();
   registerToolHandlers();
   initAttachments();
   await detectLocalServer();
+  await loadToolConfigFromStorage();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();

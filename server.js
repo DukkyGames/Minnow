@@ -9,6 +9,8 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createConfigMiddleware } from './server/config/middleware.js';
+import { ensureSpeedChatLayout, getSpeedChatHome } from './server/config/home.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -791,18 +793,24 @@ async function main() {
     },
     plugins: [
       {
-        name: 'speedchat-tools-api',
+        name: 'speedchat-api',
         configureServer(server) {
+          server.middlewares.use(createConfigMiddleware());
           server.middlewares.use(createToolsMiddleware());
         },
       },
     ],
   });
 
+  await ensureSpeedChatLayout();
+  const homePath = getSpeedChatHome();
+  console.log(`SpeedChat data: ${homePath}`);
+
   await vite.listen();
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
   console.log(`SpeedChat dev server: ${localUrl}`);
+  console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   openBrowser(localUrl);
 }
