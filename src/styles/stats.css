@@ -1,0 +1,174 @@
+/* ─── STATS STRIP (instrument panel) ─── */
+.stats-strip {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.stats-expand-btn {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .stats-expand-btn:hover {
+    background: var(--surface-elevated);
+  }
+}
+
+.stats-expand-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stats-expand-preview {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+  text-align: right;
+}
+
+.stats-expand-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  transition: transform 0.22s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.stats-strip.is-expanded .stats-expand-chevron {
+  transform: rotate(180deg);
+}
+
+.stats-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(140px, 1.6fr) minmax(100px, 1fr);
+}
+
+.stat-cell {
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+}
+
+.stat-name {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.stat-name .stat-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.9;
+  margin-bottom: 5px;
+}
+
+.stat-cell.cyan .stat-name .stat-icon { color: var(--accent); }
+.stat-cell.green .stat-name .stat-icon { color: var(--success); }
+.stat-cell.yellow .stat-name .stat-icon { color: var(--warning); }
+.stat-cell.red .stat-name .stat-icon { color: var(--danger); }
+
+.stat-val {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-cell.cyan .stat-val { color: var(--accent); }
+.stat-cell.green .stat-val { color: var(--success); }
+.stat-cell.yellow .stat-val { color: var(--warning); }
+.stat-cell.red .stat-val { color: var(--danger); }
+.stat-val.blank { color: var(--border-strong) !important; }
+
+.stat-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 2px;
+  font-weight: 400;
+}
+
+.token-cell {
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.token-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.tbl {
+  width: 72px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.token-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.token-fill {
+  height: 100%;
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.5s var(--ease-out);
+}
+
+.token-fill.prompt { background: var(--warning); }
+.token-fill.completion { background: var(--success); }
+
+.token-count {
+  width: 36px;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.minfo-cell {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.irow { display: flex; gap: 6px; align-items: baseline; }
+.ikey { color: var(--text-muted); flex-shrink: 0; }
+.ival { color: var(--text-muted); }
+.ival.lit { color: var(--accent); }

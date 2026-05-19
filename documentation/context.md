@@ -2,7 +2,35 @@
 
 ## What it is
 
-SpeedChat is a static single-page web client for **LM Studio** (local OpenAI-compatible API). The entire UI and client logic live in [`index.html`](../index.html): HTML, CSS, and JavaScript. There is no build step.
+SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
+
+## Repository layout (Vite)
+
+```
+SpeedChat/
+├── index.html              # Vite shell: markup + <script type="module" src="/src/main.ts">
+├── package.json
+├── tsconfig.json
+├── vite.config.ts          # base: './', outDir: dist
+├── public/                 # Copied verbatim to dist/ (not bundled)
+│   ├── manifest.json       # PWA manifest (start_url: ./)
+│   ├── sw.js               # Service worker (cache: speedchat-v5)
+│   └── icons/              # icon-192.png, icon-512.png
+├── src/
+│   ├── main.ts             # Entry: CSS imports, window handlers, initApp()
+│   ├── types.ts
+│   ├── constants.ts
+│   ├── app-state.ts        # streaming flags, modelCache, abort controllers
+│   ├── state/sessions.ts   # localStorage chat sessions
+│   ├── api/models.ts       # fetchModels, modelCache re-export, resolveModelInfo
+│   ├── api/chat.ts         # sendMessage, SSE/stream helpers, non-streaming fallback
+│   ├── chat/messaging.ts   # Re-exports sendMessage from api/chat
+│   ├── ui/                 # sidebar, settings, stats, messages, layout, status, …
+│   ├── markdown/renderer.ts
+│   └── styles/             # tokens, global, topbar, sidebar, …
+├── dist/                   # Production build (gitignored)
+└── documentation/
+```
 
 ## Multi-chat sessions
 
@@ -45,19 +73,28 @@ Chats can be **deleted** from the sidebar (trash control on each row). A browser
 
 ### Other persisted settings
 
-System prompt preset and textarea content use a separate key: `speedchat.systemPrompt` (see `PRESET_STORAGE_KEY` in `index.html`). Server URL, temperature, and max tokens remain in the DOM / settings drawer and are not part of the session blob unless changed elsewhere later.
+System prompt preset and textarea content use a separate key: `speedchat.systemPrompt` (see `PRESET_STORAGE_KEY` in `src/constants.ts`). Server URL, temperature, and max tokens remain in the DOM / settings drawer and are not part of the session blob unless changed elsewhere later.
 
 ## Service worker
 
-[`sw.js`](../sw.js) caches shell assets for offline/PWA use. The cache name is versioned (e.g. `speedchat-v4`) so bumps invalidate old caches.
+[`public/sw.js`](../public/sw.js) is copied to `dist/sw.js` on build. Cache name **`speedchat-v5`** (bump to invalidate old caches).
+
+| Request | Strategy |
+|---------|----------|
+| `localhost` / `127.0.0.1` (LM Studio API) | **Not intercepted** |
+| Navigation (`mode: navigate`) | **Network-first**, fallback to cached `./index.html` |
+| `index.html`, `manifest.json` | **Cache-first** |
+| Hashed JS/CSS from Vite | **Network only** (default browser fetch) |
+
+Registration: `navigator.serviceWorker.register('sw.js')` in `src/main.ts`.
 
 ## Design context
 
 Product and visual direction live in [`PRODUCT.md`](../PRODUCT.md) and [`DESIGN.md`](../DESIGN.md). Machine-readable tokens also live in [`.impeccable/design.json`](../.impeccable/design.json).
 
-**Current theme (light):** OKLCH near-white `--bg` / `--surface`, graphite `--text`, ink-black `--accent` (logo, send, selection), soft green `--user-bg` for user bubbles, flat assistant bubbles on `--bg` with hairline borders. Semantic green / amber / red only on metrics (stats strip, chips, status dot). JetBrains Mono for instrumentation; system-ui at 14px for UI. No card stacks or gradient chrome; mobile sidebar uses the only routine shadow.
+**Current theme (light):** OKLCH near-white `--bg` / `--surface`, graphite `--text`, ink-black `--accent` (logo, send, selection), soft green `--user-bg` for user bubbles, flat assistant bubbles on `--bg` with hairline borders. Semantic green / amber / red only on metrics (stats strip, chips, status dot). JetBrains Mono for instrumentation (loaded via [`src/styles/fonts.css`](../src/styles/fonts.css), imported in `main.ts` — not from a CDN link in `index.html`); system-ui at 14px for UI. No card stacks or gradient chrome; mobile sidebar uses the only routine shadow.
 
-PWA chrome: `theme-color` and `manifest.json` `theme_color` / `background_color` use `#fefefe` (near `--bg`); iOS status bar uses `default` for dark-on-light system chrome.
+PWA chrome: `theme-color` and `manifest.json` `theme_color` / `background_color` use `#fefefe` (near `--bg`); iOS status bar uses `default` for dark-on-light system chrome. Manifest `start_url` is `./` for relative hosting with `vite.config.ts` `base: './'`.
 
 Structural UI: inline SVG icon buttons, semantic `<header>` top bar, `<main>` chat area, settings drawer with `role="dialog"` and focus trap, collapsible stats strip on narrow viewports.
 
@@ -85,17 +122,24 @@ Structural UI: inline SVG icon buttons, semantic `<header>` top bar, `<main>` ch
 ## Message rendering
 
 - **User** bubbles show **plain text** (`textContent`), including literal markdown if the user types it.
-- **Assistant** bubbles render **GitHub-flavored markdown** in the browser: **marked** parses content, **DOMPurify** sanitizes HTML before `innerHTML`, and **highlight.js** (with the `github` theme) colors fenced ` ```language ` blocks. Inline `` `code` `` and prose (lists, bold, links, tables, blockquotes) use `.msg-bubble--md` styles in `index.html`.
-- **Streaming:** assistant HTML is **debounced** (~100 ms) while SSE deltas arrive so the UI stays responsive; a final synchronous render runs when the stream finishes. The blinking caret is a `.cursor` span re-appended after each render while streaming.
+- **Assistant** bubbles render **GitHub-flavored markdown** in the browser: **marked** parses content, **DOMPurify** sanitizes HTML before `innerHTML`, and **highlight.js** (with the `github` theme) colors fenced code blocks. Inline `` `code` `` and prose (lists, bold, links, tables, blockquotes) use `.msg-bubble--md` styles.
+- **Streaming:** assistant HTML is **debounced** (~100 ms) while SSE deltas arrive; a final synchronous render runs when the stream finishes. The blinking caret is a `.cursor` span re-appended after each render while streaming.
 - **Errors** on the assistant bubble use plain `textContent` again (no markdown) and strip the markdown modifier class so error styling stays predictable.
 
-CDN scripts and the hljs stylesheet are loaded in `index.html` immediately before the main app `<script>` block.
+Dependencies are npm packages (`marked`, `dompurify`, `highlight.js`); the hljs theme is imported in `src/main.ts`.
+
+## Development
+
+- `npm run dev` — Vite dev server with HMR
+- `npm run build` — `tsc` then `vite build` → `dist/`
+- `npm run preview` — serve production build locally
 
 ## Files
 
 | File | Role |
 |------|------|
-| [`index.html`](../index.html) | Full app: UI, presets, sessions, LM Studio client |
-| [`sw.js`](../sw.js) | PWA cache |
-| [`manifest.json`](../manifest.json) | Web app manifest |
+| [`index.html`](../index.html) | Vite HTML shell and static markup |
+| [`src/main.ts`](../src/main.ts) | Application entry point |
+| [`public/sw.js`](../public/sw.js) | PWA service worker |
+| [`public/manifest.json`](../public/manifest.json) | Web app manifest |
 | [`documentation/context.md`](context.md) | This document |

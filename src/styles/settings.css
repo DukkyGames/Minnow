@@ -1,0 +1,132 @@
+/* ─── SETTINGS DRAWER ─── */
+.drawer-overlay,
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  padding: 0;
+  border: none;
+  margin: 0;
+  background: var(--overlay);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.drawer-overlay {
+  z-index: 50;
+}
+
+.drawer-overlay.open,
+.sidebar-backdrop.open {
+  display: block;
+}
+
+.drawer {
+  position: fixed;
+  top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  right: 0;
+  bottom: 0;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Wider panel so settings and long system prompts are easier to use on all viewports */
+  width: min(420px, calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-width: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s var(--ease-out);
+  z-index: 51;
+}
+
+.drawer.open { transform: translateX(0); }
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.drawer-body {
+  padding: 18px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+
+.field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.field input, .field textarea, .field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+  width: 100%;
+}
+
+.field input:focus, .field textarea:focus, .field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.field textarea { resize: vertical; min-height: 70px; line-height: 1.6; }
+
+/* System prompt: primary editing area in settings — taller default and capped max height with scroll */
+#systemPrompt {
+  min-height: 200px;
+  max-height: min(55vh, 520px);
+}
+
+.field-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  margin: -2px 0 2px;
+}
+
+.field-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.drawer-clear-btn {
+  margin-top: auto;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.drawer-clear-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}

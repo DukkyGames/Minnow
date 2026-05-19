@@ -1,0 +1,47 @@
+:root {
+  --bg: oklch(100% 0.00011 271.152);
+  --surface: oklch(100% 0.00011 271.152);
+  --surface-elevated: oklch(0% 0 0 / 0.84);
+  --border: oklch(28.094% 0.00003 271.152);
+  --border-strong: oklch(0.34 0.028 250);
+  --text: oklch(31.714% 0.00004 271.152);
+  --text-muted: oklch(0.62 0.025 250);
+  --text-hover: oklch(100% 0.00011 271.152);
+  --accent: oklch(0% 0 0);
+  --accent-dim: oklch(0% 0 0 / 0);
+  --accent-subtle: oklch(27.685% 0.00003 271.152);
+  --success: oklch(0.72 0.14 155);
+  --warning: oklch(0.8 0.12 85);
+  --danger: oklch(0.62 0.18 15);
+  --overlay: oklch(0.12 0.02 250 / 0.65);
+  --user-bg: oklch(88.769% 0.2563 138.508 / 0.336);
+  --user-bdr: oklch(0.72 0.12 220 / 0.28);
+  --asst-bg: var(--bg);
+  --asst-bdr: var(--border);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Layout breakpoints (content-driven; used in @media below) */
+  --bp-compact: 600px;
+  --bp-mobile: 640px;
+  --bp-wide: 900px;
+  --topbar-h: 52px;
+  --sidebar-w: 240px;
+  --sidebar-rail: 48px;
+  --touch-min: 44px;
+  /* Legacy aliases */
+  --surface2: var(--surface-elevated);
+  --border2: var(--border-strong);
+  --cyan: var(--accent);
+  --cyan-dim: var(--accent-dim);
+  --cyan-glow: var(--accent-subtle);
+  --green: var(--success);
+  --yellow: var(--warning);
+  --red: var(--danger);
+  --muted: var(--text-muted);
+  --text-dim: var(--text-muted);
+
+}

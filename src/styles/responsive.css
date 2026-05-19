@@ -1,0 +1,159 @@
+/* ─── Responsive adapt (mobile, tablet, touch, landscape) ─── */
+
+/* Tablet: stats grid reflows before desktop single row */
+@media (max-width: 899px) {
+  .stats-panel {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .token-cell {
+    grid-column: 1 / -1;
+    border-right: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .minfo-cell {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+  }
+
+  .stat-cell:nth-child(2) { border-right: none; }
+  .stat-cell:nth-child(4) { border-right: none; }
+}
+
+@media (max-width: 600px) {
+  .topbar {
+    gap: 6px;
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  .app-title {
+    display: none;
+  }
+
+  .topbar-sep.mid-hide { display: none; }
+
+  .model-wrap {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .status-pill {
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .status-pill #sText {
+    max-width: 5.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-area {
+    padding: 16px 12px;
+    gap: 16px;
+    /* Keep last message above composer when mobile keyboard opens */
+    scroll-padding-bottom: 12px;
+  }
+
+  #msgInput {
+    font-size: 16px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-expand-btn {
+    display: flex;
+    min-height: var(--touch-min);
+  }
+
+  .stats-panel {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-strip.is-expanded .stats-panel {
+    display: grid;
+  }
+
+  .stat-cell.green,
+  .stat-cell.yellow {
+    display: none;
+  }
+
+  .stats-strip.is-expanded .stat-cell.green,
+  .stats-strip.is-expanded .stat-cell.yellow {
+    display: block;
+  }
+}
+
+@media (min-width: 900px) {
+  .model-wrap { max-width: 380px; }
+}
+
+/* Narrow phones: drop duplicate new-chat control; keep sidebar menu */
+@media (max-width: 380px) {
+  #btnNewChatTop {
+    display: none;
+  }
+
+  .status-pill #sText {
+    max-width: 4rem;
+  }
+
+  #btnRefreshModels {
+    display: none;
+  }
+}
+
+/* Tablet portrait: slightly narrower session panel */
+@media (min-width: 641px) and (max-width: 899px) {
+  .chat-sidebar:not(.collapsed) {
+    width: 200px;
+  }
+}
+
+/* Phone landscape: reclaim vertical space for messages */
+@media (max-height: 500px) and (orientation: landscape) {
+  .chat-area {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    gap: 12px;
+  }
+
+  .empty-state {
+    padding: 20px;
+  }
+
+  .stats-expand-btn {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .input-bar {
+    padding-top: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Coarse pointer: ensure tap targets without changing desktop density */
+@media (pointer: coarse) {
+  .chat-item-row {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .chat-new-wide {
+    min-height: var(--touch-min);
+  }
+
+  .drawer-clear-btn {
+    min-height: var(--touch-min);
+  }
+}
