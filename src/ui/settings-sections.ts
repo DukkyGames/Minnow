@@ -6,6 +6,7 @@ import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import { loadSubAgentConfig, saveSubAgentConfigToServer } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
+import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import {
   deletePromptConfig,
@@ -26,6 +27,11 @@ import {
   loadPromptMetaSettings,
   savePromptMetaSettings,
 } from '../config/prompt-meta';
+import {
+  loadUserRules,
+  MAX_USER_RULES_BYTES,
+  saveUserRules,
+} from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import {
   isProvidersApiAvailable,
@@ -33,10 +39,12 @@ import {
   setActiveProvider,
 } from '../providers/store';
 import {
+  createMemoryEntry,
   deleteMemoryEntry,
   fetchMemoryEntries,
   fetchMemoryStatus,
 } from '../memory/client';
+import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
 import { renderSkillsSettingsSection } from './settings-skills';
 import {
@@ -58,7 +66,9 @@ import {
   isToolConfigReadyForSettingsUi,
   loadToolConfigForSettingsUi,
   loadToolConfigIntoDrawer,
+  resetBuiltInToolPermissionsToDefaults,
   saveToolConfig,
+  setAllBuiltInToolPermissions,
 } from '../tools/config';
 import type { ToolSecurityMeta } from '../config/tool-security-meta';
 import {
@@ -316,6 +326,7 @@ function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void
         ...(activeCustomConfig.parts[partId] ?? DEFAULT_PART_SETTINGS),
         enabled: enable.checked,
       };
+      schedulePromptTokenEstimateRefresh();
     });
     summary.appendChild(enable);
     summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
@@ -333,6 +344,7 @@ function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void
         enabled: enable.checked,
         contentOverride: trimmed ? ta.value : null,
       };
+      schedulePromptTokenEstimateRefresh();
     });
     block.appendChild(ta);
     mount.appendChild(block);
@@ -385,6 +397,7 @@ async function bindPromptingToolbar(): Promise<void> {
       const id = select.value || null;
       await savePromptMetaSettings({ activePromptConfigId: id });
       await renderPromptPartsPanel('custom', id);
+      schedulePromptTokenEstimateRefresh();
     })();
   });
 
@@ -428,6 +441,7 @@ async function bindPromptingToolbar(): Promise<void> {
       };
       const saved = await savePromptConfig(activeCustomConfig);
       setStatus(saved instanceof Error ? 'err' : 'ok', saved instanceof Error ? saved.message : 'Configuration saved');
+      if (!(saved instanceof Error)) schedulePromptTokenEstimateRefresh();
     })();
   });
 
@@ -476,7 +490,7 @@ async function bindPromptingToolbar(): Promise<void> {
 
   document.querySelectorAll('[data-profile-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
-      void syncCustomBarVisibility();
+      void syncCustomBarVisibility().then(() => schedulePromptTokenEstimateRefresh());
     });
   });
 
@@ -488,6 +502,7 @@ async function renderPromptingSection(): Promise<void> {
   await bindPromptingToolbar();
   const meta = await loadPromptMetaSettings();
   await renderPromptPartsPanel(meta.activePromptProfile, meta.activePromptConfigId);
+  schedulePromptTokenEstimateRefresh();
 }
 
 /** Plan granularity control inside Modes → Plan expandable row. */
@@ -528,6 +543,7 @@ async function mountPlanGranularityField(container: HTMLElement): Promise<void> 
   select.onchange = async () => {
     const value = select.value as 'large' | 'medium' | 'small';
     await savePromptMetaSettings({ planGranularity: value });
+    schedulePromptTokenEstimateRefresh();
   };
 }
 
@@ -786,6 +802,21 @@ async function renderToolsSection(): Promise<void> {
     ),
   );
 
+  const bulkActions = document.createElement('div');
+  bulkActions.className = 'settings-tools-bulk-actions';
+  const allFullBtn = document.createElement('button');
+  allFullBtn.type = 'button';
+  allFullBtn.id = 'settingsToolsAllFull';
+  allFullBtn.className = 'settings-inline-btn settings-tools-bulk-all-full';
+  allFullBtn.textContent = 'All full permissions';
+  const resetDefaultsBtn = document.createElement('button');
+  resetDefaultsBtn.type = 'button';
+  resetDefaultsBtn.id = 'settingsToolsResetDefaults';
+  resetDefaultsBtn.className = 'settings-inline-btn settings-tools-bulk-reset';
+  resetDefaultsBtn.textContent = 'Reset to defaults';
+  bulkActions.append(allFullBtn, resetDefaultsBtn);
+  mount.appendChild(bulkActions);
+
   const fsSection = document.createElement('section');
   fsSection.className = 'settings-tool-filesystem';
   const fsHeading = document.createElement('h3');
@@ -892,6 +923,37 @@ async function renderToolsSection(): Promise<void> {
   mount.appendChild(toolsPanel);
 
   fillToolsSection('settingsToolsList');
+
+  allFullBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. File, git, shell, and browser tools can change your project or machine depending on the model’s requests.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
+    );
+    if (!ok) return;
+    void (async () => {
+      try {
+        await setAllBuiltInToolPermissions('full', list);
+        setStatus('ok', 'All tools set to full permission');
+      } catch {
+        setStatus('err', 'Could not save — use npm start');
+      }
+    })();
+  });
+
+  resetDefaultsBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings. Your Brave API key will be kept.',
+    );
+    if (!ok) return;
+    void (async () => {
+      try {
+        await resetBuiltInToolPermissionsToDefaults(list);
+        keyInput.value = getToolConfig().keys.braveApiKey;
+        setStatus('ok', 'Tool permissions reset to defaults');
+      } catch {
+        setStatus('err', 'Could not save — use npm start');
+      }
+    })();
+  });
 
   if (!toolsSectionInitialized) {
     toolsSectionInitialized = true;
@@ -1201,6 +1263,83 @@ async function renderSkillsSection(): Promise<void> {
 }
 
 let memoryListBindingsDone = false;
+let memoryAddFormBound = false;
+
+const MEMORY_BODY_MAX_BYTES = 32 * 1024;
+
+function clearMemoryAddForm(): void {
+  const form = document.getElementById('settingsMemoryAddForm') as HTMLFormElement | null;
+  form?.reset();
+  const err = document.getElementById('settingsMemoryAddError');
+  err?.classList.add('hidden');
+  if (err) err.textContent = '';
+}
+
+function bindMemoryAddForm(): void {
+  if (memoryAddFormBound) return;
+  memoryAddFormBound = true;
+
+  const form = document.getElementById('settingsMemoryAddForm') as HTMLFormElement | null;
+  const errEl = document.getElementById('settingsMemoryAddError');
+  const resetBtn = document.getElementById('settingsMemoryAddReset');
+
+  resetBtn?.addEventListener('click', () => clearMemoryAddForm());
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void (async () => {
+      const titleInput = document.getElementById('settingsMemoryAddTitle') as HTMLInputElement | null;
+      const bodyInput = document.getElementById('settingsMemoryAddBody') as HTMLTextAreaElement | null;
+      const tagsInput = document.getElementById('settingsMemoryAddTags') as HTMLInputElement | null;
+
+      const title = titleInput?.value.trim() ?? '';
+      const body = bodyInput?.value ?? '';
+      const bodyTrimmed = body.trim();
+
+      if (!title || !bodyTrimmed) {
+        if (errEl) {
+          errEl.textContent = 'Title and body are required.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const bodyBytes = new TextEncoder().encode(body).length;
+      if (bodyBytes > MEMORY_BODY_MAX_BYTES) {
+        if (errEl) {
+          errEl.textContent = 'Body exceeds 32 KB. Shorten the text and try again.';
+          errEl.classList.remove('hidden');
+        }
+        setStatus('err', 'Memory body too large (max 32 KB)');
+        return;
+      }
+
+      const tags = parseMemoryTagsInput(tagsInput?.value ?? '');
+      const entry = await createMemoryEntry({
+        title,
+        body,
+        tags,
+        source: 'user',
+      });
+
+      if (!entry) {
+        if (errEl) {
+          errEl.textContent = 'Save failed — start with npm start and try again.';
+          errEl.classList.remove('hidden');
+        }
+        setStatus('err', 'Save failed — use npm start');
+        return;
+      }
+
+      if (errEl) errEl.classList.add('hidden');
+      clearMemoryAddForm();
+      const panel = document.getElementById('settingsMemoryAddPanel') as HTMLDetailsElement | null;
+      if (panel) panel.open = false;
+      setStatus('ok', `Saved memory “${entry.title}”`);
+      await renderMemorySection();
+    })();
+  });
+}
 
 /** Sort pinned first, then most recently updated. */
 function sortMemoryEntries(entries: MemoryEntryWithBody[]): MemoryEntryWithBody[] {
@@ -1308,12 +1447,19 @@ async function renderMemorySection(): Promise<void> {
   const countEl = document.getElementById('settingsMemoryEntryCount');
   const hintEl = document.getElementById('settingsMemoryServerHint');
   const listEl = document.getElementById('settingsMemoryList');
+  const offlineEl = document.getElementById('settingsMemoryOffline');
+  const addPanel = document.getElementById('settingsMemoryAddPanel');
   if (!countEl || !hintEl || !listEl) return;
 
   listEl.replaceChildren();
   bindMemoryListActions(listEl);
+  bindMemoryAddForm();
 
   const status = await fetchMemoryStatus();
+  const online = !!status;
+  offlineEl?.classList.toggle('hidden', online);
+  addPanel?.classList.toggle('hidden', !online);
+
   if (!status) {
     countEl.textContent = 'Entries: —';
     hintEl.textContent = 'Start npm start for memory API';
@@ -1351,6 +1497,61 @@ async function renderMemorySection(): Promise<void> {
   }
 }
 
+let rulesSectionBindingsDone = false;
+
+function bindRulesSection(): void {
+  if (rulesSectionBindingsDone) return;
+  rulesSectionBindingsDone = true;
+
+  const saveBtn = document.getElementById('settingsRulesSave');
+  saveBtn?.addEventListener('click', () => {
+    void (async () => {
+      const enabledEl = document.getElementById('settingsRulesEnabled') as HTMLInputElement | null;
+      const textEl = document.getElementById('settingsRulesText') as HTMLTextAreaElement | null;
+      if (!enabledEl || !textEl) return;
+
+      const text = textEl.value;
+      const bytes = new TextEncoder().encode(text).length;
+      if (bytes > MAX_USER_RULES_BYTES) {
+        setStatus('err', `Rules text exceeds ${MAX_USER_RULES_BYTES} bytes`);
+        return;
+      }
+
+      try {
+        await saveUserRules({
+          version: 1,
+          enabled: enabledEl.checked,
+          text,
+        });
+        const serverUp = await detectConfigServer();
+        setStatus(
+          'ok',
+          serverUp ? 'User rules saved' : 'Saved locally — start npm start to persist to disk',
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Save failed';
+        setStatus('err', message);
+      }
+    })();
+  });
+}
+
+async function renderRulesSection(): Promise<void> {
+  const enabledEl = document.getElementById('settingsRulesEnabled') as HTMLInputElement | null;
+  const textEl = document.getElementById('settingsRulesText') as HTMLTextAreaElement | null;
+  const offlineEl = document.getElementById('settingsRulesOffline');
+  if (!enabledEl || !textEl) return;
+
+  bindRulesSection();
+
+  const rules = await loadUserRules();
+  enabledEl.checked = rules.enabled;
+  textEl.value = rules.text;
+
+  const serverUp = await detectConfigServer();
+  offlineEl?.classList.toggle('hidden', serverUp);
+}
+
 async function renderFeaturesSection(): Promise<void> {
   try {
     const res = await fetch('/api/config/file?key=config.json');
@@ -1382,6 +1583,9 @@ export async function refreshSettingsSection(
       break;
     case 'prompting':
       await renderPromptingSection();
+      break;
+    case 'rules':
+      await renderRulesSection();
       break;
     case 'modes':
       await renderModesSection();

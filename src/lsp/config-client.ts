@@ -4,6 +4,13 @@
 
 import { detectLocalServer } from '../tools/client';
 
+/** Install requirements from defaults (display-only; not probed on disk). */
+export interface LspServerRequirements {
+  package?: string;
+  binary?: string;
+  command?: string;
+}
+
 /** Single server row from GET /api/config/lsp */
 export interface LspServerStatus {
   id: string;
@@ -13,6 +20,9 @@ export interface LspServerStatus {
   extensions: string[];
   builtin: boolean;
   hasCommand: boolean;
+  requirements?: LspServerRequirements;
+  disabledReason?: string;
+  defaultEnabled?: boolean;
 }
 
 /** Merged LSP config from GET /api/config/lsp */
