@@ -28,6 +28,7 @@ describe('widget-iframe', () => {
     assert.match(srcdoc, /requestResize/);
     assert.match(srcdoc, /width=device-width/);
     assert.match(srcdoc, /\.rw-chart/);
+    assert.match(srcdoc, /\.mw-chart/);
     assert.match(srcdoc, /min-height: 220px/);
     assert.match(srcdoc, /ensureChartParentsSized/);
   });

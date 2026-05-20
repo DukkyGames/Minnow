@@ -343,7 +343,7 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 **Bridge (`window.minnow` in iframe):** `sendPrompt(text)` → fills `#msgInput` (user sends); `callLLM({ messages })` → host streams via `postChatCompletions`; `openLink(url)` → confirm + new tab; `requestResize()` → re-measure iframe document height so the host matches widget content (charts should call this from `useLayoutEffect` after layout).
 
-**Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` → 220px tall) and the prelude sizes parents of `.recharts-responsive-container` when height collapses to ~0 — models often omit chart wrapper styles. Widgets should still use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout.
+**Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` / `.mw-chart` → 220px tall) and the prelude sizes chart wrappers plus parents of `.recharts-responsive-container` when height collapses to ~0 (including after async ESM load via `MutationObserver`). Widgets should use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout. **`reef-widget` fences are not passed to highlight.js** — mount runs before hljs so the unknown `reef-widget` language warnings do not spam the console during stream or after mount.
 
 **Tests:** `test/chat/reef/*.test.mts`. Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 

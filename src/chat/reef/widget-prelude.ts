@@ -37,16 +37,22 @@ export const PRELUDE_SCRIPT = `(function () {
     post("resize", { height: h });
   }
 
+  function sizeChartWrapper(el) {
+    if (!el || !el.getBoundingClientRect) return;
+    if (el.getBoundingClientRect().height < 8) {
+      el.style.minHeight = "220px";
+      el.style.height = "220px";
+      if (!el.style.width) el.style.width = "100%";
+    }
+  }
+
   function ensureChartParentsSized() {
+    var wrappers = document.querySelectorAll(".rw-chart, .mw-chart");
+    for (var w = 0; w < wrappers.length; w++) sizeChartWrapper(wrappers[w]);
     var charts = document.querySelectorAll(".recharts-responsive-container");
     for (var i = 0; i < charts.length; i++) {
       var parent = charts[i].parentElement;
-      if (!parent) continue;
-      if (parent.getBoundingClientRect().height < 8) {
-        parent.style.minHeight = "220px";
-        parent.style.height = "220px";
-        if (!parent.style.width) parent.style.width = "100%";
-      }
+      if (parent) sizeChartWrapper(parent);
     }
   }
 
@@ -114,6 +120,13 @@ export const PRELUDE_SCRIPT = `(function () {
     });
     ro.observe(document.documentElement);
     ro.observe(document.body);
+  }
+
+  if (typeof MutationObserver !== "undefined" && document.body) {
+    var chartMo = new MutationObserver(function () {
+      scheduleResizePost();
+    });
+    chartMo.observe(document.body, { childList: true, subtree: true });
   }
 
   window.addEventListener("load", scheduleResizePost);
