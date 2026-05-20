@@ -9,6 +9,7 @@ import {
   fetchMemoryEnabled,
 } from '../memory/client';
 import { detectLocalServer } from '../tools/client';
+import { refreshSettingsSection } from './settings-sections';
 import { setStatus } from './status';
 import type { PromptProfile } from '../chat/prompts/types';
 
@@ -16,24 +17,35 @@ export type SettingsSectionId =
   | 'general'
   | 'prompting'
   | 'providers'
+  | 'modes'
+  | 'experts'
+  | 'work-agents'
+  | 'sub-agents'
   | 'memory'
   | 'features'
   | 'tools'
   | 'mcp'
-  | 'lsp';
+  | 'lsp'
+  | 'skills';
 
 const SECTIONS: SettingsSectionId[] = [
   'general',
   'prompting',
   'providers',
+  'modes',
+  'experts',
+  'work-agents',
+  'sub-agents',
   'memory',
   'features',
   'tools',
   'mcp',
   'lsp',
+  'skills',
 ];
 
 let activeSection: SettingsSectionId = 'general';
+let staticBindingsDone = false;
 
 function getSettingsRoot(): HTMLElement | null {
   return document.getElementById('settingsView');
@@ -66,6 +78,7 @@ function setActiveSection(section: SettingsSectionId): void {
     }
   }
   window.location.hash = `#/settings/${section}`;
+  void refreshSettingsSection(section);
 }
 
 async function saveFeatureToggle(
@@ -92,16 +105,14 @@ async function saveFeatureToggle(
   }
 }
 
-async function bindMemorySection(): Promise<void> {
+function bindStaticSections(): void {
+  if (staticBindingsDone) return;
+  staticBindingsDone = true;
+
   const enableEl = document.getElementById(
     'settingsMemoryEnabled',
   ) as HTMLInputElement | null;
-  if (!enableEl) return;
-
-  const enabled = await fetchMemoryEnabled();
-  enableEl.checked = enabled;
-
-  enableEl.addEventListener('change', async () => {
+  enableEl?.addEventListener('change', async () => {
     try {
       const res = await fetch('/api/config/file?key=config.json');
       if (!res.ok) return;
@@ -126,25 +137,27 @@ async function bindMemorySection(): Promise<void> {
     ?.addEventListener('click', async () => {
       if (!confirm('Clear all memory entries?')) return;
       const ok = await clearMemory(true);
-      setStatus(ok ? 'ok' : 'err', ok ? 'Memory cleared (archived)' : 'Clear failed — use npm start');
+      setStatus(
+        ok ? 'ok' : 'err',
+        ok ? 'Memory cleared (archived)' : 'Clear failed — use npm start',
+      );
     });
 
   document
     .getElementById('settingsMemoryBackup')
     ?.addEventListener('click', async () => {
       const id = await backupMemory();
-      setStatus(id ? 'ok' : 'err', id ? `Memory backup: ${id}` : 'Backup failed — use npm start');
+      setStatus(
+        id ? 'ok' : 'err',
+        id ? `Memory backup: ${id}` : 'Backup failed — use npm start',
+      );
     });
-}
 
-async function bindPromptingSection(): Promise<void> {
-  const meta = await loadPromptMetaSettings();
   const tabs = document.querySelectorAll('[data-profile-tab]');
   tabs.forEach((tab) => {
     const el = tab as HTMLButtonElement;
-    const profile = el.dataset.profileTab as PromptProfile;
-    el.classList.toggle('is-active', profile === meta.activePromptProfile);
     el.addEventListener('click', async () => {
+      const profile = el.dataset.profileTab as PromptProfile;
       await savePromptMetaSettings({ activePromptProfile: profile });
       tabs.forEach((t) =>
         (t as HTMLButtonElement).classList.toggle(
@@ -153,27 +166,14 @@ async function bindPromptingSection(): Promise<void> {
         ),
       );
       setStatus('ok', `Prompt profile: ${profile}`);
+      await refreshSettingsSection('prompting');
     });
   });
-}
 
-async function bindFeaturesSection(): Promise<void> {
   const selfHeal = document.getElementById(
     'settingsSelfHealingEnabled',
   ) as HTMLInputElement | null;
-  if (!selfHeal) return;
-
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (res.ok) {
-      const config = await res.json();
-      selfHeal.checked = config.selfHealing?.enabled === true;
-    }
-  } catch {
-    /* ignore */
-  }
-
-  selfHeal.addEventListener('change', async () => {
+  selfHeal?.addEventListener('change', async () => {
     try {
       const res = await fetch('/api/config/file?key=config.json');
       if (!res.ok) return;
@@ -187,7 +187,10 @@ async function bindFeaturesSection(): Promise<void> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
-      setStatus('ok', selfHeal.checked ? 'Self-healing enabled' : 'Self-healing disabled');
+      setStatus(
+        'ok',
+        selfHeal.checked ? 'Self-healing enabled' : 'Self-healing disabled',
+      );
     } catch {
       setStatus('err', 'Self-healing settings require npm start');
     }
@@ -201,6 +204,39 @@ async function bindFeaturesSection(): Promise<void> {
   });
 }
 
+async function hydrateStaticFields(): Promise<void> {
+  const enableEl = document.getElementById(
+    'settingsMemoryEnabled',
+  ) as HTMLInputElement | null;
+  if (enableEl) {
+    enableEl.checked = await fetchMemoryEnabled();
+  }
+
+  const meta = await loadPromptMetaSettings();
+  document.querySelectorAll('[data-profile-tab]').forEach((tab) => {
+    const el = tab as HTMLButtonElement;
+    el.classList.toggle(
+      'is-active',
+      el.dataset.profileTab === meta.activePromptProfile,
+    );
+  });
+
+  const selfHeal = document.getElementById(
+    'settingsSelfHealingEnabled',
+  ) as HTMLInputElement | null;
+  if (selfHeal) {
+    try {
+      const res = await fetch('/api/config/file?key=config.json');
+      if (res.ok) {
+        const config = await res.json();
+        selfHeal.checked = config.selfHealing?.enabled === true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Open full settings page (hash route). */
 export function openSettings(section?: SettingsSectionId): void {
   const root = getSettingsRoot();
@@ -212,10 +248,9 @@ export function openSettings(section?: SettingsSectionId): void {
   document.querySelector('header.topbar')?.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
 
+  bindStaticSections();
+  void hydrateStaticFields();
   setActiveSection(section ?? parseHashSection());
-  void bindMemorySection();
-  void bindPromptingSection();
-  void bindFeaturesSection();
 }
 
 /** Close settings and return to chat. */

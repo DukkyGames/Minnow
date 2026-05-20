@@ -173,12 +173,13 @@ Persistent notes under `~/.speedchat/memory/` (`index.json` + `entries/<uuid>.md
 | API | Purpose |
 |-----|---------|
 | `GET /api/memory/ping` | Health |
+| `GET /api/memory/status` | `enabled`, `entryCount`, `home` |
 | `GET/POST/PUT/DELETE /api/memory/entries` | CRUD |
 | `POST /api/memory/retrieve` | Keyword-ranked block for injection |
 | `POST /api/memory/clear` | Clear (optional archive) |
 | `POST /api/memory/backup` / `restore` | Folder backup under `backups/` |
 
-**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts`. **Tests:** `npm run test:memory`.
+**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts` (`fetchMemoryStatus`, `retrieveMemoryBlock`, …). **Settings UI:** `#/settings/memory` — toggle store, live entry count via `GET /api/memory/status`, backup/clear actions. **Tests:** `npm run test:memory`; smoke: `npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173`.
 
 ### LSP integration (Step 17)
 
@@ -189,7 +190,7 @@ Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`
 | `get_lsp_diagnostics` | Formatted diagnostics for a relative path |
 | `list_lsp_servers` | Configured servers + running state |
 
-**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `/api/config/lsp`. **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files).
+**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `GET/PUT /api/config/lsp`. **Settings:** `#/settings/lsp` lists servers from the config API with master and per-server toggles (`src/lsp/config-client.ts`). **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files).
 
 ### MCP + Context7 (Step 18)
 
@@ -199,13 +200,16 @@ MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabl
 |-----|---------|
 | `GET /api/mcp/tools` | OpenAI-style defs for enabled servers |
 | `POST /api/mcp/tools/call` | Execute namespaced tool |
-| `GET /api/mcp/servers` | Server list + enabled flags |
+| `GET /api/mcp/servers` | Server list (label, description, enabled, connected) |
+| `PUT /api/mcp/servers/:id/enabled` | Toggle server in `mcp.json` |
+
+**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). Context7 appears with enable toggle; test `fixture` server is hidden in UI.
 
 **Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
 
 ### Self-healing (Step 19)
 
-Off by default (`config.json` → `selfHealing.enabled`). When enabled, duplicate sub-agent tool calls trigger tier-1 **restart** via `restartSubAgent()`.
+Off by default (`config.json` → `selfHealing.enabled`). Toggle in **Settings → Features** (persists via `/api/config/file`). When enabled, duplicate sub-agent tool calls trigger tier-1 **restart** via `restartSubAgent()`. Tier 2 (explorer + skill authoring) is deferred.
 
 | Module | Role |
 |--------|------|
@@ -216,9 +220,9 @@ Off by default (`config.json` → `selfHealing.enabled`). When enabled, duplicat
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/styles/settings-page.css`). Topbar gear opens settings (replaces drawer-only flow for primary navigation). Sections: General, Prompting (Full/Lite/Custom tabs), Providers, Memory, Features, Tools, MCP, LSP.
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
 
-**Tests:** `npm test`, `npm run build`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
+**Tests:** `npm test`, `npm run build`, `test/ui/settings-sections.test.mjs`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
 
 **Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
 

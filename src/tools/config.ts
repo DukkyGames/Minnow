@@ -126,12 +126,14 @@ export function isToolEnabled(id: string): boolean {
 }
 
 /** Sync checkboxes and Brave key field from config; dim server tools when offline. */
-export function loadToolConfigIntoDrawer(): void {
+export function loadToolConfigIntoDrawer(
+  root: ParentNode = document,
+): void {
   if (typeof document === 'undefined') return;
 
   const config = loadToolConfig();
 
-  const rows = document.querySelectorAll<HTMLElement>('[data-tool-id]');
+  const rows = root.querySelectorAll<HTMLElement>('[data-tool-id]');
   for (const row of rows) {
     const id = row.getAttribute('data-tool-id');
     if (!id) continue;
