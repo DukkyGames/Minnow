@@ -13,6 +13,12 @@ const TYPEWRITER_CHARS_PER_TICK = 4;
 /** How long a completed thought stays fully visible before fading into the next one. */
 const THOUGHT_GAP_MS = 1000;
 
+/** Optional hooks so the parent row can sync stream-status labels with reasoning. */
+export interface ThoughtPhaseCallbacks {
+  onThinkingStart?: () => void;
+  onReasoningEnded?: () => void;
+}
+
 /**
  * Controller for one user send: one live bubble at a time, paragraph boundaries
  * finalize a thought; `endReasoningPhase` flushes the open segment when prose starts.
@@ -47,14 +53,24 @@ export class ThoughtBubbleController {
 
   private disposed = false;
 
-  constructor(assistantWrap: HTMLElement) {
+  private phaseCallbacks: ThoughtPhaseCallbacks;
+
+  private thinkingStartNotified = false;
+
+  constructor(assistantWrap: HTMLElement, phaseCallbacks: ThoughtPhaseCallbacks = {}) {
     this.assistantWrap = assistantWrap;
+    this.phaseCallbacks = phaseCallbacks;
   }
 
   /**
    * Point the controller at the active assistant row (e.g. after a tool round
    * replaces the streaming bubble wrapper).
    */
+  /** Reset phase callbacks for a new streaming shell in the same user send (e.g. after tools). */
+  resetStreamPhaseHints(): void {
+    this.thinkingStartNotified = false;
+  }
+
   setAssistantWrap(wrap: HTMLElement): void {
     this.assistantWrap = wrap;
     if (this.stageEl && !this.stageEl.isConnected) {
@@ -86,7 +102,18 @@ export class ThoughtBubbleController {
   /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
-    this.tailWork = this.tailWork.then(() => this.applyReasoningDeltaInQueue(delta));
+    if (!this.thinkingStartNotified) {
+      this.thinkingStartNotified = true;
+      this.phaseCallbacks.onThinkingStart?.();
+    }
+    this.tailWork = this.tailWork
+      .then(() => this.applyReasoningDeltaInQueue(delta))
+      .catch(() => undefined);
+  }
+
+  /** Await all queued reasoning UI work (for tests). */
+  flushPendingWork(): Promise<void> {
+    return this.tailWork;
   }
 
   /**
@@ -108,13 +135,18 @@ export class ThoughtBubbleController {
 
     const carry = parts.pop() ?? '';
     this.stopTypewriter();
+    let boundaryChain: Promise<void> = Promise.resolve();
     for (let i = 0; i < parts.length; i += 1) {
       const seg = parts[i]!.trim();
-      if (seg) this.finalizeSegmentFromBoundary(seg);
+      if (seg) {
+        boundaryChain = boundaryChain.then(() =>
+          this.finalizeSegmentFromBoundary(seg),
+        );
+      }
     }
     this.openBuffer = carry;
     this.displayedLen = 0;
-    return this.tailWork.then(() => {
+    return boundaryChain.then(() => {
       if (this.disposed) return;
       if (this.openBuffer) {
         this.ensureLiveBubble();
@@ -140,6 +172,7 @@ export class ThoughtBubbleController {
     this.stopTypewriter();
     this.teardownStage();
     this.displayedLen = 0;
+    this.phaseCallbacks.onReasoningEnded?.();
   }
 
   /** Drop timers and remove the live stage (abort / error / new send). */
@@ -173,46 +206,43 @@ export class ThoughtBubbleController {
    * Close one paragraph-delimited thought: persist it, show the full text briefly,
    * wait {@link THOUGHT_GAP_MS}, then fade out so the next thought can appear.
    */
-  private finalizeSegmentFromBoundary(text: string): void {
+  private finalizeSegmentFromBoundary(text: string): Promise<void> {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return Promise.resolve();
     this.finalizedSegments.push(trimmed);
-    this.tailWork = this.tailWork.then(
-      () =>
-        new Promise<void>((resolve) => {
-          if (this.disposed) {
-            resolve();
-            return;
-          }
-          this.stopTypewriter();
-          this.ensureLiveBubble();
-          if (this.textEl) {
-            this.textEl.textContent = trimmed;
-          }
+    return new Promise<void>((resolve) => {
+      if (this.disposed) {
+        resolve();
+        return;
+      }
+      this.stopTypewriter();
+      this.ensureLiveBubble();
+      if (this.textEl) {
+        this.textEl.textContent = trimmed;
+      }
 
-          const endGap = (): void => {
-            if (settled) return;
-            settled = true;
-            if (this.gapTimer != null) {
-              clearTimeout(this.gapTimer);
-              this.gapTimer = null;
-            }
-            this.gapSkipResolve = null;
-            if (!this.disposed) {
-              this.fadeOutAndRemoveBubble();
-              this.bubbleEl = null;
-              this.textEl = null;
-              this.cursorEl = null;
-              this.displayedLen = 0;
-            }
-            resolve();
-          };
+      const endGap = (): void => {
+        if (settled) return;
+        settled = true;
+        if (this.gapTimer != null) {
+          clearTimeout(this.gapTimer);
+          this.gapTimer = null;
+        }
+        this.gapSkipResolve = null;
+        if (!this.disposed) {
+          this.fadeOutAndRemoveBubble();
+          this.bubbleEl = null;
+          this.textEl = null;
+          this.cursorEl = null;
+          this.displayedLen = 0;
+        }
+        resolve();
+      };
 
-          let settled = false;
-          this.gapSkipResolve = endGap;
-          this.gapTimer = setTimeout(endGap, THOUGHT_GAP_MS);
-        }),
-    );
+      let settled = false;
+      this.gapSkipResolve = endGap;
+      this.gapTimer = setTimeout(endGap, THOUGHT_GAP_MS);
+    });
   }
 
   private ensureLiveBubble(): void {
@@ -288,7 +318,6 @@ export class ThoughtBubbleController {
 
   private scheduleTypewriter(): void {
     if (this.disposed || !this.textEl) return;
-    const target = this.openBuffer;
     if (this.typeTimer != null) return;
     this.typeTimer = setInterval(() => {
       if (this.disposed || !this.textEl) {

@@ -28,6 +28,19 @@ export function removeAttachment(id: string): void {
   renderAttachPreview();
 }
 
+/** Appends one attachment and refreshes the preview strip. */
+export function pushAttachment(attachment: Attachment): void {
+  pendingAttachments.push(attachment);
+  renderAttachPreview();
+}
+
+/** Replaces the pending list (e.g. after workspace refs are resolved on send). */
+export function replacePendingAttachments(next: Attachment[]): void {
+  pendingAttachments.length = 0;
+  pendingAttachments.push(...next);
+  renderAttachPreview();
+}
+
 /**
  * Processes and appends files from the hidden file input.
  * Oversize and unsupported types become error chips.
@@ -44,6 +57,9 @@ export async function addAttachments(files: File[]): Promise<void> {
 function chipLabel(attachment: Attachment): string {
   if (attachment.kind === 'error') {
     return attachment.error ?? attachment.name;
+  }
+  if (attachment.kind === 'workspace') {
+    return attachment.workspacePath ?? attachment.name;
   }
   if (attachment.largeTextWarning) {
     return `${attachment.name} (large file)`;
@@ -66,6 +82,11 @@ function createAttachChip(attachment: Attachment): HTMLElement {
       thumb.alt = '';
       chip.appendChild(thumb);
     }
+  }
+
+  if (attachment.kind === 'workspace') {
+    chip.classList.add('attach-chip--workspace');
+    chip.title = 'Workspace file — content loads when you send';
   }
 
   if (attachment.kind === 'error') {

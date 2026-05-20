@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-05-20T00:40:04.290Z",
+  "migratedFromLocalStorage": false,
+  "migratedAt": null,
+  "localStorageKeysMigrated": [],
+  "layoutVersion": 1,
+  "activeProviderId": "lm-studio-local",
+  "activePromptProfile": "full",
+  "activePromptConfigId": null,
+  "activeInfoPresetId": "general-assistant",
+  "titles": {
+    "enabled": true,
+    "modelId": "",
+    "providerId": "",
+    "maxTokens": 24,
+    "temperature": 0.3
+  },
+  "terminal": {
+    "open": false,
+    "heightPx": 240,
+    "autoOpenOnAgentRun": true
+  },
+  "browser": {
+    "enabled": true,
+    "defaultUrl": "http://127.0.0.1:9222",
+    "allowNavigate": true,
+    "allowedOriginPatterns": [
+      "http://localhost:*",
+      "http://127.0.0.1:*",
+      "https://localhost:*"
+    ],
+    "screenshotDir": "screenshots"
+  },
+  "uiDesigner": {
+    "providerId": "",
+    "modelId": "",
+    "fallbackToChatModel": true
+  },
+  "selfHealing": {
+    "enabled": false,
+    "tier1": {
+      "maxRestartsPerParentTurn": 2,
+      "duplicateToolCallThreshold": 3,
+      "sameErrorThreshold": 3,
+      "noProgressTurnThreshold": 4
+    },
+    "tier2": {
+      "enabled": true,
+      "requireScriptApproval": true
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "maxEntries": 500,
+    "maxInjectCharsFull": 4000,
+    "maxInjectCharsLite": 800,
+    "retrieveLimit": 20,
+    "defaultTags": []
+  }
+}

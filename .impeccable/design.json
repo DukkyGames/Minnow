@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-05-19T00:00:00.000Z",
-  "title": "Design System: SpeedChat",
+  "title": "Design System: Minnow",
   "extensions": {
     "colorMeta": {
       "bg": {
@@ -141,7 +141,7 @@
   ],
   "narrative": {
     "northStar": "The Bench Instrument",
-    "overview": "SpeedChat reads like a light workbench: white surfaces, ink-black controls, and borders instead of stacked cards. Conversation is the focus; stats are instrumentation underneath. Depth uses borders and subtle gray fills, not decorative shadows.",
+    "overview": "Minnow reads like a light workbench: white surfaces, ink-black controls, and borders instead of stacked cards. Conversation is the focus; stats are instrumentation underneath. Depth uses borders and subtle gray fills, not decorative shadows.",
     "keyCharacteristics": [
       "Light OKLCH neutrals with ink-black accent",
       "Soft green user message wash",

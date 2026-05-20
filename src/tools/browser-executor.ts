@@ -4,6 +4,9 @@
  *
  * web_search: uses Brave when `api_key` is present; without a key, returns a message
  * so the client router (SA-5) can fall back to server `web_search_ddg`.
+ *
+ * Full browser automation (navigate, snapshot, screenshot) lives in server CDP tools
+ * (`browser_*` via `npm start` / POST /api/tools) — not in this executor.
  */
 
 /** Max plain-text bytes returned from fetched web pages. */

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "servers": {
+    "context7": {
+      "enabled": true,
+      "configFile": "servers/context7.json"
+    },
+    "fixture": {
+      "enabled": true,
+      "configFile": "servers/fixture.json"
+    }
+  }
+}

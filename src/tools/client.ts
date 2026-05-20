@@ -4,20 +4,30 @@
  */
 
 import { executeBrowserTool } from './browser-executor';
+import { executeSubAgentTool } from './sub-agent-executor';
+import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
+  ensureToolConfigReady,
   isLocalServerAvailable,
   isToolEnabled,
   loadToolConfig,
   setLocalServerAvailable,
 } from './config';
+import { filterToolsByMode } from '../chat/modes/tool-policy';
+import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import type { ToolExecutionResult } from '../types';
 import {
   BUILT_IN_TOOLS,
   type OpenAIFunctionDefinition,
   type ToolDefinition,
 } from './definitions';
+import { maybeBlockToolForUserApproval } from './permission-gate';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
+
+/** Cached MCP tool definitions from GET /api/mcp/tools. */
+let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
 
 /**
  * Probes the dev server tools API with a short timeout and updates availability in config.
@@ -38,6 +48,11 @@ export async function detectLocalServer(): Promise<boolean> {
     const body = (await response.json()) as { ok?: boolean };
     const available = body?.ok === true;
     setLocalServerAvailable(available);
+    if (available) {
+      await refreshMcpToolCache();
+    } else {
+      cachedMcpToolDefinitions = [];
+    }
     return available;
   } catch {
     setLocalServerAvailable(false);
@@ -52,50 +67,129 @@ export function getLocalServerAvailable(): boolean {
   return isLocalServerAvailable();
 }
 
+/** Optional context for streaming terminal runs and approval UI. */
+export interface ExecuteToolContext {
+  chatId?: string;
+  toolCallId?: string;
+  /** When tools run inside a sub-agent, shown on the approval modal. */
+  subAgentType?: string;
+}
+
+const STREAMING_TOOL_NAMES = new Set([
+  'execute_command',
+  'run_javascript',
+  'run_python',
+]);
+
 /** Plan alias: readable flag after detectLocalServer(). */
 export { getLocalServerAvailable as localServerAvailable };
 
 /**
  * Runs a tool by name: browser executor, server POST, or web_search → web_search_ddg fallback.
  */
+/** Refresh MCP tool definitions when the local server is available. */
+export async function refreshMcpToolCache(): Promise<void> {
+  try {
+    const response = await fetch('/api/mcp/tools');
+    if (!response.ok) {
+      cachedMcpToolDefinitions = [];
+      return;
+    }
+    const body = (await response.json()) as { tools?: OpenAIFunctionDefinition[] };
+    cachedMcpToolDefinitions = Array.isArray(body.tools) ? body.tools : [];
+  } catch {
+    cachedMcpToolDefinitions = [];
+  }
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
-): Promise<string> {
+  context: ExecuteToolContext = {},
+): Promise<ToolExecutionResult> {
+  await ensureToolConfigReady();
+
+  if (name.startsWith('mcp__')) {
+    if (!isLocalServerAvailable()) {
+      return {
+        content:
+          'Error: MCP tools require the local server. Run `npm start` (not Vite-only dev).',
+      };
+    }
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    return executeServerTool(name, args);
+  }
+
+  if (
+    name === 'spawn_sub_agent' ||
+    name === 'cancel_sub_agent' ||
+    name === 'list_sub_agents' ||
+    name === 'get_sub_agent_status'
+  ) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeSubAgentTool(name, args);
+    return { content: text };
+  }
+
   const config = loadToolConfig();
   const enrichedArgs = mergeConfigKeysIntoArgs(name, args, config);
 
   if (name === 'web_search' && !hasBraveApiKey(enrichedArgs, config)) {
+    const blocked = await maybeBlockToolForUserApproval(
+      'web_search',
+      enrichedArgs,
+      context,
+      'web_search',
+    );
+    if (blocked) return blocked;
     if (isLocalServerAvailable()) {
       return executeServerTool('web_search_ddg', {
         query: enrichedArgs.query,
       });
     }
-    return executeBrowserTool(name, enrichedArgs);
+    return { content: await executeBrowserTool(name, enrichedArgs) };
   }
 
   const tool = findToolByFunctionName(name);
   if (!tool) {
-    return `Error: unknown tool "${name}"`;
+    return { content: `Error: unknown tool "${name}"` };
   }
+
+  const permissionId = name === 'web_search_ddg' ? 'web_search' : tool.id;
+  const blocked = await maybeBlockToolForUserApproval(
+    permissionId,
+    enrichedArgs,
+    context,
+    name,
+  );
+  if (blocked) return blocked;
 
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {
-      return (
-        'Error: local tool server is not available. Run `npm start` for file, git, and code tools.'
-      );
+      return {
+        content:
+          'Error: local tool server is not available. Run `npm start` for file, git, and code tools.',
+      };
+    }
+    if (
+      STREAMING_TOOL_NAMES.has(name) &&
+      context.chatId &&
+      typeof enrichedArgs === 'object'
+    ) {
+      return {
+        content: await executeStreamingCodeTool(name, enrichedArgs, context),
+      };
     }
     return executeServerTool(name, enrichedArgs);
   }
 
-  return executeBrowserTool(name, enrichedArgs);
+  return { content: await executeBrowserTool(name, enrichedArgs) };
 }
 
-/**
- * Returns OpenAI function definitions for tools the user enabled and that can run here.
- * Server-required tools are omitted when the local server was not detected.
- */
-export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
+/** User + server gating only (no mode filter). */
+export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
     if (!isToolEnabled(tool.id)) {
       return false;
@@ -104,14 +198,103 @@ export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
       return false;
     }
     return true;
-  }).map((tool) => tool.definition);
+  });
+}
+
+/**
+ * Returns OpenAI function definitions for tools the user enabled and that can run here.
+ * Server-required tools are omitted when the local server was not detected.
+ */
+export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
+  return [
+    ...getEnabledToolCatalogEntries().map((tool) => tool.definition),
+    ...cachedMcpToolDefinitions,
+  ];
+}
+
+/**
+ * Enabled tools after operating mode policy (Step 05).
+ */
+export function getEnabledToolDefinitionsForMode(
+  modeId: ModeId | string | null | undefined,
+): OpenAIFunctionDefinition[] {
+  const normalized = normalizeModeId(
+    typeof modeId === 'string' ? modeId : modeId ?? undefined,
+  );
+  return filterToolsByMode(getEnabledToolCatalogEntries(), normalized).map(
+    (tool) => tool.definition,
+  );
+}
+
+/** Map code tools to process argv for the terminal runner. */
+function mapCodeToolToCommand(
+  name: string,
+  args: Record<string, unknown>,
+): { command: string; argv: string[]; shell?: boolean; label: string } | null {
+  if (name === 'execute_command') {
+    const command = args.command;
+    if (typeof command !== 'string' || !command.trim()) {
+      return null;
+    }
+    const isWin =
+      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
+    return {
+      command: command.trim(),
+      argv: [],
+      shell: isWin,
+      label: command.trim(),
+    };
+  }
+  if (name === 'run_javascript') {
+    const code = args.code;
+    if (typeof code !== 'string' || !code.trim()) {
+      return null;
+    }
+    return { command: 'node', argv: ['-e', code], label: 'node -e …' };
+  }
+  if (name === 'run_python') {
+    const code = args.code;
+    if (typeof code !== 'string' || !code.trim()) {
+      return null;
+    }
+    const isWin =
+      typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent);
+    const bin = isWin ? 'python' : 'python3';
+    return { command: bin, argv: ['-c', code], label: `${bin} -c …` };
+  }
+  return null;
+}
+
+async function executeStreamingCodeTool(
+  name: string,
+  args: Record<string, unknown>,
+  context: ExecuteToolContext,
+): Promise<string> {
+  const mapped = mapCodeToolToCommand(name, args);
+  if (!mapped) {
+    return `Error: ${name} requires valid arguments`;
+  }
+
+  try {
+    return await runCommandWithTerminalStream(mapped.command, {
+      chatId: context.chatId!,
+      source: 'agent',
+      toolCallId: context.toolCallId,
+      displayLabel: mapped.label,
+      args: mapped.argv,
+      shell: mapped.shell,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
 }
 
 /** POST { name, args } to the Node tools middleware. */
 async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   let response: Response;
   try {
     response = await fetch('/api/tools', {
@@ -121,21 +304,40 @@ async function executeServerTool(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error: failed to reach tool server (${message})`;
+    return { content: `Error: failed to reach tool server (${message})` };
   }
 
-  let payload: { result?: string; error?: string };
+  let payload: {
+    result?: string;
+    error?: string;
+    attachments?: ToolExecutionResult['attachments'];
+  };
   try {
-    payload = (await response.json()) as { result?: string; error?: string };
+    payload = (await response.json()) as typeof payload;
   } catch {
-    return `Error: invalid JSON from tool server (HTTP ${response.status})`;
+    return {
+      content: `Error: invalid JSON from tool server (HTTP ${response.status})`,
+    };
   }
 
   if (!response.ok) {
-    return `Error: ${payload.error ?? `tool server HTTP ${response.status}`}`;
+    return {
+      content: `Error: ${payload.error ?? `tool server HTTP ${response.status}`}`,
+    };
   }
 
-  return String(payload.result ?? '');
+  const content = String(payload.result ?? '');
+  const attachments = Array.isArray(payload.attachments)
+    ? payload.attachments.filter(
+        (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
+          a != null &&
+          a.type === 'image' &&
+          typeof a.url === 'string' &&
+          a.mime === 'image/png',
+      )
+    : undefined;
+
+  return attachments?.length ? { content, attachments } : { content };
 }
 
 /** Resolves catalog entry by OpenAI function name. */

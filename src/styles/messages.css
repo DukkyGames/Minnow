@@ -81,6 +81,55 @@
   display: none;
 }
 
+/* Live stream phase label (sibling of hidden prose bubble) */
+.stream-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin: 2px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stream-status__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.stream-status__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.45;
+  animation: stream-dot-pulse 1.1s ease-in-out infinite;
+}
+
+.stream-status__dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.stream-status__dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes stream-dot-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-status__dot {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+
 .msg-label {
   position: absolute;
   width: 1px;
@@ -244,17 +293,27 @@
   margin-bottom: 8px;
 }
 
-/* Streaming cursor */
-.cursor {
+/* Streaming caret (prose only; thought rows use .thought-cursor) */
+.cursor,
+.cursor--prose {
   display: inline-block;
-  width: 8px; height: 14px;
-  background: var(--cyan);
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
   margin-left: 2px;
   vertical-align: text-bottom;
-  animation: cursor-blink .8s step-end infinite;
+  animation: cursor-blink 0.8s step-end infinite;
 }
 
-@keyframes cursor-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor,
+  .cursor--prose {
+    animation: none;
+    opacity: 0.85;
+  }
+}
 
 /* Stats pill under assistant message */
 .msg-stats {
@@ -440,4 +499,14 @@
   overflow-x: auto;
   max-height: 240px;
   overflow-y: auto;
+}
+
+.tool-call-screenshot {
+  display: block;
+  max-width: 100%;
+  max-height: min(480px, 70vh);
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  object-fit: contain;
 }

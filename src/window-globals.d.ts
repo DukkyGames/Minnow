@@ -10,6 +10,7 @@ declare global {
     createChat: () => void;
     fetchModels: () => Promise<void>;
     toggleDrawer: () => void;
+    openSettingsFromTopbar: () => void;
     closeDrawer: () => void;
     onDrawerKeydown: (e: KeyboardEvent) => void;
     clearChat: () => void;
@@ -23,5 +24,8 @@ declare global {
     handleKey: (e: KeyboardEvent) => void;
     autoResize: (el: HTMLTextAreaElement) => void;
     onFileSelected: (event: Event) => void;
+    toggleFileSidebarLayout: () => void;
+    toggleFileSidebarCollapsed: () => void;
+    closeMobileFileSidebar: () => void;
   }
 }

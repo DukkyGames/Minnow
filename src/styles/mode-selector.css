@@ -1,0 +1,70 @@
+/**
+ * Operating mode segmented control above the composer.
+ */
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-height: 28px;
+}
+
+.mode-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.mode-segment {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition:
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mode-segment:hover:not(:disabled):not([aria-checked='true']) {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+  }
+}
+
+.mode-segment[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--text-hover);
+  border-color: var(--accent);
+}
+
+.mode-segment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mode-segment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .mode-segment {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+}

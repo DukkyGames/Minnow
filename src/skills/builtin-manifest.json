@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-05-20T07:55:42.816Z",
+  "skills": [
+    {
+      "id": "browser-automation",
+      "label": "Browser Automation",
+      "description": "Drive Chrome via CDP for login flows, SPAs, and screenshots. Use when fetch tools are insufficient or the user mentions browser automation.",
+      "source": "builtin"
+    },
+    {
+      "id": "code-review",
+      "label": "Code Review",
+      "description": "Review code changes with security, correctness, and style checklist. Use for PR review, diff review, or /code-review.",
+      "source": "builtin"
+    },
+    {
+      "id": "debug-error",
+      "label": "Debug Error",
+      "description": "Trace tool failures and Error messages systematically. Use when tools fail or the user pastes a stack trace.",
+      "source": "builtin"
+    },
+    {
+      "id": "docs-update",
+      "label": "Docs Update",
+      "description": "Update README and documentation/context.md after code changes. Use when docs are stale or user asks to document.",
+      "source": "builtin"
+    },
+    {
+      "id": "explain-code",
+      "label": "Explain Code",
+      "description": "Teach and walk through code clearly. Use when the user wants understanding, not changes.",
+      "source": "builtin"
+    },
+    {
+      "id": "git-commit",
+      "label": "Git Commit",
+      "description": "Write conventional commit messages from staged diff context. Use when the user asks to commit or mentions git commit message.",
+      "source": "builtin"
+    },
+    {
+      "id": "impeccable",
+      "label": "Impeccable",
+      "description": "Design, critique, audit, and refine Minnow UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.",
+      "source": "builtin"
+    },
+    {
+      "id": "refactor-safe",
+      "label": "Refactor Safe",
+      "description": "Small, tested refactors with minimal diff. Use when restructuring without changing behavior.",
+      "source": "builtin"
+    },
+    {
+      "id": "security-review",
+      "label": "Security Review",
+      "description": "OWASP-style security pass on changes or files. Use before merge or for audit requests.",
+      "source": "builtin"
+    },
+    {
+      "id": "ui-designer",
+      "label": "UI Designer",
+      "description": "Impeccable-guided UI audit, screenshot capture, plan or implement Minnow surfaces.",
+      "source": "builtin"
+    },
+    {
+      "id": "write-tests",
+      "label": "Write Tests",
+      "description": "Generate deterministic tests matching project style. Use when adding or fixing test coverage.",
+      "source": "builtin"
+    }
+  ]
+}

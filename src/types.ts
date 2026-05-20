@@ -3,7 +3,9 @@
  * Mirrors structures in `scripts/_extracted-app.js` / legacy `index.html`.
  */
 
-/** Persisted session blob schema version (`speedchat-sessions-v1`). */
+import type { ModeId } from './chat/modes/types';
+
+/** Persisted session blob schema version (`minnow-sessions-v1`). */
 export const SESSION_SCHEMA_VERSION = 1 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
@@ -74,11 +76,26 @@ export interface AssistantToolCallMessage {
   usage?: Usage;
 }
 
+/** Inline image attachment from server tools (e.g. browser_screenshot). */
+export interface ToolImageAttachment {
+  type: 'image';
+  url: string;
+  mime: 'image/png';
+  alt?: string;
+}
+
 /** Tool execution result correlated to `tool_call_id` from the prior assistant turn. */
 export interface ToolResultMessage {
   role: 'tool';
   tool_call_id: string;
   content: string;
+  attachments?: ToolImageAttachment[];
+}
+
+/** Result returned from executeTool (text + optional UI attachments). */
+export interface ToolExecutionResult {
+  content: string;
+  attachments?: ToolImageAttachment[];
 }
 
 export type Message =
@@ -149,10 +166,78 @@ export interface ModelInfo {
   context_length?: number;
 }
 
+/** Per-chat expert picker state (Step 06). */
+export interface ExpertSelection {
+  mode: 'auto' | 'manual';
+  expertId: string | null;
+}
+
+/** One completed terminal run persisted on the chat (Step 10). */
+export interface TerminalRunRecord {
+  id: string;
+  command: string;
+  cwd: string;
+  source: 'user' | 'agent';
+  toolCallId?: string;
+  startedAt: number;
+  finishedAt: number;
+  exitCode: number | null;
+  timedOut: boolean;
+  /** Path relative to ~/.minnow (e.g. logs/terminal/<runId>.log). */
+  logPath: string;
+}
+
+/** Lifecycle values persisted for sub-agent runs on the parent chat. */
+export type PersistedSubAgentStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * Snapshot of a sub-agent run saved on the parent chat when the run reaches a
+ * terminal state (for drawer restore after session reload).
+ */
+export interface PersistedSubAgentRun {
+  runId: string;
+  parentTurnId: string;
+  /** Parent assistant tool_call id when known (optional). */
+  parentToolCallId?: string;
+  type: string;
+  task: string;
+  status: PersistedSubAgentStatus;
+  summary: string;
+  error?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  toolTurns: number;
+  /** Transcript (ApiMessage-shaped JSON); capped when persisting. */
+  messages: unknown[];
+}
+
 export interface Chat {
   id: string;
   name: string;
   modelId: string;
+  /** Optional per-chat provider override (Step 03). */
+  providerId?: string;
+  /** Operating mode for prompt + tool policy (Step 05); default build. */
+  modeId?: ModeId;
+  /** Expert auto/manual selection (Step 06). */
+  expertSelection?: ExpertSelection;
+  /** Last auto-routed expert id (UI hint / debug). */
+  lastResolvedExpertId?: string | null;
+  /** Active Work Agent; null = default / auto from mode (Step 08). */
+  workAgentId?: string | null;
+  /** When true, mode switch picks defaultForModes agent (Step 08). */
+  workAgentAuto?: boolean;
+  /** UI Designer plan vs implement (Step 15); default plan. */
+  uiDesignerMode?: 'plan' | 'implement';
+  /** Per-chat terminal command history (Step 10). */
+  terminalHistory?: TerminalRunRecord[];
+  /** Settled sub-agent transcripts keyed per chat (Step 09 + visibility). */
+  subAgentRuns?: PersistedSubAgentRun[];
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
@@ -173,7 +258,7 @@ export interface SystemPromptPreset {
   text: string;
 }
 
-/** `localStorage` payload under `speedchat.systemPrompt`. */
+/** `localStorage` payload under `minnow.systemPrompt`. */
 export interface SystemPromptSettings {
   presetId: string;
   text: string;

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minnow.local/schemas/prompt-config.json",
+  "type": "object",
+  "required": ["id", "label", "profile", "parts"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-_]{0,63}$",
+      "description": "Filename stem; stable identifier"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "profile": {
+      "const": "custom",
+      "description": "Named configs are always custom profile"
+    },
+    "parts": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "base",
+          "mode",
+          "expert",
+          "tool-usage",
+          "info",
+          "memory",
+          "work-agent",
+          "skill"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["enabled"],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "contentOverride": {
+            "type": ["string", "null"],
+            "description": "null = use shipped/user file; non-null = inline text"
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

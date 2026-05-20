@@ -23,6 +23,15 @@ import { updateStrip } from './stats';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
+import {
+  clearSubAgentCardDomRegistry,
+  renderPersistedSubAgentCardsForChat,
+} from './sub-agent-cards';
+import {
+  attachStreamStatus,
+  type StreamingStatusHandle,
+  type StreamPhase,
+} from './stream-status';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
@@ -99,6 +108,7 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
+  clearSubAgentCardDomRegistry();
   const area = document.getElementById('chatArea')!;
   area.innerHTML = '';
   if (!chat.history.length) {
@@ -107,13 +117,21 @@ export function renderChatFromHistory(chat: Chat): void {
     empty.id = 'emptyState';
     empty.innerHTML = EMPTY_STATE_HTML;
     area.appendChild(empty);
+    renderPersistedSubAgentCardsForChat(chat);
+    scrollBottom();
     return;
   }
-  const toolResultMap = new Map<string, string>();
+  const toolResultMap = new Map<
+    string,
+    { content: string; attachments?: ToolResultMessage['attachments'] }
+  >();
   for (const msg of chat.history) {
     if (msg?.role !== 'tool') continue;
     const toolMsg = msg as ToolResultMessage;
-    toolResultMap.set(toolMsg.tool_call_id, toolMsg.content);
+    toolResultMap.set(toolMsg.tool_call_id, {
+      content: toolMsg.content,
+      attachments: toolMsg.attachments,
+    });
   }
 
   for (const msg of chat.history) {
@@ -138,9 +156,9 @@ export function renderChatFromHistory(chat: Chat): void {
         const argsObj = parseToolArgsForDisplay(tc.function.arguments);
         const toolWrap = renderToolCall(tc.function.name, argsObj);
         area.appendChild(toolWrap);
-        const result = toolResultMap.get(tc.id);
-        if (result !== undefined) {
-          renderToolResult(toolWrap, result);
+        const stored = toolResultMap.get(tc.id);
+        if (stored !== undefined) {
+          renderToolResult(toolWrap, stored.content, stored.attachments);
         }
       }
       continue;
@@ -162,6 +180,7 @@ export function renderChatFromHistory(chat: Chat): void {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
   }
+  renderPersistedSubAgentCardsForChat(chat);
   scrollBottom();
 }
 
@@ -199,6 +218,33 @@ export interface StreamingAssistantRow {
   wrap: HTMLDivElement;
   bubble: HTMLDivElement;
   cursor: HTMLDivElement;
+  streamStatus: StreamingStatusHandle;
+}
+
+/** Update the live stream phase label on an in-flight assistant row. */
+export function setStreamingRowPhase(wrap: HTMLElement, phase: StreamPhase): void {
+  const phaseAttr = wrap.dataset.streamPhase;
+  if (!phaseAttr) return;
+  const status = wrap.querySelector('.stream-status');
+  if (!status) return;
+  const label = status.querySelector('.stream-status__label');
+  if (phase === 'prose' || phase === 'done') {
+    status.classList.add('hidden');
+    status.setAttribute('aria-busy', 'false');
+    wrap.dataset.streamPhase = phase;
+    return;
+  }
+  status.classList.remove('hidden');
+  status.setAttribute('aria-busy', 'true');
+  status.classList.remove('stream-status--generating', 'stream-status--thinking');
+  status.classList.add(
+    phase === 'thinking' ? 'stream-status--thinking' : 'stream-status--generating',
+  );
+  if (label) {
+    label.textContent =
+      phase === 'thinking' ? 'Thinking…' : 'Generating response…';
+  }
+  wrap.dataset.streamPhase = phase;
 }
 
 /**
@@ -220,23 +266,27 @@ export function appendStreamingAssistantRow(): StreamingAssistantRow {
   bubble.className = 'msg-bubble msg-bubble--awaiting';
 
   const cursor = document.createElement('div');
-  cursor.className = 'cursor';
+  cursor.className = 'cursor cursor--prose';
+  cursor.setAttribute('aria-hidden', 'true');
 
   wrap.appendChild(label);
+  const streamStatus = attachStreamStatus(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   document.getElementById('chatArea')!.appendChild(wrap);
   scrollBottom();
-  return { wrap, bubble, cursor };
+  return { wrap, bubble, cursor, streamStatus };
 }
 
 /** Show the assistant prose bubble once streamed content (or fallback text) is ready. */
 export function revealAssistantProseBubble(
   wrap: HTMLElement,
   bubble: HTMLElement,
+  streamStatus?: StreamingStatusHandle,
 ): void {
   wrap.classList.remove('msg--awaiting-prose');
   bubble.classList.remove('msg-bubble--awaiting');
+  streamStatus?.setPhase('prose');
 }
 
 /** Add per-turn metric chips under an assistant bubble. */

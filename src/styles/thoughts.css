@@ -2,8 +2,13 @@
 .thought-stage {
   align-self: flex-start;
   max-width: min(560px, 92%);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   min-height: 0;
+}
+
+/* Coalesce vertical rhythm with .stream-status (6px total below status row) */
+.msg.assistant .stream-status + .thought-stage {
+  margin-top: -2px;
 }
 
 .thought-bubble {

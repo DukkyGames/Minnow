@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360" width="400" height="360">
+  <title>Minnow — stacked lockup</title>
+  <rect x="120" y="20" width="160" height="160" rx="36" fill="#0f0f10"/>
+  <g transform="translate(120, 20) scale(1.6)">
+    <path d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z" fill="#ffffff"/>
+    <path d="M 69 50 L 84 40 L 81 50 L 84 60 Z" fill="#ffffff"/>
+    <circle cx="27" cy="46" r="2.2" fill="#0f0f10"/>
+  </g>
+  <text x="200" y="240" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="500" fill="#0f0f10" letter-spacing="-1.5">Minnow</text>
+  <text x="200" y="272" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400" fill="#6b6b70" letter-spacing="0.5">Tiny by design.</text>
+</svg>

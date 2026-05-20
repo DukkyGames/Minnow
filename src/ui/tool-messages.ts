@@ -2,6 +2,8 @@
  * Tool-call / tool-result bubbles in the chat transcript (SA-8).
  */
 
+import type { ToolImageAttachment } from '../types';
+
 /** Max characters shown in expanded result <pre> blocks. */
 const RESULT_DISPLAY_CAP = 2048;
 
@@ -100,7 +102,11 @@ export function renderToolCall(
 /**
  * Mark a tool-call bubble complete: status glyph, Success/Failed label, result <pre> in body.
  */
-export function renderToolResult(wrap: HTMLElement, result: string): void {
+export function renderToolResult(
+  wrap: HTMLElement,
+  result: string,
+  attachments?: ToolImageAttachment[],
+): void {
   const details = wrap.querySelector('.tool-call-details');
   const summary = wrap.querySelector('.tool-call-summary');
   const statusGlyph = wrap.querySelector('.tool-call-status');
@@ -152,4 +158,16 @@ export function renderToolResult(wrap: HTMLElement, result: string): void {
 
   body.appendChild(resultLabel);
   body.appendChild(resultPre);
+
+  if (attachments?.length) {
+    for (const att of attachments) {
+      if (att.type !== 'image' || !att.url) continue;
+      const img = document.createElement('img');
+      img.className = 'tool-call-screenshot';
+      img.loading = 'lazy';
+      img.alt = att.alt ?? 'Browser screenshot';
+      img.src = att.url;
+      body.appendChild(img);
+    }
+  }
 }

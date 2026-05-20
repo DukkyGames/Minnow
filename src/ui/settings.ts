@@ -1,8 +1,24 @@
+import { PRESET_STORAGE_KEY, SYSTEM_PROMPT_PRESETS } from '../constants';
+import { getSystemPrompt, putSystemPrompt } from '../config/api-client';
+import { defaultSystemPromptSettings } from '../config/defaults';
+import { fetchModels } from '../api/models';
+import { isServerStorageMode } from '../config/storage-mode';
 import {
-  PRESET_STORAGE_KEY,
-  SYSTEM_PROMPT_PRESETS,
-} from '../constants';
-import { onToolToggle, saveBraveApiKeyFromDrawer } from '../tools/config';
+  getActiveProvider,
+  invalidateProviderCache,
+  isProvidersApiAvailable,
+  listProviders,
+  setActiveProvider,
+} from '../providers/store';
+import { setActiveProviderBaseUrl, setStatus } from './status';
+import {
+  isToolPermissionMode,
+  saveBraveApiKeyFromDrawer,
+  setToolPermission,
+  setToolsEnabled,
+  getToolIdsForCategory,
+} from '../tools/config';
+import type { SystemPromptSettings } from '../types';
 import {
   BUILT_IN_TOOLS,
   type ToolCategory,
@@ -21,6 +37,9 @@ const DRAWER_FOCUSABLE =
 const TOOL_CATEGORY_ORDER: ToolCategory[] = [
   'web',
   'utility',
+  'browser',
+  'agents',
+  'lsp',
   'files',
   'git',
   'code',
@@ -29,13 +48,17 @@ const TOOL_CATEGORY_ORDER: ToolCategory[] = [
 const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   web: 'Web',
   utility: 'Utility',
+  browser: 'Browser (CDP)',
+  agents: 'Sub-agents',
   files: 'Files',
   git: 'Git',
   code: 'Code',
+  lsp: 'LSP',
 };
 
 let drawerReturnFocus: HTMLElement | null = null;
 let toolHandlersRegistered = false;
+let providerHandlersRegistered = false;
 
 function systemPromptPresetById(id: string) {
   return SYSTEM_PROMPT_PRESETS.find((p) => p.id === id);
@@ -62,40 +85,67 @@ export function fillSystemPromptPresetSelect(): void {
   }
 }
 
+function currentSystemPromptSettings(): SystemPromptSettings {
+  return {
+    presetId: activeSystemPromptPresetId,
+    text: (document.getElementById('systemPrompt') as HTMLTextAreaElement).value,
+  };
+}
+
+function applySystemPromptSettingsToDom(data: SystemPromptSettings): void {
+  const text = typeof data.text === 'string' ? data.text : '';
+  const presetId = typeof data.presetId === 'string' ? data.presetId : '';
+  const ta = document.getElementById('systemPrompt') as HTMLTextAreaElement;
+  const sel = document.getElementById('systemPromptPreset') as HTMLSelectElement;
+  ta.value = text;
+  const template = getActivePresetText(presetId).trim();
+  if (presetId && template !== '' && text.trim() === template) {
+    setActiveSystemPromptPresetId(presetId);
+    sel.value = presetId;
+  } else {
+    setActiveSystemPromptPresetId('');
+    sel.value = '';
+  }
+}
+
 export function saveSystemPromptSettings(): void {
+  const payload = currentSystemPromptSettings();
+
+  if (isServerStorageMode()) {
+    void putSystemPrompt(payload).catch(() => {
+      setStatus('err', 'Could not save system prompt to ~/.minnow');
+    });
+    return;
+  }
+
   try {
-    localStorage.setItem(
-      PRESET_STORAGE_KEY,
-      JSON.stringify({
-        presetId: activeSystemPromptPresetId,
-        text: (document.getElementById('systemPrompt') as HTMLTextAreaElement).value,
-      })
-    );
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(payload));
   } catch {
     /* ignore quota / private mode */
   }
 }
 
-export function loadSystemPromptSettings(): void {
+export async function loadSystemPromptSettings(): Promise<void> {
+  if (isServerStorageMode()) {
+    try {
+      const data = await getSystemPrompt();
+      applySystemPromptSettingsToDom(data);
+      return;
+    } catch {
+      setStatus('err', 'Could not load system prompt from ~/.minnow');
+    }
+  }
+
   try {
     const raw = localStorage.getItem(PRESET_STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw) as { text?: string; presetId?: string };
-    const text = typeof data.text === 'string' ? data.text : '';
-    const presetId = typeof data.presetId === 'string' ? data.presetId : '';
-    const ta = document.getElementById('systemPrompt') as HTMLTextAreaElement;
-    const sel = document.getElementById('systemPromptPreset') as HTMLSelectElement;
-    ta.value = text;
-    const template = getActivePresetText(presetId).trim();
-    if (presetId && template !== '' && text.trim() === template) {
-      setActiveSystemPromptPresetId(presetId);
-      sel.value = presetId;
-    } else {
-      setActiveSystemPromptPresetId('');
-      sel.value = '';
+    if (!raw) {
+      applySystemPromptSettingsToDom(defaultSystemPromptSettings());
+      return;
     }
+    const data = JSON.parse(raw) as SystemPromptSettings;
+    applySystemPromptSettingsToDom(data);
   } catch {
-    /* ignore corrupt storage */
+    applySystemPromptSettingsToDom(defaultSystemPromptSettings());
   }
 }
 
@@ -136,20 +186,186 @@ export function onSystemPromptPresetChange(): void {
 }
 
 /** Build tool toggle rows from BUILT_IN_TOOLS (single source of truth). */
-export function fillToolsSection(): void {
-  const container = document.getElementById('toolsList');
+/** Show banner when provider API is unavailable (Vite-only). */
+export function refreshProvidersBanner(): void {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('providersServerBanner');
+  if (!banner) return;
+  const hide = isServerStorageMode() && isProvidersApiAvailable();
+  banner.classList.toggle('hidden', hide);
+}
+
+/** Populate provider select from /api/providers. */
+export async function loadProviderSelect(): Promise<void> {
+  const sel = document.getElementById('providerSelect') as HTMLSelectElement | null;
+  if (!sel) return;
+
+  const { providers, activeProviderId } = await listProviders();
+  const enabled = providers.filter((p) => p.enabled !== false);
+  sel.replaceChildren();
+
+  for (const p of enabled) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  }
+
+  if (enabled.some((p) => p.id === activeProviderId)) {
+    sel.value = activeProviderId;
+  } else if (enabled.length > 0) {
+    sel.value = enabled[0].id;
+  }
+
+  const active = await getActiveProvider();
+  setActiveProviderBaseUrl(active.baseUrl);
+
+  const urlInput = document.getElementById('serverUrl') as HTMLInputElement | null;
+  if (urlInput) {
+    const serverMode = isServerStorageMode() && isProvidersApiAvailable();
+    urlInput.readOnly = serverMode;
+    if (!serverMode) {
+      urlInput.removeAttribute('readonly');
+    }
+  }
+
+  refreshProvidersBanner();
+}
+
+/** Wire provider select change → set active + refresh models. */
+export function registerProviderHandlers(): void {
+  if (providerHandlersRegistered) return;
+  providerHandlersRegistered = true;
+
+  const sel = document.getElementById('providerSelect');
+  if (!sel) return;
+
+  sel.addEventListener('change', () => {
+    void onProviderSelectChange();
+  });
+}
+
+async function onProviderSelectChange(): Promise<void> {
+  const sel = document.getElementById('providerSelect') as HTMLSelectElement;
+  const id = sel.value;
+  if (!id) return;
+
+  try {
+    await setActiveProvider(id);
+    invalidateProviderCache();
+    const active = await getActiveProvider(id);
+    setActiveProviderBaseUrl(active.baseUrl);
+    await fetchModels();
+    setStatus('ok', `Active provider: ${active.label}`);
+  } catch {
+    setStatus('err', 'Could not switch provider');
+  }
+}
+
+/** Build a per-category or global "select all" control. */
+function createToolSelectAllControl(
+  scope: 'global' | ToolCategory,
+  labelText: string,
+): HTMLLabelElement {
+  const label = document.createElement('label');
+  label.className = 'tool-select-all';
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  if (scope === 'global') {
+    checkbox.setAttribute('data-select-all', 'global');
+    checkbox.setAttribute('aria-label', 'Enable all tools');
+  } else {
+    checkbox.setAttribute('data-select-all-category', scope);
+    checkbox.setAttribute(
+      'aria-label',
+      `Enable all ${TOOL_CATEGORY_LABELS[scope]} tools`,
+    );
+  }
+
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  label.append(checkbox, text);
+  return label;
+}
+
+/** Handle permission select and bulk checkbox changes on a tools list. */
+function handleToolsListChange(event: Event, list: HTMLElement): void {
+  const target = event.target;
+  if (
+    target instanceof HTMLSelectElement &&
+    target.classList.contains('tool-permission-select')
+  ) {
+    const row = target.closest<HTMLElement>('[data-tool-id]');
+    const id = row?.getAttribute('data-tool-id');
+    if (!id) return;
+    const mode = target.value;
+    if (!isToolPermissionMode(mode)) return;
+    setToolPermission(id, mode, list);
+    return;
+  }
+
+  if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+    return;
+  }
+
+  if (target.getAttribute('data-select-all') === 'global') {
+    const ids = BUILT_IN_TOOLS.map((tool) => tool.id);
+    setToolsEnabled(ids, target.checked, list);
+    return;
+  }
+
+  const category = target.getAttribute('data-select-all-category');
+  if (category) {
+    const ids = getToolIdsForCategory(category as ToolCategory);
+    setToolsEnabled(ids, target.checked, list);
+    return;
+  }
+}
+
+/** Wire change delegation once per tools list element. */
+function bindToolsListChange(list: HTMLElement): void {
+  if (list.dataset.toolsChangeBound === 'true') return;
+  list.dataset.toolsChangeBound = 'true';
+  list.addEventListener('change', (event) => handleToolsListChange(event, list));
+}
+
+export function fillToolsSection(containerId = 'toolsList'): void {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   container.replaceChildren();
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'tool-list-toolbar';
+  toolbar.appendChild(createToolSelectAllControl('global', 'Enable all tools'));
+  container.appendChild(toolbar);
 
   for (const category of TOOL_CATEGORY_ORDER) {
     const tools = BUILT_IN_TOOLS.filter((tool) => tool.category === category);
     if (tools.length === 0) continue;
 
+    const group = document.createElement('section');
+    group.className = 'tool-group';
+    group.setAttribute('data-tool-category', category);
+
+    const head = document.createElement('div');
+    head.className = 'tool-group-head';
+
     const header = document.createElement('h3');
     header.className = 'tool-group-header';
     header.textContent = TOOL_CATEGORY_LABELS[category];
-    container.appendChild(header);
+
+    head.append(header, createToolSelectAllControl(category, 'All'));
+    group.appendChild(head);
+
+    if (category === 'browser') {
+      const hint = document.createElement('p');
+      hint.className = 'tool-group-hint';
+      hint.textContent =
+        'Requires Chrome with --remote-debugging-port and npm start.';
+      group.appendChild(hint);
+    }
 
     for (const tool of tools) {
       const row = document.createElement('div');
@@ -159,32 +375,44 @@ export function fillToolsSection(): void {
         row.setAttribute('data-server-required', '');
       }
 
-      const label = document.createElement('label');
-      label.className = 'tool-toggle-wrap';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'tool-toggle';
-      checkbox.id = `tool-${tool.id}`;
-      checkbox.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+      const controlWrap = document.createElement('div');
+      controlWrap.className = 'tool-permission-wrap';
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'tool-label';
       nameSpan.textContent = tool.label;
 
-      label.appendChild(checkbox);
-      label.appendChild(nameSpan);
+      const select = document.createElement('select');
+      select.className = 'tool-permission-select';
+      select.setAttribute('aria-label', `${tool.label} permission`);
+      select.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+      for (const optDef of [
+        { value: 'off', label: 'Disabled' },
+        { value: 'ask', label: 'Requires permission' },
+        { value: 'full', label: 'Full permission' },
+      ] as const) {
+        const opt = document.createElement('option');
+        opt.value = optDef.value;
+        opt.textContent = optDef.label;
+        select.appendChild(opt);
+      }
+
+      controlWrap.append(nameSpan, select);
 
       const desc = document.createElement('p');
       desc.className = 'tool-desc';
       desc.id = `tool-desc-${tool.id}`;
       desc.textContent = tool.description;
 
-      row.appendChild(label);
+      row.appendChild(controlWrap);
       row.appendChild(desc);
-      container.appendChild(row);
+      group.appendChild(row);
     }
+
+    container.appendChild(group);
   }
+
+  bindToolsListChange(container);
 }
 
 /** Bind tool checkboxes and Brave API key field to config handlers. */
@@ -192,18 +420,14 @@ export function registerToolHandlers(): void {
   if (toolHandlersRegistered) return;
   toolHandlersRegistered = true;
 
-  const list = document.getElementById('toolsList');
-  if (list) {
-    list.addEventListener('change', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
-        return;
-      }
-      const row = target.closest<HTMLElement>('[data-tool-id]');
-      const id = row?.getAttribute('data-tool-id');
-      if (!id) return;
-      onToolToggle(id);
-    });
+  const drawerList = document.getElementById('toolsList');
+  if (drawerList) {
+    bindToolsListChange(drawerList);
+  }
+
+  const settingsList = document.getElementById('settingsToolsList');
+  if (settingsList) {
+    bindToolsListChange(settingsList);
   }
 
   const braveInput = document.getElementById('braveApiKey');

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minnow.local/schemas/expert-meta.json",
+  "title": "ExpertMeta",
+  "type": "object",
+  "required": ["id", "label", "kind", "version"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "label": { "type": "string" },
+    "kind": { "const": "expert" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "priority": { "type": "integer", "default": 0 },
+    "triggers": {
+      "type": "object",
+      "properties": {
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "regex": { "type": "array", "items": { "type": "string" } },
+        "negativeKeywords": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "classifierHint": { "type": "string" },
+    "default": { "type": "boolean" }
+  }
+}
