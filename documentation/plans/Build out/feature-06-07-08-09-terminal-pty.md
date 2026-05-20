@@ -5,7 +5,7 @@
 **Wave:** 6 (dedicated agent; spike first)  
 **Backlog:** [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](../product_backlog_agents_48a41af9.plan.md)  
 **Size:** XL  
-**Status:** Build plan (not yet implemented)  
+**Status:** Implemented (Epic D1)  
 **Depends on:** Step 10 terminal panel + run/SSE API (shipped in codebase; historical build doc `step-10-terminal-panel.md` removed from repo — behavior documented in [`documentation/context.md`](../../context.md) § Terminal panel)  
 **Blocks:** Nothing in backlog; Wave 6 is intentionally isolated from chat/workspace waves  
 

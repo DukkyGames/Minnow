@@ -8,6 +8,7 @@ import './styles/global.css';
 import './styles/topbar.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
+import './styles/message-actions.css';
 import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/settings.css';
@@ -23,6 +24,7 @@ import './styles/workspace-menu.css';
 import './styles/settings-page.css';
 import './styles/tool-approval.css';
 import './styles/sub-agent-drawer.css';
+import './styles/pending-turn-recovery.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -47,7 +49,10 @@ import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
+import { streaming } from './app-state';
+import { flushPendingTurnNow } from './state/pending-turn';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
+import { initPendingTurnRecoveryForChat } from './ui/pending-turn-recovery';
 import { autoResize, handleComposerPrimaryAction, handleKey } from './ui/input';
 import {
   applySidebarVisuals,
@@ -198,6 +203,7 @@ export async function initApp(): Promise<void> {
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
+  initPendingTurnRecoveryForChat(getActiveChat());
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
@@ -217,6 +223,12 @@ export async function initApp(): Promise<void> {
       dismissOpenLayers();
     }
   });
+
+  const flushOnExit = (): void => {
+    if (streaming) flushPendingTurnNow();
+  };
+  window.addEventListener('pagehide', flushOnExit);
+  window.addEventListener('beforeunload', flushOnExit);
 
   const drawerOverlay = document.getElementById('drawerOverlay');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');

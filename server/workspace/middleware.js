@@ -3,7 +3,9 @@
  */
 
 import {
+  buildRecentWorkspaceList,
   getWorkspaceInfo,
+  removeRecentWorkspacePath,
   setWorkspaceRoot,
   validateWorkspacePath,
 } from './root.js';
@@ -11,7 +13,7 @@ import { pickWorkspaceFolder } from './pick-folder.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -54,7 +56,21 @@ export async function handleWorkspaceRequest(req, res, pathname) {
 
   try {
     if (pathname === '/api/workspace' && req.method === 'GET') {
-      sendJson(res, 200, { ok: true, ...getWorkspaceInfo() });
+      const recent = await buildRecentWorkspaceList();
+      sendJson(res, 200, { ok: true, ...getWorkspaceInfo(), recent });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/recent' && req.method === 'DELETE') {
+      const body = await readJsonBody(req);
+      const userPath = body?.path;
+      if (typeof userPath !== 'string' || !userPath.trim()) {
+        sendJson(res, 400, { error: 'path is required' });
+        return true;
+      }
+      await removeRecentWorkspacePath(userPath);
+      const recent = await buildRecentWorkspaceList();
+      sendJson(res, 200, { ok: true, recent });
       return true;
     }
 

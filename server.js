@@ -8,6 +8,8 @@ import { createServer } from 'vite';
 import { spawn, execFile } from 'node:child_process';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from './server/process-runner.js';
 import { createTerminalMiddleware } from './server/terminal/middleware.js';
+import { attachPtyWebSocketServer } from './server/terminal/pty-ws.js';
+import { destroyAllPtySessions } from './server/terminal/pty-host.js';
 import { executeCommandBlocking } from './server/terminal-runner.js';
 import { promisify } from 'node:util';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -792,6 +794,9 @@ async function main() {
       {
         name: 'minnow-api',
         configureServer(server) {
+          if (server.httpServer) {
+            attachPtyWebSocketServer(server.httpServer);
+          }
           server.middlewares.use(createConfigMiddleware());
           server.middlewares.use(createWorkspaceMiddleware());
           server.middlewares.use(createMemoryMiddleware());
@@ -832,6 +837,8 @@ async function main() {
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
+  console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
+  process.on('exit', () => destroyAllPtySessions());
   openBrowser(localUrl);
 }
 
