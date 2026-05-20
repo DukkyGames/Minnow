@@ -1,8 +1,9 @@
 import type { SystemPromptPreset } from './types';
+import { SESSION_SCHEMA_VERSION } from './types';
 import { MINNOW_GLYPH_EMPTY_HTML } from './ui/minnow-glyph';
 
-/** Persisted `SessionState.version` — must match localStorage migration checks. */
-export const SESSION_STATE_VERSION = 1;
+/** Persisted `SessionState.version` — must match `SESSION_SCHEMA_VERSION` in types. */
+export const SESSION_STATE_VERSION = SESSION_SCHEMA_VERSION;
 
 /** SVG chevrons for sidebar collapse control. */
 export const ICON_CHEVRON_LEFT =

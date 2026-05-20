@@ -383,7 +383,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 **Internal tree move (E3 / feature-20):** Drop a file or folder onto a **folder row** in `#fileTreeHost` → [`showMoveConfirmDialog`](../src/ui/file-tree-move-dialog.ts) (`<dialog id="fileTreeMoveDialog">`) → [`movePath`](../src/ui/file-tree-ops.ts) via existing `move_file` (no new REST route). Delegation: [`src/ui/file-tree-dnd.ts`](../src/ui/file-tree-dnd.ts) (`initFileTreeDnD` from `init-file-panel.ts`). Invalid drops (cycle, same parent) use `computeMoveDestination` in `file-tree-path.ts`. Composer drag-and-drop is unchanged (`copy` effect).
 
-**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/file/path-utils.test.mjs` (path + `computeMoveDestination`), `test/file/file-tree-move-dialog.test.mjs`, `test/file/file-tree-dnd.test.mjs`, `test/file/file-tree-ops.test.mts`, `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md), [`documentation/plans/verification/feature-20.md`](plans/verification/feature-20.md).
+**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-tree-layout.test.mjs` (E4 indent constants), `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/file/path-utils.test.mjs` (path + `computeMoveDestination`), `test/file/file-tree-move-dialog.test.mjs`, `test/file/file-tree-dnd.test.mjs`, `test/file/file-tree-ops.test.mts`, `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md), [`documentation/plans/verification/feature-20.md`](plans/verification/feature-20.md), [`documentation/plans/verification/feature-21.md`](plans/verification/feature-21.md).
 
 ### Sub-agent orchestration (Step 09)
 
@@ -655,19 +655,28 @@ Browser (same origin :5173)
 - **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
 - **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking `POST /api/tools` still uses the same runner via `executeCommandBlocking()` (no SSE).
 
-### Terminal panel (Step 10)
+### Terminal panel (Step 10 + Epic D1 PTY)
 
-Docked **bottom panel** in `.main-column` (below `.stats-strip`, after chat + composer + metrics): live command output, per-chat history, user **Run** input. Styling matches the light bench-instrument UI (`terminal.css`). Toggle: `#btnTerminal` or **Ctrl+`**.
+Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus a separate **agent run** stream (SSE) and **Agent runs** sidebar. Toggle: `#btnTerminal` or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS).
+
+**Dual backend:** User shell → `@lydell/node-pty`. Agent `execute_command` / `run_javascript` / `run_python` → unchanged `terminal-runner` + SSE (`runCommandWithTerminalStream`).
 
 | Concern | Location |
 |---------|----------|
-| UI | `src/ui/terminal-panel.ts`, `src/styles/terminal.css`, `#terminalPanel` in `index.html` |
-| Stream client | `src/api/terminal.ts` — `startTerminalRun`, `streamTerminalRun` (fetch + SSE parser) |
-| Tool integration | `executeTool(..., { chatId, toolCallId })` streams `execute_command` / `run_javascript` / `run_python` when server is up |
-| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
-| Persistence | `Chat.terminalHistory` (last **50** runs) in `sessions/state.json`; full logs in `~/.minnow/logs/terminal/<runId>.log` |
+| Panel orchestration | `src/ui/terminal-panel.ts` |
+| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
+| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` |
+| PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
+| Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
+| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun, tabs[], activeTabId, defaultShellProfileId }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
+| Agent persistence | `Chat.terminalHistory` (last **50** runs); logs `~/.minnow/logs/terminal/<runId>.log` |
+| PTY audit | `~/.minnow/logs/terminal/pty-sessions.log` (create/kill only) |
 
-**Tests:** `node test/terminal-stream.test.mjs <baseUrl>` (server must be running). Verification: [`documentation/plans/verification/step-10.md`](plans/verification/step-10.md).
+**Shell profiles (OS-gated):** `powershell`, `cmd`, optional WSL `bash` on Windows; `zsh`/`bash` on macOS; `bash` on Linux. `GET /api/terminal/shell-profiles`.
+
+**Windows:** Prefer `@lydell/node-pty` (prebuilt). Stock `node-pty` needs VS Build Tools + `node-gyp`.
+
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`. Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 

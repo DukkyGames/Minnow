@@ -114,7 +114,7 @@ async function appendLogFile(logPath, text) {
 async function persistTerminalHistory(chatId, record) {
   if (!chatId) return;
 
-  const raw = (await readConfigJson('sessions/state.json')) ?? { version: 1, chats: [] };
+  const raw = (await readConfigJson('sessions/state.json')) ?? { version: 2, chats: [] };
   let state;
   try {
     state = validateSessionState(raw);
@@ -363,7 +363,7 @@ export function cancelRun(runId) {
  * @returns {Promise<TerminalRunRecord[]>}
  */
 export async function getTerminalHistoryForChat(chatId) {
-  const raw = (await readConfigJson('sessions/state.json')) ?? { version: 1, chats: [] };
+  const raw = (await readConfigJson('sessions/state.json')) ?? { version: 2, chats: [] };
   let state;
   try {
     state = validateSessionState(raw);
