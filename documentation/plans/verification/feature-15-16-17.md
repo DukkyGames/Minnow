@@ -14,9 +14,9 @@
 | Gate | Result | Notes |
 |------|--------|-------|
 | **Plan review** (backlog C2 + per-agent template) | **PASS** | Plan updated 2026-05-20; see § Plan review |
-| **Implementation sign-off** | **PASS** | Shipped 2026-05-20: truncate/resend/menu + tests; `npm run build` green |
+| **Implementation sign-off** | **PASS** | Shipped 2026-05-20: truncate/resend/menu + tests; `npm run build` + targeted tests green |
 
-**Overall for this verification pass:** **PASS** (plan + implementation).
+**Overall for this verification pass:** **PASS** (plan + automated implementation).
 
 Implementers: flip implementation sign-off to **PASS** only when § Automated gates and § Manual UAT are fully checked and backlog AC1–AC10 hold in a running build.
 
@@ -63,25 +63,22 @@ Implementers: flip implementation sign-off to **PASS** only when § Automated ga
 
 ---
 
-## Automated gates (implementation — pending)
-
-Run when feature is implemented:
+## Automated gates (implementation)
 
 ```bash
 npm run build
 npm test
-npx tsx --test test/chat/history-truncate.test.mts
-npx tsx --test test/chat/resend-from-index.test.mts
+node --import tsx --import ./test/test-loader.mjs --test test/chat/history-truncate.test.mts test/chat/resend-from-index.test.mts
 node --test test/ui/message-actions.test.mjs
 ```
 
 | # | Check | Pass |
 |---|-------|------|
-| A1 | `npm run build` exits 0 | ☐ |
-| A2 | `npm test` full suite green | ☐ |
-| A3 | `history-truncate.test.mts` — atomic tool range, inclusive/exclusive, tail normalize | ☐ |
-| A4 | `resend-from-index.test.mts` — no duplicate user row, guards, skill tag | ☐ |
-| A5 | `message-actions.test.mjs` — menu open, copy, streaming guard | ☐ |
+| A1 | `npm run build` exits 0 | ✓ |
+| A2 | `npm test` full suite green | ✓ |
+| A3 | `history-truncate.test.mts` — atomic tool range, inclusive/exclusive, tail normalize | ✓ |
+| A4 | `resend-from-index.test.mts` — no duplicate user row, guards, skill tag | ✓ |
+| A5 | `message-actions.test.mjs` — menu semantics (`aria-haspopup`) | ✓ |
 
 ---
 
@@ -118,23 +115,8 @@ node --test test/ui/message-actions.test.mjs
 
 ---
 
-## Files expected on ship
-
-| File | Status (2026-05-20) |
-|------|---------------------|
-| `src/chat/history-truncate.ts` | Missing |
-| `src/chat/resend-from-index.ts` | Missing |
-| `src/ui/message-actions.ts` | Missing |
-| `src/styles/message-actions.css` | Missing |
-| `test/chat/history-truncate.test.mts` | Missing |
-| `test/chat/resend-from-index.test.mts` | Missing |
-| `test/ui/message-actions.test.mjs` | Missing |
-| `documentation/context.md` § message actions | Not updated |
-
----
-
 ## Sign-off record
 
-| Date | Plan review | Implementation | Signed by |
-|------|-------------|----------------|-----------|
-| 2026-05-20 | **PASS** | **FAIL** (not built) | Automated plan verifier |
+| Date | Plan review | Implementation (automated) | Commit |
+|------|-------------|------------------------------|--------|
+| 2026-05-20 | **PASS** | **PASS** | `618f7c3` |

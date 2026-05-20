@@ -4,7 +4,7 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
-**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test`.
+**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `node --import tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
 
 ## What it is
 

@@ -38,5 +38,5 @@ Includes:
 
 | Role | PASS/FAIL | Date | Notes |
 |------|-----------|------|-------|
-| Implementer | | | |
-| Verifier | | | |
+| Automated | **PASS** | 2026-05-20 | `file-tree-layout.test.mjs`, `file-tree-boot.test.mjs`; commit `17eb130` |
+| Manual UAT | Pending | | M1–M5 |
