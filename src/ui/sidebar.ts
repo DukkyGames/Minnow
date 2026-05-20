@@ -15,8 +15,12 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
+import { syncExpertSelectForActiveChat } from './expert-select';
+import { syncModeSelectorFromActiveChat } from './mode-selector';
+import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
+import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 
 /** Keep model picker aligned with the active chat's stored model id. */
 export function syncModelSelectForActiveChat(): void {
@@ -80,6 +84,15 @@ export function renderSidebar(): void {
     nameSpan.className = 'chat-item-name';
     nameSpan.textContent = chat.name;
     titleRow.appendChild(nameSpan);
+
+    const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
+    if (agentAbbrev) {
+      const badge = document.createElement('span');
+      badge.className = 'chat-item-agent-badge';
+      badge.textContent = agentAbbrev;
+      badge.title = `Work agent: ${chat.workAgentId}`;
+      titleRow.appendChild(badge);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'chat-item-actions';
@@ -223,6 +236,10 @@ export function switchChat(id: string): void {
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncExpertSelectForActiveChat();
+  syncWorkAgentDevFromActiveChat();
+  void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();
@@ -242,6 +259,9 @@ export function createChat(): void {
   touchChat(chat);
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncExpertSelectForActiveChat();
+  void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();

@@ -2,8 +2,8 @@
  * Attachment shapes for the composer preview and API payload builders (SA-13).
  */
 
-/** How an attachment is represented after `processFile`. */
-export type AttachmentKind = 'image' | 'text' | 'pdf' | 'error';
+/** How an attachment is represented after `processFile` or workspace drag-drop. */
+export type AttachmentKind = 'image' | 'text' | 'pdf' | 'error' | 'workspace';
 
 /** One pending file in the composer strip before send. */
 export interface Attachment {
@@ -24,4 +24,6 @@ export interface Attachment {
   error?: string;
   /** True when text content exceeds the soft 32KB warning threshold. */
   largeTextWarning?: boolean;
+  /** Project-relative path for workspace reference chips (loaded on send). */
+  workspacePath?: string;
 }

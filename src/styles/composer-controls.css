@@ -1,0 +1,133 @@
+/**
+ * Composer control strip: expert select + shared layout with mode selector.
+ */
+
+.composer-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-control label.composer-control-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  white-space: nowrap;
+}
+
+#expertSelect {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  max-width: 12rem;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #expertSelect:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+}
+
+#expertSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+#expertSelect:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.expert-auto-hint {
+  font-size: 0.72rem;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  white-space: nowrap;
+}
+
+.expert-auto-hint.hidden {
+  display: none;
+}
+
+.experts-id-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.8rem;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+}
+
+.work-agent-dev.hidden {
+  display: none;
+}
+
+.work-agent-dev #workAgentSelect {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  max-width: 10rem;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .work-agent-dev #workAgentSelect:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+}
+
+.work-agent-dev #workAgentSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.work-agent-auto-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  white-space: nowrap;
+}
+
+.chat-item-agent-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-2, oklch(0.94 0.01 260));
+  color: var(--ink-muted, oklch(0.45 0.02 260));
+  margin-left: 6px;
+}
+
+@media (max-width: 600px) {
+  .composer-controls {
+    flex-wrap: wrap;
+  }
+
+  #expertSelect {
+    max-width: 100%;
+    flex: 1 1 8rem;
+  }
+}

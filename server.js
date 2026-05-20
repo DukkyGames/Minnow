@@ -1,24 +1,50 @@
 /**
- * SpeedChat dev server: Vite + /api/tools middleware for LM Studio tool execution.
+ * Minnow dev server: Vite + /api/tools middleware for LM Studio tool execution.
  * SA-4: full executeServerTool handlers (files, git, code, web, notifications).
  * SA-14: read_document (PDF text extraction via optional pdf-parse).
  */
 
 import { createServer } from 'vite';
 import { spawn, execFile } from 'node:child_process';
+import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from './server/process-runner.js';
+import { createTerminalMiddleware } from './server/terminal/middleware.js';
+import { executeCommandBlocking } from './server/terminal-runner.js';
 import { promisify } from 'node:util';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createConfigMiddleware } from './server/config/middleware.js';
+import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
+import { ensureMinnowLayout, getMinnowHome } from './server/config/home.js';
+import { createProviderMiddleware } from './server/providers/routes.js';
+import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
+import { createSkillsMiddleware } from './server/skills/middleware.js';
+import { ensureProviderRegistry } from './server/providers/store.js';
+import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
+import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
+import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
+import { toolLoadImpeccableContext } from './server/impeccable/load-impeccable-context.js';
+import { toolSaveMemory } from './server/tools/memory-tools.js';
+import { createMemoryMiddleware } from './server/memory/middleware.js';
+import { initMemoryApi } from './server/memory/routes.js';
+import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
+import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
+import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
+import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
+import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
+import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
-const PROJECT_ROOT = process.cwd();
+const APP_ROOT = getAppRoot();
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
-const COMMAND_TIMEOUT_MS = 30_000;
 const FIND_FILES_MAX = 500;
 const DDG_MAX_SNIPPETS = 8;
 /** Max decoded PDF size for read_document (aligns with attachment limit). */
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
+/** Per-request flag: allow paths outside workspace when config grants full filesystem access. */
+const pathAccessStore = new AsyncLocalStorage();
 
 /** Normalize slashes for consistent prefix checks on Windows. */
 function normalizePath(p) {
@@ -26,7 +52,8 @@ function normalizePath(p) {
 }
 
 /**
- * Resolve a user-supplied path under PROJECT_ROOT unless TOOLS_ALLOW_ALL_PATHS=1.
+ * Resolve a user-supplied path under the workspace root unless full access is allowed
+ * (TOOLS_ALLOW_ALL_PATHS=1 or persisted toolSecurity.filesystemAccess === 'full').
  * Returns absolute path string, or throws with a message suitable for tool results.
  */
 function resolveSafePath(userPath) {
@@ -34,15 +61,19 @@ function resolveSafePath(userPath) {
     throw new Error('Path is required');
   }
 
+  const workspaceRoot = getWorkspaceRoot();
   const resolved = path.isAbsolute(userPath)
     ? path.resolve(userPath)
-    : path.resolve(PROJECT_ROOT, userPath);
+    : path.resolve(workspaceRoot, userPath);
 
-  if (ALLOW_ALL_PATHS) {
+  const store = pathAccessStore.getStore();
+  const allowOutside = ALLOW_ALL_PATHS || store?.allowOutsideWorkspace === true;
+
+  if (allowOutside) {
     return resolved;
   }
 
-  const rootNorm = normalizePath(PROJECT_ROOT);
+  const rootNorm = normalizePath(workspaceRoot);
   const resolvedNorm = normalizePath(resolved);
 
   if (resolvedNorm === rootNorm || resolvedNorm.startsWith(`${rootNorm}/`)) {
@@ -50,13 +81,13 @@ function resolveSafePath(userPath) {
   }
 
   throw new Error(
-    `Path "${userPath}" resolves outside the project directory. Set TOOLS_ALLOW_ALL_PATHS=1 to allow.`,
+    `Path "${userPath}" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`,
   );
 }
 
-/** Path relative to project root for display in tool output. */
+/** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
-  const rel = path.relative(PROJECT_ROOT, absPath);
+  const rel = path.relative(getWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
 
@@ -73,69 +104,10 @@ function stripHtml(html) {
     .trim();
 }
 
-/** Run a subprocess; collect stdout/stderr; enforce timeout. */
-function runProcess(command, args, options = {}) {
-  const { cwd = PROJECT_ROOT, timeout = COMMAND_TIMEOUT_MS, env, shell = false } = options;
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      shell,
-      windowsHide: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, timeout);
-
-    child.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (timedOut) {
-        reject(new Error(`Command timed out after ${timeout / 1000}s`));
-        return;
-      }
-      resolve({ code: code ?? 1, stdout, stderr });
-    });
-  });
-}
-
-/** Format process output for tool results. */
-function formatProcessOutput(label, { code, stdout, stderr }) {
-  const parts = [`${label} (exit ${code})`];
-  if (stdout.trim()) {
-    parts.push(`stdout:\n${stdout.trimEnd()}`);
-  }
-  if (stderr.trim()) {
-    parts.push(`stderr:\n${stderr.trimEnd()}`);
-  }
-  if (!stdout.trim() && !stderr.trim()) {
-    parts.push('(no output)');
-  }
-  return parts.join('\n\n');
-}
-
 /** Run git with arguments in the project root. */
 async function runGit(args) {
   try {
-    const result = await runProcess('git', args, { cwd: PROJECT_ROOT });
+    const result = await runProcess('git', args, { cwd: getWorkspaceRoot() });
     return formatProcessOutput(`git ${args.join(' ')}`, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -471,13 +443,11 @@ async function toolExecuteCommand(args) {
   }
 
   try {
-    const shell = process.platform === 'win32';
-    const result = await runProcess(command, [], {
-      cwd: PROJECT_ROOT,
-      timeout: COMMAND_TIMEOUT_MS,
-      shell,
+    return await executeCommandBlocking({
+      command,
+      cwd: getWorkspaceRoot(),
+      shell: process.platform === 'win32',
     });
-    return formatProcessOutput(command, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
@@ -492,7 +462,7 @@ async function toolRunJavascript(args) {
 
   try {
     const result = await runProcess('node', ['-e', code], {
-      cwd: PROJECT_ROOT,
+      cwd: getWorkspaceRoot(),
       timeout: COMMAND_TIMEOUT_MS,
     });
     return formatProcessOutput('node -e', result);
@@ -514,7 +484,7 @@ async function toolRunPython(args) {
   for (const bin of candidates) {
     try {
       const result = await runProcess(bin, ['-c', code], {
-        cwd: PROJECT_ROOT,
+        cwd: getWorkspaceRoot(),
         timeout: COMMAND_TIMEOUT_MS,
       });
       return formatProcessOutput(`${bin} -c`, result);
@@ -530,7 +500,7 @@ async function toolRunPython(args) {
 
 /** Desktop notification via OS-native commands. */
 async function toolSendNotification(args) {
-  const title = String(args?.title ?? 'SpeedChat');
+  const title = String(args?.title ?? 'Minnow');
   const message = String(args?.message ?? args?.body ?? '');
   if (!message) {
     return 'Error: message is required';
@@ -663,6 +633,19 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
+  run_impeccable: (args) => toolRunImpeccable(args, getWorkspaceRoot()),
+  load_impeccable_context: () =>
+    toolLoadImpeccableContext(APP_ROOT, getWorkspaceRoot()),
+  get_lsp_diagnostics: async (args) => {
+    const { getLspDiagnostics } = await import('./server/lsp/manager.js');
+    return getLspDiagnostics(String(args?.path ?? ''));
+  },
+  list_lsp_servers: async () => {
+    const { listLspServers } = await import('./server/lsp/manager.js');
+    return JSON.stringify(await listLspServers(), null, 2);
+  },
+  save_memory: toolSaveMemory,
+  ...BROWSER_TOOL_HANDLERS,
 };
 
 /**
@@ -670,16 +653,28 @@ const SERVER_TOOL_HANDLERS = {
  * All tools return strings; errors are returned as string messages, not thrown to HTTP layer.
  */
 async function executeServerTool(name, args) {
-  try {
-    const handler = SERVER_TOOL_HANDLERS[name];
-    if (!handler) {
-      return `Not implemented: ${name}`;
+  const fsAccess = await getFilesystemAccessFromConfig();
+  const allowOutsideWorkspace = fsAccess === 'full';
+  return pathAccessStore.run({ allowOutsideWorkspace }, async () => {
+    try {
+      if (isMcpToolName(name)) {
+        const result = await callMcpTool(name, args ?? {});
+        return { result: String(result) };
+      }
+      const handler = SERVER_TOOL_HANDLERS[name];
+      if (!handler) {
+        return { result: `Not implemented: ${name}` };
+      }
+      const out = await handler(args ?? {});
+      if (out && typeof out === 'object' && 'result' in out) {
+        return out;
+      }
+      return { result: String(out) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { result: `Error: ${message}` };
     }
-    return await handler(args ?? {});
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error: ${message}`;
-  }
+  });
 }
 
 /** CORS headers for local Vite dev (browser tools calling same origin or localhost). */
@@ -744,9 +739,13 @@ function createToolsMiddleware() {
           res.end(JSON.stringify({ error: 'Missing or invalid "name"' }));
           return;
         }
-        const result = await executeServerTool(name, args);
+        const out = await executeServerTool(name, args);
         res.statusCode = 200;
-        res.end(JSON.stringify({ result: String(result) }));
+        const payload = { result: String(out.result ?? '') };
+        if (Array.isArray(out.attachments) && out.attachments.length > 0) {
+          payload.attachments = out.attachments;
+        }
+        res.end(JSON.stringify(payload));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         res.statusCode = 400;
@@ -784,26 +783,55 @@ function openBrowser(url) {
 
 async function main() {
   const vite = await createServer({
-    configFile: path.join(PROJECT_ROOT, 'vite.config.ts'),
+    configFile: path.join(APP_ROOT, 'vite.config.ts'),
     server: {
       port: PORT,
       strictPort: false,
     },
     plugins: [
       {
-        name: 'speedchat-tools-api',
+        name: 'minnow-api',
         configureServer(server) {
+          server.middlewares.use(createConfigMiddleware());
+          server.middlewares.use(createWorkspaceMiddleware());
+          server.middlewares.use(createMemoryMiddleware());
+          server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
+          server.middlewares.use(createMcpMiddleware());
+          server.middlewares.use(createPromptConfigsMiddleware());
+          server.middlewares.use(createProviderMiddleware());
+          server.middlewares.use(createWorkAgentsMiddleware());
+          server.middlewares.use(createBrowserScreenshotMiddleware());
           server.middlewares.use(createToolsMiddleware());
+          server.middlewares.use(createSkillsMiddleware());
+          server.middlewares.use(createTerminalMiddleware(() => getWorkspaceRoot()));
         },
       },
     ],
   });
 
+  await ensureMinnowLayout();
+  const workspacePath = await initWorkspaceRoot();
+  console.log(`Workspace: ${workspacePath}`);
+  await ensureProviderRegistry();
+  await initMemoryApi();
+  await initLspConfig();
+  await initMcpApi();
+  const homePath = getMinnowHome();
+  console.log(`Minnow data: ${homePath}`);
+
   await vite.listen();
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
-  console.log(`SpeedChat dev server: ${localUrl}`);
+  console.log(`Minnow dev server: ${localUrl}`);
+  console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
+  console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
+  console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
+  console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
+  console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
+  console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
+  console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
+  console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   openBrowser(localUrl);
 }
 

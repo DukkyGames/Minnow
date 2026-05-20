@@ -1,0 +1,69 @@
+/**
+ * Default persisted payloads when home dir or localStorage is empty.
+ */
+
+import { SYSTEM_PROMPT_PRESETS } from '../constants';
+import { BUILT_IN_TOOLS } from '../tools/definitions';
+import type { ToolConfig, ToolPermissionMode } from '../tools/tool-settings-types';
+import type { SessionState, SystemPromptSettings } from '../types';
+import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
+import type { SkillConfig } from '../skills/config';
+
+/** Default skill toggles (all enabled). */
+export function defaultSkillConfig(): SkillConfig {
+  return buildDefaultSkillConfig();
+}
+
+const DEFAULT_ENABLED_TOOL_IDS = new Set([
+  'get_datetime',
+  'calculate',
+  'web_search',
+  'wikipedia_search',
+  'save_memory',
+]);
+
+/** Default tool toggles for new `tools.json` (matches server seed). */
+export function defaultToolConfig(): ToolConfig {
+  const enabled: Record<string, boolean> = {};
+  const permissions: Record<string, ToolPermissionMode> = {};
+  for (const tool of BUILT_IN_TOOLS) {
+    const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
+    enabled[tool.id] = on;
+    permissions[tool.id] = on ? 'ask' : 'off';
+  }
+  return { enabled, permissions, keys: { braveApiKey: '' } };
+}
+
+/** Default system prompt file contents. */
+export function defaultSystemPromptSettings(): SystemPromptSettings {
+  const preset = SYSTEM_PROMPT_PRESETS.find((p) => p.id === 'general-assistant');
+  return {
+    presetId: 'general-assistant',
+    text: preset?.text ?? 'You are a helpful, concise assistant.',
+  };
+}
+
+/** One empty chat session blob. */
+export function defaultSessionState(): SessionState {
+  const chatId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : '00000000-0000-0000-0000-000000000001';
+
+  return {
+    version: 1,
+    activeId: chatId,
+    sidebarCollapsed: false,
+    chats: [
+      {
+        id: chatId,
+        name: 'New chat',
+        modelId: '',
+        history: [],
+        lastStats: null,
+        modelInfo: {},
+        updatedAt: Date.now(),
+      },
+    ],
+  };
+}

@@ -26,6 +26,7 @@
   flex-shrink: 0;
 }
 
+.logo-mark .minnow-glyph { width: 18px; height: 18px; }
 .logo-mark .icon-svg { width: 16px; height: 16px; }
 
 .app-title {
@@ -107,6 +108,11 @@
 }
 
 .icon-btn:active { background: var(--bg); }
+
+.workspace-btn .icon-svg {
+  width: 18px;
+  height: 18px;
+}
 
 /* Hover affordances only when the device supports hover (not touch-primary) */
 @media (hover: hover) and (pointer: fine) {

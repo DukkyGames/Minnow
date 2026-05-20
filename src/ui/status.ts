@@ -1,8 +1,21 @@
 import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
+import { closeMobileFileSidebar } from './init-file-panel';
+import { closeSubAgentDrawer } from './sub-agent-drawer';
 
+/** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
 export function serverUrl(): string {
-  return (document.getElementById('serverUrl') as HTMLInputElement).value.trim().replace(/\/$/, '');
+  const el = document.getElementById('serverUrl') as HTMLInputElement | null;
+  if (!el) return 'http://localhost:1234';
+  return el.value.trim().replace(/\/$/, '');
+}
+
+/** Display base URL for the active provider (read-only field in settings). */
+export function setActiveProviderBaseUrl(baseUrl: string): void {
+  const el = document.getElementById('serverUrl') as HTMLInputElement | null;
+  if (el) {
+    el.value = baseUrl;
+  }
 }
 
 /** Validate LM Studio base URL before network calls. */
@@ -25,9 +38,15 @@ export function setStatus(state: string, msg: string): void {
 
 /** Close settings drawer or mobile chat list when Escape is pressed. */
 export function dismissOpenLayers(): void {
+  closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     closeDrawer();
+    return;
+  }
+  const fileSide = document.getElementById('fileSidebar');
+  if (fileSide && fileSide.classList.contains('mobile-open')) {
+    closeMobileFileSidebar();
     return;
   }
   const side = document.getElementById('chatSidebar');

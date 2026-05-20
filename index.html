@@ -6,32 +6,121 @@
 <meta name="theme-color" content="#fefefe">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="SpeedChat">
+<meta name="apple-mobile-web-app-title" content="Minnow">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icons/icon-192.png">
-<title>SpeedChat</title>
+<link rel="icon" href="/logos/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/logos/apple-touch-icon.png">
+<title>Minnow</title>
+<style>
+  /* Critical: loading shell only (Vite CSS + app boot hide this via html.app-ready). */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    background: #fefefe;
+  }
+  html:not(.app-ready) body > :not(#app-loader) {
+    visibility: hidden;
+  }
+  .app-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: max(16px, env(safe-area-inset-top)) 24px max(16px, env(safe-area-inset-bottom));
+    background: #fefefe;
+    color: oklch(31.714% 0.00004 271.152);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  html.app-ready .app-loader {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-loader__mark {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    background: #000;
+    color: #fefefe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .app-loader__mark svg {
+    width: 32px;
+    height: 32px;
+    display: block;
+  }
+  .app-loader__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .app-loader__status {
+    margin: 0;
+    font-size: 12px;
+    color: oklch(62% 0.025 250);
+    letter-spacing: 0.02em;
+  }
+  .app-loader__spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid oklch(90% 0.01 250);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: app-loader-spin 0.75s linear infinite;
+  }
+  @keyframes app-loader-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-loader__spinner { animation: none; opacity: 0.5; }
+    .app-loader { transition-duration: 0.01ms; }
+  }
+</style>
 </head>
 <body>
+<div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-busy="true" aria-label="Loading Minnow">
+  <div class="app-loader__mark" aria-hidden="true">
+    <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+  </div>
+  <p class="app-loader__title">Minnow</p>
+  <div class="app-loader__spinner" aria-hidden="true"></div>
+  <p class="app-loader__status" id="appLoaderStatus">Loading…</p>
+</div>
 <header class="topbar">
   <div class="logo-mark" aria-hidden="true">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
   </div>
-  <div class="app-title">SpeedChat</div>
+  <div class="app-title">Minnow</div>
   <div class="topbar-sep"></div>
 
-  <button class="icon-btn" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
+  <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
-  <button class="icon-btn" id="btnNewChatTop" type="button" aria-label="New chat" onclick="createChat()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+
+  <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
   </button>
-  <div class="topbar-sep mid-hide"></div>
+  <div class="topbar-sep workspace-sep mid-hide"></div>
 
   <div class="model-wrap">
     <label class="visually-hidden" for="modelSelect">Model</label>
     <select id="modelSelect" onchange="onModelSelectChange()"></select>
   </div>
 
+  <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+  </button>
   <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M20 4v4h-4"/>
@@ -40,7 +129,10 @@
       <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
     </svg>
   </button>
-  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" aria-expanded="false" aria-controls="drawer" onclick="toggleDrawer()">
+  <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
+  </button>
+  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
 
@@ -58,10 +150,17 @@
     Settings
   </div>
   <div class="drawer-body">
+    <p id="configStorageBanner" class="tools-server-banner hidden" role="status">File-backed config requires <code>npm start</code> (not <code>npm run dev</code>). Using browser storage until then.</p>
+    <p id="providersServerBanner" class="tools-server-banner hidden" role="status">Provider management requires <code>npm start</code> (not <code>npm run dev</code>).</p>
     <div class="field">
-      <label for="serverUrl">LM Studio server URL</label>
-      <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" onchange="fetchModels()">
-      <p class="field-hint">Default is <code>http://localhost:1234</code> when LM Studio is running locally.</p>
+      <label for="providerSelect">Provider</label>
+      <select id="providerSelect" aria-describedby="providerSelectHint"></select>
+      <p class="field-hint" id="providerSelectHint">Switch the active LLM endpoint. Full provider CRUD arrives in a future settings page.</p>
+    </div>
+    <div class="field">
+      <label for="serverUrl">Provider base URL</label>
+      <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" readonly>
+      <p class="field-hint">Read-only display of the active provider URL. API keys are stored under <code>~/.minnow/providers/</code>.</p>
     </div>
     <div class="field-row">
       <div class="field">
@@ -85,6 +184,17 @@
       <textarea id="systemPrompt" placeholder="Example: You are a helpful assistant." rows="12"
         oninput="onSystemPromptInput()"></textarea>
     </div>
+    <section class="tools-section" id="expertsSection" aria-labelledby="expertsSectionTitle">
+      <h2 class="tools-section-title" id="expertsSectionTitle">Experts</h2>
+      <div class="field-row">
+        <label class="tool-toggle-label">
+          <input type="checkbox" id="expertsEnabled" checked>
+          Enable experts
+        </label>
+      </div>
+      <p class="field-hint">Choose an expert in the chat bar (Auto or manual). Built-in ids:</p>
+      <div id="expertsBuiltinList"></div>
+    </section>
     <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
       <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
       <p class="field-hint tools-section-hint">Enable function calling for the model. Server tools require <code>npm start</code> (local tool server).</p>
@@ -104,6 +214,186 @@
 </div>
 
 <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
+<button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" onclick="closeMobileFileSidebar()" aria-hidden="true"></button>
+
+<main id="settingsView" class="settings-page" aria-label="Settings">
+  <header class="settings-page-header">
+    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
+  </header>
+  <div class="settings-page-body">
+    <nav class="settings-nav" aria-label="Settings sections">
+      <button type="button" data-settings-nav="general" aria-current="page">General</button>
+      <button type="button" data-settings-nav="prompting">Prompting</button>
+      <button type="button" data-settings-nav="providers">Providers</button>
+      <button type="button" data-settings-nav="modes">Modes</button>
+      <button type="button" data-settings-nav="experts">Experts</button>
+      <button type="button" data-settings-nav="work-agents">Work agents</button>
+      <button type="button" data-settings-nav="sub-agents">Sub-agents</button>
+      <button type="button" data-settings-nav="memory">Memory</button>
+      <button type="button" data-settings-nav="features">Features</button>
+      <button type="button" data-settings-nav="tools">Tools</button>
+      <button type="button" data-settings-nav="mcp">MCP</button>
+      <button type="button" data-settings-nav="lsp">LSP</button>
+      <button type="button" data-settings-nav="skills">Skills</button>
+    </nav>
+    <div class="settings-content">
+      <section id="settingsSection-general" class="settings-section is-active">
+        <h2>General</h2>
+        <div id="settingsGeneralBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-prompting" class="settings-section">
+        <h2>Prompting</h2>
+        <p>Active profile controls which prompt templates are composed on send.</p>
+        <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
+          <button type="button" data-profile-tab="full" class="is-active">Full</button>
+          <button type="button" data-profile-tab="lite">Lite</button>
+          <button type="button" data-profile-tab="custom">Custom</button>
+        </div>
+        <div id="settingsCustomConfigBar" class="settings-custom-bar hidden">
+          <select id="settingsCustomConfigSelect" aria-label="Custom configuration"></select>
+          <button type="button" id="settingsCustomConfigNew">New</button>
+          <button type="button" id="settingsCustomConfigSave">Save</button>
+          <button type="button" id="settingsCustomConfigDuplicate">Duplicate</button>
+          <button type="button" id="settingsCustomConfigDelete">Delete</button>
+        </div>
+        <div id="settingsPromptParts" class="settings-parts-mount"></div>
+      </section>
+      <section id="settingsSection-providers" class="settings-section">
+        <h2>Providers</h2>
+        <div id="settingsProvidersBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-modes" class="settings-section">
+        <h2>Modes</h2>
+        <div id="settingsModesBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-experts" class="settings-section">
+        <h2>Experts</h2>
+        <div id="settingsExpertsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-work-agents" class="settings-section">
+        <h2>Work agents</h2>
+        <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-sub-agents" class="settings-section">
+        <h2>Sub-agents</h2>
+        <div id="settingsSubAgentsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-memory" class="settings-section">
+        <h2>Memory</h2>
+        <p class="field-hint">Persistent notes under <code>~/.minnow/memory/</code>. On send, matching entries are ranked and injected into the composed prompt when the store is enabled and <code>npm start</code> is running.</p>
+        <label class="settings-toggle-row">
+          <span>Enable memory store</span>
+          <input type="checkbox" id="settingsMemoryEnabled">
+        </label>
+        <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
+          <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
+          <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
+        </div>
+        <div id="settingsMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
+        <div class="settings-actions">
+          <button type="button" id="settingsMemoryBackup" class="settings-action-btn">Backup memory</button>
+          <button type="button" id="settingsMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
+        </div>
+      </section>
+      <section id="settingsSection-features" class="settings-section">
+        <h2>Features</h2>
+        <label class="settings-toggle-row">
+          <span id="settingsSelfHealingLabel">Self-healing (sub-agents)</span>
+          <input
+            type="checkbox"
+            id="settingsSelfHealingEnabled"
+            aria-labelledby="settingsSelfHealingLabel"
+            aria-describedby="settingsSelfHealingHint"
+          >
+        </label>
+        <p id="settingsSelfHealingHint" class="settings-section-note">
+          When enabled, the parent orchestrator restarts a sub-agent after repeated identical tool calls (tier 1). Off by default; stored in <code>config.json</code> as <code>selfHealing.enabled</code>.
+        </p>
+        <label class="settings-toggle-row">
+          <span>Memory injection (feature flag)</span>
+          <input type="checkbox" id="settingsFeatureMemoryInjection" checked>
+        </label>
+      </section>
+      <section id="settingsSection-tools" class="settings-section">
+        <h2>Tools</h2>
+        <div id="settingsToolsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-mcp" class="settings-section">
+        <h2>MCP servers</h2>
+        <p class="field-hint">Model Context Protocol tools are loaded from <code>~/.minnow/mcp/</code> when <code>npm start</code> is running. Namespaced tools use the <code>mcp__</code> prefix in the tool loop.</p>
+        <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
+        <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
+        <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
+          <summary class="settings-mcp-add-summary">Add MCP server</summary>
+          <form id="settingsMcpAddForm" class="settings-mcp-form" novalidate>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsMcpAddId">Server id</label>
+                <input type="text" id="settingsMcpAddId" name="id" required pattern="[a-z0-9][a-z0-9_-]*" autocomplete="off" spellcheck="false" placeholder="my-docs-mcp">
+                <p class="field-hint">Lowercase letters, numbers, hyphens, underscores.</p>
+              </div>
+              <div class="field">
+                <label for="settingsMcpAddLabel">Display name</label>
+                <input type="text" id="settingsMcpAddLabel" name="label" required autocomplete="off" placeholder="My docs MCP">
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddDescription">Description (optional)</label>
+              <input type="text" id="settingsMcpAddDescription" name="description" autocomplete="off" placeholder="What this server provides">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsMcpAddCommand">Command</label>
+                <input type="text" id="settingsMcpAddCommand" name="command" required autocomplete="off" spellcheck="false" placeholder="npx">
+              </div>
+              <div class="field">
+                <label for="settingsMcpAddEnabled">Enabled on add</label>
+                <label class="settings-toggle-row">
+                  <input type="checkbox" id="settingsMcpAddEnabled" name="enabled" checked>
+                  <span>Connect after saving</span>
+                </label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddArgs">Arguments (one per line)</label>
+              <textarea id="settingsMcpAddArgs" name="args" rows="4" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/allowed/dir"></textarea>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddEnv">Environment variables (optional, KEY=value per line)</label>
+              <textarea id="settingsMcpAddEnv" name="env" rows="3" spellcheck="false" placeholder="API_KEY=your-key-here"></textarea>
+            </div>
+            <p id="settingsMcpAddError" class="settings-mcp-form-error hidden" role="alert"></p>
+            <div class="settings-mcp-form-actions">
+              <button type="submit" class="settings-action-btn">Add server</button>
+              <button type="button" id="settingsMcpAddReset" class="settings-inline-btn">Clear form</button>
+            </div>
+          </form>
+        </details>
+      </section>
+      <section id="settingsSection-lsp" class="settings-section">
+        <h2>Language servers</h2>
+        <p class="field-hint">Agent tools <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> use these servers when <code>npm start</code> is running. Overrides are saved to <code>~/.minnow/lsp.json</code>.</p>
+        <p id="settingsLspOffline" class="field-hint settings-lsp-offline hidden">Start with <code>npm start</code> to load and toggle language servers.</p>
+        <label class="settings-toggle-row" id="settingsLspMasterRow">
+          <span>Enable language servers</span>
+          <input type="checkbox" id="settingsLspMasterEnabled" checked>
+        </label>
+        <div id="settingsLspServerList" class="settings-lsp-list" role="list" aria-label="Configured language servers"></div>
+        <details id="settingsLspAddPanel" class="settings-lsp-add-panel">
+          <summary class="settings-lsp-add-summary">Add custom language server</summary>
+          <div id="settingsLspCustomForm" class="settings-lsp-custom-mount"></div>
+        </details>
+      </section>
+      <section id="settingsSection-skills" class="settings-section">
+        <h2>Skills</h2>
+        <div id="settingsSkillsBody" class="settings-section-body"></div>
+      </section>
+    </div>
+  </div>
+</main>
 
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
@@ -118,22 +408,42 @@
     <div class="chat-list" id="chatList" role="list"></div>
   </aside>
 
-  <div class="main-column">
+  <div id="workspaceSplit" class="workspace-split">
+  <div class="main-column" id="mainColumn">
     <!-- Chat messages -->
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon" aria-hidden="true">
-          <svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          <svg class="minnow-glyph icon-svg" width="32" height="32" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
 
+    <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
+    <div id="toolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
+
     <!-- Input bar -->
     <div class="input-bar">
       <input type="file" id="fileInput" class="visually-hidden" multiple tabindex="-1" aria-hidden="true">
       <div class="input-bar-composer">
+        <div class="composer-controls" id="composerControls" role="toolbar" aria-label="Composer options">
+          <div id="modeSelector" class="mode-segmented" role="radiogroup" aria-label="Operating mode"></div>
+          <div class="composer-control">
+            <label class="visually-hidden" for="expertSelect">Expert</label>
+            <select id="expertSelect" aria-label="Expert: Auto"></select>
+            <span id="expertAutoHint" class="expert-auto-hint hidden" aria-live="polite"></span>
+          </div>
+                  <div id="workAgentDev" class="composer-control work-agent-dev hidden" aria-hidden="true">
+            <label class="composer-control-label" for="workAgentSelect">Work agent (dev)</label>
+            <select id="workAgentSelect" aria-label="Work agent"></select>
+            <label class="work-agent-auto-label">
+              <input type="checkbox" id="workAgentAuto" checked />
+              Auto from mode
+            </label>
+          </div>
+        </div>
         <div id="attachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
         <div class="input-row">
           <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">
@@ -196,8 +506,73 @@
       </div>
       </div>
     </div>
+
+    <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
+      <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
+      <header class="terminal-header">
+        <span class="terminal-header-title">Terminal</span>
+        <div class="terminal-header-actions">
+          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
+        </div>
+      </header>
+      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <div class="terminal-body">
+        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
+        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
+      </div>
+      <form class="terminal-input-row" id="terminalForm">
+        <label class="visually-hidden" for="terminalInput">Terminal command</label>
+        <div class="terminal-input-wrap">
+          <span class="terminal-prompt" aria-hidden="true">&gt;</span>
+          <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit" class="terminal-run-btn">Run</button>
+      </form>
+    </section>
+
   </div>
+
+  <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
+
+  <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
+    <header class="file-viewer-header">
+      <span class="file-viewer-path" id="fileViewerPath"></span>
+      <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+      </button>
+      <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close file viewer">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="file-viewer-body" id="fileViewerHost"></div>
+  </section>
+  </div>
+
+  <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">
+    <div class="file-sidebar-header">
+      <span class="file-sidebar-title">Files</span>
+      <button type="button" class="icon-btn" id="btnFileSidebarCollapse" aria-label="Collapse file tree" onclick="toggleFileSidebarCollapsed()">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 4v4h-4"/>
+          <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
+          <path d="M4 20v-4h4"/>
+          <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
+        </svg>
+      </button>
+    </div>
+    <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
+  </aside>
 </div>
+<script>
+  /* Fallback if the module bundle fails to boot (avoids an infinite loader). */
+  setTimeout(function () {
+    document.documentElement.classList.add('app-ready');
+  }, 30000);
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

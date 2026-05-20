@@ -1,4 +1,6 @@
 import { modelCache, modelsFetchAbort, setModelsFetchAbort } from '../app-state';
+import { fetchModelsForProvider } from '../providers/fetch-models';
+import { getActiveProvider } from '../providers/store';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -6,7 +8,7 @@ import {
 } from '../state/sessions';
 import type { LmModelRecord, ModelInfo } from '../types';
 import { renderSidebar } from '../ui/sidebar';
-import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
+import { setStatus } from '../ui/status';
 import { updateStrip } from '../ui/stats';
 
 export { modelCache };
@@ -14,7 +16,7 @@ export { modelCache };
 /** Merge cached model row with optional fields from a chat completion response. */
 export function resolveModelInfo(
   modelId: string,
-  fromResponse?: ModelInfo | null
+  fromResponse?: ModelInfo | null,
 ): ModelInfo {
   const cached = modelCache.get(modelId);
   const fromCache: ModelInfo = cached
@@ -34,15 +36,10 @@ export function showCachedModelInfo(): void {
   updateStrip({}, {}, resolveModelInfo(modelId));
 }
 
-/** Load LLM/VLM models from LM Studio and populate the model select. */
+/** Load models from the active provider and populate the model select. */
 export async function fetchModels(): Promise<void> {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const base = parseServerBaseUrl(serverUrl());
-  if (!base) {
-    sel.innerHTML = '<option value="">Invalid server URL</option>';
-    setStatus('err', 'Check server URL in Settings');
-    return;
-  }
+  const chat = getActiveChat();
 
   if (modelsFetchAbort) modelsFetchAbort.abort();
   const controller = new AbortController();
@@ -51,15 +48,17 @@ export async function fetchModels(): Promise<void> {
 
   sel.innerHTML = '<option value="">Loading models…</option>';
   setStatus('spin', 'Loading models…');
+
+  let providerLabel = 'provider';
   try {
-    const res = await fetch(`${base}/api/v0/models`, { signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { data?: LmModelRecord[] };
-    const models = (data.data || []).filter((m) => m.type === 'llm' || m.type === 'vlm');
+    const provider = await getActiveProvider(chat.providerId);
+    providerLabel = provider.label;
+
+    const models = await fetchModelsForProvider(provider, signal);
 
     if (!models.length) {
       sel.innerHTML = '<option value="">No models found</option>';
-      setStatus('err', 'No models in LM Studio');
+      setStatus('err', `No models for ${provider.label}`);
       return;
     }
 
@@ -93,8 +92,8 @@ export async function fetchModels(): Promise<void> {
   } catch (err) {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;
-    sel.innerHTML = '<option value="">Cannot reach server</option>';
-    setStatus('err', 'Cannot reach LM Studio');
+    sel.innerHTML = '<option value="">Cannot reach provider</option>';
+    setStatus('err', `Cannot reach ${providerLabel}`);
   } finally {
     if (modelsFetchAbort && modelsFetchAbort.signal === signal) {
       setModelsFetchAbort(null);

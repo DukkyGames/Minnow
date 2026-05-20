@@ -1,0 +1,138 @@
+/**
+ * HTTP client for ~/.minnow config API (npm start only).
+ */
+
+import type { SessionState, SystemPromptSettings } from '../types';
+import type { SkillConfig } from '../skills/config';
+import type { ToolConfig } from '../tools/tool-settings-types';
+import {
+  defaultSessionState,
+  defaultSystemPromptSettings,
+  defaultSkillConfig,
+  defaultToolConfig,
+} from './defaults';
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+export interface ConfigStatusResponse {
+  ok: boolean;
+  storage: string;
+  migrated: boolean;
+  schemaVersion: number;
+}
+
+export interface MigrateBody {
+  localStorage?: {
+    sessions?: string;
+    tools?: string;
+    systemPrompt?: string;
+  };
+  clearLocalStorage?: boolean;
+}
+
+export interface MigrateResponse {
+  ok: boolean;
+  migrated?: boolean;
+  skipped?: boolean;
+  written?: string[];
+  warnings?: string[];
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      errBody && typeof errBody === 'object' && 'error' in errBody
+        ? String((errBody as { error: unknown }).error)
+        : res.statusText;
+    throw new Error(message || `Config API ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** GET /api/config/status */
+export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
+  const res = await fetch('/api/config/status', { cache: 'no-store' });
+  return parseJsonResponse<ConfigStatusResponse>(res);
+}
+
+/** GET /api/config/sessions */
+export async function getSessions(): Promise<SessionState> {
+  const res = await fetch('/api/config/sessions', { cache: 'no-store' });
+  return parseJsonResponse<SessionState>(res);
+}
+
+/** PUT /api/config/sessions */
+export async function putSessions(state: SessionState): Promise<void> {
+  const res = await fetch('/api/config/sessions', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(state),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/** GET /api/config/tools */
+export async function getTools(): Promise<ToolConfig> {
+  const res = await fetch('/api/config/tools', { cache: 'no-store' });
+  return parseJsonResponse<ToolConfig>(res);
+}
+
+/** PUT /api/config/tools */
+export async function putTools(config: ToolConfig): Promise<void> {
+  const res = await fetch('/api/config/tools', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(config),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/** GET /api/config/skills */
+export async function getSkills(): Promise<SkillConfig> {
+  const res = await fetch('/api/config/skills', { cache: 'no-store' });
+  return parseJsonResponse<SkillConfig>(res);
+}
+
+/** PUT /api/config/skills */
+export async function putSkills(config: SkillConfig): Promise<void> {
+  const res = await fetch('/api/config/skills', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(config),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/** GET /api/config/system-prompt */
+export async function getSystemPrompt(): Promise<SystemPromptSettings> {
+  const res = await fetch('/api/config/system-prompt', { cache: 'no-store' });
+  return parseJsonResponse<SystemPromptSettings>(res);
+}
+
+/** PUT /api/config/system-prompt */
+export async function putSystemPrompt(settings: SystemPromptSettings): Promise<void> {
+  const res = await fetch('/api/config/system-prompt', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(settings),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
+/** POST /api/config/migrate */
+export async function postMigrate(body: MigrateBody): Promise<MigrateResponse> {
+  const res = await fetch('/api/config/migrate', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  return parseJsonResponse<MigrateResponse>(res);
+}
+
+export {
+  defaultSessionState,
+  defaultSkillConfig,
+  defaultToolConfig,
+  defaultSystemPromptSettings,
+};

@@ -1,0 +1,16 @@
+{
+  "profile": "full",
+  "customConfigId": null,
+  "customConfig": null,
+  "cwd": "/test-project",
+  "modeId": null,
+  "expertId": null,
+  "workAgentId": null,
+  "skillBody": null,
+  "memoryBlock": null,
+  "enabledToolIds": ["get_datetime", "calculate"],
+  "enabledToolSummaries": "get_datetime: Returns current date and time.\ncalculate: Evaluates a safe math expression.",
+  "infoPresetId": "general-assistant",
+  "userMessagePreview": "Hello",
+  "includeChatHistorySummary": false
+}

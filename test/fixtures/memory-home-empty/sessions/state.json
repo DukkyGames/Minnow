@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "activeId": "00000000-0000-0000-0000-000000000001",
+  "sidebarCollapsed": false,
+  "chats": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "New chat",
+      "modelId": "",
+      "history": [],
+      "lastStats": null,
+      "modelInfo": {},
+      "updatedAt": 0
+    }
+  ]
+}

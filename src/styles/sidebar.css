@@ -158,9 +158,24 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .chat-item-row:hover {
+  .chat-item-row:hover:not(.active) {
     background: var(--surface-elevated);
     border-color: var(--border);
+  }
+
+  /* Dark hover fill (--surface-elevated) needs light title + action icons; skip active row */
+  .chat-item-row:hover:not(.active) .chat-item-title-row,
+  .chat-item-row:hover:not(.active) .chat-rename-btn,
+  .chat-item-row:hover:not(.active) .chat-delete-btn {
+    color: var(--text-hover);
+  }
+
+  .chat-item-row:hover:not(.active) .chat-rename-btn:hover {
+    color: var(--success);
+  }
+
+  .chat-item-row:hover:not(.active) .chat-delete-btn:hover {
+    color: var(--red);
   }
 }
 
@@ -187,12 +202,14 @@
   gap: 4px;
   min-width: 0;
   flex: 1;
+  transition: color 0.2s var(--ease-out);
 }
 
+/* Rename/delete: no flex gap so icons read as a pair; size follows pointer type below */
 .chat-item-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
 }
 
@@ -209,8 +226,9 @@
 .chat-rename-btn,
 .chat-delete-btn {
   flex-shrink: 0;
-  width: var(--touch-min);
-  height: var(--touch-min);
+  /* Default: compact hit area on mouse/desktop so glyphs sit closer (was full --touch-min each) */
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -221,6 +239,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: color 0.2s var(--ease-out);
+}
+
+@media (pointer: coarse) {
+  .chat-rename-btn,
+  .chat-delete-btn {
+    width: var(--touch-min);
+    height: var(--touch-min);
+  }
 }
 
 .chat-rename-btn {

@@ -11,8 +11,11 @@ import {
 } from '../markdown/renderer';
 import { resolveModelInfo } from './models';
 import {
+  isFirstUserMessagePending,
+  scheduleChatTitleGeneration,
+} from '../chat/titles/schedule';
+import {
   getActiveChat,
-  maybeAutoTitleFromFirstUserMessage,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
@@ -36,8 +39,11 @@ import {
 } from '../ui/messages';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
+import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
 import { renderSidebar } from '../ui/sidebar';
-import { parseServerBaseUrl, serverUrl, setStatus } from '../ui/status';
+import { postChatCompletions } from '../providers/fetch-chat';
+import { getActiveProvider } from '../providers/store';
+import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 
 /** Accumulated metadata from SSE chunks (stats, usage, model_info). */
@@ -225,15 +231,13 @@ export function finalizeResponseMeta(
 
 /** Non-streaming fallback when SSE yields no assistant text. */
 export async function tryNonStreamingFallback(
-  serverBase: string,
   body: ChatCompletionBody,
-  signal: AbortSignal
+  signal: AbortSignal,
+  chatProviderId?: string,
 ): Promise<ChatCompletionChunk> {
-  const res = await fetch(`${serverBase}/api/v0/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, stream: false }),
-    signal,
+  const provider = await getActiveProvider(chatProviderId);
+  const res = await postChatCompletions(provider, { ...body, stream: false }, signal, {
+    stream: false,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<ChatCompletionChunk>;
@@ -250,7 +254,9 @@ export async function sendMessage(): Promise<void> {
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
   const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
-  const sysPrompt = (document.getElementById('systemPrompt') as HTMLTextAreaElement).value.trim();
+  const legacySysPrompt = (
+    document.getElementById('systemPrompt') as HTMLTextAreaElement
+  ).value.trim();
 
   if (!modelId) {
     setStatus('err', 'Select a model first');
@@ -264,19 +270,13 @@ export async function sendMessage(): Promise<void> {
     setStatus('err', 'Max tokens must be at least 1');
     return;
   }
-  const base = parseServerBaseUrl(serverUrl());
-  if (!base) {
-    setStatus('err', 'Check server URL in Settings');
-    return;
-  }
-
   if (chatFetchAbort) chatFetchAbort.abort();
   const controller = new AbortController();
   setChatFetchAbort(controller);
   const chatSignal = controller.signal;
 
   chat.modelId = modelId || chat.modelId;
-  maybeAutoTitleFromFirstUserMessage(chat, text);
+  const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
   touchChat(chat);
   scheduleSaveSessions();
@@ -285,6 +285,17 @@ export async function sendMessage(): Promise<void> {
 
   input.value = '';
   input.style.height = 'auto';
+
+  let composedSystemPrompt = '';
+  try {
+    composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
+      userMessagePreview: text,
+      routeUserText: text,
+    });
+  } catch {
+    composedSystemPrompt = '';
+  }
+  const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
 
   const messages: ApiMessage[] = [];
   if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
@@ -320,14 +331,23 @@ export async function sendMessage(): Promise<void> {
     stream_options: { include_usage: true },
   };
 
-  const { wrap, bubble, cursor } = appendStreamingAssistantRow();
-  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble);
+  const { wrap, bubble, cursor, streamStatus } = appendStreamingAssistantRow();
+  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble, streamStatus);
 
-  const thoughtController = new ThoughtBubbleController(wrap);
+  const thoughtController = new ThoughtBubbleController(wrap, {
+    onThinkingStart: (): void => {
+      streamStatus.setPhase('thinking');
+    },
+    onReasoningEnded: (): void => {
+      if (wrap.classList.contains('msg--awaiting-prose')) {
+        streamStatus.setPhase('generating');
+      }
+    },
+  });
 
   setStreaming(true);
   setSendLoading(true);
-  setStatus('spin', 'Generating replyâ€¦');
+  setStatus('spin', 'Generating reply…');
 
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
@@ -335,12 +355,15 @@ export async function sendMessage(): Promise<void> {
   let tFirst: number | null = null;
 
   try {
-    const res = await fetch(`${base}/api/v0/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: chatSignal,
-    });
+    const provider = await getActiveProvider(chat.providerId);
+    chat.providerId = provider.id;
+    if (shouldScheduleTitle) {
+      scheduleChatTitleGeneration(chat.id, text, {
+        modelId: modelId || chat.modelId,
+        providerId: provider.id,
+      });
+    }
+    const res = await postChatCompletions(provider, body, chatSignal);
 
     if (!res.ok) {
       const err = await res.text();
@@ -389,14 +412,14 @@ export async function sendMessage(): Promise<void> {
     if (!fullText) {
       revealProse();
       const fallback = await tryNonStreamingFallback(
-        base,
         {
           model: modelId || undefined,
           messages,
           temperature: temp,
           max_tokens: maxTok,
         },
-        chatSignal
+        chatSignal,
+        chat.providerId,
       );
       const fbMsg = fallback.choices?.[0]?.message;
       fullText = extractMessageText(fbMsg);
@@ -450,6 +473,7 @@ export async function sendMessage(): Promise<void> {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
       thoughtController.abort();
+      streamStatus.dispose();
       return;
     }
     cancelAssistantBubbleRenderDebounce();
@@ -459,7 +483,7 @@ export async function sendMessage(): Promise<void> {
     bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
     bubble.style.color = 'var(--red)';
     const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}â€¦` : msg;
+    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     setStatus('err', statusMsg);
     thoughtController.abort();
   } finally {

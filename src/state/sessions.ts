@@ -1,23 +1,49 @@
-import {
-  AUTO_TITLE_MAX_LEN,
-  MAX_CHATS,
-  PLACEHOLDER_CHAT_NAME,
-  SAVE_DEBOUNCE_MS,
-  STORAGE_KEY,
-} from '../constants';
+import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
+import { abortChatTitleGeneration } from '../chat/titles/inflight';
+import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
+import { getSessions, putSessions } from '../config/api-client';
+import { defaultSessionState } from '../config/defaults';
+import { isServerStorageMode } from '../config/storage-mode';
+import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
+import { setStatus } from '../ui/status';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
   Chat,
+  ExpertSelection,
   Message,
+  PersistedSubAgentRun,
+  PersistedSubAgentStatus,
   SessionState,
+  TerminalRunRecord,
   ToolCall,
   ToolResultMessage,
 } from '../types';
 
-/** In-memory session blob mirrored to localStorage. */
+/** Default expert picker when missing on older chats. */
+export function defaultExpertSelection(): ExpertSelection {
+  return { mode: 'auto', expertId: null };
+}
+
+function ensureExpertSelection(raw: unknown): ExpertSelection {
+  if (!raw || typeof raw !== 'object') return defaultExpertSelection();
+  const row = raw as Partial<ExpertSelection>;
+  const mode = row.mode === 'manual' ? 'manual' : 'auto';
+  const expertId =
+    mode === 'manual' && typeof row.expertId === 'string' && row.expertId.trim()
+      ? row.expertId.trim()
+      : null;
+  return { mode, expertId };
+}
+
+/** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
+
+/** Replace in-memory session blob (unit tests). */
+export function setSessionStateForTests(state: SessionState | null): void {
+  sessionState = state;
+}
 
 export type SaveSessionsResult = 'ok' | 'quota_exceeded';
 
@@ -46,6 +72,9 @@ export function createEmptyChatObject(modelId: string): Chat {
     id: newChatId(),
     name: PLACEHOLDER_CHAT_NAME,
     modelId: modelId || '',
+    modeId: DEFAULT_MODE_ID,
+    workAgentId: null,
+    workAgentAuto: true,
     history: [],
     lastStats: null,
     modelInfo: {},
@@ -80,7 +109,21 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
       typeof toolMsg.tool_call_id === 'string' ? toolMsg.tool_call_id.trim() : '';
     if (!toolCallId) return null;
     const content = toolMsg.content != null ? String(toolMsg.content) : '';
-    return { role: 'tool', tool_call_id: toolCallId, content };
+    const attachments = Array.isArray(toolMsg.attachments)
+      ? toolMsg.attachments.filter(
+          (a) =>
+            a &&
+            typeof a === 'object' &&
+            a.type === 'image' &&
+            typeof a.url === 'string',
+        )
+      : undefined;
+    return {
+      role: 'tool',
+      tool_call_id: toolCallId,
+      content,
+      ...(attachments?.length ? { attachments } : {}),
+    };
   }
 
   if (m.role === 'user') {
@@ -111,11 +154,85 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
   return assistant;
 }
 
+function ensureTerminalHistory(raw: unknown): TerminalRunRecord[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const rows = raw
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => {
+      const row = r as Partial<TerminalRunRecord>;
+      if (typeof row.id !== 'string' || typeof row.command !== 'string') return null;
+      return {
+        id: row.id,
+        command: row.command,
+        cwd: typeof row.cwd === 'string' ? row.cwd : '.',
+        source: row.source === 'user' ? 'user' : 'agent',
+        ...(row.toolCallId ? { toolCallId: row.toolCallId } : {}),
+        startedAt: typeof row.startedAt === 'number' ? row.startedAt : 0,
+        finishedAt: typeof row.finishedAt === 'number' ? row.finishedAt : 0,
+        exitCode: typeof row.exitCode === 'number' ? row.exitCode : null,
+        timedOut: row.timedOut === true,
+        logPath: typeof row.logPath === 'string' ? row.logPath : '',
+      } satisfies TerminalRunRecord;
+    })
+    .filter((x): x is TerminalRunRecord => Boolean(x));
+  return rows.length ? rows : undefined;
+}
+
+const PERSISTED_SUB_AGENT_STATUSES = new Set<PersistedSubAgentStatus>([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+function ensurePersistedSubAgentRuns(
+  raw: unknown,
+): PersistedSubAgentRun[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PersistedSubAgentRun[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const runId = typeof r.runId === 'string' ? r.runId.trim() : '';
+    const parentTurnId = typeof r.parentTurnId === 'string' ? r.parentTurnId : '';
+    const type = typeof r.type === 'string' ? r.type : '';
+    const task = typeof r.task === 'string' ? r.task : '';
+    const statusRaw = typeof r.status === 'string' ? r.status : '';
+    if (!runId || !PERSISTED_SUB_AGENT_STATUSES.has(statusRaw as PersistedSubAgentStatus)) {
+      continue;
+    }
+    const status = statusRaw as PersistedSubAgentStatus;
+    const messages = Array.isArray(r.messages) ? r.messages : [];
+    const parentToolCallId =
+      typeof r.parentToolCallId === 'string' && r.parentToolCallId.trim()
+        ? r.parentToolCallId.trim()
+        : undefined;
+    const err = r.error;
+    out.push({
+      runId,
+      parentTurnId,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
+      type,
+      task,
+      status,
+      summary: typeof r.summary === 'string' ? r.summary : '',
+      ...(err === null || typeof err === 'string' ? { error: err as string | null } : {}),
+      startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
+      endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,
+      toolTurns: typeof r.toolTurns === 'number' ? r.toolTurns : 0,
+      messages,
+    });
+  }
+  return out.length ? out : undefined;
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
     ? raw.history.map(ensureMessageEntry).filter((x): x is Message => Boolean(x))
     : [];
+  const subAgentRuns = ensurePersistedSubAgentRuns(raw.subAgentRuns);
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -123,6 +240,17 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         ? raw.name.trim()
         : PLACEHOLDER_CHAT_NAME,
     modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
+    modeId: normalizeModeId(raw.modeId),
+    expertSelection: ensureExpertSelection(raw.expertSelection),
+    lastResolvedExpertId:
+      typeof raw.lastResolvedExpertId === 'string' ? raw.lastResolvedExpertId : null,
+    workAgentId:
+      typeof raw.workAgentId === 'string' && raw.workAgentId.trim()
+        ? raw.workAgentId.trim()
+        : null,
+    workAgentAuto: raw.workAgentAuto !== false,
+    terminalHistory: ensureTerminalHistory(raw.terminalHistory),
+    ...(subAgentRuns ? { subAgentRuns } : {}),
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
@@ -130,33 +258,47 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   };
 }
 
-function defaultSessionState(): SessionState {
-  const chat = createEmptyChatObject('');
-  return { version: 1, activeId: chat.id, sidebarCollapsed: false, chats: [chat] };
+/** Read expert selection for a chat (defaults to Auto). */
+export function getExpertSelection(chat: Chat): ExpertSelection {
+  return chat.expertSelection ?? defaultExpertSelection();
 }
 
-export function loadSessionsFromStorage(): void {
+function parseSessionStateFromJson(parsed: Partial<SessionState> | null): SessionState {
+  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.chats)) {
+    return defaultSessionState();
+  }
+  const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
+  const state: SessionState = {
+    version: 1,
+    activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
+    sidebarCollapsed: !!parsed.sidebarCollapsed,
+    chats: chats.length ? chats : [createEmptyChatObject('')],
+  };
+  if (!state.chats.some((c) => c.id === state.activeId)) {
+    state.activeId = state.chats[0].id;
+  }
+  return state;
+}
+
+/** Load sessions from API or localStorage (after detectConfigServer). */
+export async function loadSessionsFromStorage(): Promise<void> {
+  if (isServerStorageMode()) {
+    try {
+      const remote = await getSessions();
+      sessionState = parseSessionStateFromJson(remote);
+      return;
+    } catch {
+      setStatus('err', 'Could not load sessions from ~/.minnow');
+    }
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       sessionState = defaultSessionState();
       return;
     }
-    const parsed = JSON.parse(raw) as Partial<SessionState>;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.chats)) {
-      sessionState = defaultSessionState();
-      return;
-    }
-    const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
-    sessionState = {
-      version: 1,
-      activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
-      sidebarCollapsed: !!parsed.sidebarCollapsed,
-      chats: chats.length ? chats : [createEmptyChatObject('')],
-    };
-    if (!sessionState.chats.some((c) => c.id === sessionState!.activeId)) {
-      sessionState.activeId = sessionState.chats[0].id;
-    }
+    sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
   } catch {
     sessionState = defaultSessionState();
   }
@@ -197,6 +339,15 @@ function trimChatsIfNeeded(): void {
 
 export function saveSessionsNow(): SaveSessionsResult {
   trimChatsIfNeeded();
+  if (!sessionState) return 'ok';
+
+  if (isServerStorageMode()) {
+    void putSessions(sessionState).catch(() => {
+      setStatus('err', 'Could not save sessions to ~/.minnow');
+    });
+    return 'ok';
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionState));
     return 'ok';
@@ -287,6 +438,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   const victim = state.chats[idx];
+  abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
   state.chats.splice(idx, 1);
 
@@ -311,11 +463,15 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   };
 }
 
-/** Auto-title from first user message when still on placeholder name. */
-export function maybeAutoTitleFromFirstUserMessage(chat: Chat, userText: string): void {
-  if (chat.name !== PLACEHOLDER_CHAT_NAME) return;
-  const line = userText.replace(/\s+/g, ' ').trim();
-  if (!line) return;
-  const extra = line.length > AUTO_TITLE_MAX_LEN ? '…' : '';
-  chat.name = line.slice(0, AUTO_TITLE_MAX_LEN) + extra;
+/**
+ * Apply a model-generated title when the chat still uses the placeholder name.
+ * Returns false if the chat is missing or was renamed.
+ */
+export function applyGeneratedChatTitle(chatId: string, title: string): boolean {
+  const chat = findChatById(chatId);
+  if (!chat || !isPlaceholderChatName(chat.name)) return false;
+  const trimmed = title.trim();
+  if (!trimmed) return false;
+  chat.name = trimmed;
+  return true;
 }
