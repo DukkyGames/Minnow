@@ -3,7 +3,7 @@
  * after the assistant reply completes.
  */
 
-import { scrollBottom } from './input';
+import { scrollChatIfPinned } from './chat-scroll';
 import { splitThinkingSegments } from '../api/reasoning';
 import { formatThinkingDuration } from './thinking-duration';
 
@@ -340,7 +340,7 @@ export class ThoughtBubbleController {
   }
 
   private scrollChat(): void {
-    scrollBottom();
+    scrollChatIfPinned();
   }
 }
 
