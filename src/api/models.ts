@@ -10,6 +10,7 @@ import {
   touchChat,
 } from '../state/sessions';
 import { buildModelOptionHtml } from '../lib/format-model-label';
+import { isModelLoaded } from './model-loaded-state';
 import type { ModelInfo } from '../types';
 import { updateModelStateDot } from '../ui/model-state-dot';
 import { renderSidebar } from '../ui/sidebar';
@@ -17,11 +18,7 @@ import { setReadyStatus, setStatus } from '../ui/status';
 import { updateStrip } from '../ui/stats';
 
 export { modelCache };
-
-/** LM Studio v0 uses "loaded" / "not-loaded" for model rows. */
-export function isModelLoaded(state?: string): boolean {
-  return state === 'loaded';
-}
+export { isModelLoaded } from './model-loaded-state';
 
 let modelLoadUnloadInFlight = false;
 let activeProviderSupportsLoadUnload = false;

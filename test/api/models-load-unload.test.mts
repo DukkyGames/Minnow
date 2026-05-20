@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isModelLoaded } from '../../src/api/models.ts';
+import { isModelLoaded } from '../../src/api/model-loaded-state.ts';
 import { providerSupportsModelLoadUnload } from '../../src/providers/capabilities.ts';
 import { resolveProviderEndpoints } from '../../src/providers/resolve.ts';
 import type { ProviderPublic } from '../../src/providers/types.ts';
