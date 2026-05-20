@@ -363,6 +363,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 | Concern | Location |
 |---------|----------|
 | File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse, `refreshFileTree()` after save |
+| **Name filter (F19)** | `#fileTreeSearch` above tree — debounced subsequence match on basename; filter mode BFS-indexes workspace via `list_directory` (skips `.git`, `node_modules`, `dist`, `.minnow`) and shows flat results; browse mode when query empty. `src/ui/file-tree-filter.ts`, `src/ui/file-tree-search.ts`. Phase 2 content search not shipped. |
 | Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range` / `save_file`, CodeMirror 6 + GitHub-style highlight (`src/ui/codemirror-theme.ts`); Save button + Ctrl/Cmd+S; dirty ● on path; large files (>512 KB) load lines 1–2000 read-only; LSP completions via `src/ui/file-editor-extensions.ts` + `POST /api/lsp/completion` when LSP enabled |
 | Layout | `src/ui/file-layout.ts`, `src/ui/init-file-panel.ts` |
 | Parser | `src/lib/list-directory-parse.ts` |
@@ -376,7 +377,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 **Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
 
-**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
+**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-tree-filter.test.mjs`, `test/file/file-tree-search.test.mjs`, `test/file/file-tree-filter-render.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md), [`documentation/plans/verification/feature-19.md`](plans/verification/feature-19.md).
 
 ### Sub-agent orchestration (Step 09)
 

@@ -13,6 +13,39 @@
 .chat-area::-webkit-scrollbar-track { background: transparent; }
 .chat-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+/* Jump to latest when user scrolls up during a stream */
+.chat-jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--input-bar-h, 120px) + 16px);
+  z-index: 12;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.12);
+  cursor: pointer;
+}
+
+.chat-jump-latest:hover {
+  background: var(--surface-elevated);
+  color: var(--text-hover);
+}
+
+.chat-jump-latest:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-jump-latest.hidden {
+  display: none;
+}
+
 /* Empty state */
 .empty-state {
   flex: 1;
@@ -76,6 +109,14 @@
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
 
+.msg.assistant.msg--stopped .msg-stopped-chip {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
 /* In-flight assistant reply: hide prose shell until the first streamed token */
 .msg.assistant.msg--awaiting-prose .msg-bubble.msg-bubble--awaiting {
   display: none;
@@ -128,6 +169,15 @@
     animation: none;
     opacity: 0.65;
   }
+}
+
+.stream-status__elapsed {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }
 
 .msg-label {

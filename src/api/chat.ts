@@ -30,6 +30,7 @@ import type {
   ToolCallAccumulator,
   Usage,
 } from '../types';
+import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setSendLoading } from '../ui/input';
 import {
   appendBubble,
@@ -39,7 +40,8 @@ import {
 } from '../ui/messages';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
-import { resolveComposedSystemPrompt } from '../chat/prompts/compose-context';
+import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
@@ -63,12 +65,6 @@ export interface ChatCompletionBody {
   max_tokens: number;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
-}
-
-/** Scroll the message list to the latest content. */
-function scrollBottom(): void {
-  const area = document.getElementById('chatArea')!;
-  area.scrollTop = area.scrollHeight;
 }
 
 // â”€â”€ Stream / stats helpers â”€â”€
@@ -286,19 +282,18 @@ export async function sendMessage(): Promise<void> {
   input.value = '';
   input.style.height = 'auto';
 
-  let composedSystemPrompt = '';
-  try {
-    composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
-      userMessagePreview: text,
-      routeUserText: text,
-    });
-  } catch {
-    composedSystemPrompt = '';
-  }
-  const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
+  const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
+    userMessagePreview: text,
+    routeUserText: text,
+  });
 
   const messages: ApiMessage[] = [];
-  if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
+  if (outbound.composed) {
+    messages.push({ role: 'system', content: outbound.composed });
+  }
+  if (outbound.userRules) {
+    messages.push({ role: 'system', content: outbound.userRules });
+  }
   for (const m of chat.history) {
     if (m.role === 'tool') {
       messages.push({
@@ -334,11 +329,18 @@ export async function sendMessage(): Promise<void> {
   const { wrap, bubble, cursor, streamStatus } = appendStreamingAssistantRow();
   const revealProse = (): void => revealAssistantProseBubble(wrap, bubble, streamStatus);
 
+  const thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
+    streamStatus.setThinkingElapsed(elapsedMs);
+  });
+
   const thoughtController = new ThoughtBubbleController(wrap, {
     onThinkingStart: (): void => {
       streamStatus.setPhase('thinking');
+      thinkingTracker.startSegment();
     },
     onReasoningEnded: (): void => {
+      thinkingTracker.endSegment();
+      streamStatus.setThinkingElapsed(null);
       if (wrap.classList.contains('msg--awaiting-prose')) {
         streamStatus.setPhase('generating');
       }
@@ -388,7 +390,7 @@ export async function sendMessage(): Promise<void> {
         fullText += delta;
         scheduleAssistantBubbleRender(bubble, fullText, cursor);
       }
-      scrollBottom();
+      scrollChatIfPinned();
     }
 
     while (true) {
@@ -445,6 +447,7 @@ export async function sendMessage(): Promise<void> {
       );
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
       const thinkingNorm = thoughtController.getSegmentsNormalized();
+      const thinkingDurationMs = thinkingTracker.finalize();
       const assistantMsg: AssistantMessage = {
         role: 'assistant',
         content: fullText,
@@ -453,6 +456,9 @@ export async function sendMessage(): Promise<void> {
       };
       if (thinkingNorm.length > 0) {
         assistantMsg.thinking = thinkingNorm;
+        if (thinkingDurationMs > 0) {
+          assistantMsg.thinkingDurationMs = thinkingDurationMs;
+        }
       }
       chat.history.push(assistantMsg);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
@@ -462,7 +468,9 @@ export async function sendMessage(): Promise<void> {
       touchChat(chat);
       appendStats(wrap, meta.stats, meta.usage);
       if (thinkingNorm.length > 0) {
-        renderThoughtsToggle(wrap, thinkingNorm);
+        renderThoughtsToggle(wrap, thinkingNorm, {
+          durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+        });
       }
       updateStrip(meta.stats, meta.usage, modelInfo);
       setStatus('ok', 'Ready');
@@ -473,6 +481,8 @@ export async function sendMessage(): Promise<void> {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
       thoughtController.abort();
+      thinkingTracker.abort();
+      streamStatus.setThinkingElapsed(null);
       streamStatus.dispose();
       return;
     }
@@ -486,6 +496,7 @@ export async function sendMessage(): Promise<void> {
     const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     setStatus('err', statusMsg);
     thoughtController.abort();
+    thinkingTracker.abort();
   } finally {
     thoughtController.abort();
     setStreaming(false);
@@ -493,6 +504,6 @@ export async function sendMessage(): Promise<void> {
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);
     }
-    scrollBottom();
+    scrollChatIfPinned();
   }
 }
