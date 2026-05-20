@@ -80,4 +80,24 @@ test('dispose() removes status node', () => {
   handle.dispose();
   assert.equal(wrap.querySelector('.stream-status'), null);
 });
+
+test('setThinkingElapsed shows suffix in thinking phase', () => {
+  setupDom();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div class="msg-label"></div><div class="msg-bubble"></div>';
+  const handle = attachStreamStatus(wrap);
+
+  handle.setPhase('thinking');
+  handle.setThinkingElapsed(4200);
+
+  const elapsed = wrap.querySelector('.stream-status__elapsed');
+  assert.ok(elapsed);
+  assert.equal(elapsed.hidden, false);
+  assert.match(elapsed.textContent ?? '', /4\.2s/);
+
+  handle.setPhase('generating');
+  assert.equal(elapsed.hidden, true);
+
+  handle.dispose();
+});
 });

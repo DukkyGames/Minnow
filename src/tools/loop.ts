@@ -55,7 +55,16 @@ import type {
   Message,
   ToolCallAccumulator,
 } from '../types';
+import { beginTurnCheckpoint, type TurnCheckpointHandle } from '../chat/turn-checkpoint';
 import { finalizeStoppedTurn } from '../chat/finalize-stopped-turn';
+import {
+  clearPendingTurn,
+  consumeContinueInstructionForNextSend,
+  consumePendingContinueSend,
+  ensurePendingTurn,
+} from '../state/pending-turn';
+import { isComposerRecoveryBlocked } from '../ui/composer-send';
+import { dismissPendingTurnRecovery } from '../ui/pending-turn-recovery';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setComposerStreamingMode } from '../ui/composer-send';
 import { refreshExpertSelectDisabled } from '../ui/expert-select';
@@ -79,6 +88,7 @@ import {
   resolveOutboundSystemMessages,
 } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
+import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
@@ -122,6 +132,8 @@ export interface BuildApiMessagesOptions {
   composedSystemPrompt?: string;
   /** Second system message: global user rules (Feature 24). */
   userRulesContent?: string;
+  /** Ephemeral user line for Continue after reload (not stored in history). */
+  ephemeralContinueInstruction?: string;
 }
 
 interface ChatCompletionBody {
@@ -233,6 +245,8 @@ export interface RunChatTurnOptions {
   validAttachments: Attachment[];
   titleSeed?: string;
   shouldScheduleTitle?: boolean;
+  /** Pre-resolved skill body when skillId is set (composer path). */
+  skillBody?: string | null;
 }
 
 /**
@@ -246,15 +260,11 @@ export function buildApiMessages(
   options?: BuildApiMessagesOptions,
 ): ApiMessage[] {
   const messages: ApiMessage[] = [];
-  const systemContent =
-    options?.composedSystemPrompt?.trim() || sysPrompt.trim();
-  if (systemContent) {
-    messages.push({ role: 'system', content: systemContent });
-  }
-  const userRules = options?.userRulesContent?.trim();
-  if (userRules) {
-    messages.push({ role: 'system', content: userRules });
-  }
+  pushOutboundSystemMessages(messages, {
+    composedSystemPrompt: options?.composedSystemPrompt,
+    legacySysPrompt: sysPrompt,
+    userRulesContent: options?.userRulesContent,
+  });
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
   const lastUserIdx = indexOfLastUserMessage(chat.history);
@@ -300,6 +310,11 @@ export function buildApiMessages(
     }
   }
 
+  const continueLine = options?.ephemeralContinueInstruction?.trim();
+  if (continueLine) {
+    messages.push({ role: 'user', content: continueLine });
+  }
+
   return messages;
 }
 
@@ -338,8 +353,14 @@ async function streamCompletionTurn(
   signal: AbortSignal,
   thoughtController: ThoughtBubbleController | null,
   onFirstProseDelta?: () => void,
+  onPartialText?: (fullText: string) => void,
+  onStreamConnected?: () => void,
 ): Promise<StreamTurnResult> {
   const res = await postChatCompletions(provider, body, signal);
+
+  if (res.ok) {
+    onStreamConnected?.();
+  }
 
   if (!res.ok) {
     const err = await res.text();
@@ -418,11 +439,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     rawText,
     userText,
     skillId,
-    displayText,
     historyContent,
     validAttachments,
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
+    skillBody: presetSkillBody = null,
   } = options;
 
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
@@ -522,464 +543,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   setStreaming(true);
   refreshModeSelectorDisabled();
   refreshExpertSelectDisabled();
-  setSendLoading(true);
-  setStatus(
-    'spin',
-    uiDesignerCtx.active
-      ? `${uiDesignerCtx.statusHint}…`
-      : `Generating reply${agentStatusSuffix}…`,
-  );
-
-  let streamRow = appendStreamingAssistantRow();
-  let { wrap, bubble, cursor, streamStatus } = streamRow;
-  const streamCtx = { wrap, streamStatus };
-  let revealProse = (): void =>
-    revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
-
-  let completedNormally = false;
-  let lastWrap = wrap;
-  let thoughtController: ThoughtBubbleController | null = null;
-
-  const thoughtPhaseCallbacks = {
-    onThinkingStart: (): void => {
-      streamCtx.streamStatus.setPhase('thinking');
-    },
-    onReasoningEnded: (): void => {
-      if (streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
-        streamCtx.streamStatus.setPhase('generating');
-      }
-    },
-  };
-
-  let composedSystemPrompt = '';
-  let skillBody: string | null = null;
-  if (skillId) {
-    const skill = await resolveActiveSkill(skillId);
-    if (skill?.body?.trim()) {
-      skillBody = skill.body;
-    }
-  }
-  if (skillBody && uiDesignerCtx.active) {
-    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
-  }
-
-  try {
-    composedSystemPrompt = await resolveComposedSystemPrompt(chat, {
-      userMessagePreview: userText || rawText,
-      routeUserText: userText || rawText,
-      overrides: { skillBody },
-    });
-  } catch {
-    composedSystemPrompt = '';
-  }
-  const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
-
-  try {
-    const provider = await getActiveProvider(sendProviderId);
-    thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
-
-    const activeModeId = normalizeModeId(chat.modeId);
-
-    for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-      let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
-      if (activeWorkAgent?.allowedTools?.length) {
-        const allow = new Set(activeWorkAgent.allowedTools);
-        enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
-      }
-      enabledTools = applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
-      const messages = buildApiMessages(chat, sysPrompt, {
-        modelId: sendModelId,
-        pendingUserText: pushUser ? userText || rawText : undefined,
-        composedSystemPrompt: sysPrompt,
-      });
-      const body: ChatCompletionBody = {
-        model: sendModelId || undefined,
-        messages,
-        temperature: temp,
-        max_tokens: maxTok,
-        stream: true,
-        stream_options: { include_usage: true },
-      };
-      if (enabledTools.length > 0) {
-        body.tools = enabledTools;
-        body.tool_choice = 'auto';
-      }
-
-      thoughtController.setAssistantWrap(wrap);
-      const turnResult = await streamCompletionTurn(
-        provider,
-        body,
-        bubble,
-        cursor,
-        chatSignal,
-        thoughtController,
-        revealProse,
-      );
-
-      cancelAssistantBubbleRenderDebounce();
-      cursor.remove();
-
-      const finishReason =
-        turnResult.finishReason ||
-        (turnResult.toolCalls.length > 0 ? 'tool_calls' : undefined);
-
-      if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
-        if (turnResult.fullText) {
-          revealProse();
-          setAssistantBubbleContent(bubble, turnResult.fullText, { streaming: false });
-        } else {
-          wrap.remove();
-        }
-
-        const assistantToolMsg: AssistantToolCallMessage = {
-          role: 'assistant',
-          content: turnResult.fullText || null,
-          tool_calls: turnResult.toolCalls,
-        };
-        chat.history.push(assistantToolMsg);
-        touchChat(chat);
-        scheduleSaveSessions();
-
-        setStatus('spin', 'Running tools…');
-
-        const area = document.getElementById('chatArea')!;
-        for (const tc of turnResult.toolCalls) {
-          const args = parseToolArguments(tc.function.arguments);
-          const toolWrap = renderToolCall(tc.function.name, args);
-          toolWrap.dataset.toolCallId = tc.id;
-          area.appendChild(toolWrap);
-          scrollBottom();
-
-          setSubAgentExecutorContext({
-            parentTurnId,
-            modeId: normalizeModeId(chat.modeId),
-            parentChatId: chat.id,
-            parentToolCallId: tc.id,
-          });
-
-          const planBlock = uiDesignerCtx.active
-            ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
-            : null;
-          const toolOut = planBlock
-            ? { content: planBlock }
-            : await executeTool(tc.function.name, args, {
-                chatId: chat.id,
-                toolCallId: tc.id,
-              });
-          renderToolResult(toolWrap, toolOut.content, toolOut.attachments);
-
-          chat.history.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: toolOut.content,
-            ...(toolOut.attachments?.length
-              ? { attachments: toolOut.attachments }
-              : {}),
-          });
-          scrollBottom();
-        }
-
-        touchChat(chat);
-        scheduleSaveSessions();
-        renderSidebar();
-
-        if (turn + 1 >= MAX_TOOL_TURNS) {
-          setStatus('err', 'Maximum tool turns reached');
-          break;
-        }
-
-        streamRow = appendStreamingAssistantRow();
-        ({ wrap, bubble, cursor, streamStatus } = streamRow);
-        streamCtx.wrap = wrap;
-        streamCtx.streamStatus = streamStatus;
-        lastWrap = wrap;
-        revealProse = (): void =>
-          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
-        thoughtController.setAssistantWrap(wrap);
-        thoughtController.resetStreamPhaseHints();
-
-        setStatus('spin', 'Generating reply…');
-        continue;
-      }
-
-      let fullText = turnResult.fullText;
-      let streamMeta = turnResult.streamMeta;
-
-      if (!fullText) {
-        revealProse();
-        const fallbackBody: ChatCompletionBody = {
-          model: sendModelId || undefined,
-          messages,
-          temperature: temp,
-          max_tokens: maxTok,
-        };
-        if (enabledTools.length > 0) {
-          fallbackBody.tools = enabledTools;
-          fallbackBody.tool_choice = 'auto';
-        }
-        const fallback = await tryNonStreamingFallback(
-          fallbackBody,
-          chatSignal,
-          sendProviderId,
-        );
-        const fbMsg = fallback.choices?.[0]?.message;
-        fullText = extractMessageText(fbMsg);
-        const fbReason = extractReasoningMessage(fbMsg);
-        if (fbReason) {
-          thoughtController?.ingestCompletedReasoning(fbReason);
-        }
-        streamMeta = mergeStreamMeta(streamMeta, fallback);
-        setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', {
-          streaming: false,
-        });
-      } else {
-        revealProse();
-        setAssistantBubbleContent(bubble, fullText, { streaming: false });
-      }
-
-      if (fullText) {
-        const meta = finalizeResponseMeta(
-          streamMeta,
-          turnResult.t0,
-          turnResult.tFirst ?? turnResult.tEnd,
-          turnResult.tEnd,
-        );
-        const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
-        const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
-        const assistantMsg: AssistantMessage = {
-          role: 'assistant',
-          content: fullText,
-          stats: meta.stats,
-          usage: meta.usage,
-        };
-        if (thinkingNorm.length > 0) {
-          assistantMsg.thinking = thinkingNorm;
-        }
-        chat.history.push(assistantMsg);
-        chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
-        chat.modelInfo = { ...modelInfo };
-        chat.modelId =
-          (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
-        touchChat(chat);
-        appendStats(lastWrap, meta.stats, meta.usage);
-        if (thinkingNorm.length > 0) {
-          renderThoughtsToggle(lastWrap, thinkingNorm);
-        }
-        updateStrip(meta.stats, meta.usage, modelInfo);
-        setStatus('ok', 'Ready');
-        renderSidebar();
-        scheduleSaveSessions();
-      }
-
-      completedNormally = true;
-      break;
-    }
-
-    if (!completedNormally) {
-      const attachHint =
-        getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-      setStatus('err', `Maximum tool turns reached.${attachHint}`);
-    }
-  } catch (err) {
-    const e = err as { name?: string; message?: string };
-    if (e && e.name === 'AbortError') {
-      cancelAllForParentTurn(parentTurnId);
-      thoughtController?.abort();
-      streamCtx.streamStatus.dispose();
-      return;
-    }
-    cancelAssistantBubbleRenderDebounce();
-    if (cursor.parentElement) cursor.remove();
-    revealProse();
-    bubble.classList.remove('msg-bubble--md');
-    bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
-    bubble.style.color = 'var(--red)';
-    const msg = e.message ?? '';
-    const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
-    const attachHint =
-      getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-    setStatus('err', statusMsg + attachHint);
-  } finally {
-    if (uiDesignerCtx.active) {
-      chat.workAgentId = savedWorkAgentId;
-    }
-    setSubAgentExecutorContext(null);
-    thoughtController?.abort();
-    if (completedNormally) {
-      clearAttachments();
-    }
-    setStreaming(false);
-    refreshModeSelectorDisabled();
-    refreshExpertSelectDisabled();
-    setSendLoading(false);
-    if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
-      setChatFetchAbort(null);
-    }
-    scrollBottom();
-  }
-}
-
-/** Send the composer text with tool calling (SSE loop, max {@link MAX_TOOL_TURNS} rounds). */
-export async function sendMessageWithTools(): Promise<void> {
-  if (streaming) return;
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
-  const rawText = input.value.trim();
-  const pending = getPendingAttachments();
-  const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
-  const { skillId, userText } = parseSlashCommand(rawText);
-  const hasUserText = Boolean(userText.trim());
-  if (!rawText && pendingWithoutErrors.length === 0) return;
-  if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
-
-  const chat = getActiveChat();
-  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-  const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
-  const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
-  const legacySysPrompt = (
-    document.getElementById('systemPrompt') as HTMLTextAreaElement
-  ).value.trim();
-
-  if (!modelId) {
-    setStatus('err', 'Select a model first');
-    return;
-  }
-  if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
-    setStatus('err', 'Temperature must be 0 to 2');
-    return;
-  }
-  if (!Number.isFinite(maxTok) || maxTok < 1) {
-    setStatus('err', 'Max tokens must be at least 1');
-    return;
-  }
-  await detectLocalServer();
-
-  let skillBody: string | null = null;
-  if (skillId) {
-    const skill = await resolveActiveSkill(skillId);
-    if (!skill?.body?.trim()) {
-      setStatus('err', `Unknown skill: ${skillId}`);
-      return;
-    }
-    skillBody = skill.body;
-  }
-
-  const uiDesignerCtx = prepareUiDesignerTurn(chat, {
-    skillId,
-    userText,
-    workAgentId: chat.workAgentId,
-  });
-  const savedWorkAgentId = chat.workAgentId;
-  if (uiDesignerCtx.active) {
-    chat.workAgentId = UI_DESIGNER_AGENT_ID;
-  }
-  if (skillBody && uiDesignerCtx.active) {
-    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
-  }
-
-  if (!hasUserText && pendingWithoutErrors.length === 0 && !skillBody?.trim()) {
-    setStatus('err', 'Add a message or attachment');
-    if (uiDesignerCtx.active) {
-      chat.workAgentId = savedWorkAgentId;
-    }
-    return;
-  }
-
-  const resolvedAttachments = await resolveWorkspaceReferences(pending);
-  const validAttachments = resolvedAttachments.filter((a) => a.kind !== 'error');
-  if (validAttachments.length === 0 && !hasUserText && !skillBody?.trim()) {
-    replacePendingAttachments(resolvedAttachments);
-    setStatus('err', 'Could not read attached workspace file(s)');
-    if (uiDesignerCtx.active) {
-      chat.workAgentId = savedWorkAgentId;
-    }
-    return;
-  }
-  replacePendingAttachments(resolvedAttachments);
-
-  if (chatFetchAbort) chatFetchAbort.abort();
-  const controller = new AbortController();
-  setChatFetchAbort(controller);
-  const chatSignal = controller.signal;
-  const parentTurnId = createSubAgentRunId();
-  setSubAgentExecutorContext({
-    parentTurnId,
-    modeId: normalizeModeId(chat.modeId),
-    parentChatId: chat.id,
-  });
-
-  chat.modelId = modelId || chat.modelId;
-  const displayText = skillId
-    ? formatHistoryWithSkillTag(userText, skillId)
-    : userText || rawText;
-  const historyContent = buildHistoryUserContent(displayText, validAttachments);
-  const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
-  const shouldScheduleTitle = isFirstUserMessagePending(chat);
-  chat.history.push({ role: 'user', content: historyContent });
-  touchChat(chat);
-  scheduleSaveSessions();
-  renderSidebar();
-  appendBubble('user', historyContent);
-
-  input.value = '';
-  input.style.height = 'auto';
-
-  const activeWorkAgent = resolveActiveWorkAgent(chat);
-  let sendModelId = modelId || chat.modelId;
-  let sendProviderId = chat.providerId;
-
-  try {
-    const sendProvider = await getActiveProvider(chat.providerId);
-    if (uiDesignerCtx.active) {
-      const binding = await resolveUiDesignerBinding(chat, {
-        providerId: sendProvider.id,
-        modelId: sendModelId,
-      });
-      sendModelId = binding.modelId;
-      sendProviderId = binding.providerId;
-    } else {
-      const binding = await resolveWorkAgentBinding(
-        activeWorkAgent,
-        chat,
-        { providerId: sendProvider.id, modelId: sendModelId },
-        {
-          userOverride: activeWorkAgent
-            ? getUserWorkAgentOverride(activeWorkAgent.id)
-            : undefined,
-        },
-      );
-      sendModelId = binding.modelId;
-      sendProviderId = binding.providerId;
-    }
-  } catch (err) {
-    if (err instanceof WorkAgentConfigError) {
-      setStatus('err', err.message);
-      if (uiDesignerCtx.active) {
-        chat.workAgentId = savedWorkAgentId;
-      }
-      return;
-    }
-    throw err;
-  }
-
-  chat.modelId = sendModelId;
-  chat.providerId = sendProviderId;
-  if (shouldScheduleTitle) {
-    scheduleChatTitleGeneration(chat.id, titleSeed, {
-      modelId: sendModelId,
-      providerId: sendProviderId,
-    });
-  }
-
-  const agentStatusSuffix = uiDesignerCtx.active
-    ? ' (UI Designer)'
-    : activeWorkAgent?.label
-      ? ` (${activeWorkAgent.label})`
-      : '';
-
-  setStreaming(true);
-  refreshModeSelectorDisabled();
-  refreshExpertSelectDisabled();
-  setSendLoading(true);
+  setComposerStreamingMode('streaming');
+  let livePartialText = '';
   setStatus(
     'spin',
     uiDesignerCtx.active
@@ -1016,6 +581,17 @@ export async function sendMessageWithTools(): Promise<void> {
     },
   };
 
+  let skillBody: string | null = presetSkillBody;
+  if (!skillBody && skillId) {
+    const skill = await resolveActiveSkill(skillId);
+    if (skill?.body?.trim()) {
+      skillBody = skill.body;
+    }
+  }
+  if (skillBody && uiDesignerCtx.active) {
+    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
+  }
+
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: userText || rawText,
     routeUserText: userText || rawText,
@@ -1024,28 +600,6 @@ export async function sendMessageWithTools(): Promise<void> {
   const sysPrompt = outbound.composed;
   const userRulesContent = outbound.userRules;
 
-  if (typeof console !== 'undefined') {
-    const rulesLen = userRulesContent?.length ?? 0;
-    const debugMeta = {
-      mode: chat.modeId,
-      chatWorkAgentId: chat.workAgentId ?? null,
-      chatWorkAgentAuto: chat.workAgentAuto !== false,
-      resolvedWorkAgent: activeWorkAgent?.id ?? null,
-      resolvedWorkAgentLabel: activeWorkAgent?.label ?? null,
-      promptHasWorkAgentSection: /Work agent:|work-agent:/i.test(sysPrompt),
-      length: sysPrompt.length,
-      userRulesLength: rulesLen,
-      systemMessageCount: (sysPrompt ? 1 : 0) + (rulesLen > 0 ? 1 : 0),
-      tokensEstimate: estimateTokensFromText(sysPrompt) + estimateTokensFromText(userRulesContent ?? ''),
-    };
-    console.groupCollapsed(
-      `[Minnow] system messages — mode=${debugMeta.mode} resolvedAgent=${debugMeta.resolvedWorkAgent} (chat.workAgentId=${debugMeta.chatWorkAgentId} auto=${debugMeta.chatWorkAgentAuto}) hasAgentSection=${debugMeta.promptHasWorkAgentSection} composedLen=${debugMeta.length} rulesLen=${debugMeta.userRulesLength} systemMsgs=${debugMeta.systemMessageCount} (~${debugMeta.tokensEstimate} toks)`,
-    );
-    if (sysPrompt) console.log('[composed]', sysPrompt);
-    if (userRulesContent) console.log('[user rules]', userRulesContent);
-    console.groupEnd();
-  }
-
   try {
     const provider = await getActiveProvider(sendProviderId);
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
@@ -1053,6 +607,10 @@ export async function sendMessageWithTools(): Promise<void> {
     const activeModeId = normalizeModeId(chat.modeId);
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      if (chatSignal.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
       let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
       if (activeWorkAgent?.allowedTools?.length) {
         const allow = new Set(activeWorkAgent.allowedTools);
@@ -1061,7 +619,7 @@ export async function sendMessageWithTools(): Promise<void> {
       enabledTools = applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
       const messages = buildApiMessages(chat, sysPrompt, {
         modelId: sendModelId,
-        pendingUserText: userText || rawText,
+        pendingUserText: pushUser ? userText || rawText : undefined,
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
       });
@@ -1087,6 +645,9 @@ export async function sendMessageWithTools(): Promise<void> {
         chatSignal,
         thoughtController,
         revealProse,
+        (text) => {
+          livePartialText = text;
+        },
       );
 
       cancelAssistantBubbleRenderDebounce();
@@ -1317,16 +878,114 @@ export async function sendMessageWithTools(): Promise<void> {
     thoughtController?.abort();
     thinkingTracker?.abort();
     if (completedNormally) {
-      // Clear-on-success-only: retain chips after abort, errors, or max tool turns for retry.
       clearAttachments();
     }
     setStreaming(false);
     refreshModeSelectorDisabled();
-  refreshExpertSelectDisabled();
-    setSendLoading(false);
+    refreshExpertSelectDisabled();
+    setComposerStreamingMode('idle');
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);
     }
     scrollChatIfPinned();
   }
+}
+
+/** Send the composer text with tool calling (SSE loop, max {@link MAX_TOOL_TURNS} rounds). */
+export async function sendMessageWithTools(): Promise<void> {
+  if (streaming) return;
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+  const rawText = input.value.trim();
+  const pending = getPendingAttachments();
+  const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
+  const { skillId, userText } = parseSlashCommand(rawText);
+  const hasUserText = Boolean(userText.trim());
+  if (!rawText && pendingWithoutErrors.length === 0) return;
+  if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
+
+  const chat = getActiveChat();
+  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
+  const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
+  const legacySysPrompt = (
+    document.getElementById('systemPrompt') as HTMLTextAreaElement
+  ).value.trim();
+
+  if (!modelId) {
+    setStatus('err', 'Select a model first');
+    return;
+  }
+  if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+    setStatus('err', 'Temperature must be 0 to 2');
+    return;
+  }
+  if (!Number.isFinite(maxTok) || maxTok < 1) {
+    setStatus('err', 'Max tokens must be at least 1');
+    return;
+  }
+  await detectLocalServer();
+
+  let skillBody: string | null = null;
+  if (skillId) {
+    const skill = await resolveActiveSkill(skillId);
+    if (!skill?.body?.trim()) {
+      setStatus('err', `Unknown skill: ${skillId}`);
+      return;
+    }
+    skillBody = skill.body;
+  }
+
+  const uiDesignerCtx = prepareUiDesignerTurn(chat, {
+    skillId,
+    userText,
+    workAgentId: chat.workAgentId,
+  });
+  const savedWorkAgentId = chat.workAgentId;
+  if (uiDesignerCtx.active) {
+    chat.workAgentId = UI_DESIGNER_AGENT_ID;
+  }
+  if (skillBody && uiDesignerCtx.active) {
+    skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
+  }
+
+  if (!hasUserText && pendingWithoutErrors.length === 0 && !skillBody?.trim()) {
+    setStatus('err', 'Add a message or attachment');
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
+    return;
+  }
+
+  const resolvedAttachments = await resolveWorkspaceReferences(pending);
+  const validAttachments = resolvedAttachments.filter((a) => a.kind !== 'error');
+  if (validAttachments.length === 0 && !hasUserText && !skillBody?.trim()) {
+    replacePendingAttachments(resolvedAttachments);
+    setStatus('err', 'Could not read attached workspace file(s)');
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
+    return;
+  }
+  replacePendingAttachments(resolvedAttachments);
+
+  const displayText = skillId
+    ? formatHistoryWithSkillTag(userText, skillId)
+    : userText || rawText;
+  const historyContent = buildHistoryUserContent(displayText, validAttachments);
+  const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
+  const shouldScheduleTitle = isFirstUserMessagePending(chat);
+
+  await runChatTurn({
+    chat,
+    pushUser: true,
+    rawText,
+    userText,
+    skillId,
+    displayText,
+    historyContent,
+    validAttachments,
+    titleSeed,
+    shouldScheduleTitle,
+    skillBody,
+  });
 }
