@@ -18,3 +18,8 @@ npx tsx --test test/file/path-utils.test.mjs test/file/file-tree-move-dialog.tes
 | M6 | `move_file` **off** | After confirm, error status points to Settings |
 | M7 | Move open file in viewer | Viewer path updates |
 | M8 | Short click file row | Opens viewer; no accidental drag |
+
+## Sign-off
+
+- Automated: **PASS** (2026-05-20) — path-utils, move-dialog, dnd tests + `npm test`; commit `2d21408`
+- Manual M1–M8: pending

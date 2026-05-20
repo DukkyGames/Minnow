@@ -32,6 +32,6 @@
 
 ## Sign-off
 
-- [ ] AC1–AC8
-- [ ] Automated green
-- [ ] U1–U7
+- [x] Automated green (`pending-turn*.test.mts`, full `npm test`) — 2026-05-20
+- [ ] Manual U1–U7
+- Commit: `9860d41`

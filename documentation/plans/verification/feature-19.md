@@ -26,3 +26,4 @@ Flat-list DOM integration is covered manually (M1–M3); unit tests cover matche
 
 - v1: **name filter only** (subsequence on basename); no content/ripgrep search
 - Phase 2: content search documented in [`feature-19-file-search.md`](../Build%20out/feature-19-file-search.md) — not shipped
+- Automated: **PASS** (2026-05-20) — filter/search/render tests + `npm test`; commit `42887a3`

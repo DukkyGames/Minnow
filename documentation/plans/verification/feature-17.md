@@ -23,6 +23,13 @@ Includes `test/ui/chat-scroll.test.mjs` (`isChatAtBottom` threshold math, scroll
 8. **Mobile:** Narrow layout — chip not hidden under composer.
 9. **Terminal unchanged:** Terminal output still pins at 24px independently.
 
+## Automated sign-off (2026-05-20)
+
+| Gate | Result |
+|------|--------|
+| `npm test` (includes `chat-scroll.test.mjs`) | **PASS** |
+| Commit | `4ade7a3` |
+
 ## Plan review (ship)
 
 - [x] `src/ui/chat-scroll.ts` — 80px threshold, `stickToBottom`, jump chip
