@@ -53,6 +53,8 @@ import type {
   ChatCompletionChunk,
   ContentPart,
   Message,
+  PendingTurn,
+  ToolCall,
   ToolCallAccumulator,
 } from '../types';
 import { beginTurnCheckpoint, type TurnCheckpointHandle } from '../chat/turn-checkpoint';
@@ -67,7 +69,7 @@ import {
 import { isComposerRecoveryBlocked } from '../ui/composer-send';
 import {
   dismissPendingTurnRecovery,
-  showPendingTurnRecovery,
+  showPendingTurnRecoveryManual,
 } from '../ui/pending-turn-recovery';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setComposerStreamingMode } from '../ui/composer-send';
@@ -135,6 +137,8 @@ export interface BuildApiMessagesOptions {
   userRulesContent?: string;
   /** Ephemeral user line for Continue after reload (not stored in history). */
   ephemeralContinueInstruction?: string;
+  /** Checkpointed assistant leg to inject before the continue user line (reload resume). */
+  pendingTurnResume?: PendingTurn;
 }
 
 interface ChatCompletionBody {
@@ -233,6 +237,86 @@ function isVlmModel(modelId: string | undefined): boolean {
   return modelCache.get(modelId)?.type === 'vlm';
 }
 
+/** Visible text for API replay of a checkpoint (prose, else reasoning segments). */
+function effectivePendingResumeText(pending: PendingTurn): string {
+  const trimmed = pending.content?.trim() ?? '';
+  if (trimmed.length > 0) {
+    return pending.content ?? '';
+  }
+  if (pending.thinking?.length) {
+    return pending.thinking.join('\n\n');
+  }
+  return '';
+}
+
+/** True when the checkpoint carries something we should send to the model. */
+function pendingTurnResumeHasApiPayload(pending: PendingTurn): boolean {
+  return (
+    effectivePendingResumeText(pending).trim().length > 0 ||
+    (pending.toolCalls?.length ?? 0) > 0
+  );
+}
+
+function toolCallsShallowEqual(a: ToolCall[], b: ToolCall[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]!.id !== b[i]!.id) return false;
+    if (a[i]!.function.name !== b[i]!.function.name) return false;
+  }
+  return true;
+}
+
+/**
+ * Avoid duplicating an assistant row that is already the last persisted message
+ * for this turn (e.g. same partial already flushed to history).
+ */
+function shouldInjectPendingTurnResume(
+  history: Message[],
+  pending: PendingTurn,
+): boolean {
+  if (!pendingTurnResumeHasApiPayload(pending)) {
+    return false;
+  }
+  const last = history[history.length - 1];
+  if (!last || last.role === 'user' || last.role === 'tool') {
+    return true;
+  }
+  if (last.role !== 'assistant') {
+    return true;
+  }
+  const asst = last as AssistantToolCallMessage;
+  if (asst.tool_calls?.length) {
+    if (
+      pending.toolCalls?.length &&
+      toolCallsShallowEqual(asst.tool_calls, pending.tool_calls) &&
+      String(asst.content ?? '').trim() === String(pending.content ?? '').trim()
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return String(asst.content ?? '').trim() !== String(pending.content ?? '').trim();
+}
+
+/** Append checkpoint assistant message before the ephemeral continue user line. */
+function appendPendingTurnResumeToApiMessages(
+  messages: ApiMessage[],
+  pending: PendingTurn,
+): void {
+  const text = effectivePendingResumeText(pending);
+  if (pending.toolCalls?.length) {
+    messages.push({
+      role: 'assistant',
+      content: text.trim() ? text : null,
+      tool_calls: pending.toolCalls,
+    });
+    return;
+  }
+  if (text.trim()) {
+    messages.push({ role: 'assistant', content: text });
+  }
+}
+
 /** Options for {@link runChatTurn} (composer send or history resend). */
 export interface RunChatTurnOptions {
   chat: Chat;
@@ -316,6 +400,10 @@ export function buildApiMessages(
   }
 
   const continueLine = options?.ephemeralContinueInstruction?.trim();
+  const pendingResume = options?.pendingTurnResume;
+  if (continueLine && pendingResume && shouldInjectPendingTurnResume(chat.history, pendingResume)) {
+    appendPendingTurnResumeToApiMessages(messages, pendingResume);
+  }
   if (continueLine) {
     messages.push({ role: 'user', content: continueLine });
   }
@@ -662,6 +750,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         ephemeralContinueInstruction: continueFromPending
           ? ephemeralContinueInstruction
           : undefined,
+        pendingTurnResume: continueFromPending ? pendingResume : undefined,
       });
       const body: ChatCompletionBody = {
         model: sendModelId || undefined,
@@ -915,7 +1004,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         toolRound: currentToolRound,
       });
       if (getActiveChat().id === chat.id) {
-        showPendingTurnRecovery(chat);
+        showPendingTurnRecoveryManual(chat);
       }
       return;
     }

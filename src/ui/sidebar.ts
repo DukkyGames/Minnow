@@ -15,7 +15,7 @@ import {
   applySidebarVisuals,
   closeMobileSidebar,
 } from './layout';
-import { initPendingTurnRecoveryForChat } from './pending-turn-recovery';
+import { bootTurnRecoveryForChat } from '../chat/turn-recovery';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -311,7 +311,7 @@ export function switchChat(id: string): void {
   sessionState.activeId = id;
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
-  initPendingTurnRecoveryForChat(chat);
+  void bootTurnRecoveryForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
@@ -335,7 +335,7 @@ export function createChat(): void {
   sessionState!.activeId = chat.id;
   touchChat(chat);
   renderChatFromHistory(chat);
-  initPendingTurnRecoveryForChat(chat);
+  void bootTurnRecoveryForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();

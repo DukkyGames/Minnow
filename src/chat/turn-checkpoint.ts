@@ -53,13 +53,9 @@ export function beginTurnCheckpoint(
       stopped: stopped || undefined,
     });
 
-  const pushCheckpoint = (immediate = false): void => {
-    syncPendingTurn(chat, buildSnap(), immediate ? { immediate: true } : undefined);
-  };
-
   registerPendingTurnLiveCapture(() => buildSnap());
 
-  syncPendingTurn(chat, buildSnap());
+  syncPendingTurn(chat, buildSnap(), { immediate: true });
 
   return {
     startedAt: opts.startedAt,

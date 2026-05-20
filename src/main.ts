@@ -55,7 +55,7 @@ import { initChatScroll } from './ui/chat-scroll';
 import { streaming } from './app-state';
 import { flushPendingTurnNow } from './state/pending-turn';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
-import { initPendingTurnRecoveryForChat } from './ui/pending-turn-recovery';
+import { bootTurnRecoveryForChat } from './chat/turn-recovery';
 import { autoResize, handleComposerPrimaryAction, handleKey } from './ui/input';
 import {
   applySidebarVisuals,
@@ -213,7 +213,7 @@ export async function initApp(): Promise<void> {
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
-  initPendingTurnRecoveryForChat(getActiveChat());
+  void bootTurnRecoveryForChat(getActiveChat());
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
@@ -239,6 +239,11 @@ export async function initApp(): Promise<void> {
   };
   window.addEventListener('pagehide', flushOnExit);
   window.addEventListener('beforeunload', flushOnExit);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && streaming) {
+      flushPendingTurnNow();
+    }
+  });
 
   const drawerOverlay = document.getElementById('drawerOverlay');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');
