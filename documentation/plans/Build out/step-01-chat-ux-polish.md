@@ -21,7 +21,7 @@ Polish the primary chat surface without new persistence, providers, or settings 
 | **24** | Generating-state animation is a harsh blinking square | Distinct, on-brand **thinking** vs **generating** affordances |
 | **25** | After reasoning ends, user sees a blank gap or lone square | Visible **“Generating response…”** (with motion) until the first prose token |
 
-**Out of scope for Step 01:** `~/.speedchat` migration, new composer tool rows (Step 20), terminal, file tree, skills, providers, programmatic prompts, changing tool-loop semantics beyond stream UI hooks, fixing LM Studio connectivity, live tool-bubble wiring (T9 in tool-usage verification).
+**Out of scope for Step 01:** `~/.minnow` migration, new composer tool rows (Step 20), terminal, file tree, skills, providers, programmatic prompts, changing tool-loop semantics beyond stream UI hooks, fixing LM Studio connectivity, live tool-bubble wiring (T9 in tool-usage verification).
 
 **Already done (do not re-implement):** Empty assistant bubble on new chats (parent plan notes backlog item 2 fixed).
 
@@ -64,7 +64,7 @@ Do **not** add Playwright unless the team explicitly wants E2E in a later step; 
 | Relationship | Step | Notes |
 |--------------|------|-------|
 | **Depends on** | — | Safe first step |
-| **Soft parallel** | Step 02 (`~/.speedchat`) | No schema conflict if Step 02 avoids `index.html` top bar in the same PR |
+| **Soft parallel** | Step 02 (`~/.minnow`) | No schema conflict if Step 02 avoids `index.html` top bar in the same PR |
 | **Does not block** | Steps 03–20 | Pure UI |
 
 ---

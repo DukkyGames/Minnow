@@ -1,5 +1,5 @@
 /**
- * Terminal panel preferences in ~/.speedchat/config.json (`terminal` block).
+ * Terminal panel preferences in ~/.minnow/config.json (`terminal` block).
  */
 
 export interface TerminalMeta {

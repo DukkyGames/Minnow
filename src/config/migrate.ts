@@ -1,5 +1,5 @@
 /**
- * One-time migration from browser localStorage to ~/.speedchat.
+ * One-time migration from browser localStorage to ~/.minnow.
  */
 
 import { PRESET_STORAGE_KEY, STORAGE_KEY } from '../constants';
@@ -19,22 +19,30 @@ function readLegacyLocalStorage(): {
     systemPrompt?: string;
   } = {};
 
+  const legacySessionsKey = 'speedchat-sessions-v1';
+  const legacyToolsKey = 'speedchat.tools';
+  const legacySystemPromptKey = 'speedchat.systemPrompt';
+
   try {
-    const sessions = localStorage.getItem(STORAGE_KEY);
+    const sessions =
+      localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(legacySessionsKey);
     if (sessions) out.sessions = sessions;
   } catch {
     /* ignore */
   }
 
   try {
-    const tools = localStorage.getItem(TOOL_CONFIG_STORAGE_KEY);
+    const tools =
+      localStorage.getItem(TOOL_CONFIG_STORAGE_KEY) ?? localStorage.getItem(legacyToolsKey);
     if (tools) out.tools = tools;
   } catch {
     /* ignore */
   }
 
   try {
-    const systemPrompt = localStorage.getItem(PRESET_STORAGE_KEY);
+    const systemPrompt =
+      localStorage.getItem(PRESET_STORAGE_KEY) ??
+      localStorage.getItem(legacySystemPromptKey);
     if (systemPrompt) out.systemPrompt = systemPrompt;
   } catch {
     /* ignore */
@@ -45,10 +53,20 @@ function readLegacyLocalStorage(): {
 
 /** Remove legacy keys after successful migration. */
 function clearLegacyLocalStorage(): void {
+  const keys = [
+    STORAGE_KEY,
+    TOOL_CONFIG_STORAGE_KEY,
+    PRESET_STORAGE_KEY,
+    'speedchat-sessions-v1',
+    'speedchat.tools',
+    'speedchat.systemPrompt',
+    'speedchat.skills',
+    'speedchat.subAgents',
+    'speedchat.experts',
+    'speedchat.titlesMeta',
+  ];
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TOOL_CONFIG_STORAGE_KEY);
-    localStorage.removeItem(PRESET_STORAGE_KEY);
+    for (const key of keys) localStorage.removeItem(key);
   } catch {
     /* ignore */
   }
@@ -81,6 +99,6 @@ export async function runMigrationIfNeeded(): Promise<void> {
       clearLegacyLocalStorage();
     }
   } catch (err) {
-    console.warn('[SpeedChat] Config migration failed:', err);
+    console.warn('[Minnow] Config migration failed:', err);
   }
 }

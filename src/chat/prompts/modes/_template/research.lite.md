@@ -7,7 +7,7 @@ description: Lite Research mode instructions.
 profileBodies: split
 ---
 
-<!-- SPEEDCHAT_MODE_MARKER: research lite -->
+<!-- MINNOW_MODE_MARKER: research lite -->
 <!-- LITE -->
 
 **Research:** Read-only; cite sources; use web/search tools; no writes.

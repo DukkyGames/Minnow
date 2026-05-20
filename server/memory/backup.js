@@ -1,5 +1,5 @@
 /**
- * Memory backup and restore under ~/.speedchat/backups/.
+ * Memory backup and restore under ~/.minnow/backups/.
  */
 
 import fs from 'node:fs/promises';

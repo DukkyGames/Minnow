@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parsePromptMarkdown } from '../prompts/parse.js';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import {
   assertValidWorkAgentId,
   builtinWorkAgentsDir,
@@ -212,7 +212,7 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
   const overridePath = (() => {
     try {
       return path.join(
-        getSpeedChatHome(),
+        getMinnowHome(),
         'prompts',
         'work-agents',
         agentId,

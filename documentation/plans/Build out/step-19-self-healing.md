@@ -10,7 +10,7 @@
 | **Blocks** | Step **20** (settings master toggle for self-healing) |
 | **Default** | **Off** — feature flag only; full toggle UI ships in Step 20 |
 
-**Workspace:** `c:\Users\dukky\Documents\Development\SpeedChat`
+**Workspace:** `c:\Users\dukky\Documents\Development\Minnow`
 
 **Read first:** [`documentation/context.md`](../../context.md), [`to-fix-step-order.md`](../to-fix-step-order.md) (Step 19 section), Step **09** / **13** / **16** deliverables (when implemented), [`src/tools/loop.ts`](../../../src/tools/loop.ts) (parent tool loop today).
 
@@ -23,7 +23,7 @@
 When self-healing is **enabled**, the **parent orchestrator** (not the stuck sub-agent) detects **repetition** in a sub-agent run and escalates in two tiers:
 
 1. **Tier 1 (cheap):** tell sub-agent to stop → **cancel** run → **restart** same sub-agent type with fresh context.
-2. **Tier 2 (expensive):** if the **same class of repetition** recurs after tier 1, spawn an **explorer** sub-agent to investigate, author a **skill** or **script** under `~/.speedchat`, optionally record in **memory** (Step 16), with **guardrails** on disk and execution.
+2. **Tier 2 (expensive):** if the **same class of repetition** recurs after tier 1, spawn an **explorer** sub-agent to investigate, author a **skill** or **script** under `~/.minnow`, optionally record in **memory** (Step 16), with **guardrails** on disk and execution.
 
 **Out of scope for v1:** Tier 2 on generic tool failures unrelated to repetition; tier 2 only after tier 1 failed once for the same signature.
 
@@ -35,10 +35,10 @@ When self-healing is **enabled**, the **parent orchestrator** (not the stuck sub
 |--------------|-------------|-------------------|
 | Sub-agent runner | **09** | `spawnSubAgent`, `cancelSubAgent`, run handles, isolated context, tool subset, aggregated result to parent |
 | Orchestrator hook | **09** | Callbacks/events during sub-agent tool loop (tool call, tool result, error, turn end) |
-| `~/.speedchat` I/O | **02** | `skills/`, `scripts/`, `logs/`, config read/write via server API |
-| Skill loader + format | **13** | `SKILL.md` discovery, skill `id`, injection API; user skills in `~/.speedchat/skills/` |
+| `~/.minnow` I/O | **02** | `skills/`, `scripts/`, `logs/`, config read/write via server API |
+| Skill loader + format | **13** | `SKILL.md` discovery, skill `id`, injection API; user skills in `~/.minnow/skills/` |
 | Memory CRUD (optional) | **16** | Append/search memory chunk: “fix exists for signature X → skill/script Y” |
-| Config flag (stub OK) | **19** | `selfHealing.enabled` in `~/.speedchat/config.json` (default `false`); Step 20 adds UI |
+| Config flag (stub OK) | **19** | `selfHealing.enabled` in `~/.minnow/config.json` (default `false`); Step 20 adds UI |
 
 If Step 09 is not merged, implement **interfaces + mocks** first; wire real orchestrator in a follow-up commit within the same step (verifier runs tests against mocks + integration flag).
 
@@ -67,9 +67,9 @@ flowchart TD
   DET -->|tier1 trigger| SH
   SH -->|cancel + restart| SA
   DET -->|tier2 trigger| EXP[Explorer sub-agent]
-  EXP -->|write| FS["~/.speedchat/skills | scripts"]
+  EXP -->|write| FS["~/.minnow/skills | scripts"]
   EXP -->|optional| MEM[Memory Step 16]
-  SH -->|audit| LOG["~/.speedchat/logs/self-heal.jsonl"]
+  SH -->|audit| LOG["~/.minnow/logs/self-heal.jsonl"]
 ```
 
 ### Module layout (target)
@@ -80,7 +80,7 @@ src/agents/
   sub-agent-runner.ts      # Step 09 — spawn/cancel/restart
   self-healing/
     index.ts               # Public API: createController, onSubAgentEvent
-    config.ts              # Load merge selfHealing from ~/.speedchat/config.json
+    config.ts              # Load merge selfHealing from ~/.minnow/config.json
     detector.ts            # RepetitionDetector (pure, unit-tested)
     signatures.ts            # Failure signature hash + match “same class”
     tier1.ts                 # stop message, cancel, restart with hint
@@ -99,7 +99,7 @@ Orchestrator integration point: **wrap** each sub-agent execution with `SelfHeal
 
 ## Configuration
 
-**Location:** `~/.speedchat/config.json` (merged with defaults on read).
+**Location:** `~/.minnow/config.json` (merged with defaults on read).
 
 ```json
 {
@@ -211,7 +211,7 @@ interface FailureSignature {
 
 ### Audit
 
-Append JSON line to `~/.speedchat/logs/self-heal.jsonl`:
+Append JSON line to `~/.minnow/logs/self-heal.jsonl`:
 
 ```json
 {"ts":"2026-05-19T12:00:00.000Z","tier":1,"subAgentType":"implementer","fingerprint":"…","reason":"duplicate_tool"}
@@ -234,7 +234,7 @@ Append JSON line to `~/.speedchat/logs/self-heal.jsonl`:
 | Property | Value |
 |----------|--------|
 | **Type id** | `self-heal-explorer` (register in Step 09 sub-agent config) |
-| **Tools** | Superset of original sub-agent + file read/list + `save_file` under `~/.speedchat` only + skill validate API |
+| **Tools** | Superset of original sub-agent + file read/list + `save_file` under `~/.minnow` only + skill validate API |
 | **Max turns** | `tier2.maxExplorerTurns` (default 12) |
 | **Prompt** | `explorer-prompt.ts` — investigate root cause, prefer **skill** over ad-hoc scripts; follow Cursor `SKILL.md` front matter |
 
@@ -242,8 +242,8 @@ Append JSON line to `~/.speedchat/logs/self-heal.jsonl`:
 
 | Artifact | Path | Format |
 |----------|------|--------|
-| **Skill** | `~/.speedchat/skills/<skill-id>/SKILL.md` | YAML front matter: `id`, `name`, `description`; body = instructions |
-| **Script** | `~/.speedchat/scripts/<slug>.mjs` or `.ps1` | Executable helper; **not** auto-run if `requireScriptApproval` |
+| **Skill** | `~/.minnow/skills/<skill-id>/SKILL.md` | YAML front matter: `id`, `name`, `description`; body = instructions |
+| **Script** | `~/.minnow/scripts/<slug>.mjs` or `.ps1` | Executable helper; **not** auto-run if `requireScriptApproval` |
 
 **Skill id rules:** kebab-case, prefix `heal-` optional, must not collide with built-in `src/skills/` unless override policy from Step 13 allows user win.
 
@@ -251,10 +251,10 @@ Append JSON line to `~/.speedchat/logs/self-heal.jsonl`:
 
 | Rule | Behavior |
 |------|----------|
-| Path allowlist | Writes only under `~/.speedchat/skills/`, `~/.speedchat/scripts/`, `~/.speedchat/logs/` |
+| Path allowlist | Writes only under `~/.minnow/skills/`, `~/.minnow/scripts/`, `~/.minnow/logs/` |
 | Size cap | Reject skill body > `maxSkillBytes` |
 | Script count | Refuse create if `scripts/` count ≥ `maxScriptsOnDisk` |
-| Script execution | If `requireScriptApproval`, register pending in `~/.speedchat/pending-scripts.json`; parent must call approve API or settings (Step 20) |
+| Script execution | If `requireScriptApproval`, register pending in `~/.minnow/pending-scripts.json`; parent must call approve API or settings (Step 20) |
 | No secrets | Scanner rejects patterns like `api[_-]?key`, `Bearer ` in written files (warn + fail) |
 | Audit | Every write + tier-2 completion → `self-heal.jsonl` |
 
@@ -341,7 +341,7 @@ Use **Node built-in test** (`node:test`) + **tsx** (already used by `scripts/sa1
 | `test/self-healing/detector.test.ts` | R1–R4 with fixture event arrays; edge cases (below threshold, different args) |
 | `test/self-healing/signatures.test.ts` | Tier-1 record → tier-2 match; window expiry (mock clock) |
 | `test/self-healing/tier1.test.ts` | Mock runner: cancel called, restart has empty history + hint |
-| `test/self-healing/tier2.test.ts` | Mock explorer; skill written under temp `~/.speedchat`; guardrails reject oversize |
+| `test/self-healing/tier2.test.ts` | Mock explorer; skill written under temp `~/.minnow`; guardrails reject oversize |
 | `test/self-healing/guardrails.test.ts` | Path deny outside home; secret pattern block |
 | `test/self-healing/integration.test.ts` | Optional: full controller with fake sub-agent event stream |
 
@@ -375,7 +375,7 @@ npm run build
 npm run test:self-healing
 # optional with server:
 npm start
-# manual: enable selfHealing in ~/.speedchat/config.json, trigger duplicate read_file in sub-agent
+# manual: enable selfHealing in ~/.minnow/config.json, trigger duplicate read_file in sub-agent
 ```
 
 ---
@@ -385,8 +385,8 @@ npm start
 - [ ] `selfHealing.enabled` defaults to **false**; when false, zero healing code paths run (grep or coverage on gate).
 - [ ] Detector unit tests: **all R1–R4** cases pass; deterministic fixtures.
 - [ ] Tier 1: repetition → cancel + restart with hint; capped by `maxRestartsPerParentTurn`.
-- [ ] Tier 2: only after tier-1 signature match; writes skill under `~/.speedchat/skills/`; guardrails block bad paths/sizes.
-- [ ] Audit log append-only at `~/.speedchat/logs/self-heal.jsonl`.
+- [ ] Tier 2: only after tier-1 signature match; writes skill under `~/.minnow/skills/`; guardrails block bad paths/sizes.
+- [ ] Audit log append-only at `~/.minnow/logs/self-heal.jsonl`.
 - [ ] `documentation/context.md` updated: self-healing module, config keys, logs path.
 - [ ] `documentation/plans/verification/step-19.md` exists; verifier re-runs `npm run test:self-healing` and `npm run build` → **PASS**.
 
@@ -400,7 +400,7 @@ Use this checklist in order; parallelize only where noted.
 
 - [ ] **19.0.1** Confirm Step 09 APIs exist (`spawnSubAgent`, `cancelSubAgent`, events); document gaps in verification file if stubbed.
 - [ ] **19.0.2** Add `src/agents/self-healing/types.ts` — events, signatures, config types, tier outcomes.
-- [ ] **19.0.3** Add `defaults.ts` + `config.ts` — load/merge `selfHealing` from `~/.speedchat/config.json`.
+- [ ] **19.0.3** Add `defaults.ts` + `config.ts` — load/merge `selfHealing` from `~/.minnow/config.json`.
 - [ ] **19.0.4** Add `npm run test:self-healing` script to `package.json`.
 
 ### Phase B — Detector (test-first)
@@ -414,7 +414,7 @@ Use this checklist in order; parallelize only where noted.
 
 - [ ] **19.2.1** Write `tier1.test.ts` with mock sub-agent runner.
 - [ ] **19.2.2** Implement `tier1.ts` — stop message, cancel, restart, restart cap.
-- [ ] **19.2.3** Wire audit logging to `~/.speedchat/logs/self-heal.jsonl`.
+- [ ] **19.2.3** Wire audit logging to `~/.minnow/logs/self-heal.jsonl`.
 - [ ] **19.2.4** Parent status message hook (minimal UI string).
 
 ### Phase D — Tier 2 + guardrails
@@ -458,14 +458,14 @@ Use this checklist in order; parallelize only where noted.
 Copy to implementer Task:
 
 ```
-Step 19 — Self-healing (2-tier). Repo: c:\Users\dukky\Documents\Development\SpeedChat
+Step 19 — Self-healing (2-tier). Repo: c:\Users\dukky\Documents\Development\Minnow
 
 Backlog: to-fix.md #30
 Depends: Step 09 (sub-agents), Step 13 (skills); Step 16 optional for memory
 Plan: documentation/plans/Build out/step-19-self-healing.md
 
 Read: documentation/context.md, to-fix-step-order.md Step 19, this build plan.
-Implement: detector (R1–R4), tier1 cancel/restart, tier2 explorer + ~/.speedchat skills/scripts, guardrails, config default OFF.
+Implement: detector (R1–R4), tier1 cancel/restart, tier2 explorer + ~/.minnow skills/scripts, guardrails, config default OFF.
 Tests: test/self-healing/*.test.ts, npm run test:self-healing
 Update: documentation/context.md, documentation/plans/verification/step-19.md
 Do not build Step 20 settings UI.

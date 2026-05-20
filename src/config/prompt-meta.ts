@@ -12,7 +12,7 @@ export interface PromptMetaSettings {
   activeInfoPresetId: string;
 }
 
-const PROMPT_META_STORAGE_KEY = 'speedchat.promptMeta';
+const PROMPT_META_STORAGE_KEY = 'minnow.promptMeta';
 
 const DEFAULT_PROMPT_META: PromptMetaSettings = {
   activePromptProfile: 'full',

@@ -11,7 +11,7 @@ Expected: **2/2** detector tests pass.
 
 ## Config
 
-`~/.speedchat/config.json` → `selfHealing.enabled` (default **false**). Enable in Settings → Features for manual tier-1 restart tests.
+`~/.minnow/config.json` → `selfHealing.enabled` (default **false**). Enable in Settings → Features for manual tier-1 restart tests.
 
 ## Manual (deferred)
 

@@ -1,6 +1,6 @@
 /**
  * Vendors Impeccable upstream reference/ and scripts/ into src/skills/impeccable/.
- * Preserves SpeedChat-authored SKILL.md; writes SKILL.upstream.md from upstream.
+ * Preserves Minnow-authored SKILL.md; writes SKILL.upstream.md from upstream.
  *
  * Env:
  *   IMPECCABLE_SYNC_STRICT=1  — exit non-zero on install/sync failure (CI)
@@ -116,10 +116,10 @@ function syncFromUpstream(upstreamDir) {
     copyTree(from, to);
   }
 
-  const speedchatSkill = path.join(TARGET_DIR, 'SKILL.md');
-  if (!fs.existsSync(speedchatSkill)) {
+  const minnowSkill = path.join(TARGET_DIR, 'SKILL.md');
+  if (!fs.existsSync(minnowSkill)) {
     fail(
-      `Missing SpeedChat wrapper ${path.relative(PROJECT_ROOT, speedchatSkill)} — commit SKILL.md before sync`,
+      `Missing Minnow wrapper ${path.relative(PROJECT_ROOT, minnowSkill)} — commit SKILL.md before sync`,
     );
   }
 }

@@ -12,6 +12,11 @@ export interface MemoryEntryMeta {
   pinned: boolean;
 }
 
+/** Full entry returned when listing with includeBody=1. */
+export interface MemoryEntryWithBody extends MemoryEntryMeta {
+  body: string;
+}
+
 export interface MemoryConfig {
   enabled: boolean;
   maxEntries: number;

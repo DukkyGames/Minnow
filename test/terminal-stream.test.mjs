@@ -46,7 +46,7 @@ async function testRunReturnsRunId() {
   const res = await fetch(`${BASE}/api/terminal/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command: 'echo SPEEDCHAT_STREAM_OK' }),
+    body: JSON.stringify({ command: 'echo MINNOW_STREAM_OK' }),
   });
   const body = await res.json();
   assert(res.status === 200, 'run status 200');
@@ -64,7 +64,7 @@ async function testStreamEmitsStdoutAndExit(runId) {
   assert(res.status === 200, 'stream status 200');
   const stdout = events.filter((e) => e.type === 'stdout').map((e) => e.text).join('');
   const exit = events.find((e) => e.type === 'exit');
-  assert(stdout.includes('SPEEDCHAT_STREAM_OK'), 'stdout contains marker');
+  assert(stdout.includes('MINNOW_STREAM_OK'), 'stdout contains marker');
   assert(exit && exit.code === 0, 'exit code 0');
 }
 

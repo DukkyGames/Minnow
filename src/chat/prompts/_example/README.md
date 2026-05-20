@@ -1,11 +1,11 @@
-# SpeedChat prompt system — contributor guide
+# Minnow prompt system — contributor guide
 
 ## Where loaders scan
 
 | Root | Purpose |
 |------|---------|
 | `src/chat/prompts/**` | Shipped defaults (bundled via Vite `import.meta.glob`) |
-| `~/.speedchat/prompts/**` | User overrides (same relative paths; same `id` wins) |
+| `~/.minnow/prompts/**` | User overrides (same relative paths; same `id` wins) |
 
 `_example/` is excluded from routing.
 
@@ -45,6 +45,6 @@ Send path: `resolveComposedSystemPrompt()` in `compose-context.ts` → `buildApi
 
 - **Full** — maximum guidance (`*.full.md` / `fullBody`)
 - **Lite** — token-efficient (`liteBody`, caps, short tool list)
-- **Custom** — saved JSON under `~/.speedchat/prompt-configs/`
+- **Custom** — saved JSON under `~/.minnow/prompt-configs/`
 
 See `PROMPT_TEMPLATE.md` in this folder for the full schema and tokens.

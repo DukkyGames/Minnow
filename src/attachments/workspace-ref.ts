@@ -12,7 +12,7 @@ import {
 import type { Attachment } from './types';
 
 /** Drag-and-drop MIME type for file-tree → composer transfers. */
-export const WORKSPACE_FILE_MIME = 'application/x-speedchat-workspace-file';
+export const WORKSPACE_FILE_MIME = 'application/x-minnow-workspace-file';
 
 /** Minimum pointer movement (px) before a file-tree row starts a drag. */
 export const FILE_TREE_DRAG_THRESHOLD_PX = 5;

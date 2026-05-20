@@ -36,7 +36,7 @@ try {
   const read = await postTool('read_file', { path: 'package.json' });
   record(
     'P2',
-    read.status === 200 && read.body.result.includes('"name": "speedchat"'),
+    read.status === 200 && read.body.result.includes('"name": "minnow"'),
     'read_file package.json',
   );
 

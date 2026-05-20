@@ -1,15 +1,15 @@
 /**
- * CRUD for ~/.speedchat/prompt-configs/*.json
+ * CRUD for ~/.minnow/prompt-configs/*.json
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ensureSpeedChatLayout, getSpeedChatHome } from '../config/home.js';
+import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { validatePromptConfig } from './validate.js';
 
 function configsDir() {
-  return path.join(getSpeedChatHome(), 'prompt-configs');
+  return path.join(getMinnowHome(), 'prompt-configs');
 }
 
 function configPath(id) {
@@ -20,7 +20,7 @@ function configPath(id) {
  * @returns {Promise<Array<{ id: string, label: string }>>}
  */
 export async function listPromptConfigs() {
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
   const dir = configsDir();
   let entries = [];
   try {
@@ -52,7 +52,7 @@ export async function listPromptConfigs() {
  * @param {string} id
  */
 export async function loadPromptConfigFile(id) {
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
   try {
     const raw = await fs.readFile(configPath(id), 'utf8');
     return JSON.parse(raw);
@@ -73,7 +73,7 @@ export async function savePromptConfigFile(config) {
     throw new Error(validated.error);
   }
 
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
   const id = validated.config.id;
   const now = new Date().toISOString();
   const existing = (await loadPromptConfigFile(id)) ?? {};

@@ -73,13 +73,13 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.ok(skill);
     assert.equal(skill.id, 'impeccable');
     assert.ok(skill.body.length > 500);
-    assert.match(skill.body, /PRODUCT\.md|load-context|speedchat-context/);
+    assert.match(skill.body, /PRODUCT\.md|load-context|minnow-context/);
   });
 
-  it('speedchat-context.mjs exits 0 with designJson', () => {
+  it('minnow-context.mjs exits 0 with designJson', () => {
     const result = spawnSync(
       process.execPath,
-      ['src/skills/impeccable/scripts/speedchat-context.mjs'],
+      ['src/skills/impeccable/scripts/minnow-context.mjs'],
       { cwd: PROJECT_ROOT, encoding: 'utf8' },
     );
     assert.equal(result.status, 0, result.stderr || result.stdout);

@@ -3,7 +3,7 @@
 **Roadmap:** [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) — Step 18  
 **Backlog:** [`documentation/plans/to-fix.md`](../to-fix.md) items **27** (MCP servers), **28** (Context7 default) — **not** item 29 (top-bar toggles → Step 20)  
 **Architecture context:** [`documentation/context.md`](../../context.md)  
-**Depends on:** **Step 02** (`~/.speedchat` data layer + config API); **Step 03** (provider auth — Bearer/custom headers for MCP HTTP/SSE transports)
+**Depends on:** **Step 02** (`~/.minnow` data layer + config API); **Step 03** (provider auth — Bearer/custom headers for MCP HTTP/SSE transports)
 
 **Out of scope for this step:** Full settings page, top-bar per-MCP toggles, prompt “MCP context blocks” (Step **20**). Minimal data model + API hooks only so Step 20 can bind UI later.
 
@@ -11,13 +11,13 @@
 
 ## Goal
 
-When `npm start` is running, SpeedChat can:
+When `npm start` is running, Minnow can:
 
-1. Load MCP server definitions from **`~/.speedchat/mcp/`** (seeded on first run).
+1. Load MCP server definitions from **`~/.minnow/mcp/`** (seeded on first run).
 2. Connect to enabled MCP servers from **Node** (not the browser — MCP SDK + subprocess/HTTP belong on the server).
 3. **Merge** MCP tool schemas into the LM Studio request via [`getEnabledToolDefinitions()`](../../../src/tools/client.ts).
 4. **Execute** MCP tool calls through the same path as built-in server tools (`executeTool` → `POST /api/tools` or a dedicated MCP route).
-5. Ship **Context7** as a **built-in, enabled-by-default** MCP server (user supplies API key in `~/.speedchat` if required).
+5. Ship **Context7** as a **built-in, enabled-by-default** MCP server (user supplies API key in `~/.minnow` if required).
 
 ---
 
@@ -25,7 +25,7 @@ When `npm start` is running, SpeedChat can:
 
 | Step | What Step 18 consumes |
 |------|------------------------|
-| **02** | `getSpeedChatHome()` (or equivalent), `~/.speedchat/mcp/` directory creation, `GET/PUT /api/config/*` or dedicated `/api/mcp/*` with safe path guards, migration from any legacy MCP stub |
+| **02** | `getMinnowHome()` (or equivalent), `~/.minnow/mcp/` directory creation, `GET/PUT /api/config/*` or dedicated `/api/mcp/*` with safe path guards, migration from any legacy MCP stub |
 | **03** | `resolveProviderAuth(providerId)` (or shared secret store) so MCP configs can reference `authRef: "context7"` / `providerId` for `Authorization` headers on remote MCP URLs |
 
 If Step 02/03 are not merged, implementer ships **interfaces + in-memory fixtures** behind a feature flag and documents the integration contract — but **verifier PASS** requires the real home-dir + auth wiring from those steps.
@@ -70,7 +70,7 @@ flowchart TD
     bridge --> registry
   end
 
-  subgraph disk ["~/.speedchat/mcp/"]
+  subgraph disk ["~/.minnow/mcp/"]
     index[mcp.json index]
     seeds[servers/context7.json]
     keys[keys via Step 03 secrets]
@@ -94,10 +94,10 @@ flowchart TD
 
 ---
 
-## `~/.speedchat/mcp/` layout
+## `~/.minnow/mcp/` layout
 
 ```
-~/.speedchat/
+~/.minnow/
 ├── mcp.json                    # Index: server ids, enabled flags, default transport hints
 ├── secrets.json                # (Step 03) optional: context7ApiKey — never commit
 └── mcp/
@@ -174,7 +174,7 @@ Suggested layout under `src/mcp/` (or `server/mcp/` if implementer prefers Node-
 | File | Responsibility |
 |------|----------------|
 | `src/mcp/types.ts` | `McpServerConfig`, `McpTransport`, `McpToolDescriptor`, enabled state |
-| `src/mcp/paths.ts` | Resolve `~/.speedchat/mcp`, validate paths under home (mirror `resolveSafePath` rules) |
+| `src/mcp/paths.ts` | Resolve `~/.minnow/mcp`, validate paths under home (mirror `resolveSafePath` rules) |
 | `src/mcp/registry.ts` | Load index + server files; list servers; enable/disable; seed defaults |
 | `src/mcp/client-pool.ts` | Connect/disconnect; cache `tools/list` per server; handle errors as strings |
 | `src/mcp/bridge.ts` | Map MCP tools → `OpenAIFunctionDefinition[]`; execute `tools/call` by namespaced name |
@@ -244,7 +244,7 @@ export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
 
 ### Config persistence (until Step 20 UI)
 
-- Extend tool config **or** separate `speedchat.mcp` key / `~/.speedchat/mcp.json` only (prefer **server source of truth** from Step 02).
+- Extend tool config **or** separate `minnow.mcp` key / `~/.minnow/mcp.json` only (prefer **server source of truth** from Step 02).
 - Browser may cache enabled flags via `GET /api/mcp/servers` after `detectLocalServer()`.
 
 **Do not** duplicate full MCP server definitions in `localStorage` long term.
@@ -255,9 +255,9 @@ export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
 
 | Requirement | Implementation |
 |-------------|----------------|
-| Bundled seed | `src/mcp/defaults.ts` + copy to `~/.speedchat/mcp/servers/context7.json` on first run |
+| Bundled seed | `src/mcp/defaults.ts` + copy to `~/.minnow/mcp/servers/context7.json` on first run |
 | Enabled by default | `mcp.json` → `"context7": { "enabled": true }` |
-| API key | Document in `~/.speedchat/mcp/README.md` and Step 20 placeholder; store via Step 03 secrets (`context7ApiKey`) |
+| API key | Document in `~/.minnow/mcp/README.md` and Step 20 placeholder; store via Step 03 secrets (`context7ApiKey`) |
 | Missing key | `tools/list` may succeed; `tools/call` returns clear `Error: Context7 API key not configured. Set …` |
 | Tool descriptions | Preserve Context7 guidance (resolve library id before query-docs) in function `description` fields |
 
@@ -265,7 +265,7 @@ export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
 
 ## Prompt / UI hooks (minimal — Step 20 completes)
 
-- Add **feature flag** in `~/.speedchat/config.json`: `features.mcp: true` (default true).
+- Add **feature flag** in `~/.minnow/config.json`: `features.mcp: true` (default true).
 - Optional: inject one line into `tool-usage` prompt part later (“MCP tools are prefixed `mcp__`”) — **only** if Step 04 composer is already merged; otherwise document for Step 20.
 - **No** top-bar MCP toggles in Step 18.
 
@@ -316,7 +316,7 @@ Use **deterministic** fixtures per project test guidelines:
 **Integration smoke (manual / CI with key):**
 
 ```bash
-# With npm start running and CONTEXT7_API_KEY set in ~/.speedchat secrets:
+# With npm start running and CONTEXT7_API_KEY set in ~/.minnow secrets:
 npx tsx scripts/sa18-mcp-smoke.mjs http://localhost:5173
 ```
 
@@ -336,7 +336,7 @@ const EXPECTED_CALL_RESULT = 'pong';
 | Check | Command / criterion |
 |-------|---------------------|
 | Unit tests pass | `npx tsx --test test/mcp/*.test.ts` (or `npm test` if added in Step 02) |
-| Registry seeds Context7 | Fresh temp `SPEEDCHAT_HOME=…` → `context7.json` exists; `enabled: true` |
+| Registry seeds Context7 | Fresh temp `MINNOW_HOME=…` → `context7.json` exists; `enabled: true` |
 | Bridge merges tools | Mock server adds 1 tool → `getEnabledToolDefinitions().length === builtinEnabled + 1` |
 | Execute namespaced tool | `executeTool('mcp__fixture__echo', { message: 'x' })` → `'pong'` |
 | Server gating | Vite-only (`npm run dev`) → MCP defs not cached / not sent |
@@ -355,8 +355,8 @@ Optional: implementer creates [`documentation/plans/verification/step-18.md`](..
 |------|--------|
 | New | `src/mcp/*.ts`, `test/mcp/*`, `scripts/sa18-mcp-smoke.mjs` |
 | Modify | [`server.js`](../../../server.js), [`src/tools/client.ts`](../../../src/tools/client.ts), [`package.json`](../../../package.json) (`@modelcontextprotocol/sdk`) |
-| Seed | `src/mcp/defaults.ts` → copies to `~/.speedchat/mcp/` |
-| Docs | [`documentation/context.md`](../../context.md), `~/.speedchat/mcp/README.md` (generated on seed) |
+| Seed | `src/mcp/defaults.ts` → copies to `~/.minnow/mcp/` |
+| Docs | [`documentation/context.md`](../../context.md), `~/.minnow/mcp/README.md` (generated on seed) |
 | Plan | This file — tick todos below |
 
 ---
@@ -364,17 +364,17 @@ Optional: implementer creates [`documentation/plans/verification/step-18.md`](..
 ## Sub-agent implementer prompt (copy-paste)
 
 ```
-You are implementing Step 18 (MCP + Context7 default) for SpeedChat.
+You are implementing Step 18 (MCP + Context7 default) for Minnow.
 
 Read:
 - documentation/plans/Build out/step-18-mcp-context7.md
 - documentation/context.md
 - documentation/plans/to-fix-step-order.md (Step 18 section)
 
-Depends on Step 02 (~/.speedchat) and Step 03 (auth/secrets). If not merged, implement interfaces + document integration points.
+Depends on Step 02 (~/.minnow) and Step 03 (auth/secrets). If not merged, implement interfaces + document integration points.
 
 Deliver:
-1. ~/.speedchat/mcp/ layout + first-run seed (Context7 enabled by default)
+1. ~/.minnow/mcp/ layout + first-run seed (Context7 enabled by default)
 2. McpRegistry + client pool in Node (src/mcp/)
 3. server.js routes and /api/tools delegation for mcp__* names
 4. Bridge into getEnabledToolDefinitions() and executeTool()
@@ -394,7 +394,7 @@ Run tests and npm run build before handoff.
 ```
 Verify Step 18 only. Read documentation/plans/Build out/step-18-mcp-context7.md acceptance criteria.
 
-Re-run unit tests with a clean SPEEDCHAT_HOME temp directory.
+Re-run unit tests with a clean MINNOW_HOME temp directory.
 Confirm Context7 seed exists and enabled by default.
 Confirm namespaced MCP tools appear in GET /api/mcp/tools when mock server enabled.
 Do not implement fixes; report PASS/FAIL with logs.
@@ -412,11 +412,11 @@ Do not implement fixes; report PASS/FAIL with logs.
 
 ### Phase 1 — Data layer & seed
 
-- [ ] **S18-1.1** Add `src/mcp/paths.ts` — resolve `~/.speedchat/mcp`, `mcp.json`, `servers/*.json` with safe path guards.
+- [ ] **S18-1.1** Add `src/mcp/paths.ts` — resolve `~/.minnow/mcp`, `mcp.json`, `servers/*.json` with safe path guards.
 - [ ] **S18-1.2** Add `src/mcp/types.ts` — config shapes, transport union (`stdio` | `sse` | `http`), server summary types.
 - [ ] **S18-1.3** Add `src/mcp/defaults.ts` — built-in Context7 server definition + `mcp.json` index template.
 - [ ] **S18-1.4** Implement `ensureMcpSeed(homeDir)` — copy seed files on first run; idempotent (never overwrite user edits except missing files).
-- [ ] **S18-1.5** Write generated `~/.speedchat/mcp/README.md` (Context7 key instructions, adding custom servers).
+- [ ] **S18-1.5** Write generated `~/.minnow/mcp/README.md` (Context7 key instructions, adding custom servers).
 
 ### Phase 2 — Registry
 
@@ -472,7 +472,7 @@ Do not implement fixes; report PASS/FAIL with logs.
 
 ## Acceptance criteria (summary)
 
-1. **`~/.speedchat/mcp/`** exists after first `npm start` with **Context7** seeded and **enabled by default**.
+1. **`~/.minnow/mcp/`** exists after first `npm start` with **Context7** seeded and **enabled by default**.
 2. **Registry** loads servers, persists enable/disable, rejects unsafe paths.
 3. **Tool bridge** exposes namespaced MCP tools through **`getEnabledToolDefinitions()`** when local server is up.
 4. **Tool execution** for `mcp__*` names returns string results through existing tool loop.

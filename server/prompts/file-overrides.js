@@ -1,10 +1,10 @@
 /**
- * Read/write shipped prompt files and ~/.speedchat user overrides (modes, experts, sub-agents).
+ * Read/write shipped prompt files and ~/.minnow user overrides (modes, experts, sub-agents).
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { parsePromptMarkdown } from './parse.js';
 
 const ENTITY_ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
@@ -85,7 +85,7 @@ export async function readPromptFile(projectRoot, family, entityId, profile) {
     throw new Error('Invalid profile');
   }
 
-  const home = path.resolve(getSpeedChatHome());
+  const home = path.resolve(getMinnowHome());
   const userPath = resolveUnderRoot(home, userRelativePath(family, entityId, profile));
 
   try {
@@ -115,7 +115,7 @@ export async function writePromptFileOverride(family, entityId, profile, content
     throw new Error('Invalid profile');
   }
 
-  const home = path.resolve(getSpeedChatHome());
+  const home = path.resolve(getMinnowHome());
   const filePath = resolveUnderRoot(home, userRelativePath(family, entityId, profile));
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const body =
@@ -129,7 +129,7 @@ export async function writePromptFileOverride(family, entityId, profile, content
  */
 export async function deletePromptFileOverride(family, entityId, profile) {
   assertValidPromptEntityId(entityId);
-  const home = path.resolve(getSpeedChatHome());
+  const home = path.resolve(getMinnowHome());
   const filePath = resolveUnderRoot(home, userRelativePath(family, entityId, profile));
   try {
     await fs.unlink(filePath);

@@ -3,7 +3,7 @@
 ## Automated
 
 ```bash
-cd c:\Users\dukky\Documents\Development\SpeedChat
+cd c:\Users\dukky\Documents\Development\Minnow
 npm test
 npm run build
 ```

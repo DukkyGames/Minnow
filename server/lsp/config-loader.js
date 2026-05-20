@@ -1,11 +1,11 @@
 /**
- * Load merged LSP config from repo defaults + ~/.speedchat/lsp.json.
+ * Load merged LSP config from repo defaults + ~/.minnow/lsp.json.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { mergeLspConfig } from '../../src/lsp/merge-config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,7 +35,7 @@ export async function loadMergedLspConfig() {
   );
   const defaults = JSON.parse(defaultsRaw);
 
-  const userPath = path.join(getSpeedChatHome(), 'lsp.json');
+  const userPath = path.join(getMinnowHome(), 'lsp.json');
   let user = {};
   try {
     user = JSON.parse(await fs.readFile(userPath, 'utf8'));
@@ -53,7 +53,7 @@ export function invalidateLspConfigCache() {
 
 /** Write initial lsp.json with typescript enabled, others off. */
 export async function seedLspJson(defaults) {
-  const home = getSpeedChatHome();
+  const home = getMinnowHome();
   const userPath = path.join(home, 'lsp.json');
   const lsp = {};
   for (const [id, cfg] of Object.entries(defaults.lsp ?? {})) {

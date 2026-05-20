@@ -1,5 +1,5 @@
 /**
- * Client API for mode/expert/sub-agent prompt bodies (built-in + ~/.speedchat overrides).
+ * Client API for mode/expert/sub-agent prompt bodies (built-in + ~/.minnow overrides).
  */
 
 export type PromptFileFamily = 'modes' | 'experts' | 'sub-agents';

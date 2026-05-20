@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js 20+
-- Repo root: `c:\Users\dukky\Documents\Development\SpeedChat`
+- Repo root: `c:\Users\dukky\Documents\Development\Minnow`
 
 ## Automated tests
 
@@ -35,7 +35,7 @@ npm run build
 4. Settings → **Experts** → uncheck **Enable experts** — composer strip hides; sends omit expert part.
 5. Re-enable experts; confirm six built-in experts appear in the dropdown (plus Auto).
 
-## Config (`~/.speedchat/config.json`)
+## Config (`~/.minnow/config.json`)
 
 ```json
 {

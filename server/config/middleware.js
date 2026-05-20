@@ -2,7 +2,7 @@
  * Express-style middleware for /api/config/* (Vite configureServer).
  */
 
-import { ensureSpeedChatLayout, getSpeedChatHome } from './home.js';
+import { ensureMinnowLayout, getMinnowHome } from './home.js';
 import { readResource, writeResource, readConfigJson, writeConfigJson, configFileExists } from './store.js';
 import {
   validateSessionState,
@@ -15,9 +15,9 @@ import { resolveConfigPath, ALLOWED_CONFIG_FILES } from './paths.js';
 const MAX_MIGRATE_BYTES = 10 * 1024 * 1024;
 
 const STORAGE_KEYS = {
-  sessions: 'speedchat-sessions-v1',
-  tools: 'speedchat.tools',
-  systemPrompt: 'speedchat.systemPrompt',
+  sessions: 'minnow-sessions-v1',
+  tools: 'minnow.tools',
+  systemPrompt: 'minnow.systemPrompt',
 };
 
 /** CORS headers aligned with /api/tools. */
@@ -57,7 +57,7 @@ async function handleMigrate(body) {
   const warnings = [];
   const written = [];
 
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
 
   const meta = (await readConfigJson('config.json')) ?? {};
   if (meta.migratedFromLocalStorage === true) {
@@ -65,7 +65,7 @@ async function handleMigrate(body) {
   }
 
   const ls = body?.localStorage && typeof body.localStorage === 'object' ? body.localStorage : {};
-  const force = body?.force === true && process.env.SPEEDCHAT_DEBUG === '1';
+  const force = body?.force === true && process.env.MINNOW_DEBUG === '1';
 
   const migrations = [
     {
@@ -153,19 +153,19 @@ export async function handleConfigRequest(req, res, pathname) {
 
   try {
     if (pathname === '/api/config/ping' && req.method === 'GET') {
-      await ensureSpeedChatLayout();
-      const debug = process.env.SPEEDCHAT_DEBUG === '1';
+      await ensureMinnowLayout();
+      const debug = process.env.MINNOW_DEBUG === '1';
       sendJson(res, 200, {
         ok: true,
-        home: '.speedchat',
+        home: '.minnow',
         homeResolved: true,
-        ...(debug ? { homePath: getSpeedChatHome() } : {}),
+        ...(debug ? { homePath: getMinnowHome() } : {}),
       });
       return true;
     }
 
     if (pathname === '/api/config/status' && req.method === 'GET') {
-      await ensureSpeedChatLayout();
+      await ensureMinnowLayout();
       const meta = (await readConfigJson('config.json')) ?? {};
       sendJson(res, 200, {
         ok: true,

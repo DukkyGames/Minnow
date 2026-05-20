@@ -1,5 +1,5 @@
 /**
- * Merge repo LSP defaults with ~/.speedchat/lsp.json (OpenCode-compatible shape).
+ * Merge repo LSP defaults with ~/.minnow/lsp.json (OpenCode-compatible shape).
  */
 
 /**

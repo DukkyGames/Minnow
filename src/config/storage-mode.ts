@@ -14,7 +14,7 @@ export function getStorageMode(): StorageMode {
   return storageMode;
 }
 
-/** Whether reads/writes should use ~/.speedchat via the API. */
+/** Whether reads/writes should use ~/.minnow via the API. */
 export function isServerStorageMode(): boolean {
   return storageMode === 'server';
 }

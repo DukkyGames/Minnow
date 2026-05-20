@@ -4,7 +4,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { defaultSkillLabel, parseSkillFrontmatter } from './parse-frontmatter.js';
 
 /** Skill id: lowercase alphanumeric with hyphens. */
@@ -22,7 +22,7 @@ export function getBuiltinSkillsRoot(projectRoot) {
  * @returns {string}
  */
 export function getUserSkillsRoot() {
-  return path.join(getSpeedChatHome(), 'skills');
+  return path.join(getMinnowHome(), 'skills');
 }
 
 /**

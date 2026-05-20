@@ -1,5 +1,5 @@
 /**
- * Provider id, URL, and enum validation for ~/.speedchat/providers.
+ * Provider id, URL, and enum validation for ~/.minnow/providers.
  */
 
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;

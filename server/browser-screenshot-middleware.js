@@ -1,5 +1,5 @@
 /**
- * Serve PNG screenshots from ~/.speedchat/screenshots/ (Step 12).
+ * Serve PNG screenshots from ~/.minnow/screenshots/ (Step 12).
  */
 
 import fs from 'node:fs/promises';

@@ -1,5 +1,5 @@
 /**
- * SpeedChat Vite entry: styles, highlight.js theme, window handlers, init, service worker.
+ * Minnow Vite entry: styles, highlight.js theme, window handlers, init, service worker.
  */
 
 import './styles/fonts.css';
@@ -84,6 +84,7 @@ import {
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
 } from './ui/init-file-panel';
+import { initWorkspaceButton } from './ui/workspace-button';
 import {
   initTerminalPanel,
   onTerminalServerAvailabilityChanged,
@@ -141,6 +142,7 @@ export async function initApp(): Promise<void> {
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  initWorkspaceButton();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) mountSlashPicker(msgInput);

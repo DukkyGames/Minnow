@@ -1,7 +1,7 @@
 ---
 name: _example
 description: >-
-  Author template for SpeedChat skills (not shown in the slash picker).
+  Author template for Minnow skills (not shown in the slash picker).
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ This folder documents the **SKILL.md** contract. It is **not** invokable via `/`
 ## Folder layout
 
 ```text
-~/.speedchat/skills/<skill-id>/SKILL.md   # user override
+~/.minnow/skills/<skill-id>/SKILL.md   # user override
 src/skills/<skill-id>/SKILL.md            # built-in (repo)
 ```
 
@@ -25,14 +25,14 @@ src/skills/<skill-id>/SKILL.md            # built-in (repo)
 
 - `label` — display title in the picker
 - `version` — semver badge
-- `disable-model-invocation: true` — only apply when user types `/name` (SpeedChat v1 default)
+- `disable-model-invocation: true` — only apply when user types `/name` (Minnow v1 default)
 
 ## Merge rules
 
-User skills under `~/.speedchat/skills/` **override** built-ins with the same `name`.
+User skills under `~/.minnow/skills/` **override** built-ins with the same `name`.
 
 ## Body
 
-Write actionable markdown: when to use, steps, and SpeedChat **tool ids** from `definitions.ts`.
+Write actionable markdown: when to use, steps, and Minnow **tool ids** from `definitions.ts`.
 
 See Step 14 for `/impeccable` (UI polish skill).

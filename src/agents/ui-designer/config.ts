@@ -1,5 +1,5 @@
 /**
- * UI Designer model binding from ~/.speedchat config.json (Step 15).
+ * UI Designer model binding from ~/.minnow config.json (Step 15).
  */
 
 import { resolveProviderEndpoints } from '../../providers/resolve';

@@ -1,5 +1,5 @@
 /**
- * HTTP client for ~/.speedchat config API (npm start only).
+ * HTTP client for ~/.minnow config API (npm start only).
  */
 
 import type { SessionState, SystemPromptSettings } from '../types';

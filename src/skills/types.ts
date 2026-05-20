@@ -1,4 +1,4 @@
-/** Built-in repo skills vs user ~/.speedchat/skills. */
+/** Built-in repo skills vs user ~/.minnow/skills. */
 export type SkillSource = 'builtin' | 'user';
 
 /** Catalog row for slash picker (no body). */

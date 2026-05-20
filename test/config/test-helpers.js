@@ -1,5 +1,5 @@
 /**
- * Shared helpers for config API tests (temp SPEEDCHAT_HOME + minimal HTTP server).
+ * Shared helpers for config API tests (temp MINNOW_HOME + minimal HTTP server).
  */
 
 import http from 'node:http';
@@ -7,24 +7,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { handleConfigRequest } from '../../server/config/middleware.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_DIR = path.join(__dirname, '../fixtures/migration');
 
 /** Fixed suffix for deterministic temp home paths. */
-export const TEST_HOME_SUFFIX = 'speedchat-test-step02';
+export const TEST_HOME_SUFFIX = 'minnow-test-step02';
 
 export function setTestHome(env, suffix = TEST_HOME_SUFFIX) {
-  resetSpeedChatHomeCache();
+  resetMinnowHomeCache();
   const dir = path.join(os.tmpdir(), `${suffix}-${process.pid}`);
-  env.SPEEDCHAT_HOME = dir;
+  env.MINNOW_HOME = dir;
   return dir;
 }
 
 export async function rmTestHome(dir) {
-  resetSpeedChatHomeCache();
+  resetMinnowHomeCache();
   try {
     await fs.rm(dir, { recursive: true, force: true });
   } catch {

@@ -9,7 +9,7 @@ import {
   type ExpertsConfig,
 } from '../chat/experts/types';
 
-const EXPERTS_STORAGE_KEY = 'speedchat.experts';
+const EXPERTS_STORAGE_KEY = 'minnow.experts';
 
 let cachedConfig: ExpertsConfig | null = null;
 

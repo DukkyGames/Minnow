@@ -1,5 +1,5 @@
 /**
- * prompt-configs API CRUD against temp SPEEDCHAT_HOME.
+ * prompt-configs API CRUD against temp MINNOW_HOME.
  */
 
 import assert from 'node:assert/strict';
@@ -7,14 +7,14 @@ import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
 import { after, before, describe, test } from 'node:test';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { handleConfigRequest } from '../../server/config/middleware.js';
 import { handlePromptRequest } from '../../server/prompt-configs/middleware.js';
 
 function setTestHome(env) {
-  resetSpeedChatHomeCache();
-  const dir = path.join(os.tmpdir(), `speedchat-prompt-test-${process.pid}`);
-  env.SPEEDCHAT_HOME = dir;
+  resetMinnowHomeCache();
+  const dir = path.join(os.tmpdir(), `minnow-prompt-test-${process.pid}`);
+  env.MINNOW_HOME = dir;
   return dir;
 }
 
@@ -77,7 +77,7 @@ describe('prompt-configs API', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    resetSpeedChatHomeCache();
+    resetMinnowHomeCache();
   });
 
   test('PUT and GET round-trip', async () => {

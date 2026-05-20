@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js 20+
-- Repo root: `c:\Users\dukky\Documents\Development\SpeedChat`
+- Repo root: `c:\Users\dukky\Documents\Development\Minnow`
 
 ## Automated tests
 

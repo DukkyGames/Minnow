@@ -3,7 +3,7 @@
 **Type:** IMPLEMENTATION BUILD PLAN (no feature code in this document)  
 **Roadmap:** [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) — Step 17  
 **Backlog:** [`documentation/plans/to-fix.md`](../to-fix.md) item **26** (LSP Servers)  
-**Depends on:** **Step 02** (`~/.speedchat` data layer + config API) — **required**  
+**Depends on:** **Step 02** (`~/.minnow` data layer + config API) — **required**  
 **Helpful (not blocking):** Step 11 (file tree / viewer — natural trigger for `textDocument/didOpen`)  
 **UI deferred to:** **Step 20** (master LSP toggle, per-server enable/disable, custom server editor, top-bar quick toggles)  
 **Can parallel with:** Step 16, Step 18 (after Step 02)
@@ -12,10 +12,10 @@
 
 ## 1. Goal
 
-Give the LLM **language-aware feedback** by integrating **Language Server Protocol (LSP)** servers in the Node dev server (`npm start`). SpeedChat should:
+Give the LLM **language-aware feedback** by integrating **Language Server Protocol (LSP)** servers in the Node dev server (`npm start`). Minnow should:
 
 1. Ship an **OpenCode-compatible** built-in server catalog in-repo (`src/lsp/defaults.json`).
-2. Persist user overrides in **`~/.speedchat/lsp.json`** (seeded on first run, merged on upgrade).
+2. Persist user overrides in **`~/.minnow/lsp.json`** (seeded on first run, merged on upgrade).
 3. Run a **process manager** in [`server.js`](../../../server.js) that spawns stdio LSP children, tracks diagnostics, and exposes HTTP APIs.
 4. Expose **agent tools** (server-required) so the model can fetch diagnostics for a file/path.
 5. Expose a **config data model + API** so Step 20 can render toggles without rework.
@@ -37,10 +37,10 @@ Give the LLM **language-aware feedback** by integrating **Language Server Protoc
 | [OpenCode LSP docs — built-ins & custom servers](https://opencode.ai/docs/lsp/#custom-lsp-servers) | Config shape, built-in table, `disabled` / `command` / `extensions` / `env` / `initialization` |
 | [OpenCode `packages/opencode/src/lsp`](https://github.com/anomalyco/opencode/tree/dev/packages/opencode/src/lsp) | `client.ts`, `launch.ts`, `server.ts`, `diagnostic.ts`, `language.ts` |
 | [`documentation/context.md`](../../context.md) | Tools API, `server.js` patterns, project layout |
-| Step 02 plan | `GET/PUT /api/config/*`, `~/.speedchat/lsp/` layout |
-| Step 20 plan | LSP settings section + `speedchat.lsp` or merged `config.json` flags |
+| Step 02 plan | `GET/PUT /api/config/*`, `~/.minnow/lsp/` layout |
+| Step 20 plan | LSP settings section + `minnow.lsp` or merged `config.json` flags |
 
-**OpenCode patterns to adopt (simplified for SpeedChat)**
+**OpenCode patterns to adopt (simplified for Minnow)**
 
 - **Extension → server** matching; multiple servers may match one extension (run all enabled matches or first-wins — document choice; recommend **all enabled matchers** like OpenCode for eslint + typescript).
 - **Project root** per server: walk upward for lockfiles (`package-lock.json`, `pnpm-lock.yaml`, …) or use `PROJECT_ROOT` from [`server.js`](../../../server.js).
@@ -64,7 +64,7 @@ flowchart TB
     LspMgr[LspManager]
     ProcMap[Process map per serverId]
     Defaults[src/lsp/defaults.json]
-    UserCfg[~/.speedchat/lsp.json]
+    UserCfg[~/.minnow/lsp.json]
   end
 
   subgraph child [Child processes]
@@ -91,7 +91,7 @@ flowchart TB
 
 ```
 src/lsp/
-  defaults.json          # Full OpenCode built-in catalog + SpeedChat default enablement
+  defaults.json          # Full OpenCode built-in catalog + Minnow default enablement
   types.ts               # LspServerEntry, LspConfig, Diagnostic types
   merge-config.ts        # mergeDefaults(user) — pure, unit-testable
   format-diagnostics.ts  # LSP Diagnostic[] → LLM string
@@ -146,13 +146,13 @@ Structure (OpenCode-compatible top-level `lsp` key):
 **Tasks for catalog authoring**
 
 - [ ] Transcribe the **full** built-in table from [OpenCode LSP docs](https://opencode.ai/docs/lsp/#custom-lsp-servers) (astro, bash, clangd, csharp, … zls) into `defaults.json`.
-- [ ] Add SpeedChat-specific metadata (not sent to LSP):
+- [ ] Add Minnow-specific metadata (not sent to LSP):
   - `requirements`: `{ "command": "go" }`, `{ "package": "eslint" }`, `{ "binary": "rust-analyzer" }`, etc.
   - `rootPatterns`: optional `["package-lock.json", "deno.json"]` for root detection.
   - `defaultEnabled`: boolean — **subset enabled on first seed** (see §4.3).
 - [ ] Do **not** commit secrets; document Intelephense license path in README only.
 
-### 4.2 User config — `~/.speedchat/lsp.json`
+### 4.2 User config — `~/.minnow/lsp.json`
 
 Same `lsp` object shape. User entries **override** repo defaults by server id. Custom servers are arbitrary keys:
 
@@ -178,11 +178,11 @@ Same `lsp` object shape. User entries **override** repo defaults by server id. C
 
 ### 4.3 Default-enabled subset (first seed)
 
-On first `~/.speedchat` init (Step 02), write `lsp.json` with **sensible defaults for this repo**:
+On first `~/.minnow` init (Step 02), write `lsp.json` with **sensible defaults for this repo**:
 
 | Server id | Default on | Reason |
 |-----------|------------|--------|
-| `typescript` | yes | SpeedChat is TS/Vite |
+| `typescript` | yes | Minnow is TS/Vite |
 | `eslint` | yes if `eslint` in project | Lint signal for agent |
 | `pyright` | yes if `.py` work expected | optional off by default |
 | `rust`, `gopls`, `lua-ls`, `yaml-ls`, `bash` | off | enable when detected / user opts in |
@@ -223,7 +223,7 @@ Priority:
 
 1. User `command` from merged config.
 2. Else built-in `command` from defaults.
-3. Else built-in **spawn recipe** in code (port minimal recipes from OpenCode `server.ts` only for `typescript`, `eslint`, `pyright` in v1; others return `"Install {binary} or set lsp.{id}.command in ~/.speedchat/lsp.json"`).
+3. Else built-in **spawn recipe** in code (port minimal recipes from OpenCode `server.ts` only for `typescript`, `eslint`, `pyright` in v1; others return `"Install {binary} or set lsp.{id}.command in ~/.minnow/lsp.json"`).
 
 **Environment:** merge `process.env` + per-server `env`.
 
@@ -268,7 +268,7 @@ Keep optional: do not add full `vscode-languageclient` unless needed.
 
 ### 6.2 Minimal protocol sequence
 
-1. Spawn child: `stdin/stdout` piped; stderr logged to `~/.speedchat/logs/lsp/{serverId}.log`.
+1. Spawn child: `stdin/stdout` piped; stderr logged to `~/.minnow/logs/lsp/{serverId}.log`.
 2. `initialize` → `initialized`.
 3. `textDocument/didOpen` with `TextDocumentItem`.
 4. Wait for `textDocument/publishDiagnostics` **or** timeout (5s test / 10s prod).
@@ -316,7 +316,7 @@ Add to [`src/tools/definitions.ts`](../../../src/tools/definitions.ts) (new cate
 
 **Tool config (Step 17 data model only)**
 
-Extend `speedchat.tools` or new `~/.speedchat/config.json` field:
+Extend `minnow.tools` or new `~/.minnow/config.json` field:
 
 ```json
 {
@@ -409,7 +409,7 @@ Register in `defaults.json` under test-only id `fake` **or** inject via test `ls
 
 **Integration test** (`test/lsp/fake-lsp.integration.test.mjs`):
 
-1. Set `SPEEDCHAT_HOME` to temp dir.
+1. Set `MINNOW_HOME` to temp dir.
 2. Copy fixture `lsp.json`.
 3. Start middleware / call manager directly (export `createLspManagerForTest`).
 4. POST diagnostics for `test/sample.fake`.
@@ -437,16 +437,16 @@ node --test test/lsp/*.test.mjs
 ## 12. Documentation updates
 
 - [ ] [`documentation/context.md`](../../context.md) — new section **LSP** (config paths, APIs, tools, env vars).
-- [ ] [`README.md`](../../../README.md) — prerequisites (`typescript-language-server`, `pyright`, etc.), `~/.speedchat/lsp.json` example.
+- [ ] [`README.md`](../../../README.md) — prerequisites (`typescript-language-server`, `pyright`, etc.), `~/.minnow/lsp.json` example.
 - [ ] `documentation/plans/verification/step-17.md` — commands for verifier (implementer creates).
 
 **Env vars**
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SPEEDCHAT_HOME` | `~/.speedchat` | Override home for tests |
-| `SPEEDCHAT_LSP_ENABLED` | `true` | Kill-switch for CI |
-| `SPEEDCHAT_LSP_IDLE_MS` | optional | Process idle shutdown |
+| `MINNOW_HOME` | `~/.minnow` | Override home for tests |
+| `MINNOW_LSP_ENABLED` | `true` | Kill-switch for CI |
+| `MINNOW_LSP_IDLE_MS` | optional | Process idle shutdown |
 
 ---
 
@@ -454,8 +454,8 @@ node --test test/lsp/*.test.mjs
 
 | # | Criterion |
 |---|-----------|
-| AC-1 | `src/lsp/defaults.json` contains full OpenCode built-in catalog + SpeedChat `defaultEnabled` metadata |
-| AC-2 | First-run seeds `~/.speedchat/lsp.json`; merge preserves user disables across upgrades |
+| AC-1 | `src/lsp/defaults.json` contains full OpenCode built-in catalog + Minnow `defaultEnabled` metadata |
+| AC-2 | First-run seeds `~/.minnow/lsp.json`; merge preserves user disables across upgrades |
 | AC-3 | `npm start` spawns fake LSP in tests; real `typescript` spawn optional (mocked in CI) |
 | AC-4 | `get_lsp_diagnostics` returns formatted static diagnostics for fake server |
 | AC-5 | `list_lsp_servers` reports running/stopped and respects `disabled` |
@@ -471,7 +471,7 @@ node --test test/lsp/*.test.mjs
 
 ### Phase 0 — Prerequisites
 
-- [ ] **T0.1** Confirm Step 02 delivers `SPEEDCHAT_HOME`, `GET/PUT /api/config/*`, and `~/.speedchat/lsp/` path — or implement minimal config I/O in Step 17 if Step 02 is incomplete (document dependency).
+- [ ] **T0.1** Confirm Step 02 delivers `MINNOW_HOME`, `GET/PUT /api/config/*`, and `~/.minnow/lsp/` path — or implement minimal config I/O in Step 17 if Step 02 is incomplete (document dependency).
 - [ ] **T0.2** Add `vscode-jsonrpc` + `vscode-languageserver-types` to `package.json`.
 - [ ] **T0.3** Create `documentation/plans/verification/step-17.md` stub with test commands.
 
@@ -480,7 +480,7 @@ node --test test/lsp/*.test.mjs
 - [ ] **T1.1** Create `src/lsp/types.ts` (`LspServerEntry`, `LspConfig`, `MergedLspConfig`).
 - [ ] **T1.2** Author `src/lsp/defaults.json` (full OpenCode table + metadata).
 - [ ] **T1.3** Implement `src/lsp/merge-config.ts` with unit tests.
-- [ ] **T1.4** Implement server-side loader: read defaults from repo + user from `~/.speedchat/lsp.json`.
+- [ ] **T1.4** Implement server-side loader: read defaults from repo + user from `~/.minnow/lsp.json`.
 - [ ] **T1.5** Seed `lsp.json` on first home init (hook Step 02 migration).
 
 ### Phase 2 — LSP runtime (Node)
@@ -490,7 +490,7 @@ node --test test/lsp/*.test.mjs
 - [ ] **T2.3** Implement `server/lsp/client.js` (JSON-RPC connection, initialize, didOpen, publishDiagnostics listener).
 - [ ] **T2.4** Implement `server/lsp/manager.js` (process map, spawn, shutdown, diagnostic cache).
 - [ ] **T2.5** Wire `createLspMiddleware()` into `server.js` (`/api/lsp/*`, `/api/config/lsp`).
-- [ ] **T2.6** Add stderr logging to `~/.speedchat/logs/lsp/{id}.log`.
+- [ ] **T2.6** Add stderr logging to `~/.minnow/logs/lsp/{id}.log`.
 
 ### Phase 3 — Diagnostics formatting & tools
 
@@ -526,7 +526,7 @@ node --test test/lsp/*.test.mjs
 ### Phase 7 — Verifier handoff
 
 - [ ] **T7.1** Fill `documentation/plans/verification/step-17.md` with exact commands and expected output.
-- [ ] **T7.2** Verifier runs `node --test test/lsp/*.test.mjs` on clean temp `SPEEDCHAT_HOME`.
+- [ ] **T7.2** Verifier runs `node --test test/lsp/*.test.mjs` on clean temp `MINNOW_HOME`.
 - [ ] **T7.3** Verifier confirms PASS/FAIL per §13 acceptance criteria.
 
 ---
@@ -534,7 +534,7 @@ node --test test/lsp/*.test.mjs
 ## 15. Sub-agent implementer prompt (copy-paste)
 
 ```
-You are implementing Step 17 — LSP server integration for SpeedChat.
+You are implementing Step 17 — LSP server integration for Minnow.
 
 Read first:
 - documentation/plans/Build out/step-17-lsp-integration.md (this plan)
@@ -542,11 +542,11 @@ Read first:
 - documentation/plans/to-fix-step-order.md (Step 17 section)
 - server.js, src/tools/definitions.ts, src/tools/client.ts
 
-Depends on Step 02 (~/.speedchat + /api/config). If missing, implement minimal config read/write for lsp.json only.
+Depends on Step 02 (~/.minnow + /api/config). If missing, implement minimal config read/write for lsp.json only.
 
 Deliver:
 - src/lsp/defaults.json (full OpenCode catalog)
-- ~/.speedchat/lsp.json seed + merge-config
+- ~/.minnow/lsp.json seed + merge-config
 - server/lsp/* manager + JSON-RPC client
 - server.js middleware + tool handlers get_lsp_diagnostics, list_lsp_servers
 - test/fixtures/fake-lsp.mjs + node --test suite
@@ -569,7 +569,7 @@ Read acceptance criteria in documentation/plans/Build out/step-17-lsp-integratio
 Run commands from documentation/plans/verification/step-17.md.
 
 Required:
-1. node --test test/lsp/*.test.mjs (SPEEDCHAT_HOME=temp dir)
+1. node --test test/lsp/*.test.mjs (MINNOW_HOME=temp dir)
 2. Confirm fake-lsp integration returns static expected diagnostics
 3. Confirm merge-config tests pass
 4. Confirm context.md documents LSP paths and tools

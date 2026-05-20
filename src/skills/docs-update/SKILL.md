@@ -23,7 +23,7 @@ disable-model-invocation: true
 6. Keep prose concise; use tables for paths and routes.
 7. Do not document secrets or local-only overrides in committed files.
 
-## SpeedChat locations
+## Minnow locations
 
 | Doc | Purpose |
 |-----|---------|

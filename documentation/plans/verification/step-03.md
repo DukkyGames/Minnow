@@ -2,7 +2,7 @@
 
 ## Automated
 
-From repo root with **no** real `~/.speedchat` touched (`SPEEDCHAT_HOME` set by tests):
+From repo root with **no** real `~/.minnow` touched (`MINNOW_HOME` set by tests):
 
 ```bash
 npm test
@@ -19,13 +19,13 @@ node --test test/providers/auth-headers.test.js test/providers/proxy-mock.test.j
 
 | Variable | Purpose |
 |----------|---------|
-| `SPEEDCHAT_HOME` | Temp directory for provider CRUD/proxy tests (set automatically in tests) |
-| `SPEEDCHAT_DEBUG=1` | Optional: config ping includes `homePath` |
+| `MINNOW_HOME` | Temp directory for provider CRUD/proxy tests (set automatically in tests) |
+| `MINNOW_DEBUG=1` | Optional: config ping includes `homePath` |
 
 ## Manual (`npm start`)
 
 1. Start: `npm start` (note port, default **5173**).
-2. Open Settings → **Provider** select lists `lm-studio-local` (and any others under `%USERPROFILE%\.speedchat\providers\`).
+2. Open Settings → **Provider** select lists `lm-studio-local` (and any others under `%USERPROFILE%\.minnow\providers\`).
 3. Switch provider → model dropdown refreshes; status pill updates.
 4. **Provider base URL** is read-only when file-backed providers API is up.
 5. Secrets (curl example — replace port):
@@ -52,6 +52,6 @@ curl -s -X POST http://localhost:5173/api/providers \
 
 - [ ] `npm test` and `npm run build` pass
 - [ ] Two+ providers on disk; switching active changes models/chat target
-- [ ] Secrets only under `~/.speedchat/providers/*/secrets.json`
+- [ ] Secrets only under `~/.minnow/providers/*/secrets.json`
 - [ ] Proxy routes attach auth headers (covered by `proxy-mock.test.js`)
 - [ ] `documentation/context.md` documents provider layout and routes

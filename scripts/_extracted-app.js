@@ -7,7 +7,7 @@ const EMPTY_STATE_HTML =
   '<p class="empty-title">No messages yet</p>' +
   '<p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>';
 
-const STORAGE_KEY = 'speedchat-sessions-v1';
+const STORAGE_KEY = 'minnow-sessions-v1';
 const MAX_CHATS = 50;
 const SAVE_DEBOUNCE_MS = 300;
 const PLACEHOLDER_CHAT_NAME = 'New chat';
@@ -24,14 +24,14 @@ const modelCache = new Map(); // model id -> metadata from /api/v0/models
 const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 let assistantRenderDebounceTimer = null;
 /** Run marked configuration once (GFM on, do not treat single newlines as hard breaks). */
-let speedchatMarkedConfigured = false;
+let minnowMarkedConfigured = false;
 
 // Which preset the textarea is supposed to match (empty string = Custom).
 let activeSystemPromptPresetId = '';
 // Avoid re-entrancy when programmatically reverting the preset <select> after cancel.
 let suppressSystemPromptSelectChange = false;
 
-const PRESET_STORAGE_KEY = 'speedchat.systemPrompt';
+const PRESET_STORAGE_KEY = 'minnow.systemPrompt';
 
 // Ordered list of built-in system prompts for the settings drawer.
 const SYSTEM_PROMPT_PRESETS = [
@@ -834,8 +834,8 @@ function cancelAssistantBubbleRenderDebounce() {
 
 /** Configure marked once for GitHub-flavored markdown without single-line breaks. */
 function ensureMarkedOptionsConfigured() {
-  if (speedchatMarkedConfigured) return;
-  speedchatMarkedConfigured = true;
+  if (minnowMarkedConfigured) return;
+  minnowMarkedConfigured = true;
   if (typeof marked === 'undefined') return;
   try {
     if (typeof marked.use === 'function') {

@@ -54,4 +54,8 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsMcpAddId"/);
     assert.match(html, /id="settingsMcpAddCommand"/);
   });
+
+  test('memory entry list mount exists in index.html', () => {
+    assert.match(html, /id="settingsMemoryList"/);
+  });
 });

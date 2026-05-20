@@ -21,7 +21,7 @@ describe('config migration', () => {
   let baseUrl;
 
   before(async () => {
-    homeDir = setTestHome(process.env, 'speedchat-test-migrate');
+    homeDir = setTestHome(process.env, 'minnow-test-migrate');
     server = createConfigTestServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const addr = server.address();
@@ -74,7 +74,7 @@ describe('config migration', () => {
   });
 
   test('corrupt tools string still migrates sessions with warning', async () => {
-    const freshHome = setTestHome(process.env, 'speedchat-test-migrate-partial');
+    const freshHome = setTestHome(process.env, 'minnow-test-migrate-partial');
     const partialServer = createConfigTestServer();
     await new Promise((resolve) => partialServer.listen(0, '127.0.0.1', resolve));
     const partialUrl = `http://127.0.0.1:${partialServer.address().port}`;

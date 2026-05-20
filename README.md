@@ -1,4 +1,4 @@
-# SpeedChat
+# Minnow
 
 A fast, lightweight browser client for **[LM Studio](https://lmstudio.ai/)** — local OpenAI-compatible chat with streaming replies, multi-session history, inference metrics, and built-in **agent tools** (file ops, git, web search, code execution, and more).
 
@@ -40,7 +40,7 @@ npm install
 
 **Impeccable (UI design skill):** `postinstall` vendors the [Impeccable](https://impeccable.style) skill into `src/skills/impeccable/` (reference docs + scripts). With `npm start`, use **`/impeccable`** in the composer for design critique, polish, and related commands — context comes from [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md), and [`.impeccable/design.json`](.impeccable/design.json). Docs: https://impeccable.style/docs — optional Chrome extension for Live Mode. Before UI-heavy PRs: `npm run impeccable:detect` (exit code `2` = issues found). Re-sync: `npm run impeccable:sync`; update upstream: `npm run impeccable:update`.
 
-**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** Work Agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional dedicated binding in `~/.speedchat/config.json` under `uiDesigner`.
+**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** Work Agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional dedicated binding in `~/.minnow/config.json` under `uiDesigner`.
 
 Optional: PDF text extraction uses `pdf-parse` (listed under `optionalDependencies`). A normal `npm install` should pull it in; if PDF attachments fail, run:
 
@@ -65,7 +65,7 @@ npm start
 This runs `node server.js`, which:
 
 - Starts **Vite** on port **5173** (or the next free port — check the terminal)
-- Serves the SpeedChat UI
+- Serves the Minnow UI
 - Exposes **`GET /api/tools/ping`** and **`POST /api/tools`** for server-side tool execution
 - Opens your default browser to the app URL
 
@@ -123,7 +123,7 @@ When you run `npm start`, the browser talks to the same origin for tools:
 |----------|--------|---------|
 | `/api/tools/ping` | GET | Health check (`{ "ok": true }`) |
 | `/api/tools` | POST | Execute a tool — body: `{ "name": "...", "args": { ... } }` → `{ "result": "..." }` (optional `attachments` for screenshots) |
-| `/api/browser/screenshot/:id` | GET | PNG from `~/.speedchat/screenshots/` (Step 12) |
+| `/api/browser/screenshot/:id` | GET | PNG from `~/.minnow/screenshots/` (Step 12) |
 
 - **Path safety:** File/git tools resolve paths under the **project root** unless you set `TOOLS_ALLOW_ALL_PATHS=1`.
 - **Brave Search:** Optional API key in Settings → Tools for `web_search`; without it, the client may use a DuckDuckGo fallback when the server is up.
@@ -143,7 +143,7 @@ Enable **Browser (CDP)** tools in Settings. Start Chrome with remote debugging:
 google-chrome --remote-debugging-port=9222
 ```
 
-Optional: `SPEEDCHAT_BROWSER_URL=http://127.0.0.1:9222` or `browser.defaultUrl` in `~/.speedchat/config.json`.
+Optional: `MINNOW_BROWSER_URL=http://127.0.0.1:9222` or `browser.defaultUrl` in `~/.minnow/config.json`.
 
 Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). `browser_eval` runs full page JavaScript — use only on trusted pages.
 
@@ -156,8 +156,8 @@ Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts
 | LM Studio URL | Settings | Default `http://localhost:1234` |
 | Temperature / max tokens | Settings | Per-session behavior via active chat |
 | System prompt | Settings | Presets + custom text (`localStorage`) |
-| Tool toggles & Brave key | Settings → Tools | Stored as `speedchat.tools` |
-| Chat sessions | Sidebar | Stored as `speedchat-sessions-v1` |
+| Tool toggles & Brave key | Settings → Tools | Stored as `minnow.tools` |
+| Chat sessions | Sidebar | Stored as `minnow-sessions-v1` |
 
 ---
 
@@ -197,7 +197,7 @@ ReadLints
 ## Project layout (short)
 
 ```
-SpeedChat/
+Minnow/
 ├── index.html          # App shell
 ├── server.js           # Dev server: Vite + /api/tools
 ├── src/                # TypeScript app (chat, tools, UI, attachments)

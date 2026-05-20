@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://speedchat.local/schemas/prompt-config.json",
+  "$id": "https://minnow.local/schemas/prompt-config.json",
   "type": "object",
   "required": ["id", "label", "profile", "parts"],
   "additionalProperties": false,

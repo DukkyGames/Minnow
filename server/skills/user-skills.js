@@ -1,5 +1,5 @@
 /**
- * Create and update user skills under ~/.speedchat/skills/.
+ * Create and update user skills under ~/.minnow/skills/.
  */
 
 import fs from 'node:fs/promises';

@@ -1,10 +1,10 @@
 /**
- * Load browser automation settings from ~/.speedchat/config.json.
+ * Load browser automation settings from ~/.minnow/config.json.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 
 /** @typedef {object} BrowserConfig
  * @property {boolean} enabled
@@ -56,7 +56,7 @@ function mergeBrowserConfig(raw) {
  * @returns {Promise<BrowserConfig>}
  */
 export async function loadBrowserConfig() {
-  const configPath = path.join(getSpeedChatHome(), 'config.json');
+  const configPath = path.join(getMinnowHome(), 'config.json');
   try {
     const stat = await fs.stat(configPath);
     if (cachedConfig && stat.mtimeMs === cachedMtime) {
@@ -91,9 +91,9 @@ export async function resolveBrowserUrl(args = {}) {
   if (fromArg) return fromArg;
 
   const fromEnv =
-    typeof process.env.SPEEDCHAT_BROWSER_URL === 'string' &&
-    process.env.SPEEDCHAT_BROWSER_URL.trim()
-      ? process.env.SPEEDCHAT_BROWSER_URL.trim()
+    typeof process.env.MINNOW_BROWSER_URL === 'string' &&
+    process.env.MINNOW_BROWSER_URL.trim()
+      ? process.env.MINNOW_BROWSER_URL.trim()
       : '';
   if (fromEnv) return fromEnv;
 

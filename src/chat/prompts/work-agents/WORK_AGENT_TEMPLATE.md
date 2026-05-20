@@ -18,7 +18,7 @@ label: My Agent
 kind: work-agent
 version: "1"
 description: One-line purpose.
-providerId: null          # or openai-compatible provider id from ~/.speedchat/providers
+providerId: null          # or openai-compatible provider id from ~/.minnow/providers
 modelId: null             # or model id on that provider
 defaultForModes:          # optional — auto when workAgentAuto is on
   - build
@@ -32,5 +32,5 @@ Body supports interpolation: `{{work_agent}}`, `{{work_agent_label}}`, `{{mode}}
 
 User overrides:
 
-- `~/.speedchat/work-agents.json` — `{ "my-agent": { "providerId", "modelId", "disabled" } }`
-- `~/.speedchat/prompts/work-agents/<id>/agent.full.md` — prompt file override
+- `~/.minnow/work-agents.json` — `{ "my-agent": { "providerId", "modelId", "disabled" } }`
+- `~/.minnow/prompts/work-agents/<id>/agent.full.md` — prompt file override

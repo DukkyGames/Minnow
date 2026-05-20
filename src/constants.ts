@@ -1,4 +1,5 @@
 import type { SystemPromptPreset } from './types';
+import { MINNOW_GLYPH_EMPTY_HTML } from './ui/minnow-glyph';
 
 /** Persisted `SessionState.version` — must match localStorage migration checks. */
 export const SESSION_STATE_VERSION = 1;
@@ -17,18 +18,18 @@ export const icons = {
 
 /** Empty chat area placeholder markup. */
 export const EMPTY_STATE_HTML =
-  '<div class="empty-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>' +
+  `<div class="empty-icon" aria-hidden="true">${MINNOW_GLYPH_EMPTY_HTML}</div>` +
   '<p class="empty-title">No messages yet</p>' +
   '<p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>';
 
-/** @deprecated Use config API / ~/.speedchat — kept for migration and Vite-only fallback. */
-export const STORAGE_KEY = 'speedchat-sessions-v1';
+/** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */
+export const STORAGE_KEY = 'minnow-sessions-v1';
 export const MAX_CHATS = 50;
 export const SAVE_DEBOUNCE_MS = 300;
 export const PLACEHOLDER_CHAT_NAME = 'New chat';
 export const AUTO_TITLE_MAX_LEN = 40;
-/** @deprecated Use config API / ~/.speedchat — kept for migration and Vite-only fallback. */
-export const PRESET_STORAGE_KEY = 'speedchat.systemPrompt';
+/** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */
+export const PRESET_STORAGE_KEY = 'minnow.systemPrompt';
 export const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 
 /** Built-in system prompt presets for the settings drawer. */

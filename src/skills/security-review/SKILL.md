@@ -34,7 +34,7 @@ disable-model-invocation: true
 ### Access control
 
 - Server routes validate ids (`^[a-z0-9-]+$`) and reject `..`
-- User data under `~/.speedchat` read only via whitelisted APIs
+- User data under `~/.minnow` read only via whitelisted APIs
 
 ### Dependencies
 

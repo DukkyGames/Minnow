@@ -164,9 +164,14 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
 
 /**
  * Vite connect middleware factory.
- * @param {string} projectRoot
+ * @param {string | (() => string)} resolveProjectRoot
  */
-export function createTerminalMiddleware(projectRoot) {
+export function createTerminalMiddleware(resolveProjectRoot) {
+  const getRoot =
+    typeof resolveProjectRoot === 'function'
+      ? resolveProjectRoot
+      : () => resolveProjectRoot;
+
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';
     if (!url.startsWith('/api/terminal')) {
@@ -174,7 +179,7 @@ export function createTerminalMiddleware(projectRoot) {
       return;
     }
 
-    const handled = await handleTerminalRequest(req, res, url, projectRoot);
+    const handled = await handleTerminalRequest(req, res, url, getRoot());
     if (!handled) {
       sendJson(res, 404, { error: 'Not found' });
     }

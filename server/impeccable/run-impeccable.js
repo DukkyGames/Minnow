@@ -72,7 +72,7 @@ export function toolRunImpeccable(args, projectRoot) {
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      const relRoot = path.basename(projectRoot) === 'SpeedChat' ? '.' : projectRoot;
+      const relRoot = path.basename(projectRoot) === 'Minnow' ? '.' : projectRoot;
       if (timedOut) {
         resolve({
           result: `Error: run_impeccable timed out after ${IMPECCABLE_TIMEOUT_MS / 1000}s`,

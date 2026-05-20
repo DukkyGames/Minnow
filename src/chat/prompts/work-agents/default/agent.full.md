@@ -8,4 +8,4 @@ providerId: null
 modelId: null
 ---
 
-You are the default assistant for SpeedChat. Follow the base system prompt and operating mode. No additional work-agent role constraints apply.
+You are the default assistant for Minnow. Follow the base system prompt and operating mode. No additional work-agent role constraints apply.

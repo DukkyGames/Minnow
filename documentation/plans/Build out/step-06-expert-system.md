@@ -86,7 +86,7 @@ flowchart LR
 | Root | Path |
 |------|------|
 | Built-in | `src/chat/prompts/experts/<id>/` |
-| User override | `~/.speedchat/prompts/experts/<id>/` (wins on same `id`) |
+| User override | `~/.minnow/prompts/experts/<id>/` (wins on same `id`) |
 
 Each expert is a **folder** with at least:
 
@@ -102,7 +102,7 @@ Each expert is a **folder** with at least:
 
 ```json
 {
-  "$schema": "https://speedchat.local/schemas/expert-meta.json",
+  "$schema": "https://minnow.local/schemas/expert-meta.json",
   "type": "object",
   "required": ["id", "label", "kind", "version"],
   "properties": {
@@ -170,7 +170,7 @@ Implementer ships **at least** these built-in ids (full + lite bodies):
 | `creative-writer` | Creative writer | Prose, story, tone (non-code) |
 | `security-reviewer` | Security reviewer | vuln, OWASP, threat, auth |
 
-User can add more under `~/.speedchat/prompts/experts/` without code changes.
+User can add more under `~/.minnow/prompts/experts/` without code changes.
 
 ---
 
@@ -235,7 +235,7 @@ export function resolveExpertForTurn(input: {
 6. If no winner: use expert with `default: true` (`general`) at `confidence: 0.5`, `source: 'default'`.
 7. If `experts.autoOmitWhenNoMatch` is true and no winner and no default → `expertId: null`, `source: 'none'`.
 
-Expose `minScore` and `preferDefaultOverOmit` in `~/.speedchat/config.json` (see §8).
+Expose `minScore` and `preferDefaultOverOmit` in `~/.minnow/config.json` (see §8).
 
 ### 6.3 Auto — optional LLM classifier
 
@@ -309,7 +309,7 @@ On `switchChat` / `renderSidebar` active change: `syncExpertSelectForActiveChat(
 
 ---
 
-## 8. Configuration (`~/.speedchat/config.json`)
+## 8. Configuration (`~/.minnow/config.json`)
 
 Extend config schema (Step 02):
 
@@ -453,14 +453,14 @@ Use **fixed strings** and **fixed expert fixtures** under `test/fixtures/experts
 Extend or add `scripts/step06-expert-smoke.mjs`:
 
 - DOM: `#expertSelect` exists, options length ≥ 7 (auto + 6 builtins).
-- Change manual expert → next `composeSystemPrompt` call receives id (hook via `window.__speedchatDebug` in dev only).
+- Change manual expert → next `composeSystemPrompt` call receives id (hook via `window.__minnowDebug` in dev only).
 
 ---
 
 ## 12. Acceptance criteria
 
 - [ ] Built-in experts live under `src/chat/prompts/experts/` with full + lite bodies and `_template` pack.
-- [ ] Registry lists built-ins and merges `~/.speedchat/prompts/experts/`.
+- [ ] Registry lists built-ins and merges `~/.minnow/prompts/experts/`.
 - [ ] Composer `#expertSelect` offers **Auto** + all experts; persists per chat.
 - [ ] **Manual** selection forces that expert on every send until user selects Auto.
 - [ ] **Auto** uses rules router; optional LLM behind config flag.
@@ -487,7 +487,7 @@ Extend or add `scripts/step06-expert-smoke.mjs`:
 
 - [ ] **A1** Create `src/chat/experts/types.ts` with `ExpertMeta`, `ExpertRecord`, `ExpertSelection`, `ExpertRouteResult`, `ExpertsConfig`.
 - [ ] **A2** Implement `registry.ts`: glob/scan `src/chat/prompts/experts/*/`, load `meta.json` or front matter, load full/lite bodies.
-- [ ] **A3** Merge user overrides from `~/.speedchat/prompts/experts/` (Step 02 file API or fetch `/api/config/prompts/...`).
+- [ ] **A3** Merge user overrides from `~/.minnow/prompts/experts/` (Step 02 file API or fetch `/api/config/prompts/...`).
 - [ ] **A4** Export `listExperts()`, `getExpert(id)`, `refreshExpertRegistry()` with in-memory cache + mtime invalidation.
 - [ ] **A5** Add JSON schema file `documentation/schemas/expert-meta.json` (optional but recommended).
 
@@ -496,7 +496,7 @@ Extend or add `scripts/step06-expert-smoke.mjs`:
 - [ ] **B1** Implement `rules-router.ts` with scoring, negatives, priority, `minScore`, default expert.
 - [ ] **B2** Implement `resolve.ts` orchestrating manual vs auto vs config flags.
 - [ ] **B3** Implement `llm-classifier.ts` (optional path) with strict JSON parse and timeout (2s).
-- [ ] **B4** Wire `ExpertsConfig` from `~/.speedchat/config.json` with defaults when missing.
+- [ ] **B4** Wire `ExpertsConfig` from `~/.minnow/config.json` with defaults when missing.
 
 ### Phase C — Default content
 

@@ -24,7 +24,7 @@ let mockServer;
 let lastMockHeaders = {};
 
 before(async () => {
-  homeDir = setTestHome(process.env, 'speedchat-test-step03');
+  homeDir = setTestHome(process.env, 'minnow-test-step03');
   server = createProviderTestServer();
   await new Promise((resolve) => {
     server.listen(0, '127.0.0.1', resolve);

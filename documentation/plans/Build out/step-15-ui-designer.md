@@ -13,7 +13,7 @@ Ship a **UI Designer** agent surface that combines:
 
 1. **Impeccable** design workflow (preflight gates, `shape` → `craft`, PRODUCT/DESIGN context) via Step 14’s `/impeccable` skill.
 2. **Visual evidence** from Step 12’s `browser_screenshot` (and related CDP tools) with inline chat display.
-3. **Dedicated provider + model** binding from Step 08’s Work Agent registry, stored in `~/.speedchat` config (settings UI finalized in Step 20).
+3. **Dedicated provider + model** binding from Step 08’s Work Agent registry, stored in `~/.minnow` config (settings UI finalized in Step 20).
 
 Users invoke UI design work via **`/ui-designer`** in the composer **or** by selecting the **UI Designer** Work Agent. Both paths share one runner, one tool allowlist, and one config key for model routing.
 
@@ -23,7 +23,7 @@ Users invoke UI design work via **`/ui-designer`** in the composer **or** by sel
 
 | Step | Delivers for Step 15 | If missing |
 |------|------------------------|------------|
-| **02** | `~/.speedchat/config.json`, config API | Cannot persist `uiDesigner` model binding |
+| **02** | `~/.minnow/config.json`, config API | Cannot persist `uiDesigner` model binding |
 | **03** | Provider registry, per-request provider resolution | Model binding has nowhere to resolve |
 | **08** | Work Agent registry, per-agent `providerId` + `modelId`, prompt files | Work Agent entry point blocked |
 | **12** | `browser_screenshot`, screenshot message type, CDP executor | No automated UI capture in loop |
@@ -39,7 +39,7 @@ Users invoke UI design work via **`/ui-designer`** in the composer **or** by sel
 ## Product intent (from backlog)
 
 - Runs **Impeccable** tasking and workflow (not ad-hoc “make it pretty” prompts).
-- Can **screenshot** the running UI (SpeedChat or debug Chrome tab) and use images in critique/planning.
+- Can **screenshot** the running UI (Minnow or debug Chrome tab) and use images in critique/planning.
 - Outputs either a **UI change plan** (markdown in chat + optional `documentation/plans/…`) or **implements** UI edits in `index.html`, `src/styles/`, `src/ui/`.
 - **Provider and model** for UI Designer are **manually set** in config (defaults: same as chat until user overrides).
 - Callable as **`/ui-designer`** skill **or** **Work Agent** profile.
@@ -81,7 +81,7 @@ Both paths call the same module: `src/agents/ui-designer/runner.ts` (name TBD).
 - **`/ui-designer`** is a **specialized orchestrator** that:
   - Embeds a **fixed workflow** (audit → screenshot → shape brief → plan or craft).
   - **Delegates** to Impeccable via documented sub-commands (`impeccable audit`, `impeccable shape`, `impeccable craft`, `impeccable polish`) rather than re-copying reference files.
-  - Injects **SpeedChat-specific** targets: `index.html`, `src/styles/*`, `DESIGN.md`, `.impeccable/design.json`.
+  - Injects **Minnow-specific** targets: `index.html`, `src/styles/*`, `DESIGN.md`, `.impeccable/design.json`.
 
 Skill front matter should list `relatedSkills: [impeccable]` and instruct the model to run `node …/load-context.mjs` before mutations.
 
@@ -115,12 +115,12 @@ Step 20 adds full Settings section; Step 15 ships **API + schema + placeholder**
 
 The UI Designer agent must follow Impeccable **gates** before editing project files. Encode this in `SKILL.md` and the Work Agent system prompt.
 
-| Phase | Impeccable action | SpeedChat-specific |
+| Phase | Impeccable action | Minnow-specific |
 |-------|-------------------|-------------------|
 | **0. Preflight** | `load-context.mjs` → PRODUCT.md + DESIGN.md | Fail fast if PRODUCT.md placeholder; suggest `npx impeccable teach` |
 | **1. Observe** | — | `browser_navigate` → app URL; `browser_screenshot`; attach PNG to user turn (VLM) |
 | **2. Audit** | `impeccable audit` (or `critique`) on target surface | Default target: main chat shell (`#app` or `body`) |
-| **3. Shape** | `impeccable shape` | User confirms brief; store brief in assistant message or `~/.speedchat/ui-designer/last-shape.json` |
+| **3. Shape** | `impeccable shape` | User confirms brief; store brief in assistant message or `~/.minnow/ui-designer/last-shape.json` |
 | **4a. Plan mode** | — | Output markdown plan under `documentation/plans/` only; **no** file edits until user says implement |
 | **4b. Implement mode** | `impeccable craft` / `polish` | Edit allowed paths: `index.html`, `src/**/*.css`, `src/ui/**`, `DESIGN.md` (document only with user OK) |
 | **5. Verify** | Optional `impeccable live` | Re-screenshot; diff description in chat |
@@ -141,7 +141,7 @@ UI Designer turns use a **restricted** tool set (override `getEnabledToolDefinit
 
 | Tool | Purpose |
 |------|---------|
-| `browser_list` | Find SpeedChat / target tab |
+| `browser_list` | Find Minnow / target tab |
 | `browser_navigate` | Open URL under test |
 | `browser_snapshot` | a11y tree for element refs |
 | `browser_screenshot` | Visual capture → chat image |
@@ -153,7 +153,7 @@ UI Designer turns use a **restricted** tool set (override `getEnabledToolDefinit
 | `save_file` | New partials (implement mode) |
 | `list_directory` | Discover `src/ui`, styles |
 
-**Excluded by default:** `git_*`, `execute_command`, `run_javascript`, `run_python`, `delete_path`, `web_search` (avoid distraction). User can widen via `~/.speedchat/ui-designer.json` `extraTools: string[]` later.
+**Excluded by default:** `git_*`, `execute_command`, `run_javascript`, `run_python`, `delete_path`, `web_search` (avoid distraction). User can widen via `~/.minnow/ui-designer.json` `extraTools: string[]` later.
 
 **Impeccable CLI:** Run via server wrapper tool `run_impeccable` (new) **or** document as Bash-only in skill (prefer server tool for Windows parity):
 
@@ -172,7 +172,7 @@ Implement `run_impeccable` in `server.js`: spawn `npx impeccable <command> …`,
 | [`src/skills/ui-designer/SKILL.md`](../../../src/skills/ui-designer/SKILL.md) | Slash skill: workflow, allowlist, Impeccable delegation |
 | [`src/chat/prompts/work-agents/ui-designer/system.md`](../../../src/chat/prompts/work-agents/ui-designer/system.md) | Work Agent system prompt (mirrors skill + agent role) |
 | [`src/agents/ui-designer/runner.ts`](../../../src/agents/ui-designer/runner.ts) | Preflight, mode, model resolution, screenshot hook |
-| [`src/agents/ui-designer/config.ts`](../../../src/agents/ui-designer/config.ts) | Read `uiDesigner` from `~/.speedchat` |
+| [`src/agents/ui-designer/config.ts`](../../../src/agents/ui-designer/config.ts) | Read `uiDesigner` from `~/.minnow` |
 | [`src/agents/work-agent-registry.ts`](../../../src/agents/work-agent-registry.ts) | Register `ui-designer` via Step 08 `registry.json` + `getWorkAgent('ui-designer')` |
 | [`server.js`](../../../server.js) | `run_impeccable` handler (if not only skill-delegated) |
 | [`src/tools/definitions.ts`](../../../src/tools/definitions.ts) | Optional `run_impeccable` schema |
@@ -185,7 +185,7 @@ Implement `run_impeccable` in `server.js`: spawn `npx impeccable <command> …`,
 ---
 id: ui-designer
 name: UI Designer
-description: Impeccable-guided UI audit, screenshot capture, plan or implement SpeedChat surfaces.
+description: Impeccable-guided UI audit, screenshot capture, plan or implement Minnow surfaces.
 user-invocable: true
 argument-hint: "[plan|implement] [target description]"
 requires:
@@ -206,14 +206,14 @@ allowed-tools:
 
 ### Phase A — Config and registry
 
-- [ ] **A1** Add `uiDesigner` block to `~/.speedchat/config.json` schema + defaults in server config module (Step 02).
+- [ ] **A1** Add `uiDesigner` block to `~/.minnow/config.json` schema + defaults in server config module (Step 02).
 - [ ] **A2** Implement `loadUiDesignerConfig()` / `resolveUiDesignerModel()` in `src/agents/ui-designer/config.ts`.
 - [ ] **A3** Register Work Agent `ui-designer` in `src/chat/prompts/work-agents/` + [`src/agents/work-agent-registry.ts`](../../../src/agents/work-agent-registry.ts) (Step 08 API: `listWorkAgents()`, `getWorkAgent('ui-designer')`) with `promptPath`, `defaultTools`, provider/model from `uiDesigner` config.
 - [ ] **A4** Extend `buildApiMessages` / tool loop to pass `workAgentId` and resolve provider/model for UI Designer turns.
 
 ### Phase B — Skill and prompts
 
-- [ ] **B1** Create `src/skills/ui-designer/SKILL.md` with full Impeccable workflow, plan/implement modes, SpeedChat paths.
+- [ ] **B1** Create `src/skills/ui-designer/SKILL.md` with full Impeccable workflow, plan/implement modes, Minnow paths.
 - [ ] **B2** Create `src/chat/prompts/work-agents/ui-designer/system.md` (aligned with skill; no drift).
 - [ ] **B3** Wire `/ui-designer` in skill discovery (Step 13): appears in `/` picker after `impeccable`.
 - [ ] **B4** On slash select: inject skill body + set `activeWorkAgentId` for session turn; clear after send completes (or sticky per product decision — **default: one turn**).
@@ -329,7 +329,7 @@ Expected: all **U\*** and **I\*** PASS; manual checklist signed in PR or step re
 1. **Sticky Work Agent:** Should UI Designer stay active across turns until user clears, or only one turn per `/ui-designer`?
 2. **Default mode:** Plan-only first message vs always ask plan/implement?
 3. **`run_impeccable`:** Dedicated server tool vs allowlisted `execute_command` — security vs simplicity?
-4. **Screenshot target:** Always SpeedChat tab vs user-supplied URL?
+4. **Screenshot target:** Always Minnow tab vs user-supplied URL?
 5. **User-provided Work Agent copy:** Replace stub `system.md` when prompts arrive (Step 08 note).
 
 ---

@@ -1,12 +1,12 @@
 ---
 name: Step 13 — Skills framework
 overview: >-
-  Dual-root skill discovery (src/skills + ~/.speedchat/skills), SKILL.md loader,
+  Dual-root skill discovery (src/skills + ~/.minnow/skills), SKILL.md loader,
   / slash picker in the composer, and skill injection on the send path. Ship an
   expanded default skill pack and deterministic loader-merge tests.
 backlog: to-fix.md item 20
 depends_on:
-  - step-02-speedchat-dir
+  - step-02-minnow-dir
   - step-04-prompts-partial
 blocks:
   - step-14-impeccable
@@ -67,7 +67,7 @@ isProject: false
 |-------|--------|
 | **Backlog** | [`documentation/plans/to-fix.md`](../to-fix.md) item **19** (skills + `/` slash usage) |
 | **Roadmap** | [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) Step 13 |
-| **Depends on** | **Step 02** (`~/.speedchat` data layer + server config APIs). **Step 04** (prompt composer with a `skill` part) — minimal hook acceptable if Step 04 is not merged yet (see [Send-path injection](#send-path-injection)). |
+| **Depends on** | **Step 02** (`~/.minnow` data layer + server config APIs). **Step 04** (prompt composer with a `skill` part) — minimal hook acceptable if Step 04 is not merged yet (see [Send-path injection](#send-path-injection)). |
 | **Blocks** | Step 14 (Impeccable `/impeccable`), Step 15 (UI Designer), Step 19 (self-healing skill authoring) |
 | **Out of scope** | Full settings page for skills (Step 20); Impeccable install (Step 14); agent auto-invocation of skills without `/` |
 
@@ -80,7 +80,7 @@ Users invoke **skills** from the composer with **`/`** (slash commands), similar
 1. Type **`/`** → see all available skills (built-in + user).
 2. Pick or type **`/<skill-id>`** → that skill’s `SKILL.md` body is injected into the model context for **this send only**.
 3. **Built-in** skills ship in-repo under [`src/skills/`](../../../src/skills/).
-4. **User / agent** skills live under `~/.speedchat/skills/` (Windows: `%USERPROFILE%\.speedchat\skills\`).
+4. **User / agent** skills live under `~/.minnow/skills/` (Windows: `%USERPROFILE%\.minnow\skills\`).
 5. Runtime **merges** both trees; user skill **wins** on duplicate `id`.
 
 No separate “skill pack installer” — adding a folder with `SKILL.md` is enough when discovery is glob-based.
@@ -106,7 +106,7 @@ No separate “skill pack installer” — adding a folder with `SKILL.md` is en
 flowchart LR
   subgraph roots [Skill roots]
     SRC[src/skills/ built-in]
-    HOME[~/.speedchat/skills/ user]
+    HOME[~/.minnow/skills/ user]
   end
 
   subgraph server [npm start]
@@ -170,7 +170,7 @@ description: >-
 |-------|---------|
 | `label` | Display name in picker (default: title-case `name`) |
 | `version` | Semver string for UI badge |
-| `disable-model-invocation` | If `true`, skill is **only** applied via explicit `/` (default `true` for SpeedChat v1) |
+| `disable-model-invocation` | If `true`, skill is **only** applied via explicit `/` (default `true` for Minnow v1) |
 | `allowed-tools` | Future: restrict tool loop (out of scope v1; document in `_example`) |
 
 ### Body
@@ -194,7 +194,7 @@ Ship [`src/skills/_example/SKILL.md`](../../../src/skills/_example/SKILL.md) and
 - Folder layout
 - Front matter fields
 - How merge/override works
-- How to add a user skill under `~/.speedchat/skills/<id>/SKILL.md`
+- How to add a user skill under `~/.minnow/skills/<id>/SKILL.md`
 - Link to Step 14 `/impeccable` placeholder (folder stub only in Step 13)
 
 ---
@@ -205,9 +205,9 @@ Extend middleware **before** Vite SPA handler (same pattern as `/api/tools`).
 
 ### `resolveSpeedchatHome()`
 
-- Shared helper (extract to `server/speedchat-home.js` or top of `server.js` if Step 02 not split yet):
-  - Unix: `path.join(os.homedir(), '.speedchat')`
-  - Windows: `%USERPROFILE%\.speedchat`
+- Shared helper (extract to `server/minnow-home.js` or top of `server.js` if Step 02 not split yet):
+  - Unix: `path.join(os.homedir(), '.minnow')`
+  - Windows: `%USERPROFILE%\.minnow`
 - Ensure `skills/` subdir exists when listing (mkdir with `recursive: true` only for user root, not for missing built-in).
 
 ### `scanSkillDir(rootDir, source: 'builtin' | 'user')`
@@ -230,7 +230,7 @@ For each **immediate child directory** `entry`:
 
 **CORS / OPTIONS:** Same as `/api/tools` (`*`, OPTIONS 204).
 
-**Security:** User root is outside project — only read `SKILL.md` under `~/.speedchat/skills/*/`; reject `..` in `:id` param (`^[a-z0-9][a-z0-9-]*$`).
+**Security:** User root is outside project — only read `SKILL.md` under `~/.minnow/skills/*/`; reject `..` in `:id` param (`^[a-z0-9][a-z0-9-]*$`).
 
 **Vite-only (`npm run dev`):** Client falls back to **bundled manifest** (see below) so slash UI still works for built-ins only.
 
@@ -344,7 +344,7 @@ const skillBlock = skillBody
 const effectiveSys = (sysPrompt + skillBlock).trim();
 ```
 
-Only apply on the **turn being sent** (do not persist skill body into `speedchat.systemPrompt` preset).
+Only apply on the **turn being sent** (do not persist skill body into `minnow.systemPrompt` preset).
 
 ### `buildApiMessages` signature (optional)
 
@@ -388,7 +388,7 @@ Expand beyond `_example`. Each folder: `SKILL.md` + optional `README.md`.
 | `browser-automation` | CDP workflow stub | **Stub** for Step 12; link opencode-browser |
 | `impeccable` | UI polish stub | **Stub** body; Step 14 fills + install |
 
-**Quality bar:** Each skill 40–120 lines, actionable steps, references SpeedChat tools by **id** from [`definitions.ts`](../../../src/tools/definitions.ts).
+**Quality bar:** Each skill 40–120 lines, actionable steps, references Minnow tools by **id** from [`definitions.ts`](../../../src/tools/definitions.ts).
 
 ---
 
@@ -396,11 +396,11 @@ Expand beyond `_example`. Each folder: `SKILL.md` + optional `README.md`.
 
 | Step | Integration |
 |------|-------------|
-| **02** | `~/.speedchat/skills/` path, server read/write guard, optional `GET /api/config/paths` |
+| **02** | `~/.minnow/skills/` path, server read/write guard, optional `GET /api/config/paths` |
 | **04** | `skill` prompt part in composer order: `… → skill → memory → user` |
 | **14** | Replace `src/skills/impeccable/SKILL.md` + postinstall; keep same `id` |
 | **15** | `/ui-designer` skill or Work Agent — may share `impeccable` body |
-| **19** | Explorer writes new folders under `~/.speedchat/skills/`; refresh catalog API |
+| **19** | Explorer writes new folders under `~/.minnow/skills/`; refresh catalog API |
 | **20** | Settings UI: list skills, open folder, disable built-in (future flag in `config.json`) |
 
 ---
@@ -419,7 +419,7 @@ Expand beyond `_example`. Each folder: `SKILL.md` + optional `README.md`.
 - [ ] **s13-02** `resolveSpeedchatHome()` (align with Step 02 if present).
 - [ ] **s13-03** `scanSkillDir` + `GET /api/skills`.
 - [ ] **s13-04** `GET /api/skills/:id` with safe id validation.
-- [ ] **s13-14** Smoke script against temp `SPEEDCHAT_HOME` env override for tests.
+- [ ] **s13-14** Smoke script against temp `MINNOW_HOME` env override for tests.
 
 ### Phase C — Client catalog
 
@@ -469,7 +469,7 @@ Use **fixed** fixture strings (no random ids).
 
 ### Integration — `scripts/s13-skills-smoke.mjs`
 
-1. Set `SPEEDCHAT_HOME` to temp dir with one user skill overriding built-in id.
+1. Set `MINNOW_HOME` to temp dir with one user skill overriding built-in id.
 2. Start server (or call scan helpers if exported).
 3. `GET /api/skills` → count ≥ built-in count.
 4. `GET /api/skills/git-commit` → body contains fixture string from user override.
@@ -479,7 +479,7 @@ Use **fixed** fixture strings (no random ids).
 - [ ] `npm start` → type `/` → picker shows built-ins.
 - [ ] Select skill → composer shows `/skill-id `.
 - [ ] Send → LM Studio request includes skill instructions in system message (inspect network or log debug once).
-- [ ] Add `~/.speedchat/skills/git-commit/SKILL.md` override → picker shows Custom; send uses override body.
+- [ ] Add `~/.minnow/skills/git-commit/SKILL.md` override → picker shows Custom; send uses override body.
 - [ ] `npm run dev` → built-ins still listed (manifest); user skills unavailable with clear status if attempted.
 
 ---

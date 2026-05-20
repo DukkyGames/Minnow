@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   ensureMcpSeed,
   callMcpTool,
@@ -22,8 +22,8 @@ describe('MCP registry', () => {
 
   before(async () => {
     homeDir = path.join(__dirname, '../fixtures/mcp-home');
-    process.env.SPEEDCHAT_HOME = homeDir;
-    resetSpeedChatHomeCache();
+    process.env.MINNOW_HOME = homeDir;
+    resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });
     await ensureMcpSeed();
     await reloadMcp();
@@ -31,8 +31,8 @@ describe('MCP registry', () => {
 
   after(async () => {
     await reloadMcp();
-    delete process.env.SPEEDCHAT_HOME;
-    resetSpeedChatHomeCache();
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
   });
 
   test('seed creates context7 enabled', async () => {

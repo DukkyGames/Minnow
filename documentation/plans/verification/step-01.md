@@ -18,7 +18,7 @@ npx tsx scripts/step01-ui-smoke.mjs http://localhost:5179
 npx tsx scripts/sa16-smoke.mjs http://localhost:5179
 ```
 
-`sa16-smoke` hits the SpeedChat tool API on the same host; it will fail if pointed at the wrong port or if `npm start` is not running.
+`sa16-smoke` hits the Minnow tool API on the same host; it will fail if pointed at the wrong port or if `npm start` is not running.
 
 ## Automated commands
 

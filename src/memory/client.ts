@@ -3,7 +3,11 @@
  */
 
 import { detectLocalServer } from '../tools/client';
-import type { MemoryEntryMeta, MemoryRetrieveResult } from './types';
+import type {
+  MemoryEntryMeta,
+  MemoryEntryWithBody,
+  MemoryRetrieveResult,
+} from './types';
 import type { PromptProfile } from '../chat/prompts/types';
 
 const API_BASE = '';
@@ -39,6 +43,33 @@ export interface MemoryStatus {
   enabled: boolean;
   entryCount: number;
   home: string;
+}
+
+/** List memory entries (metadata only unless includeBody). */
+export async function fetchMemoryEntries(
+  includeBody = true,
+): Promise<MemoryEntryWithBody[] | null> {
+  const qs = includeBody ? '?includeBody=1' : '';
+  const data = await memoryFetch<{ entries: MemoryEntryWithBody[] }>(
+    `/api/memory/entries${qs}`,
+  );
+  if (!data?.entries) return null;
+  return data.entries;
+}
+
+/** Delete one memory entry by id. */
+export async function deleteMemoryEntry(id: string): Promise<boolean> {
+  const ok = await detectLocalServer();
+  if (!ok) return false;
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/memory/entries/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Server memory status (enabled flag, entry count, home path). */

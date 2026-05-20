@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from './config/home.js';
+import { getMinnowHome } from './config/home.js';
 import { readConfigJson, writeConfigJson } from './config/store.js';
 import { validateSessionState } from './config/validators.js';
 import {
@@ -66,7 +66,7 @@ const RUN_EVICTION_MS = 60_000;
 const activeRuns = new Map();
 
 function terminalLogDir() {
-  return path.join(getSpeedChatHome(), 'logs', 'terminal');
+  return path.join(getMinnowHome(), 'logs', 'terminal');
 }
 
 function relativeLogPath(runId) {

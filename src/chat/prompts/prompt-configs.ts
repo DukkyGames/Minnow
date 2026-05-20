@@ -1,5 +1,5 @@
 /**
- * Client API for ~/.speedchat/prompt-configs (npm start) with in-memory fallback.
+ * Client API for ~/.minnow/prompt-configs (npm start) with in-memory fallback.
  */
 
 import type { PromptConfig, PromptConfigListItem } from './types';

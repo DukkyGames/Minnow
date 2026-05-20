@@ -104,7 +104,7 @@ function scheduleSaveFilePanelPrefs(): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
-/** Load prefs from ~/.speedchat/config.json when config server is up. */
+/** Load prefs from ~/.minnow/config.json when config server is up. */
 export async function loadFilePanelPrefs(): Promise<FilePanelState> {
   const serverUp = await detectConfigServer();
   if (serverUp) {

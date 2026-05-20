@@ -55,7 +55,7 @@ export interface ExpertClassifierModelRef {
   modelId: string;
 }
 
-/** `experts` block in ~/.speedchat/config.json. */
+/** `experts` block in ~/.minnow/config.json. */
 export interface ExpertsConfig {
   enabled: boolean;
   classifier: ExpertClassifierMode;

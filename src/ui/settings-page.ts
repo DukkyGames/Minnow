@@ -141,6 +141,7 @@ function bindStaticSections(): void {
         ok ? 'ok' : 'err',
         ok ? 'Memory cleared (archived)' : 'Clear failed — use npm start',
       );
+      if (ok) void refreshSettingsSection('memory');
     });
 
   document

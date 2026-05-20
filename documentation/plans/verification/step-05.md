@@ -23,7 +23,7 @@ Expected:
 1. Mode selector appears **above** the attachment row in the composer (not in the top bar).
 2. New chat defaults to **Build**; switch to **Plan** → status pill “Mode: Plan”.
 3. Second chat set to **Orchestrate**; switch back to first chat → mode restores.
-4. Reload app → per-chat `modeId` persists in `~/.speedchat/sessions/state.json` (or `speedchat-sessions-v1` in Vite-only).
+4. Reload app → per-chat `modeId` persists in `~/.minnow/sessions/state.json` (or `minnow-sessions-v1` in Vite-only).
 5. **Plan** send: DevTools → chat request `tools` array omits `execute_command` (and other denied ids).
 6. **Research** send: read/web tools still present when enabled in Settings; `save_file` omitted.
 7. While streaming, mode segments are disabled.

@@ -1,21 +1,21 @@
 /**
- * Step 13 smoke: skills API list + GET one with user override in SPEEDCHAT_HOME.
+ * Step 13 smoke: skills API list + GET one with user override in MINNOW_HOME.
  * Usage: node scripts/s13-skills-smoke.mjs [baseUrl]
  *
- * S1–S3: in-process scan (isolated temp home if SPEEDCHAT_HOME unset).
+ * S1–S3: in-process scan (isolated temp home if MINNOW_HOME unset).
  * S4–S6: HTTP against npm start. S6 needs the server to use the same home as this script:
- *   set SPEEDCHAT_HOME=%TEMP%\speedchat-s13-verify (or export on Unix)
+ *   set MINNOW_HOME=%TEMP%\minnow-s13-verify (or export on Unix)
  *   node scripts/s13-skills-smoke.mjs   # writes override, then start server in same env:
  *   npm start
  *   node scripts/s13-skills-smoke.mjs http://localhost:5173
- * If SPEEDCHAT_HOME is already set, the script writes the override there and does not replace it.
+ * If MINNOW_HOME is already set, the script writes the override there and does not replace it.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache } from '../server/config/home.js';
+import { resetMinnowHomeCache } from '../server/config/home.js';
 import { listMergedSkills, getSkillById } from '../server/skills/scan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,15 +25,15 @@ const baseUrl = (process.argv[2] || 'http://localhost:5173').replace(/\/$/, '');
 const USER_OVERRIDE_BODY = 'USER_OVERRIDE_FIXTURE_git-commit';
 
 async function setupUserOverride() {
-  const existing = process.env.SPEEDCHAT_HOME?.trim();
+  const existing = process.env.MINNOW_HOME?.trim();
   const serverCoordinated = Boolean(existing);
   const home = serverCoordinated
     ? path.resolve(existing)
-    : path.join(os.tmpdir(), `speedchat-s13-${process.pid}`);
+    : path.join(os.tmpdir(), `minnow-s13-${process.pid}`);
 
   if (!serverCoordinated) {
-    process.env.SPEEDCHAT_HOME = home;
-    resetSpeedChatHomeCache();
+    process.env.MINNOW_HOME = home;
+    resetMinnowHomeCache();
   }
 
   const skillDir = path.join(home, 'skills', 'git-commit');
@@ -63,8 +63,8 @@ async function cleanupHome({ home, serverCoordinated }) {
     return;
   }
 
-  resetSpeedChatHomeCache();
-  delete process.env.SPEEDCHAT_HOME;
+  resetMinnowHomeCache();
+  delete process.env.MINNOW_HOME;
   try {
     await fs.rm(home, { recursive: true, force: true });
   } catch {
@@ -84,7 +84,7 @@ try {
 
   if (!serverCoordinated) {
     console.log(
-      `Note: for S6, start server with SPEEDCHAT_HOME=${home} (same shell/env), then re-run this script.`,
+      `Note: for S6, start server with MINNOW_HOME=${home} (same shell/env), then re-run this script.`,
     );
   }
 
@@ -130,7 +130,7 @@ try {
       record(
         'S6',
         false,
-        `skipped: server must use SPEEDCHAT_HOME=${home} (see script header)`,
+        `skipped: server must use MINNOW_HOME=${home} (see script header)`,
       );
     } else {
       record(
@@ -161,7 +161,7 @@ try {
   const httpFailed = httpChecks.some((c) => !c.pass);
   if (httpFailed) {
     console.log(
-      'Note: S4–S6 need npm start. S6 needs SPEEDCHAT_HOME set before npm start (see script header).',
+      'Note: S4–S6 need npm start. S6 needs MINNOW_HOME set before npm start (see script header).',
     );
     process.exit(serverCoordinated ? 1 : 0);
   }

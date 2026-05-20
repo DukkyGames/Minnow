@@ -16,7 +16,7 @@ Reference stubs for **Build**, **Plan**, **Orchestrate**, and **Research** opera
 
 1. Add `ModeId` + `ModeDefinition` in `src/chat/modes/registry.ts`.
 2. Add `modes/{id}.full.md` and `modes/{id}.lite.md` with front matter `kind: mode`.
-3. Embed `<!-- SPEEDCHAT_MODE_MARKER: {id} full -->` / `lite` in bodies.
+3. Embed `<!-- MINNOW_MODE_MARKER: {id} full -->` / `lite` in bodies.
 4. Extend `test/modes/run-all.mts` cases.
 
 ## Tests
@@ -25,4 +25,4 @@ Reference stubs for **Build**, **Plan**, **Orchestrate**, and **Research** opera
 npx tsx test/modes/run-all.mts
 ```
 
-User overrides: `~/.speedchat/prompts/modes/{id}.{full|lite}.md` (wins over built-in when `npm start` registry is loaded).
+User overrides: `~/.minnow/prompts/modes/{id}.{full|lite}.md` (wins over built-in when `npm start` registry is loaded).

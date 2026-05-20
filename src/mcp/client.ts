@@ -26,7 +26,7 @@ export async function pingMcpApi(): Promise<boolean> {
   }
 }
 
-/** Load MCP servers from ~/.speedchat/mcp via the Node API. */
+/** Load MCP servers from ~/.minnow/mcp via the Node API. */
 export async function fetchMcpServers(): Promise<McpServerSummary[] | null> {
   try {
     const res = await fetch('/api/mcp/servers');
@@ -75,7 +75,7 @@ export async function setMcpServerEnabled(
   }
 }
 
-/** Register a custom stdio MCP server under ~/.speedchat/mcp/. */
+/** Register a custom stdio MCP server under ~/.minnow/mcp/. */
 export async function createMcpServer(
   payload: CreateMcpServerPayload,
 ): Promise<{ ok: true; server: McpServerSummary } | { ok: false; error: string }> {

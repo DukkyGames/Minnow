@@ -1,4 +1,4 @@
-const CACHE = 'speedchat-v5';
+const CACHE = 'minnow-v6';
 
 /** Shell files precached on install (relative to SW scope for base './'). */
 const SHELL = ['./index.html', './manifest.json'];

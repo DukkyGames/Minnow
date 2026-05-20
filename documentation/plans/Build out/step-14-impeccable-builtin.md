@@ -1,6 +1,6 @@
 ---
 name: Step 14 — Impeccable built-in
-overview: Install Impeccable as part of SpeedChat setup, ship a built-in `/impeccable` skill under `src/skills/impeccable/`, wire it to existing PRODUCT.md / DESIGN.md / `.impeccable/design.json`, and add deterministic tests for skill discovery and load.
+overview: Install Impeccable as part of Minnow setup, ship a built-in `/impeccable` skill under `src/skills/impeccable/`, wire it to existing PRODUCT.md / DESIGN.md / `.impeccable/design.json`, and add deterministic tests for skill discovery and load.
 step: 14
 backlog: [21]
 depends_on: [13]
@@ -15,7 +15,7 @@ todos:
     content: "Add postinstall sync script (skills → src/skills/impeccable)"
     status: pending
   - id: s14-03-skill-wrapper
-    content: "Author SpeedChat SKILL.md wrapper (no duplicate design logic)"
+    content: "Author Minnow SKILL.md wrapper (no duplicate design logic)"
     status: pending
   - id: s14-04-context-paths
     content: "Wire PRODUCT.md, DESIGN.md, .impeccable/design.json paths"
@@ -52,7 +52,7 @@ isProject: false
 
 ## Goal
 
-Make [Impeccable](https://impeccable.style) a **first-class, repo-shipped** design skill for SpeedChat:
+Make [Impeccable](https://impeccable.style) a **first-class, repo-shipped** design skill for Minnow:
 
 1. **Setup** — `npm install` (via `postinstall`) ensures the Impeccable CLI and skill assets are present; contributors do not run a separate manual `npx skills add`.
 2. **Built-in skill** — `/impeccable` resolves to `src/skills/impeccable/SKILL.md` (skill id: `impeccable`).
@@ -64,7 +64,7 @@ Make [Impeccable](https://impeccable.style) a **first-class, repo-shipped** desi
 - UI Designer Work Agent / dedicated model binding → **Step 15**
 - Chrome extension install → optional user doc link only
 - `/impeccable live` browser variant loop → optional note; full Live Mode needs dev server + HMR (document limitation)
-- Rewriting `PRODUCT.md` / `DESIGN.md` content (already populated for SpeedChat)
+- Rewriting `PRODUCT.md` / `DESIGN.md` content (already populated for Minnow)
 - Self-healing skill authoring → **Step 19**
 
 ---
@@ -125,7 +125,7 @@ Implementer **must not** start Step 14 until Step 13 delivers:
 | Contract | Requirement |
 |----------|-------------|
 | Built-in root | `src/skills/<skill-id>/SKILL.md` discovery (glob) |
-| User root | `~/.speedchat/skills/` merge; **user wins on duplicate `name`** (same as Step 13) |
+| User root | `~/.minnow/skills/` merge; **user wins on duplicate `name`** (same as Step 13) |
 | Skill id | Front matter **`name`** = slash id (`impeccable` → `/impeccable`); directory name must match |
 | API | `GET /api/skills` (or equivalent) returns merged list with `id`, `name`, `description`, `source: 'builtin' \| 'user'` |
 | Injection | Selecting `/impeccable` prepends skill body (or `skill` prompt part) before user message |
@@ -175,8 +175,8 @@ Responsibilities:
    - Run `npx skills add pbakaus/impeccable` with env/dir override **or**
    - Copy from `node_modules` / release artifact into `src/skills/impeccable/` per [impeccable GitHub](https://github.com/pbakaus/impeccable).
 
-4. **Preserve SpeedChat wrapper** — if sync overwrites `SKILL.md`, merge strategy:
-   - `SKILL.md` — SpeedChat front matter + `{{include}}` or short wrapper (see Phase B)
+4. **Preserve Minnow wrapper** — if sync overwrites `SKILL.md`, merge strategy:
+   - `SKILL.md` — Minnow front matter + `{{include}}` or short wrapper (see Phase B)
    - `SKILL.upstream.md` — raw synced content (git-tracked or gitignored — **prefer tracked** with comment header `AUTO-SYNCED — do not edit`)
    - Or: sync only `reference/`, `scripts/` subdirs; keep hand-authored `SKILL.md`
 
@@ -197,7 +197,7 @@ Responsibilities:
 
 ---
 
-### Phase B — SpeedChat skill wrapper
+### Phase B — Minnow skill wrapper
 
 #### TODO `s14-03` — Author `src/skills/impeccable/SKILL.md`
 
@@ -209,15 +209,15 @@ Responsibilities:
 ---
 name: impeccable
 description: >-
-  Design, critique, audit, and refine SpeedChat UI using PRODUCT.md, DESIGN.md,
+  Design, critique, audit, and refine Minnow UI using PRODUCT.md, DESIGN.md,
   and .impeccable/design.json. Not for backend-only tasks.
 disable-model-invocation: true
 ---
 ```
 
-**Front matter (Step 13 contract):** `name` is the slash id and merge key. Do **not** use a separate `id:` field. Optional Cursor-only fields (`user-invocable`, `allowed-tools`) may appear in synced upstream content under `SKILL.upstream.md` only — SpeedChat loader reads **`name`** + **`description`**.
+**Front matter (Step 13 contract):** `name` is the slash id and merge key. Do **not** use a separate `id:` field. Optional Cursor-only fields (`user-invocable`, `allowed-tools`) may appear in synced upstream content under `SKILL.upstream.md` only — Minnow loader reads **`name`** + **`description`**.
 
-**Body requirements (SpeedChat-specific, no duplicate design logic):**
+**Body requirements (Minnow-specific, no duplicate design logic):**
 
 1. **Context gate** — Before UI edits, load context:
 
@@ -237,9 +237,9 @@ disable-model-invocation: true
    | `src/styles/tokens.css` | Runtime CSS variables |
    | `index.html` + `src/styles/*.css` | Implementation targets |
 
-3. **Command routing** — Delegate sub-commands (`polish`, `audit`, `critique`, `craft`, `shape`, `teach`, `document`, …) to synced upstream reference files under `src/skills/impeccable/reference/` (do **not** copy 23 command bodies into SpeedChat repo prose).
+3. **Command routing** — Delegate sub-commands (`polish`, `audit`, `critique`, `craft`, `shape`, `teach`, `document`, …) to synced upstream reference files under `src/skills/impeccable/reference/` (do **not** copy 23 command bodies into Minnow repo prose).
 
-4. **SpeedChat constraints** — Short bullet list referencing `DESIGN.md` anti-patterns (no gradient text, no hero-metric cards, bench instrument aesthetic). **Link** to `DESIGN.md`; do not restate full token tables.
+4. **Minnow constraints** — Short bullet list referencing `DESIGN.md` anti-patterns (no gradient text, no hero-metric cards, bench instrument aesthetic). **Link** to `DESIGN.md`; do not restate full token tables.
 
 5. **`IMPECCABLE_CONTEXT_DIR`** — Default: project root. Document override for monorepo forks.
 
@@ -249,7 +249,7 @@ disable-model-invocation: true
 
 #### TODO `s14-04` — Context paths and loader alignment
 
-Ensure Impeccable’s `load-context.mjs` resolves SpeedChat files:
+Ensure Impeccable’s `load-context.mjs` resolves Minnow files:
 
 | Check | Action |
 |-------|--------|
@@ -258,13 +258,13 @@ Ensure Impeccable’s `load-context.mjs` resolves SpeedChat files:
 | `.impeccable/design.json` | Add one line in skill: “for structured tokens, read `.impeccable/design.json` when implementing or critiquing components” |
 | `register: product` in PRODUCT.md | Matches app UI (not marketing site) |
 
-Optional **thin** script [`src/skills/impeccable/scripts/speedchat-context.mjs`](../../../src/skills/impeccable/scripts/speedchat-context.mjs):
+Optional **thin** script [`src/skills/impeccable/scripts/minnow-context.mjs`](../../../src/skills/impeccable/scripts/minnow-context.mjs):
 
 - Runs upstream `load-context.mjs`
 - Appends `designJson` field: parsed `.impeccable/design.json` (validate JSON, fail with clear error)
 - Output consumed by agent in one JSON blob (no `head`/`grep`/`jq` truncation per upstream skill rules)
 
-**Acceptance:** `node src/skills/impeccable/scripts/speedchat-context.mjs` exits 0 and JSON includes `contextDir`, `product`, `design`, `designJson`.
+**Acceptance:** `node src/skills/impeccable/scripts/minnow-context.mjs` exits 0 and JSON includes `contextDir`, `product`, `design`, `designJson`.
 
 ---
 
@@ -278,7 +278,7 @@ Optional **thin** script [`src/skills/impeccable/scripts/speedchat-context.mjs`]
 | `/` picker | Typing `/` lists **Impeccable** with description from front matter |
 | `/impeccable` | Selects skill; composer shows chip or prefix indicator |
 | `/impeccable polish sidebar` | Passes tail as user message augmentation per Step 13 rules |
-| Override | User skill `~/.speedchat/skills/impeccable/SKILL.md` **replaces** built-in when `name: impeccable` matches (Step 13: user wins on duplicate `name`) |
+| Override | User skill `~/.minnow/skills/impeccable/SKILL.md` **replaces** built-in when `name: impeccable` matches (Step 13: user wins on duplicate `name`) |
 
 **Acceptance:** Manual — `npm start` → composer `/` → `impeccable` visible → send smoke message injects skill header in API payload (log or debug flag).
 
@@ -435,7 +435,7 @@ Skill front matter `allowed-tools: Bash(npx impeccable *)` — ensure tool loop 
 ### Implementer
 
 ```
-You are implementing Step 14 — Impeccable built-in for SpeedChat.
+You are implementing Step 14 — Impeccable built-in for Minnow.
 
 Read:
 - documentation/plans/Build out/step-14-impeccable-builtin.md (this file)
@@ -445,7 +445,7 @@ Read:
 
 Tasks:
 1. Add impeccable@^2.1.9 devDependency + postinstall sync script → src/skills/impeccable/
-2. Create SpeedChat SKILL.md wrapper (`name: impeccable`) — reference PRODUCT.md, DESIGN.md, .impeccable/design.json; NO duplicate token tables
+2. Create Minnow SKILL.md wrapper (`name: impeccable`) — reference PRODUCT.md, DESIGN.md, .impeccable/design.json; NO duplicate token tables
 3. Wire skill into Step 13 discovery and /impeccable injection
 4. Add npm scripts: impeccable:sync, impeccable:update, impeccable:detect
 5. Write test/skills-impeccable.test.mjs (static assertions)
@@ -511,7 +511,7 @@ Verify Step 14 only. Read documentation/plans/verification/step-14.md and accept
 | npm package | https://www.npmjs.com/package/impeccable |
 | GitHub | https://github.com/pbakaus/impeccable |
 | Skills CLI install | `npx skills add pbakaus/impeccable` / `npx impeccable skills install` |
-| SpeedChat design context | [`DESIGN.md`](../../../DESIGN.md), [`.impeccable/design.json`](../../../.impeccable/design.json) |
+| Minnow design context | [`DESIGN.md`](../../../DESIGN.md), [`.impeccable/design.json`](../../../.impeccable/design.json) |
 | Parent roadmap | [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) |
 
 ---

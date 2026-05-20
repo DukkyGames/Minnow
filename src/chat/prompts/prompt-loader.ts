@@ -8,7 +8,7 @@ import type { ParsedPrompt, PromptKind, PromptProfile } from './types';
 /** In-memory registry keyed by `${kind}:${id}`. */
 const registry = new Map<string, ParsedPrompt>();
 
-/** User overrides from ~/.speedchat/prompts (merged when server registry is set). */
+/** User overrides from ~/.minnow/prompts (merged when server registry is set). */
 const userRegistry = new Map<string, ParsedPrompt>();
 
 function registryKey(kind: PromptKind, id: string): string {

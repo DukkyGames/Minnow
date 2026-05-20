@@ -3,7 +3,7 @@
 **Source roadmap:** [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) (Step 04)  
 **Backlog:** [`documentation/plans/to-fix.md`](../to-fix.md) item 6  
 **Architecture:** [`documentation/context.md`](../../context.md)  
-**Depends on:** Step 02 (`~/.speedchat` data layer + config API)  
+**Depends on:** Step 02 (`~/.minnow` data layer + config API)  
 **Blocks:** Steps 05 (modes), 06 (experts), 07 (titles), 08 (work agents)  
 **Settings UI:** deferred to Step 20 (engine + schema + tests ship here)
 
@@ -11,7 +11,7 @@
 
 ## Goal
 
-Replace the single settings textarea + hardcoded [`SYSTEM_PROMPT_PRESETS`](../../../src/constants.ts) with a **composable, profile-aware system prompt** assembled at send time. Shipped defaults live in **`src/chat/prompts/`**; user overrides in **`~/.speedchat/prompts/`**; named **Custom** profiles in **`~/.speedchat/prompt-configs/`**.
+Replace the single settings textarea + hardcoded [`SYSTEM_PROMPT_PRESETS`](../../../src/constants.ts) with a **composable, profile-aware system prompt** assembled at send time. Shipped defaults live in **`src/chat/prompts/`**; user overrides in **`~/.minnow/prompts/`**; named **Custom** profiles in **`~/.minnow/prompt-configs/`**.
 
 Success: `composeSystemPrompt()` returns one `system` string; [`buildApiMessages`](../../../src/tools/loop.ts) uses it instead of reading `#systemPrompt` DOM; Full/Lite/Custom behavior is testable without the settings UI.
 
@@ -44,9 +44,9 @@ Read for design parity; **do not copy verbatim** without license review. Impleme
 | oh-my-opencode-slim | https://github.com/alvinunreal/oh-my-opencode-slim | Token-efficient / lite trimming patterns | `uploads/oh-my-opencode-slim-2.md` |
 | OpenCode docs | https://opencode.ai/docs/ | Agents, rules, official layering | — |
 | Cursor (conceptual) | — | Part toggles, separate Full/Lite/Custom bodies | — |
-| Current SpeedChat | [`src/constants.ts`](../../../src/constants.ts), [`src/ui/settings.ts`](../../../src/ui/settings.ts) | Migration source for `info/` seeds | — |
+| Current Minnow | [`src/constants.ts`](../../../src/constants.ts), [`src/ui/settings.ts`](../../../src/ui/settings.ts) | Migration source for `info/` seeds | — |
 
-**`prompt-sources.md` deliverable (verifier checks file exists):** For each reference above, 1–2 sentences on what SpeedChat **adopted** vs **diverged** (composition order, dual-root, profile engine, no verbatim vendor copy).
+**`prompt-sources.md` deliverable (verifier checks file exists):** For each reference above, 1–2 sentences on what Minnow **adopted** vs **diverged** (composition order, dual-root, profile engine, no verbatim vendor copy).
 
 ---
 
@@ -56,7 +56,7 @@ Read for design parity; **do not copy verbatim** without license review. Impleme
 flowchart LR
   subgraph roots [Prompt roots]
     SRC[src/chat/prompts/]
-    USR[~/.speedchat/prompts/]
+    USR[~/.minnow/prompts/]
   end
   subgraph engine [Step 04 engine]
     LOAD[prompt-loader.ts]
@@ -80,7 +80,7 @@ flowchart LR
 **Dual-root merge (same pattern as future skills):**
 
 1. Glob-scan built-in tree under `src/chat/prompts/**` (exclude `_example/` from routing).
-2. Glob-scan `~/.speedchat/prompts/**` with identical relative paths.
+2. Glob-scan `~/.minnow/prompts/**` with identical relative paths.
 3. On **`id` conflict**, user file wins.
 4. Profile body selection: `full` → `fullBody` or `*.full.md` or default body; `lite` → `liteBody` or `lite/` sibling or truncated rules; `custom` → config overrides.
 
@@ -106,7 +106,7 @@ src/chat/prompts/
   work-agents/
   titles/                      # Stub for Step 07
 
-~/.speedchat/
+~/.minnow/
   config.json                  # activePromptProfile, activePromptConfigId, …
   prompt-configs/
     <id>.json                  # Custom named profiles
@@ -159,7 +159,7 @@ base → mode → expert → work-agent → tool-usage → info → skill → me
 |---------|-------------------|----------|
 | **full** | `activePromptProfile: "full"` | All parts required by session features; full templates; full interpolations |
 | **lite** | `activePromptProfile: "lite"` | Apply [Lite rules](#lite-rules) per part |
-| **custom** | `activePromptProfile: "custom"` + `activePromptConfigId` | Merge `~/.speedchat/prompt-configs/<id>.json` per-part `enabled` + `contentOverride` |
+| **custom** | `activePromptProfile: "custom"` + `activePromptConfigId` | Merge `~/.minnow/prompt-configs/<id>.json` per-part `enabled` + `contentOverride` |
 
 Default on first install: **`full`**.
 
@@ -279,7 +279,7 @@ Unknown tokens: leave literal `{{token}}` in output and log once (dev console).
 
 ## Custom configuration JSON schema
 
-**Path:** `~/.speedchat/prompt-configs/<id>.json`  
+**Path:** `~/.minnow/prompt-configs/<id>.json`  
 **API module:** `src/chat/prompts/prompt-configs.ts` (server-backed when `npm start`; in-memory fallback for Vite-only dev if Step 02 provides graceful degrade).
 
 ### Schema (JSON Schema draft 2020-12)
@@ -287,7 +287,7 @@ Unknown tokens: leave literal `{{token}}` in output and log once (dev console).
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://speedchat.local/schemas/prompt-config.json",
+  "$id": "https://minnow.local/schemas/prompt-config.json",
   "type": "object",
   "required": ["id", "label", "profile", "parts"],
   "additionalProperties": false,
@@ -371,7 +371,7 @@ Unknown tokens: leave literal `{{token}}` in output and log once (dev console).
 }
 ```
 
-### `~/.speedchat/config.json` keys (Step 04)
+### `~/.minnow/config.json` keys (Step 04)
 
 ```json
 {
@@ -443,7 +443,7 @@ export function buildApiMessages(
 ### Migration: `SYSTEM_PROMPT_PRESETS`
 
 - Export each preset to `src/chat/prompts/info/<id>.full.md` with front matter `kind: info`, `part: info`.
-- On first launch after Step 04, if `speedchat.systemPrompt` exists in localStorage (pre-migration), copy `text` to `~/.speedchat/prompts/overrides/custom/info-override.md` or `config.json` — document in Step 02 migration script.
+- On first launch after Step 04, if `minnow.systemPrompt` exists in localStorage (pre-migration), copy `text` to `~/.minnow/prompts/overrides/custom/info-override.md` or `config.json` — document in Step 02 migration script.
 - Keep [`SYSTEM_PROMPT_PRESETS`](../../../src/constants.ts) re-exporting labels/ids for settings select until Step 20 removes duplicate UI.
 
 ---
@@ -469,7 +469,7 @@ Commented reference file covering:
 
 Human + sub-agent guide:
 
-1. Where loaders scan (`src/chat/prompts/**`, `~/.speedchat/prompts/**`)
+1. Where loaders scan (`src/chat/prompts/**`, `~/.minnow/prompts/**`)
 2. Adding a prompt (drop file in subfolder; glob registry — no central manifest)
 3. Modules: `prompt-loader.ts`, `prompt-composer.ts`, `compose-context.ts`, hooks from [`src/chat/messaging.ts`](../../../src/chat/messaging.ts) / `loop.ts`
 4. How modes/experts/work-agents/skills reference prompt `id`s (forward refs to Steps 05–08, 13)
@@ -530,7 +530,7 @@ Use **`node --test`** (Step 02 project standard). Do **not** add Vitest unless `
 ### Phase B — Loader
 
 - [ ] **B1** Implement `prompt-loader.ts`: parse YAML front matter + body
-- [ ] **B2** Dual-root scan: `src/chat/prompts` + `~/.speedchat/prompts` (via Step 02 path API or direct read on server)
+- [ ] **B2** Dual-root scan: `src/chat/prompts` + `~/.minnow/prompts` (via Step 02 path API or direct read on server)
 - [ ] **B3** Exclude `_example/**` from routing
 - [ ] **B4** Profile body resolution (`full` / `lite` / `contentOverride` path)
 - [ ] **B5** Unit tests: loader merge + exclusion
@@ -547,7 +547,7 @@ Use **`node --test`** (Step 02 project standard). Do **not** add Vitest unless `
 
 - [ ] **D1** `prompt-configs.ts` validate against JSON Schema
 - [ ] **D2** `server.js`: `GET/PUT/DELETE /api/prompt-configs`, duplicate route
-- [ ] **D3** Ensure `~/.speedchat/prompt-configs/` created on first save (Step 02)
+- [ ] **D3** Ensure `~/.minnow/prompt-configs/` created on first save (Step 02)
 - [ ] **D4** Wire `activePromptProfile` + `activePromptConfigId` in `config.json`
 - [ ] **D5** Unit tests: CRUD + validation errors
 
@@ -587,7 +587,7 @@ Use **`node --test`** (Step 02 project standard). Do **not** add Vitest unless `
 
 | Topic | Decision |
 |-------|----------|
-| Browser vs server for loader | **Prefer server** read of `~/.speedchat` when `npm start`; ship **bundled** built-ins via Vite `import.meta.glob` for `src/chat/prompts/**` so Vite-only dev still composes defaults |
+| Browser vs server for loader | **Prefer server** read of `~/.minnow` when `npm start`; ship **bundled** built-ins via Vite `import.meta.glob` for `src/chat/prompts/**` so Vite-only dev still composes defaults |
 | Single vs multiple system messages | **One** `system` message (concatenated parts) for LM Studio compatibility |
 | DOM textarea | Keep until Step 20; composed prompt is source of truth on send |
 | Token counting | Char-length ratio in tests; revisit with tokenizer if models saturate context |

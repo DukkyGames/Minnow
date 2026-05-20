@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { handleMemoryRequest, initMemoryApi } from '../../server/memory/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -50,8 +50,8 @@ function httpRequest(baseUrl, method, pathname, body) {
 }
 
 async function startMemoryServer(homeDir) {
-  process.env.SPEEDCHAT_HOME = homeDir;
-  resetSpeedChatHomeCache();
+  process.env.MINNOW_HOME = homeDir;
+  resetMinnowHomeCache();
   await fs.rm(homeDir, { recursive: true, force: true });
   await fs.mkdir(homeDir, { recursive: true });
   await initMemoryApi();
@@ -76,14 +76,14 @@ describe('memory API', () => {
   let baseUrl;
 
   before(async () => {
-    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'speedchat-memory-api-'));
+    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-memory-api-'));
     ({ server, baseUrl } = await startMemoryServer(homeDir));
   });
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    delete process.env.SPEEDCHAT_HOME;
-    resetSpeedChatHomeCache();
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });
 
@@ -105,6 +105,16 @@ describe('memory API', () => {
 
     const list = await httpRequest(baseUrl, 'GET', '/api/memory/entries');
     assert.ok(list.json.entries.some((e) => e.id === FIXTURE_ID));
+
+    const listWithBody = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/memory/entries?includeBody=1',
+    );
+    assert.equal(listWithBody.status, 200);
+    const withBody = listWithBody.json.entries.find((e) => e.id === FIXTURE_ID);
+    assert.equal(withBody.title, 'Preferred test command');
+    assert.match(withBody.body, /npm start/);
 
     const get = await httpRequest(baseUrl, 'GET', `/api/memory/entries/${FIXTURE_ID}`);
     assert.equal(get.status, 200);

@@ -91,7 +91,7 @@ async function getConnection(serverId, config) {
   const command = config.command;
   if (!Array.isArray(command) || command.length === 0) {
     throw new Error(
-      `LSP server "${serverId}" has no command. Install the language server or set lsp.${serverId}.command in ~/.speedchat/lsp.json`,
+      `LSP server "${serverId}" has no command. Install the language server or set lsp.${serverId}.command in ~/.minnow/lsp.json`,
     );
   }
 

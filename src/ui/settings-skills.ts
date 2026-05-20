@@ -61,8 +61,8 @@ function mountSkillEditor(
     'p',
     'settings-field-hint',
     skill.source === 'builtin'
-      ? 'Saving creates or updates ~/.speedchat/skills/ override (built-in ships in src/skills/).'
-      : 'Stored in ~/.speedchat/skills/. Requires npm start.',
+      ? 'Saving creates or updates ~/.minnow/skills/ override (built-in ships in src/skills/).'
+      : 'Stored in ~/.minnow/skills/. Requires npm start.',
   );
   body.appendChild(hint);
 
@@ -182,7 +182,7 @@ export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<v
   const intro = el(
     'p',
     'settings-field-hint',
-    'Skills extend the assistant via /slash commands. Built-in skills ship with SpeedChat; custom skills live under ~/.speedchat/skills/ when npm start is running.',
+    'Skills extend the assistant via /slash commands. Built-in skills ship with Minnow; custom skills live under ~/.minnow/skills/ when npm start is running.',
   );
   mount.appendChild(intro);
 
@@ -191,7 +191,7 @@ export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<v
       el(
         'p',
         'settings-server-banner',
-        'Start npm start to add custom skills and save edits to ~/.speedchat/skills/.',
+        'Start npm start to add custom skills and save edits to ~/.minnow/skills/.',
       ),
     );
   }

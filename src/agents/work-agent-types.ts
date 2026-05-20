@@ -22,7 +22,7 @@ export interface WorkAgentDefinition {
   disabled?: boolean;
 }
 
-/** User overrides stored under ~/.speedchat/work-agents.json */
+/** User overrides stored under ~/.minnow/work-agents.json */
 export interface WorkAgentUserOverride {
   providerId?: string | null;
   modelId?: string | null;

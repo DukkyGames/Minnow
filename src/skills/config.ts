@@ -1,13 +1,13 @@
 /**
- * Per-skill enablement — ~/.speedchat/skills.json when npm start,
- * else localStorage (`speedchat.skills`).
+ * Per-skill enablement — ~/.minnow/skills.json when npm start,
+ * else localStorage (`minnow.skills`).
  */
 
 import { getSkills, putSkills } from '../config/api-client';
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 
-export const SKILL_CONFIG_STORAGE_KEY = 'speedchat.skills';
+export const SKILL_CONFIG_STORAGE_KEY = 'minnow.skills';
 
 /** Persisted skill toggles; missing ids default to enabled. */
 export interface SkillConfig {
@@ -48,7 +48,7 @@ export async function loadSkillConfigFromStorage(): Promise<SkillConfig> {
       skillConfigLoaded = true;
       return cachedConfig;
     } catch {
-      setStatus('err', 'Could not load skill settings from ~/.speedchat');
+      setStatus('err', 'Could not load skill settings from ~/.minnow');
     }
   }
 
@@ -80,7 +80,7 @@ export function saveSkillConfig(config: SkillConfig): void {
 
   if (isServerStorageMode()) {
     void putSkills(config).catch(() => {
-      setStatus('err', 'Could not save skill settings to ~/.speedchat');
+      setStatus('err', 'Could not save skill settings to ~/.minnow');
     });
     return;
   }

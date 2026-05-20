@@ -1,5 +1,5 @@
 ---
-name: SpeedChat
+name: Minnow
 description: Light, instrument-focused LM Studio chat client with black accent and semantic metric colors.
 colors:
   bg: "oklch(100% 0.00011 271.152)"
@@ -69,13 +69,13 @@ components:
     rounded: "{rounded.sm}"
 ---
 
-# Design System: SpeedChat
+# Design System: Minnow
 
 ## Overview
 
 **Creative North Star: "The Bench Instrument"**
 
-SpeedChat reads like a light workbench: white surfaces, ink-black controls, and a thin grid of borders instead of stacked cards. Conversation is the focus; the stats strip and chips are instrumentation layered underneath, not a dashboard selling KPIs. The palette stays restrained: neutrals carry the UI, black handles primary action and selection, and green / amber / red appear only where metrics need semantic color.
+Minnow reads like a light workbench: white surfaces, ink-black controls, and a thin grid of borders instead of stacked cards. Conversation is the focus; the stats strip and chips are instrumentation layered underneath, not a dashboard selling KPIs. The palette stays restrained: neutrals carry the UI, black handles primary action and selection, and green / amber / red appear only where metrics need semantic color.
 
 The system rejects neon HUD chrome, purple-gradient chat clones, hero metric cards, glassmorphism, and gradient text. Depth comes from borders and subtle gray fills, not drop shadows on every panel.
 

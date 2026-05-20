@@ -1,14 +1,14 @@
-# Step 02 verification — `~/.speedchat` data layer
+# Step 02 verification — `~/.minnow` data layer
 
 ## Automated
 
 ```powershell
-cd c:\Users\dukky\Documents\Development\SpeedChat
+cd c:\Users\dukky\Documents\Development\Minnow
 npm test
 npm run build
 ```
 
-**Config tests** use a temp `SPEEDCHAT_HOME` (see `test/config/test-helpers.js`). No writes to the real user profile.
+**Config tests** use a temp `MINNOW_HOME` (see `test/config/test-helpers.js`). No writes to the real user profile.
 
 | Suite | File |
 |-------|------|
@@ -23,11 +23,11 @@ Fixtures: `test/fixtures/migration/*` (static expected JSON).
 1. Set a fresh home (optional):
 
    ```powershell
-   $env:SPEEDCHAT_HOME = "$env:TEMP\speedchat-verify-step02"
-   Remove-Item -Recurse -Force $env:SPEEDCHAT_HOME -ErrorAction SilentlyContinue
+   $env:MINNOW_HOME = "$env:TEMP\minnow-verify-step02"
+   Remove-Item -Recurse -Force $env:MINNOW_HOME -ErrorAction SilentlyContinue
    ```
 
-2. `npm start` — console should log `SpeedChat data: ...` and `Config API: .../api/config/ping`.
+2. `npm start` — console should log `Minnow data: ...` and `Config API: .../api/config/ping`.
 
 3. Open the app → Settings: **`#configStorageBanner` hidden**.
 
@@ -45,7 +45,7 @@ Fixtures: `test/fixtures/migration/*` (static expected JSON).
 
 ## Manual — Vite-only (`npm run dev`)
 
-1. `npm run dev` (no `SPEEDCHAT_HOME` override needed).
+1. `npm run dev` (no `MINNOW_HOME` override needed).
 
 2. App boots; sessions/tools/prompt work via `localStorage`.
 

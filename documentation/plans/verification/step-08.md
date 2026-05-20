@@ -8,12 +8,12 @@
 - `parseWorkAgentMeta` reads `parsed.kind`, `parsed.id`, etc.
 - `readWorkAgentPrompt` uses `parsed.body`; raw user override files (no YAML) fall back to file text with `source: "override"`.
 
-**Implementer smoke (PASS):** temp `SPEEDCHAT_HOME`, `PORT=5185`, `npm start` → `GET /api/work-agents` (≥4 agents), `PUT`/`GET` builder prompt override.
+**Implementer smoke (PASS):** temp `MINNOW_HOME`, `PORT=5185`, `npm start` → `GET /api/work-agents` (≥4 agents), `PUT`/`GET` builder prompt override.
 
 ## Prerequisites
 
 - Node.js 20+
-- Repo root: `c:\Users\dukky\Documents\Development\SpeedChat`
+- Repo root: `c:\Users\dukky\Documents\Development\Minnow`
 
 ## Automated tests
 

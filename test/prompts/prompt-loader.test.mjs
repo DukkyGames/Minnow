@@ -25,10 +25,10 @@ kind: base
 label: Test
 version: 1
 ---
-SpeedChat base body`,
+Minnow base body`,
     });
     const loaded = loadPromptById('base', 'default', 'full');
-    assert.ok(loaded?.body.includes('SpeedChat'));
+    assert.ok(loaded?.body.includes('Minnow'));
   });
 
   test('user override wins on same id', () => {

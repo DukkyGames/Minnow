@@ -9,7 +9,7 @@
 
 ## Summary
 
-Replace the narrow **settings drawer** ([`index.html`](../../../index.html) `#drawer`, [`src/ui/settings.ts`](../../../src/ui/settings.ts)) with a **full settings experience** (dedicated route or full-screen panel) that surfaces every SpeedChat configuration surface in one place. Ship the **Full / Lite / Custom** prompting UI with **per-part editors**, **named Custom config save/load**, **topbar quick toggles** (expert, tools, MCP), and **import/export** of the entire `~/.speedchat` home directory. Retire duplicated drawer-only fields where the new page owns them.
+Replace the narrow **settings drawer** ([`index.html`](../../../index.html) `#drawer`, [`src/ui/settings.ts`](../../../src/ui/settings.ts)) with a **full settings experience** (dedicated route or full-screen panel) that surfaces every Minnow configuration surface in one place. Ship the **Full / Lite / Custom** prompting UI with **per-part editors**, **named Custom config save/load**, **topbar quick toggles** (expert, tools, MCP), and **import/export** of the entire `~/.minnow` home directory. Retire duplicated drawer-only fields where the new page owns them.
 
 This step is **UI + wiring only** for features whose engines were built in Steps 02–19; do not re-implement prompt composition, MCP bridging, or provider logic here.
 
@@ -19,8 +19,8 @@ This step is **UI + wiring only** for features whose engines were built in Steps
 
 | Prior step | Required artifacts for Step 20 |
 |------------|--------------------------------|
-| **02** | `~/.speedchat/` layout, `GET/PUT /api/config/*`, migration from `localStorage` |
-| **03** | Provider registry API, secrets in `~/.speedchat/providers/` |
+| **02** | `~/.minnow/` layout, `GET/PUT /api/config/*`, migration from `localStorage` |
+| **03** | Provider registry API, secrets in `~/.minnow/providers/` |
 | **04** | `prompt-composer.ts`, part ids, Full/Lite/Custom profiles, `prompt-configs/*.json` CRUD API |
 | **05** | Mode enum + files under `src/chat/prompts/modes/` |
 | **06** | Expert registry + auto/manual router |
@@ -29,11 +29,11 @@ This step is **UI + wiring only** for features whose engines were built in Steps
 | **09** | Sub-agent settings schema (concurrency, tools, model) |
 | **10** | Terminal panel preferences (default open, height) |
 | **11** | File tree / viewer preferences (root path, split ratio) |
-| **12** | Browser automation toggle + `SPEEDCHAT_BROWSER_URL` |
+| **12** | Browser automation toggle + `MINNOW_BROWSER_URL` |
 | **13** | Skills dual-root discovery API |
 | **14–15** | Impeccable + UI Designer model binding in config |
 | **16** | Memory enable/clear/backup API |
-| **17** | `~/.speedchat/lsp.json` + per-server enable flags |
+| **17** | `~/.minnow/lsp.json` + per-server enable flags |
 | **18** | MCP registry + Context7 default + tool bridge |
 | **19** | Self-healing master toggle |
 
@@ -47,7 +47,7 @@ If any prerequisite API is missing, implement a **minimal read/write stub** in t
 2. **Prompting UX** — profile switcher (Full | Lite | Custom), per-part enable + edit per profile, Custom named configs (load / save / save as / duplicate / delete / new).
 3. **Feature sections** — one nav group per major subsystem (see [Settings sections](#settings-sections)).
 4. **Topbar quick controls** — expert selector (or deep-link), per-tool toggles, per-MCP-server toggles without opening full settings.
-5. **Backup** — export and import full `~/.speedchat` (zip or tar.gz via server); clear warnings on overwrite.
+5. **Backup** — export and import full `~/.minnow` (zip or tar.gz via server); clear warnings on overwrite.
 6. **Tests** — integration tests against config APIs + E2E smoke for critical paths.
 7. **Docs** — update [`documentation/context.md`](../../context.md); add [`documentation/plans/verification/step-20.md`](../verification/step-20.md).
 
@@ -88,7 +88,7 @@ All reads/writes go through a thin client module — do not scatter `fetch` acro
 ```
 src/settings/
   index.ts              # open/close, route, bootstrap
-  config-client.ts      # GET/PUT wrappers for ~/.speedchat APIs
+  config-client.ts      # GET/PUT wrappers for ~/.minnow APIs
   types.ts              # SettingsSectionId, PromptPartId, export manifest types
   sections/             # one module per nav section
   prompting/            # profile tabs, part editors, custom configs
@@ -109,7 +109,7 @@ Server routes (from Step 02, extend if needed):
 | GET/PUT | `/api/config/tools` | Tool enable map + keys |
 | GET/PUT | `/api/config/mcp` | MCP server entries + enabled |
 | GET/PUT | `/api/config/lsp` | LSP server map |
-| POST | `/api/config/export` | Stream zip of `~/.speedchat` |
+| POST | `/api/config/export` | Stream zip of `~/.minnow` |
 | POST | `/api/config/import` | Upload zip; optional `?merge=true` |
 
 ### Prompt part ids (canonical)
@@ -120,7 +120,7 @@ Align with Step 04 — do not invent new ids in UI only:
 
 ### Active profile storage
 
-`~/.speedchat/config.json`:
+`~/.minnow/config.json`:
 
 ```json
 {
@@ -175,7 +175,7 @@ Custom profile uses `activePromptConfigId` + `prompt-configs/<id>.json` for per-
 ```
 
 - Changing profile updates `config.promptProfile` immediately (debounced save).
-- **Full / Lite:** part editors show overrides for `~/.speedchat/prompts/overrides/full/` and `.../lite/` respectively; fall back to shipped `src/chat/prompts/` / `liteBody`.
+- **Full / Lite:** part editors show overrides for `~/.minnow/prompts/overrides/full/` and `.../lite/` respectively; fall back to shipped `src/chat/prompts/` / `liteBody`.
 - **Custom:** show config selector + part editors bound to active named config.
 
 **Row 2 — Custom config toolbar** (visible only when profile = Custom)
@@ -222,13 +222,13 @@ Map to `config.features.*` — disabling a feature should disable related parts 
 | `mcp` | MCP servers | List servers; enable toggle; Context7 key; add custom server form |
 | `lsp` | LSP | Master enable; per-server toggle from OpenCode catalog; add custom server |
 | `memory` | Memory | Enable injection; clear; backup/restore memory dir |
-| `skills` | Skills | Built-in vs user paths; rescan; open `~/.speedchat/skills` hint |
+| `skills` | Skills | Built-in vs user paths; rescan; open `~/.minnow/skills` hint |
 | `terminal` | Terminal | Default panel height; auto-open on command |
 | `files` | Files & workspace | Default cwd; file tree root; split ratio |
-| `browser` | Browser automation | Enable CDP tools; allowed origins; `SPEEDCHAT_BROWSER_URL` |
+| `browser` | Browser automation | Enable CDP tools; allowed origins; `MINNOW_BROWSER_URL` |
 | `ui-designer` | UI Designer | Provider + model for designer agent |
 | `self-healing` | Self-healing | Master toggle; tier-2 approval policy (if Step 19 exposes) |
-| `backup` | Backup & data | Export / import `~/.speedchat`; show home path; migration status |
+| `backup` | Backup & data | Export / import `~/.minnow`; show home path; migration status |
 
 **Migrate from drawer:** Move `#serverUrl`, `#temperature`, `#maxTokens`, system prompt preset UI, and tools section into appropriate sections; remove duplicate markup from drawer or delete drawer DOM.
 
@@ -260,8 +260,8 @@ Add to [`index.html`](../../../index.html) header (after model select, before se
 **Export**
 
 1. User clicks Export → confirm → `POST /api/config/export`.
-2. Server builds zip of `~/.speedchat` excluding transient logs > optional size cap.
-3. Browser downloads `speedchat-backup-YYYY-MM-DD.zip`.
+2. Server builds zip of `~/.minnow` excluding transient logs > optional size cap.
+3. Browser downloads `minnow-backup-YYYY-MM-DD.zip`.
 
 **Import**
 
@@ -355,11 +355,11 @@ See [Testing plan](#testing-plan).
 
 | Module | Integration |
 |--------|-------------|
-| [`src/tools/config.ts`](../../../src/tools/config.ts) | Tool toggles read/write `~/.speedchat` via API; topbar + settings share `onToolToggle` |
+| [`src/tools/config.ts`](../../../src/tools/config.ts) | Tool toggles read/write `~/.minnow` via API; topbar + settings share `onToolToggle` |
 | [`src/tools/client.ts`](../../../src/tools/client.ts) | `getEnabledToolDefinitions()` reacts to toggle changes without reload |
 | Step 04 composer | Listens to `promptProfile`, `features`, active custom config |
 | [`src/api/models.ts`](../../../src/api/models.ts) | Provider switch in General/Providers refreshes model list |
-| [`src/state/sessions.ts`](../../../src/state/sessions.ts) | Unchanged; sessions live under `~/.speedchat/sessions/` |
+| [`src/state/sessions.ts`](../../../src/state/sessions.ts) | Unchanged; sessions live under `~/.minnow/sessions/` |
 | Chat UI | Mode selector stays near composer (Step 05); settings links to Modes section |
 
 ---
@@ -368,7 +368,7 @@ See [Testing plan](#testing-plan).
 
 ### Integration tests (`test/integration/step-20-settings.test.mjs`)
 
-Run with `npm start` and a temp `SPEEDCHAT_HOME` env pointing at a fixture dir.
+Run with `npm start` and a temp `MINNOW_HOME` env pointing at a fixture dir.
 
 | # | Test | Expected |
 |---|------|----------|
@@ -416,7 +416,7 @@ Document in `documentation/plans/verification/step-20.md`:
 1. Settings gear opens **full settings page**, not drawer-only UX.
 2. **Full / Lite / Custom** profile switch works; each part editable per profile with enable/disable and reset.
 3. **Custom** configs: load, save, save as, duplicate, delete, new.
-4. All sections in [Settings sections](#settings-sections) are present and persist via `~/.speedchat` APIs.
+4. All sections in [Settings sections](#settings-sections) are present and persist via `~/.minnow` APIs.
 5. Topbar **Expert**, **Tools**, **MCP** popovers work and stay in sync with settings page.
 6. **Export** and **import** round-trip `config.json` + `prompt-configs/` on a fixture home dir.
 7. Integration tests pass in CI script (add `npm test` if Step 02 introduced it).
@@ -515,7 +515,7 @@ Document in `documentation/plans/verification/step-20.md`:
 
 ### Phase H — Tests
 
-- [ ] **T51** Fixture dir `test/fixtures/speedchat-home/` with static config
+- [ ] **T51** Fixture dir `test/fixtures/minnow-home/` with static config
 - [ ] **T52** `test/integration/step-20-settings.test.mjs` (cases 1–10)
 - [ ] **T53** `test/e2e/step-20-settings.spec.mjs` (flows 1–7)
 - [ ] **T54** Add `npm test` script if absent — runs integration tests against `npm start`

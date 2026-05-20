@@ -16,13 +16,13 @@ status: pending
 |-------|--------|
 | **Backlog** | [`documentation/plans/to-fix.md`](../to-fix.md) item 5 — file viewer / browser |
 | **Roadmap** | [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) Step 11 |
-| **Depends on** | **Step 02** (`~/.speedchat` data layer) — UI prefs and workspace root should persist via server config, not ad-hoc `localStorage` keys |
+| **Depends on** | **Step 02** (`~/.minnow` data layer) — UI prefs and workspace root should persist via server config, not ad-hoc `localStorage` keys |
 | **Parallel** | Step 10 (terminal panel) after S02 |
 | **Blocks** | None directly; Step 15 (UI Designer) benefits from readable file UI |
 
 ## Goal
 
-Ship a **project file explorer** and **read-only code viewer** inside the SpeedChat SPA:
+Ship a **project file explorer** and **read-only code viewer** inside the Minnow SPA:
 
 1. **Right pop-out file tree** — mirrors the left chat sidebar pattern (`chat-sidebar` / `sidebar.css`): collapse rail, mobile overlay, backdrop, top-bar toggle.
 2. **Split main column** — chat + composer on the left; file viewer pane on the right when a file is open (resizable split).
@@ -48,7 +48,7 @@ Ship a **project file explorer** and **read-only code viewer** inside the SpeedC
 | [`index.html`](../../../index.html) | `app-body`, `main-column`, `chat-area` |
 | [`src/tools/client.ts`](../../../src/tools/client.ts) | `detectLocalServer`, `executeTool` |
 | [`server.js`](../../../server.js) | `toolListDirectory`, `toolReadFile`, `toolReadFileRange`, `resolveSafePath` |
-| Step 02 deliverable | `~/.speedchat/config.json` (or `ui.json`) for `filePanel` prefs |
+| Step 02 deliverable | `~/.minnow/config.json` (or `ui.json`) for `filePanel` prefs |
 
 **Server tool response shapes (do not change without updating parser tests):**
 
@@ -160,7 +160,7 @@ export interface FilePanelState {
 }
 ```
 
-**Persistence (after Step 02):** `GET/PUT /api/config/ui` → `~/.speedchat/config.json` field `filePanel`. **Degrade:** if server offline, keep in-memory only for session (no new `localStorage` key).
+**Persistence (after Step 02):** `GET/PUT /api/config/ui` → `~/.minnow/config.json` field `filePanel`. **Degrade:** if server offline, keep in-memory only for session (no new `localStorage` key).
 
 ### Tree behavior
 
@@ -263,7 +263,7 @@ assert(list.body.result.includes('[file] package.json'));
 
 // read_file package.json
 const read = await postTool('read_file', { path: 'package.json' });
-assert(read.body.result.includes('"name": "speedchat"'));
+assert(read.body.result.includes('"name": "minnow"'));
 
 // read_file_range lines 1-3
 const range = await postTool('read_file_range', {

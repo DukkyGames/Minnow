@@ -9,7 +9,7 @@ toolPolicy:
   default: allow
 ---
 
-<!-- SPEEDCHAT_MODE_MARKER: orchestrate full -->
+<!-- MINNOW_MODE_MARKER: orchestrate full -->
 
 # Operating mode: Orchestrate ({{mode_label}})
 

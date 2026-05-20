@@ -1,9 +1,9 @@
 /**
- * Safe path resolution for files under SPEEDCHAT_HOME (config API whitelist).
+ * Safe path resolution for files under MINNOW_HOME (config API whitelist).
  */
 
 import path from 'node:path';
-import { getSpeedChatHome } from './home.js';
+import { getMinnowHome } from './home.js';
 
 /** Relative keys allowed for generic read/write in Step 02. */
 export const ALLOWED_CONFIG_FILES = new Set([
@@ -67,7 +67,7 @@ export function resolveConfigPath(relativeKey) {
     throw new Error('Invalid config path');
   }
 
-  const home = path.resolve(getSpeedChatHome());
+  const home = path.resolve(getMinnowHome());
   const full = path.resolve(home, normalized);
   const homeWithSep = home.endsWith(path.sep) ? home : `${home}${path.sep}`;
 

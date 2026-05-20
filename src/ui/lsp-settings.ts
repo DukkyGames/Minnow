@@ -96,7 +96,7 @@ function createLspServerRow(
       el(
         'span',
         'settings-lsp-warn',
-        'No command configured — set command in ~/.speedchat/lsp.json',
+        'No command configured — set command in ~/.minnow/lsp.json',
       ),
     );
   }
