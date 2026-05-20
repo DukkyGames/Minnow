@@ -1,11 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "activeId": "11111111-1111-1111-1111-111111111111",
   "sidebarCollapsed": false,
+  "lastActiveChatIdByWorkspace": {},
   "chats": [
     {
       "id": "11111111-1111-1111-1111-111111111111",
       "name": "Fixture chat",
+      "workspacePath": "",
       "modelId": "test-model",
       "modeId": "build",
       "expertSelection": { "mode": "auto", "expertId": null },

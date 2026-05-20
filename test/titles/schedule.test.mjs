@@ -33,13 +33,15 @@ function setupDom() {
 
 function seedSession(name = 'New chat') {
   setSessionStateForTests({
-    version: 1,
+    version: 2,
     activeId: CHAT_ID,
     sidebarCollapsed: false,
+    lastActiveChatIdByWorkspace: {},
     chats: [
       {
         id: CHAT_ID,
         name,
+        workspacePath: '',
         modelId: 'test-model',
         history: [],
         lastStats: null,

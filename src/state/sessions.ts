@@ -6,7 +6,20 @@ import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import {
+  getChatsForWorkspace as filterChatsForWorkspace,
+  getUnassignedChats as filterUnassignedChats,
+  migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
+  resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
+  type RawSessionJson,
+} from './session-workspace-scope';
 import { setStatus } from '../ui/status';
+import { getWorkspacePath } from './workspace';
+import {
+  clearStalePendingTurnsOnLoad,
+  ensurePendingTurn,
+} from './pending-turn';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
@@ -67,10 +80,15 @@ export function newChatId(): string {
   return `c_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-export function createEmptyChatObject(modelId: string): Chat {
+export function createEmptyChatObject(modelId: string, workspacePath?: string): Chat {
+  const boundWorkspace =
+    workspacePath !== undefined
+      ? normalizeWorkspacePath(workspacePath)
+      : normalizeWorkspacePath(getWorkspacePath());
   return {
     id: newChatId(),
     name: PLACEHOLDER_CHAT_NAME,
+    workspacePath: boundWorkspace,
     modelId: modelId || '',
     modeId: DEFAULT_MODE_ID,
     workAgentId: null,
@@ -233,12 +251,18 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ? raw.history.map(ensureMessageEntry).filter((x): x is Message => Boolean(x))
     : [];
   const subAgentRuns = ensurePersistedSubAgentRuns(raw.subAgentRuns);
+  const pendingTurn = ensurePendingTurn(raw.pendingTurn);
+  const workspacePath =
+    typeof raw.workspacePath === 'string'
+      ? normalizeWorkspacePath(raw.workspacePath)
+      : '';
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
       typeof raw.name === 'string' && raw.name.trim()
         ? raw.name.trim()
         : PLACEHOLDER_CHAT_NAME,
+    workspacePath,
     modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
     modeId: normalizeModeId(raw.modeId),
     expertSelection: ensureExpertSelection(raw.expertSelection),
@@ -251,6 +275,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     workAgentAuto: raw.workAgentAuto !== false,
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     ...(subAgentRuns ? { subAgentRuns } : {}),
+    ...(pendingTurn ? { pendingTurn } : {}),
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
@@ -263,21 +288,97 @@ export function getExpertSelection(chat: Chat): ExpertSelection {
   return chat.expertSelection ?? defaultExpertSelection();
 }
 
-function parseSessionStateFromJson(parsed: Partial<SessionState> | null): SessionState {
-  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.chats)) {
+/** Upgrade v1/v2 session JSON to canonical schema v2 in memory. */
+export function migrateSessionStateV1ToV2(parsed: RawSessionJson): SessionState {
+  const state = migrateSessionJsonToV2(
+    parsed,
+    (c) => ensureChatShape(c as Partial<Chat>),
+    () => createEmptyChatObject(''),
+  );
+  clearStalePendingTurnsOnLoad(state.chats);
+  return state;
+}
+
+function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState {
+  if (!parsed || !Array.isArray(parsed.chats)) {
     return defaultSessionState();
   }
-  const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
-  const state: SessionState = {
-    version: 1,
-    activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
-    sidebarCollapsed: !!parsed.sidebarCollapsed,
-    chats: chats.length ? chats : [createEmptyChatObject('')],
-  };
-  if (!state.chats.some((c) => c.id === state.activeId)) {
-    state.activeId = state.chats[0].id;
+  const ver = parsed.version;
+  if (ver !== 1 && ver !== 2) {
+    return defaultSessionState();
   }
-  return state;
+  return migrateSessionStateV1ToV2(parsed);
+}
+
+/** Remember the active chat under the current workspace key before switching scope. */
+function rememberActiveChatForWorkspaceKey(workspaceKey: string): void {
+  const state = sessionState;
+  if (!state?.activeId) return;
+  if (!state.lastActiveChatIdByWorkspace) {
+    state.lastActiveChatIdByWorkspace = {};
+  }
+  state.lastActiveChatIdByWorkspace[workspaceKey] = state.activeId;
+}
+
+/** Chats for the given workspace (newest first); empty workspace key returns none. */
+export function getChatsForWorkspace(
+  workspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterChatsForWorkspace(workspacePath, state);
+}
+
+/** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
+export function getUnassignedChats(state: SessionState = requireSessionState()): Chat[] {
+  return filterUnassignedChats(state);
+}
+
+/**
+ * Pick the active chat id for a workspace: remembered id, else newest scoped chat,
+ * else create a new empty chat bound to that workspace.
+ */
+export function resolveActiveChatIdForWorkspace(
+  workspacePath: string,
+  state: SessionState = requireSessionState(),
+  fallbackModelId = '',
+): string {
+  return pickActiveChatIdForWorkspace(
+    workspacePath,
+    state,
+    fallbackModelId,
+    (modelId, workspaceKey) => {
+      const fresh = createEmptyChatObject(modelId, workspaceKey);
+      touchChat(fresh);
+      return fresh;
+    },
+  );
+}
+
+export interface WorkspaceChangeResult {
+  activeChat: Chat;
+  activeChanged: boolean;
+}
+
+/**
+ * After the workspace folder changes: persist per-workspace active chat and switch
+ * to the best chat for the new path.
+ */
+export function onWorkspaceChanged(
+  newPath: string,
+  previousPath?: string,
+): WorkspaceChangeResult {
+  const state = requireSessionState();
+  const prevKey = normalizeWorkspacePath(previousPath ?? '');
+  rememberActiveChatForWorkspaceKey(prevKey);
+
+  const fallbackModelId =
+    state.chats.find((c) => c.id === state.activeId)?.modelId ?? '';
+  const nextId = resolveActiveChatIdForWorkspace(newPath, state, fallbackModelId);
+  const activeChanged = state.activeId !== nextId;
+  state.activeId = nextId;
+  rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
+  scheduleSaveSessions();
+  return { activeChat: getActiveChat(), activeChanged };
 }
 
 /** Load sessions from API or localStorage (after detectConfigServer). */
@@ -377,6 +478,7 @@ export function createAndActivateChat(modelId: string): Chat {
   state.chats.unshift(chat);
   state.activeId = chat.id;
   touchChat(chat);
+  rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath));
   scheduleSaveSessions();
   return chat;
 }
@@ -390,6 +492,7 @@ export function switchActiveChat(id: string): Chat | null {
   const chat = state.chats.find((c) => c.id === id);
   if (!chat) return null;
   state.activeId = id;
+  rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath ?? ''));
   scheduleSaveSessions();
   return chat;
 }
@@ -442,15 +545,24 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   const wasActive = state.activeId === chatId;
   state.chats.splice(idx, 1);
 
+  const victimWorkspace = normalizeWorkspacePath(victim.workspacePath ?? '');
   let activeChanged = wasActive;
   if (state.chats.length === 0) {
-    const fresh = createEmptyChatObject(fallbackModelId);
+    const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
     state.chats.push(fresh);
     state.activeId = fresh.id;
     touchChat(fresh);
     activeChanged = true;
   } else if (wasActive) {
-    state.activeId = [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+    const inWorkspace = getChatsForWorkspace(victimWorkspace, state);
+    if (inWorkspace.length) {
+      state.activeId = inWorkspace[0].id;
+    } else {
+      const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
+      state.chats.push(fresh);
+      state.activeId = fresh.id;
+      touchChat(fresh);
+    }
     activeChanged = true;
   }
 

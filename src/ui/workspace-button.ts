@@ -1,13 +1,24 @@
 /**
- * Top bar workspace folder button — pick directory for AI tools.
+ * Top bar workspace folder button — recent workspaces menu + native picker.
  */
 
-import { pickWorkspaceFolder } from '../config/workspace-api';
+import { pickWorkspaceFolder, type WorkspaceInfo } from '../config/workspace-api';
 import { patchFilePanelState } from '../state/file-panel';
-import { loadWorkspaceFromServer, setWorkspaceFromServer } from '../state/workspace';
+import {
+  getWorkspacePath,
+  loadWorkspaceFromServer,
+  setWorkspaceFromServer,
+} from '../state/workspace';
 import { getLocalServerAvailable } from '../tools/client';
-import { invalidateFileTreeCache, refreshFileTree } from './file-tree';
 import { setStatus } from './status';
+import { invalidateFileTreeCache, refreshFileTree } from './file-tree';
+import { applyWorkspaceScopedSession } from './sidebar';
+import {
+  closeWorkspaceMenu,
+  configureWorkspaceRecentMenu,
+  setWorkspaceMenuDeps,
+  toggleWorkspaceMenu,
+} from './workspace-recent-menu';
 
 function getWorkspaceButton(): HTMLButtonElement | null {
   return document.getElementById('btnWorkspace') as HTMLButtonElement | null;
@@ -19,7 +30,27 @@ export function updateWorkspaceButtonLabel(label: string, fullPath: string): voi
   if (!btn) return;
   const short = label.trim() || 'Workspace';
   btn.title = fullPath ? `Workspace: ${fullPath}` : 'Choose workspace folder';
-  btn.setAttribute('aria-label', `Workspace: ${short}. Click to change folder.`);
+  btn.setAttribute('aria-label', `Workspace: ${short}. Click to open recent workspaces.`);
+  btn.setAttribute('aria-haspopup', 'menu');
+}
+
+/**
+ * Shared refresh after PUT, native picker, or recent-workspace menu — label, file tree, chats.
+ */
+export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
+  const previousPath = getWorkspacePath();
+  setWorkspaceFromServer(info);
+  updateWorkspaceButtonLabel(info.label, info.path);
+  applyWorkspaceScopedSession(info.path, previousPath);
+
+  patchFilePanelState({
+    expandedDirs: [],
+    selectedPath: null,
+  });
+  invalidateFileTreeCache();
+  await refreshFileTree();
+
+  setStatus('ok', `Workspace: ${info.label}`);
 }
 
 /** Load workspace from server and refresh top bar + file tree. */
@@ -30,7 +61,7 @@ export async function refreshWorkspaceUi(): Promise<void> {
   }
 }
 
-async function onWorkspaceFolderChosen(): Promise<void> {
+async function onOpenNewWorkspace(): Promise<void> {
   if (!getLocalServerAvailable()) {
     setStatus('err', 'Workspace requires npm start (local server)');
     return;
@@ -51,21 +82,11 @@ async function onWorkspaceFolderChosen(): Promise<void> {
       return;
     }
 
-    setWorkspaceFromServer({
+    await applyWorkspaceSwitch({
       path: result.path,
       label: result.label ?? result.path,
       isDefault: result.isDefault === true,
     });
-    updateWorkspaceButtonLabel(result.label ?? result.path, result.path);
-
-    patchFilePanelState({
-      expandedDirs: [],
-      selectedPath: null,
-    });
-    invalidateFileTreeCache();
-    await refreshFileTree();
-
-    setStatus('ok', `Workspace: ${result.label ?? result.path}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);
@@ -77,9 +98,21 @@ export function initWorkspaceButton(): void {
   const btn = getWorkspaceButton();
   if (!btn) return;
 
+  setWorkspaceMenuDeps({
+    isServerAvailable: getLocalServerAvailable,
+    reportStatus: setStatus,
+  });
+
+  configureWorkspaceRecentMenu({
+    onSwitch: applyWorkspaceSwitch,
+    onOpenNew: onOpenNewWorkspace,
+  });
+
   btn.addEventListener('click', () => {
-    void onWorkspaceFolderChosen();
+    void toggleWorkspaceMenu(btn);
   });
 
   void refreshWorkspaceUi();
 }
+
+export { closeWorkspaceMenu };
