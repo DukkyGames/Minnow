@@ -3,8 +3,14 @@
  */
 
 import type { SessionState, SystemPromptSettings } from '../types';
+import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/config';
-import { defaultSessionState, defaultSystemPromptSettings, defaultToolConfig } from './defaults';
+import {
+  defaultSessionState,
+  defaultSystemPromptSettings,
+  defaultSkillConfig,
+  defaultToolConfig,
+} from './defaults';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -82,6 +88,22 @@ export async function putTools(config: ToolConfig): Promise<void> {
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
+/** GET /api/config/skills */
+export async function getSkills(): Promise<SkillConfig> {
+  const res = await fetch('/api/config/skills', { cache: 'no-store' });
+  return parseJsonResponse<SkillConfig>(res);
+}
+
+/** PUT /api/config/skills */
+export async function putSkills(config: SkillConfig): Promise<void> {
+  const res = await fetch('/api/config/skills', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(config),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
 /** GET /api/config/system-prompt */
 export async function getSystemPrompt(): Promise<SystemPromptSettings> {
   const res = await fetch('/api/config/system-prompt', { cache: 'no-store' });
@@ -108,4 +130,9 @@ export async function postMigrate(body: MigrateBody): Promise<MigrateResponse> {
   return parseJsonResponse<MigrateResponse>(res);
 }
 
-export { defaultSessionState, defaultToolConfig, defaultSystemPromptSettings };
+export {
+  defaultSessionState,
+  defaultSkillConfig,
+  defaultToolConfig,
+  defaultSystemPromptSettings,
+};

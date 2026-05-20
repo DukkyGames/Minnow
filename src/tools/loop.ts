@@ -13,8 +13,10 @@ import {
 import {
   clearAttachments,
   getPendingAttachments,
+  replacePendingAttachments,
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
+import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
   extractStreamDelta,
@@ -393,11 +395,11 @@ export async function sendMessageWithTools(): Promise<void> {
   const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const rawText = input.value.trim();
   const pending = getPendingAttachments();
-  const validAttachments = pending.filter((a) => a.kind !== 'error');
+  const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
   const { skillId, userText } = parseSlashCommand(rawText);
   const hasUserText = Boolean(userText.trim());
-  if (!rawText && validAttachments.length === 0) return;
-  if (!skillId && !hasUserText && validAttachments.length === 0) return;
+  if (!rawText && pendingWithoutErrors.length === 0) return;
+  if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
 
   const chat = getActiveChat();
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
@@ -444,13 +446,25 @@ export async function sendMessageWithTools(): Promise<void> {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
   }
 
-  if (!hasUserText && validAttachments.length === 0 && !skillBody?.trim()) {
+  if (!hasUserText && pendingWithoutErrors.length === 0 && !skillBody?.trim()) {
     setStatus('err', 'Add a message or attachment');
     if (uiDesignerCtx.active) {
       chat.workAgentId = savedWorkAgentId;
     }
     return;
   }
+
+  const resolvedAttachments = await resolveWorkspaceReferences(pending);
+  const validAttachments = resolvedAttachments.filter((a) => a.kind !== 'error');
+  if (validAttachments.length === 0 && !hasUserText && !skillBody?.trim()) {
+    replacePendingAttachments(resolvedAttachments);
+    setStatus('err', 'Could not read attached workspace file(s)');
+    if (uiDesignerCtx.active) {
+      chat.workAgentId = savedWorkAgentId;
+    }
+    return;
+  }
+  replacePendingAttachments(resolvedAttachments);
 
   if (chatFetchAbort) chatFetchAbort.abort();
   const controller = new AbortController();

@@ -78,7 +78,7 @@ function renderList(): void {
 
     const badge = document.createElement('span');
     badge.className = `skill-picker__badge skill-picker__badge--${skill.source}`;
-    badge.textContent = skill.source === 'user' ? 'Custom' : 'Built-in';
+    badge.textContent = skill.source === 'user' ? 'Custom' : 'Built-In';
 
     const label = document.createElement('span');
     label.className = 'skill-picker__label';

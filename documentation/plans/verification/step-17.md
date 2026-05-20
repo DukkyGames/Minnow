@@ -22,3 +22,9 @@ curl -X POST http://localhost:5173/api/tools -H "Content-Type: application/json"
 ```
 
 Expected: formatted diagnostics containing `';' expected`.
+
+## Settings UI
+
+1. `npm start` → open `#/settings/lsp`.
+2. Master toggle and per-server rows load from `GET /api/config/lsp` (not static placeholder).
+3. Toggling a server persists via `PUT /api/config/lsp`.

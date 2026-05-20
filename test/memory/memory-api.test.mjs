@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
@@ -75,7 +76,7 @@ describe('memory API', () => {
   let baseUrl;
 
   before(async () => {
-    homeDir = path.join(__dirname, '../fixtures/memory-home-empty');
+    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'speedchat-memory-api-'));
     ({ server, baseUrl } = await startMemoryServer(homeDir));
   });
 
@@ -83,6 +84,7 @@ describe('memory API', () => {
     await new Promise((resolve) => server.close(resolve));
     delete process.env.SPEEDCHAT_HOME;
     resetSpeedChatHomeCache();
+    await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });
 
   test('ping returns ok', async () => {

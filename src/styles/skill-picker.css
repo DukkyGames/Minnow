@@ -1,4 +1,4 @@
-/* Slash skill picker above composer */
+/* Slash skill picker above composer — bench instrument register (DESIGN.md) */
 .skill-picker {
   position: absolute;
   bottom: 100%;
@@ -7,10 +7,9 @@
   margin-bottom: 0.35rem;
   max-height: 16rem;
   overflow-y: auto;
-  background: var(--surface-elevated, #fff);
-  border: 1px solid var(--border, #e2e8f0);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   z-index: 30;
 }
 
@@ -34,45 +33,54 @@
   align-items: baseline;
 }
 
-.skill-picker__item--active,
-.skill-picker__item:hover {
-  background: var(--surface-hover, #f1f5f9);
+@media (hover: hover) and (pointer: fine) {
+  .skill-picker__item--active,
+  .skill-picker__item:hover {
+    background: var(--surface-elevated);
+  }
 }
 
 .skill-picker__badge {
   grid-row: span 2;
-  font-size: 0.65rem;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
   padding: 0.15rem 0.35rem;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   align-self: start;
 }
 
 .skill-picker__badge--builtin {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--bg);
 }
 
 .skill-picker__badge--user {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--bg);
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .skill-picker__label {
   font-weight: 600;
   font-size: 0.875rem;
+  color: var(--text);
 }
 
 .skill-picker__id {
+  font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
 }
 
 .skill-picker__desc {
   grid-column: 2;
   font-size: 0.75rem;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -80,7 +88,7 @@
 
 .skill-picker__empty {
   padding: 0.75rem;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
   font-size: 0.875rem;
 }
 

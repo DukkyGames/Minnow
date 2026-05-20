@@ -129,7 +129,9 @@
 
 <main id="settingsView" class="settings-page" aria-label="Settings">
   <header class="settings-page-header">
-    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">← Back to chat</button>
+    <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
     <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
   </header>
   <div class="settings-page-body">
@@ -234,6 +236,52 @@
         <p class="field-hint">Model Context Protocol tools are loaded from <code>~/.speedchat/mcp/</code> when <code>npm start</code> is running. Namespaced tools use the <code>mcp__</code> prefix in the tool loop.</p>
         <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
         <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
+        <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
+          <summary class="settings-mcp-add-summary">Add MCP server</summary>
+          <form id="settingsMcpAddForm" class="settings-mcp-form" novalidate>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsMcpAddId">Server id</label>
+                <input type="text" id="settingsMcpAddId" name="id" required pattern="[a-z0-9][a-z0-9_-]*" autocomplete="off" spellcheck="false" placeholder="my-docs-mcp">
+                <p class="field-hint">Lowercase letters, numbers, hyphens, underscores.</p>
+              </div>
+              <div class="field">
+                <label for="settingsMcpAddLabel">Display name</label>
+                <input type="text" id="settingsMcpAddLabel" name="label" required autocomplete="off" placeholder="My docs MCP">
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddDescription">Description (optional)</label>
+              <input type="text" id="settingsMcpAddDescription" name="description" autocomplete="off" placeholder="What this server provides">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsMcpAddCommand">Command</label>
+                <input type="text" id="settingsMcpAddCommand" name="command" required autocomplete="off" spellcheck="false" placeholder="npx">
+              </div>
+              <div class="field">
+                <label for="settingsMcpAddEnabled">Enabled on add</label>
+                <label class="settings-toggle-row">
+                  <input type="checkbox" id="settingsMcpAddEnabled" name="enabled" checked>
+                  <span>Connect after saving</span>
+                </label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddArgs">Arguments (one per line)</label>
+              <textarea id="settingsMcpAddArgs" name="args" rows="4" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/allowed/dir"></textarea>
+            </div>
+            <div class="field">
+              <label for="settingsMcpAddEnv">Environment variables (optional, KEY=value per line)</label>
+              <textarea id="settingsMcpAddEnv" name="env" rows="3" spellcheck="false" placeholder="API_KEY=your-key-here"></textarea>
+            </div>
+            <p id="settingsMcpAddError" class="settings-mcp-form-error hidden" role="alert"></p>
+            <div class="settings-mcp-form-actions">
+              <button type="submit" class="settings-action-btn">Add server</button>
+              <button type="button" id="settingsMcpAddReset" class="settings-inline-btn">Clear form</button>
+            </div>
+          </form>
+        </details>
       </section>
       <section id="settingsSection-lsp" class="settings-section">
         <h2>Language servers</h2>
@@ -244,6 +292,14 @@
           <input type="checkbox" id="settingsLspMasterEnabled" checked>
         </label>
         <div id="settingsLspServerList" class="settings-lsp-list" role="list" aria-label="Configured language servers"></div>
+        <details id="settingsLspAddPanel" class="settings-lsp-add-panel">
+          <summary class="settings-lsp-add-summary">Add custom language server</summary>
+          <div id="settingsLspCustomForm" class="settings-lsp-custom-mount"></div>
+        </details>
+      </section>
+      <section id="settingsSection-skills" class="settings-section">
+        <h2>Skills</h2>
+        <div id="settingsSkillsBody" class="settings-section-body"></div>
       </section>
     </div>
   </div>
@@ -274,27 +330,6 @@
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
-
-    <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
-      <header class="terminal-header">
-        <span class="terminal-header-title">Terminal</span>
-        <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear</button>
-          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Collapse terminal">Collapse</button>
-        </div>
-      </header>
-      <p id="terminalOfflineBanner" class="terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
-      <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
-      <div class="terminal-body">
-        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
-        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
-      </div>
-      <form class="terminal-input-row" id="terminalForm">
-        <label class="visually-hidden" for="terminalInput">Terminal command</label>
-        <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
-        <button type="submit">Run</button>
-      </form>
-    </section>
 
     <!-- Input bar -->
     <div class="input-bar">
@@ -378,6 +413,31 @@
       </div>
       </div>
     </div>
+
+    <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
+      <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
+      <header class="terminal-header">
+        <span class="terminal-header-title">Terminal</span>
+        <div class="terminal-header-actions">
+          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
+        </div>
+      </header>
+      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <div class="terminal-body">
+        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
+        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
+      </div>
+      <form class="terminal-input-row" id="terminalForm">
+        <label class="visually-hidden" for="terminalInput">Terminal command</label>
+        <div class="terminal-input-wrap">
+          <span class="terminal-prompt" aria-hidden="true">&gt;</span>
+          <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit" class="terminal-run-btn">Run</button>
+      </form>
+    </section>
+
   </div>
 
   <div class="split-resizer hidden" id="splitResizer" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
@@ -385,6 +445,9 @@
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
       <span class="file-viewer-path" id="fileViewerPath"></span>
+      <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+      </button>
       <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close file viewer">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>

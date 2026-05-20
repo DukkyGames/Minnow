@@ -3,7 +3,10 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseSkillFrontmatter } from '../src/skills/parse-frontmatter.ts';
+import {
+  parseSkillFrontmatter,
+  parseYamlFrontmatterBlock,
+} from '../src/skills/parse-frontmatter.ts';
 import { mergeSkillLists, resolveSkillDetail } from '../src/skills/loader.ts';
 import {
   formatHistoryWithSkillTag,
@@ -84,6 +87,28 @@ name: bad
 ---
 body`;
     assert.throws(() => parseSkillFrontmatter(raw), /description/);
+  });
+
+  it('parses folded block scalar description (>-)', () => {
+    const raw = `---
+name: git-commit
+description: >-
+  Write conventional commit messages from staged diff context. Use when the user
+  asks to commit or mentions git commit message.
+---
+
+# Body
+`;
+    const { meta } = parseSkillFrontmatter(raw);
+    assert.match(meta.description, /conventional commit/);
+    assert.match(meta.description, /git commit message/);
+  });
+
+  it('parseYamlFrontmatterBlock handles block scalars', () => {
+    const meta = parseYamlFrontmatterBlock(
+      'description: >-\n  Line one continues\n  on the next line.',
+    );
+    assert.match(meta.description, /Line one continues on the next line/);
   });
 });
 

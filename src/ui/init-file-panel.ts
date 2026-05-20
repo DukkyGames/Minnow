@@ -14,8 +14,9 @@ import {
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
 } from './file-layout';
-import { initFileTreeIfNeeded, refreshFileTree } from './file-tree';
-import { closeFileViewer, openFileInViewer } from './file-viewer';
+import { initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './file-viewer';
+import { getLocalServerAvailable } from '../tools/client';
 
 let resizerBound = false;
 
@@ -82,9 +83,21 @@ function bindFilePanelControls(): void {
   }
 }
 
+/** React to local server ping success/failure (after detectLocalServer). */
+export function onFilePanelServerAvailabilityChanged(): void {
+  if (getLocalServerAvailable()) {
+    void refreshFileTree();
+  } else {
+    renderFileTree();
+  }
+}
+
 /** Initialize file panel after detectLocalServer(). */
 export async function initFilePanel(): Promise<void> {
   await loadFilePanelPrefs();
+  if (getLocalServerAvailable()) {
+    void initFileTreeIfNeeded();
+  }
   applyFileSidebarVisuals();
 
   const state = getFilePanelState();
@@ -94,6 +107,7 @@ export async function initFilePanel(): Promise<void> {
 
   bindSplitResizer();
   bindFilePanelControls();
+  bindFileViewerControls();
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) closeMobileFileSidebar();

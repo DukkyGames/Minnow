@@ -21,7 +21,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -129,6 +129,20 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
         await writeWorkAgentPromptOverride(agentId, writeProfile, content);
         workAgentPromptOverridePath(agentId, writeProfile);
         const result = await readWorkAgentPrompt(PROJECT_ROOT, agentId, writeProfile);
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      if (req.method === 'DELETE') {
+        const { unlink } = await import('node:fs/promises');
+        const overridePath = workAgentPromptOverridePath(agentId, profile);
+        try {
+          await unlink(overridePath);
+        } catch {
+          sendJson(res, 404, { error: 'No override to remove' });
+          return true;
+        }
+        const result = await readWorkAgentPrompt(PROJECT_ROOT, agentId, profile);
         sendJson(res, 200, result);
         return true;
       }

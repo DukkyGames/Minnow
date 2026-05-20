@@ -14,6 +14,11 @@ import {
   FIXTURE_SERVER,
 } from './defaults.js';
 import { toNamespacedName, toOpenAIDefinitions, parseNamespacedName } from './bridge.js';
+import {
+  RESERVED_MCP_SERVER_IDS,
+  validateCreateMcpServerBody,
+  validateMcpServerId,
+} from './validate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -162,8 +167,22 @@ export async function listServers() {
   const index = await loadIndex();
   const out = [];
   for (const [id, meta] of Object.entries(index.servers ?? {})) {
+    let label = id;
+    let description = '';
+    let builtin = false;
+    try {
+      const config = await loadServerConfig(id);
+      label = config.label ?? id;
+      description = config.description ?? '';
+      builtin = config.builtin === true;
+    } catch {
+      /* config file missing — index entry only */
+    }
     out.push({
       id,
+      label,
+      description,
+      builtin,
       enabled: meta.enabled !== false,
       connected: clients.has(id),
     });
@@ -232,4 +251,82 @@ export async function reloadMcp() {
   }
   clients.clear();
   toolMaps.clear();
+}
+
+async function writeIndex(index) {
+  const indexPath = path.join(getSpeedChatHome(), 'mcp.json');
+  await fs.writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * Register a custom stdio MCP server (writes config + index entry).
+ * @param {unknown} body
+ */
+export async function createMcpServer(body) {
+  await ensureMcpSeed();
+  const payload = validateCreateMcpServerBody(body);
+  const index = await loadIndex();
+  if (index.servers?.[payload.id]) {
+    throw new Error('MCP server already exists');
+  }
+
+  const config = {
+    id: payload.id,
+    label: payload.label,
+    description: payload.description,
+    transport: payload.transport,
+    enabled: payload.enabled,
+    builtin: false,
+  };
+
+  const filePath = path.join(mcpHome(), 'servers', `${payload.id}.json`);
+  await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  index.servers = index.servers ?? {};
+  index.servers[payload.id] = {
+    enabled: payload.enabled,
+    configFile: `servers/${payload.id}.json`,
+  };
+  await writeIndex(index);
+  await reloadMcp();
+  return listServers().then((servers) => servers.find((s) => s.id === payload.id));
+}
+
+/**
+ * Remove a user-added MCP server (built-ins cannot be deleted).
+ * @param {string} serverId
+ */
+export async function deleteMcpServer(serverId) {
+  const id = validateMcpServerId(serverId);
+  if (RESERVED_MCP_SERVER_IDS.has(id)) {
+    throw new Error('Cannot delete a built-in MCP server');
+  }
+
+  const index = await loadIndex();
+  if (!index.servers?.[id]) {
+    throw new Error('Unknown MCP server');
+  }
+
+  let builtin = false;
+  try {
+    const config = await loadServerConfig(id);
+    builtin = config.builtin === true;
+  } catch {
+    /* missing config — allow delete of orphan index entry */
+  }
+  if (builtin) {
+    throw new Error('Cannot delete a built-in MCP server');
+  }
+
+  delete index.servers[id];
+  await writeIndex(index);
+
+  const filePath = path.join(mcpHome(), 'servers', `${id}.json`);
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    /* file may already be missing */
+  }
+
+  await reloadMcp();
 }

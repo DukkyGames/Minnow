@@ -12,13 +12,21 @@ import {
   savePromptConfigFile,
 } from './handlers.js';
 import { buildPromptRegistry } from '../prompts/registry.js';
+import {
+  deletePromptFileOverride,
+  readPromptFile,
+  writePromptFileOverride,
+} from '../prompts/file-overrides.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, PUT, POST, DELETE, OPTIONS',
+  );
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -48,12 +56,16 @@ function sendJson(res, status, payload) {
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
+ * @param {string} [search]
  * @returns {Promise<boolean>}
  */
-export async function handlePromptRequest(req, res, pathname) {
+export async function handlePromptRequest(req, res, pathname, search = '') {
   if (!pathname.startsWith('/api/prompt')) {
     return false;
   }
+
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const profileParam = params.get('profile') === 'lite' ? 'lite' : 'full';
 
   setCorsHeaders(res);
 
@@ -91,6 +103,45 @@ export async function handlePromptRequest(req, res, pathname) {
       const saved = await duplicatePromptConfigFile(sourceId, newId, newLabel);
       sendJson(res, 200, { ok: true, config: saved });
       return true;
+    }
+
+    const filePromptMatch = pathname.match(
+      /^\/api\/prompts\/(modes|experts|sub-agents)\/([a-z][a-z0-9-]{0,63})\/prompt$/,
+    );
+    if (filePromptMatch) {
+      const family = filePromptMatch[1];
+      const entityId = filePromptMatch[2];
+
+      if (req.method === 'GET') {
+        const result = await readPromptFile(PROJECT_ROOT, family, entityId, profileParam);
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      if (req.method === 'PUT') {
+        const body = await readJsonBody(req);
+        const content = typeof body.content === 'string' ? body.content : '';
+        const writeProfile = body.profile === 'lite' ? 'lite' : profileParam;
+        await writePromptFileOverride(family, entityId, writeProfile, content);
+        const result = await readPromptFile(PROJECT_ROOT, family, entityId, writeProfile);
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      if (req.method === 'DELETE') {
+        const removed = await deletePromptFileOverride(
+          family,
+          entityId,
+          profileParam,
+        );
+        if (!removed) {
+          sendJson(res, 404, { error: 'No override to remove' });
+          return true;
+        }
+        const result = await readPromptFile(PROJECT_ROOT, family, entityId, profileParam);
+        sendJson(res, 200, result);
+        return true;
+      }
     }
 
     const idMatch = pathname.match(/^\/api\/prompt-configs\/([a-z0-9][a-z0-9-_]{0,63})$/);
@@ -145,12 +196,15 @@ export async function handlePromptRequest(req, res, pathname) {
 /** Vite middleware hook. */
 export function createPromptConfigsMiddleware() {
   return async (req, res, next) => {
-    const url = req.url?.split('?')[0] ?? '';
-    if (!url.startsWith('/api/prompt')) {
+    const rawUrl = req.url ?? '';
+    const q = rawUrl.indexOf('?');
+    const pathname = q >= 0 ? rawUrl.slice(0, q) : rawUrl;
+    const search = q >= 0 ? rawUrl.slice(q) : '';
+    if (!pathname.startsWith('/api/prompt')) {
       next();
       return;
     }
-    const handled = await handlePromptRequest(req, res, url);
+    const handled = await handlePromptRequest(req, res, pathname, search);
     if (!handled) next();
   };
 }

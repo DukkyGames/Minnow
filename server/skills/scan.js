@@ -181,6 +181,7 @@ export async function getSkillById(projectRoot, id) {
       path: skillPath,
       version: meta.version?.trim() || undefined,
       body,
+      raw,
       disableModelInvocation: meta['disable-model-invocation'] === 'true',
     };
   } catch (err) {

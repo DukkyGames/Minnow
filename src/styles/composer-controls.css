@@ -16,15 +16,33 @@
 }
 
 #expertSelect {
-  font-family: inherit;
+  font-family: var(--font-ui);
   font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1.2;
-  padding: 4px 8px;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle, oklch(0.88 0.02 260));
-  background: var(--surface-1, oklch(0.99 0 260));
-  color: var(--ink, oklch(0.25 0.02 260));
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   max-width: 12rem;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #expertSelect:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+}
+
+#expertSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 #expertSelect:disabled {
@@ -54,12 +72,33 @@
 }
 
 .work-agent-dev #workAgentSelect {
-  font-family: inherit;
+  font-family: var(--font-ui);
   font-size: 0.75rem;
-  padding: 4px 8px;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle, oklch(0.88 0.02 260));
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   max-width: 10rem;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .work-agent-dev #workAgentSelect:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
+}
+
+.work-agent-dev #workAgentSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .work-agent-auto-label {

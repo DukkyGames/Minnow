@@ -56,17 +56,17 @@ npm run build
 4. Create `~/.speedchat/skills/git-commit/SKILL.md` with distinct body → refresh → picker shows **Custom**; send uses override.
 5. `npm run dev` (no server) → built-ins still in picker; user-only skill shows error on send if attempted.
 
-## Result (implementer re-verify)
+## Result (verifier re-run 2026-05-19)
 
 | Check | Status |
 |-------|--------|
-| `npm test` | pass (node 43/43, tsx 98/98; **141** total) |
-| `npm run test:skills` | pass (10/10) |
-| `npm run build` | pass |
-| `generate-skills-manifest.mjs` | OK (10 skills) |
-| `s13-skills-smoke.mjs` S1–S3 | pass |
-| `s13-skills-smoke.mjs` S4–S6 | pass with coordinated `SPEEDCHAT_HOME` + `npm start` |
-| `import.meta.glob` in Node/tsx | guarded/lazy in `src/skills/client.ts` |
+| `npm test` | **PASS** (node **67/67**, tsx **109/109**; **176** total) |
+| `npm run test:skills` | **PASS** (10/10) |
+| `npm run build` | **PASS** |
+| `generate-skills-manifest.mjs` | OK (**11** skills) |
+| `s13-skills-smoke.mjs` S1–S3 | **PASS** |
+| `s13-skills-smoke.mjs` S4–S6 | **PASS** with coordinated `SPEEDCHAT_HOME` + `npm start` (use smoke URL matching server port if 5173 busy) |
+| `skill-picker.css` (Impeccable) | OKLCH tokens, flat chrome, label badges |
 | `documentation/context.md` | updated (Step 13 skills) |
 
-Ready for verifier re-run (no commit).
+**Manual deferred:** live composer `/` picker, send injection bubble, user override refresh, Vite-only dev fallback.

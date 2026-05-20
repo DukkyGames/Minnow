@@ -40,6 +40,7 @@ export interface TerminalStreamHooks {
 }
 
 let externalHooks: TerminalStreamHooks = {};
+let userCommandInFlight = false;
 
 function maxPanelHeight(): number {
   return Math.floor(window.innerHeight * MAX_HEIGHT_RATIO);
@@ -63,7 +64,7 @@ function updateOfflineBanner(): void {
   const offline = !getLocalServerAvailable();
   offlineBannerEl.classList.toggle('hidden', !offline);
   inputEl.disabled = offline;
-  const runBtn = formEl.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+  const runBtn = formEl.querySelector('.terminal-run-btn') as HTMLButtonElement | null;
   if (runBtn) runBtn.disabled = offline;
 }
 
@@ -103,6 +104,34 @@ function clearOutput(): void {
   displayBytes = 0;
 }
 
+/** Whether the terminal panel is visible (not hidden). */
+function isTerminalPanelOpen(): boolean {
+  return Boolean(panelEl && !panelEl.classList.contains('hidden'));
+}
+
+/** Print a command header; keep prior output unless `clear` is set. */
+function beginCommandOutput(command: string, options: { clear?: boolean } = {}): void {
+  if (options.clear) {
+    clearOutput();
+    appendOutputText(`$ ${command}\n`, 'stdout');
+    stickToBottom = true;
+    return;
+  }
+  if (outputEl?.textContent?.trim()) {
+    appendOutputText('\n', 'stdout');
+  }
+  appendOutputText(`$ ${command}\n`, 'stdout');
+  stickToBottom = true;
+}
+
+function setActiveHistoryRun(runId: string): void {
+  if (!historyEl) return;
+  historyEl.querySelectorAll('.terminal-history-item').forEach((el) => {
+    const item = el as HTMLButtonElement;
+    item.classList.toggle('is-active', item.dataset.runId === runId);
+  });
+}
+
 /** Append streamed chunk (tool or user run). */
 export function appendTerminalOutput(
   runId: string,
@@ -116,15 +145,26 @@ export function appendTerminalOutput(
 
 function setPanelOpen(open: boolean): void {
   if (!panelEl) return;
-  panelEl.classList.toggle('hidden', !open);
-  panelEl.classList.toggle('is-collapsed', !open);
+  const currentlyOpen = isTerminalPanelOpen();
   const btn = document.getElementById('btnTerminal');
   btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (currentlyOpen === open) return;
+
+  panelEl.classList.toggle('hidden', !open);
+  panelEl.classList.toggle('is-collapsed', !open);
   void saveTerminalMeta({ open });
 }
 
+/** Show the panel only when it is hidden (avoid re-opening an active session). */
+function ensureTerminalPanelVisible(): void {
+  if (!isTerminalPanelOpen()) {
+    setPanelOpen(true);
+  }
+}
+
 export function openTerminalPanel(): void {
-  setPanelOpen(true);
+  ensureTerminalPanelVisible();
+  void refreshTerminalHistoryForActiveChat();
 }
 
 export function closeTerminalPanel(): void {
@@ -132,8 +172,7 @@ export function closeTerminalPanel(): void {
 }
 
 export function toggleTerminalPanel(): void {
-  const meta = getTerminalMetaCached();
-  setPanelOpen(!meta.open);
+  setPanelOpen(!isTerminalPanelOpen());
 }
 
 function applyPanelHeight(px: number): void {
@@ -143,20 +182,65 @@ function applyPanelHeight(px: number): void {
   void saveTerminalMeta({ heightPx: height });
 }
 
+const MAX_TERMINAL_HISTORY = 50;
+
+/** Label shown in the history sidebar for a run record. */
+function historyCommandLabel(run: TerminalRunRecord): string {
+  const cmd = typeof run.command === 'string' ? run.command.trim() : '';
+  if (cmd) return cmd;
+  if (run.toolCallId) return `Tool ${run.toolCallId.slice(0, 8)}…`;
+  return `Run ${run.id.slice(0, 8)}…`;
+}
+
+/** Merge local and server terminal history by run id (newest first). */
+function mergeTerminalHistory(
+  local: TerminalRunRecord[],
+  remote: TerminalRunRecord[],
+): TerminalRunRecord[] {
+  const byId = new Map<string, TerminalRunRecord>();
+  for (const run of [...local, ...remote]) {
+    if (!run?.id) continue;
+    const existing = byId.get(run.id);
+    if (!existing || run.finishedAt >= existing.finishedAt) {
+      byId.set(run.id, run);
+    }
+  }
+  return [...byId.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, MAX_TERMINAL_HISTORY);
+}
+
+/** Keep the active chat's in-memory history in sync and re-render the sidebar. */
+function upsertChatTerminalRun(chat: { terminalHistory?: TerminalRunRecord[] }, record: TerminalRunRecord): void {
+  const history = chat.terminalHistory ?? [];
+  const next = [record, ...history.filter((r) => r.id !== record.id)].slice(0, MAX_TERMINAL_HISTORY);
+  chat.terminalHistory = next;
+  renderHistoryList(next);
+}
+
 function renderHistoryList(runs: TerminalRunRecord[]): void {
   if (!historyEl) return;
   historyEl.innerHTML = '';
   const sorted = [...runs].sort((a, b) => b.startedAt - a.startedAt);
 
+  if (sorted.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'terminal-history-empty';
+    empty.textContent = 'No commands yet';
+    historyEl.appendChild(empty);
+    return;
+  }
+
   for (const run of sorted) {
+    const label = historyCommandLabel(run);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'terminal-history-item';
     btn.dataset.runId = run.id;
     const cmd = document.createElement('span');
     cmd.className = 'cmd';
-    cmd.textContent = run.command;
-    cmd.title = run.command;
+    cmd.textContent = label;
+    cmd.title = label;
     btn.appendChild(cmd);
     btn.addEventListener('click', () => {
       void loadHistoryRun(run.id);
@@ -182,19 +266,18 @@ export async function refreshTerminalHistoryForActiveChat(): Promise<void> {
   const chat = getActiveChat();
   if (!chat) return;
 
-  let runs = chat.terminalHistory ?? [];
+  const local = chat.terminalHistory ?? [];
+  let remote: TerminalRunRecord[] = [];
   if (getLocalServerAvailable()) {
     try {
-      const remote = await loadTerminalHistory(chat.id);
-      if (remote.length) {
-        runs = remote;
-        chat.terminalHistory = remote;
-      }
+      remote = await loadTerminalHistory(chat.id);
     } catch {
-      /* use in-memory history */
+      /* use in-memory history only */
     }
   }
-  renderHistoryList(runs);
+  const merged = mergeTerminalHistory(local, remote);
+  chat.terminalHistory = merged.length ? merged : undefined;
+  renderHistoryList(merged);
 }
 
 function setupResizeHandle(): void {
@@ -233,27 +316,61 @@ function setupOutputScroll(): void {
 }
 
 async function runUserCommand(command: string): Promise<void> {
+  if (userCommandInFlight) return;
+
   const chat = getActiveChat();
   if (!chat || !getLocalServerAvailable()) return;
 
-  clearOutput();
+  userCommandInFlight = true;
+  ensureTerminalPanelVisible();
+  beginCommandOutput(command);
   activeRunId = null;
 
-  const { runId } = await startTerminalRun({
-    command,
-    chatId: chat.id,
-    source: 'user',
-    shell: typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent),
-  });
+  let runId = '';
+  let startedAt = Date.now();
+  try {
+    const started = await startTerminalRun({
+      command,
+      chatId: chat.id,
+      source: 'user',
+      shell: false,
+    });
+    runId = started.runId;
+    startedAt = started.startedAt;
 
-  activeRunId = runId;
-  externalHooks.onRunStart?.(runId, command);
+    activeRunId = runId;
+    externalHooks.onRunStart?.(runId, command);
 
-  await streamTerminalRun(runId, (ev) => handleStreamEvent(ev));
-  activeRunId = null;
-  externalHooks.onRunEnd?.(runId);
-  await refreshTerminalHistoryForActiveChat();
-  scheduleSaveSessions();
+    let exitCode: number | null = 0;
+    let timedOut = false;
+    await streamTerminalRun(runId, (ev) => {
+      handleStreamEvent(ev);
+      if (ev.type === 'exit') {
+        exitCode = ev.code;
+        timedOut = ev.timedOut;
+      }
+    });
+    activeRunId = null;
+    externalHooks.onRunEnd?.(runId);
+
+    upsertChatTerminalRun(chat, {
+      id: runId,
+      command,
+      cwd: '.',
+      source: 'user',
+      startedAt,
+      finishedAt: Date.now(),
+      exitCode,
+      timedOut,
+      logPath: `logs/terminal/${runId}.log`,
+    });
+    setActiveHistoryRun(runId);
+
+    await refreshTerminalHistoryForActiveChat();
+    scheduleSaveSessions();
+  } finally {
+    userCommandInFlight = false;
+  }
 }
 
 function handleStreamEvent(ev: TerminalStreamEvent): void {
@@ -284,14 +401,13 @@ export async function runCommandWithTerminalStream(
 ): Promise<string> {
   const meta = getTerminalMetaCached();
   if (options.source === 'agent' && meta.autoOpenOnAgentRun) {
-    openTerminalPanel();
+    ensureTerminalPanelVisible();
   }
 
-  clearOutput();
   const label = options.displayLabel ?? command;
-  appendOutputText(`$ ${label}\n`, 'stdout');
+  beginCommandOutput(label, { clear: true });
 
-  const { runId } = await startTerminalRun({
+  const { runId, startedAt } = await startTerminalRun({
     command,
     args: options.args,
     shell: options.shell,
@@ -332,6 +448,18 @@ export async function runCommandWithTerminalStream(
 
   const chat = getActiveChat();
   if (chat?.id === options.chatId) {
+    upsertChatTerminalRun(chat, {
+      id: runId,
+      command: label,
+      cwd: '.',
+      source: options.source,
+      ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+      startedAt,
+      finishedAt: Date.now(),
+      exitCode,
+      timedOut,
+      logPath: `logs/terminal/${runId}.log`,
+    });
     await refreshTerminalHistoryForActiveChat();
     scheduleSaveSessions();
   }

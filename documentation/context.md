@@ -98,6 +98,7 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   logs/terminal/           # full stdout/stderr per runId (Step 10)
   screenshots/             # browser_screenshot PNGs (Step 12)
   skills/                  # user skills (Step 13)
+  skills.json              # per-skill enabled flags (Step 20 settings)
   backups/                 # scaffold
 ```
 
@@ -118,8 +119,11 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 |---------|----------|
 | Types, merge, slash parse | `src/skills/` (`loader.ts`, `parse-slash.ts`, `parse-frontmatter.ts`) |
 | Catalog client + offline manifest | `src/skills/client.ts`, `src/skills/builtin-manifest.json` (from `npm run prebuild`) |
+| Enable/disable + persistence | `src/skills/config.ts`, `~/.speedchat/skills.json`, `GET/PUT /api/config/skills` |
+| Settings UI (toggles, editor, add custom) | `src/ui/settings-skills.ts`, `src/skills/skill-settings-api.ts` |
+| Custom skill template | `src/skills/_template/SKILL.md` (copied on `POST /api/skills`) |
 | Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` |
-| Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js` |
+| Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js`, `server/skills/user-skills.js` |
 
 **API** (same CORS as `/api/tools`; requires `npm start` for user skills):
 
@@ -127,7 +131,10 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 |-------|----------|
 | `GET /api/skills/ping` | `{ ok: true }` |
 | `GET /api/skills` | `{ skills: SkillListItem[] }` (no body) |
-| `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 |
+| `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 (`raw` = full SKILL.md) |
+| `POST /api/skills` | Create user skill from `_template/SKILL.md` (`{ id, label? }`) |
+| `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
+| `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean> }` |
 
 **Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `impeccable` (Step 14), `ui-designer` (Step 15).
 
@@ -190,7 +197,7 @@ Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`
 | `get_lsp_diagnostics` | Formatted diagnostics for a relative path |
 | `list_lsp_servers` | Configured servers + running state |
 
-**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `GET/PUT /api/config/lsp`. **Settings:** `#/settings/lsp` lists servers from the config API with master and per-server toggles (`src/lsp/config-client.ts`). **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files).
+**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `POST /api/lsp/notify` (`{ path, event: open|change|close, text? }` → didOpen/didChange/didClose), `POST /api/lsp/completion` (`{ path, line, character }` → `{ items: [{ label, insertText, kind?, detail? }] }`), `GET/PUT /api/config/lsp` (PUT supports `removeLspIds` for custom server removal). **File viewer:** When LSP is enabled and `npm start` is up, CodeMirror autocomplete calls `src/lsp/completion-client.ts` via `src/ui/file-editor-extensions.ts`; open/edit/save debounce document sync (`src/ui/file-viewer.ts`). **Catalog:** `src/lsp/defaults.json` ships OpenCode-aligned built-ins (typescript, pyright, rust, …); user overrides in `~/.speedchat/lsp.json`. **Settings:** `#/settings/lsp` lists all built-in servers (toggle `disabled`), running/idle badges, and an **Add custom language server** form (`src/ui/lsp-settings.ts`, `src/lsp/config-client.ts`). Test-only `fake` server is hidden in UI. **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files + completion API).
 
 ### MCP + Context7 (Step 18)
 
@@ -201,9 +208,11 @@ MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabl
 | `GET /api/mcp/tools` | OpenAI-style defs for enabled servers |
 | `POST /api/mcp/tools/call` | Execute namespaced tool |
 | `GET /api/mcp/servers` | Server list (label, description, enabled, connected) |
+| `POST /api/mcp/servers` | Add custom stdio server (writes `mcp/servers/<id>.json` + `mcp.json` index) |
+| `DELETE /api/mcp/servers/:id` | Remove user-added server (built-ins cannot be deleted) |
 | `PUT /api/mcp/servers/:id/enabled` | Toggle server in `mcp.json` |
 
-**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). Context7 appears with enable toggle; test `fixture` server is hidden in UI.
+**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). **Add MCP server** form (stdio: id, label, command, args, env). Custom servers can be removed; Context7 is built-in with enable toggle; test `fixture` server is hidden in UI.
 
 **Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
 
@@ -220,9 +229,11 @@ Off by default (`config.json` → `selfHealing.enabled`). Toggle in **Settings �
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.speedchat/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
 
-**Tests:** `npm test`, `npm run build`, `test/ui/settings-sections.test.mjs`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
+**Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.speedchat/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
+
+**Tests:** `npm test`, `npm run build`, `test/ui/settings-sections.test.mjs`, `test/ui/settings-page-html.test.mjs`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
 
 **Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
 
@@ -317,23 +328,25 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 ### File panel (Step 11)
 
-Project file explorer (right) and read-only CodeMirror viewer in a horizontal split with chat.
+Project file explorer (right) and editable CodeMirror viewer in a horizontal split with chat.
 
 | Concern | Location |
 |---------|----------|
-| File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse |
-| Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range`, CodeMirror 6 |
+| File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse, `refreshFileTree()` after save |
+| Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range` / `save_file`, CodeMirror 6 + GitHub-style highlight (`src/ui/codemirror-theme.ts`); Save button + Ctrl/Cmd+S; dirty ● on path; large files (>512 KB) load lines 1–2000 read-only; LSP completions via `src/ui/file-editor-extensions.ts` + `POST /api/lsp/completion` when LSP enabled |
 | Layout | `src/ui/file-layout.ts`, `src/ui/init-file-panel.ts` |
 | Parser | `src/lib/list-directory-parse.ts` |
 | State / prefs | `src/state/file-panel.ts` → `config.json` `filePanel` via `GET/PUT /api/config/meta` |
 | Styles | `src/styles/file-panel.css` |
 | Markup | `index.html` — `#fileSidebar`, `#workspaceSplit`, `#fileViewerPane` |
 
-**Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”.
+**Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”. On boot, after `detectLocalServer()`, `initFilePanel()` and `onFilePanelServerAvailabilityChanged()` load the tree when the server is up (no need to open the Files panel or click refresh).
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
 
-**Tests:** `test/file/list-directory-parse.test.mjs`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
+**Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-speedchat-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
+
+**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
 
 ### Sub-agent orchestration (Step 09)
 
@@ -464,7 +477,7 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
 ```
 
 - **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search` **on**; every other catalog id **off** (`defaultToolConfig()` in [`src/tools/config.ts`](../src/tools/config.ts)).
-- **UI:** Settings drawer **Tools** section — `fillToolsSection()`, `registerToolHandlers()` (delegated `change` on `#toolsList` → `onToolToggle(id)` from [`src/tools/config.ts`](../src/tools/config.ts)), `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)).
+- **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with global and per-category **Enable all** controls; list `change` delegates to `setToolsEnabled()` / `onToolToggle()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes checked or indeterminate, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)).
 - **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
 - **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables checkboxes, and sets `title` on each. `onToolToggle` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
 
@@ -561,7 +574,7 @@ Browser (same origin :5173)
 
 ### Terminal panel (Step 10)
 
-Docked **bottom panel** in `.main-column` (above `.input-bar`): live command output, per-chat history, user **Run** input. Toggle: `#btnTerminal` or **Ctrl+`**.
+Docked **bottom panel** in `.main-column` (below `.stats-strip`, after chat + composer + metrics): live command output, per-chat history, user **Run** input. Styling matches the light bench-instrument UI (`terminal.css`). Toggle: `#btnTerminal` or **Ctrl+`**.
 
 | Concern | Location |
 |---------|----------|

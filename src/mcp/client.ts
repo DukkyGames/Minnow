@@ -38,6 +38,20 @@ export async function fetchMcpServers(): Promise<McpServerSummary[] | null> {
   }
 }
 
+/** Payload for POST /api/mcp/servers (stdio transport). */
+export type CreateMcpServerPayload = {
+  id: string;
+  label: string;
+  description?: string;
+  enabled?: boolean;
+  transport: {
+    type: 'stdio';
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+  };
+};
+
 /** Persist enable flag in mcp.json and reload the registry. */
 export async function setMcpServerEnabled(
   id: string,
@@ -52,6 +66,45 @@ export async function setMcpServerEnabled(
         body: JSON.stringify({ enabled }),
       },
     );
+    if (!res.ok) return false;
+    await fetch('/api/mcp/reload', { method: 'POST' });
+    await refreshMcpToolCache();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Register a custom stdio MCP server under ~/.speedchat/mcp/. */
+export async function createMcpServer(
+  payload: CreateMcpServerPayload,
+): Promise<{ ok: true; server: McpServerSummary } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/mcp/servers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = (await res.json()) as { server?: McpServerSummary; error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? 'Failed to add MCP server' };
+    }
+    await refreshMcpToolCache();
+    if (!body.server) {
+      return { ok: false, error: 'Invalid server response' };
+    }
+    return { ok: true, server: body.server };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
+}
+
+/** Remove a user-added MCP server (built-ins cannot be deleted). */
+export async function deleteMcpServer(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
     if (!res.ok) return false;
     await fetch('/api/mcp/reload', { method: 'POST' });
     await refreshMcpToolCache();

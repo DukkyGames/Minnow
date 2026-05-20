@@ -5,6 +5,8 @@
 import { SYSTEM_PROMPT_PRESETS } from '../constants';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
 import type { SessionState, SystemPromptSettings } from '../types';
+import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
+import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/config';
 
 const DEFAULT_ENABLED_IDS = new Set([
@@ -13,6 +15,11 @@ const DEFAULT_ENABLED_IDS = new Set([
   'web_search',
   'wikipedia_search',
 ]);
+
+/** Default skill toggles (all enabled). */
+export function defaultSkillConfig(): SkillConfig {
+  return buildDefaultSkillConfig();
+}
 
 /** Default tool toggles aligned with defaultToolConfig(). */
 export function defaultToolConfig(): ToolConfig {

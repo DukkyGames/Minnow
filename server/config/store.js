@@ -9,6 +9,7 @@ import { ensureSpeedChatLayout } from './home.js';
 import {
   mergeConfigMeta,
   normalizeToolConfig,
+  normalizeSkillConfig,
   normalizeSubAgentsConfig,
   validateSessionState,
   validateSystemPromptSettings,
@@ -17,6 +18,7 @@ import {
   DEFAULT_META,
   defaultSessionStateJson,
   defaultToolsJson,
+  defaultSkillsJson,
   DEFAULT_SYSTEM_PROMPT,
 } from './home.js';
 
@@ -95,6 +97,10 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? defaultToolsJson();
   }
+  if (resource === 'skills') {
+    const data = await readConfigJson(key);
+    return data ?? defaultSkillsJson();
+  }
   if (resource === 'system-prompt') {
     const data = await readConfigJson(key);
     return data ?? DEFAULT_SYSTEM_PROMPT;
@@ -133,6 +139,11 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'tools') {
     const normalized = normalizeToolConfig(body);
+    await writeConfigJson(key, normalized);
+    return normalized;
+  }
+  if (resource === 'skills') {
+    const normalized = normalizeSkillConfig(body);
     await writeConfigJson(key, normalized);
     return normalized;
   }

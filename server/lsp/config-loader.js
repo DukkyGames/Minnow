@@ -12,6 +12,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 let cached = null;
+let builtinIdsCache = null;
+
+/** Server ids shipped in src/lsp/defaults.json (built-ins, not user-defined). */
+export async function getBuiltinLspIds() {
+  if (builtinIdsCache) return builtinIdsCache;
+  const defaultsRaw = await fs.readFile(
+    path.join(PROJECT_ROOT, 'src/lsp/defaults.json'),
+    'utf8',
+  );
+  const defaults = JSON.parse(defaultsRaw);
+  builtinIdsCache = new Set(Object.keys(defaults.lsp ?? {}));
+  return builtinIdsCache;
+}
 
 export async function loadMergedLspConfig() {
   if (cached) return cached;

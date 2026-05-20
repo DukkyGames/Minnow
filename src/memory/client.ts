@@ -35,10 +35,27 @@ export async function pingMemoryApi(): Promise<boolean> {
   return data?.ok === true;
 }
 
+export interface MemoryStatus {
+  enabled: boolean;
+  entryCount: number;
+  home: string;
+}
+
+/** Server memory status (enabled flag, entry count, home path). */
+export async function fetchMemoryStatus(): Promise<MemoryStatus | null> {
+  const data = await memoryFetch<MemoryStatus>('/api/memory/status');
+  if (!data) return null;
+  return {
+    enabled: data.enabled !== false,
+    entryCount: typeof data.entryCount === 'number' ? data.entryCount : 0,
+    home: data.home ?? '',
+  };
+}
+
 /** Whether memory is enabled globally (from server config). */
 export async function fetchMemoryEnabled(): Promise<boolean> {
-  const data = await memoryFetch<{ enabled: boolean }>('/api/memory/status');
-  return data?.enabled !== false;
+  const status = await fetchMemoryStatus();
+  return status?.enabled !== false;
 }
 
 /** Retrieve formatted memory block for prompt injection. */
