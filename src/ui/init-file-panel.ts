@@ -20,8 +20,10 @@ import {
   initFileTreeSearch,
   onFileTreeSearchServerChanged,
   registerFileTreeFilterRender,
+  registerFileTreeServerCheck,
 } from './file-tree-search';
 import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './file-viewer';
+import { isLocalServerAvailable } from '../tools/config';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
 
@@ -120,6 +122,7 @@ export async function initFilePanel(): Promise<void> {
   initFileTreeCrud();
   initFileTreeDnD();
   registerFileTreeFilterRender(renderFileTree);
+  registerFileTreeServerCheck(isLocalServerAvailable);
   initFileTreeSearch();
 
   window.addEventListener('resize', () => {

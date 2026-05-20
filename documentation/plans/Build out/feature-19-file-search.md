@@ -8,7 +8,7 @@ depends_on: [11]
 blocks: []
 wave: 4
 size: M
-status: pending
+status: done
 ---
 
 # Feature 19 — Search / filter in file tree
