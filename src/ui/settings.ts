@@ -256,8 +256,8 @@ async function onProviderSelectChange(): Promise<void> {
   }
 }
 
-export function fillToolsSection(): void {
-  const container = document.getElementById('toolsList');
+export function fillToolsSection(containerId = 'toolsList'): void {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   container.replaceChildren();
