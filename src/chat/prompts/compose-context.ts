@@ -11,6 +11,10 @@ import { resolveExpertForTurn } from '../experts/resolve';
 import { normalizeModeId } from '../modes/types';
 import { loadExpertsConfig } from '../../config/experts-config';
 import { loadPromptMetaSettings } from '../../config/prompt-meta';
+import {
+  getUserRulesPayloadForSend,
+  loadUserRules,
+} from '../../config/user-rules';
 import { getExpertSelection } from '../../state/sessions';
 import { updateExpertAutoHint } from '../../ui/expert-select';
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
@@ -211,4 +215,33 @@ export async function resolveComposedSystemPrompt(
     },
   });
   return composeSystemPrompt(ctx);
+}
+
+/** Outbound system messages for LM Studio (composed prompt + optional user rules). */
+export interface OutboundSystemMessages {
+  /** Primary system content (composed stack or legacy textarea fallback). */
+  composed: string;
+  /** Second system message body when rules are enabled and non-empty. */
+  userRules: string | null;
+}
+
+/**
+ * Resolve composed programmatic prompt and optional user rules for send.
+ * Shared by tool loop, plain chat, and token estimate (F25).
+ */
+export async function resolveOutboundSystemMessages(
+  chat: Chat,
+  legacySysPrompt: string,
+  options?: BuildComposeContextOptions,
+): Promise<OutboundSystemMessages> {
+  let composedRaw = '';
+  try {
+    composedRaw = await resolveComposedSystemPrompt(chat, options);
+  } catch {
+    composedRaw = '';
+  }
+  const composed = composedRaw.trim() || legacySysPrompt.trim();
+  const rulesSettings = await loadUserRules();
+  const userRules = getUserRulesPayloadForSend(rulesSettings);
+  return { composed, userRules };
 }

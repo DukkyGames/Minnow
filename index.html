@@ -135,14 +135,15 @@
   <div class="topbar-spacer" aria-hidden="true"></div>
 
   <div class="topbar-end">
-  <div class="model-wrap">
-    <label class="visually-hidden" for="modelSelect">Model</label>
-    <div class="model-select-inner">
-      <select id="modelSelect" onchange="onModelSelectChange()"></select>
+    <div class="model-wrap" data-model-state="unknown">
+      <span class="model-state-dot" id="modelStateDot" aria-hidden="true"></span>
+      <label class="visually-hidden" for="modelSelect">Model</label>
+      <div class="model-select-inner">
+        <select id="modelSelect" onchange="onModelSelectChange()"></select>
+      </div>
+      <button type="button" id="btnLoadModel" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="loadSelectedModel()">Load</button>
+      <button type="button" id="btnUnloadModel" class="model-action-btn" hidden aria-label="Unload model" title="Unload selected model from VRAM" onclick="unloadSelectedModel()">Unload</button>
     </div>
-    <button type="button" id="btnLoadModel" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="loadSelectedModel()">Load</button>
-    <button type="button" id="btnUnloadModel" class="model-action-btn" hidden aria-label="Unload model" title="Unload selected model from VRAM" onclick="unloadSelectedModel()">Unload</button>
-  </div>
     <div class="status-pill" role="status" aria-live="polite">
       <div class="s-dot" id="sDot" aria-hidden="true"></div>
       <span id="sText">Loading models…</span>
@@ -598,25 +599,23 @@
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <header class="terminal-header">
-        <span class="terminal-header-title">Terminal</span>
+        <label class="visually-hidden" for="terminalShellSelect">Shell profile</label>
+        <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
+        <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear agent output</button>
           <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
         </div>
       </header>
-      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Interactive terminal requires <code>npm start</code> (not <code>npm run dev</code>). Agent runs still need the local server.</p>
+      <p class="terminal-shell-hint" id="terminalShellHint">Shell has full access on your machine (not limited by workspace tool policy).</p>
       <div class="terminal-body">
-        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
-        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
-      </div>
-      <form class="terminal-input-row" id="terminalForm">
-        <label class="visually-hidden" for="terminalInput">Terminal command</label>
-        <div class="terminal-input-wrap">
-          <span class="terminal-prompt" aria-hidden="true">&gt;</span>
-          <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
+        <aside class="terminal-history" id="terminalHistory" aria-label="Agent runs"></aside>
+        <div class="terminal-main">
+          <pre class="terminal-output terminal-agent-output hidden" id="terminalOutput" aria-live="polite"></pre>
+          <div class="terminal-xterm-host" id="terminalXtermHost" role="tabpanel"></div>
         </div>
-        <button type="submit" class="terminal-run-btn">Run</button>
-      </form>
+      </div>
     </section>
 
   </div>

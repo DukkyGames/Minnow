@@ -10,12 +10,18 @@ import {
 } from '../memory/client';
 import { detectLocalServer } from '../tools/client';
 import { refreshSettingsSection } from './settings-sections';
+import {
+  initSettingsPromptEstimate,
+  refreshPromptTokenEstimate,
+  schedulePromptTokenEstimateRefresh,
+} from './settings-prompt-estimate';
 import { setStatus } from './status';
 import type { PromptProfile } from '../chat/prompts/types';
 
 export type SettingsSectionId =
   | 'general'
   | 'prompting'
+  | 'rules'
   | 'providers'
   | 'modes'
   | 'experts'
@@ -31,6 +37,7 @@ export type SettingsSectionId =
 const SECTIONS: SettingsSectionId[] = [
   'general',
   'prompting',
+  'rules',
   'providers',
   'modes',
   'experts',
@@ -82,6 +89,7 @@ function setActiveSection(section: SettingsSectionId): void {
     window.location.hash = nextHash;
   }
   void refreshSettingsSection(section);
+  void detectLocalServer().then(() => refreshPromptTokenEstimate());
 }
 
 async function saveFeatureToggle(
@@ -171,6 +179,7 @@ function bindStaticSections(): void {
       );
       setStatus('ok', `Prompt profile: ${profile}`);
       await refreshSettingsSection('prompting');
+      schedulePromptTokenEstimateRefresh();
     });
   });
 
@@ -253,7 +262,9 @@ export function openSettings(section?: SettingsSectionId): void {
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
 
   bindStaticSections();
+  initSettingsPromptEstimate();
   void hydrateStaticFields();
+  void detectLocalServer().then(() => refreshPromptTokenEstimate());
 
   const target = section ?? parseHashSection();
   // Nav clicks update the hash after setActiveSection; hashchange would otherwise

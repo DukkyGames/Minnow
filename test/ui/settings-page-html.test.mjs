@@ -81,4 +81,13 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesSave"/);
     assert.match(html, /data-settings-nav="rules"/);
   });
+
+  test('composer tools button and popover exist in index.html', () => {
+    assert.match(html, /id="btnComposerTools"/);
+    assert.match(html, /id="composerToolsPopover"/);
+    assert.match(html, /id="composerToolsList"/);
+    assert.match(html, /id="composerToolsServerBanner"/);
+    assert.match(html, /id="composerToolsOpenSettings"/);
+    assert.match(html, /class="tools-list tools-list--composer"/);
+  });
 });

@@ -8,6 +8,7 @@ import type { ToolConfig, ToolPermissionMode } from '../tools/tool-settings-type
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
 import type { SkillConfig } from '../skills/config';
+import type { UserRulesSettings } from './user-rules';
 
 /** Default skill toggles (all enabled). */
 export function defaultSkillConfig(): SkillConfig {
@@ -34,6 +35,11 @@ export function defaultToolConfig(): ToolConfig {
   return { enabled, permissions, keys: { braveApiKey: '' } };
 }
 
+/** Default ~/.minnow/rules.json contents. */
+export function defaultUserRulesSettings(): UserRulesSettings {
+  return { version: 1, enabled: false, text: '' };
+}
+
 /** Default system prompt file contents. */
 export function defaultSystemPromptSettings(): SystemPromptSettings {
   const preset = SYSTEM_PROMPT_PRESETS.find((p) => p.id === 'general-assistant');
@@ -51,13 +57,15 @@ export function defaultSessionState(): SessionState {
       : '00000000-0000-0000-0000-000000000001';
 
   return {
-    version: 1,
+    version: 2,
     activeId: chatId,
     sidebarCollapsed: false,
+    lastActiveChatIdByWorkspace: {},
     chats: [
       {
         id: chatId,
         name: 'New chat',
+        workspacePath: '',
         modelId: '',
         history: [],
         lastStats: null,
