@@ -14,6 +14,10 @@ Design and iterate Minnow’s frontend using **project context files** and vendo
 
 Load full product + design context in one JSON blob (no `head` / `grep` / `jq` on output):
 
+**In Minnow (preferred):** call the `load_impeccable_context` tool. It runs the bundled script from the Minnow app root and reads `PRODUCT.md`, `DESIGN.md`, and `.impeccable/design.json` from the **active workspace** (works when the workspace is not the Minnow repo).
+
+**From the Minnow repo root only:**
+
 ```bash
 node src/skills/impeccable/scripts/minnow-context.mjs
 ```
@@ -24,7 +28,7 @@ Or upstream loader only:
 node src/skills/impeccable/scripts/load-context.mjs
 ```
 
-Set `IMPECCABLE_CONTEXT_DIR` to the repo root (default) or a monorepo sub-app path.
+Set `IMPECCABLE_CONTEXT_DIR` to the workspace root or a monorepo sub-app path when invoking scripts manually.
 
 | File | Role |
 |------|------|

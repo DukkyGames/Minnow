@@ -42,7 +42,7 @@ export const UI_DESIGNER_PREFLIGHT_INSTRUCTION = [
   'IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=pass|not_required image_gate=pass|skipped:<reason> mutation=open|closed',
   '',
   'Load design context first:',
-  'node src/skills/impeccable/scripts/minnow-context.mjs',
+  'load_impeccable_context (server tool — works when workspace is not the Minnow repo)',
   '',
   'Delegate Impeccable sub-commands via run_impeccable (audit, shape, craft, polish) or documented /impeccable flow.',
 ].join('\n');

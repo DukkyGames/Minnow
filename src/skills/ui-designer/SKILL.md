@@ -23,7 +23,7 @@ Reply with **`plan`** (default) or **`implement`** after `/ui-designer`:
 
 ## Workflow
 
-1. **Preflight** — `node src/skills/impeccable/scripts/minnow-context.mjs` (PRODUCT.md, DESIGN.md, `.impeccable/design.json`). Fail fast if PRODUCT.md is placeholder; suggest `npx impeccable teach`.
+1. **Preflight** — `load_impeccable_context` (PRODUCT.md, DESIGN.md, `.impeccable/design.json` from the active workspace). Fail fast if PRODUCT.md is placeholder; suggest `npx impeccable teach`.
 2. **Observe** — `browser_navigate` → `http://127.0.0.1:<PORT>` (Minnow dev server); `browser_screenshot` for visual evidence (vision model required).
 3. **Audit** — `run_impeccable` with `command: audit` on `#app` or target CSS/HTML.
 4. **Shape** — `run_impeccable` with `command: shape`; confirm brief with user.

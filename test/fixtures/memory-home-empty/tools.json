@@ -34,6 +34,8 @@
     "run_python": false,
     "spawn_sub_agent": false,
     "cancel_sub_agent": false,
+    "list_sub_agents": false,
+    "get_sub_agent_status": false,
     "browser_list": false,
     "browser_navigate": false,
     "browser_snapshot": false,
@@ -42,8 +44,10 @@
     "browser_eval": false,
     "browser_screenshot": false,
     "run_impeccable": false,
+    "load_impeccable_context": false,
     "get_lsp_diagnostics": false,
-    "list_lsp_servers": false
+    "list_lsp_servers": false,
+    "save_memory": true
   },
   "keys": {
     "braveApiKey": ""

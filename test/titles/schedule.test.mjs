@@ -16,6 +16,7 @@ import {
 } from '../../src/state/sessions.ts';
 import {
   resetTitleGenerationInflight,
+  resetTitleScheduleContext,
   scheduleChatTitleGeneration,
   setGenerateChatTitleForTests,
 } from '../../src/chat/titles/schedule.ts';
@@ -63,6 +64,7 @@ describe('scheduleChatTitleGeneration', () => {
     setupDom();
     seedSession();
     resetTitleGenerationInflight();
+    resetTitleScheduleContext();
     resetTitlesConfigCache();
     setTitlesConfigForTests({
       enabled: true,
@@ -114,6 +116,35 @@ describe('scheduleChatTitleGeneration', () => {
     await new Promise((r) => setTimeout(r, 30));
 
     assert.equal(calls, 1);
+  });
+
+  test('applies for New Chat casing variant', async () => {
+    seedSession('New Chat');
+    setGenerateChatTitleForTests(async () => 'Cased title');
+
+    scheduleChatTitleGeneration(CHAT_ID, 'Hello');
+    await waitMicrotasks();
+    await waitMicrotasks();
+
+    assert.equal(getChat().name, 'Cased title');
+  });
+
+  test('uses schedule context model and provider overrides', async () => {
+    getChat().modelId = '';
+    setGenerateChatTitleForTests(async (_seed, options) => {
+      assert.equal(options.modelId, 'context-model');
+      assert.equal(options.providerId, 'context-provider');
+      return 'Context title';
+    });
+
+    scheduleChatTitleGeneration(CHAT_ID, 'Hello', {
+      modelId: 'context-model',
+      providerId: 'context-provider',
+    });
+    await waitMicrotasks();
+    await waitMicrotasks();
+
+    assert.equal(getChat().name, 'Context title');
   });
 
   test('disabled config skips generation', async () => {

@@ -12,8 +12,9 @@ import {
 } from '../providers/store';
 import { setActiveProviderBaseUrl, setStatus } from './status';
 import {
-  onToolToggle,
+  isToolPermissionMode,
   saveBraveApiKeyFromDrawer,
+  setToolPermission,
   setToolsEnabled,
   getToolIdsForCategory,
 } from '../tools/config';
@@ -288,9 +289,22 @@ function createToolSelectAllControl(
   return label;
 }
 
-/** Handle checkbox changes on a tools list (rows and select-all controls). */
+/** Handle permission select and bulk checkbox changes on a tools list. */
 function handleToolsListChange(event: Event, list: HTMLElement): void {
   const target = event.target;
+  if (
+    target instanceof HTMLSelectElement &&
+    target.classList.contains('tool-permission-select')
+  ) {
+    const row = target.closest<HTMLElement>('[data-tool-id]');
+    const id = row?.getAttribute('data-tool-id');
+    if (!id) return;
+    const mode = target.value;
+    if (!isToolPermissionMode(mode)) return;
+    setToolPermission(id, mode, list);
+    return;
+  }
+
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
     return;
   }
@@ -307,11 +321,6 @@ function handleToolsListChange(event: Event, list: HTMLElement): void {
     setToolsEnabled(ids, target.checked, list);
     return;
   }
-
-  const row = target.closest<HTMLElement>('[data-tool-id]');
-  const id = row?.getAttribute('data-tool-id');
-  if (!id) return;
-  onToolToggle(id);
 }
 
 /** Wire change delegation once per tools list element. */
@@ -366,28 +375,36 @@ export function fillToolsSection(containerId = 'toolsList'): void {
         row.setAttribute('data-server-required', '');
       }
 
-      const label = document.createElement('label');
-      label.className = 'tool-toggle-wrap';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'tool-toggle';
-      checkbox.id = `tool-${tool.id}`;
-      checkbox.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+      const controlWrap = document.createElement('div');
+      controlWrap.className = 'tool-permission-wrap';
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'tool-label';
       nameSpan.textContent = tool.label;
 
-      label.appendChild(checkbox);
-      label.appendChild(nameSpan);
+      const select = document.createElement('select');
+      select.className = 'tool-permission-select';
+      select.setAttribute('aria-label', `${tool.label} permission`);
+      select.setAttribute('aria-describedby', `tool-desc-${tool.id}`);
+      for (const optDef of [
+        { value: 'off', label: 'Disabled' },
+        { value: 'ask', label: 'Requires permission' },
+        { value: 'full', label: 'Full permission' },
+      ] as const) {
+        const opt = document.createElement('option');
+        opt.value = optDef.value;
+        opt.textContent = optDef.label;
+        select.appendChild(opt);
+      }
+
+      controlWrap.append(nameSpan, select);
 
       const desc = document.createElement('p');
       desc.className = 'tool-desc';
       desc.id = `tool-desc-${tool.id}`;
       desc.textContent = tool.description;
 
-      row.appendChild(label);
+      row.appendChild(controlWrap);
       row.appendChild(desc);
       group.appendChild(row);
     }

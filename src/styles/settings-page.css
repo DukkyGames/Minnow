@@ -40,6 +40,9 @@
 }
 
 .settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
@@ -611,17 +614,76 @@
 
 .settings-mcp-row-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Checkbox + server name: stays left-aligned without list-row chrome from .settings-toggle-row. */
+.settings-mcp-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.settings-mcp-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* Stacked description, status instrument, and hints (matches LSP row rhythm, avoids one busy flex row). */
+.settings-mcp-detail {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.settings-mcp-meta {
-  display: flex;
-  flex-wrap: wrap;
+.settings-mcp-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Small status readout: semantic green only on the dot, not the whole pill (DESIGN metric-color rule). */
+.settings-mcp-status {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  font-family: var(--font-mono);
   font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-mcp-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.settings-mcp-status--ok .settings-mcp-status-dot {
+  background: var(--success);
+}
+
+.settings-mcp-status-text {
+  font-family: var(--font-mono);
+}
+
+.settings-mcp-hint {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--text-muted);
 }
 
@@ -635,11 +697,6 @@
 
 .settings-mcp-badge--builtin {
   background: var(--code-inline-bg);
-}
-
-.settings-mcp-badge--connected {
-  color: var(--success);
-  border-color: var(--success);
 }
 
 .settings-mcp-add-panel {
@@ -686,54 +743,137 @@
   display: none;
 }
 
-.settings-tools-hint {
-  margin: 0 0 12px;
-  max-width: 52ch;
+/* Tools page: bench panel (list + Brave key), filesystem radios, subsection titles */
+.settings-tools-intro {
+  max-width: 72ch;
 }
 
-.settings-tools-list {
-  margin-top: 4px;
+.settings-subheading {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
-.settings-tools-list .tool-list-toolbar {
-  background: var(--surface);
+.settings-tool-filesystem {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tool-filesystem > .settings-field-hint {
+  margin-bottom: 10px;
+}
+
+.settings-filesystem-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.settings-radio-option input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.settings-radio-option__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-tools-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.settings-tools-panel .tool-list-toolbar {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-tools-panel .settings-tools-list {
+  margin-top: 0;
 }
 
 .settings-tools-list .tool-group {
-  padding: 0 2px;
+  padding: 0 10px;
+}
+
+.settings-tools-list .tool-group-head {
+  /* Extra top padding so category labels (e.g. WEB) clear the toolbar divider. */
+  padding-top: 10px;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .settings-tools-list .tool-row {
-  padding: 10px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  border-bottom-color: var(--border);
+  padding: 10px 2px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-tools-list .tool-group .tool-row:last-child {
-  border-bottom-color: transparent;
+  border-bottom: none;
 }
 
 .settings-tools-list .tool-row:hover:not(.is-server-unavailable) {
-  background: var(--bg);
+  background: var(--surface-elevated);
+}
+
+.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-label,
+.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
+.settings-tools-list .tool-permission-wrap:hover .tool-label,
+.settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
+  color: var(--text-hover);
+}
+
+.settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
+.settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
+  background: transparent;
+  border-color: oklch(100% 0.00011 271.152 / 0.35);
 }
 
 .settings-tools-list .tool-desc {
   margin-left: 26px;
 }
 
-.settings-tool-key-row {
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+.settings-tools-panel .settings-tool-key-row {
+  margin-top: 0;
+  padding: 14px 14px 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
   background: var(--surface);
 }
 
 .settings-tool-key-row label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .settings-tool-key-row input {
@@ -751,6 +891,10 @@
   outline: none;
 }
 
+.settings-tool-key-hint {
+  margin-bottom: 0;
+}
+
 @media (max-width: 768px) {
   .settings-page-body {
     flex-direction: column;
@@ -761,6 +905,7 @@
     border-right: none;
     border-bottom: 1px solid var(--border);
     display: flex;
+    flex-direction: row;
     flex-wrap: wrap;
     gap: 4px;
   }

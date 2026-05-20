@@ -1,5 +1,6 @@
 import { MAX_CHATS, PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
+import { isPlaceholderChatName } from '../chat/titles/placeholder';
 import { setSaveTimer, saveTimer } from '../app-state';
 import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
@@ -12,6 +13,8 @@ import type {
   Chat,
   ExpertSelection,
   Message,
+  PersistedSubAgentRun,
+  PersistedSubAgentStatus,
   SessionState,
   TerminalRunRecord,
   ToolCall,
@@ -175,11 +178,61 @@ function ensureTerminalHistory(raw: unknown): TerminalRunRecord[] | undefined {
   return rows.length ? rows : undefined;
 }
 
+const PERSISTED_SUB_AGENT_STATUSES = new Set<PersistedSubAgentStatus>([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+function ensurePersistedSubAgentRuns(
+  raw: unknown,
+): PersistedSubAgentRun[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PersistedSubAgentRun[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const runId = typeof r.runId === 'string' ? r.runId.trim() : '';
+    const parentTurnId = typeof r.parentTurnId === 'string' ? r.parentTurnId : '';
+    const type = typeof r.type === 'string' ? r.type : '';
+    const task = typeof r.task === 'string' ? r.task : '';
+    const statusRaw = typeof r.status === 'string' ? r.status : '';
+    if (!runId || !PERSISTED_SUB_AGENT_STATUSES.has(statusRaw as PersistedSubAgentStatus)) {
+      continue;
+    }
+    const status = statusRaw as PersistedSubAgentStatus;
+    const messages = Array.isArray(r.messages) ? r.messages : [];
+    const parentToolCallId =
+      typeof r.parentToolCallId === 'string' && r.parentToolCallId.trim()
+        ? r.parentToolCallId.trim()
+        : undefined;
+    const err = r.error;
+    out.push({
+      runId,
+      parentTurnId,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
+      type,
+      task,
+      status,
+      summary: typeof r.summary === 'string' ? r.summary : '',
+      ...(err === null || typeof err === 'string' ? { error: err as string | null } : {}),
+      startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
+      endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,
+      toolTurns: typeof r.toolTurns === 'number' ? r.toolTurns : 0,
+      messages,
+    });
+  }
+  return out.length ? out : undefined;
+}
+
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (!raw || typeof raw !== 'object') return createEmptyChatObject('');
   const history = Array.isArray(raw.history)
     ? raw.history.map(ensureMessageEntry).filter((x): x is Message => Boolean(x))
     : [];
+  const subAgentRuns = ensurePersistedSubAgentRuns(raw.subAgentRuns);
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -197,6 +250,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         : null,
     workAgentAuto: raw.workAgentAuto !== false,
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
+    ...(subAgentRuns ? { subAgentRuns } : {}),
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
@@ -415,7 +469,7 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
  */
 export function applyGeneratedChatTitle(chatId: string, title: string): boolean {
   const chat = findChatById(chatId);
-  if (!chat || chat.name !== PLACEHOLDER_CHAT_NAME) return false;
+  if (!chat || !isPlaceholderChatName(chat.name)) return false;
   const trimmed = title.trim();
   if (!trimmed) return false;
   chat.name = trimmed;

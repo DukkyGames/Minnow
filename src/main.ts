@@ -19,6 +19,8 @@ import './styles/file-panel.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/settings-page.css';
+import './styles/tool-approval.css';
+import './styles/sub-agent-drawer.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -35,6 +37,7 @@ import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
+import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { autoResize, handleKey } from './ui/input';
@@ -76,6 +79,7 @@ import {
 } from './ui/expert-select';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
+import { initSubAgentUi } from './ui/sub-agent-cards';
 import { dismissOpenLayers } from './ui/status';
 import {
   initFilePanel,
@@ -124,14 +128,27 @@ function registerServiceWorker(): void {
   }
 }
 
+/** Dismiss the inline loading shell (see index.html #app-loader). */
+function markAppReady(): void {
+  const loader = document.getElementById('app-loader');
+  if (loader) {
+    loader.setAttribute('aria-busy', 'false');
+    loader.setAttribute('aria-hidden', 'true');
+  }
+  document.documentElement.classList.add('app-ready');
+}
+
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
   await runMigrationIfNeeded();
+  // Load tools before any UI reads permissions (drawer + settings page rebuilds).
+  await loadToolConfigFromStorage();
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
+  initSubAgentUi();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();
@@ -150,8 +167,8 @@ export async function initApp(): Promise<void> {
   await initFilePanel();
   onFilePanelServerAvailabilityChanged();
   onTerminalServerAvailabilityChanged();
-  await loadToolConfigFromStorage();
   await loadSkillConfigFromStorage();
+  await loadToolSecurityMeta().catch(() => undefined);
   await initTerminalPanel();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
@@ -190,9 +207,19 @@ export async function initApp(): Promise<void> {
   updateStatsExpandPreview();
 }
 
+/** Start init once the document is ready (module scripts often run after `load`). */
+function startApp(): void {
+  void initApp();
+}
+
 registerWindowHandlers();
 registerServiceWorker();
 
-window.addEventListener('load', () => {
-  void initApp();
-});
+// Vite has injected CSS by now; hide the inline loader before async boot work.
+markAppReady();
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startApp, { once: true });
+} else {
+  startApp();
+}

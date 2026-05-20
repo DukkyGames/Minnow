@@ -1,0 +1,89 @@
+/**
+ * Run Minnow's bundled minnow-context.mjs against the active workspace.
+ * Scripts live under the Minnow app root; PRODUCT.md / DESIGN.md / design.json
+ * are read from the workspace (IMPECCABLE_CONTEXT_DIR).
+ */
+
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const CONTEXT_TIMEOUT_MS = 30_000;
+const MAX_STDOUT_CHARS = 96_000;
+
+/**
+ * @param {string} appRoot Minnow install (npm start cwd)
+ * @param {string} workspaceRoot Active workspace for design files
+ */
+export function toolLoadImpeccableContext(appRoot, workspaceRoot) {
+  const scriptPath = path.join(
+    appRoot,
+    'src',
+    'skills',
+    'impeccable',
+    'scripts',
+    'minnow-context.mjs',
+  );
+
+  if (!fs.existsSync(scriptPath)) {
+    return Promise.resolve({
+      result: `Error: missing Impeccable context script at ${scriptPath}. Re-run npm install in the Minnow app directory.`,
+    });
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        IMPECCABLE_CONTEXT_DIR: workspaceRoot,
+      },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, CONTEXT_TIMEOUT_MS);
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+      if (stdout.length > MAX_STDOUT_CHARS) {
+        stdout = `${stdout.slice(0, MAX_STDOUT_CHARS)}\n…[truncated]`;
+      }
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        resolve({
+          result: `Error: load_impeccable_context timed out after ${CONTEXT_TIMEOUT_MS / 1000}s`,
+        });
+        return;
+      }
+      if (code !== 0) {
+        const errText = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n');
+        resolve({
+          result:
+            `Error: load_impeccable_context exited ${code}\n` +
+            (errText || `(workspace ${workspaceRoot})`),
+        });
+        return;
+      }
+      resolve({ result: stdout.trim() || '{}' });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({
+        result: `Error: failed to run minnow-context.mjs: ${err.message}`,
+      });
+    });
+  });
+}

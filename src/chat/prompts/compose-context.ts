@@ -133,6 +133,7 @@ export async function buildComposeContext(
         ? formatEnabledToolsLite(enabledToolIds)
         : formatEnabledToolsFull(enabledToolIds),
     infoPresetId,
+    planGranularity: meta.planGranularity ?? 'medium',
     userMessagePreview:
       options?.userMessagePreview ??
       chat.history

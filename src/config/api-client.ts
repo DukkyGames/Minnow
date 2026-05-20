@@ -4,7 +4,7 @@
 
 import type { SessionState, SystemPromptSettings } from '../types';
 import type { SkillConfig } from '../skills/config';
-import type { ToolConfig } from '../tools/config';
+import type { ToolConfig } from '../tools/tool-settings-types';
 import {
   defaultSessionState,
   defaultSystemPromptSettings,

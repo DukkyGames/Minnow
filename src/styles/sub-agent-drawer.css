@@ -1,0 +1,215 @@
+/**
+ * Sub-agent transcript drawer + inline cards (parent chat).
+ */
+
+.sub-agent-card {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface, var(--bg));
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sub-agent-card:hover,
+.sub-agent-card:focus-visible {
+  border-color: var(--border-strong, var(--border));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.sub-agent-card--active {
+  border-color: var(--accent, #3b82f6);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #3b82f6) 35%, transparent);
+}
+
+.sub-agent-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sub-agent-card__type {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sub-agent-card__badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg);
+}
+
+.sub-agent-card--active .sub-agent-card__badge {
+  color: var(--accent, #2563eb);
+  border-color: color-mix(in srgb, var(--accent, #3b82f6) 40%, var(--border));
+}
+
+.sub-agent-card__task {
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sub-agent-card__meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sub-agent-card__hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.sub-agent-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+}
+
+.sub-agent-drawer-panel {
+  width: min(100vw - 24px, 440px);
+  max-width: 100%;
+  background: var(--surface, var(--bg));
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.sub-agent-drawer__header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sub-agent-drawer__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sub-agent-drawer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sub-agent-drawer__status {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.sub-agent-drawer__run-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.sub-agent-drawer__header-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sub-agent-drawer__icon-btn,
+.sub-agent-drawer__cancel {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sub-agent-drawer__cancel {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--border));
+  color: #b91c1c;
+}
+
+.sub-agent-drawer__scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px 20px;
+}
+
+.sub-agent-drawer__summary {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sub-agent-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sub-agent-drawer__system {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  white-space: pre-wrap;
+}
+
+.sub-agent-drawer__user {
+  align-self: flex-end;
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--accent, #3b82f6) 12%, var(--surface, #fff));
+  border: 1px solid var(--border);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sub-agent-drawer__assistant {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -145,11 +145,20 @@ export function validateSessionState(raw) {
  */
 export function normalizeToolConfig(raw) {
   const enabled = {};
+  const permissions = {};
   for (const id of ALL_TOOL_IDS) {
-    enabled[id] = ['get_datetime', 'calculate', 'web_search', 'wikipedia_search'].includes(id);
+    const on = [
+      'get_datetime',
+      'calculate',
+      'web_search',
+      'wikipedia_search',
+      'save_memory',
+    ].includes(id);
+    enabled[id] = on;
+    permissions[id] = on ? 'ask' : 'off';
   }
 
-  const config = { enabled, keys: { braveApiKey: '' } };
+  const config = { enabled, permissions, keys: { braveApiKey: '' } };
 
   if (!raw || typeof raw !== 'object') return config;
 
@@ -161,6 +170,36 @@ export function normalizeToolConfig(raw) {
         config.enabled[id] = enabledMap[id];
       }
     }
+  }
+
+  let hadPermissionsInFile = false;
+  if (stored.permissions && typeof stored.permissions === 'object') {
+    const permMap = /** @type {Record<string, unknown>} */ (stored.permissions);
+    for (const [id, value] of Object.entries(permMap)) {
+      if (typeof id !== 'string' || !id) continue;
+      if (value === 'full' || value === 'ask' || value === 'off') {
+        config.permissions[id] = value;
+        hadPermissionsInFile = true;
+      }
+    }
+  }
+
+  if (!hadPermissionsInFile) {
+    for (const id of ALL_TOOL_IDS) {
+      config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+    }
+  } else {
+    for (const id of ALL_TOOL_IDS) {
+      const v = config.permissions[id];
+      if (v !== 'full' && v !== 'ask' && v !== 'off') {
+        config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+      }
+    }
+  }
+
+  for (const id of ALL_TOOL_IDS) {
+    const mode = config.permissions[id];
+    config.enabled[id] = mode !== 'off';
   }
 
   if (stored.keys && typeof stored.keys === 'object') {
@@ -359,6 +398,30 @@ export function mergeConfigMeta(existing, patch) {
       existingUi.fallbackToChatModel = u.fallbackToChatModel;
     }
     base.uiDesigner = existingUi;
+  }
+
+  if (p.toolSecurity && typeof p.toolSecurity === 'object') {
+    const existingTs =
+      base.toolSecurity && typeof base.toolSecurity === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.toolSecurity) }
+        : { filesystemAccess: 'workspace' };
+    const ts = /** @type {Record<string, unknown>} */ (p.toolSecurity);
+    if (ts.filesystemAccess === 'full' || ts.filesystemAccess === 'workspace') {
+      existingTs.filesystemAccess = ts.filesystemAccess;
+    }
+    base.toolSecurity = existingTs;
+  }
+
+  if (p.planning && typeof p.planning === 'object') {
+    const existingPlanning =
+      base.planning && typeof base.planning === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.planning) }
+        : { granularity: 'medium' };
+    const pl = /** @type {Record<string, unknown>} */ (p.planning);
+    if (pl.granularity === 'large' || pl.granularity === 'medium' || pl.granularity === 'small') {
+      existingPlanning.granularity = pl.granularity;
+    }
+    base.planning = existingPlanning;
   }
 
   return base;

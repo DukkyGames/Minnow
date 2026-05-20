@@ -90,6 +90,22 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.equal(payload.hasDesign, true);
     assert.equal(typeof payload.design, 'string');
     assert.equal(payload.designJson.schemaVersion, 2);
+    assert.equal(payload.workspaceRoot, PROJECT_ROOT);
+  });
+
+  it('minnow-context.mjs honors IMPECCABLE_CONTEXT_DIR', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['src/skills/impeccable/scripts/minnow-context.mjs'],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, IMPECCABLE_CONTEXT_DIR: PROJECT_ROOT },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(path.resolve(payload.workspaceRoot), PROJECT_ROOT);
   });
 
   it('sync script is idempotent', () => {

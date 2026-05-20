@@ -8,20 +8,66 @@ import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults'
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
+import type { ToolConfig, ToolPermissionMode } from './tool-settings-types';
+
+export type { ToolConfig, ToolPermissionMode } from './tool-settings-types';
+
+export { defaultToolConfig } from '../config/defaults';
 
 /** @deprecated Direct localStorage use — migration read / Vite-only fallback only. */
 export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 
-/** Persisted tool settings: per-tool enabled flags and optional keys. */
-export interface ToolConfig {
-  enabled: Record<string, boolean>;
-  keys: {
-    braveApiKey: string;
-  };
+const PERMISSION_SET = new Set<ToolPermissionMode>(['full', 'ask', 'off']);
+
+/** True when `value` is a valid stored permission string. */
+export function isToolPermissionMode(value: unknown): value is ToolPermissionMode {
+  return typeof value === 'string' && PERMISSION_SET.has(value as ToolPermissionMode);
+}
+
+/**
+ * Normalizes built-in `permissions` entries and mirrors `enabled` for those ids.
+ * Leaves unrelated keys (for example MCP tool names) unchanged.
+ */
+export function syncEnabledFromPermissions(config: ToolConfig): void {
+  for (const tool of BUILT_IN_TOOLS) {
+    const raw = config.permissions[tool.id];
+    const mode: ToolPermissionMode = isToolPermissionMode(raw)
+      ? raw
+      : config.enabled[tool.id] === true
+        ? 'ask'
+        : 'off';
+    config.permissions[tool.id] = mode;
+    config.enabled[tool.id] = mode !== 'off';
+  }
+}
+
+/**
+ * Effective permission for a tool id: stored value, or `ask` for unknown MCP-style ids,
+ * or derived default for built-ins when missing.
+ */
+export function getToolPermissionForId(
+  config: ToolConfig,
+  id: string,
+): ToolPermissionMode {
+  const raw = config.permissions[id];
+  if (isToolPermissionMode(raw)) return raw;
+  if (id.startsWith('mcp__')) return 'ask';
+  if (id === 'web_search_ddg') {
+    return getToolPermissionForId(config, 'web_search');
+  }
+  const tool = BUILT_IN_TOOLS.find((t) => t.id === id);
+  if (!tool) return 'off';
+  return config.enabled[id] === true ? 'ask' : 'off';
 }
 
 let cachedConfig: ToolConfig | null = null;
 let toolConfigLoaded = false;
+
+/** Set when `GET /api/config/tools` fails in server mode; cleared on success. */
+let serverToolsFetchFailed = false;
+
+/** Deduplicate overlapping {@link loadToolConfigFromStorage} calls (settings refresh + init). */
+let loadFromStoragePromise: Promise<ToolConfig> | null = null;
 
 /** Whether `npm start` tool server responded to ping (set by client / init). */
 let localServerAvailable = false;
@@ -31,7 +77,11 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
   const config = buildDefaultToolConfig();
   if (!raw || typeof raw !== 'object') return config;
 
-  const stored = raw as { enabled?: unknown; keys?: unknown };
+  const stored = raw as {
+    enabled?: unknown;
+    keys?: unknown;
+    permissions?: unknown;
+  };
   if (stored.enabled && typeof stored.enabled === 'object') {
     const enabledMap = stored.enabled as Record<string, unknown>;
     for (const tool of BUILT_IN_TOOLS) {
@@ -41,6 +91,33 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
       }
     }
   }
+
+  let hadPermissionsInFile = false;
+  if (stored.permissions && typeof stored.permissions === 'object') {
+    const permMap = stored.permissions as Record<string, unknown>;
+    for (const [id, value] of Object.entries(permMap)) {
+      if (!id || typeof id !== 'string') continue;
+      if (isToolPermissionMode(value)) {
+        config.permissions[id] = value;
+        hadPermissionsInFile = true;
+      }
+    }
+  }
+
+  if (!hadPermissionsInFile) {
+    for (const tool of BUILT_IN_TOOLS) {
+      config.permissions[tool.id] = config.enabled[tool.id] === true ? 'ask' : 'off';
+    }
+  } else {
+    for (const tool of BUILT_IN_TOOLS) {
+      if (!isToolPermissionMode(config.permissions[tool.id])) {
+        config.permissions[tool.id] =
+          config.enabled[tool.id] === true ? 'ask' : 'off';
+      }
+    }
+  }
+
+  syncEnabledFromPermissions(config);
 
   if (stored.keys && typeof stored.keys === 'object') {
     const keysMap = stored.keys as Record<string, unknown>;
@@ -52,29 +129,85 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
   return config;
 }
 
+/** Clear in-memory tool config so the next load re-reads persistence. */
+export function invalidateToolConfigCache(): void {
+  cachedConfig = null;
+  toolConfigLoaded = false;
+  loadFromStoragePromise = null;
+}
+
 /** Load tool config from API or localStorage (call during initApp). */
 export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
-  if (isServerStorageMode()) {
+  if (loadFromStoragePromise) return loadFromStoragePromise;
+
+  loadFromStoragePromise = (async (): Promise<ToolConfig> => {
     try {
-      cachedConfig = normalizeToolConfig(await getTools());
+      if (isServerStorageMode()) {
+        try {
+          cachedConfig = normalizeToolConfig(await getTools());
+          serverToolsFetchFailed = false;
+          toolConfigLoaded = true;
+          return cachedConfig;
+        } catch {
+          serverToolsFetchFailed = true;
+          setStatus('err', 'Could not load tool settings from ~/.minnow');
+          // Do not fall back to browser localStorage in server mode — stale empty
+          // minnow.tools would show every tool as Disabled on the settings page.
+          cachedConfig = cachedConfig ?? buildDefaultToolConfig();
+          toolConfigLoaded = true;
+          return cachedConfig;
+        }
+      }
+
+      try {
+        const raw = localStorage.getItem(TOOL_CONFIG_STORAGE_KEY);
+        cachedConfig = raw
+          ? normalizeToolConfig(JSON.parse(raw) as unknown)
+          : buildDefaultToolConfig();
+      } catch {
+        cachedConfig = buildDefaultToolConfig();
+      }
+
       toolConfigLoaded = true;
       return cachedConfig;
     } catch {
-      setStatus('err', 'Could not load tool settings from ~/.minnow');
+      cachedConfig = buildDefaultToolConfig();
+      toolConfigLoaded = true;
+      return cachedConfig;
+    } finally {
+      loadFromStoragePromise = null;
     }
-  }
+  })();
 
-  try {
-    const raw = localStorage.getItem(TOOL_CONFIG_STORAGE_KEY);
-    cachedConfig = raw
-      ? normalizeToolConfig(JSON.parse(raw) as unknown)
-      : buildDefaultToolConfig();
-  } catch {
-    cachedConfig = buildDefaultToolConfig();
-  }
+  return loadFromStoragePromise;
+}
 
-  toolConfigLoaded = true;
-  return cachedConfig;
+/**
+ * Load tool config for Settings → Tools without re-fetching on every visit.
+ * Retries once when the initial server-mode fetch failed during app boot.
+ */
+export async function loadToolConfigForSettingsUi(): Promise<ToolConfig> {
+  if (cachedConfig !== null && !serverToolsFetchFailed) {
+    return cachedConfig;
+  }
+  if (serverToolsFetchFailed) {
+    invalidateToolConfigCache();
+  }
+  return loadToolConfigFromStorage();
+}
+
+/** True when settings UI can hydrate from memory without a network round-trip. */
+export function isToolConfigReadyForSettingsUi(): boolean {
+  return cachedConfig !== null && !serverToolsFetchFailed;
+}
+
+/**
+ * Ensures tool config is loaded before permission checks (avoids treating tools as `ask`
+ * when `executeTool` runs before `initApp` finishes loading `tools.json`).
+ */
+export async function ensureToolConfigReady(): Promise<ToolConfig> {
+  if (cachedConfig !== null) return cachedConfig;
+  return loadToolConfigFromStorage();
 }
 
 /** Read config from memory cache (loads defaults if init skipped). */
@@ -91,14 +224,29 @@ export function getToolConfig(): ToolConfig {
   return loadToolConfig();
 }
 
-/** Persist config to API or localStorage. */
+/** Persist config to API or localStorage; server write is best-effort (see {@link saveToolConfigAsync}). */
 export function saveToolConfig(config: ToolConfig): void {
+  void saveToolConfigAsync(config).catch(() => {
+    if (isServerStorageMode()) {
+      setStatus('err', 'Could not save tool settings to ~/.minnow');
+    }
+  });
+}
+
+/**
+ * Persists tool config and awaits the network round-trip when using `npm start`
+ * so a full reload does not race ahead of the completed `PUT /api/config/tools`.
+ */
+export async function saveToolConfigAsync(config: ToolConfig): Promise<void> {
+  syncEnabledFromPermissions(config);
   cachedConfig = config;
 
   if (isServerStorageMode()) {
-    void putTools(config).catch(() => {
+    try {
+      await putTools(config);
+    } catch {
       setStatus('err', 'Could not save tool settings to ~/.minnow');
-    });
+    }
     return;
   }
 
@@ -122,10 +270,10 @@ export function isLocalServerAvailable(): boolean {
 
 /** True when a tool id is enabled in config (defaults applied). */
 export function isToolEnabled(id: string): boolean {
-  return loadToolConfig().enabled[id] === true;
+  return getToolPermissionForId(loadToolConfig(), id) !== 'off';
 }
 
-/** Sync checkboxes and Brave key field from config; dim server tools when offline. */
+/** Sync permission selects and Brave key field from config; dim server tools when offline. */
 export function loadToolConfigIntoDrawer(
   root: ParentNode = document,
 ): void {
@@ -138,11 +286,9 @@ export function loadToolConfigIntoDrawer(
     const id = row.getAttribute('data-tool-id');
     if (!id) continue;
 
-    const checkbox = row.querySelector<HTMLInputElement>(
-      'input[type="checkbox"].tool-toggle, input[type="checkbox"]',
-    );
-    if (checkbox) {
-      checkbox.checked = config.enabled[id] === true;
+    const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
+    if (select) {
+      select.value = getToolPermissionForId(config, id);
     }
   }
 
@@ -175,7 +321,8 @@ export function getToolBulkCheckboxState(ids: string[]): {
     return { checked: false, indeterminate: false };
   }
 
-  const enabledCount = eligible.filter((id) => config.enabled[id] === true).length;
+  const enabledCount = eligible.filter((id) => getToolPermissionForId(config, id) !== 'off')
+    .length;
   if (enabledCount === 0) {
     return { checked: false, indeterminate: false };
   }
@@ -204,12 +351,17 @@ export function setToolsEnabled(
       continue;
     }
 
-    if (config.enabled[id] === enabled) continue;
-    config.enabled[id] = enabled;
+    if (enabled) {
+      if (getToolPermissionForId(config, id) !== 'off') continue;
+    } else if (getToolPermissionForId(config, id) === 'off') {
+      continue;
+    }
+    config.permissions[id] = enabled ? 'ask' : 'off';
     applied += 1;
   }
 
   if (applied > 0) {
+    syncEnabledFromPermissions(config);
     saveToolConfig(config);
   }
 
@@ -221,6 +373,29 @@ export function setToolsEnabled(
   }
 
   return { applied, skipped };
+}
+
+/** Set one built-in tool permission mode and refresh UI. */
+export function setToolPermission(
+  id: string,
+  mode: ToolPermissionMode,
+  root: ParentNode = document,
+): void {
+  const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
+  if (!tool) return;
+
+  if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
+    setStatus('err', 'Start with npm start to use file/git tools.');
+    loadToolConfigIntoDrawer(root);
+    return;
+  }
+
+  const config = loadToolConfig();
+  config.permissions[id] = mode;
+  syncEnabledFromPermissions(config);
+  saveToolConfig(config);
+
+  loadToolConfigIntoDrawer(root);
 }
 
 /** All built-in tool ids in a settings category. */
@@ -265,32 +440,9 @@ export function onToolToggle(id: string): void {
   const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
   if (!tool) return;
 
-  const nextEnabled = !config.enabled[id];
-  if (tool.serverRequired && nextEnabled && !localServerAvailable) {
-    const blockedRow = document.querySelector<HTMLElement>(`[data-tool-id="${id}"]`);
-    const blockedCheckbox = blockedRow?.querySelector<HTMLInputElement>(
-      'input[type="checkbox"].tool-toggle, input[type="checkbox"]',
-    );
-    if (blockedCheckbox) {
-      blockedCheckbox.checked = false;
-    }
-    setStatus('err', 'Start with npm start to use file/git tools.');
-    return;
-  }
-
-  config.enabled[id] = nextEnabled;
-  saveToolConfig(config);
-
-  const row = document.querySelector<HTMLElement>(`[data-tool-id="${id}"]`);
-  const checkbox = row?.querySelector<HTMLInputElement>(
-    'input[type="checkbox"].tool-toggle, input[type="checkbox"]',
-  );
-  if (checkbox) {
-    checkbox.checked = nextEnabled;
-  }
-
-  refreshServerToolDisabledState();
-  syncToolSelectAllControls(document);
+  const currentlyOn = getToolPermissionForId(config, id) !== 'off';
+  const nextMode: ToolPermissionMode = currentlyOn ? 'off' : 'ask';
+  setToolPermission(id, nextMode, document);
 }
 
 /** Disable server-required tool rows when the local tool server is down. */
@@ -304,29 +456,37 @@ export function refreshServerToolDisabledState(): void {
     banner.classList.toggle('hidden', !unavailable);
   }
 
+  const settingsBanner = document.getElementById('settingsToolsServerBanner');
+  if (settingsBanner) {
+    settingsBanner.classList.toggle('hidden', !unavailable);
+  }
+
   const serverRows = document.querySelectorAll<HTMLElement>(
     '.tool-row[data-server-required], [data-tool-id][data-server-required]',
   );
 
   for (const row of serverRows) {
     row.classList.toggle('is-server-unavailable', unavailable);
-    const checkbox = row.querySelector<HTMLInputElement>(
-      'input[type="checkbox"].tool-toggle, input[type="checkbox"]',
-    );
-    if (!checkbox) continue;
-
-    checkbox.disabled = unavailable;
-    if (unavailable) {
-      checkbox.setAttribute(
-        'title',
-        'Requires npm start — local tool server is not running',
-      );
-    } else {
-      checkbox.removeAttribute('title');
+    const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
+    if (select) {
+      select.disabled = unavailable;
+      if (unavailable) {
+        select.setAttribute(
+          'title',
+          'Requires npm start — local tool server is not running',
+        );
+      } else {
+        select.removeAttribute('title');
+      }
     }
   }
 
   syncToolSelectAllControls(document);
+
+  const settingsList = document.getElementById('settingsToolsList');
+  if (settingsList) {
+    syncToolSelectAllControls(settingsList);
+  }
 }
 
 /** Persist Brave API key from the settings drawer (call on input/blur). */

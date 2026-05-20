@@ -3,7 +3,6 @@
  */
 
 import { loadTitlesConfig } from '../../config/titles-meta';
-import { PLACEHOLDER_CHAT_NAME } from '../../constants';
 import {
   applyGeneratedChatTitle,
   findChatById,
@@ -17,7 +16,17 @@ import {
   registerTitleJobInflight,
   releaseTitleJobInflight,
 } from './inflight';
+import { isPlaceholderChatName } from './placeholder';
 import { createTitleProviderPort } from './provider-port';
+import type { TitleGenerationOptions } from './types';
+
+/** Resolved send binding passed from the main message path (work-agent / UI designer). */
+export interface TitleScheduleContext {
+  modelId?: string;
+  providerId?: string;
+}
+
+const scheduleContextByChatId = new Map<string, TitleScheduleContext>();
 
 let titleGenerateImpl = generateChatTitle;
 
@@ -35,21 +44,59 @@ export function isFirstUserMessagePending(chat: { history: { role: string }[] })
 
 export { resetTitleGenerationInflight } from './inflight';
 
+/** Clear per-chat schedule context (tests). */
+export function resetTitleScheduleContext(): void {
+  scheduleContextByChatId.clear();
+}
+
 /**
  * Schedule async title generation — returns immediately; never blocks send.
+ * Pass `context` when the send path already resolved model/provider bindings.
  */
-export function scheduleChatTitleGeneration(chatId: string, seed: string): void {
+export function scheduleChatTitleGeneration(
+  chatId: string,
+  seed: string,
+  context?: TitleScheduleContext,
+): void {
   if (hasTitleJobInflight(chatId)) return;
 
   const chat = findChatById(chatId);
-  if (!chat || chat.name !== PLACEHOLDER_CHAT_NAME) return;
+  if (!chat || !isPlaceholderChatName(chat.name)) return;
+
+  if (context && (context.modelId?.trim() || context.providerId?.trim())) {
+    scheduleContextByChatId.set(chatId, {
+      modelId: context.modelId?.trim() || undefined,
+      providerId: context.providerId?.trim() || undefined,
+    });
+  }
 
   const controller = new AbortController();
   if (!registerTitleJobInflight(chatId, controller)) return;
 
   void runTitleJob(chatId, seed, controller.signal).finally(() => {
+    scheduleContextByChatId.delete(chatId);
     releaseTitleJobInflight(chatId, controller);
   });
+}
+
+function resolveTitleGenerationOptions(
+  chatBefore: { modelId: string; providerId?: string },
+  config: Awaited<ReturnType<typeof loadTitlesConfig>>,
+  scheduled: TitleScheduleContext | undefined,
+): Pick<TitleGenerationOptions, 'modelId' | 'providerId'> | null {
+  const modelId =
+    config.modelId.trim() ||
+    scheduled?.modelId?.trim() ||
+    chatBefore.modelId.trim();
+  if (!modelId) return null;
+
+  const providerId =
+    config.providerId.trim() ||
+    scheduled?.providerId?.trim() ||
+    chatBefore.providerId?.trim() ||
+    undefined;
+
+  return { modelId, providerId };
 }
 
 async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): Promise<void> {
@@ -57,24 +104,22 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
   if (!config.enabled) return;
 
   const chatBefore = findChatById(chatId);
-  if (!chatBefore || chatBefore.name !== PLACEHOLDER_CHAT_NAME) return;
+  if (!chatBefore || !isPlaceholderChatName(chatBefore.name)) return;
 
-  const modelId = config.modelId.trim() || chatBefore.modelId.trim();
-  if (!modelId) return;
-
-  const providerId =
-    config.providerId.trim() || chatBefore.providerId?.trim() || undefined;
+  const scheduled = scheduleContextByChatId.get(chatId);
+  const resolved = resolveTitleGenerationOptions(chatBefore, config, scheduled);
+  if (!resolved) return;
 
   const title = await titleGenerateImpl(
     seed,
     {
-      modelId,
-      providerId,
+      modelId: resolved.modelId,
+      providerId: resolved.providerId,
       maxTokens: config.maxTokens,
       temperature: config.temperature,
       signal,
     },
-    createTitleProviderPort(providerId),
+    createTitleProviderPort(resolved.providerId),
   );
 
   if (!title || signal.aborted) return;

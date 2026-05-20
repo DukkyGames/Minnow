@@ -307,6 +307,35 @@
   color: var(--text-muted);
 }
 
+.tool-permission-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tool-permission-select {
+  min-width: 200px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tool-row .tool-desc {
+  margin-left: 0;
+  margin-top: 4px;
+}
+
+.tool-row:has(.tool-permission-select:focus-visible) {
+  border-color: var(--border);
+}
+
+.tool-row.is-server-unavailable .tool-permission-select:disabled {
+  cursor: not-allowed;
+}
+
 .tool-key-row {
   display: flex;
   flex-direction: column;

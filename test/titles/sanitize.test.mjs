@@ -30,4 +30,8 @@ describe('normalizeTitle', () => {
   test('markdown fence stripped', () => {
     assert.equal(normalizeTitle('```foo```'), 'foo');
   });
+
+  test('accepts non-Latin letters', () => {
+    assert.equal(normalizeTitle('Redis 缓存调优'), 'Redis 缓存调优');
+  });
 });

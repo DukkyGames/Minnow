@@ -1,6 +1,7 @@
 import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
 import { closeMobileFileSidebar } from './init-file-panel';
+import { closeSubAgentDrawer } from './sub-agent-drawer';
 
 /** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
 export function serverUrl(): string {
@@ -37,6 +38,7 @@ export function setStatus(state: string, msg: string): void {
 
 /** Close settings drawer or mobile chat list when Escape is pressed. */
 export function dismissOpenLayers(): void {
+  closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     closeDrawer();

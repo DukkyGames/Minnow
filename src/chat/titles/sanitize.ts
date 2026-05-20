@@ -20,7 +20,7 @@ export function normalizeTitle(raw: string): string | null {
   text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
   text = text.replace(/\.$/, '').trim();
 
-  if (!text || !/[a-zA-Z0-9]/.test(text)) return null;
+  if (!text || !/[\p{L}\p{N}]/u.test(text)) return null;
 
   if (text.length > AUTO_TITLE_MAX_LEN) {
     return `${text.slice(0, AUTO_TITLE_MAX_LEN)}…`;

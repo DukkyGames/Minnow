@@ -10,18 +10,31 @@ import { loadContext } from './load-context.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Repo root: src/skills/impeccable/scripts → four levels up. */
-const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
+/** Minnow install root: src/skills/impeccable/scripts → four levels up. */
+const APP_ROOT = path.resolve(__dirname, '../../../..');
+
+/**
+ * Workspace where PRODUCT.md, DESIGN.md, and .impeccable/ live.
+ * IMPECCABLE_CONTEXT_DIR is set by Minnow's load_impeccable_context tool.
+ */
+function resolveWorkspaceRoot() {
+  const envDir = process.env.IMPECCABLE_CONTEXT_DIR?.trim();
+  if (envDir) {
+    return path.isAbsolute(envDir) ? envDir : path.resolve(APP_ROOT, envDir);
+  }
+  return APP_ROOT;
+}
 
 /**
  * @param {string} contextDir
+ * @param {string} workspaceRoot for relative paths in errors
  * @returns {Record<string, unknown>}
  */
-function readDesignJson(contextDir) {
+function readDesignJson(contextDir, workspaceRoot) {
   const designJsonPath = path.join(contextDir, '.impeccable', 'design.json');
   if (!fs.existsSync(designJsonPath)) {
     throw new Error(
-      `Missing ${path.relative(PROJECT_ROOT, designJsonPath)} — run impeccable document or add design tokens`,
+      `Missing ${path.relative(workspaceRoot, designJsonPath)} — run impeccable document or add design tokens`,
     );
   }
 
@@ -43,22 +56,22 @@ function readDesignJson(contextDir) {
 }
 
 function main() {
-  const prevCwd = process.cwd();
-  try {
-    process.chdir(PROJECT_ROOT);
-    const ctx = loadContext(PROJECT_ROOT);
-    const designJson = readDesignJson(ctx.contextDir);
+  const workspaceRoot = resolveWorkspaceRoot();
+  const ctx = loadContext(workspaceRoot);
+  const designJson = readDesignJson(ctx.contextDir, workspaceRoot);
 
-    const payload = {
-      ...ctx,
-      designJson,
-      designJsonPath: path.relative(PROJECT_ROOT, path.join(ctx.contextDir, '.impeccable', 'design.json')),
-    };
+  const payload = {
+    ...ctx,
+    designJson,
+    appRoot: APP_ROOT,
+    workspaceRoot,
+    designJsonPath: path.relative(
+      workspaceRoot,
+      path.join(ctx.contextDir, '.impeccable', 'design.json'),
+    ),
+  };
 
-    console.log(JSON.stringify(payload, null, 2));
-  } finally {
-    process.chdir(prevCwd);
-  }
+  console.log(JSON.stringify(payload, null, 2));
 }
 
 main();

@@ -187,6 +187,35 @@ export interface TerminalRunRecord {
   logPath: string;
 }
 
+/** Lifecycle values persisted for sub-agent runs on the parent chat. */
+export type PersistedSubAgentStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * Snapshot of a sub-agent run saved on the parent chat when the run reaches a
+ * terminal state (for drawer restore after session reload).
+ */
+export interface PersistedSubAgentRun {
+  runId: string;
+  parentTurnId: string;
+  /** Parent assistant tool_call id when known (optional). */
+  parentToolCallId?: string;
+  type: string;
+  task: string;
+  status: PersistedSubAgentStatus;
+  summary: string;
+  error?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  toolTurns: number;
+  /** Transcript (ApiMessage-shaped JSON); capped when persisting. */
+  messages: unknown[];
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -207,6 +236,8 @@ export interface Chat {
   uiDesignerMode?: 'plan' | 'implement';
   /** Per-chat terminal command history (Step 10). */
   terminalHistory?: TerminalRunRecord[];
+  /** Settled sub-agent transcripts keyed per chat (Step 09 + visibility). */
+  subAgentRuns?: PersistedSubAgentRun[];
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;

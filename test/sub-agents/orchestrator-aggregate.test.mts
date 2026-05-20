@@ -60,6 +60,8 @@ describe('orchestrator aggregate', () => {
       type: 'explore',
       task: 't',
       status: 'failed',
+      parentChatId: null,
+      parentToolCallId: null,
       parentTurnId: null,
       summary: '',
       error: 'boom',

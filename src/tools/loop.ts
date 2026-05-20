@@ -474,6 +474,7 @@ export async function sendMessageWithTools(): Promise<void> {
   setSubAgentExecutorContext({
     parentTurnId,
     modeId: normalizeModeId(chat.modeId),
+    parentChatId: chat.id,
   });
 
   chat.modelId = modelId || chat.modelId;
@@ -484,9 +485,6 @@ export async function sendMessageWithTools(): Promise<void> {
   const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: historyContent });
-  if (shouldScheduleTitle) {
-    scheduleChatTitleGeneration(chat.id, titleSeed);
-  }
   touchChat(chat);
   scheduleSaveSessions();
   renderSidebar();
@@ -531,6 +529,15 @@ export async function sendMessageWithTools(): Promise<void> {
       return;
     }
     throw err;
+  }
+
+  chat.modelId = sendModelId;
+  chat.providerId = sendProviderId;
+  if (shouldScheduleTitle) {
+    scheduleChatTitleGeneration(chat.id, titleSeed, {
+      modelId: sendModelId,
+      providerId: sendProviderId,
+    });
   }
 
   const agentStatusSuffix = uiDesignerCtx.active
@@ -582,6 +589,24 @@ export async function sendMessageWithTools(): Promise<void> {
     composedSystemPrompt = '';
   }
   const sysPrompt = composedSystemPrompt.trim() || legacySysPrompt;
+
+  if (typeof console !== 'undefined') {
+    const debugMeta = {
+      mode: chat.modeId,
+      chatWorkAgentId: chat.workAgentId ?? null,
+      chatWorkAgentAuto: chat.workAgentAuto !== false,
+      resolvedWorkAgent: activeWorkAgent?.id ?? null,
+      resolvedWorkAgentLabel: activeWorkAgent?.label ?? null,
+      promptHasWorkAgentSection: /Work agent:|work-agent:/i.test(sysPrompt),
+      length: sysPrompt.length,
+      tokensEstimate: Math.round(sysPrompt.length / 4),
+    };
+    console.groupCollapsed(
+      `[Minnow] composed system prompt — mode=${debugMeta.mode} resolvedAgent=${debugMeta.resolvedWorkAgent} (chat.workAgentId=${debugMeta.chatWorkAgentId} auto=${debugMeta.chatWorkAgentAuto}) hasAgentSection=${debugMeta.promptHasWorkAgentSection} len=${debugMeta.length} (~${debugMeta.tokensEstimate} toks)`,
+    );
+    console.log(sysPrompt);
+    console.groupEnd();
+  }
 
   try {
     const provider = await getActiveProvider(sendProviderId);
@@ -655,8 +680,16 @@ export async function sendMessageWithTools(): Promise<void> {
         for (const tc of turnResult.toolCalls) {
           const args = parseToolArguments(tc.function.arguments);
           const toolWrap = renderToolCall(tc.function.name, args);
+          toolWrap.dataset.toolCallId = tc.id;
           area.appendChild(toolWrap);
           scrollBottom();
+
+          setSubAgentExecutorContext({
+            parentTurnId,
+            modeId: normalizeModeId(chat.modeId),
+            parentChatId: chat.id,
+            parentToolCallId: tc.id,
+          });
 
           const planBlock = uiDesignerCtx.active
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)

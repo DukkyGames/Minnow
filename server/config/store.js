@@ -111,8 +111,15 @@ export async function readResource(resource) {
       await ensureMinnowLayout();
       data = await readConfigJson(key);
     }
+    const patch = {};
     if (!data?.uiDesigner) {
-      return mergeConfigMeta(data ?? {}, { uiDesigner: DEFAULT_META.uiDesigner });
+      patch.uiDesigner = DEFAULT_META.uiDesigner;
+    }
+    if (!data?.titles) {
+      patch.titles = DEFAULT_META.titles;
+    }
+    if (Object.keys(patch).length > 0) {
+      return mergeConfigMeta(data ?? {}, patch);
     }
     return data;
   }

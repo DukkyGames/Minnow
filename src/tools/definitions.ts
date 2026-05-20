@@ -75,7 +75,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (9 browser-native, 30 server-required including 7 CDP browser tools).
+ * All built-in tools (9 browser-native, 31 server-required including 7 CDP browser tools).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
@@ -632,6 +632,36 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['run_id'],
     ),
   },
+  {
+    id: 'list_sub_agents',
+    label: 'List sub-agents',
+    description:
+      'Lists sub-agent runs spawned during the current parent user message turn (queued, running, or finished).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'list_sub_agents',
+      'Return run ids, types, status, and short task previews for this turn.',
+      {},
+      [],
+    ),
+  },
+  {
+    id: 'get_sub_agent_status',
+    label: 'Get sub-agent status',
+    description:
+      'Reads live status, summary (when complete), tool counts, and a short preview of the latest transcript for one run id.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'get_sub_agent_status',
+      'Inspect one sub-agent run created in this parent turn.',
+      {
+        run_id: { type: 'string', description: 'Run id from spawn_sub_agent or list_sub_agents' },
+      },
+      ['run_id'],
+    ),
+  },
   // --- Browser CDP (server; Chrome --remote-debugging-port) ---
   {
     id: 'browser_list',
@@ -735,6 +765,19 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'load_impeccable_context',
+    label: 'Load Impeccable context',
+    description: 'Load PRODUCT.md, DESIGN.md, and .impeccable/design.json from the workspace as JSON.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'load_impeccable_context',
+      'Returns JSON with product, design, and designJson for the active workspace. Use before UI edits (not a workspace-relative node path).',
+      {},
+      [],
+    ),
+  },
+  {
     id: 'run_impeccable',
     label: 'Run Impeccable',
     description: 'Run an Impeccable CLI sub-command (audit, shape, craft, polish, …).',
@@ -755,6 +798,34 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['command'],
+    ),
+  },
+  {
+    id: 'save_memory',
+    label: 'Save memory',
+    description:
+      'Persist a note for future chats (preferences, decisions, project facts). Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'save_memory',
+      'Save a durable memory entry under ~/.minnow/memory for retrieval in later sessions. Use when the user asks you to remember something or when a stable preference or project fact should persist.',
+      {
+        title: {
+          type: 'string',
+          description: 'Short label for the memory (e.g. "Preferred test runner")',
+        },
+        body: {
+          type: 'string',
+          description: 'Full note text to store',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags for retrieval (e.g. ["testing", "preferences"])',
+        },
+      },
+      ['title', 'body'],
     ),
   },
   {

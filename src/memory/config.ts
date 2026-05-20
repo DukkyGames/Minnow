@@ -16,8 +16,33 @@ export function isMemoryEnabledForChat(
   return globalEnabled;
 }
 
-/** Resolve whether memory injection should run for this send. */
+/**
+ * Whether prompt injection should run (Settings → Features → Memory injection).
+ * Defaults to true when unset.
+ */
+export async function fetchMemoryInjectionEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/config/file?key=config.json', {
+      cache: 'no-store',
+    });
+    if (!res.ok) return true;
+    const config = (await res.json()) as {
+      features?: { memoryInjection?: boolean };
+    };
+    const features = config.features;
+    if (features && typeof features.memoryInjection === 'boolean') {
+      return features.memoryInjection;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/** Resolve whether memory retrieval should run for this send. */
 export async function shouldInjectMemory(chat: Chat): Promise<boolean> {
+  const injectionOn = await fetchMemoryInjectionEnabled();
+  if (!injectionOn) return false;
   const globalEnabled = await fetchMemoryEnabled();
   return isMemoryEnabledForChat(chat, globalEnabled);
 }

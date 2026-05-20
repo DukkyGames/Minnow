@@ -278,9 +278,6 @@ export async function sendMessage(): Promise<void> {
   chat.modelId = modelId || chat.modelId;
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
-  if (shouldScheduleTitle) {
-    scheduleChatTitleGeneration(chat.id, text);
-  }
   touchChat(chat);
   scheduleSaveSessions();
   renderSidebar();
@@ -359,6 +356,13 @@ export async function sendMessage(): Promise<void> {
 
   try {
     const provider = await getActiveProvider(chat.providerId);
+    chat.providerId = provider.id;
+    if (shouldScheduleTitle) {
+      scheduleChatTitleGeneration(chat.id, text, {
+        modelId: modelId || chat.modelId,
+        providerId: provider.id,
+      });
+    }
     const res = await postChatCompletions(provider, body, chatSignal);
 
     if (!res.ok) {

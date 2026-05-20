@@ -34,6 +34,8 @@ export const ALL_TOOL_IDS = [
   'run_python',
   'spawn_sub_agent',
   'cancel_sub_agent',
+  'list_sub_agents',
+  'get_sub_agent_status',
   'browser_list',
   'browser_navigate',
   'browser_snapshot',
@@ -42,6 +44,8 @@ export const ALL_TOOL_IDS = [
   'browser_eval',
   'browser_screenshot',
   'run_impeccable',
+  'load_impeccable_context',
   'get_lsp_diagnostics',
   'list_lsp_servers',
+  'save_memory',
 ];
