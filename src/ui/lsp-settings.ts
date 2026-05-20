@@ -33,6 +33,19 @@ function sortServers(servers: LspServerStatus[]): LspServerStatus[] {
   });
 }
 
+/** Format requirements object for settings meta line. */
+function formatRequirementsLine(
+  requirements: LspServerStatus['requirements'],
+): string | null {
+  if (!requirements) return null;
+  const bits: string[] = [];
+  if (requirements.package) bits.push(`npm package ${requirements.package}`);
+  if (requirements.binary) bits.push(`binary ${requirements.binary}`);
+  if (requirements.command) bits.push(`command ${requirements.command}`);
+  if (bits.length === 0) return null;
+  return `Requires: ${bits.join(', ')}`;
+}
+
 function parseCommaList(raw: string): string[] {
   return raw
     .split(/[,\n]+/)
@@ -91,14 +104,13 @@ function createLspServerRow(
   );
   meta.append(statusBadge);
 
-  if (!server.hasCommand && !server.disabled) {
-    meta.append(
-      el(
-        'span',
-        'settings-lsp-warn',
-        'No command configured — set command in ~/.minnow/lsp.json',
-      ),
-    );
+  const reqLine = formatRequirementsLine(server.requirements);
+  if (reqLine) {
+    meta.append(el('span', 'settings-lsp-requirements', reqLine));
+  }
+
+  if (server.disabledReason) {
+    meta.append(el('span', 'settings-lsp-reason', server.disabledReason));
   }
 
   row.append(meta);
@@ -254,6 +266,14 @@ export async function renderLspSection(): Promise<void> {
     list.appendChild(el('p', 'settings-field-hint', 'No language servers configured.'));
     return;
   }
+
+  const builtinCount = servers.filter((s) => s.builtin).length;
+  const customCount = servers.length - builtinCount;
+  const countParts = [`${builtinCount} built-in`];
+  if (customCount > 0) countParts.push(`${customCount} custom`);
+  list.appendChild(
+    el('p', 'settings-field-hint settings-lsp-catalog-count', countParts.join(', ')),
+  );
 
   const setServerDisabled = async (id: string, enabled: boolean) => {
     const ok = await saveLspConfig({

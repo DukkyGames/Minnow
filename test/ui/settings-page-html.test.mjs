@@ -11,6 +11,7 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const SETTINGS_SECTION_IDS = [
   'general',
   'prompting',
+  'rules',
   'providers',
   'modes',
   'experts',
@@ -57,5 +58,19 @@ describe('settings page HTML', () => {
 
   test('memory entry list mount exists in index.html', () => {
     assert.match(html, /id="settingsMemoryList"/);
+  });
+
+  test('memory add form exists in index.html', () => {
+    assert.match(html, /id="settingsMemoryAddForm"/);
+    assert.match(html, /id="settingsMemoryAddTitle"/);
+    assert.match(html, /id="settingsMemoryAddBody"/);
+    assert.match(html, /id="settingsMemoryAddTags"/);
+    assert.match(html, /id="settingsMemoryAddPanel"/);
+  });
+
+  test('prompt token estimate elements exist in index.html', () => {
+    assert.match(html, /id="settingsPromptTokenEstimate"/);
+    assert.match(html, /id="settingsPromptTokenBreakdown"/);
+    assert.match(html, /class="settings-prompt-estimate"/);
   });
 });

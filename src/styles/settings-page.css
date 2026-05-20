@@ -569,6 +569,23 @@
   color: var(--warning);
 }
 
+.settings-lsp-requirements {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.settings-lsp-reason {
+  flex-basis: 100%;
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-lsp-catalog-count {
+  margin-bottom: 4px;
+}
+
 .settings-lsp-remove {
   font-size: 12px;
   color: var(--danger);
