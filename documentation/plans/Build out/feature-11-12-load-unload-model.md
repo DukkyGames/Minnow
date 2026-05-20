@@ -4,31 +4,31 @@ overview: Topbar Load/Unload controls for LM Studio via server-proxied v1 REST e
 todos:
   - id: lm-api-research-lock
     content: Lock v1 load/unload paths and request bodies in paths.js + docs (not v0)
-    status: pending
+    status: completed
   - id: provider-capabilities
     content: Add supportsModelLoadUnload to profile/public types + seed lm-studio-local true
-    status: pending
+    status: completed
   - id: server-proxy-load-unload
     content: proxyModelLoad/proxyModelUnload + POST routes in routes.js
-    status: pending
+    status: completed
   - id: model-state-normalize
     content: isModelLoaded() helper — LM Studio uses loaded / not-loaded
-    status: pending
+    status: completed
   - id: client-api-models
     content: loadModel/unloadModel in src/api/models.ts + resolve endpoints
-    status: pending
+    status: completed
   - id: topbar-ui-buttons
     content: index.html Load/Unload buttons + topbar.css + wire main.ts handlers
-    status: pending
+    status: completed
   - id: tests-proxy-load-unload
     content: Extend test/providers/proxy-mock.test.js + client unit tests
-    status: pending
+    status: completed
   - id: verification-doc
     content: Add documentation/plans/verification/feature-11-12.md sign-off checklist
-    status: pending
+    status: completed
   - id: manual-qa-docs
     content: Manual QA with real LM Studio; update documentation/context.md on ship
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -41,7 +41,7 @@ isProject: false
 | **Backlog** | [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](../product_backlog_agents_48a41af9.plan.md) — **A3** |
 | **Wave** | 7 (with A4 model-picker dots; after A2 display names) |
 | **Size** | M |
-| **Status** | Build plan (not yet implemented) |
+| **Status** | Implemented |
 | **Depends on** | **A2** (`feature-10-model-display-names`) per backlog (friendly labels); **soft** — load/unload can ship with raw `id` labels. **Coordinate:** **A1** (`.topbar-end` / `.model-wrap` layout), **A4** (dots after load/unload via `fetchModels()`) |
 | **Blocks** | **A4** (`feature-12-13-model-picker-right-dots`) — dots reflect `state` after load/unload |
 

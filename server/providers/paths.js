@@ -1,10 +1,20 @@
 /**
  * Default API paths per provider apiKind.
+ * LM Studio list/chat use v0; load/unload use v1 REST on the same baseUrl.
  */
 
 /**
  * @param {'lm-studio-v0' | 'openai-v1'} apiKind
- * @param {{ modelsPath?: string, chatCompletionsPath?: string }} [overrides]
+ */
+export function getProviderCapabilities(apiKind) {
+  return {
+    supportsModelLoadUnload: apiKind === 'lm-studio-v0',
+  };
+}
+
+/**
+ * @param {'lm-studio-v0' | 'openai-v1'} apiKind
+ * @param {{ modelsPath?: string, chatCompletionsPath?: string, modelsLoadPath?: string, modelsUnloadPath?: string }} [overrides]
  */
 export function getDefaultPaths(apiKind, overrides = {}) {
   const defaults =
@@ -13,12 +23,21 @@ export function getDefaultPaths(apiKind, overrides = {}) {
       : {
           modelsPath: '/api/v0/models',
           chatCompletionsPath: '/api/v0/chat/completions',
+          modelsLoadPath: '/api/v1/models/load',
+          modelsUnloadPath: '/api/v1/models/unload',
         };
 
-  return {
+  const out = {
     modelsPath: overrides.modelsPath || defaults.modelsPath,
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
   };
+
+  if (defaults.modelsLoadPath) {
+    out.modelsLoadPath = overrides.modelsLoadPath || defaults.modelsLoadPath;
+    out.modelsUnloadPath = overrides.modelsUnloadPath || defaults.modelsUnloadPath;
+  }
+
+  return out;
 }
 
 /**

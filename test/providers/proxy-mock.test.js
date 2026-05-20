@@ -48,6 +48,16 @@ before(async () => {
       res.end('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n');
       return;
     }
+    if (req.method === 'POST' && req.url === '/api/v1/models/load') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ status: 'loaded', instance_id: 'mock-model-fixed' }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/v1/models/unload') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ status: 'unloaded' }));
+      return;
+    }
     res.statusCode = 404;
     res.end('not found');
   });
@@ -123,6 +133,53 @@ describe('provider CRUD + proxy', () => {
     assert.equal(models.status, 200);
     assert.ok(models.json.data.some((m) => m.id === 'mock-model-fixed'));
     assert.equal(lastMockHeaders.authorization, `Bearer ${FIXED_KEY}`);
+  });
+
+  it('proxy model load forwards POST with auth', async () => {
+    lastMockHeaders = {};
+    const load = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/providers/mock-remote-fixed/models/load',
+      { model: 'mock-model-fixed' },
+    );
+    assert.equal(load.status, 200);
+    assert.equal(load.json.status, 'loaded');
+    assert.equal(lastMockHeaders.authorization, `Bearer ${FIXED_KEY}`);
+  });
+
+  it('proxy model unload forwards POST with auth', async () => {
+    lastMockHeaders = {};
+    const unload = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/providers/mock-remote-fixed/models/unload',
+      { instance_id: 'mock-model-fixed' },
+    );
+    assert.equal(unload.status, 200);
+    assert.equal(unload.json.status, 'unloaded');
+    assert.equal(lastMockHeaders.authorization, `Bearer ${FIXED_KEY}`);
+  });
+
+  it('rejects load for openai-v1 provider', async () => {
+    const create = await httpRequest(baseUrl, 'POST', '/api/providers', {
+      id: 'openai-fixed-test',
+      label: 'OpenAI',
+      baseUrl: mockBaseUrl,
+      apiKind: 'openai-v1',
+      connectionMode: 'proxy',
+      supportsModelLoadUnload: false,
+    });
+    assert.equal(create.status, 201);
+
+    const load = await httpRequest(
+      baseUrl,
+      'POST',
+      '/api/providers/openai-fixed-test/models/load',
+      { model: 'gpt-4' },
+    );
+    assert.equal(load.status, 400);
+    assert.match(load.json.error, /does not support model load\/unload/);
   });
 
   it('proxy chat forwards POST with auth', async () => {

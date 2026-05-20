@@ -444,6 +444,7 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 | `GET/PUT` | `/api/config/sessions` | `SessionState` ↔ `sessions/state.json` |
 | `GET/PUT` | `/api/config/tools` | `ToolConfig` ↔ `tools.json` |
 | `GET/PUT` | `/api/config/system-prompt` | `SystemPromptSettings` ↔ `system-prompt.json` |
+| `GET/PUT` | `/api/config/rules` | `UserRulesSettings` ↔ `rules.json` (Feature 24) |
 | `GET/PUT` | `/api/config/sub-agents` | `sub-agents.json` (Step 09) |
 | `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
 | `POST` | `/api/config/migrate` | Browser → disk one-time import |

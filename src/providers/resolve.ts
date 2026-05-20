@@ -3,20 +3,28 @@
  */
 
 import { parseServerBaseUrl } from '../ui/status';
+import { providerSupportsModelLoadUnload } from './capabilities';
 import { pathsForProvider } from './paths';
 import type { ProviderEndpoints, ProviderPublic } from './types';
 
 /** Build fetch targets for models list and chat completions. */
 export function resolveProviderEndpoints(provider: ProviderPublic): ProviderEndpoints {
   const paths = pathsForProvider(provider);
+  const supportsLoadUnload = providerSupportsModelLoadUnload(provider);
 
   if (provider.connectionMode === 'proxy') {
-    return {
+    const encoded = encodeURIComponent(provider.id);
+    const endpoints: ProviderEndpoints = {
       provider,
       mode: 'proxy',
-      modelsUrl: `/api/providers/${encodeURIComponent(provider.id)}/models`,
-      chatUrl: `/api/providers/${encodeURIComponent(provider.id)}/chat/completions`,
+      modelsUrl: `/api/providers/${encoded}/models`,
+      chatUrl: `/api/providers/${encoded}/chat/completions`,
     };
+    if (supportsLoadUnload && paths.modelsLoadPath && paths.modelsUnloadPath) {
+      endpoints.modelsLoadUrl = `/api/providers/${encoded}/models/load`;
+      endpoints.modelsUnloadUrl = `/api/providers/${encoded}/models/unload`;
+    }
+    return endpoints;
   }
 
   const base = parseServerBaseUrl(provider.baseUrl);
@@ -24,10 +32,15 @@ export function resolveProviderEndpoints(provider: ProviderPublic): ProviderEndp
     throw new Error('Invalid provider base URL');
   }
 
-  return {
+  const endpoints: ProviderEndpoints = {
     provider,
     mode: 'direct',
     modelsUrl: `${base}${paths.modelsPath}`,
     chatUrl: `${base}${paths.chatCompletionsPath}`,
   };
+  if (supportsLoadUnload && paths.modelsLoadPath && paths.modelsUnloadPath) {
+    endpoints.modelsLoadUrl = `${base}${paths.modelsLoadPath}`;
+    endpoints.modelsUnloadUrl = `${base}${paths.modelsUnloadPath}`;
+  }
+  return endpoints;
 }
