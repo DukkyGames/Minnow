@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#fefefe">
+<script>
+(function () {
+  try {
+    var k = 'minnow.theme';
+    var v = localStorage.getItem(k);
+    var resolved = 'light';
+    if (v === 'dark') resolved = 'dark';
+    else if (v === 'system') {
+      resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.style.colorScheme = resolved;
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#121218' : '#fefefe');
+  } catch (e) { /* private mode */ }
+})();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Minnow">
@@ -20,6 +39,9 @@
     height: 100dvh;
     overflow: hidden;
     background: #fefefe;
+  }
+  html[data-theme="dark"], html[data-theme="dark"] body {
+    background: #121218;
   }
   html:not(.app-ready) body > :not(#app-loader) {
     visibility: hidden;
@@ -39,6 +61,10 @@
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
+  html[data-theme="dark"] .app-loader {
+    background: #121218;
+    color: oklch(72% 0.02 271);
+  }
   html.app-ready .app-loader {
     opacity: 0;
     pointer-events: none;
@@ -53,6 +79,10 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+  }
+  html[data-theme="dark"] .app-loader__mark {
+    background: #f2f2f5;
+    color: #121218;
   }
   .app-loader__mark svg {
     width: 32px;
@@ -71,6 +101,9 @@
     color: oklch(62% 0.025 250);
     letter-spacing: 0.02em;
   }
+  html[data-theme="dark"] .app-loader__status {
+    color: oklch(52% 0.03 250);
+  }
   .app-loader__spinner {
     width: 20px;
     height: 20px;
@@ -78,6 +111,10 @@
     border-top-color: #000;
     border-radius: 50%;
     animation: app-loader-spin 0.75s linear infinite;
+  }
+  html[data-theme="dark"] .app-loader__spinner {
+    border-color: oklch(32% 0.02 250);
+    border-top-color: #f2f2f5;
   }
   @keyframes app-loader-spin {
     to { transform: rotate(360deg); }

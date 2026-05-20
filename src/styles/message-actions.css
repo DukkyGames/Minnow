@@ -29,7 +29,7 @@
 .message-actions__trigger:hover,
 .message-actions__trigger:focus-visible {
   background: var(--surface-elevated);
-  color: var(--text);
+  color: var(--elevated-fg);
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -44,7 +44,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
   background: var(--surface);
-  box-shadow: 0 6px 20px oklch(0 0 0 / 0.12);
+  box-shadow: var(--shadow-lift);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -67,6 +67,7 @@
 .message-actions__item:hover,
 .message-actions__item:focus-visible {
   background: var(--surface-elevated);
+  color: var(--elevated-fg);
   outline: none;
 }
 

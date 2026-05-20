@@ -83,12 +83,19 @@ function applyXtermTheme(): void {
   const fg = style.getPropertyValue('--text').trim() || 'oklch(0.32 0 0)';
   const bg = style.getPropertyValue('--bg').trim() || 'oklch(1 0 0)';
   const accent = style.getPropertyValue('--accent').trim() || 'oklch(0 0 0)';
+  const sel =
+    style.getPropertyValue('--code-inline-bg').trim() || 'oklch(0.88 0.02 250)';
   term.options.theme = {
     background: bg,
     foreground: fg,
     cursor: accent,
-    selectionBackground: 'oklch(0.88 0.02 250)',
+    selectionBackground: sel,
   };
+}
+
+/** Re-read CSS variables into xterm after theme change (no-op if terminal not mounted). */
+export function refreshXtermTheme(): void {
+  applyXtermTheme();
 }
 
 function disconnectWs(): void {

@@ -37,6 +37,7 @@
   .skill-picker__item--active,
   .skill-picker__item:hover {
     background: var(--surface-elevated);
+    color: var(--elevated-fg);
   }
 }
 

@@ -33,6 +33,12 @@ export const AUTO_TITLE_MAX_LEN = 40;
 export const PRESET_STORAGE_KEY = 'minnow.systemPrompt';
 /** Whether the inference metrics strip is visible (`'1'` / `'0'`). */
 export const STATS_STRIP_OPEN_KEY = 'minnow.statsStripOpen';
+
+/** UI appearance: light, dark, or follow OS (`localStorage`). */
+export const THEME_STORAGE_KEY = 'minnow.theme';
+
+/** Valid values for `THEME_STORAGE_KEY`. */
+export type ThemePreference = 'light' | 'dark' | 'system';
 export const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 
 /** Built-in system prompt presets for the settings drawer. */

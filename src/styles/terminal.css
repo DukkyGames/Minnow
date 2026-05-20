@@ -112,7 +112,7 @@
   .terminal-tab:hover:not([aria-selected='true']) {
     background: var(--surface-elevated);
     border-color: var(--border);
-    color: var(--text-hover);
+    color: var(--elevated-fg);
   }
 }
 
@@ -282,7 +282,7 @@
 @media (hover: hover) and (pointer: fine) {
   .terminal-history-item:hover:not(.is-active) {
     background: var(--surface-elevated);
-    color: var(--text-hover);
+    color: var(--elevated-fg);
     border-color: var(--border);
   }
 }

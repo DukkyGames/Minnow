@@ -1,6 +1,6 @@
 ---
 name: Minnow
-description: Light, instrument-focused LM Studio chat client with black accent and semantic metric colors.
+description: Light-first LM Studio chat client with optional dark mode (OKLCH token inversion), black/paper accent, semantic metric colors.
 colors:
   bg: "oklch(100% 0.00011 271.152)"
   surface: "oklch(100% 0.00011 271.152)"
@@ -70,6 +70,10 @@ components:
 ---
 
 # Design System: Minnow
+
+## Dark theme
+
+`<html data-theme="dark">` (set from Settings → General → Appearance or the inline boot script) overrides [`src/styles/tokens.css`](src/styles/tokens.css): surfaces drop to ~11–12% L (cool 271 hue), text and borders invert L, **accent** becomes near-paper for controls, **surface-elevated** becomes a light wash on dark chrome (hover rows use `--elevated-fg` for readable labels). Semantic **success / warning / danger** stay the same hues for the stats strip. **highlight.js** loads `github-dark` via an injected link when dark; CodeMirror uses `--cm-*` variables tied to the same tokens. `theme-color` meta updates at runtime; PWA manifest colors stay light defaults.
 
 ## Overview
 
@@ -209,4 +213,4 @@ Flat-by-default. Surfaces share `--surface` / `--bg`; separation is borders, not
 - **Don't** build hero-metric dashboards (giant KPI cards with colored top stripes).
 - **Don't** use glassmorphism or gradient text (`background-clip: text`).
 - **Don't** add colored `border-left` stripes on cards or alerts.
-- **Don't** assume a dark theme: the live UI is light-first; keep `theme-color` / manifest `theme_color` aligned with `--bg` when the palette changes.
+- **Do** keep `theme-color` meta in sync with effective `--bg` (see `initTheme` / `applyResolvedTheme` in [`src/ui/theme.ts`](src/ui/theme.ts)); PWA manifest defaults remain light.

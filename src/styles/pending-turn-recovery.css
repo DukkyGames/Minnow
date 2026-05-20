@@ -9,7 +9,7 @@
   gap: 10px 16px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  background: var(--code-inline-bg);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
@@ -53,7 +53,7 @@
 .pending-turn-recovery__btn--primary {
   background: var(--accent);
   border: 1px solid var(--accent);
-  color: var(--text-hover);
+  color: var(--elevated-fg);
   font-weight: 600;
 }
 
@@ -79,7 +79,7 @@
 }
 
 .msg.msg--interrupted .msg-bubble {
-  background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  background: var(--code-inline-bg);
   border-color: var(--border-strong);
 }
 

@@ -36,8 +36,9 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 27 | editor-tab-key | Shipped | `8ad1447` |
 | 28 | composer-tools-button | Shipped | `b2e6f7b` |
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
+| 31 | ask-question-cards | Planned | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **424** tests (**109** + **315**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **435** tests (**112** + **323**), **0** fail.
 
 ## What it is
 
@@ -59,9 +60,9 @@ Minnow/
 │   ├── sw.js               # Service worker (cache: minnow-v5)
 │   └── icons/              # icon-192.png, icon-512.png
 ├── src/
-│   ├── main.ts             # Entry: CSS imports, window handlers, initApp()
+│   ├── main.ts             # Entry: CSS imports, initTheme(), window handlers, initApp()
 │   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
-│   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY
+│   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY, THEME_STORAGE_KEY
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── state/sessions.ts   # localStorage chat sessions
 │   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
@@ -72,7 +73,7 @@ Minnow/
 │   │   ├── modes/          # Step 05: registry, tool-policy
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
-│   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, tool-approval-modal, …
+│   ├── ui/                 # sidebar, theme.ts (Appearance), settings, stats, messages, tool-approval-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
 │   ├── lib/
 │   │   ├── format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
@@ -570,6 +571,10 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
 - **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with a **permission** `<select>` per tool and global/category **Enable all** controls (bulk sets **`ask`** / **`off`**); list `change` delegates to `setToolPermission()` / `setToolsEnabled()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes aligned, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)). On the **full settings page**, `renderToolsSection()` ([`src/ui/settings-sections.ts`](../src/ui/settings-sections.ts)) hydrates from in-memory caches (`loadToolConfigForSettingsUi()`, `loadToolSecurityMeta()` — no network on repeat visits; one retry if boot-time `GET /api/config/tools` failed). Generation guard drops stale async renders. Server storage mode does **not** fall back to empty browser `minnow.tools` when `GET /api/config/tools` fails. Adds a server banner, intro copy, **Filesystem access** radios (restrict vs full disk, with confirm when enabling full), then a single **`.settings-tools-panel`** wrapping the tool list and Brave API key row (styles in [`src/styles/settings-page.css`](../src/styles/settings-page.css)); **`.settings-tools-list .tool-group-head`** adds top padding so category headers sit below the list toolbar divider. **Filesystem access** persists as `config.json` → `toolSecurity.filesystemAccess` via [`src/config/tool-security-meta.ts`](../src/config/tool-security-meta.ts). Each time **Settings → Tools** mounts, `clearMount` replaces the Brave key `<input>` — input/change listeners are re-attached on that fresh node so the key still persists when revisiting the section (the one-shot `toolsSectionInitialized` gate only wraps `registerToolHandlers()`).
 - **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
 - **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables permission selects, and sets `title` on each. `setToolPermission` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
+
+### Ask Question cards (planned — Feature 31)
+
+Structured multiple-choice questions from the model: browser-native tool `ask_question`, bottom strip `#questionHost` (carousel, one card per question; same composer-hide pattern as tool approval). Build plan: [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md).
 
 ### Tool approval (execution gate)
 

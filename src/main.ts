@@ -30,6 +30,7 @@ import './styles/pending-turn-recovery.css';
 
 import 'highlight.js/styles/github.min.css';
 
+import { initTheme } from './ui/theme';
 import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
 import {
@@ -254,6 +255,8 @@ function startApp(): void {
 
 registerWindowHandlers();
 registerServiceWorker();
+
+initTheme();
 
 // Vite has injected CSS by now; hide the inline loader before async boot work.
 markAppReady();

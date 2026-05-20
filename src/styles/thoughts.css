@@ -16,7 +16,7 @@
   padding: 8px 12px;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--border-strong);
-  background: oklch(0.97 0.012 250 / 0.85);
+  background: var(--thought-bubble-bg);
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.55;
@@ -96,7 +96,7 @@
   padding: 10px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: oklch(0.98 0.008 250);
+  background: var(--thought-flow-bg);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -116,6 +116,6 @@
   word-break: break-word;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
-  background: oklch(0.99 0.006 250);
+  background: var(--thought-segment-bg);
   border: 1px dashed var(--border2);
 }

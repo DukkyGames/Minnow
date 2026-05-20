@@ -285,6 +285,26 @@
   border-bottom: 1px solid var(--border);
 }
 
+.settings-appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 16px;
+}
+
+.settings-appearance__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-appearance__option input {
+  accent-color: var(--accent);
+}
+
 .settings-toggle-row:last-child {
   border-bottom: none;
 }
@@ -937,13 +957,13 @@
 .settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
 .settings-tools-list .tool-permission-wrap:hover .tool-label,
 .settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
-  color: var(--text-hover);
+  color: var(--elevated-fg);
 }
 
 .settings-tools-list .tool-row:hover:not(.is-server-unavailable) .tool-permission-wrap .tool-permission-select,
 .settings-tools-list .tool-permission-wrap:hover .tool-permission-select {
   background: transparent;
-  border-color: oklch(100% 0.00011 271.152 / 0.35);
+  border-color: color-mix(in oklch, var(--elevated-fg) 35%, transparent);
 }
 
 .settings-tools-list .tool-desc {

@@ -155,8 +155,8 @@
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
-  border: 1px solid oklch(0.8 0.12 85 / 0.45);
-  background: oklch(0.97 0.03 85 / 0.5);
+  border: 1px solid var(--settings-warn-banner-border);
+  background: var(--settings-warn-banner-bg);
   font-size: 11px;
   line-height: 1.45;
   color: var(--text-muted);

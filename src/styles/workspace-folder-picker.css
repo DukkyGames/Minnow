@@ -90,7 +90,7 @@
 @media (hover: hover) and (pointer: fine) {
   .workspace-picker__up:not(:disabled):hover {
     border-color: var(--border-strong);
-    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+    background: var(--code-inline-bg);
   }
 }
 
@@ -202,7 +202,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-picker__row:hover {
-    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+    background: var(--code-inline-bg);
   }
 
   .workspace-picker__row--child:hover .workspace-picker__chevron,
@@ -257,7 +257,7 @@
 @media (hover: hover) and (pointer: fine) {
   .workspace-picker__btn:not(.workspace-picker__btn--primary):hover {
     border-color: var(--border-strong);
-    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+    background: var(--code-inline-bg);
   }
 
   .workspace-picker__btn--primary:hover {

@@ -11,7 +11,7 @@
 .composer-control label.composer-control-label {
   font-size: 0.72rem;
   font-weight: 500;
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  color: var(--ink-muted);
   white-space: nowrap;
 }
 
@@ -52,7 +52,7 @@
 
 .expert-auto-hint {
   font-size: 0.72rem;
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  color: var(--ink-muted);
   white-space: nowrap;
 }
 
@@ -64,7 +64,7 @@
   margin: 0.25rem 0 0;
   padding-left: 1.25rem;
   font-size: 0.8rem;
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  color: var(--ink-muted);
 }
 
 .work-agent-dev.hidden {
@@ -106,7 +106,7 @@
   align-items: center;
   gap: 4px;
   font-size: 0.72rem;
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  color: var(--ink-muted);
   white-space: nowrap;
 }
 
@@ -116,8 +116,8 @@
   letter-spacing: 0.04em;
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--surface-2, oklch(0.94 0.01 260));
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  background: var(--surface-2);
+  color: var(--ink-muted);
   margin-left: 6px;
 }
 
