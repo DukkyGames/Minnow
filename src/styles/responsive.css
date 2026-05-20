@@ -37,6 +37,10 @@
 
   .topbar-sep.mid-hide { display: none; }
 
+  .topbar-end {
+    min-width: 0;
+  }
+
   .model-wrap {
     max-width: none;
     min-width: 0;

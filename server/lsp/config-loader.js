@@ -26,6 +26,36 @@ export async function getBuiltinLspIds() {
   return builtinIdsCache;
 }
 
+/**
+ * Add missing built-in stubs to an existing ~/.minnow/lsp.json (upgrade path).
+ * Never overwrites keys already present; excludes test-only `fake`.
+ */
+export function migrateLspJsonMissingBuiltins(defaults, userPayload) {
+  const defaultLsp = defaults.lsp ?? {};
+  const userLsp =
+    userPayload?.lsp && typeof userPayload.lsp === 'object' ? userPayload.lsp : {};
+  const nextLsp = { ...userLsp };
+  let mutated = false;
+
+  for (const [id, cfg] of Object.entries(defaultLsp)) {
+    if (id === 'fake') continue;
+    if (Object.prototype.hasOwnProperty.call(nextLsp, id)) continue;
+    nextLsp[id] = {
+      disabled: cfg?.defaultEnabled === true ? false : true,
+    };
+    mutated = true;
+  }
+
+  if (!mutated) {
+    return { payload: userPayload, mutated: false };
+  }
+
+  return {
+    payload: { ...userPayload, lsp: nextLsp },
+    mutated: true,
+  };
+}
+
 export async function loadMergedLspConfig() {
   if (cached) return cached;
 
@@ -37,10 +67,21 @@ export async function loadMergedLspConfig() {
 
   const userPath = path.join(getMinnowHome(), 'lsp.json');
   let user = {};
+  let userFromDisk = false;
   try {
     user = JSON.parse(await fs.readFile(userPath, 'utf8'));
+    userFromDisk = true;
   } catch {
     user = await seedLspJson(defaults);
+  }
+
+  if (userFromDisk) {
+    const { payload, mutated } = migrateLspJsonMissingBuiltins(defaults, user);
+    if (mutated) {
+      await fs.writeFile(userPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+      invalidateLspConfigCache();
+      user = payload;
+    }
   }
 
   cached = mergeLspConfig(defaults, user);

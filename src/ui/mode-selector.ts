@@ -3,6 +3,7 @@
  */
 
 import { streaming } from '../app-state';
+import { isComposerRecoveryBlocked } from './composer-send';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncWorkAgentDevFromActiveChat } from './work-agent-dev';
 import { listModes } from '../chat/modes/registry';
@@ -57,7 +58,7 @@ export function syncModeSelectorFromActiveChat(): void {
 export function refreshModeSelectorDisabled(): void {
   const root = getModeSelectorEl();
   if (!root) return;
-  const disabled = streaming;
+  const disabled = streaming || isComposerRecoveryBlocked();
   root.querySelectorAll<HTMLButtonElement>('[data-mode-id]').forEach((btn) => {
     btn.disabled = disabled;
   });

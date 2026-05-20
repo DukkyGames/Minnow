@@ -4,7 +4,40 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
-**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test`.
+**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
+
+## Product backlog (features 01–29)
+
+Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](plans/product_backlog_agents_48a41af9.plan.md). Build plans: [`documentation/plans/Build out/`](plans/Build%20out/) (`feature-01` … `feature-30`). Verification: [`documentation/plans/verification/`](plans/verification/).
+
+| ID | Slug | Status | Primary commit (`Large-Feature-Add`) |
+| --- | --- | --- | --- |
+| 01 | topbar-grouped-actions | Shipped | `5f3adb9` |
+| 02 | lsp-full-catalog | Shipped | settings wave + `8ad1447` (fixture) |
+| 03 | workspace-scoped-chats | Shipped | `5bc076a` |
+| 04 | recent-workspaces-menu | Shipped | workspace API + UI tests |
+| 05 | thinking-duration | Shipped | `ade9c45` |
+| 06–09 | terminal-pty | Shipped | `15cc1dc` |
+| 10 | model-display-names | Shipped | `bf63994` |
+| 11–12 | load-unload-model | Shipped | `2d49c52` |
+| 12–13 | model-picker-right-dots | Shipped | `b4735b6` |
+| 14 | stop-generation | Shipped | `9df9f12` |
+| 15–17 | message-actions | Shipped | `618f7c3` |
+| 17 | chat-scroll-during-stream | Shipped | `4ade7a3` |
+| 18 | file-tree-crud | Shipped | `1c9293b` |
+| 19 | file-search | Shipped | `42887a3` |
+| 20 | drag-drop-move-confirm | Shipped | `2d21408` |
+| 21 | file-tree-padding | Shipped | `17eb130` |
+| 22 | stream-persistence-reload | Shipped | `9860d41` |
+| 23 | manual-memory-add | Shipped | `e3f209c` |
+| 24 | user-rules-settings | Shipped | `c118962` |
+| 25 | prompt-token-estimate | Shipped | `38fe81a` |
+| 26 | stats-strip-with-editor | Shipped | `b1ca5c6` |
+| 27 | editor-tab-key | Shipped | `8ad1447` |
+| 28 | composer-tools-button | Shipped | `b2e6f7b` |
+| 29 | all-full-permissions | Shipped | `1cf8c45` |
+
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **424** tests (**109** + **315**), **0** fail.
 
 ## What it is
 
@@ -31,7 +64,7 @@ Minnow/
 │   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── state/sessions.ts   # localStorage chat sessions
-│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo
+│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/
@@ -41,7 +74,9 @@ Minnow/
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
 │   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, tool-approval-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
-│   ├── lib/list-directory-parse.ts
+│   ├── lib/
+│   │   ├── format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
+│   │   └── list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
 │   │   ├── definitions.ts      # 41-tool catalog (OpenAI function schemas)
@@ -89,6 +124,7 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
   sessions/state.json      # full SessionState blob (all chats — canonical)
   tools.json               # ToolConfig (permissions, mirrored enabled, braveApiKey)
   system-prompt.json       # { presetId, text }
+  rules.json               # global user rules { version, enabled, text } (Feature 24)
   memory/                  # scaffold (Step 16)
   providers/               # one dir per provider (Step 03)
     lm-studio-local/
@@ -240,7 +276,9 @@ Off by default (`config.json` → `selfHealing.enabled`). Toggle in **Settings �
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). The sidebar `.settings-nav` stacks section buttons in a column with a small vertical `gap` between them. Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Plan granularity** (`large` / `medium` / `small`) lives under **Modes → Plan** (expand the Plan row); persisted in `config.json` via `prompt-meta` (`planGranularity`). Nav clicks update the hash after `setActiveSection`; `openSettings()` skips re-entry when the page is already open on that section so `hashchange` does not race async section renders (duplicate entity lists on work/sub-agents). Async sections (providers, work agents, sub-agents) use a render-generation guard like the Tools panel. **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.minnow/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). The sidebar `.settings-nav` stacks section buttons in a column with a small vertical `gap` between them. Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, **rules**, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Rules** (`#/settings/rules`): enable toggle + textarea for global instructions; explicit **Save rules** persists to `rules.json` when `npm start` is up (offline hint + localStorage mirror otherwise). **Plan granularity** (`large` / `medium` / `small`) lives under **Modes → Plan** (expand the Plan row); persisted in `config.json` via `prompt-meta` (`planGranularity`). Nav clicks update the hash after `setActiveSection`; `openSettings()` skips re-entry when the page is already open on that section so `hashchange` does not race async section renders (duplicate entity lists on work/sub-agents). Async sections (providers, work agents, sub-agents) use a render-generation guard like the Tools panel. **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.minnow/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
+
+**Prompt token estimate (Feature 25 / F4):** While settings is open, `#settingsPromptTokenEstimate` in `.settings-page-header` shows **~N tokens (estimate)** for the next main-chat send (active session). **Prompting** adds `#settingsPromptTokenBreakdown` (System · History · Tools · Rules). Heuristic: `chars ÷ 4` (`estimateTokensFromText` in `src/chat/prompts/token-estimate-core.ts`). `resolveOutboundPromptEstimate()` in `src/chat/prompts/token-estimate.ts` mirrors send via `resolveOutboundSystemMessages()`, full `chat.history`, and mode-filtered tool JSON (work-agent allowlist + UI Designer filter). UI: `src/ui/settings-prompt-estimate.ts`. Refreshes on settings open, section change, and profile/part toggles (300 ms debounce). Not provider `usage.prompt_tokens`. Verification: [`documentation/plans/verification/feature-25.md`](plans/verification/feature-25.md).
 
 **Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
 
@@ -339,20 +377,22 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 ### Workspace folder (AI project root)
 
-The **workspace** is the directory where file/git/terminal tools and the file tree operate. It defaults to the directory where `npm start` was launched; users can change it from the top bar **folder** button (`#btnWorkspace`).
+The **workspace** is the directory where file/git/terminal tools and the file tree operate. It defaults to the directory where `npm start` was launched; users change it from the top bar **folder** button (`#btnWorkspace`) via a **recent workspaces menu** (feature B1), not an immediate OS dialog.
 
 | Concern | Location |
 |---------|----------|
-| Server root + persistence | `server/workspace/root.js` — `getWorkspaceRoot()`, `setWorkspaceRoot()`, saved in `~/.minnow/config.json` as `workspace.path` |
-| API | `GET/PUT /api/workspace`, `POST /api/workspace/pick` (native folder dialog) — `server/workspace/middleware.js` |
-| Native picker | `server/workspace/pick-folder.js` (PowerShell / osascript / zenity) |
-| Client state | `src/state/workspace.ts`, `src/config/workspace-api.ts` |
-| Top bar UI | `src/ui/workspace-button.ts`, `index.html` `#btnWorkspace` |
+| Server root + MRU | `server/workspace/root.js` — `getWorkspaceRoot()`, `setWorkspaceRoot()`, `touchRecentWorkspacePath()`, `buildRecentWorkspaceList()`; `~/.minnow/config.json` → `workspace.path` + `workspace.recentPaths` (max **10**, MRU order) |
+| API | `GET/PUT /api/workspace`, `POST /api/workspace/pick`, `DELETE /api/workspace/recent` — `server/workspace/middleware.js` |
+| Folder picker | In-app browser: `GET /api/workspace/browse`, [`src/ui/workspace-folder-picker.ts`](../src/ui/workspace-folder-picker.ts), [`src/styles/workspace-folder-picker.css`](../src/styles/workspace-folder-picker.css). Legacy native picker remains at `POST /api/workspace/pick` (`server/workspace/pick-folder.js`) but **Open new workspace…** uses the in-app UI |
+| Client state | `src/state/workspace.ts`, `src/config/workspace-api.ts` (`WorkspaceRecentItem`, `removeRecentWorkspace`) |
+| Top bar UI | `src/ui/workspace-button.ts` (`applyWorkspaceSwitch`), `src/ui/workspace-recent-menu.ts`, `src/styles/workspace-menu.css` (current workspace: `--accent-dim` + ink border; hover: light `--code-inline-bg`, not `--accent-subtle`) |
 | Prompt `{{cwd}}` | `src/chat/prompts/compose-context.ts` → `resolveComposeCwd()` uses workspace path when set |
+
+**Menu UX:** Click `#btnWorkspace` → popover lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspace…** opens the centered folder browser (current folder pinned at top with **This folder**, indented subfolders with › chevrons, **Folders** section label, Up, double-click to drill down, **Open folder** / Cancel, Escape / overlay dismiss). Starts at the current workspace when set; browse roots show Home (+ drive letters on Windows). Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
 
 **Server wiring:** `server.js` `resolveSafePath`, git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
 
-**Tests:** `test/workspace/workspace-api.test.js`.
+**Tests:** `test/workspace/workspace-api.test.js`, `test/ui/workspace-recent-menu.test.mjs`. Verification: [`documentation/plans/verification/feature-04.md`](plans/verification/feature-04.md).
 
 ### File panel (Step 11)
 
@@ -361,6 +401,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 | Concern | Location |
 |---------|----------|
 | File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse, `refreshFileTree()` after save |
+| **Name filter (F19)** | `#fileTreeSearch` — debounced subsequence match on basename; filter mode BFS-indexes via `list_directory` (skips `.git`, `node_modules`, `dist`, `.minnow`) and shows flat results; browse mode when query empty. `src/ui/file-tree-filter.ts`, `src/ui/file-tree-search.ts`. Phase 2 content search not shipped. |
 | Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range` / `save_file`, CodeMirror 6 + GitHub-style highlight (`src/ui/codemirror-theme.ts`); Save button + Ctrl/Cmd+S; dirty ● on path; large files (>512 KB) load lines 1–2000 read-only; LSP completions via `src/ui/file-editor-extensions.ts` + `POST /api/lsp/completion` when LSP enabled |
 | Layout | `src/ui/file-layout.ts`, `src/ui/init-file-panel.ts` |
 | Parser | `src/lib/list-directory-parse.ts` |
@@ -368,13 +409,19 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 | Styles | `src/styles/file-panel.css` |
 | Markup | `index.html` — `#fileSidebar`, `#workspaceSplit`, `#fileViewerPane` |
 
+**Tree row density (E4 / feature-21):** Default rows are compact (`min-height: 0`, tighter padding in `file-panel.css`); `@media (pointer: coarse)` restores `min-height: var(--touch-min)` (44px) and touch padding. Row hover/selection matches chat sidebar (`.chat-item-row`): fine-pointer `--surface-elevated` hover, `--accent` border when selected. Depth indent: `src/ui/file-tree-indent.ts` (`FILE_TREE_DEPTH_INDENT_PX` = 12, dir/file base 6 / 24), re-exported from `file-tree.ts`.
+
 **Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”. On boot, after `detectLocalServer()`, `initFilePanel()` and `onFilePanelServerAvailabilityChanged()` load the tree when the server is up (no need to open the Files panel or click refresh).
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
 
-**Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
+**Phase 2 — drag to composer:** File and folder rows in `src/ui/file-tree.ts` are draggable via `wireTreeRowDrag` (`effectAllowed` `copyMove` for composer copy + tree move; `suppressClick` after drag so clicks still open the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
 
-**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
+**Tree CRUD (E1 / feature-18):** Context menu + shortcuts on file/folder rows call `executeTool` (`.file-tree-context-menu` uses light `--bg` popover like `workspace-menu`, not `--surface-elevated`) (`delete_path`, `move_file`, `copy_file`, `save_file`, `make_directory`) through [`src/ui/file-tree-ops.ts`](../src/ui/file-tree-ops.ts) with the same permission/approval gate as chat tools. Feedback via top-bar `setStatus` (not a floating toast). Path helpers: [`src/ui/file-tree-path.ts`](../src/ui/file-tree-path.ts), clipboard: [`src/ui/file-tree-clipboard.ts`](../src/ui/file-tree-clipboard.ts). Menu UI: [`src/ui/file-tree-context-menu.ts`](../src/ui/file-tree-context-menu.ts). Server flag for browse/CRUD: [`src/ui/file-tree-server.ts`](../src/ui/file-tree-server.ts) (synced from `init-file-panel.ts`). **Tests:** `test/file/file-tree-ops.test.mts`; UI modules under tsx use [`test/test-loader.mjs`](../test/test-loader.mjs) (stubs xterm CSS).
+
+**Internal tree move (E3 / feature-20):** Drop a file or folder onto a **folder row** in `#fileTreeHost` → [`showMoveConfirmDialog`](../src/ui/file-tree-move-dialog.ts) (inline `#fileTreeMoveConfirm` strip in `#fileSidebar`, not a native dialog) → [`movePath`](../src/ui/file-tree-ops.ts) via existing `move_file` (no new REST route). Delegation: [`src/ui/file-tree-dnd.ts`](../src/ui/file-tree-dnd.ts) (`initFileTreeDnD` from `init-file-panel.ts`; `dragover` uses `activeDragSourcePath` from capture `dragstart` because `DataTransfer.getData` is empty during `dragover`). Invalid drops (cycle, same parent) use `computeMoveDestination` in `file-tree-path.ts`.
+
+**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-tree-filter.test.mjs`, `test/file/file-tree-search.test.mjs`, `test/file/file-tree-filter-render.test.mjs`, `test/file/file-tree-layout.test.mjs` (E4 indent constants), `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/file/path-utils.test.mjs` (path + `computeMoveDestination`), `test/file/file-tree-move-dialog.test.mjs`, `test/file/file-tree-dnd.test.mjs`, `test/file/file-tree-ops.test.mts`, `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md), [`documentation/plans/verification/feature-19.md`](plans/verification/feature-19.md), [`documentation/plans/verification/feature-20.md`](plans/verification/feature-20.md), [`documentation/plans/verification/feature-21.md`](plans/verification/feature-21.md).
 
 ### Sub-agent orchestration (Step 09)
 
@@ -422,7 +469,9 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 | `GET/PUT/DELETE` | `/api/prompt-configs/:id` | CRUD custom profile JSON |
 | `POST` | `/api/prompt-configs/:id/duplicate` | Copy profile |
 
-**Send path:** `resolveComposedSystemPrompt()` (expert routing + compose) → `buildApiMessages(..., { composedSystemPrompt })` in [`loop.ts`](../src/tools/loop.ts). Legacy `#systemPrompt` textarea is fallback when compose returns empty. Settings UI for profiles deferred to Step 20.
+**Send path:** `resolveOutboundSystemMessages()` (expert routing + `resolveComposedSystemPrompt()` + `loadUserRules()`) → `pushOutboundSystemMessages()` in [`api-system-messages.ts`](../src/tools/api-system-messages.ts) via `buildApiMessages()` in [`loop.ts`](../src/tools/loop.ts) and plain send in [`chat.ts`](../src/api/chat.ts). Produces **one or two** leading `role: system` messages: composed programmatic stack first, then optional global user rules when `rules.json` has `enabled: true` and non-empty `text`. Legacy `#systemPrompt` textarea is fallback when compose returns empty. User rules are **not** a `PART_ORDER` composer part. Sub-agent runs do not receive global user rules (v1).
+
+**User rules (Feature 24):** Settings → **Rules** (`#/settings/rules`). Client: [`src/config/user-rules.ts`](../src/config/user-rules.ts) (`loadUserRules`, `saveUserRules`, `getUserRulesPayloadForSend`); localStorage key `minnow.userRules` when Vite-only. **Tests:** `test/config/rules-crud.test.js`, `test/tools/build-api-messages-rules.test.mts`.
 
 **Tests:** `test/prompts/*.test.mjs` + `test/prompts/*.test.js`. Verification: [`documentation/plans/verification/step-04.md`](plans/verification/step-04.md).
 
@@ -439,6 +488,7 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 | `GET/PUT` | `/api/config/sessions` | `SessionState` ↔ `sessions/state.json` |
 | `GET/PUT` | `/api/config/tools` | `ToolConfig` ↔ `tools.json` |
 | `GET/PUT` | `/api/config/system-prompt` | `SystemPromptSettings` ↔ `system-prompt.json` |
+| `GET/PUT` | `/api/config/rules` | `UserRulesSettings` ↔ `rules.json` (Feature 24) |
 | `GET/PUT` | `/api/config/sub-agents` | `sub-agents.json` (Step 09) |
 | `GET/PUT` | `/api/config/meta` | `config.json` (merge on PUT) |
 | `POST` | `/api/config/migrate` | Browser → disk one-time import |
@@ -546,11 +596,38 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage`.
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **2**).
+
+| Concern | Location |
+|---------|----------|
+| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 2`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts` |
+| Server validate / migrate | `server/config/validators.js` (accepts v1 input, persists v2) |
+| Sidebar filter + Unassigned | `src/ui/sidebar.ts`, `src/styles/sidebar.css` |
+| Workspace switch hook | `onWorkspaceChanged()` in `sessions.ts`; `applyWorkspaceScopedSession()` in `sidebar.ts`; `applyWorkspaceSwitch()` in `workspace-button.ts` (B1 recent menu uses same path) |
+
+**Workspace-scoped chats (B2):** Each chat has **`workspacePath`** (normalized absolute root at create; `''` = unassigned). The sidebar lists chats for **`getWorkspacePath()`** only; legacy pre-v2 chats appear under a collapsible **Unassigned** section (`workspacePath === ''`). **New chat** binds the current workspace. **Workspace switch** restores **`lastActiveChatIdByWorkspace`** (per normalized path key) or newest chat on that path, or creates a new empty scoped chat.
+
+**Migration v1→v2:** Client `parseSessionStateFromJson` and server `validateSessionState` set `workspacePath: ''` on legacy chats (no auto-bind). Defaults: `src/config/defaults.ts`, `server/config/home.js`.
 
 - At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
-- Delete chat: confirm dialog; deleting active chat switches to latest other or creates a new empty session.
+- Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace.
+
+### Stream persistence across reload (feature 22 / C5)
+
+In-flight assistant turns checkpoint to **`chat.pendingTurn`** (not a `history` row) while streaming or after stop, then debounced to **`sessions/state.json`** / **`minnow-sessions-v1`**.
+
+| Concern | Location |
+|---------|----------|
+| Types | `PendingTurn` on `Chat` in `src/types.ts` |
+| Validation | `src/state/pending-turn-shape.ts`; wired in `ensureChatShape` + `server/config/validators.js` |
+| Checkpoint API | `src/state/pending-turn.ts`, `src/chat/turn-checkpoint.ts` |
+| Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` flush in `main.ts` |
+| Stop (C1) | `finalizeStoppedTurn` — `pendingTurn` with `stopped: true` (no duplicate assistant in `history`) |
+| Recovery UI | `src/ui/pending-turn-recovery.ts`, `renderPendingTurn`, `pending-turn-recovery.css` (light sheet bar at top of `#mainColumn`: `--code-inline-bg`, ink primary + outlined secondary buttons; not `--surface-elevated`) |
+| Continue | New completion via ephemeral user line in `buildApiMessages` only; clears `pendingTurn` on stream connect |
+
+**Boot / chat switch:** partial assistant + **Continue** / **Discard**; composer blocked until resolved.
 
 ### Programmatic chat titles (Step 07)
 
@@ -577,11 +654,12 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 - **Chat list row actions:** rename (✎) and delete (🗑) use **32×32px** controls with **no gap** on fine pointers (`sidebar.css`); **`pointer: coarse`** keeps **`--touch-min` (44px)** for touch targets.
 - **Session row hover:** fine-pointer hover on non-active rows uses `--surface-elevated` fill; title and rename/delete use `--text-hover` (direct button hover: green/red). **Active** row keeps accent styling on hover (`sidebar.css`).
 - **Mobile (≤640px):** sidebar overlay + backdrop; safe-area padding.
-- **Compact (≤600px):** 16px input (iOS zoom), collapsible stats strip.
+- **Stats strip:** `#statsStrip` inference metrics above the terminal; **collapsed by default** (`.is-collapsed`). Toggle **`#btnStats`** in the top bar (`initStatsStrip()` in [`stats.ts`](../src/ui/stats.ts), preference `minnow.statsStripOpen` in `localStorage`). Inside an open strip, **`#statsExpandBtn`** still expands the detailed panel on mobile (≤600px) and when the file editor split is open (feature 26).
+- **Compact (≤600px):** 16px input (iOS zoom); stats panel grid collapses behind the expand row when the strip is open.
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
-- **Top bar:** **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail.
+- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, files, refresh, metrics, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model row + `.status-pill`). **Model row** (`.model-wrap`): custom combobox [`model-select-picker.ts`](../src/ui/model-select-picker.ts) over hidden `#modelSelect`; trigger + `#modelSelectMenu` list show **load dots** (solid green / grey ring) per model; header `#modelStateDot` mirrors selection via [`model-state-dot.ts`](../src/ui/model-state-dot.ts); optional **Load/Unload** buttons when provider supports it (A3). **Status pill** (`setStatus` / `setReadyStatus` in [`src/ui/status.ts`](../src/ui/status.ts)): operational messages only — after `fetchModels()` success shows **`Ready`**, not `N models, M loaded`. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css) — `z-index: 40` so topbar menus (e.g. `#modelSelectMenu`) stack above chat/file sidebars (`34`–`36`) and below modals/drawers (`50+`). Tests: `test/ui/topbar-layout.test.mjs`, `test/ui/model-state-dot.test.mts`, `test/api/models-status.test.mjs`.
 
 ## Dev server architecture (`server.js`)
 
@@ -594,9 +672,12 @@ Browser (same origin :5173)
     ├─► GET/PUT /api/config/*    → ~/.minnow JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
-    ├─► POST /api/terminal/run   → { runId, startedAt }
+    ├─► POST /api/terminal/run   → { runId, startedAt } (agent one-shot runs)
     ├─► GET  /api/terminal/stream/:runId → SSE (stdout/stderr/exit)
-    ├─► GET  /api/terminal/history?chatId= → { runs }
+    ├─► POST /api/terminal/session → { sessionId } (interactive PTY)
+    ├─► WS   /api/terminal/ws?sessionId= → JSON PTY I/O
+    ├─► GET  /api/terminal/shell-profiles → OS-gated shells
+    ├─► GET  /api/terminal/history?chatId= → { runs } (agent runs)
     ├─► GET/POST /api/providers/* → registry + proxy (secrets on server only)
     │
     ├─► LLM upstream (direct localhost or proxied /api/providers/:id/*)
@@ -612,7 +693,13 @@ Browser (same origin :5173)
 | `/api/tools` | POST | `{ "name", "args" }` → `{ "result": "<string>" }` |
 | `/api/terminal/run` | POST | `{ command, chatId?, args?, shell?, source? }` → `{ runId, startedAt }` |
 | `/api/terminal/stream/:runId` | GET | `text/event-stream` — `meta`, `stdout`, `stderr`, `exit` |
-| `/api/terminal/history` | GET | `?chatId=` → `{ runs: TerminalRunRecord[] }` |
+| `/api/terminal/session` | POST | `{ shellProfileId?, cwd?, cols?, rows? }` → `{ sessionId, shell, … }` |
+| `/api/terminal/session/:id` | DELETE | Kill PTY session |
+| `/api/terminal/session/:id/resize` | POST | `{ cols, rows }` |
+| `/api/terminal/ws` | WS | `?sessionId=` — JSON `{ type: input\|resize\|output\|exit\|meta }` |
+| `/api/terminal/shell-profiles` | GET | `{ profiles[], ptyAvailable }` |
+| `/api/terminal/sessions` | GET | Optional `?chatId=` — live PTY metadata |
+| `/api/terminal/history` | GET | `?chatId=` → `{ runs: TerminalRunRecord[] }` (agent runs) |
 | `/api/terminal/log/:runId` | GET | `{ text }` log tail |
 | `/api/terminal/cancel/:runId` | POST | `{ ok: true }` (SIGTERM when supported) |
 
@@ -623,19 +710,28 @@ Browser (same origin :5173)
 - **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
 - **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking `POST /api/tools` still uses the same runner via `executeCommandBlocking()` (no SSE).
 
-### Terminal panel (Step 10)
+### Terminal panel (Step 10 + Epic D1 PTY)
 
-Docked **bottom panel** in `.main-column` (below `.stats-strip`, after chat + composer + metrics): live command output, per-chat history, user **Run** input. Styling matches the light bench-instrument UI (`terminal.css`). Toggle: `#btnTerminal` or **Ctrl+`**.
+Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus a separate **agent run** stream (SSE) and **Agent runs** sidebar. Toggle: `#btnTerminal` or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS). **Chrome:** [`src/styles/terminal.css`](../src/styles/terminal.css) matches bench-instrument panels (stats strip / input bar): hairline borders, `--code-inline-bg` for `#terminalShellHint` and hovers, ink-accent active tabs/history rows, solid bordered controls (no dashed add tab). Tokens: `--code-bg`, `--code-inline-bg` in [`src/styles/tokens.css`](../src/styles/tokens.css).
+
+**Dual backend:** User shell → `@lydell/node-pty`. Agent `execute_command` / `run_javascript` / `run_python` → unchanged `terminal-runner` + SSE (`runCommandWithTerminalStream`).
 
 | Concern | Location |
 |---------|----------|
-| UI | `src/ui/terminal-panel.ts`, `src/styles/terminal.css`, `#terminalPanel` in `index.html` |
-| Stream client | `src/api/terminal.ts` — `startTerminalRun`, `streamTerminalRun` (fetch + SSE parser) |
-| Tool integration | `executeTool(..., { chatId, toolCallId })` streams `execute_command` / `run_javascript` / `run_python` when server is up |
-| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
-| Persistence | `Chat.terminalHistory` (last **50** runs) in `sessions/state.json`; full logs in `~/.minnow/logs/terminal/<runId>.log` |
+| Panel orchestration | `src/ui/terminal-panel.ts` |
+| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
+| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` |
+| PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
+| Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
+| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun, tabs[], activeTabId, defaultShellProfileId }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
+| Agent persistence | `Chat.terminalHistory` (last **50** runs); logs `~/.minnow/logs/terminal/<runId>.log` |
+| PTY audit | `~/.minnow/logs/terminal/pty-sessions.log` (create/kill only) |
 
-**Tests:** `node test/terminal-stream.test.mjs <baseUrl>` (server must be running). Verification: [`documentation/plans/verification/step-10.md`](plans/verification/step-10.md).
+**Shell profiles (OS-gated):** `powershell`, `cmd`, optional WSL `bash` on Windows; `zsh`/`bash` on macOS; `bash` on Linux. `GET /api/terminal/shell-profiles`.
+
+**Windows:** Prefer `@lydell/node-pty` (prebuilt). Stock `node-pty` needs VS Build Tools + `node-gyp`.
+
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`. Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 
@@ -747,9 +843,49 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 ## API usage (providers)
 
-- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`.
+- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`. Top-bar `#modelSelect` (native, visually hidden) shows **human-readable labels** via [`formatModelLabel`](../src/lib/format-model-label.ts) (`buildModelOptionHtml`); visible picker is [`model-select-picker.ts`](../src/ui/model-select-picker.ts) with per-row load dots. `option value` and `chat.modelId` remain the canonical LM Studio `id`; each option `title` shows full id + quant + load state. After list refresh: `setReadyStatus()` + `updateModelStateDot()` + `syncModelSelectPicker()`. Load/unload: [`src/api/models.ts`](../src/api/models.ts) (`toggleSelectedModelLoad` → `loadSelectedModel` / `unloadSelectedModel`) when LM Studio v0 provider is active; single `#btnModelLoadUnload` shows **Load** or **Unload** from selection state; inline `onclick` requires `window.toggleSelectedModelLoad` in [`main.ts`](../src/main.ts) `registerWindowHandlers()`.
 - **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitionsForMode(chat.modeId)` (user toggles + server ping + mode policy). Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
 - **Settings UI:** `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up).
+
+## Stop generation (feature 14, Epic C1)
+
+While **`streaming === true`**, the composer primary button (`#sendBtn`) is a **Stop** control (`data-mode="stop"`, class `send-btn--stop`); the textarea stays enabled so the user can draft the next message. **`handleComposerPrimaryAction()`** (window + `index.html`) calls **`stopGeneration()`** → **`chatFetchAbort.abort()`**, which ends the active SSE `fetch` and triggers **`AbortError`** handling in **`runChatTurn`** / **`sendMessagePlain`**.
+
+| Concern | Location |
+|---------|----------|
+| Stop API | [`src/chat/stop-generation.ts`](../src/chat/stop-generation.ts) |
+| Abort finalize | [`src/chat/finalize-stopped-turn.ts`](../src/chat/finalize-stopped-turn.ts) — checkpoints **`chat.pendingTurn`** with `stopped: true` (coordinates with feature 22; not a duplicate `history` assistant row) |
+| Composer toggle | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/styles/input.css`](../src/styles/input.css) |
+| Tool-loop abort | [`src/tools/loop.ts`](../src/tools/loop.ts) — `livePartialText`, cooperative skip of remaining tools (`Stopped by user.`), `cancelAllForParentTurn` on abort |
+| Stopped chip | [`src/ui/stopped-affordance.ts`](../src/ui/stopped-affordance.ts), `.msg--stopped` in [`messages.css`](../src/styles/messages.css) |
+| Recovery banner | [`src/ui/pending-turn-recovery.ts`](../src/ui/pending-turn-recovery.ts) after stop |
+| History flag | `AssistantMessage.stopped?: boolean` in [`src/types.ts`](../src/types.ts) for completed rows; reload paints chip when set |
+
+**Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/ui/composer-send.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).
+
+## Message actions (Epic C2 — features 15–17)
+
+Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-flight streaming shells).
+
+| Action | Target | Behavior |
+|--------|--------|----------|
+| **Copy** | User / assistant | Clipboard text from `.msg-bubble` (prose only for tool turns) |
+| **Edit** | User | Truncate after row, composer prefilled (skill `[skill: id]` footer stripped), next send updates row + `resendFromIndex` |
+| **Regenerate from here** | User | Inclusive truncate → `resendFromIndex` (no duplicate user row) |
+| **Remake** | Assistant / tool group | Resend from preceding user message |
+| **Delete message** | Any logical turn | Exclusive truncate (atomic assistant + `tool` rows); confirm when multiple rows removed |
+
+| Concern | Location |
+|---------|----------|
+| Truncate + tail normalize | `src/chat/history-truncate-core.ts`, `src/chat/history-truncate.ts` |
+| Resend orchestration | `src/chat/resend-from-index.ts` → `runChatTurn({ pushUser: false })` in `src/tools/loop.ts` |
+| Menu UI | `src/ui/message-actions.ts`, `src/styles/message-actions.css` |
+| Render indices | `data-history-index`, `data-turn-kind` on `.msg` / tool cards in `renderChatFromHistory` |
+| Skill footer parse | `src/skills/history-content.ts` |
+
+**Guards:** All mutating actions blocked while `streaming` (same pattern as `clearChat`). Works with C1 stop: stop first, then regenerate. **v1:** No undo stack; resend does not re-hydrate attachment chips (history placeholders only). `chat.terminalHistory` is not truncated on delete (follow-up).
+
+**Tests:** `test/chat/history-truncate.test.mts`, `test/chat/resend-from-index.test.mts`, `test/ui/message-actions.test.mjs`. Verification: [`documentation/plans/verification/feature-15-16-17.md`](plans/verification/feature-15-16-17.md).
 
 ## Message rendering
 
@@ -824,7 +960,7 @@ Order in `initApp()`:
 - Sidebar rows: no nested buttons; keyboard Enter/Space to switch chats.
 - Overlays: Escape closes drawer / mobile sidebar (`dismissOpenLayers`).
 - `parseServerBaseUrl()` before LM Studio fetch; `AbortController` on model list and chat.
-- Send requires model, temperature 0–2, max tokens ≥ 1; composer disabled while streaming.
+- Send requires model, temperature 0–2, max tokens ≥ 1; while streaming the send button is Stop (enabled) and the textarea stays editable.
 - Rename capped at 120 characters.
 
 ## Key files
@@ -842,6 +978,9 @@ Order in `initApp()`:
 | [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts) | `composeSystemPrompt`, profile/lite rules |
 | [`src/chat/prompts/compose-context.ts`](../src/chat/prompts/compose-context.ts) | `buildComposeContext`, `resolveComposedSystemPrompt` |
 | [`src/chat/prompts/prompt-configs.ts`](../src/chat/prompts/prompt-configs.ts) | Custom profile CRUD client |
+| [`src/api/models.ts`](../src/api/models.ts) | Model list + cache; `fetchModels`, load/unload; populates `#modelSelect` |
+| [`src/ui/model-state-dot.ts`](../src/ui/model-state-dot.ts) | Top-bar loaded/unloaded dot + `aria-label` sync |
+| [`src/lib/format-model-label.ts`](../src/lib/format-model-label.ts) | Slug parse, humanize, `formatModelLabel`, `buildModelOptionHtml` |
 | [`src/providers/store.ts`](../src/providers/store.ts) | List/active provider via `/api/providers` |
 | [`src/providers/fetch-chat.ts`](../src/providers/fetch-chat.ts) | `postChatCompletions` (direct/proxy) |
 | [`server/providers/routes.js`](../server/providers/routes.js) | Provider CRUD + proxy HTTP |

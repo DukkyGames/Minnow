@@ -98,47 +98,62 @@
   <p class="app-loader__status" id="appLoaderStatus">Loading…</p>
 </div>
 <header class="topbar">
-  <div class="logo-mark" aria-hidden="true">
-    <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+  <div class="topbar-brand">
+    <div class="logo-mark" aria-hidden="true">
+      <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+    </div>
+    <div class="app-title">Minnow</div>
   </div>
-  <div class="app-title">Minnow</div>
-  <div class="topbar-sep"></div>
+  <div class="topbar-sep" aria-hidden="true"></div>
 
-  <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
-
-  <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-  </button>
-  <div class="topbar-sep workspace-sep mid-hide"></div>
-
-  <div class="model-wrap">
-    <label class="visually-hidden" for="modelSelect">Model</label>
-    <select id="modelSelect" onchange="onModelSelectChange()"></select>
+  <div class="topbar-actions">
+    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 4v4h-4"/>
+        <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
+        <path d="M4 20v-4h4"/>
+        <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
+      </svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
   </div>
 
-  <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 4v4h-4"/>
-      <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
-      <path d="M4 20v-4h4"/>
-      <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
-    </svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-  </button>
+  <div class="topbar-spacer" aria-hidden="true"></div>
 
-  <div class="status-pill" role="status" aria-live="polite">
-    <div class="s-dot" id="sDot" aria-hidden="true"></div>
-    <span id="sText">Loading models…</span>
+  <div class="topbar-end">
+    <div class="model-wrap" data-model-state="unknown">
+      <label class="visually-hidden" id="modelSelectLabel" for="modelSelectTrigger">Model</label>
+      <div class="model-select-inner" id="modelSelectRoot">
+        <span class="model-state-dot model-load-dot" id="modelStateDot" aria-hidden="true"></span>
+        <select id="modelSelect" class="model-select-native" tabindex="-1" aria-hidden="true" onchange="onModelSelectChange()"></select>
+        <button type="button" class="model-select-trigger" id="modelSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSelectMenu">
+          <span class="model-select-trigger-text" id="modelSelectTriggerText">Loading models…</span>
+        </button>
+        <ul class="model-select-menu hidden" id="modelSelectMenu" role="listbox" aria-labelledby="modelSelectLabel"></ul>
+      </div>
+      <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="toggleSelectedModelLoad()">Load</button>
+    </div>
+    <div class="status-pill" role="status" aria-live="polite">
+      <div class="s-dot" id="sDot" aria-hidden="true"></div>
+      <span id="sText">Loading models…</span>
+    </div>
   </div>
 </header>
 
@@ -222,11 +237,19 @@
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
     <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
+    <span
+      id="settingsPromptTokenEstimate"
+      class="settings-prompt-estimate"
+      role="status"
+      aria-live="polite"
+      title="Approximate size using characters ÷ 4. Real prompt tokens depend on the model tokenizer."
+    >~…</span>
   </header>
   <div class="settings-page-body">
     <nav class="settings-nav" aria-label="Settings sections">
       <button type="button" data-settings-nav="general" aria-current="page">General</button>
       <button type="button" data-settings-nav="prompting">Prompting</button>
+      <button type="button" data-settings-nav="rules">Rules</button>
       <button type="button" data-settings-nav="providers">Providers</button>
       <button type="button" data-settings-nav="modes">Modes</button>
       <button type="button" data-settings-nav="experts">Experts</button>
@@ -246,6 +269,12 @@
       </section>
       <section id="settingsSection-prompting" class="settings-section">
         <h2>Prompting</h2>
+        <p
+          id="settingsPromptTokenBreakdown"
+          class="settings-prompt-estimate-breakdown"
+          role="status"
+          aria-live="polite"
+        >Computing estimate…</p>
         <p>Active profile controls which prompt templates are composed on send.</p>
         <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
           <button type="button" data-profile-tab="full" class="is-active">Full</button>
@@ -260,6 +289,25 @@
           <button type="button" id="settingsCustomConfigDelete">Delete</button>
         </div>
         <div id="settingsPromptParts" class="settings-parts-mount"></div>
+      </section>
+      <section id="settingsSection-rules" class="settings-section">
+        <h2>Rules</h2>
+        <p class="field-hint">Global instructions applied on every parent chat send, as a second system message after the composed programmatic prompt.</p>
+        <label class="settings-toggle-row">
+          <span>Enable user rules</span>
+          <input type="checkbox" id="settingsRulesEnabled">
+        </label>
+        <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
+          Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
+        </p>
+        <div class="field settings-rules-field">
+          <label for="settingsRulesText">Instructions</label>
+          <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
+            placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
+        </div>
+        <div class="settings-rules-actions">
+          <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
+        </div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -292,6 +340,36 @@
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
         </div>
+        <p id="settingsMemoryOffline" class="field-hint settings-memory-offline hidden">
+          Start with <code>npm start</code> to add and manage memories.
+        </p>
+        <details id="settingsMemoryAddPanel" class="settings-memory-add-panel hidden">
+          <summary class="settings-memory-add-summary">Add memory</summary>
+          <form id="settingsMemoryAddForm" class="settings-memory-form" novalidate>
+            <div class="field">
+              <label for="settingsMemoryAddTitle">Title</label>
+              <input type="text" id="settingsMemoryAddTitle" name="title" required maxlength="200"
+                autocomplete="off" placeholder="e.g. Preferred test command">
+            </div>
+            <div class="field">
+              <label for="settingsMemoryAddBody">Body</label>
+              <textarea id="settingsMemoryAddBody" name="body" required rows="6"
+                placeholder="What should be remembered across chats?"></textarea>
+              <p class="field-hint">Max 32 KB. Used for retrieval on send when memory injection is enabled.</p>
+            </div>
+            <div class="field">
+              <label for="settingsMemoryAddTags">Tags (optional)</label>
+              <input type="text" id="settingsMemoryAddTags" name="tags" autocomplete="off"
+                placeholder="testing, npm">
+              <p class="field-hint">Comma-separated. Max 64 characters per tag.</p>
+            </div>
+            <p id="settingsMemoryAddError" class="settings-memory-form-error hidden" role="alert"></p>
+            <div class="settings-memory-form-actions">
+              <button type="submit" class="settings-action-btn">Save memory</button>
+              <button type="button" id="settingsMemoryAddReset" class="settings-inline-btn">Clear form</button>
+            </div>
+          </form>
+        </details>
         <div id="settingsMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
         <div class="settings-actions">
           <button type="button" id="settingsMemoryBackup" class="settings-action-btn">Backup memory</button>
@@ -414,12 +492,14 @@
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon" aria-hidden="true">
-          <svg class="minnow-glyph icon-svg" width="32" height="32" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+          <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
+
+    <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
 
     <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
     <div id="toolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
@@ -449,6 +529,20 @@
           <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
+          <div class="composer-tools-anchor">
+            <button type="button" class="composer-tools-btn" id="btnComposerTools"
+              aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
+              aria-controls="composerToolsPopover">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
+            </button>
+            <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
+              <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+              <div id="composerToolsList" class="tools-list tools-list--composer"></div>
+              <footer class="composer-tools-popover__footer">
+                <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>
+              </footer>
+            </div>
+          </div>
           <div class="input-wrap">
             <label for="msgInput" class="visually-hidden">Message</label>
             <textarea id="msgInput" placeholder="Type a message…" rows="1"
@@ -456,14 +550,15 @@
           </div>
         </div>
       </div>
-      <button class="send-btn" id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">
+      <button class="send-btn" id="sendBtn" type="button" onclick="handleComposerPrimaryAction()" aria-label="Send message" data-mode="send">
         <span id="sendIcon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+        <span id="sendStopIcon" class="hidden"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
         <span id="sendSpinner" class="spinner hidden"></span>
       </button>
     </div>
 
     <!-- Stats strip -->
-    <div class="stats-strip" id="statsStrip">
+    <div class="stats-strip is-collapsed" id="statsStrip">
       <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel" onclick="toggleStatsPanel()">
         <span class="stats-expand-label">Metrics</span>
         <span class="stats-expand-preview" id="statsExpandPreview">— t/s · — tokens</span>
@@ -510,25 +605,23 @@
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <header class="terminal-header">
-        <span class="terminal-header-title">Terminal</span>
+        <label class="visually-hidden" for="terminalShellSelect">Shell profile</label>
+        <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
+        <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear output</button>
+          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear agent output</button>
           <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
         </div>
       </header>
-      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Terminal requires <code>npm start</code> (not <code>npm run dev</code>).</p>
+      <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Interactive terminal requires <code>npm start</code> (not <code>npm run dev</code>). Agent runs still need the local server.</p>
+      <p class="terminal-shell-hint" id="terminalShellHint">Shell has full access on your machine (not limited by workspace tool policy).</p>
       <div class="terminal-body">
-        <aside class="terminal-history" id="terminalHistory" aria-label="Command history"></aside>
-        <pre class="terminal-output" id="terminalOutput" aria-live="polite"></pre>
-      </div>
-      <form class="terminal-input-row" id="terminalForm">
-        <label class="visually-hidden" for="terminalInput">Terminal command</label>
-        <div class="terminal-input-wrap">
-          <span class="terminal-prompt" aria-hidden="true">&gt;</span>
-          <input type="text" id="terminalInput" placeholder="Run a command…" autocomplete="off" spellcheck="false">
+        <aside class="terminal-history" id="terminalHistory" aria-label="Agent runs"></aside>
+        <div class="terminal-main">
+          <pre class="terminal-output terminal-agent-output hidden" id="terminalOutput" aria-live="polite"></pre>
+          <div class="terminal-xterm-host" id="terminalXtermHost" role="tabpanel"></div>
         </div>
-        <button type="submit" class="terminal-run-btn">Run</button>
-      </form>
+      </div>
     </section>
 
   </div>
@@ -563,6 +656,27 @@
           <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
         </svg>
       </button>
+    </div>
+    <div class="file-tree-search-wrap">
+      <input type="search" id="fileTreeSearch" class="file-tree-search"
+        placeholder="Filter files…" autocomplete="off"
+        aria-label="Filter files by name" role="searchbox" />
+      <button type="button" class="icon-btn file-tree-search-clear hidden"
+        id="btnFileTreeSearchClear" aria-label="Clear filter" title="Clear filter">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" role="region"
+      aria-labelledby="fileTreeMoveConfirmTitle" hidden>
+      <div class="file-tree-move-confirm__content">
+        <p id="fileTreeMoveConfirmTitle" class="file-tree-move-confirm__title" data-move-title>Move file?</p>
+        <p class="file-tree-move-confirm__body" data-move-body></p>
+        <p class="file-tree-move-confirm__paths" data-move-paths></p>
+      </div>
+      <div class="file-tree-move-confirm__actions">
+        <button type="button" class="file-tree-move-confirm__btn" data-move-cancel>Cancel</button>
+        <button type="button" class="file-tree-move-confirm__btn file-tree-move-confirm__btn--primary" data-move-confirm>Move</button>
+      </div>
     </div>
     <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
   </aside>

@@ -4,28 +4,28 @@ overview: A fleshed-out, assignable backlog of 29 UX/product items for Minnow, m
 todos:
   - id: save-backlog-docs
     content: After approval, copy plan to documentation/plans/product-backlog-agents.md and add index link in context.md
-    status: pending
+    status: completed
   - id: wave-1-agents
     content: Assign agents to Wave 1 features (A1, A2, A4, C3, C4, E4-E6) — each writes feature-XX build plan under documentation/plans/Build out/
-    status: pending
+    status: completed
   - id: wave-2-chat
     content: Assign agent for C1+C2+C5 (stop, message actions, reload persistence) with shared session schema design
-    status: pending
+    status: completed
   - id: wave-3-workspace
     content: Assign agent for B1+B2 (recent workspaces + scoped chats) with migration spec
-    status: pending
+    status: completed
   - id: wave-4-settings
     content: Assign agent for F1-F6 (LSP catalog, memory, rules, tokens, composer tools, full permissions)
-    status: pending
+    status: completed
   - id: wave-5-files
     content: Assign agent for E1-E3 (CRUD, search, DnD move)
-    status: pending
+    status: completed
   - id: wave-6-pty
     content: Assign dedicated agent for D1 terminal PTY (XL) — spike node-pty + xterm.js first
-    status: pending
+    status: completed
   - id: wave-7-models
     content: Assign agent for A3 load/unload after LM Studio API research
-    status: pending
+    status: completed
 isProject: false
 ---
 

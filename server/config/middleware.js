@@ -189,7 +189,7 @@ export async function handleConfigRequest(req, res, pathname) {
     }
 
     const resourceMatch = pathname.match(
-      /^\/api\/config\/(sessions|tools|skills|system-prompt|sub-agents|meta)$/,
+      /^\/api\/config\/(sessions|tools|skills|system-prompt|rules|sub-agents|meta)$/,
     );
     if (resourceMatch) {
       const resource = resourceMatch[1];
@@ -251,8 +251,20 @@ export async function handleConfigRequest(req, res, pathname) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const statusCode =
+      err && typeof err === 'object' && 'statusCode' in err
+        ? Number(/** @type {{ statusCode: number }} */ (err).statusCode)
+        : undefined;
+    if (statusCode === 413) {
+      sendJson(res, 413, { error: message });
+      return true;
+    }
     if (message === 'Invalid config path' || message.includes('Invalid config')) {
       sendJson(res, 400, { error: 'Invalid config path' });
+      return true;
+    }
+    if (statusCode === 400) {
+      sendJson(res, 400, { error: message });
       return true;
     }
     console.error('[config]', message);

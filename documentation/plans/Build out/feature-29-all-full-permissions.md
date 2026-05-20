@@ -3,7 +3,7 @@
 **Backlog ID:** F6 · `feature-29-all-full-permissions`  
 **Wave:** 4 (Settings completeness)  
 **Size:** S  
-**Status:** Plan only (not implemented)  
+**Status:** Implemented  
 **Parallel-safe with:** F2 (manual memory add) — different sections/files  
 
 ---

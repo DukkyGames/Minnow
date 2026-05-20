@@ -1,0 +1,150 @@
+/* Recent workspaces popover — light bench-instrument menu (matches model-select, DESIGN.md) */
+
+.workspace-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 14rem;
+  max-width: min(22rem, calc(100vw - 1rem));
+  max-height: min(20rem, calc(100vh - 4rem));
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px oklch(0.2 0 0 / 0.1);
+  color: var(--text);
+}
+
+.workspace-menu.hidden {
+  display: none;
+}
+
+.workspace-menu__item {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+  align-items: center;
+  margin: 0 4px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text);
+  transition:
+    background 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out);
+}
+
+/* Current workspace: ink border on light sheet (matches .chat-item-row.active) */
+.workspace-menu__item[aria-current='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-menu__item:not(.workspace-menu__item--disabled):not([aria-current='true']):hover {
+    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  }
+
+  .workspace-menu__item[aria-current='true']:hover {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+  }
+}
+
+.workspace-menu__item--disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.workspace-menu__check {
+  grid-row: 1 / span 2;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+  line-height: 1;
+}
+
+.workspace-menu__label {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-menu__path {
+  grid-column: 2;
+  grid-row: 2;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-menu__remove {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-menu__remove:hover {
+    color: var(--text);
+    border-color: var(--border);
+    background: var(--bg);
+  }
+}
+
+.workspace-menu__divider {
+  height: 1px;
+  margin: 4px 10px;
+  background: var(--border);
+  list-style: none;
+}
+
+.workspace-menu__action {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-menu__action:hover {
+    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  }
+}

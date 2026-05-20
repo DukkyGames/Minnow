@@ -3,6 +3,8 @@
  * until the prose bubble is revealed.
  */
 
+import { formatThinkingDuration } from './thinking-duration';
+
 export type StreamPhase = 'generating' | 'thinking' | 'prose' | 'done';
 
 /** Visible while waiting for reasoning or prose (no tokens yet). */
@@ -18,6 +20,8 @@ const LABEL_BY_PHASE: Record<'generating' | 'thinking', string> = {
 
 export interface StreamingStatusHandle {
   setPhase(phase: StreamPhase): void;
+  /** Muted elapsed suffix while phase is `thinking`; pass null to clear. */
+  setThinkingElapsed(ms: number | null): void;
   dispose(): void;
 }
 
@@ -44,8 +48,13 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   labelEl.className = 'stream-status__label';
   labelEl.textContent = STREAM_LABEL_GENERATING;
 
+  const elapsedEl = document.createElement('span');
+  elapsedEl.className = 'stream-status__elapsed';
+  elapsedEl.hidden = true;
+
   statusEl.appendChild(dots);
   statusEl.appendChild(labelEl);
+  statusEl.appendChild(elapsedEl);
 
   const label = wrap.querySelector('.msg-label');
   const bubble = wrap.querySelector('.msg-bubble');
@@ -60,11 +69,32 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   wrap.dataset.streamPhase = 'generating';
 
   let disposed = false;
+  let currentPhase: StreamPhase = 'generating';
+
+  const syncElapsedVisibility = (): void => {
+    const show =
+      currentPhase === 'thinking' && elapsedEl.textContent.length > 0;
+    elapsedEl.hidden = !show;
+  };
+
+  const setThinkingElapsed = (ms: number | null): void => {
+    if (disposed) return;
+    if (ms == null || ms <= 0) {
+      elapsedEl.textContent = '';
+      elapsedEl.hidden = true;
+      return;
+    }
+    elapsedEl.textContent = ` ${formatThinkingDuration(ms)}`;
+    syncElapsedVisibility();
+  };
 
   const setPhase = (phase: StreamPhase): void => {
     if (disposed) return;
+    currentPhase = phase;
 
     if (phase === 'prose' || phase === 'done') {
+      elapsedEl.textContent = '';
+      elapsedEl.hidden = true;
       statusEl.classList.add('hidden');
       statusEl.setAttribute('aria-busy', 'false');
       wrap.dataset.streamPhase = phase;
@@ -79,6 +109,11 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     );
     labelEl.textContent = LABEL_BY_PHASE[phase];
     wrap.dataset.streamPhase = phase;
+    if (phase !== 'thinking') {
+      elapsedEl.hidden = true;
+    } else {
+      syncElapsedVisibility();
+    }
   };
 
   const dispose = (): void => {
@@ -87,5 +122,5 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
     delete wrap.dataset.streamPhase;
   };
 
-  return { setPhase, dispose };
+  return { setPhase, setThinkingElapsed, dispose };
 }

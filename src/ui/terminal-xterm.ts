@@ -1,0 +1,305 @@
+/**
+ * xterm.js viewport wired to PTY WebSocket sessions.
+ */
+
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import '@xterm/xterm/css/xterm.css';
+import {
+  buildTerminalWsUrl,
+  createTerminalSession,
+  deleteTerminalSession,
+  parsePtyServerMessage,
+  resizeTerminalSession,
+  type ShellProfile,
+} from '../api/terminal-pty';
+import { getLocalServerAvailable } from '../tools/client';
+
+const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
+const MAX_TAB_HISTORY = 500;
+
+export interface TerminalTabSession {
+  tabId: string;
+  shellProfileId: string;
+  sessionId: string | null;
+  title: string;
+}
+
+let hostEl: HTMLElement | null = null;
+let term: Terminal | null = null;
+let fitAddon: FitAddon | null = null;
+let activeWs: WebSocket | null = null;
+let activeTabId: string | null = null;
+let lineBuffer = '';
+let historyIndex = -1;
+let tabHistory: string[] = [];
+let resizeObserver: ResizeObserver | null = null;
+let onSessionEnded: ((tabId: string) => void) | null = null;
+
+function historyKey(tabId: string): string {
+  return `${HISTORY_STORAGE_PREFIX}${tabId}`;
+}
+
+function loadTabHistory(tabId: string): string[] {
+  try {
+    const raw = sessionStorage.getItem(historyKey(tabId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((l) => typeof l === 'string').slice(-MAX_TAB_HISTORY);
+  } catch {
+    return [];
+  }
+}
+
+function saveTabHistory(tabId: string, lines: string[]): void {
+  try {
+    sessionStorage.setItem(
+      historyKey(tabId),
+      JSON.stringify(lines.slice(-MAX_TAB_HISTORY)),
+    );
+  } catch {
+    /* quota */
+  }
+}
+
+function pushSubmittedLine(line: string): void {
+  const trimmed = line.trim();
+  if (!trimmed || !activeTabId) return;
+  if (tabHistory[tabHistory.length - 1] !== trimmed) {
+    tabHistory.push(trimmed);
+    if (tabHistory.length > MAX_TAB_HISTORY) {
+      tabHistory = tabHistory.slice(-MAX_TAB_HISTORY);
+    }
+    saveTabHistory(activeTabId, tabHistory);
+  }
+  historyIndex = tabHistory.length;
+}
+
+function applyXtermTheme(): void {
+  if (!term) return;
+  const style = getComputedStyle(document.documentElement);
+  const fg = style.getPropertyValue('--text').trim() || 'oklch(0.32 0 0)';
+  const bg = style.getPropertyValue('--bg').trim() || 'oklch(1 0 0)';
+  const accent = style.getPropertyValue('--accent').trim() || 'oklch(0 0 0)';
+  term.options.theme = {
+    background: bg,
+    foreground: fg,
+    cursor: accent,
+    selectionBackground: 'oklch(0.88 0.02 250)',
+  };
+}
+
+function disconnectWs(): void {
+  if (activeWs) {
+    activeWs.close();
+    activeWs = null;
+  }
+}
+
+/** Close WebSocket for the active tab without killing the server PTY. */
+export function disconnectActiveTerminalWs(): void {
+  disconnectWs();
+  attachedTabId = null;
+}
+
+function fitAndResize(sessionId: string | null): void {
+  if (!fitAddon || !term || !hostEl) return;
+  fitAddon.fit();
+  const cols = term.cols;
+  const rows = term.rows;
+  if (sessionId && cols > 0 && rows > 0) {
+    void resizeTerminalSession(sessionId, cols, rows);
+    if (activeWs?.readyState === WebSocket.OPEN) {
+      activeWs.send(JSON.stringify({ type: 'resize', cols, rows }));
+    }
+  }
+}
+
+function handleHistoryKeys(data: string): boolean {
+  if (!term || data !== '\u001b[A' && data !== '\u001b[B') return false;
+  if (tabHistory.length === 0) return false;
+
+  if (data === '\u001b[A') {
+    if (historyIndex <= 0) {
+      historyIndex = 0;
+    } else {
+      historyIndex -= 1;
+    }
+  } else {
+    if (historyIndex >= tabHistory.length - 1) {
+      historyIndex = tabHistory.length;
+      term.write('\x1b[K');
+      return true;
+    }
+    historyIndex += 1;
+  }
+
+  const line =
+    historyIndex < tabHistory.length ? tabHistory[historyIndex] : '';
+  term.write('\r\x1b[K');
+  if (line) term.write(line);
+  return true;
+}
+
+function connectWs(sessionId: string, tabId: string): void {
+  disconnectWs();
+  const url = buildTerminalWsUrl(sessionId);
+  const ws = new WebSocket(url);
+  activeWs = ws;
+
+  ws.onmessage = (ev) => {
+    const text = typeof ev.data === 'string' ? ev.data : '';
+    const msg = parsePtyServerMessage(text);
+    if (!msg || !term) return;
+    if (msg.type === 'output') {
+      term.write(msg.data);
+    } else if (msg.type === 'exit') {
+      term.writeln(`\r\n[Session ended — exit ${msg.code}]`);
+      onSessionEnded?.(tabId);
+    }
+  };
+
+  ws.onopen = () => {
+    fitAndResize(sessionId);
+  };
+
+  ws.onclose = () => {
+    if (activeWs === ws) activeWs = null;
+  };
+}
+
+function ensureTerminal(): Terminal {
+  if (!hostEl) throw new Error('terminal xterm host missing');
+  if (term) return term;
+
+  term = new Terminal({
+    cursorBlink: true,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 13,
+    scrollback: 5000,
+    allowProposedApi: false,
+  });
+  fitAddon = new FitAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(new WebLinksAddon());
+  applyXtermTheme();
+  term.open(hostEl);
+
+  term.onData((data) => {
+    if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
+
+    if (handleHistoryKeys(data)) return;
+
+    for (const ch of data) {
+      if (ch === '\r' || ch === '\n') {
+        pushSubmittedLine(lineBuffer);
+        lineBuffer = '';
+      } else if (ch === '\u007f') {
+        lineBuffer = lineBuffer.slice(0, -1);
+      } else if (ch >= ' ') {
+        lineBuffer += ch;
+      }
+    }
+
+    activeWs.send(JSON.stringify({ type: 'input', data }));
+  });
+
+  resizeObserver = new ResizeObserver(() => {
+    const sid = activeWs ? new URL(activeWs.url).searchParams.get('sessionId') : null;
+    fitAndResize(sid);
+  });
+  resizeObserver.observe(hostEl);
+
+  return term;
+}
+
+/** Mount xterm into the host element. */
+export function initTerminalXterm(host: HTMLElement): void {
+  hostEl = host;
+}
+
+/** Open or reconnect PTY for a tab. */
+export async function attachTerminalTab(
+  tab: TerminalTabSession,
+  cols = 80,
+  rows = 24,
+): Promise<void> {
+  if (!getLocalServerAvailable()) return;
+
+  if (attachedTabId && attachedTabId !== tab.tabId) {
+    disconnectWs();
+  }
+  attachedTabId = tab.tabId;
+  activeTabId = tab.tabId;
+  tabHistory = loadTabHistory(tab.tabId);
+  historyIndex = tabHistory.length;
+  lineBuffer = '';
+
+  const t = ensureTerminal();
+  t.reset();
+  t.focus();
+
+  if (tab.sessionId) {
+    connectWs(tab.sessionId, tab.tabId);
+    return;
+  }
+
+  const created = await createTerminalSession({
+    shellProfileId: tab.shellProfileId,
+    cols,
+    rows,
+    chatId: null,
+  });
+  tab.sessionId = created.sessionId;
+  connectWs(created.sessionId, tab.tabId);
+}
+
+let attachedTabId: string | null = null;
+
+/** Tear down WebSocket; optionally delete server session. */
+export async function detachTerminalTab(
+  tab: TerminalTabSession,
+  killServer = true,
+): Promise<void> {
+  if (attachedTabId === tab.tabId) {
+    disconnectWs();
+    attachedTabId = null;
+  }
+  if (killServer && tab.sessionId) {
+    await deleteTerminalSession(tab.sessionId).catch(() => {});
+    tab.sessionId = null;
+  }
+}
+
+export function focusTerminalXterm(): void {
+  term?.focus();
+}
+
+export function fitTerminalXterm(): void {
+  const sid = activeWs
+    ? new URL(activeWs.url).searchParams.get('sessionId')
+    : null;
+  fitAndResize(sid);
+}
+
+export function setTerminalSessionEndedHandler(
+  handler: (tabId: string) => void,
+): void {
+  onSessionEnded = handler;
+}
+
+export function disposeTerminalXterm(): void {
+  disconnectWs();
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  term?.dispose();
+  term = null;
+  fitAddon = null;
+}
+
+/** Profile label for a new tab title. */
+export function profileTabTitle(profile: ShellProfile): string {
+  return profile.label;
+}
