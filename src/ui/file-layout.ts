@@ -7,6 +7,7 @@ import {
   getFilePanelState,
   patchFilePanelState,
 } from '../state/file-panel';
+import { syncStatsStripLayoutForViewer } from './stats';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -45,6 +46,7 @@ export function applyFileSidebarVisuals(): void {
   if (split) {
     split.classList.toggle('viewer-open', state.viewerOpen);
     split.style.setProperty('--split-ratio', String(state.splitRatio));
+    syncStatsStripLayoutForViewer(state.viewerOpen);
   }
 
   if (!side || !btn) return;

@@ -30,6 +30,21 @@ export function toggleStatsPanel(): void {
   btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
 }
 
+/** Collapse expanded metrics when the file viewer split is active (narrow chat column). */
+export function collapseStatsPanelForSplit(): void {
+  const strip = document.getElementById('statsStrip');
+  const btn = document.getElementById('statsExpandBtn');
+  if (!strip) return;
+  strip.classList.remove('is-expanded');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  updateStatsExpandPreview();
+}
+
+/** Reset stats expand state when the workspace split opens or closes. */
+export function syncStatsStripLayoutForViewer(viewerOpen: boolean): void {
+  if (viewerOpen) collapseStatsPanelForSplit();
+}
+
 export function updateStatsExpandPreview(): void {
   const preview = document.getElementById('statsExpandPreview');
   if (!preview) return;

@@ -104,6 +104,47 @@
 .stat-cell.red .stat-val { color: var(--danger); }
 .stat-val.blank { color: var(--border-strong) !important; }
 
+/* File editor split: compact metrics in the chat column only (feature 26 / E6) */
+.workspace-split.viewer-open .stats-strip {
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.workspace-split.viewer-open .stats-expand-btn {
+  display: flex;
+}
+
+.workspace-split.viewer-open .stats-panel {
+  display: none;
+}
+
+.workspace-split.viewer-open .stats-strip.is-expanded .stats-panel {
+  display: grid;
+  /* Matches responsive.css ≤899px narrow-column grid */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+}
+
+.workspace-split.viewer-open .stats-strip.is-expanded .token-cell {
+  grid-column: 1 / -1;
+  border-right: none;
+  border-top: 1px solid var(--border);
+}
+
+.workspace-split.viewer-open .stats-strip.is-expanded .minfo-cell {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.workspace-split.viewer-open .stats-strip.is-expanded .stat-cell:nth-child(2),
+.workspace-split.viewer-open .stats-strip.is-expanded .stat-cell:nth-child(4) {
+  border-right: none;
+}
+
 .stat-unit {
   font-size: 11px;
   color: var(--text-muted);
