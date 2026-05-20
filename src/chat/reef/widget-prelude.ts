@@ -6,6 +6,8 @@
 export const PRELUDE_SCRIPT = `(function () {
   var widgetId = "__REEF_WIDGET_ID__";
   var pending = Object.create(null);
+  var resizeRaf = 0;
+  var lastPostedHeight = 0;
 
   function post(action, extra) {
     var payload = { type: "reef", action: action, widgetId: widgetId };
@@ -15,6 +17,48 @@ export const PRELUDE_SCRIPT = `(function () {
       }
     }
     parent.postMessage(payload, "*");
+  }
+
+  function measureContentHeightPx() {
+    var root = document.documentElement;
+    var body = document.body;
+    var fromBody = body
+      ? Math.max(body.scrollHeight, body.offsetHeight, Math.ceil(body.getBoundingClientRect().height))
+      : 0;
+    var fromRoot = Math.max(root.scrollHeight, root.offsetHeight, Math.ceil(root.getBoundingClientRect().height));
+    return Math.ceil(Math.max(fromBody, fromRoot, 1));
+  }
+
+  function postResizeToHost() {
+    var h = measureContentHeightPx();
+    if (h <= 0) return;
+    if (h === lastPostedHeight) return;
+    lastPostedHeight = h;
+    post("resize", { height: h });
+  }
+
+  function ensureChartParentsSized() {
+    var charts = document.querySelectorAll(".recharts-responsive-container");
+    for (var i = 0; i < charts.length; i++) {
+      var parent = charts[i].parentElement;
+      if (!parent) continue;
+      if (parent.getBoundingClientRect().height < 8) {
+        parent.style.minHeight = "220px";
+        parent.style.height = "220px";
+        if (!parent.style.width) parent.style.width = "100%";
+      }
+    }
+  }
+
+  function scheduleResizePost() {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(function () {
+      resizeRaf = requestAnimationFrame(function () {
+        resizeRaf = 0;
+        ensureChartParentsSized();
+        postResizeToHost();
+      });
+    });
   }
 
   window.addEventListener("message", function (ev) {
@@ -61,16 +105,20 @@ export const PRELUDE_SCRIPT = `(function () {
     openLink: function (url) {
       post("openLink", { url: String(url == null ? "" : url) });
     },
+    requestResize: scheduleResizePost,
   };
 
   if (typeof ResizeObserver !== "undefined") {
     var ro = new ResizeObserver(function () {
-      var h = Math.ceil(document.body.getBoundingClientRect().height);
-      if (h > 0) post("resize", { height: h });
+      scheduleResizePost();
     });
+    ro.observe(document.documentElement);
     ro.observe(document.body);
-    post("resize", { height: Math.ceil(document.body.getBoundingClientRect().height) || 120 });
   }
+
+  window.addEventListener("load", scheduleResizePost);
+
+  scheduleResizePost();
 })();`;
 
 /** Replace widget id placeholder before injecting into srcdoc. */

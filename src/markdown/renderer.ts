@@ -99,7 +99,7 @@ export function setAssistantBubbleContent(
 
   if (streaming && streamCursor) bubble.appendChild(streamCursor);
 
-  mountReefWidgets(bubble);
+  mountReefWidgets(bubble, { bubbleStreaming: streaming });
 }
 
 /** Debounced markdown refresh while the assistant reply is still streaming. */

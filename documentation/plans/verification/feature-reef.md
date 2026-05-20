@@ -12,7 +12,7 @@ Manual QA after shipping Reef mode widgets. Automated gate: `npm run build` && `
 6. **Override model** — Set Reef widget LLM in composer strip to a different model than chat; `callLLM` uses override (network tab / logs).
 7. **Default fallback** — Clear override — widget uses chat `providerId` / `modelId`.
 8. **Sandbox** — DevTools in iframe: `localStorage` throws; disallowed fetch blocked by CSP.
-9. **Streaming** — Open fence shows as code; on close, swaps to iframe without duplicate mounts on debounce.
+9. **Streaming** — While tokens stream, each `reef-widget` block shows pending labels (Building widget… / Styling… / Finishing up…) with a loading dot row, not highlighted code. After the reply completes, the fence becomes an interactive iframe without duplicate mounts on debounce.
 10. **Template** — Ask for standard slider-graph; model reads `src/chat/reef/widgets/slider-graph.md` and mounts.
 10a. **React** — Recharts + slider widget renders via importmap.
 11. **Impeccable** — Polish request references impeccable workflow.
@@ -24,4 +24,4 @@ Manual QA after shipping Reef mode widgets. Automated gate: `npm run build` && `
 |------|--------|
 | Mode prompts | `test/modes/load-mode-prompt.test.mts`, `compose-mode.test.mts` |
 | Chat shape | `test/modes/chat-mode-persist.test.mts` (reef LLM fields) |
-| Reef host | `test/chat/reef/theme-forward.test.mts`, `widget-iframe.test.mts`, `widget-block-detector.test.mts`, `widget-bridge.test.mts` |
+| Reef host | `test/chat/reef/theme-forward.test.mts`, `widget-iframe.test.mts`, `widget-block-detector.test.mts`, `widget-pending-ui.test.mts`, `widget-bridge.test.mts` |

@@ -2,6 +2,7 @@
  * Build sandboxed iframe srcdoc for a reef widget fence body.
  */
 
+import { REEF_WIDGET_BASELINE_CSS } from './widget-baseline-styles.ts';
 import { buildThemeCssBlock, readThemeVarsFromHost } from './theme-forward.ts';
 import { injectWidgetIdIntoPrelude, PRELUDE_SCRIPT } from './widget-prelude.ts';
 
@@ -64,10 +65,12 @@ export function buildReefWidgetSrcdoc(options: ReefWidgetIframeOptions): string 
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${REEF_CSP}">
 <style>
 ${themeCss}
-html, body { margin: 0; padding: 8px; box-sizing: border-box; min-height: ${minH}px; background: var(--bg, transparent); color: var(--text, inherit); font-family: var(--font-ui, system-ui, sans-serif); }
+${REEF_WIDGET_BASELINE_CSS}
+html, body { margin: 0; padding: 8px; box-sizing: border-box; min-height: ${minH}px; width: 100%; max-width: 100%; overflow-x: hidden; overflow-y: visible; background: var(--bg, transparent); color: var(--text, inherit); font-family: var(--font-ui, system-ui, sans-serif); }
 *, *::before, *::after { box-sizing: border-box; }
 </style>
 <script type="importmap">${importMapJson}</script>
@@ -98,6 +101,8 @@ export function createReefWidgetIframe(
   iframe.style.minHeight = `${options.minHeightPx ?? 120}px`;
   iframe.style.border = 'none';
   iframe.style.display = 'block';
+  /* Host sets exact height from resize messages; hide inner scrollbars. */
+  iframe.style.overflow = 'hidden';
 
   const setSrcdoc = (widgetHtml: string): void => {
     iframe.srcdoc = buildReefWidgetSrcdoc({

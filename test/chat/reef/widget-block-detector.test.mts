@@ -83,7 +83,77 @@ describe('widget-block-detector', { concurrency: false }, () => {
     assert.ok(bubble.querySelector('pre[data-lang="reef-widget"]'));
   });
 
-  test('skips mount while streaming', () => {
+  test('skips iframe mount while bubble is streaming; shows pending UI', () => {
+    setupDom();
+    const chat = createEmptyChatObject('model-a');
+    chat.modeId = 'reef';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const bubble = reefBubbleWithFence();
+    mountReefWidgetBlocks(bubble, { bubbleStreaming: true });
+    assert.equal(bubble.querySelector('.reef-widget-host'), null);
+    const pre = bubble.querySelector('pre[data-lang="reef-widget"]');
+    assert.ok(pre?.classList.contains('reef-widget-pre--pending'));
+    assert.equal(
+      pre?.querySelector('.reef-widget-pending__label')?.textContent,
+      'Building widget…',
+    );
+  });
+
+  test('pending phase styling when style present but no script', () => {
+    setupDom();
+    const chat = createEmptyChatObject('model-a');
+    chat.modeId = 'reef';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const bubble = document.createElement('div');
+    const pre = document.createElement('pre');
+    pre.setAttribute('data-lang', 'reef-widget');
+    const code = document.createElement('code');
+    code.textContent = '<style>.a{}</style><div></div>';
+    pre.appendChild(code);
+    bubble.appendChild(pre);
+    mountReefWidgetBlocks(bubble, { bubbleStreaming: true });
+    assert.equal(
+      pre.querySelector('.reef-widget-pending__label')?.textContent,
+      'Styling…',
+    );
+  });
+
+  test('pending phase finishing when script is present in body', () => {
+    setupDom();
+    const chat = createEmptyChatObject('model-a');
+    chat.modeId = 'reef';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const bubble = document.createElement('div');
+    const pre = document.createElement('pre');
+    pre.setAttribute('data-lang', 'reef-widget');
+    const code = document.createElement('code');
+    code.textContent = '<style></style><div></div><script></script>';
+    pre.appendChild(code);
+    bubble.appendChild(pre);
+    mountReefWidgetBlocks(bubble, { bubbleStreaming: true });
+    assert.equal(
+      pre.querySelector('.reef-widget-pending__label')?.textContent,
+      'Finishing up…',
+    );
+  });
+
+  test('mounts iframe when global streaming is true but bubble render is final', () => {
     setupDom();
     const chat = createEmptyChatObject('model-a');
     chat.modeId = 'reef';
@@ -97,7 +167,10 @@ describe('widget-block-detector', { concurrency: false }, () => {
 
     const bubble = reefBubbleWithFence();
     mountReefWidgetBlocks(bubble);
-    assert.equal(bubble.querySelector('.reef-widget-host'), null);
+
+    const host = bubble.querySelector('.reef-widget-host');
+    assert.ok(host);
+    assert.ok(host?.querySelector('iframe.reef-widget-iframe'));
   });
 
   test('does not remount when pre already marked', () => {

@@ -1,0 +1,17 @@
+/**
+ * Default layout CSS injected into every reef widget iframe srcdoc.
+ * Models often omit chart wrapper heights; Recharts ResponsiveContainer needs a sized parent.
+ */
+export const REEF_WIDGET_BASELINE_CSS = `
+.rw { max-width: 680px; min-width: 0; }
+.rw-chart {
+  height: 220px;
+  min-height: 220px;
+  min-width: 0;
+  width: 100%;
+}
+.rw-chart .recharts-responsive-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+`.trim();
