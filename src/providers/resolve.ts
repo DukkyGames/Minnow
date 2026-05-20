@@ -2,7 +2,7 @@
  * Resolve active provider to models/chat URLs (direct vs proxy).
  */
 
-import { parseServerBaseUrl } from '../ui/status';
+import { parseServerBaseUrl } from '../lib/parse-server-base-url';
 import { providerSupportsModelLoadUnload } from './capabilities';
 import { pathsForProvider } from './paths';
 import type { ProviderEndpoints, ProviderPublic } from './types';

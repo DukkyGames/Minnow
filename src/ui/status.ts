@@ -1,3 +1,4 @@
+import { parseServerBaseUrl as parseServerBaseUrlImpl } from '../lib/parse-server-base-url';
 import { closeMobileFileSidebar } from './file-layout';
 import { closeMobileSidebar } from './layout';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
@@ -19,15 +20,7 @@ export function setActiveProviderBaseUrl(baseUrl: string): void {
 
 /** Validate LM Studio base URL before network calls. */
 export function parseServerBaseUrl(raw: string): string | null {
-  const trimmed = (raw || '').trim().replace(/\/$/, '');
-  if (!trimmed) return null;
-  try {
-    const u = new URL(trimmed);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-    return u.origin;
-  } catch {
-    return null;
-  }
+  return parseServerBaseUrlImpl(raw);
 }
 
 /** Topbar pill states — operational feedback only, not model inventory. */

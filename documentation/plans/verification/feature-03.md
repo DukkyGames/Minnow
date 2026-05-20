@@ -66,8 +66,8 @@ npm test
 | A1 | `test/sessions/workspace-scoped.test.mts` — v1→v2 migration | ☑ |
 | A2 | `getChatsForWorkspace` / normalize / `resolveActiveChatForWorkspace` | ☑ |
 | A3 | `test/server/validate-sessions-v2.test.mjs` | ☑ |
-| A4 | Full `npm test` green | ☐ (repo has unrelated failures in rules-crud, workspace DELETE, token-estimate, `loop.ts` tsc) |
-| A5 | `npm run build` exits 0 | ☐ (pre-existing `loop.ts` / `terminal-meta.ts` tsc errors) |
+| A4 | Full `npm test` green | ☐ (full suite; B2 targeted tests pass) |
+| A5 | `npm run build` exits 0 | ☑ (2026-05-20 verification) |
 
 ### Manual (from build plan § Test plan)
 

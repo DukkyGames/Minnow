@@ -7,21 +7,27 @@
 
 ## Automated
 
-- [ ] `npm test` — includes `test/providers/paths.test.js`, `test/providers/proxy-mock.test.js` (load/unload), `test/api/models-load-unload.test.mts`
-- [ ] `npm run build` exits 0
+- [x] `test/providers/paths.test.js` — **PASS** (3 tests)
+- [x] `test/providers/proxy-mock.test.js` — **PASS** (load/unload proxy, 9 tests)
+- [x] `test/api/models-load-unload.test.mts` — **PASS** (5 tests)
+- [x] `npm run build` exits 0 — **PASS**
 
 ## Acceptance criteria
 
 | # | Criterion | PASS |
 |---|-----------|------|
-| AC1 | LM Studio local: **Load** loads selected not-loaded model; dropdown shows loaded after refresh | |
-| AC2 | **Unload** on loaded model; row shows not-loaded after refresh | |
-| AC3 | Buttons disabled for wrong `state` or empty selection | |
-| AC4 | `openai-v1` / `supportsModelLoadUnload: false`: buttons hidden; no upstream POST | |
-| AC5 | Proxy mode: browser hits `/api/providers/:id/models/load\|unload` only | |
-| AC6 | Upstream failure shows error status; cache/session intact | |
-| AC7 | `npm test` provider + client tests pass | |
-| AC8 | `npm run build` exits 0 | |
+| AC1 | LM Studio local: **Load** loads selected not-loaded model; dropdown shows loaded after refresh | Manual |
+| AC2 | **Unload** on loaded model; row shows not-loaded after refresh | Manual |
+| AC3 | Buttons disabled for wrong `state` or empty selection | Manual |
+| AC4 | `openai-v1` / `supportsModelLoadUnload: false`: buttons hidden; no upstream POST | **PASS** (proxy-mock rejects load) |
+| AC5 | Proxy mode: browser hits `/api/providers/:id/models/load\|unload` only | **PASS** (proxy-mock + resolve endpoints) |
+| AC6 | Upstream failure shows error status; cache/session intact | Manual |
+| AC7 | `npm test` provider + client tests pass | **PASS** |
+| AC8 | `npm run build` exits 0 | **PASS** |
+
+## Result
+
+**PASS** (automated). Manual U1–U6 require LM Studio operator QA.
 
 ## Manual QA (requires LM Studio)
 

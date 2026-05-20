@@ -31,6 +31,13 @@ npx tsx --test test/chat/stop-generation.test.mts test/chat/finalize-stopped-tur
 
 | Check | Result |
 |-------|--------|
-| AC1–AC8 (code + unit tests) | PASS |
-| `npm run build` | PASS |
+| AC1–AC8 (code + unit tests) | **PASS** (2026-05-20: `stop-generation`, `finalize-stopped-turn`, `composer-send` via tsx+test-loader) |
+| `npm run build` | **PASS** |
 | Manual M1–M8 | Pending operator run |
+
+## Verification commands (2026-05-20)
+
+```bash
+node --import ./test/test-loader.mjs ./node_modules/tsx/dist/cli.mjs --test test/chat/stop-generation.test.mts test/chat/finalize-stopped-turn.test.mts test/ui/composer-send.test.mjs
+npm run build
+```
