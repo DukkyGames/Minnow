@@ -1,12 +1,12 @@
 ---
 name: impeccable
-description: Design, critique, audit, and refine SpeedChat UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.
+description: Design, critique, audit, and refine Minnow UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.
 disable-model-invocation: true
 ---
 
-# Impeccable (SpeedChat)
+# Impeccable (Minnow)
 
-Design and iterate SpeedChat’s frontend using **project context files** and vendored Impeccable command references. Do not invent product facts or duplicate token tables from memory.
+Design and iterate Minnow’s frontend using **project context files** and vendored Impeccable command references. Do not invent product facts or duplicate token tables from memory.
 
 **UI Designer (Step 15)** may invoke this skill automatically for critique → shape → implement flows.
 
@@ -15,7 +15,7 @@ Design and iterate SpeedChat’s frontend using **project context files** and ve
 Load full product + design context in one JSON blob (no `head` / `grep` / `jq` on output):
 
 ```bash
-node src/skills/impeccable/scripts/speedchat-context.mjs
+node src/skills/impeccable/scripts/minnow-context.mjs
 ```
 
 Or upstream loader only:
@@ -55,7 +55,7 @@ Run anti-pattern scan when asked or before large UI PRs:
 npm run impeccable:detect
 ```
 
-## SpeedChat constraints (see DESIGN.md)
+## Minnow constraints (see DESIGN.md)
 
 - **Register:** `product` in `PRODUCT.md` — tool UI, not marketing site.
 - **Aesthetic:** Bench instrument — calm surfaces, ink accent, soft green user bubbles; no hero-metric cards or gradient text.
@@ -66,11 +66,11 @@ npm run impeccable:detect
 ## Tools
 
 - Read-only: `read_file`, `list_directory` on paths above.
-- Optional: SpeedChat browser CDP tools for visual QA (Step 12).
+- Optional: Minnow browser CDP tools for visual QA (Step 12).
 - CLI: `npx impeccable detect …` via `npm run impeccable:detect`.
 
 ## Maintenance
 
 - Upstream `reference/` + `scripts/` sync: `npm run impeccable:sync`
 - Update upstream + re-sync: `npm run impeccable:update`
-- User override: `~/.speedchat/skills/impeccable/SKILL.md` replaces this built-in when `name: impeccable` matches.
+- User override: `~/.minnow/skills/impeccable/SKILL.md` replaces this built-in when `name: impeccable` matches.

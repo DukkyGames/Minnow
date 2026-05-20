@@ -1,4 +1,4 @@
-# MODE_TEMPLATE — SpeedChat operating mode prompt
+# MODE_TEMPLATE — Minnow operating mode prompt
 
 Use this when authoring a new mode under `src/chat/prompts/modes/`. Production files use split `*.full.md` / `*.lite.md` pairs.
 
@@ -74,7 +74,7 @@ What this mode must **not** do (e.g. Plan: no drive-by refactors).
 Embed test markers:
 
 ```html
-<!-- SPEEDCHAT_MODE_MARKER: build full -->
+<!-- MINNOW_MODE_MARKER: build full -->
 ```
 
 ---
@@ -83,14 +83,14 @@ Embed test markers:
 
 - Target **≤ 40%** of full body length; hard cap **&lt; 600 characters** body (excluding front matter) for CI.
 - No examples in lite; imperative bullets only.
-- Include `<!-- LITE -->` and `<!-- SPEEDCHAT_MODE_MARKER: {id} lite -->`.
+- Include `<!-- LITE -->` and `<!-- MINNOW_MODE_MARKER: {id} lite -->`.
 
 ---
 
 ## Example full body opener
 
 ```markdown
-<!-- SPEEDCHAT_MODE_MARKER: my-mode full -->
+<!-- MINNOW_MODE_MARKER: my-mode full -->
 
 # Operating mode: My Mode ({{mode_label}})
 

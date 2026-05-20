@@ -1,4 +1,4 @@
-# SpeedChat prompt template reference
+# Minnow prompt template reference
 
 > Reference only — files under `_example/` are **not** loaded in production.
 
@@ -71,10 +71,10 @@ Parts concatenate in this order with `\n\n---\n\n`:
 |---------|----------|
 | **full** | Full templates; all applicable parts |
 | **lite** | `liteBody` / `*.lite.md` / truncation; `info` and `memory` off by default |
-| **custom** | `~/.speedchat/prompt-configs/<id>.json` per-part `enabled` + `contentOverride` |
+| **custom** | `~/.minnow/prompt-configs/<id>.json` per-part `enabled` + `contentOverride` |
 
 ## File layout
 
 - Shipped: `src/chat/prompts/<kind>/…`
-- User overrides: `~/.speedchat/prompts/` (mirror tree; same `id` wins)
-- Custom named profiles: `~/.speedchat/prompt-configs/<id>.json`
+- User overrides: `~/.minnow/prompts/` (mirror tree; same `id` wins)
+- Custom named profiles: `~/.minnow/prompt-configs/<id>.json`

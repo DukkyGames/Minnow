@@ -1,11 +1,11 @@
-# Step 02 — `~/.speedchat` data layer and migration
+# Step 02 — `~/.minnow` data layer and migration
 
 **Implementation build plan** for implementer and verifier sub-agents.
 
 | Field | Value |
 |-------|--------|
 | **Step ID** | 02 |
-| **Title** | `~/.speedchat` data layer + `localStorage` migration |
+| **Title** | `~/.minnow` data layer + `localStorage` migration |
 | **Backlog** | [`to-fix.md`](../to-fix.md) item **2** |
 | **Roadmap** | [`to-fix-step-order.md`](../to-fix-step-order.md) § Step 02; [`.cursor/plans/to-fix_step_order_a5310c61.plan.md`](../../../.cursor/plans/to-fix_step_order_a5310c61.plan.md) |
 | **Depends on** | Step 01 optional (can run in parallel) |
@@ -18,7 +18,7 @@
 
 ## 1. Goals
 
-1. **Canonical user data directory** — all SpeedChat config and user data live under **`~/.speedchat`** (Windows: `%USERPROFILE%\.speedchat`), not browser `localStorage`.
+1. **Canonical user data directory** — all Minnow config and user data live under **`~/.minnow`** (Windows: `%USERPROFILE%\.minnow`), not browser `localStorage`.
 2. **Server is source of truth** when `npm start` is running — new **`GET/PUT /api/config/*`** routes read/write files under the home dir with **path traversal guards** (same spirit as [`resolveSafePath`](../../../server.js) for tool paths).
 3. **One-time migration** from existing `localStorage` keys on first launch with server available.
 4. **Replace direct `localStorage`** in [`src/state/sessions.ts`](../../../src/state/sessions.ts), [`src/tools/config.ts`](../../../src/tools/config.ts), [`src/ui/settings.ts`](../../../src/ui/settings.ts) with a thin **config client** that proxies to the API.
@@ -29,14 +29,14 @@
 
 ## 2. Acceptance criteria (verifier)
 
-- [ ] With `npm start` and empty home dir, first load creates `~/.speedchat` layout + default `sessions/state.json`, `tools.json`, `system-prompt.json`, `config.json`.
+- [ ] With `npm start` and empty home dir, first load creates `~/.minnow` layout + default `sessions/state.json`, `tools.json`, `system-prompt.json`, `config.json`.
 - [ ] **Migration:** Given fixture `localStorage` payloads (see §9), `POST /api/config/migrate` writes equivalent files; `config.json` records `migratedFromLocalStorage: true`; re-run is **idempotent** (no duplicate corruption).
 - [ ] **Sessions:** Create/rename/delete chat, refresh browser — state persists from disk (not `localStorage`) when server was up during edits.
 - [ ] **Tools:** Toggle tools + Brave key in Settings → survives restart; stored under home dir only.
 - [ ] **System prompt:** Preset + custom text persists via API.
 - [ ] **Safe paths:** `GET /api/config/../../../etc/passwd` (or encoded traversal) returns **400**; writes outside home rejected.
 - [ ] **`npm run dev`:** App boots; sessions/tools/prompt still work via `localStorage`; status or banner indicates file-backed config unavailable.
-- [ ] `npm run build` passes; **`npm test`** (new) passes API + migration tests with `SPEEDCHAT_HOME` pointing at a temp directory.
+- [ ] `npm run build` passes; **`npm test`** (new) passes API + migration tests with `MINNOW_HOME` pointing at a temp directory.
 - [ ] [`documentation/context.md`](../../context.md) updated (home dir layout, API routes, persistence model, dev vs start).
 - [ ] [`documentation/plans/verification/step-02.md`](../verification/step-02.md) exists with exact commands (implementer creates).
 
@@ -46,24 +46,24 @@
 
 ### 3.1 Path helper (server + shared contract)
 
-Implement **`getSpeedChatHome()`** in `server/config/home.js` (and export types/constants for client docs):
+Implement **`getMinnowHome()`** in `server/config/home.js` (and export types/constants for client docs):
 
 | Platform | Resolved path | Node API |
 |----------|---------------|----------|
-| Linux / macOS | `$HOME/.speedchat` | `path.join(os.homedir(), '.speedchat')` |
-| Windows | `C:\Users\<user>\.speedchat` | Same — `os.homedir()` returns profile dir; **do not** use `USERPROFILE` manually unless homedir is missing |
+| Linux / macOS | `$HOME/.minnow` | `path.join(os.homedir(), '.minnow')` |
+| Windows | `C:\Users\<user>\.minnow` | Same — `os.homedir()` returns profile dir; **do not** use `USERPROFILE` manually unless homedir is missing |
 
-**Test override (required):** If `process.env.SPEEDCHAT_HOME` is set, use it **instead of** `os.homedir() + '/.speedchat'`. Verifier and CI **must** set this to a temp folder; never run destructive tests against the real user profile.
+**Test override (required):** If `process.env.MINNOW_HOME` is set, use it **instead of** `os.homedir() + '/.minnow'`. Verifier and CI **must** set this to a temp folder; never run destructive tests against the real user profile.
 
 ### 3.2 Normalization rules
 
 - Use `path.resolve()` on the home root once at startup.
 - Store **relative keys** in API (e.g. `sessions/state.json`), never absolute paths in JSON responses to the browser.
-- Log the resolved home path once on `npm start` (info): `SpeedChat data: <path>`.
+- Log the resolved home path once on `npm start` (info): `Minnow data: <path>`.
 
 ### 3.3 Directory creation
 
-On first access, **`ensureSpeedChatLayout()`**:
+On first access, **`ensureMinnowLayout()`**:
 
 - `fs.mkdir(home, { recursive: true })`
 - Create subdirs: `sessions`, `memory`, `providers`, `mcp`, `lsp`, `prompt-configs`, `prompts`, `skills`
@@ -77,7 +77,7 @@ On first access, **`ensureSpeedChatLayout()`**:
 ## 4. On-disk layout and schemas
 
 ```text
-~/.speedchat/
+~/.minnow/
   config.json              # global meta + migration flags + optional UI prefs later
   sessions/
     state.json             # full SessionState blob (v1 — same shape as localStorage today)
@@ -110,7 +110,7 @@ On first access, **`ensureSpeedChatLayout()`**:
 | `schemaVersion` | Top-level config file version for future breaking changes |
 | `migratedFromLocalStorage` | `true` after successful browser→disk migration |
 | `migratedAt` | ISO timestamp when migration completed |
-| `localStorageKeysMigrated` | e.g. `["speedchat-sessions-v1","speedchat.tools","speedchat.systemPrompt"]` |
+| `localStorageKeysMigrated` | e.g. `["minnow-sessions-v1","minnow.tools","minnow.systemPrompt"]` |
 
 **Step 02 may also store** non-secret UI prefs later (e.g. last drawer tab). **Do not** store LM Studio URL here yet — Step 03 owns `providers/`; optional interim field `legacyServerUrl` allowed **only** for Step 03 migration seed.
 
@@ -157,7 +157,7 @@ Same as [`SystemPromptSettings`](../../../src/types.ts):
 
 ## 5. Safe path guard (`resolveConfigPath`)
 
-**Separate from tool `resolveSafePath`** (which scopes to `process.cwd()` / project root). Config paths scope to **`SPEEDCHAT_HOME`**.
+**Separate from tool `resolveSafePath`** (which scopes to `process.cwd()` / project root). Config paths scope to **`MINNOW_HOME`**.
 
 ### 5.1 Algorithm
 
@@ -197,7 +197,7 @@ Extend [`server.js`](../../../server.js): new middleware **`createConfigMiddlewa
 
 | Method | Path | Response |
 |--------|------|----------|
-| `GET` | `/api/config/ping` | `{ "ok": true, "home": ".speedchat", "homeResolved": false }` — **never** expose full filesystem path to browser in production builds; `homeResolved: true` is enough. Optional debug: full path only when `SPEEDCHAT_DEBUG=1`. |
+| `GET` | `/api/config/ping` | `{ "ok": true, "home": ".minnow", "homeResolved": false }` — **never** expose full filesystem path to browser in production builds; `homeResolved: true` is enough. Optional debug: full path only when `MINNOW_DEBUG=1`. |
 | `GET` | `/api/config/status` | `{ "ok": true, "storage": "home", "migrated": boolean, "schemaVersion": 1 }` |
 
 ### 6.2 Resource CRUD (canonical)
@@ -224,9 +224,9 @@ Extend [`server.js`](../../../server.js): new middleware **`createConfigMiddlewa
 ```ts
 interface MigrateBody {
   localStorage?: {
-    sessions?: string;      // raw JSON string from speedchat-sessions-v1
-    tools?: string;         // raw from speedchat.tools
-    systemPrompt?: string;  // raw from speedchat.systemPrompt
+    sessions?: string;      // raw JSON string from minnow-sessions-v1
+    tools?: string;         // raw from minnow.tools
+    systemPrompt?: string;  // raw from minnow.systemPrompt
   };
   clearLocalStorage?: boolean; // client hint only — server does not clear browser
 }
@@ -236,7 +236,7 @@ interface MigrateBody {
 
 1. If `config.json` already has `migratedFromLocalStorage: true` → return **200** `{ ok: true, skipped: true }` (idempotent).
 2. Parse each provided string; on parse error, skip that key and log warning (include in response `warnings: string[]`).
-3. Write files **only if** target file does not exist **OR** body includes `force: true` (optional, dev-only guard with `SPEEDCHAT_DEBUG=1`).
+3. Write files **only if** target file does not exist **OR** body includes `force: true` (optional, dev-only guard with `MINNOW_DEBUG=1`).
 4. Set `migratedFromLocalStorage`, `migratedAt`, `localStorageKeysMigrated`.
 5. Never accept migration payloads > **10 MB** total (align attachment limit).
 
@@ -292,7 +292,7 @@ When `npm start` but disk error (permissions): return **500** `{ "error": "..." 
 
 **Debounce:** Keep [`SAVE_DEBOUNCE_MS`](../../../src/constants.ts) — debounced save calls `putSessions` instead of `localStorage.setItem`.
 
-**Quota errors:** Server PUT failure → surface `setStatus('err', 'Could not save sessions to ~/.speedchat')`; remove `QuotaExceededError` branch when in server mode (or map disk full to similar UX).
+**Quota errors:** Server PUT failure → surface `setStatus('err', 'Could not save sessions to ~/.minnow')`; remove `QuotaExceededError` branch when in server mode (or map disk full to similar UX).
 
 ### 7.4 Graceful Vite-only degrade
 
@@ -309,7 +309,7 @@ When `npm start` but disk error (permissions): return **500** `{ "error": "..." 
 If `migrate` succeeds and `clearLocalStorage: true` in client:
 
 - `localStorage.removeItem(STORAGE_KEY)` etc.
-- Keep backup keys `speedchat-sessions-v1.backup` only if implementer wants rollback (optional; default **remove** to prevent stale re-migration confusion).
+- Keep backup keys `minnow-sessions-v1.backup` only if implementer wants rollback (optional; default **remove** to prevent stale re-migration confusion).
 
 ---
 
@@ -319,7 +319,7 @@ If `migrate` succeeds and `clearLocalStorage: true` in client:
 sequenceDiagram
   participant Browser
   participant API as server.js /api/config
-  participant Disk as ~/.speedchat
+  participant Disk as ~/.minnow
 
   Browser->>API: GET /api/config/status
   alt not migrated
@@ -339,9 +339,9 @@ sequenceDiagram
 
 | localStorage key | File | Transform |
 |------------------|------|-----------|
-| `speedchat-sessions-v1` | `sessions/state.json` | Parse JSON; validate `version === 1`; run existing `ensureChatShape` logic server-side or trust client parse + server validate |
-| `speedchat.tools` | `tools.json` | `normalizeToolConfig` |
-| `speedchat.systemPrompt` | `system-prompt.json` | `{ presetId, text }` strings only |
+| `minnow-sessions-v1` | `sessions/state.json` | Parse JSON; validate `version === 1`; run existing `ensureChatShape` logic server-side or trust client parse + server validate |
+| `minnow.tools` | `tools.json` | `normalizeToolConfig` |
+| `minnow.systemPrompt` | `system-prompt.json` | `{ presetId, text }` strings only |
 
 ### 8.2 Edge cases
 
@@ -368,7 +368,7 @@ Add **`npm test`** script (project-wide standard from Step 02 onward):
 
 ### 9.1 Test environment
 
-- Every test file sets `process.env.SPEEDCHAT_HOME` to `path.join(os.tmpdir(), 'speedchat-test-' + fixedSuffix)` in `before` hook.
+- Every test file sets `process.env.MINNOW_HOME` to `path.join(os.tmpdir(), 'minnow-test-' + fixedSuffix)` in `before` hook.
 - Use **fixed** chat id `11111111-1111-1111-1111-111111111111` in fixtures.
 - Clean up temp home in `after`.
 
@@ -424,7 +424,7 @@ npx tsx scripts/config-smoke.mjs http://localhost:5173
 
 | Action | Path |
 |--------|------|
-| Create | `server/config/home.js` — `getSpeedChatHome`, `ensureSpeedChatLayout` |
+| Create | `server/config/home.js` — `getMinnowHome`, `ensureMinnowLayout` |
 | Create | `server/config/paths.js` — `resolveConfigPath`, whitelist |
 | Create | `server/config/validators.js` — session/tools/prompt validation |
 | Create | `server/config/store.js` — read/write JSON files |
@@ -450,10 +450,10 @@ npx tsx scripts/config-smoke.mjs http://localhost:5173
 
 Replace **localStorage keys** section with:
 
-- **Primary persistence:** `~/.speedchat` when `npm start`
+- **Primary persistence:** `~/.minnow` when `npm start`
 - **Fallback:** browser `localStorage` when Vite-only
 - Table of files + API routes
-- Migration one-liner + `SPEEDCHAT_HOME` for tests
+- Migration one-liner + `MINNOW_HOME` for tests
 - Note scaffold dirs for future steps
 
 ---
@@ -473,7 +473,7 @@ Replace **localStorage keys** section with:
 
 ## 13. Verifier handoff
 
-1. Set `SPEEDCHAT_HOME` to a fresh temp dir (commands in `verification/step-02.md`).
+1. Set `MINNOW_HOME` to a fresh temp dir (commands in `verification/step-02.md`).
 2. Run `npm test` and `npm run build`.
 3. `npm start` → open app → verify banner absent; create chat; restart server; chat persists.
 4. Seed localStorage via devtools (fixture strings) → reload → confirm migration + files on disk.
@@ -488,8 +488,8 @@ Replace **localStorage keys** section with:
 
 ### 14.1 Server foundation
 
-- [ ] **S02-T01** Add `getSpeedChatHome()` with `SPEEDCHAT_HOME` override and platform tests in comments.
-- [ ] **S02-T02** Implement `ensureSpeedChatLayout()` + default file writers.
+- [ ] **S02-T01** Add `getMinnowHome()` with `MINNOW_HOME` override and platform tests in comments.
+- [ ] **S02-T02** Implement `ensureMinnowLayout()` + default file writers.
 - [ ] **S02-T03** Implement `resolveConfigPath()` + whitelist unit tests.
 - [ ] **S02-T04** Implement `server/config/store.js` (atomic write: write temp + rename).
 
@@ -573,6 +573,6 @@ function resolveSafePath(userPath) {
 
 ## 16. Sub-agent prompt snippet
 
-**Implementer:** Implement Step 02 per this file. Server owns `~/.speedchat`; migrate three `localStorage` keys; graceful Vite-only fallback. Tests required before handoff. Update `context.md`.
+**Implementer:** Implement Step 02 per this file. Server owns `~/.minnow`; migrate three `localStorage` keys; graceful Vite-only fallback. Tests required before handoff. Update `context.md`.
 
-**Verifier:** Acceptance criteria §2 + §13 only; use temp `SPEEDCHAT_HOME`; re-run `npm test` and `npm run build`; no feature commits on FAIL.
+**Verifier:** Acceptance criteria §2 + §13 only; use temp `MINNOW_HOME`; re-run `npm test` and `npm run build`; no feature commits on FAIL.

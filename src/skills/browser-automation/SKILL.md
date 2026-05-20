@@ -26,6 +26,6 @@ Use **CDP browser tools** when you need a real Chrome tab: authenticated pages, 
 4. `browser_click` / `browser_fill` — act on uids from the latest snapshot.
 5. `browser_screenshot` — PNG appears inline in chat.
 
-Set `SPEEDCHAT_BROWSER_URL` or pass `browser_url` on each call. Enable tools under **Settings → Browser (CDP)**.
+Set `MINNOW_BROWSER_URL` or pass `browser_url` on each call. Enable tools under **Settings → Browser (CDP)**.
 
 Troubleshooting: [opencode-browser](https://github.com/different-ai/opencode-browser).

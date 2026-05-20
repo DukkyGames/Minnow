@@ -40,7 +40,7 @@ describe('composeSystemPrompt mode part', () => {
       enabledToolIds: [],
       infoPresetId: null,
     });
-    assert.match(out, /SPEEDCHAT_MODE_MARKER: plan full/);
+    assert.match(out, /MINNOW_MODE_MARKER: plan full/);
   });
 
   test('switching modeId changes composed output', async () => {
@@ -86,7 +86,7 @@ describe('composeSystemPrompt mode part', () => {
       enabledToolSummaries: 'get_datetime',
       infoPresetId: null,
     });
-    assert.match(out, /SPEEDCHAT_MODE_MARKER: build lite/);
+    assert.match(out, /MINNOW_MODE_MARKER: build lite/);
     assert.match(out, /LITE/);
   });
 });

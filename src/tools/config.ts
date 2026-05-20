@@ -1,6 +1,6 @@
 /**
- * Tool enablement and API keys — ~/.speedchat/tools.json when npm start,
- * else localStorage (`speedchat.tools`). Settings drawer uses `data-tool-id`.
+ * Tool enablement and API keys — ~/.minnow/tools.json when npm start,
+ * else localStorage (`minnow.tools`). Settings drawer uses `data-tool-id`.
  */
 
 import { getTools, putTools } from '../config/api-client';
@@ -10,7 +10,7 @@ import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
 
 /** @deprecated Direct localStorage use — migration read / Vite-only fallback only. */
-export const TOOL_CONFIG_STORAGE_KEY = 'speedchat.tools';
+export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 
 /** Persisted tool settings: per-tool enabled flags and optional keys. */
 export interface ToolConfig {
@@ -60,7 +60,7 @@ export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
       toolConfigLoaded = true;
       return cachedConfig;
     } catch {
-      setStatus('err', 'Could not load tool settings from ~/.speedchat');
+      setStatus('err', 'Could not load tool settings from ~/.minnow');
     }
   }
 
@@ -97,7 +97,7 @@ export function saveToolConfig(config: ToolConfig): void {
 
   if (isServerStorageMode()) {
     void putTools(config).catch(() => {
-      setStatus('err', 'Could not save tool settings to ~/.speedchat');
+      setStatus('err', 'Could not save tool settings to ~/.minnow');
     });
     return;
   }

@@ -6,23 +6,29 @@
 <meta name="theme-color" content="#fefefe">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="SpeedChat">
+<meta name="apple-mobile-web-app-title" content="Minnow">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icons/icon-192.png">
-<title>SpeedChat</title>
+<link rel="icon" href="/logos/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/logos/apple-touch-icon.png">
+<title>Minnow</title>
 </head>
 <body>
 <header class="topbar">
   <div class="logo-mark" aria-hidden="true">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
   </div>
-  <div class="app-title">SpeedChat</div>
+  <div class="app-title">Minnow</div>
   <div class="topbar-sep"></div>
 
   <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
   <div class="topbar-sep mid-hide"></div>
+
+  <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
+    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+  </button>
+  <div class="topbar-sep workspace-sep mid-hide"></div>
 
   <div class="model-wrap">
     <label class="visually-hidden" for="modelSelect">Model</label>
@@ -71,7 +77,7 @@
     <div class="field">
       <label for="serverUrl">Provider base URL</label>
       <input type="url" id="serverUrl" value="http://localhost:1234" autocomplete="off" spellcheck="false" readonly>
-      <p class="field-hint">Read-only display of the active provider URL. API keys are stored under <code>~/.speedchat/providers/</code>.</p>
+      <p class="field-hint">Read-only display of the active provider URL. API keys are stored under <code>~/.minnow/providers/</code>.</p>
     </div>
     <div class="field-row">
       <div class="field">
@@ -194,7 +200,7 @@
       </section>
       <section id="settingsSection-memory" class="settings-section">
         <h2>Memory</h2>
-        <p class="field-hint">Persistent notes under <code>~/.speedchat/memory/</code>. On send, matching entries are ranked and injected into the composed prompt when the store is enabled and <code>npm start</code> is running.</p>
+        <p class="field-hint">Persistent notes under <code>~/.minnow/memory/</code>. On send, matching entries are ranked and injected into the composed prompt when the store is enabled and <code>npm start</code> is running.</p>
         <label class="settings-toggle-row">
           <span>Enable memory store</span>
           <input type="checkbox" id="settingsMemoryEnabled">
@@ -203,6 +209,7 @@
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
         </div>
+        <div id="settingsMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
         <div class="settings-actions">
           <button type="button" id="settingsMemoryBackup" class="settings-action-btn">Backup memory</button>
           <button type="button" id="settingsMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
@@ -233,7 +240,7 @@
       </section>
       <section id="settingsSection-mcp" class="settings-section">
         <h2>MCP servers</h2>
-        <p class="field-hint">Model Context Protocol tools are loaded from <code>~/.speedchat/mcp/</code> when <code>npm start</code> is running. Namespaced tools use the <code>mcp__</code> prefix in the tool loop.</p>
+        <p class="field-hint">Model Context Protocol tools are loaded from <code>~/.minnow/mcp/</code> when <code>npm start</code> is running. Namespaced tools use the <code>mcp__</code> prefix in the tool loop.</p>
         <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
         <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
         <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
@@ -285,7 +292,7 @@
       </section>
       <section id="settingsSection-lsp" class="settings-section">
         <h2>Language servers</h2>
-        <p class="field-hint">Agent tools <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> use these servers when <code>npm start</code> is running. Overrides are saved to <code>~/.speedchat/lsp.json</code>.</p>
+        <p class="field-hint">Agent tools <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> use these servers when <code>npm start</code> is running. Overrides are saved to <code>~/.minnow/lsp.json</code>.</p>
         <p id="settingsLspOffline" class="field-hint settings-lsp-offline hidden">Start with <code>npm start</code> to load and toggle language servers.</p>
         <label class="settings-toggle-row" id="settingsLspMasterRow">
           <span>Enable language servers</span>
@@ -324,7 +331,7 @@
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon" aria-hidden="true">
-          <svg class="icon-svg" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" style="width:32px;height:32px;margin:0 auto" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>

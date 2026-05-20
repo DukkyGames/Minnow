@@ -12,7 +12,7 @@ export interface TitlesConfig {
   temperature: number;
 }
 
-const TITLES_META_STORAGE_KEY = 'speedchat.titlesMeta';
+const TITLES_META_STORAGE_KEY = 'minnow.titlesMeta';
 
 export const DEFAULT_TITLES_CONFIG: TitlesConfig = {
   enabled: true,

@@ -1,10 +1,10 @@
 /**
- * Screenshot paths under ~/.speedchat/screenshots/.
+ * Screenshot paths under ~/.minnow/screenshots/.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { loadBrowserConfig } from './browser-config.js';
 
 /**
@@ -13,7 +13,7 @@ import { loadBrowserConfig } from './browser-config.js';
  */
 export async function getScreenshotsDir() {
   const cfg = await loadBrowserConfig();
-  const dir = path.join(getSpeedChatHome(), cfg.screenshotDir || 'screenshots');
+  const dir = path.join(getMinnowHome(), cfg.screenshotDir || 'screenshots');
   await fs.mkdir(dir, { recursive: true });
   return dir;
 }

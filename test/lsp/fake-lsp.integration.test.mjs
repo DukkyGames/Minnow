@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { getLspDiagnostics, shutdownAllLsp } from '../../server/lsp/manager.js';
 
@@ -18,12 +18,12 @@ describe('fake LSP integration', () => {
   let homeDir;
 
   before(async () => {
-    if (process.env.SPEEDCHAT_LSP_ENABLED === 'false') {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
       return;
     }
     homeDir = path.join(__dirname, '../fixtures/lsp-home');
-    process.env.SPEEDCHAT_HOME = homeDir;
-    resetSpeedChatHomeCache();
+    process.env.MINNOW_HOME = homeDir;
+    resetMinnowHomeCache();
     invalidateLspConfigCache();
     shutdownAllLsp();
     await fs.rm(homeDir, { recursive: true, force: true });
@@ -47,13 +47,13 @@ describe('fake LSP integration', () => {
 
   after(() => {
     shutdownAllLsp();
-    delete process.env.SPEEDCHAT_HOME;
-    resetSpeedChatHomeCache();
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
     invalidateLspConfigCache();
   });
 
   test('getLspDiagnostics includes static fake error', async () => {
-    if (process.env.SPEEDCHAT_LSP_ENABLED === 'false') {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
       return;
     }
     const result = await getLspDiagnostics('test/fixtures/sample.fake');

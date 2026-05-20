@@ -12,8 +12,8 @@ Task-specific agents with their own system prompt bodies and optional provider/m
 
 | Path | Purpose |
 |------|---------|
-| `~/.speedchat/work-agents.json` | Per-agent `providerId`, `modelId`, `disabled`, `promptOverride` |
-| `~/.speedchat/prompts/work-agents/<id>/agent.{full,lite}.md` | Prompt file override |
+| `~/.minnow/work-agents.json` | Per-agent `providerId`, `modelId`, `disabled`, `promptOverride` |
+| `~/.minnow/prompts/work-agents/<id>/agent.{full,lite}.md` | Prompt file override |
 
 ## APIs (`npm start`)
 

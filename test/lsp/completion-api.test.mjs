@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequestNode } from 'node:http';
-import { resetSpeedChatHomeCache } from '../../server/config/home.js';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { createLspMiddleware } from '../../server/lsp/middleware.js';
 import { shutdownAllLsp } from '../../server/lsp/manager.js';
@@ -58,12 +58,12 @@ describe('LSP completion API', () => {
   let baseUrl;
 
   before(async () => {
-    if (process.env.SPEEDCHAT_LSP_ENABLED === 'false') {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
       return;
     }
     homeDir = path.join(__dirname, '../fixtures/lsp-completion-home');
-    process.env.SPEEDCHAT_HOME = homeDir;
-    resetSpeedChatHomeCache();
+    process.env.MINNOW_HOME = homeDir;
+    resetMinnowHomeCache();
     invalidateLspConfigCache();
     shutdownAllLsp();
     await fs.rm(homeDir, { recursive: true, force: true });
@@ -104,8 +104,8 @@ describe('LSP completion API', () => {
       await new Promise((resolve) => server.close(resolve));
     }
     shutdownAllLsp();
-    delete process.env.SPEEDCHAT_HOME;
-    resetSpeedChatHomeCache();
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
     invalidateLspConfigCache();
     if (homeDir) {
       await fs.rm(homeDir, { recursive: true, force: true });
@@ -113,7 +113,7 @@ describe('LSP completion API', () => {
   });
 
   test('notify open then completion returns fake items', async () => {
-    if (process.env.SPEEDCHAT_LSP_ENABLED === 'false') {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
       return;
     }
 
@@ -151,7 +151,7 @@ describe('LSP completion API', () => {
   });
 
   test('notify rejects invalid event', async () => {
-    if (process.env.SPEEDCHAT_LSP_ENABLED === 'false') {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
       return;
     }
     const res = await httpRequest(baseUrl, 'POST', '/api/lsp/notify', {

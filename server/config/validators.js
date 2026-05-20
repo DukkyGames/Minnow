@@ -297,6 +297,18 @@ export function mergeConfigMeta(existing, patch) {
     base.terminal = existingTerminal;
   }
 
+  if (p.workspace && typeof p.workspace === 'object') {
+    const existingWorkspace =
+      base.workspace && typeof base.workspace === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.workspace) }
+        : { path: '' };
+    const w = /** @type {Record<string, unknown>} */ (p.workspace);
+    if (typeof w.path === 'string' && w.path.trim()) {
+      existingWorkspace.path = w.path.trim();
+    }
+    base.workspace = existingWorkspace;
+  }
+
   if (p.filePanel && typeof p.filePanel === 'object') {
     const existingPanel =
       base.filePanel && typeof base.filePanel === 'object'

@@ -9,7 +9,7 @@ tsx --test test/ui-designer/**/*.test.mts
 node scripts/step15-smoke.mjs
 ```
 
-With dev server (`npm start`, same `SPEEDCHAT_HOME` if testing meta over HTTP):
+With dev server (`npm start`, same `MINNOW_HOME` if testing meta over HTTP):
 
 ```bash
 node scripts/step15-smoke.mjs http://localhost:5173
@@ -49,7 +49,7 @@ Expected: all **U1–U6** and **I1–I4** PASS; `npm test` includes `test/ui-des
 | `tsx --test test/ui-designer/**/*.test.mts` | **PASS** (9/9) |
 | `node scripts/step15-smoke.mjs` | **PASS** |
 | `npm test` | **PASS** (176/176) |
-| Step 14 impeccable | **PASS** — `src/skills/impeccable/SKILL.md` present; `speedchat-context.mjs` loads PRODUCT + DESIGN |
+| Step 14 impeccable | **PASS** — `src/skills/impeccable/SKILL.md` present; `minnow-context.mjs` loads PRODUCT + DESIGN |
 | Impeccable UI spot-check | **PASS** — skill picker `UI Designer`; work agent label `UI Designer`; no gradient-text / AI-slop in Step 15 surfaces (settings model UI deferred Step 20) |
 | Manual QA (1–3) | **Deferred** — Chrome CDP + vision model E2E |
 

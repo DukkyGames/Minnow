@@ -6,14 +6,14 @@
 | **Title** | Programmatic chat title generation |
 | **Backlog** | [`to-fix.md`](../to-fix.md) item **9** — *titles should generate programaticly as an inital prompt to the agent* |
 | **Roadmap** | [`to-fix-step-order.md`](../to-fix-step-order.md) § Step 07 |
-| **Depends on** | **Step 02** (`~/.speedchat` sessions persistence), **Step 03** (provider registry + authenticated chat HTTP) |
+| **Depends on** | **Step 02** (`~/.minnow` sessions persistence), **Step 03** (provider registry + authenticated chat HTTP) |
 | **Out of scope** | Step 04 prompt composer profiles, Step 06 experts, Step 20 settings UI for title model (minimal config hook only) |
 
 ---
 
 ## Goal
 
-Replace the synchronous first-line truncation in [`maybeAutoTitleFromFirstUserMessage`](../../../src/state/sessions.ts) with a **short, non-streaming** LLM title job fired on the **first user message** of a chat still named `New chat`. Titles must **not block** the main send path; the sidebar updates when the job completes. Shipped prompt lives under [`src/chat/prompts/titles/`](../../../src/chat/prompts/titles/) with optional user override under `~/.speedchat/prompts/titles/`.
+Replace the synchronous first-line truncation in [`maybeAutoTitleFromFirstUserMessage`](../../../src/state/sessions.ts) with a **short, non-streaming** LLM title job fired on the **first user message** of a chat still named `New chat`. Titles must **not block** the main send path; the sidebar updates when the job completes. Shipped prompt lives under [`src/chat/prompts/titles/`](../../../src/chat/prompts/titles/) with optional user override under `~/.minnow/prompts/titles/`.
 
 ---
 
@@ -25,7 +25,7 @@ Replace the synchronous first-line truncation in [`maybeAutoTitleFromFirstUserMe
 | [`src/tools/loop.ts`](../../../src/tools/loop.ts) ~L399 | Calls heuristic before push + `renderSidebar()` on tool send path |
 | [`src/api/chat.ts`](../../../src/api/chat.ts) ~L279 | Same on plain `sendMessage` path |
 | [`src/ui/sidebar.ts`](../../../src/ui/sidebar.ts) | `renderSidebar()` reads `chat.name`; manual rename via inline input (max **120** chars) |
-| Persistence | Today: `localStorage` `speedchat-sessions-v1` → after **Step 02**: session blob under `~/.speedchat/sessions/` (via server API) |
+| Persistence | Today: `localStorage` `minnow-sessions-v1` → after **Step 02**: session blob under `~/.minnow/sessions/` (via server API) |
 
 **Remove** calls to `maybeAutoTitleFromFirstUserMessage` from send paths once the async title hook is wired. **Delete or deprecate** the heuristic function (prefer delete + re-export nothing; tests cover replacement).
 
@@ -82,7 +82,7 @@ Attachments-only first message: seed is filename; prompt should still produce a 
 
 - [ ] Session read/write API for chats (not raw `localStorage` only in production path).
 - [ ] `findChatById(chatId)` or equivalent stable lookup from async callback.
-- [ ] `scheduleSaveSessions()` persists to `~/.speedchat/sessions/<id>.json` (or aggregate file — match Step 02 design).
+- [ ] `scheduleSaveSessions()` persists to `~/.minnow/sessions/<id>.json` (or aggregate file — match Step 02 design).
 
 ### From Step 03
 
@@ -122,7 +122,7 @@ documentation/plans/verification/step-07.md   # commands + expected output (impl
 User overrides (Step 02 paths):
 
 ```
-~/.speedchat/prompts/titles/default.md   # wins over shipped default when present
+~/.minnow/prompts/titles/default.md   # wins over shipped default when present
 ```
 
 ---
@@ -139,14 +139,14 @@ User overrides (Step 02 paths):
 ### `prompt.ts`
 
 - Read bundled default via `import.meta.url` / `?raw` (Vite) **or** fetch from `/src/...` in dev — match how Step 04 loads prompts.
-- Merge override from `~/.speedchat` when server exposes `GET /api/config/prompts/titles/default` (Step 02 API); else bundled only in `npm run dev`.
+- Merge override from `~/.minnow` when server exposes `GET /api/config/prompts/titles/default` (Step 02 API); else bundled only in `npm run dev`.
 - `buildTitleMessages(seed: string): ApiMessage[]` → `[{ role: 'system', content }, { role: 'user', content: seed }]`.
 
 ---
 
 ## Configuration
 
-Store in `~/.speedchat/config.json` (Step 02 schema), keys:
+Store in `~/.minnow/config.json` (Step 02 schema), keys:
 
 | Key | Default | Notes |
 |-----|---------|--------|
@@ -328,7 +328,7 @@ Use minimal in-memory session stub or mock `sessions` module:
 
 - [ ] **3.1** Implement `src/chat/titles/schedule.ts` with `inflight` map and `scheduleChatTitleGeneration`.
 - [ ] **3.2** Add `applyGeneratedChatTitle` in [`sessions.ts`](../../../src/state/sessions.ts) (or keep logic inside schedule module calling session helpers only).
-- [ ] **3.3** Read `titles.*` from `~/.speedchat/config.json` via Step 02 config API with safe defaults.
+- [ ] **3.3** Read `titles.*` from `~/.minnow/config.json` via Step 02 config API with safe defaults.
 - [ ] **3.4** Unit tests `test/titles/schedule.test.ts` (rename race, duplicate guard, disabled config).
 - [ ] **3.5** **Remove** `maybeAutoTitleFromFirstUserMessage` from [`sessions.ts`](../../../src/state/sessions.ts).
 
@@ -359,7 +359,7 @@ Add subsection under **Multi-chat sessions**:
 
 - Title generation trigger (first message, placeholder name).
 - Async non-streaming job; does not block send.
-- Prompt path `src/chat/prompts/titles/` + `~/.speedchat/prompts/titles/` override.
+- Prompt path `src/chat/prompts/titles/` + `~/.minnow/prompts/titles/` override.
 - Config keys `titles.enabled`, `titles.modelId`, `titles.providerId`.
 - Remove description of first-line truncation heuristic.
 

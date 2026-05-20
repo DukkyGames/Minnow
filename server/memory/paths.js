@@ -1,13 +1,13 @@
 /**
- * Resolve memory store paths under SPEEDCHAT_HOME.
+ * Resolve memory store paths under MINNOW_HOME.
  */
 
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 
 /** Memory root directory. */
 export function getMemoryDir() {
-  return path.join(getSpeedChatHome(), 'memory');
+  return path.join(getMinnowHome(), 'memory');
 }
 
 /** Entry markdown files. */
@@ -22,7 +22,7 @@ export function getIndexPath() {
 
 /** Backups directory for memory archives. */
 export function getBackupsDir() {
-  return path.join(getSpeedChatHome(), 'backups');
+  return path.join(getMinnowHome(), 'backups');
 }
 
 const UUID_RE =

@@ -1,4 +1,4 @@
-# SpeedChat — Product
+# Minnow — Product
 
 ## Register
 

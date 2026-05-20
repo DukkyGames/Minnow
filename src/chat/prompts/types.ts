@@ -63,7 +63,7 @@ export interface PromptConfigPartSettings {
   contentOverride: string | null;
 }
 
-/** Named custom profile stored under ~/.speedchat/prompt-configs/. */
+/** Named custom profile stored under ~/.minnow/prompt-configs/. */
 export interface PromptConfig {
   id: string;
   label: string;

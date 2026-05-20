@@ -1,6 +1,6 @@
 {
-  "name": "SpeedChat",
-  "short_name": "SpeedChat",
+  "name": "Minnow",
+  "short_name": "Minnow",
   "description": "Local LM Studio chat client with inference stats",
   "start_url": "./",
   "display": "standalone",

@@ -12,7 +12,7 @@ toolPolicy:
     execute_command: deny
 ---
 
-<!-- SPEEDCHAT_MODE_MARKER: research full -->
+<!-- MINNOW_MODE_MARKER: research full -->
 
 # Operating mode: Research ({{mode_label}})
 

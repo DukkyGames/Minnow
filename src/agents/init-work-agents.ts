@@ -11,7 +11,7 @@ import {
 } from './work-agent-registry';
 import type { WorkAgentUserOverride } from './work-agent-types';
 
-/** Load built-ins and optional ~/.speedchat overrides from API. */
+/** Load built-ins and optional ~/.minnow overrides from API. */
 export async function initWorkAgentSystem(): Promise<void> {
   setWorkAgentRegistryIndex(registryIndex as { ids: string[] });
 

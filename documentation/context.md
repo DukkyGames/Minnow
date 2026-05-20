@@ -1,21 +1,21 @@
-# SpeedChat — project context
+# Minnow — project context
 
 User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
-**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.speedchat/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test`.
+**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test`.
 
 ## What it is
 
-SpeedChat is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
+Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
 **LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **39** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **30** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
 ```
-SpeedChat/
+Minnow/
 ├── index.html              # Vite shell: markup + <script type="module" src="/src/main.ts">
 ├── server.js               # Dev server: Vite + /api/tools (npm start)
 ├── package.json
@@ -23,7 +23,7 @@ SpeedChat/
 ├── vite.config.ts          # base: './', outDir: dist
 ├── public/                 # Copied verbatim to dist/ (not bundled)
 │   ├── manifest.json       # PWA manifest (start_url: ./)
-│   ├── sw.js               # Service worker (cache: speedchat-v5)
+│   ├── sw.js               # Service worker (cache: minnow-v5)
 │   └── icons/              # icon-192.png, icon-512.png
 ├── src/
 │   ├── main.ts             # Entry: CSS imports, window handlers, initApp()
@@ -45,7 +45,7 @@ SpeedChat/
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
 │   │   ├── definitions.ts      # 39-tool catalog (OpenAI function schemas)
-│   │   ├── config.ts           # speedchat.tools localStorage
+│   │   ├── config.ts           # minnow.tools localStorage
 │   │   ├── browser-executor.ts # 9 browser-native handlers (not CDP)
 │   │   ├── client.ts           # ping, executeTool router, enabled defs
 │   │   └── loop.ts             # buildApiMessages, sendMessageWithTools
@@ -62,23 +62,23 @@ SpeedChat/
 └── documentation/
 ```
 
-## Persistence (`~/.speedchat`)
+## Persistence (`~/.minnow`)
 
 When **`npm start`** is running, the Node dev server is the **source of truth** for durable config. Data lives under:
 
 | Platform | Path |
 |----------|------|
-| Linux / macOS | `$HOME/.speedchat` |
-| Windows | `%USERPROFILE%\.speedchat` (via `os.homedir()`) |
+| Linux / macOS | `$HOME/.minnow` |
+| Windows | `%USERPROFILE%\.minnow` (via `os.homedir()`) |
 
-**Override for tests/CI:** set `SPEEDCHAT_HOME` to a temp directory (never run destructive tests against the real profile).
+**Override for tests/CI:** set `MINNOW_HOME` to a temp directory (never run destructive tests against the real profile).
 
-On first `npm start`, the server logs `SpeedChat data: <path>` and creates the layout if missing.
+On first `npm start`, the server logs `Minnow data: <path>` and creates the layout if missing.
 
 ### Layout (Step 02)
 
 ```text
-~/.speedchat/
+~/.minnow/
   config.json              # schemaVersion, activeProviderId, migration flags
   sessions/state.json      # full SessionState blob (all chats — canonical)
   tools.json               # ToolConfig (enabled + braveApiKey)
@@ -102,7 +102,7 @@ On first `npm start`, the server logs `SpeedChat data: <path>` and creates the l
   backups/                 # scaffold
 ```
 
-**Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13). User overrides use `~/.speedchat/prompts/` and `~/.speedchat/skills/`.
+**Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13). User overrides use `~/.minnow/prompts/` and `~/.minnow/skills/`.
 
 ### Skills framework (Step 13)
 
@@ -111,7 +111,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Root | Path | Override |
 |------|------|----------|
 | Built-in | `src/skills/<id>/SKILL.md` | Shipped in repo |
-| User | `~/.speedchat/skills/<id>/SKILL.md` | Same `name` replaces built-in |
+| User | `~/.minnow/skills/<id>/SKILL.md` | Same `name` replaces built-in |
 
 **Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `skillBody` in `composeSystemPrompt()` (`skill` part). History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
 
@@ -119,7 +119,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 |---------|----------|
 | Types, merge, slash parse | `src/skills/` (`loader.ts`, `parse-slash.ts`, `parse-frontmatter.ts`) |
 | Catalog client + offline manifest | `src/skills/client.ts`, `src/skills/builtin-manifest.json` (from `npm run prebuild`) |
-| Enable/disable + persistence | `src/skills/config.ts`, `~/.speedchat/skills.json`, `GET/PUT /api/config/skills` |
+| Enable/disable + persistence | `src/skills/config.ts`, `~/.minnow/skills.json`, `GET/PUT /api/config/skills` |
 | Settings UI (toggles, editor, add custom) | `src/ui/settings-skills.ts`, `src/skills/skill-settings-api.ts` |
 | Custom skill template | `src/skills/_template/SKILL.md` (copied on `POST /api/skills`) |
 | Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` |
@@ -145,12 +145,12 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Built-in skill | `src/skills/impeccable/SKILL.md` (`name: impeccable` → `/impeccable`) |
 | Upstream snapshot | `src/skills/impeccable/SKILL.upstream.md` (auto-synced; do not edit) |
 | Command references | `src/skills/impeccable/reference/*.md` |
-| Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `speedchat-context.mjs`, …) |
+| Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `minnow-context.mjs`, …) |
 | Postinstall / sync | `scripts/sync-impeccable-skill.mjs` (vendors from `.agents/skills/impeccable` after `npx impeccable skills install -y`) |
 | npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
 | Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, `.impeccable/design.json` |
 
-`npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Override built-in: `~/.speedchat/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
+`npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Override built-in: `~/.minnow/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
 
 **Tests:** `npm run test:skills-impeccable`. Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
 
@@ -175,7 +175,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 
 ### Memory system (Step 16)
 
-Persistent notes under `~/.speedchat/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part and `{{memory}}` when enabled.
+Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part and `{{memory}}` when enabled.
 
 | API | Purpose |
 |-----|---------|
@@ -186,22 +186,22 @@ Persistent notes under `~/.speedchat/memory/` (`index.json` + `entries/<uuid>.md
 | `POST /api/memory/clear` | Clear (optional archive) |
 | `POST /api/memory/backup` / `restore` | Folder backup under `backups/` |
 
-**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts` (`fetchMemoryStatus`, `retrieveMemoryBlock`, …). **Settings UI:** `#/settings/memory` — toggle store, live entry count via `GET /api/memory/status`, backup/clear actions. **Tests:** `npm run test:memory`; smoke: `npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173`.
+**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts` (`fetchMemoryStatus`, `fetchMemoryEntries`, `retrieveMemoryBlock`, …). **Settings UI:** `#/settings/memory` — toggle store, live entry count via `GET /api/memory/status`, scrollable list of entries (title, tags, body) via `GET /api/memory/entries?includeBody=1`, per-entry delete, backup/clear actions. **Tests:** `npm run test:memory`; smoke: `npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173`.
 
 ### LSP integration (Step 17)
 
-Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`; user overrides `~/.speedchat/lsp.json`.
+Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`; user overrides `~/.minnow/lsp.json`.
 
 | Tool | Description |
 |------|-------------|
 | `get_lsp_diagnostics` | Formatted diagnostics for a relative path |
 | `list_lsp_servers` | Configured servers + running state |
 
-**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `POST /api/lsp/notify` (`{ path, event: open|change|close, text? }` → didOpen/didChange/didClose), `POST /api/lsp/completion` (`{ path, line, character }` → `{ items: [{ label, insertText, kind?, detail? }] }`), `GET/PUT /api/config/lsp` (PUT supports `removeLspIds` for custom server removal). **File viewer:** When LSP is enabled and `npm start` is up, CodeMirror autocomplete calls `src/lsp/completion-client.ts` via `src/ui/file-editor-extensions.ts`; open/edit/save debounce document sync (`src/ui/file-viewer.ts`). **Catalog:** `src/lsp/defaults.json` ships OpenCode-aligned built-ins (typescript, pyright, rust, …); user overrides in `~/.speedchat/lsp.json`. **Settings:** `#/settings/lsp` lists all built-in servers (toggle `disabled`), running/idle badges, and an **Add custom language server** form (`src/ui/lsp-settings.ts`, `src/lsp/config-client.ts`). Test-only `fake` server is hidden in UI. **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files + completion API).
+**API:** `/api/lsp/status`, `/api/lsp/diagnostics`, `POST /api/lsp/notify` (`{ path, event: open|change|close, text? }` → didOpen/didChange/didClose), `POST /api/lsp/completion` (`{ path, line, character }` → `{ items: [{ label, insertText, kind?, detail? }] }`), `GET/PUT /api/config/lsp` (PUT supports `removeLspIds` for custom server removal). **File viewer:** When LSP is enabled and `npm start` is up, CodeMirror autocomplete calls `src/lsp/completion-client.ts` via `src/ui/file-editor-extensions.ts`; open/edit/save debounce document sync (`src/ui/file-viewer.ts`). **Catalog:** `src/lsp/defaults.json` ships OpenCode-aligned built-ins (typescript, pyright, rust, …); user overrides in `~/.minnow/lsp.json`. **Settings:** `#/settings/lsp` lists all built-in servers (toggle `disabled`), running/idle badges, and an **Add custom language server** form (`src/ui/lsp-settings.ts`, `src/lsp/config-client.ts`). Test-only `fake` server is hidden in UI. **Tests:** `npm run test:lsp` (fake stdio server for `.fake` files + completion API).
 
 ### MCP + Context7 (Step 18)
 
-MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabledToolDefinitions()` when the local server is up. **Context7** seeded enabled under `~/.speedchat/mcp/`.
+MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabledToolDefinitions()` when the local server is up. **Context7** seeded enabled under `~/.minnow/mcp/`.
 
 | API | Purpose |
 |-----|---------|
@@ -229,13 +229,13 @@ Off by default (`config.json` → `selfHealing.enabled`). Toggle in **Settings �
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.speedchat/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.minnow/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
 
-**Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.speedchat/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
+**Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
 
 **Tests:** `npm test`, `npm run build`, `test/ui/settings-sections.test.mjs`, `test/ui/settings-page-html.test.mjs`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
 
-**Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `SPEEDCHAT_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
+**Tests:** `npm run test:skills`; `node scripts/s13-skills-smoke.mjs` (set `MINNOW_HOME` for override fixture). Verification: [`documentation/plans/verification/step-13.md`](plans/verification/step-13.md).
 
 **Vite-only (`npm run dev`):** picker uses `builtin-manifest.json` + lazy `import.meta.glob` in `client.ts` for built-in bodies (glob is no-op under Node/tsx tests); user skills need `npm start`.
 
@@ -275,7 +275,7 @@ Four primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**.
 
 ### Expert system (Step 06)
 
-Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `expert.lite.md`). User overrides: `~/.speedchat/prompts/experts/<id>/`.
+Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `expert.lite.md`). User overrides: `~/.minnow/prompts/experts/<id>/`.
 
 | Concern | Location |
 |---------|----------|
@@ -306,7 +306,7 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 | Prompt API client | `src/agents/work-agent-prompt-api.ts` |
 | Dev UI | `src/ui/work-agent-dev.ts` (`?dev=1` shows `#workAgentSelect`) |
 | Persistence | `Chat.workAgentId`, `Chat.workAgentAuto` in `sessions/state.json` |
-| User overrides | `~/.speedchat/work-agents.json`, `~/.speedchat/prompts/work-agents/<id>/` |
+| User overrides | `~/.minnow/work-agents.json`, `~/.minnow/prompts/work-agents/<id>/` |
 
 **Built-in ids:** `default`, `builder`, `plan` → `planner`, `research` → `researcher`, plus `reviewer`. Mode auto-map via `defaultForModes` when `workAgentAuto` is true (default).
 
@@ -322,9 +322,26 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 | `GET` | `/api/work-agents/:id` | Single merged agent |
 | `PUT` | `/api/work-agents/:id` | Patch `work-agents.json` override |
 | `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content, source }` |
-| `PUT` | `/api/work-agents/:id/prompt` | Write `~/.speedchat/prompts/work-agents/...` |
+| `PUT` | `/api/work-agents/:id/prompt` | Write `~/.minnow/prompts/work-agents/...` |
 
 **Tests:** `test/work-agents/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
+
+### Workspace folder (AI project root)
+
+The **workspace** is the directory where file/git/terminal tools and the file tree operate. It defaults to the directory where `npm start` was launched; users can change it from the top bar **folder** button (`#btnWorkspace`).
+
+| Concern | Location |
+|---------|----------|
+| Server root + persistence | `server/workspace/root.js` — `getWorkspaceRoot()`, `setWorkspaceRoot()`, saved in `~/.minnow/config.json` as `workspace.path` |
+| API | `GET/PUT /api/workspace`, `POST /api/workspace/pick` (native folder dialog) — `server/workspace/middleware.js` |
+| Native picker | `server/workspace/pick-folder.js` (PowerShell / osascript / zenity) |
+| Client state | `src/state/workspace.ts`, `src/config/workspace-api.ts` |
+| Top bar UI | `src/ui/workspace-button.ts`, `index.html` `#btnWorkspace` |
+| Prompt `{{cwd}}` | `src/chat/prompts/compose-context.ts` → `resolveComposeCwd()` uses workspace path when set |
+
+**Server wiring:** `server.js` `resolveSafePath`, git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
+
+**Tests:** `test/workspace/workspace-api.test.js`.
 
 ### File panel (Step 11)
 
@@ -344,7 +361,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
 
-**Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-speedchat-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
+**Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
 
 **Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
 
@@ -372,7 +389,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Step 19 hooks (exported, not wired):** `restartSubAgent`, `recordToolCallForRun`, `getRunToolCallFingerprint`.
 
-**Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `speedchat.subAgents` in `localStorage` when Vite-only.
+**Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `minnow.subAgents` in `localStorage` when Vite-only.
 
 **Tests:** `test/sub-agents/**/*.test.mts`. Verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
@@ -401,7 +418,7 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/config/ping` | `{ ok, home: ".speedchat", homeResolved: true }` |
+| `GET` | `/api/config/ping` | `{ ok, home: ".minnow", homeResolved: true }` |
 | `GET` | `/api/config/status` | `{ ok, storage: "home", migrated, schemaVersion }` |
 | `GET/PUT` | `/api/config/sessions` | `SessionState` ↔ `sessions/state.json` |
 | `GET/PUT` | `/api/config/tools` | `ToolConfig` ↔ `tools.json` |
@@ -431,7 +448,7 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 | `GET` | `/api/providers/:id/models` | Proxy upstream models (auth injected) |
 | `POST` | `/api/providers/:id/chat/completions` | Proxy SSE/JSON chat (auth injected) |
 
-**`apiKind`:** `lm-studio-v0` (default paths `/api/v0/...`) or `openai-v1` (`/v1/...`). **`connectionMode`:** `direct` (browser → `baseUrl`, localhost) or `proxy` (browser → SpeedChat server → upstream with secrets).
+**`apiKind`:** `lm-studio-v0` (default paths `/api/v0/...`) or `openai-v1` (`/v1/...`). **`connectionMode`:** `direct` (browser → `baseUrl`, localhost) or `proxy` (browser → Minnow server → upstream with secrets).
 
 **Seed:** On first `npm start` with empty `providers/`, creates `lm-studio-local` from legacy `config.json` `serverUrl` or `http://localhost:1234`. Non-localhost providers default to `proxy`.
 
@@ -447,9 +464,9 @@ On first load with config API available, the client reads legacy keys and `POST 
 
 | localStorage key | File |
 |------------------|------|
-| `speedchat-sessions-v1` | `sessions/state.json` |
-| `speedchat.tools` | `tools.json` |
-| `speedchat.systemPrompt` | `system-prompt.json` |
+| `minnow-sessions-v1` | `sessions/state.json` |
+| `minnow.tools` | `tools.json` |
+| `minnow.systemPrompt` | `system-prompt.json` |
 
 Re-run is **idempotent** (`skipped: true` when `config.json` has `migratedFromLocalStorage: true`).
 
@@ -459,7 +476,7 @@ No `/api/config/*` → client uses **`storageMode: 'localStorage'`** (same keys 
 
 Server URL, temperature, and max tokens remain in the settings drawer DOM (not in the session blob).
 
-### `speedchat.tools` shape
+### `minnow.tools` shape
 
 ```json
 {
@@ -498,7 +515,7 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `speedchat-sessions-v1` in `localStorage`.
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage`.
 
 - At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
@@ -511,7 +528,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 | Topic | Detail |
 |-------|--------|
 | **Trigger** | First `role: 'user'` row only; `chat.name === 'New chat'` at schedule time |
-| **Prompt** | Shipped [`src/chat/prompts/titles/default.md`](../src/chat/prompts/titles/default.md); override `~/.speedchat/prompts/titles/default.md` via prompt registry when `npm start` |
+| **Prompt** | Shipped [`src/chat/prompts/titles/default.md`](../src/chat/prompts/titles/default.md); override `~/.minnow/prompts/titles/default.md` via prompt registry when `npm start` |
 | **Config** | `config.json` → `titles.enabled`, `titles.modelId`, `titles.providerId`, `titles.maxTokens`, `titles.temperature` (see [`src/config/titles-meta.ts`](../src/config/titles-meta.ts)) |
 | **Provider** | Step 03 `postChatCompletions` / active provider; empty `titles.modelId` → chat `modelId` |
 | **Apply** | `applyGeneratedChatTitle` only if still placeholder (rename/delete races discard) |
@@ -540,7 +557,7 @@ Use **`npm start`** for the full stack. **`npm run dev`** is Vite-only (no tool 
 Browser (same origin :5173)
     │
     ├─► GET  /api/config/ping    → { ok: true, homeResolved: true }
-    ├─► GET/PUT /api/config/*    → ~/.speedchat JSON files
+    ├─► GET/PUT /api/config/*    → ~/.minnow JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
     ├─► POST /api/terminal/run   → { runId, startedAt }
@@ -582,7 +599,7 @@ Docked **bottom panel** in `.main-column` (below `.stats-strip`, after chat + co
 | Stream client | `src/api/terminal.ts` — `startTerminalRun`, `streamTerminalRun` (fetch + SSE parser) |
 | Tool integration | `executeTool(..., { chatId, toolCallId })` streams `execute_command` / `run_javascript` / `run_python` when server is up |
 | Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
-| Persistence | `Chat.terminalHistory` (last **50** runs) in `sessions/state.json`; full logs in `~/.speedchat/logs/terminal/<runId>.log` |
+| Persistence | `Chat.terminalHistory` (last **50** runs) in `sessions/state.json`; full logs in `~/.minnow/logs/terminal/<runId>.log` |
 
 **Tests:** `node test/terminal-stream.test.mjs <baseUrl>` (server must be running). Verification: [`documentation/plans/verification/step-10.md`](plans/verification/step-10.md).
 
@@ -607,7 +624,7 @@ Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **9** `serverRequir
 
 ### Browser CDP (7 server, Step 12)
 
-Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `SPEEDCHAT_BROWSER_URL`. Config: `~/.speedchat/config.json` → `browser` (enabled, defaultUrl, allowlist). Handlers: [`server/cdp/`](../server/cdp/).
+Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `MINNOW_BROWSER_URL`. Config: `~/.minnow/config.json` → `browser` (enabled, defaultUrl, allowlist). Handlers: [`server/cdp/`](../server/cdp/).
 
 | id | Purpose |
 |----|---------|
@@ -618,7 +635,7 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 | `browser_eval` | `Runtime.evaluate` in page |
 | `browser_screenshot` | PNG + `attachments` for chat UI |
 
-**Screenshot route:** `GET /api/browser/screenshot/:id` serves `~/.speedchat/screenshots/{id}.png`.
+**Screenshot route:** `GET /api/browser/screenshot/:id` serves `~/.minnow/screenshots/{id}.png`.
 
 ### Web (4 browser)
 
@@ -677,7 +694,7 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 
 ## Service worker
 
-[`public/sw.js`](../public/sw.js) → `dist/sw.js`. Cache **`speedchat-v5`**.
+[`public/sw.js`](../public/sw.js) → `dist/sw.js`. Cache **`minnow-v5`**.
 
 | Request | Strategy |
 |---------|----------|
@@ -733,7 +750,7 @@ E2E checklist and manual QA steps: [`documentation/plans/tool-usage-verification
 
 **Step 01 (chat UX / streaming):** [`documentation/plans/verification/step-01.md`](plans/verification/step-01.md) — `npm test`, `npm run build`, `scripts/step01-ui-smoke.mjs`.
 
-**Step 02 (`~/.speedchat`):** [`documentation/plans/verification/step-02.md`](plans/verification/step-02.md) — config API + migration tests with `SPEEDCHAT_HOME`.
+**Step 02 (`~/.minnow`):** [`documentation/plans/verification/step-02.md`](plans/verification/step-02.md) — config API + migration tests with `MINNOW_HOME`.
 
 **Step 03 (providers + auth):** [`documentation/plans/verification/step-03.md`](plans/verification/step-03.md) — `test/providers/*.test.js`, provider select UI.
 
@@ -782,7 +799,7 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
 | [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 39-tool catalog |
-| [`src/tools/config.ts`](../src/tools/config.ts) | `speedchat.tools` |
+| [`src/tools/config.ts`](../src/tools/config.ts) | `minnow.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |
 | [`src/chat/prompts/prompt-composer.ts`](../src/chat/prompts/prompt-composer.ts) | `composeSystemPrompt`, profile/lite rules |

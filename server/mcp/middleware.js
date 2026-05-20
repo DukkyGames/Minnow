@@ -4,7 +4,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import {
   ensureMcpSeed,
   listServers,
@@ -61,7 +61,7 @@ export function createMcpMiddleware() {
       if (url === '/api/mcp/ping' && req.method === 'GET') {
         sendJson(res, 200, {
           ok: true,
-          homeDir: getSpeedChatHome(),
+          homeDir: getMinnowHome(),
           serverCount: (await listServers()).length,
         });
         return;
@@ -110,7 +110,7 @@ export function createMcpMiddleware() {
       if (enableMatch && req.method === 'PUT') {
         const id = decodeURIComponent(enableMatch[1]);
         const body = await readJsonBody(req);
-        const indexPath = path.join(getSpeedChatHome(), 'mcp.json');
+        const indexPath = path.join(getMinnowHome(), 'mcp.json');
         const index = JSON.parse(await fs.readFile(indexPath, 'utf8'));
         if (!index.servers?.[id]) {
           sendJson(res, 404, { error: 'Unknown server' });

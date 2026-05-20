@@ -1,8 +1,9 @@
 /**
- * Resolve SpeedChat user data directory (~/.speedchat) and ensure layout exists.
+ * Resolve Minnow user data directory (~/.minnow) and ensure layout exists.
  */
 
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { ALL_TOOL_IDS } from './tool-ids.js';
@@ -10,27 +11,50 @@ import { ALL_TOOL_IDS } from './tool-ids.js';
 /** Cached resolved home path for this process. */
 let cachedHome = null;
 
+const LEGACY_DIR_NAME = '.speedchat';
+const HOME_DIR_NAME = '.minnow';
+
 /**
- * Canonical SpeedChat home directory.
- * Override with SPEEDCHAT_HOME for tests; otherwise os.homedir() + /.speedchat.
+ * Canonical Minnow home directory.
+ * Override with MINNOW_HOME (or legacy SPEEDCHAT_HOME) for tests; otherwise ~/.minnow.
+ * Renames ~/.speedchat → ~/.minnow on first run when only the legacy folder exists.
  */
-export function getSpeedChatHome() {
+export function getMinnowHome() {
   if (cachedHome) return cachedHome;
 
-  const override = process.env.SPEEDCHAT_HOME;
-  if (override && typeof override === 'string' && override.trim()) {
-    cachedHome = path.resolve(override.trim());
+  const override =
+    (typeof process.env.MINNOW_HOME === 'string' && process.env.MINNOW_HOME.trim()) ||
+    (typeof process.env.SPEEDCHAT_HOME === 'string' && process.env.SPEEDCHAT_HOME.trim());
+  if (override) {
+    cachedHome = path.resolve(override);
     return cachedHome;
   }
 
-  cachedHome = path.join(os.homedir(), '.speedchat');
+  const home = path.join(os.homedir(), HOME_DIR_NAME);
+  const legacy = path.join(os.homedir(), LEGACY_DIR_NAME);
+  if (!fs.existsSync(home) && fs.existsSync(legacy)) {
+    try {
+      fs.renameSync(legacy, home);
+    } catch {
+      cachedHome = legacy;
+      return cachedHome;
+    }
+  }
+
+  cachedHome = home;
   return cachedHome;
 }
 
 /** Reset cached home (tests only). */
-export function resetSpeedChatHomeCache() {
+export function resetMinnowHomeCache() {
   cachedHome = null;
 }
+
+/** @deprecated Use getMinnowHome */
+export const getSpeedChatHome = getMinnowHome;
+
+/** @deprecated Use resetMinnowHomeCache */
+export const resetSpeedChatHomeCache = resetMinnowHomeCache;
 
 const SCAFFOLD_DIRS = [
   'sessions',
@@ -158,7 +182,7 @@ function defaultSessionStateJson() {
 /** Best-effort restrictive permissions on Unix. */
 async function chmodSafe(filePath, mode) {
   try {
-    await fs.chmod(filePath, mode);
+    await fsp.chmod(filePath, mode);
   } catch {
     /* ignore on Windows or unsupported FS */
   }
@@ -168,19 +192,19 @@ async function chmodSafe(filePath, mode) {
  * Create home layout and default JSON files when missing.
  * @returns {Promise<string>} Resolved home path
  */
-export async function ensureSpeedChatLayout() {
-  const home = getSpeedChatHome();
-  await fs.mkdir(home, { recursive: true });
+export async function ensureMinnowLayout() {
+  const home = getMinnowHome();
+  await fsp.mkdir(home, { recursive: true });
   await chmodSafe(home, 0o700);
 
   for (const dir of SCAFFOLD_DIRS) {
     const dirPath = path.join(home, dir);
-    await fs.mkdir(dirPath, { recursive: true });
+    await fsp.mkdir(dirPath, { recursive: true });
     const keep = path.join(dirPath, '.gitkeep');
     try {
-      await fs.access(keep);
+      await fsp.access(keep);
     } catch {
-      await fs.writeFile(keep, '', 'utf8');
+      await fsp.writeFile(keep, '', 'utf8');
     }
   }
 
@@ -195,10 +219,10 @@ export async function ensureSpeedChatLayout() {
   for (const { rel, data } of defaults) {
     const full = path.join(home, rel);
     try {
-      await fs.access(full);
+      await fsp.access(full);
     } catch {
-      await fs.mkdir(path.dirname(full), { recursive: true });
-      await fs.writeFile(full, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+      await fsp.mkdir(path.dirname(full), { recursive: true });
+      await fsp.writeFile(full, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
       if (rel === 'tools.json') {
         await chmodSafe(full, 0o600);
       }
@@ -207,6 +231,9 @@ export async function ensureSpeedChatLayout() {
 
   return home;
 }
+
+/** @deprecated Use ensureMinnowLayout */
+export const ensureSpeedChatLayout = ensureMinnowLayout;
 
 export {
   DEFAULT_META,

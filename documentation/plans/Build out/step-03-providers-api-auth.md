@@ -8,7 +8,7 @@
 | **Title** | Multiple providers + API authentication |
 | **Backlog** | [`to-fix.md`](../to-fix.md) items **3** (multiple providers), **4** (API keys / auth) |
 | **Roadmap** | [`to-fix-step-order.md`](../to-fix-step-order.md) § Step 03 |
-| **Depends on** | **Step 02** — `~/.speedchat` home dir, `server.js` config I/O, migration off `localStorage` ([roadmap § Step 02](../to-fix-step-order.md#step-02--speedchat-data-layer-and-migration); [`step-02-speedchat-home-dir.md`](step-02-speedchat-home-dir.md)) |
+| **Depends on** | **Step 02** — `~/.minnow` home dir, `server.js` config I/O, migration off `localStorage` ([roadmap § Step 02](../to-fix-step-order.md#step-02--minnow-data-layer-and-migration); [`step-02-minnow-home-dir.md`](step-02-minnow-home-dir.md)) |
 | **Blocks** | Steps 07, 08, 18, 20 (provider/model binding) |
 | **Out of scope** | Full settings page (Step 20), Work Agents UI (Step 08), MCP transport (Step 18), prompt composer (Step 04) |
 
@@ -21,7 +21,7 @@
 1. **Multiple OpenAI-compatible providers** — LM Studio is the default entry; users can add remote/local endpoints (OpenRouter, Ollama gateway, custom v1 servers, etc.).
 2. **Per-provider auth** — API key, Bearer token, and optional custom headers; **secrets never in the repo or browser storage**.
 3. **Single resolution path** for models + chat — replace hard-coded `#serverUrl` + direct `fetch(`${base}/api/v0/...`)` with a **provider-aware client** used by `fetchModels`, `sendMessagePlain`, and `sendMessageWithTools`.
-4. **CRUD over HTTP** when `npm start` is running — list/create/update/delete providers under `~/.speedchat/providers/`.
+4. **CRUD over HTTP** when `npm start` is running — list/create/update/delete providers under `~/.minnow/providers/`.
 5. **Minimal UI hooks** — enough to pick active provider and refresh models; polish deferred to Step 20.
 
 ---
@@ -29,7 +29,7 @@
 ## 2. Acceptance criteria (verifier)
 
 - [ ] At least **two** providers can coexist on disk; switching active provider changes model list and chat target without editing raw URL in devtools.
-- [ ] **Secrets** exist only under `~/.speedchat` (profile JSON never contains raw keys; API list responses redact secrets).
+- [ ] **Secrets** exist only under `~/.minnow` (profile JSON never contains raw keys; API list responses redact secrets).
 - [ ] **Auth headers** are sent on proxied requests when `apiKey` / `bearerToken` / `customHeaders` are configured (verified by mock HTTP tests).
 - [ ] **Migration**: existing `#serverUrl` (`http://localhost:1234`) becomes default provider `lm-studio-local` (or similar id) on first run after Step 02 migration.
 - [ ] `npm run build` passes; new **`npm test`** (or documented `npx tsx test/...`) passes mock provider + auth tests.
@@ -44,9 +44,9 @@ Step 03 **must not** re-implement the home-dir layer. Assume Step 02 delivers:
 
 | Capability | Expected API / module |
 |------------|------------------------|
-| Home directory | `getSpeedChatHome()` → `~/.speedchat` (Windows: `%USERPROFILE%\.speedchat`) |
+| Home directory | `getMinnowHome()` → `~/.minnow` (Windows: `%USERPROFILE%\.minnow`) |
 | Safe path guard | Reuse `resolveSafePath` pattern scoped to home dir for provider files |
-| Global config | `~/.speedchat/config.json` with at least `activeProviderId`, schema version |
+| Global config | `~/.minnow/config.json` with at least `activeProviderId`, schema version |
 | Config HTTP | `GET/PUT /api/config` or granular routes under `/api/config/*` |
 | Dev vs Vite-only | CRUD returns **503** or clear JSON error when routes unavailable (`npm run dev`) |
 
@@ -54,12 +54,12 @@ If Step 02 is incomplete, implementer **stops** and finishes Step 02 first.
 
 ---
 
-## 4. On-disk layout (`~/.speedchat/providers/`)
+## 4. On-disk layout (`~/.minnow/providers/`)
 
 One **directory per provider** (stable `id` = folder name):
 
 ```text
-~/.speedchat/
+~/.minnow/
   config.json                 # activeProviderId, optional defaultProviderId
   providers/
     lm-studio-local/
@@ -90,7 +90,7 @@ One **directory per provider** (stable `id` = folder name):
 | Field | Purpose |
 |-------|---------|
 | `apiKind` | `lm-studio-v0` \| `openai-v1` — selects default paths and response normalization |
-| `connectionMode` | `direct` — browser calls `baseUrl` (localhost / CORS-allowed). `proxy` — browser calls SpeedChat server; server attaches secrets and forwards |
+| `connectionMode` | `direct` — browser calls `baseUrl` (localhost / CORS-allowed). `proxy` — browser calls Minnow server; server attaches secrets and forwards |
 | `modelsPath` / `chatCompletionsPath` | Override defaults per `apiKind` when vendor uses non-standard paths |
 
 **Default path matrix (implement in `src/providers/paths.ts`):**
@@ -179,7 +179,7 @@ server/
 - Never include `secrets.json` fields in `GET` responses.
 - Do not log request headers containing `Authorization` or API keys.
 - `.gitignore` / docs: `**/*.secrets.json` under home dir is user-local only.
-- Brave key in `speedchat.tools` remains until Step 20 consolidates keys; **new** LLM provider keys **only** in `providers/*/secrets.json`.
+- Brave key in `minnow.tools` remains until Step 20 consolidates keys; **new** LLM provider keys **only** in `providers/*/secrets.json`.
 
 ---
 
@@ -215,7 +215,7 @@ flowchart LR
   R[resolve active provider]
   M{connectionMode}
   D[Browser fetch direct to baseUrl]
-  P[SpeedChat /api/providers/:id/* proxy]
+  P[Minnow /api/providers/:id/* proxy]
   UP[Upstream LLM API]
 
   UI --> R --> M
@@ -378,7 +378,7 @@ Document port in [`documentation/plans/verification/step-03.md`](../verification
 ## 12. Verifier handoff
 
 1. Run `npm run build` and `npm test`.
-2. With temp `SPEEDCHAT_HOME` (env var implementer must add): create two providers, set active, confirm mock tests record auth headers.
+2. With temp `MINNOW_HOME` (env var implementer must add): create two providers, set active, confirm mock tests record auth headers.
 3. Manual: `npm start` → switch provider in drawer → model dropdown updates.
 4. Confirm `context.md` documents provider paths and routes.
 5. Report **PASS/FAIL**; do not patch feature code on FAIL.
@@ -389,8 +389,8 @@ Document port in [`documentation/plans/verification/step-03.md`](../verification
 
 ### 13.1 Planning and setup
 
-- [ ] **S03-T01** Confirm Step 02 complete (`~/.speedchat`, `/api/config`, home path helper, migration).
-- [ ] **S03-T02** Add `SPEEDCHAT_HOME` env override for tests (document in verification file).
+- [ ] **S03-T01** Confirm Step 02 complete (`~/.minnow`, `/api/config`, home path helper, migration).
+- [ ] **S03-T02** Add `MINNOW_HOME` env override for tests (document in verification file).
 - [ ] **S03-T03** Create `documentation/plans/verification/step-03.md` stub with commands.
 
 ### 13.2 Server — storage and auth

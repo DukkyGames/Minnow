@@ -43,7 +43,7 @@ export async function resetWorkAgentPromptOverride(
   }
 }
 
-/** Persist user prompt override under ~/.speedchat/prompts/work-agents/. */
+/** Persist user prompt override under ~/.minnow/prompts/work-agents/. */
 export async function saveWorkAgentPromptOverride(
   agentId: string,
   profile: WorkAgentPromptProfile,
@@ -61,7 +61,7 @@ export async function saveWorkAgentPromptOverride(
   }
 }
 
-/** Patch provider/model/disabled overrides in ~/.speedchat/work-agents.json. */
+/** Patch provider/model/disabled overrides in ~/.minnow/work-agents.json. */
 export async function patchWorkAgentOverride(
   agentId: string,
   patch: {

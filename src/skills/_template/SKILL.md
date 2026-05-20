@@ -2,7 +2,7 @@
 name: my-custom-skill
 label: My Custom Skill
 description: >-
-  Describe what this skill does and when SpeedChat should apply it. Include
+  Describe what this skill does and when Minnow should apply it. Include
   example phrases users might say, such as "help me with X" or "run Y workflow".
 disable-model-invocation: true
 ---

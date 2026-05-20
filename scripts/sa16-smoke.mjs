@@ -30,7 +30,7 @@ async function main() {
   // Server tools
   const read = await postTool('read_file', { path: 'package.json' });
   results.read_file =
-    read.ok && String(read.body.result ?? '').includes('"name": "speedchat"');
+    read.ok && String(read.body.result ?? '').includes('"name": "minnow"');
 
   const git = await postTool('git_status', {});
   results.git_status =

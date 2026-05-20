@@ -7,7 +7,7 @@ Experts are domain personas injected into the system prompt **after** the operat
 | Root | Path |
 |------|------|
 | Built-in | `src/chat/prompts/experts/<id>/` |
-| User override | `~/.speedchat/prompts/experts/<id>/` (same `id` wins over built-in) |
+| User override | `~/.minnow/prompts/experts/<id>/` (same `id` wins over built-in) |
 
 Each expert folder needs:
 

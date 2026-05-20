@@ -8,7 +8,7 @@ import type { OpenAIFunctionDefinition } from '../tools/definitions';
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-/** Per-type configuration merged from defaults and ~/.speedchat/sub-agents.json. */
+/** Per-type configuration merged from defaults and ~/.minnow/sub-agents.json. */
 export interface SubAgentTypeConfig {
   label?: string;
   enabled: boolean;

@@ -9,8 +9,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { startMockCdpServer } from './helpers/mock-cdp-server.mjs';
 import {
-  resetSpeedChatHomeCache,
-  getSpeedChatHome,
+  resetMinnowHomeCache,
+  getMinnowHome,
 } from '../server/config/home.js';
 import { resetBrowserConfigCache } from '../server/cdp/browser-config.js';
 import { clearSnapshotCache } from '../server/cdp/snapshot-cache.js';
@@ -26,9 +26,9 @@ let mock;
 let tempHome;
 
 before(async () => {
-  tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'speedchat-cdp-test-'));
-  process.env.SPEEDCHAT_HOME = tempHome;
-  resetSpeedChatHomeCache();
+  tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-cdp-test-'));
+  process.env.MINNOW_HOME = tempHome;
+  resetMinnowHomeCache();
   resetBrowserConfigCache();
   clearSnapshotCache();
 
@@ -56,15 +56,15 @@ before(async () => {
   );
 
   mock = await startMockCdpServer();
-  process.env.SPEEDCHAT_BROWSER_URL = mock.baseUrl;
+  process.env.MINNOW_BROWSER_URL = mock.baseUrl;
   resetBrowserConfigCache();
 });
 
 after(async () => {
   if (mock) await mock.close();
-  delete process.env.SPEEDCHAT_BROWSER_URL;
-  delete process.env.SPEEDCHAT_HOME;
-  resetSpeedChatHomeCache();
+  delete process.env.MINNOW_BROWSER_URL;
+  delete process.env.MINNOW_HOME;
+  resetMinnowHomeCache();
   resetBrowserConfigCache();
 });
 
@@ -111,12 +111,12 @@ test('browser_screenshot writes file and returns attachments shape', async () =>
   assert.equal(out.attachments?.[0]?.type, 'image');
   assert.match(out.attachments[0].url, /^\/api\/browser\/screenshot\/testshot12/);
 
-  const filePath = path.join(getSpeedChatHome(), 'screenshots', 'testshot12.png');
+  const filePath = path.join(getMinnowHome(), 'screenshots', 'testshot12.png');
   const stat = await fs.stat(filePath);
   assert.ok(stat.size > 0);
 });
 
-test('default browser_url from SPEEDCHAT_BROWSER_URL', async () => {
+test('default browser_url from MINNOW_BROWSER_URL', async () => {
   const result = await toolBrowserList({});
   assert.match(result, /TEST-TARGET-11111111/);
 });

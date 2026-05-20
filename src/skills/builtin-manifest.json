@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-20T03:44:45.131Z",
+  "generatedAt": "2026-05-20T04:50:30.001Z",
   "skills": [
     {
       "id": "browser-automation",
@@ -40,7 +40,7 @@
     {
       "id": "impeccable",
       "label": "Impeccable",
-      "description": "Design, critique, audit, and refine SpeedChat UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.",
+      "description": "Design, critique, audit, and refine Minnow UI using PRODUCT.md, DESIGN.md, and .impeccable/design.json. Not for backend-only tasks.",
       "source": "builtin"
     },
     {
@@ -58,7 +58,7 @@
     {
       "id": "ui-designer",
       "label": "UI Designer",
-      "description": "Impeccable-guided UI audit, screenshot capture, plan or implement SpeedChat surfaces.",
+      "description": "Impeccable-guided UI audit, screenshot capture, plan or implement Minnow surfaces.",
       "source": "builtin"
     },
     {

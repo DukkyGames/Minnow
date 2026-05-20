@@ -7,7 +7,7 @@
 ```bash
 npm test
 npm run build
-node src/skills/impeccable/scripts/speedchat-context.mjs
+node src/skills/impeccable/scripts/minnow-context.mjs
 ```
 
 | Check | Result |

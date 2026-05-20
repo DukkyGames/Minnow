@@ -22,7 +22,7 @@ export interface LspConfigResponse {
   servers: LspServerStatus[];
 }
 
-/** Per-server config shape in ~/.speedchat/lsp.json */
+/** Per-server config shape in ~/.minnow/lsp.json */
 export interface LspServerConfig {
   disabled?: boolean;
   command?: string[];
@@ -62,7 +62,7 @@ export async function fetchLspConfig(): Promise<LspConfigResponse | null> {
   return lspFetch<LspConfigResponse>('/api/config/lsp');
 }
 
-/** Persist partial user overrides to ~/.speedchat/lsp.json */
+/** Persist partial user overrides to ~/.minnow/lsp.json */
 export async function saveLspConfig(patch: LspConfigPatch): Promise<boolean> {
   const ok = await detectLocalServer();
   if (!ok) return false;

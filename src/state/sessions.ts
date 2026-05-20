@@ -34,7 +34,7 @@ function ensureExpertSelection(raw: unknown): ExpertSelection {
   return { mode, expertId };
 }
 
-/** In-memory session blob mirrored to ~/.speedchat or localStorage fallback. */
+/** In-memory session blob mirrored to ~/.minnow or localStorage fallback. */
 export let sessionState: SessionState | null = null;
 
 /** Replace in-memory session blob (unit tests). */
@@ -234,7 +234,7 @@ export async function loadSessionsFromStorage(): Promise<void> {
       sessionState = parseSessionStateFromJson(remote);
       return;
     } catch {
-      setStatus('err', 'Could not load sessions from ~/.speedchat');
+      setStatus('err', 'Could not load sessions from ~/.minnow');
     }
   }
 
@@ -289,7 +289,7 @@ export function saveSessionsNow(): SaveSessionsResult {
 
   if (isServerStorageMode()) {
     void putSessions(sessionState).catch(() => {
-      setStatus('err', 'Could not save sessions to ~/.speedchat');
+      setStatus('err', 'Could not save sessions to ~/.minnow');
     });
     return 'ok';
   }

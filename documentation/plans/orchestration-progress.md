@@ -1,4 +1,4 @@
-﻿# To-Fix Build Orchestration Progress
+# To-Fix Build Orchestration Progress
 
 Master plan: [`to-fix-step-order.md`](to-fix-step-order.md)
 
@@ -40,7 +40,7 @@ Each step: **Implementer** → **Verifier** → mark PASS/FAIL. Git commit after
 ### Step 13 — Skills framework
 - **Status:** **PASS** (verifier re-run 2026-05-19)
 - **Verification:** [`verification/step-13.md`](verification/step-13.md)
-- **Automated:** `npm test` **176/176** (node 67 + tsx 109); `npm run test:skills` **10/10**; `npm run build` **PASS**; `generate-skills-manifest.mjs` **11 skills**; `s13-skills-smoke.mjs` **S1–S6** (coordinated `SPEEDCHAT_HOME` + server on matching port)
+- **Automated:** `npm test` **176/176** (node 67 + tsx 109); `npm run test:skills` **10/10**; `npm run build` **PASS**; `generate-skills-manifest.mjs` **11 skills**; `s13-skills-smoke.mjs` **S1–S6** (coordinated `MINNOW_HOME` + server on matching port)
 - **UI (Impeccable):** `load-context.mjs` OK; `skill-picker.css` aligned to DESIGN.md tokens (flat chrome, OKLCH, label badges)
 - **Manual deferred:** composer `/` picker keyboard QA, send with `/git-commit`, user override in live UI, `npm run dev` offline picker
 - **Commit:** `caf2468` (wave 6)
@@ -87,7 +87,7 @@ Each step: **Implementer** → **Verifier** → mark PASS/FAIL. Git commit after
 - **Status:** **PASS** (re-verified 2026-05-19; tier-1 only)
 - **Verification:** [`verification/step-19.md`](verification/step-19.md) — detector **2/2**, `npm test` **176/176**, `npm run build` **PASS**
 - **Deliverables:** `src/agents/self-healing/*`, orchestrator `observeSubAgentToolCall`, Settings → Features → `selfHealing.enabled`
-- **Deferred (tier 2):** explorer sub-agent, `~/.speedchat/skills/` authoring, guardrails, `self-heal.jsonl` audit, R2–R4 detector cases, signatures store — see build plan Phase D–E
+- **Deferred (tier 2):** explorer sub-agent, `~/.minnow/skills/` authoring, guardrails, `self-heal.jsonl` audit, R2–R4 detector cases, signatures store — see build plan Phase D–E
 - **Commit:** `eca9188`
 
 ### Step 20 — Settings page

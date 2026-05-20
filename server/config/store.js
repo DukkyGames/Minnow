@@ -1,11 +1,11 @@
 /**
- * Read/write JSON config files under ~/.speedchat with atomic writes.
+ * Read/write JSON config files under ~/.minnow with atomic writes.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveConfigPath, resourceToRelativeKey } from './paths.js';
-import { ensureSpeedChatLayout } from './home.js';
+import { ensureMinnowLayout } from './home.js';
 import {
   mergeConfigMeta,
   normalizeToolConfig,
@@ -50,7 +50,7 @@ export async function configFileExists(relativeKey) {
  * @returns {Promise<unknown>}
  */
 export async function readConfigJson(relativeKey) {
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
   const full = resolveConfigPath(relativeKey);
   try {
     const raw = await fs.readFile(full, 'utf8');
@@ -69,7 +69,7 @@ export async function readConfigJson(relativeKey) {
  * @param {unknown} data
  */
 export async function writeConfigJson(relativeKey, data) {
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
   const full = resolveConfigPath(relativeKey);
   await fs.mkdir(path.dirname(full), { recursive: true });
   const tmp = `${full}.tmp-${process.pid}-${Date.now()}`;
@@ -108,7 +108,7 @@ export async function readResource(resource) {
   if (resource === 'meta') {
     let data = await readConfigJson(key);
     if (!data) {
-      await ensureSpeedChatLayout();
+      await ensureMinnowLayout();
       data = await readConfigJson(key);
     }
     if (!data?.uiDesigner) {

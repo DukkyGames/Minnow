@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import {
   BUILTIN_MCP_INDEX,
   CONTEXT7_SERVER,
@@ -27,7 +27,7 @@ const clients = new Map();
 const toolMaps = new Map();
 
 function mcpHome() {
-  return path.join(getSpeedChatHome(), 'mcp');
+  return path.join(getMinnowHome(), 'mcp');
 }
 
 function resolveTransportCommand(transport) {
@@ -95,7 +95,7 @@ async function connectServer(serverId, config) {
   });
 
   const client = new Client(
-    { name: 'speedchat', version: '1.0.0' },
+    { name: 'minnow', version: '1.0.0' },
     { capabilities: {} },
   );
   await client.connect(transport);
@@ -117,7 +117,7 @@ async function connectServer(serverId, config) {
 export async function ensureMcpSeed() {
   const home = mcpHome();
   await fs.mkdir(path.join(home, 'servers'), { recursive: true });
-  const indexPath = path.join(getSpeedChatHome(), 'mcp.json');
+  const indexPath = path.join(getMinnowHome(), 'mcp.json');
   try {
     await fs.access(indexPath);
   } catch {
@@ -149,7 +149,7 @@ export async function ensureMcpSeed() {
 }
 
 async function loadIndex() {
-  const indexPath = path.join(getSpeedChatHome(), 'mcp.json');
+  const indexPath = path.join(getMinnowHome(), 'mcp.json');
   try {
     return JSON.parse(await fs.readFile(indexPath, 'utf8'));
   } catch {
@@ -219,7 +219,7 @@ export async function callMcpTool(namespacedName, args) {
   if (config.id === 'context7') {
     const key = process.env.CONTEXT7_API_KEY ?? '';
     if (!key) {
-      return 'Error: Context7 API key not configured. Set CONTEXT7_API_KEY or context7ApiKey in ~/.speedchat provider secrets.';
+      return 'Error: Context7 API key not configured. Set CONTEXT7_API_KEY or context7ApiKey in ~/.minnow provider secrets.';
     }
   }
 
@@ -254,7 +254,7 @@ export async function reloadMcp() {
 }
 
 async function writeIndex(index) {
-  const indexPath = path.join(getSpeedChatHome(), 'mcp.json');
+  const indexPath = path.join(getMinnowHome(), 'mcp.json');
   await fs.writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
 }
 

@@ -1,5 +1,5 @@
 /**
- * SpeedChat context loader: upstream PRODUCT/DESIGN JSON plus .impeccable/design.json.
+ * Minnow context loader: upstream PRODUCT/DESIGN JSON plus .impeccable/design.json.
  * Prints one JSON object to stdout for agent consumption.
  */
 

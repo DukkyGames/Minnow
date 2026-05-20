@@ -21,7 +21,7 @@ Ship four **primary operating modes** that change how the assistant behaves on e
 | `orchestrate` | Orchestrate | Coordinate multi-step work; delegate; prefer structure over raw coding |
 | `research` | Research | Read/search/gather; minimal writes; web + read tools emphasized |
 
-Each mode is backed by shipped prompt files (`full` + `lite` bodies), optional **tool policy** metadata, UI selection **near the composer** (not top bar), and **`modeId` persistence** on each chat in `~/.speedchat/sessions/state.json` (Step 02).
+Each mode is backed by shipped prompt files (`full` + `lite` bodies), optional **tool policy** metadata, UI selection **near the composer** (not top bar), and **`modeId` persistence** on each chat in `~/.minnow/sessions/state.json` (Step 02).
 
 User may replace stub copy later; **template pack + working stubs ship in-repo** so the step is never blocked on copy.
 
@@ -32,22 +32,22 @@ User may replace stub copy later; **template pack + working stubs ship in-repo**
 | Source | Use for |
 |--------|---------|
 | [OpenCode — Agents](https://opencode.ai/docs/agents/) | Primary vs subagent; **Build** (full tools) vs **Plan** (`edit`/`bash` deny or ask); Tab/cycle UX |
-| [OpenCode — Permissions](https://opencode.ai/docs/permissions/) | Mapping `permission.edit` / `permission.bash` → SpeedChat tool allow/deny/ask |
+| [OpenCode — Permissions](https://opencode.ai/docs/permissions/) | Mapping `permission.edit` / `permission.bash` → Minnow tool allow/deny/ask |
 | [oh-my-opencode-slim](https://github.com/alvinunreal/oh-my-opencode-slim) | Lite prompt trimming patterns (short rules, drop examples) |
 | Workspace uploads (when present) | `uploads/opencode-1.md` — local notes from prior research |
 | Step 04 `_example` pack | Front matter schema, `fullBody` / `liteBody`, interpolation tokens |
 
-### What SpeedChat adopts vs diverges
+### What Minnow adopts vs diverges
 
-| OpenCode | SpeedChat (this step) |
+| OpenCode | Minnow (this step) |
 |----------|------------------------|
 | Primary agents **Build** / **Plan** with permission JSON | Four modes: Build, Plan, **Orchestrate**, **Research** (product-specific) |
 | `permission.edit` / `permission.bash` | `ModeToolPolicy` on each mode file → filter `getEnabledToolDefinitions()` |
 | Tab to cycle primary agents | **Segmented control** above composer (mouse + keyboard); no Tab hijack |
-| Agent prompt `{file:./prompts/...}` | `src/chat/prompts/modes/<id>.{full,lite}.md` + user overrides in `~/.speedchat/prompts/modes/` |
-| Session stores active agent | `Chat.modeId` persisted in session JSON under `~/.speedchat/sessions/` |
+| Agent prompt `{file:./prompts/...}` | `src/chat/prompts/modes/<id>.{full,lite}.md` + user overrides in `~/.minnow/prompts/modes/` |
+| Session stores active agent | `Chat.modeId` persisted in session JSON under `~/.minnow/sessions/` |
 
-**Orchestrate** and **Research** are SpeedChat extensions (not OpenCode built-in primaries). Model their prompts after OpenCode’s **General** (broad tools) and **Explore/Scout** (read-heavy) subagent descriptions respectively.
+**Orchestrate** and **Research** are Minnow extensions (not OpenCode built-in primaries). Model their prompts after OpenCode’s **General** (broad tools) and **Explore/Scout** (read-heavy) subagent descriptions respectively.
 
 ---
 
@@ -55,13 +55,13 @@ User may replace stub copy later; **template pack + working stubs ship in-repo**
 
 Before starting Step 05 implementation, confirm Step 04 delivers:
 
-- [ ] `src/chat/prompts/prompt-loader.ts` — glob load built-in + `~/.speedchat/prompts/` overrides
+- [ ] `src/chat/prompts/prompt-loader.ts` — glob load built-in + `~/.minnow/prompts/` overrides
 - [ ] `src/chat/prompts/prompt-composer.ts` — `composeSystemPrompt(ctx)` with part `mode`
 - [ ] Profile resolution: `full` \| `lite` \| `custom` picks correct body per prompt file
 - [ ] `BuildPromptContext` includes at least: `modeId`, `profile`, `cwd`, `enabledToolsSummary`
 - [ ] Send path in [`src/tools/loop.ts`](../../../src/tools/loop.ts) calls composer instead of raw `#systemPrompt` textarea only (textarea may remain as `info` part override until Step 20)
 
-If Step 02 is incomplete, persist `modeId` on each `Chat` in **`localStorage`** (`speedchat-sessions-v1`) until `GET/PUT /api/config/sessions` exists. **Do not** introduce per-chat files under `~/.speedchat/sessions/` — canonical storage is Step 02’s **`sessions/state.json`** blob only.
+If Step 02 is incomplete, persist `modeId` on each `Chat` in **`localStorage`** (`minnow-sessions-v1`) until `GET/PUT /api/config/sessions` exists. **Do not** introduce per-chat files under `~/.minnow/sessions/` — canonical storage is Step 02’s **`sessions/state.json`** blob only.
 
 ---
 
@@ -71,7 +71,7 @@ If Step 02 is incomplete, persist `modeId` on each `Chat` in **`localStorage`** 
 flowchart LR
   UI[Mode selector UI]
   Chat[Chat.modeId]
-  Sess["~/.speedchat/sessions/state.json"]
+  Sess["~/.minnow/sessions/state.json"]
   Loader[prompt loader]
   Modes["src/chat/prompts/modes/"]
   Composer[composeSystemPrompt]
@@ -136,7 +136,7 @@ export interface Chat {
 
 **Persistence (canonical — matches Step 02):**
 
-All chats (including `modeId`) live inside **`~/.speedchat/sessions/state.json`** — the same `SessionState` blob migrated from `speedchat-sessions-v1`. There are **no** per-chat JSON files and **no** `GET/PUT /api/sessions/:id` routes in Steps 02 or 05.
+All chats (including `modeId`) live inside **`~/.minnow/sessions/state.json`** — the same `SessionState` blob migrated from `minnow-sessions-v1`. There are **no** per-chat JSON files and **no** `GET/PUT /api/sessions/:id` routes in Steps 02 or 05.
 
 Add to each chat object in the existing `chats[]` array:
 
@@ -152,7 +152,7 @@ Add to each chat object in the existing `chats[]` array:
 ```
 
 - **Default:** missing `modeId` → `build` in `ensureChatShape`.
-- **Migration:** when importing `speedchat-sessions-v1` from localStorage, set `modeId: 'build'` on every chat.
+- **Migration:** when importing `minnow-sessions-v1` from localStorage, set `modeId: 'build'` on every chat.
 - **Save:** any mode change calls `scheduleSaveSessions()` → `PUT /api/config/sessions` (Step 02) immediately.
 
 ### Prompt file resolution
@@ -181,7 +181,7 @@ src/chat/prompts/modes/
 
 1. Resolve `modes/{id}.{profile}.md` where `profile` is `full` or `lite`.
 2. Else resolve `modes/{id}.md` and use front-matter `fullBody` / `liteBody`.
-3. User override: `~/.speedchat/prompts/modes/{id}.{profile}.md` wins over built-in.
+3. User override: `~/.minnow/prompts/modes/{id}.{profile}.md` wins over built-in.
 
 **Front matter (required on each stub):**
 
@@ -225,7 +225,7 @@ Do **not** read mode from DOM at send time except as a cache of `Chat.modeId` (D
 **New:** `src/chat/modes/tool-policy.ts`
 
 - `filterToolsByMode(defs: ToolDefinition[], modeId: ModeId): ToolDefinition[]`
-- Map OpenCode-style restrictions to SpeedChat tool ids:
+- Map OpenCode-style restrictions to Minnow tool ids:
 
 | Mode | Suggested policy (v1) |
 |------|------------------------|
@@ -313,7 +313,7 @@ Each lite file **must be &lt; 600 characters** body (excluding front matter) for
 - [ ] **A1** Add `ModeId`, `ModeDefinition`, `ModeToolPolicy` in `src/chat/modes/types.ts` (or `registry.ts`).
 - [ ] **A2** Implement `src/chat/modes/registry.ts` with four modes and default policies.
 - [ ] **A3** Extend `Chat` in `src/types.ts` with optional `modeId`; update `ensureChatShape` / `createEmptyChatObject` default `build`.
-- [ ] **A4** Session persistence: ensure `modeId` saved/loaded from `~/.speedchat/sessions/` (or localStorage bridge until Step 02).
+- [ ] **A4** Session persistence: ensure `modeId` saved/loaded from `~/.minnow/sessions/` (or localStorage bridge until Step 02).
 
 ### Phase B — Prompt pack
 
@@ -377,7 +377,7 @@ Use **fixed** mode ids and **static** expected path suffixes (no dynamic path bu
 - [ ] `build` full body **contains** a stable marker string e.g. `MODE: build` (embed in stubs).
 - [ ] `plan` full body **contains** `do not modify` or equivalent plan-only phrase.
 - [ ] `build` lite length **&lt;** `build` full length (character count).
-- [ ] Override fixture: place temp file in `~/.speedchat/prompts/modes/build.full.md` with `OVERRIDE_MARKER` → loader prefers override.
+- [ ] Override fixture: place temp file in `~/.minnow/prompts/modes/build.full.md` with `OVERRIDE_MARKER` → loader prefers override.
 
 ### Unit — tool policy (`test/modes/tool-policy.test.mts`)
 
@@ -409,16 +409,16 @@ Fixture context with fixed UUID chat id `11111111-1111-1111-1111-111111111111`:
 Embed in every shipped stub (full):
 
 ```markdown
-<!-- SPEEDCHAT_MODE_MARKER: build full -->
+<!-- MINNOW_MODE_MARKER: build full -->
 ```
 
 Lite:
 
 ```markdown
-<!-- SPEEDCHAT_MODE_MARKER: build lite -->
+<!-- MINNOW_MODE_MARKER: build lite -->
 ```
 
-Tests grep for `SPEEDCHAT_MODE_MARKER: {id} {profile}`.
+Tests grep for `MINNOW_MODE_MARKER: {id} {profile}`.
 
 ---
 
@@ -434,7 +434,7 @@ Tests grep for `SPEEDCHAT_MODE_MARKER: {id} {profile}`.
 1. All eight `resolveModePromptPath` cases pass.
 2. Each mode id loads distinct full/lite bodies with markers.
 3. Mode selector is in composer area, not top bar.
-4. `modeId` persists per chat under `~/.speedchat/sessions/` (or documented fallback).
+4. `modeId` persists per chat under `~/.minnow/sessions/` (or documented fallback).
 5. `composeSystemPrompt` includes mode fragment when part enabled.
 6. Plan mode filters destructive tools from API request.
 

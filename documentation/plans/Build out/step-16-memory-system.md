@@ -6,18 +6,18 @@
 | **Title** | Memory system |
 | **Backlog** | [`documentation/plans/to-fix.md`](../to-fix.md) item **23** (memory system) |
 | **Roadmap** | [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) — Wave 7 |
-| **Depends on** | **Step 02** (`~/.speedchat` data layer, server config API) |
+| **Depends on** | **Step 02** (`~/.minnow` data layer, server config API) |
 | **Integrates with** | **Step 04** (prompt composer `memory` part, `{{memory}}` token) |
 | **Optional consumers** | Step 19 (self-healing records fixes), Step 20 (settings UI: backup, master toggle) |
 | **Out of scope (this step)** | Vector embeddings / semantic search; full settings page UI (Step 20); agent-facing `add_memory` tool in the 32-tool catalog (optional stretch — see §12) |
 
-**Read first:** [`documentation/context.md`](../../context.md), Step 02 plan (`step-02-speedchat-home-dir.md`), Step 04 plan (`step-04-programmatic-prompts.md`), [`server.js`](../../../server.js), [`src/tools/loop.ts`](../../../src/tools/loop.ts), [`src/ui/settings.ts`](../../../src/ui/settings.ts).
+**Read first:** [`documentation/context.md`](../../context.md), Step 02 plan (`step-02-minnow-home-dir.md`), Step 04 plan (`step-04-programmatic-prompts.md`), [`server.js`](../../../server.js), [`src/tools/loop.ts`](../../../src/tools/loop.ts), [`src/ui/settings.ts`](../../../src/ui/settings.ts).
 
 ---
 
 ## 1. Goal
 
-Ship a **durable, user-controlled memory store** under `~/.speedchat/memory/` with:
+Ship a **durable, user-controlled memory store** under `~/.minnow/memory/` with:
 
 - **Global enable/disable** (and optional per-chat override)
 - **CRUD** over HTTP when `npm start` is running
@@ -33,11 +33,11 @@ Embeddings and semantic retrieval are **explicitly deferred**; v1 uses structure
 
 The step is **done** when a verifier can confirm:
 
-1. With `SPEEDCHAT_HOME` (or default `~/.speedchat`) and `npm start`:
+1. With `MINNOW_HOME` (or default `~/.minnow`) and `npm start`:
    - `GET /api/memory/ping` → `{ "ok": true }`
    - CRUD lifecycle works: create → list → get → update → delete
    - `POST /api/memory/clear` removes entries (or moves them to archive per spec)
-   - `POST /api/memory/backup` writes a timestamped archive under `~/.speedchat/backups/`
+   - `POST /api/memory/backup` writes a timestamped archive under `~/.minnow/backups/`
    - `POST /api/memory/restore` restores from a named backup id
 2. With memory **enabled** in config and at least one entry, `composeSystemPrompt()` (Step 04) includes a non-empty `memory` section and `{{memory}}` is replaced in the composed system string.
 3. With memory **disabled**, the `memory` part is omitted (or empty) and **no** memory HTTP fetch runs on send.
@@ -54,13 +54,13 @@ Do **not** start Step 16 until Step 02 provides:
 
 | Capability | Used by memory |
 |------------|----------------|
-| `getSpeedChatHome()` | Resolve `memory/`, `backups/`, `config.json` |
+| `getMinnowHome()` | Resolve `memory/`, `backups/`, `config.json` |
 | `readConfig()` / `writeConfig()` | `memory.enabled`, limits, last backup id |
 | `resolveSafePath()` pattern for paths **under home only** | All memory file I/O |
 | `GET/PUT /api/config` (or equivalent) | Browser reads/writes `memory.enabled` |
 | `npm run dev` degradation | Memory API unavailable → UI shows hint; send works without injection |
 
-**Environment override (tests):** `SPEEDCHAT_HOME=<temp-dir>` must be honored by the server (document in verification file).
+**Environment override (tests):** `MINNOW_HOME=<temp-dir>` must be honored by the server (document in verification file).
 
 ---
 
@@ -82,7 +82,7 @@ flowchart LR
     API --> Store
   end
 
-  subgraph disk ["~/.speedchat"]
+  subgraph disk ["~/.minnow"]
     Index[memory/index.json]
     Entries["memory/entries/*.md"]
     Backups[backups/memory-*.zip]
@@ -103,7 +103,7 @@ flowchart LR
 ## 5. On-disk layout
 
 ```
-~/.speedchat/
+~/.minnow/
 ├── config.json                 # memory.enabled, memory.maxInjectChars, ...
 ├── memory/
 │   ├── index.json              # catalog of entries (metadata only)
@@ -170,7 +170,7 @@ Always run `npm start` before API smoke tests, not `npm run dev`.
 }
 ```
 
-**Per-chat override** (optional v1, recommended): in session blob under `~/.speedchat/sessions/<chatId>.json`:
+**Per-chat override** (optional v1, recommended): in session blob under `~/.minnow/sessions/<chatId>.json`:
 
 ```json
 { "memoryEnabled": null }
@@ -183,7 +183,7 @@ Always run `npm start` before API smoke tests, not `npm run dev`.
 
 ## 6. HTTP API (`server.js`)
 
-Register middleware **before** Vite SPA handler (same pattern as `/api/tools`). All routes require paths under `SPEEDCHAT_HOME`; never accept arbitrary filesystem paths from the client except **restore backup id** validated against `backups/memory-*` basename allowlist.
+Register middleware **before** Vite SPA handler (same pattern as `/api/tools`). All routes require paths under `MINNOW_HOME`; never accept arbitrary filesystem paths from the client except **restore backup id** validated against `backups/memory-*` basename allowlist.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
@@ -327,7 +327,7 @@ Step 16 ships **API + data model + hooks**; full settings UI is Step 20. Minimum
 | **Status** | When disabled, show muted hint in drawer |
 | **Commands** | Document HTTP curls in verification file for headless QA |
 
-Step 20 will move these controls to the **Memory** section with import/export of full `~/.speedchat`.
+Step 20 will move these controls to the **Memory** section with import/export of full `~/.minnow`.
 
 ---
 
@@ -341,7 +341,7 @@ Follow project test guidelines: **fixed UUIDs**, **static expected strings**, mi
 
 **Harness:**
 
-1. Set `SPEEDCHAT_HOME` to a temp directory (fixed path under `test/fixtures/memory-home/` or `mkdtemp` with seeded empty home).
+1. Set `MINNOW_HOME` to a temp directory (fixed path under `test/fixtures/memory-home/` or `mkdtemp` with seeded empty home).
 2. Spawn `node server.js` on ephemeral port (or use `fetch` against already-running server — document in verification).
 3. Run cases sequentially (shared home dir — use unique fixed ids per test case or `beforeEach` wipe).
 
@@ -360,7 +360,7 @@ Follow project test guidelines: **fixed UUIDs**, **static expected strings**, mi
 **Run command (add to `package.json` when Step 02 adds test script):**
 
 ```bash
-SPEEDCHAT_HOME=test/fixtures/memory-home-empty node --test test/memory-api.test.mjs
+MINNOW_HOME=test/fixtures/memory-home-empty node --test test/memory-api.test.mjs
 ```
 
 ### 11.2 Composer / injection unit tests
@@ -412,7 +412,7 @@ Register only in `SERVER_TOOL_HANDLERS` when `config.memory.allowAgentWrites ===
 
 ## 13. Security and safety
 
-- All entry paths resolved under `~/.speedchat/memory/` only.
+- All entry paths resolved under `~/.minnow/memory/` only.
 - Backup ids: match `/^memory-\d{8}T\d{6}Z$/` or allowlist directory names under `backups/`.
 - Restore: copy current `memory/` to `memory.pre-restore-<timestamp>` before overwrite.
 - Do not log full memory bodies in server console (log ids only).
@@ -424,7 +424,7 @@ Register only in `SERVER_TOOL_HANDLERS` when `config.memory.allowAgentWrites ===
 
 Implementer **must** update [`documentation/context.md`](../../context.md):
 
-- New section **Memory (`~/.speedchat/memory/`)** with layout, config flags, API table, retrieval limits, composer part id `memory`, Lite vs Full caps.
+- New section **Memory (`~/.minnow/memory/`)** with layout, config flags, API table, retrieval limits, composer part id `memory`, Lite vs Full caps.
 - Dev commands: test + smoke scripts.
 - Note: memory requires `npm start`; degraded behavior on `npm run dev`.
 
@@ -436,7 +436,7 @@ Create [`documentation/plans/verification/step-16.md`](../verification/step-16.m
 
 ### Phase A — Server store
 
-- [ ] **A1** Add `server/memory/paths.js` — resolve dirs from `SPEEDCHAT_HOME` / `getSpeedChatHome()`.
+- [ ] **A1** Add `server/memory/paths.js` — resolve dirs from `MINNOW_HOME` / `getMinnowHome()`.
 - [ ] **A2** Add `server/memory/store.js` — load/save `index.json`; create/read/update/delete entry files; enforce size/count limits.
 - [ ] **A3** Add `server/memory/retrieve.js` — scoring + `formatMemoryBlock(entries, maxChars)`.
 - [ ] **A4** Add `server/memory/backup.js` — backup + restore with pre-restore safety copy.
@@ -502,15 +502,15 @@ Create [`documentation/plans/verification/step-16.md`](../verification/step-16.m
 
 ```bash
 # 1. Clean home
-export SPEEDCHAT_HOME=/tmp/speedchat-step16-verify   # PowerShell: $env:SPEEDCHAT_HOME=...
-rm -rf "$SPEEDCHAT_HOME" && mkdir -p "$SPEEDCHAT_HOME"
+export MINNOW_HOME=/tmp/minnow-step16-verify   # PowerShell: $env:MINNOW_HOME=...
+rm -rf "$MINNOW_HOME" && mkdir -p "$MINNOW_HOME"
 
 # 2. Start server
 npm start
 # Note port from console
 
 # 3. Automated tests
-SPEEDCHAT_HOME=/tmp/speedchat-step16-verify node --test test/memory-api.test.mjs
+MINNOW_HOME=/tmp/minnow-step16-verify node --test test/memory-api.test.mjs
 node --test test/memory-injection.test.mjs
 node --test test/memory-client.test.mjs
 
@@ -554,4 +554,4 @@ npm run build
 
 ## 20. Summary
 
-Step 16 adds a **filesystem-backed memory store** under `~/.speedchat/memory/`, a complete **`/api/memory/*` CRUD + retrieve + clear + backup/restore surface**, and **composer injection** of retrieved notes when enabled. Tests are API-first with fixed UUIDs and static expected strings; UI is minimal until Step 20 consolidates settings.
+Step 16 adds a **filesystem-backed memory store** under `~/.minnow/memory/`, a complete **`/api/memory/*` CRUD + retrieve + clear + backup/restore surface**, and **composer injection** of retrieved notes when enabled. Tests are API-first with fixed UUIDs and static expected strings; UI is minimal until Step 20 consolidates settings.

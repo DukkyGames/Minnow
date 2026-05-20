@@ -1,5 +1,5 @@
 /**
- * SpeedChat dev server: Vite + /api/tools middleware for LM Studio tool execution.
+ * Minnow dev server: Vite + /api/tools middleware for LM Studio tool execution.
  * SA-4: full executeServerTool handlers (files, git, code, web, notifications).
  * SA-14: read_document (PDF text extraction via optional pdf-parse).
  */
@@ -14,7 +14,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createConfigMiddleware } from './server/config/middleware.js';
 import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
-import { ensureSpeedChatLayout, getSpeedChatHome } from './server/config/home.js';
+import { ensureMinnowLayout, getMinnowHome } from './server/config/home.js';
 import { createProviderMiddleware } from './server/providers/routes.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
@@ -27,10 +27,12 @@ import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
 import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
 import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
+import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
+import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
-const PROJECT_ROOT = process.cwd();
+const APP_ROOT = getAppRoot();
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
 const FIND_FILES_MAX = 500;
 const DDG_MAX_SNIPPETS = 8;
@@ -43,7 +45,7 @@ function normalizePath(p) {
 }
 
 /**
- * Resolve a user-supplied path under PROJECT_ROOT unless TOOLS_ALLOW_ALL_PATHS=1.
+ * Resolve a user-supplied path under the workspace root unless TOOLS_ALLOW_ALL_PATHS=1.
  * Returns absolute path string, or throws with a message suitable for tool results.
  */
 function resolveSafePath(userPath) {
@@ -51,15 +53,16 @@ function resolveSafePath(userPath) {
     throw new Error('Path is required');
   }
 
+  const workspaceRoot = getWorkspaceRoot();
   const resolved = path.isAbsolute(userPath)
     ? path.resolve(userPath)
-    : path.resolve(PROJECT_ROOT, userPath);
+    : path.resolve(workspaceRoot, userPath);
 
   if (ALLOW_ALL_PATHS) {
     return resolved;
   }
 
-  const rootNorm = normalizePath(PROJECT_ROOT);
+  const rootNorm = normalizePath(workspaceRoot);
   const resolvedNorm = normalizePath(resolved);
 
   if (resolvedNorm === rootNorm || resolvedNorm.startsWith(`${rootNorm}/`)) {
@@ -67,13 +70,13 @@ function resolveSafePath(userPath) {
   }
 
   throw new Error(
-    `Path "${userPath}" resolves outside the project directory. Set TOOLS_ALLOW_ALL_PATHS=1 to allow.`,
+    `Path "${userPath}" resolves outside the workspace directory. Set TOOLS_ALLOW_ALL_PATHS=1 to allow.`,
   );
 }
 
-/** Path relative to project root for display in tool output. */
+/** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
-  const rel = path.relative(PROJECT_ROOT, absPath);
+  const rel = path.relative(getWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
 
@@ -93,7 +96,7 @@ function stripHtml(html) {
 /** Run git with arguments in the project root. */
 async function runGit(args) {
   try {
-    const result = await runProcess('git', args, { cwd: PROJECT_ROOT });
+    const result = await runProcess('git', args, { cwd: getWorkspaceRoot() });
     return formatProcessOutput(`git ${args.join(' ')}`, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -431,7 +434,7 @@ async function toolExecuteCommand(args) {
   try {
     return await executeCommandBlocking({
       command,
-      cwd: PROJECT_ROOT,
+      cwd: getWorkspaceRoot(),
       shell: process.platform === 'win32',
     });
   } catch (err) {
@@ -448,7 +451,7 @@ async function toolRunJavascript(args) {
 
   try {
     const result = await runProcess('node', ['-e', code], {
-      cwd: PROJECT_ROOT,
+      cwd: getWorkspaceRoot(),
       timeout: COMMAND_TIMEOUT_MS,
     });
     return formatProcessOutput('node -e', result);
@@ -470,7 +473,7 @@ async function toolRunPython(args) {
   for (const bin of candidates) {
     try {
       const result = await runProcess(bin, ['-c', code], {
-        cwd: PROJECT_ROOT,
+        cwd: getWorkspaceRoot(),
         timeout: COMMAND_TIMEOUT_MS,
       });
       return formatProcessOutput(`${bin} -c`, result);
@@ -486,7 +489,7 @@ async function toolRunPython(args) {
 
 /** Desktop notification via OS-native commands. */
 async function toolSendNotification(args) {
-  const title = String(args?.title ?? 'SpeedChat');
+  const title = String(args?.title ?? 'Minnow');
   const message = String(args?.message ?? args?.body ?? '');
   if (!message) {
     return 'Error: message is required';
@@ -619,7 +622,7 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
-  run_impeccable: (args) => toolRunImpeccable(args, PROJECT_ROOT),
+  run_impeccable: (args) => toolRunImpeccable(args, getWorkspaceRoot()),
   get_lsp_diagnostics: async (args) => {
     const { getLspDiagnostics } = await import('./server/lsp/manager.js');
     return getLspDiagnostics(String(args?.path ?? ''));
@@ -762,18 +765,19 @@ function openBrowser(url) {
 
 async function main() {
   const vite = await createServer({
-    configFile: path.join(PROJECT_ROOT, 'vite.config.ts'),
+    configFile: path.join(APP_ROOT, 'vite.config.ts'),
     server: {
       port: PORT,
       strictPort: false,
     },
     plugins: [
       {
-        name: 'speedchat-api',
+        name: 'minnow-api',
         configureServer(server) {
           server.middlewares.use(createConfigMiddleware());
+          server.middlewares.use(createWorkspaceMiddleware());
           server.middlewares.use(createMemoryMiddleware());
-          server.middlewares.use(createLspMiddleware(PROJECT_ROOT));
+          server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
           server.middlewares.use(createMcpMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
@@ -781,24 +785,26 @@ async function main() {
           server.middlewares.use(createBrowserScreenshotMiddleware());
           server.middlewares.use(createToolsMiddleware());
           server.middlewares.use(createSkillsMiddleware());
-          server.middlewares.use(createTerminalMiddleware(PROJECT_ROOT));
+          server.middlewares.use(createTerminalMiddleware(() => getWorkspaceRoot()));
         },
       },
     ],
   });
 
-  await ensureSpeedChatLayout();
+  await ensureMinnowLayout();
+  const workspacePath = await initWorkspaceRoot();
+  console.log(`Workspace: ${workspacePath}`);
   await ensureProviderRegistry();
   await initMemoryApi();
   await initLspConfig();
   await initMcpApi();
-  const homePath = getSpeedChatHome();
-  console.log(`SpeedChat data: ${homePath}`);
+  const homePath = getMinnowHome();
+  console.log(`Minnow data: ${homePath}`);
 
   await vite.listen();
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
-  console.log(`SpeedChat dev server: ${localUrl}`);
+  console.log(`Minnow dev server: ${localUrl}`);
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);

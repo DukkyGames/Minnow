@@ -13,7 +13,7 @@ import {
   showViewerSplit,
 } from './file-layout';
 import { refreshFileTree, renderFileTree } from './file-tree';
-import { speedchatEditorExtensions } from './codemirror-theme';
+import { minnowEditorExtensions } from './codemirror-theme';
 import { lspEditorExtensions } from './file-editor-extensions';
 
 export const LARGE_FILE_BYTES = 512_000;
@@ -227,7 +227,7 @@ function mountEditor(content: string, path: string): void {
           '&': { height: '100%', fontSize: '13px' },
           '.cm-scroller': { fontFamily: 'var(--font-mono)' },
         }),
-        ...speedchatEditorExtensions(),
+        ...minnowEditorExtensions(),
         ...langExts,
       ],
     });

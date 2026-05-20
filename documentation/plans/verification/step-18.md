@@ -11,7 +11,7 @@ Expected: **3/3** MCP tests pass.
 
 ## Seed check
 
-After `npm start`, verify `~/.speedchat/mcp.json` has `context7.enabled: true`.
+After `npm start`, verify `~/.minnow/mcp.json` has `context7.enabled: true`.
 
 ## Fixture tool
 

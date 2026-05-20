@@ -12,7 +12,7 @@ toolPolicy:
     save_file: deny
 ---
 
-<!-- SPEEDCHAT_MODE_MARKER: plan full -->
+<!-- MINNOW_MODE_MARKER: plan full -->
 
 # Operating mode: Plan ({{mode_label}})
 

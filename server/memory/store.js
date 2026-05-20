@@ -1,5 +1,5 @@
 /**
- * Memory entry CRUD and index maintenance under ~/.speedchat/memory/.
+ * Memory entry CRUD and index maintenance under ~/.minnow/memory/.
  */
 
 import fs from 'node:fs/promises';

@@ -1,10 +1,10 @@
 /**
- * Provider registry under ~/.speedchat/providers/<id>/.
+ * Provider registry under ~/.minnow/providers/<id>/.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { buildAuthHeaders, secretsFlags } from './auth-headers.js';
 import { getDefaultPaths } from './paths.js';
@@ -32,7 +32,7 @@ async function chmodSecrets(filePath) {
  * @returns {string}
  */
 function providersRoot() {
-  return path.join(getSpeedChatHome(), 'providers');
+  return path.join(getMinnowHome(), 'providers');
 }
 
 /**

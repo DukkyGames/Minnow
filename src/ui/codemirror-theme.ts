@@ -19,7 +19,7 @@ const gh = {
   invalid: 'var(--danger)',
 } as const;
 
-const speedchatHighlightStyle = HighlightStyle.define([
+const minnowHighlightStyle = HighlightStyle.define([
   { tag: tags.comment, color: gh.comment },
   { tag: tags.lineComment, color: gh.comment },
   { tag: tags.blockComment, color: gh.comment },
@@ -137,6 +137,6 @@ const speedchatHighlightStyle = HighlightStyle.define([
 ]);
 
 /** Shared editor extensions: GitHub-style token colors for the file viewer. */
-export function speedchatEditorExtensions(): Extension[] {
-  return [syntaxHighlighting(speedchatHighlightStyle)];
+export function minnowEditorExtensions(): Extension[] {
+  return [syntaxHighlighting(minnowHighlightStyle)];
 }

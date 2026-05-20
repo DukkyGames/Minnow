@@ -32,7 +32,12 @@ import {
   listProviders,
   setActiveProvider,
 } from '../providers/store';
-import { fetchMemoryStatus } from '../memory/client';
+import {
+  deleteMemoryEntry,
+  fetchMemoryEntries,
+  fetchMemoryStatus,
+} from '../memory/client';
+import type { MemoryEntryWithBody } from '../memory/types';
 import { renderSkillsSettingsSection } from './settings-skills';
 import {
   fillToolsSection,
@@ -131,7 +136,7 @@ async function renderGeneralSection(): Promise<void> {
 
   addRow('Active provider', active?.label ?? '—');
   addRow('Base URL', active?.baseUrl ?? '—');
-  addRow('Storage', serverUp ? '~/.speedchat' : 'Browser (localStorage)');
+  addRow('Storage', serverUp ? '~/.minnow' : 'Browser (localStorage)');
 
   mount.appendChild(summary);
 
@@ -490,7 +495,7 @@ async function renderModesSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.speedchat/prompts/modes/.',
+      'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.minnow/prompts/modes/.',
     ),
   );
 
@@ -522,7 +527,7 @@ async function renderExpertsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Edit persona prompts per expert. Overrides live in ~/.speedchat/prompts/experts/.',
+      'Edit persona prompts per expert. Overrides live in ~/.minnow/prompts/experts/.',
     ),
   );
 
@@ -557,7 +562,7 @@ async function renderWorkAgentsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.speedchat/work-agents.json.',
+      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json.',
     ),
   );
 
@@ -706,7 +711,7 @@ async function renderToolsSection(): Promise<void> {
   keyRow.appendChild(keyLabel);
   keyRow.appendChild(keyInput);
   keyRow.appendChild(
-    el('p', 'settings-field-hint', 'Stored in ~/.speedchat/tools.json when npm start is running.'),
+    el('p', 'settings-field-hint', 'Stored in ~/.minnow/tools.json when npm start is running.'),
   );
   mount.appendChild(keyRow);
 
@@ -944,7 +949,7 @@ async function renderMcpSection(): Promise<void> {
   listEl.replaceChildren();
   if (visible.length === 0) {
     listEl.appendChild(
-      el('p', 'settings-field-hint', 'No MCP servers in ~/.speedchat/mcp.json.'),
+      el('p', 'settings-field-hint', 'No MCP servers in ~/.minnow/mcp.json.'),
     );
     return;
   }
@@ -1000,20 +1005,155 @@ async function renderSkillsSection(): Promise<void> {
   await renderSkillsSettingsSection(mount);
 }
 
+let memoryListBindingsDone = false;
+
+/** Sort pinned first, then most recently updated. */
+function sortMemoryEntries(entries: MemoryEntryWithBody[]): MemoryEntryWithBody[] {
+  return [...entries].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return String(b.updatedAt).localeCompare(String(a.updatedAt));
+  });
+}
+
+function formatMemoryTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function renderMemoryEntryRow(entry: MemoryEntryWithBody): HTMLElement {
+  const row = document.createElement('article');
+  row.className = 'settings-memory-row';
+  row.setAttribute('role', 'listitem');
+  row.dataset.memoryId = entry.id;
+
+  const head = document.createElement('div');
+  head.className = 'settings-memory-row-head';
+
+  const title = document.createElement('h3');
+  title.className = 'settings-memory-title';
+  title.textContent = entry.title || 'Untitled';
+  head.append(title);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'settings-inline-btn settings-memory-remove';
+  removeBtn.textContent = 'Delete';
+  removeBtn.setAttribute('aria-label', `Delete memory ${entry.title}`);
+  removeBtn.dataset.memoryRemove = entry.id;
+  head.append(removeBtn);
+
+  row.append(head);
+
+  const meta = document.createElement('div');
+  meta.className = 'settings-memory-meta';
+
+  if (entry.pinned) {
+    const pin = document.createElement('span');
+    pin.className = 'settings-memory-badge settings-memory-badge--pinned';
+    pin.textContent = 'Pinned';
+    meta.append(pin);
+  }
+
+  const source = document.createElement('span');
+  source.className = 'settings-memory-badge';
+  source.textContent = entry.source;
+  meta.append(source);
+
+  const updated = document.createElement('span');
+  updated.className = 'settings-memory-updated';
+  updated.textContent = `Updated ${formatMemoryTimestamp(entry.updatedAt)}`;
+  meta.append(updated);
+
+  if (entry.tags.length) {
+    const tags = document.createElement('span');
+    tags.className = 'settings-memory-tags';
+    tags.textContent = entry.tags.join(', ');
+    meta.append(tags);
+  }
+
+  row.append(meta);
+
+  const body = document.createElement('pre');
+  body.className = 'settings-memory-body';
+  body.textContent = entry.body?.trim() ? entry.body : '(empty)';
+  row.append(body);
+
+  return row;
+}
+
+function bindMemoryListActions(listEl: HTMLElement): void {
+  if (memoryListBindingsDone) return;
+  memoryListBindingsDone = true;
+
+  listEl.addEventListener('click', (ev) => {
+    const target = (ev.target as HTMLElement).closest(
+      '[data-memory-remove]',
+    ) as HTMLButtonElement | null;
+    if (!target?.dataset.memoryRemove) return;
+
+    const id = target.dataset.memoryRemove;
+    void (async () => {
+      if (!confirm('Delete this memory entry?')) return;
+      const ok = await deleteMemoryEntry(id);
+      if (ok) {
+        setStatus('ok', 'Memory entry deleted');
+        await renderMemorySection();
+        return;
+      }
+      setStatus('err', 'Delete failed — use npm start');
+    })();
+  });
+}
+
 async function renderMemorySection(): Promise<void> {
   const countEl = document.getElementById('settingsMemoryEntryCount');
   const hintEl = document.getElementById('settingsMemoryServerHint');
-  if (!countEl || !hintEl) return;
+  const listEl = document.getElementById('settingsMemoryList');
+  if (!countEl || !hintEl || !listEl) return;
+
+  listEl.replaceChildren();
+  bindMemoryListActions(listEl);
 
   const status = await fetchMemoryStatus();
   if (!status) {
     countEl.textContent = 'Entries: —';
     hintEl.textContent = 'Start npm start for memory API';
+    const offline = document.createElement('p');
+    offline.className = 'settings-section-note';
+    offline.textContent =
+      'Start npm start to view and manage stored memories.';
+    listEl.append(offline);
     return;
   }
 
   countEl.textContent = `Entries: ${status.entryCount}`;
   hintEl.textContent = status.home ? `Store: ${status.home}` : 'Server connected';
+
+  const entries = await fetchMemoryEntries(true);
+  if (!entries) {
+    const err = document.createElement('p');
+    err.className = 'settings-section-note';
+    err.textContent = 'Could not load memory entries.';
+    listEl.append(err);
+    return;
+  }
+
+  if (!entries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'settings-section-note';
+    empty.textContent = 'No memory entries yet.';
+    listEl.append(empty);
+    return;
+  }
+
+  const sorted = sortMemoryEntries(entries);
+  for (const entry of sorted) {
+    listEl.append(renderMemoryEntryRow(entry));
+  }
 }
 
 async function renderFeaturesSection(): Promise<void> {

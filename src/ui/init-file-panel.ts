@@ -17,6 +17,7 @@ import {
 import { initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
 import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './file-viewer';
 import { getLocalServerAvailable } from '../tools/client';
+import { refreshWorkspaceUi } from './workspace-button';
 
 let resizerBound = false;
 
@@ -86,6 +87,7 @@ function bindFilePanelControls(): void {
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
   if (getLocalServerAvailable()) {
+    void refreshWorkspaceUi();
     void refreshFileTree();
   } else {
     renderFileTree();

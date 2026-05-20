@@ -1,12 +1,12 @@
 /**
- * Load and merge sub-agent configuration (defaults + ~/.speedchat/sub-agents.json).
+ * Load and merge sub-agent configuration (defaults + ~/.minnow/sub-agents.json).
  */
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import DEFAULTS from './defaults/sub-agents.json';
 import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
-const SUB_AGENTS_STORAGE_KEY = 'speedchat.subAgents';
+const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;

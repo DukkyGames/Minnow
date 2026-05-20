@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resetSpeedChatHomeCache, ensureSpeedChatLayout } from '../server/config/home.js';
+import { resetMinnowHomeCache, ensureMinnowLayout } from '../server/config/home.js';
 import { readConfigJson } from '../server/config/store.js';
 import { toolRunImpeccable } from '../server/impeccable/run-impeccable.js';
 
@@ -21,10 +21,10 @@ function record(id, pass, detail = '') {
 }
 
 async function testI1MetaLocal() {
-  const home = path.join(PROJECT_ROOT, '.speedchat-step15-smoke-home');
-  process.env.SPEEDCHAT_HOME = home;
-  resetSpeedChatHomeCache();
-  await ensureSpeedChatLayout();
+  const home = path.join(PROJECT_ROOT, '.minnow-step15-smoke-home');
+  process.env.MINNOW_HOME = home;
+  resetMinnowHomeCache();
+  await ensureMinnowLayout();
   const meta = await readConfigJson('config.json');
   const ok =
     meta?.uiDesigner &&
@@ -32,8 +32,8 @@ async function testI1MetaLocal() {
     meta.uiDesigner.fallbackToChatModel === true;
   record('I1', ok, ok ? 'uiDesigner defaults in config.json' : 'missing uiDesigner');
   await fs.rm(home, { recursive: true, force: true }).catch(() => {});
-  delete process.env.SPEEDCHAT_HOME;
-  resetSpeedChatHomeCache();
+  delete process.env.MINNOW_HOME;
+  resetMinnowHomeCache();
 }
 
 async function testI1MetaHttp() {

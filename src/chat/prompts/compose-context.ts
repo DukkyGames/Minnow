@@ -20,10 +20,15 @@ import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
 import { loadPromptConfig } from './prompt-configs';
+import { getWorkspacePath } from '../../state/workspace';
 import type { ComposeContext, PromptProfile } from './types';
 
-/** Browser project root for {{cwd}} — dev server cwd when tools run. */
+/** Workspace folder path for {{cwd}} in system prompts (falls back to origin). */
 export function resolveComposeCwd(): string {
+  const workspace = getWorkspacePath();
+  if (workspace.trim()) {
+    return workspace;
+  }
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }

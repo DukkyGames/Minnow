@@ -18,7 +18,7 @@ import {
 import { retrieveMemoryBlock } from './retrieve.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -76,12 +76,19 @@ export async function handleMemoryRequest(req, res, pathname) {
       sendJson(res, 200, {
         enabled: memory.enabled !== false,
         entryCount,
-        home: getSpeedChatHome(),
+        home: getMinnowHome(),
       });
       return true;
     }
 
     if (pathname === '/api/memory/entries' && req.method === 'GET') {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (url.searchParams.get('includeBody') === '1') {
+        const rows = await loadAllEntriesWithBodies();
+        const entries = rows.map(({ meta, body }) => ({ ...meta, body }));
+        sendJson(res, 200, { entries });
+        return true;
+      }
       const entries = await listEntries();
       sendJson(res, 200, { entries });
       return true;

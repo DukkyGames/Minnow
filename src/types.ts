@@ -5,7 +5,7 @@
 
 import type { ModeId } from './chat/modes/types';
 
-/** Persisted session blob schema version (`speedchat-sessions-v1`). */
+/** Persisted session blob schema version (`minnow-sessions-v1`). */
 export const SESSION_SCHEMA_VERSION = 1 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
@@ -183,7 +183,7 @@ export interface TerminalRunRecord {
   finishedAt: number;
   exitCode: number | null;
   timedOut: boolean;
-  /** Path relative to ~/.speedchat (e.g. logs/terminal/<runId>.log). */
+  /** Path relative to ~/.minnow (e.g. logs/terminal/<runId>.log). */
   logPath: string;
 }
 
@@ -227,7 +227,7 @@ export interface SystemPromptPreset {
   text: string;
 }
 
-/** `localStorage` payload under `speedchat.systemPrompt`. */
+/** `localStorage` payload under `minnow.systemPrompt`. */
 export interface SystemPromptSettings {
   presetId: string;
   text: string;

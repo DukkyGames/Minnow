@@ -1,5 +1,5 @@
 /**
- * Shared helpers for provider API tests (temp SPEEDCHAT_HOME + HTTP server).
+ * Shared helpers for provider API tests (temp MINNOW_HOME + HTTP server).
  */
 
 import http from 'node:http';

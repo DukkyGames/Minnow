@@ -4,7 +4,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import {
   loadMergedLspConfig,
   invalidateLspConfigCache,
@@ -44,13 +44,20 @@ function readJsonBody(req) {
   });
 }
 
-export function createLspMiddleware(projectRoot) {
+export function createLspMiddleware(resolveProjectRoot) {
+  const getRoot =
+    typeof resolveProjectRoot === 'function'
+      ? resolveProjectRoot
+      : () => resolveProjectRoot;
+
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';
     if (!url.startsWith('/api/lsp') && url !== '/api/config/lsp') {
       next();
       return;
     }
+
+    const projectRoot = getRoot();
 
     setCorsHeaders(res);
     if (req.method === 'OPTIONS') {
@@ -153,7 +160,7 @@ export function createLspMiddleware(projectRoot) {
 
       if (url === '/api/config/lsp' && req.method === 'PUT') {
         const body = await readJsonBody(req);
-        const home = getSpeedChatHome();
+        const home = getMinnowHome();
         const filePath = path.join(home, 'lsp.json');
         let current = {};
         try {

@@ -1,6 +1,6 @@
 # Operating mode sources (OpenCode mapping)
 
-| OpenCode concept | SpeedChat (Step 05) |
+| OpenCode concept | Minnow (Step 05) |
 |------------------|---------------------|
 | Primary agent **Build** | `build` — full tool access |
 | Primary agent **Plan** | `plan` — deny shell, writes, git mutations |
@@ -11,6 +11,6 @@
 | **General** subagent (broad) | Inspiration for `orchestrate` |
 | **Explore** / read-heavy subagents | Inspiration for `research` |
 
-SpeedChat adds **Orchestrate** and **Research** as product-specific primaries (not OpenCode built-ins).
+Minnow adds **Orchestrate** and **Research** as product-specific primaries (not OpenCode built-ins).
 
 References: [OpenCode Agents](https://opencode.ai/docs/agents/), [OpenCode Permissions](https://opencode.ai/docs/permissions/).

@@ -19,7 +19,7 @@ The seed is also sent as the API `user` message; `{{userMessage}}` is only for f
 Place a file at:
 
 ```text
-~/.speedchat/prompts/titles/default.md
+~/.minnow/prompts/titles/default.md
 ```
 
 When `npm start` is running, overrides are picked up via `GET /api/prompts/registry` (same as other prompt kinds). In Vite-only mode (`npm run dev`), only the shipped bundled prompt is used.

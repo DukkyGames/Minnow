@@ -8,7 +8,7 @@ import {
 } from '../app-state';
 import { scrollBottom } from '../ui/input';
 
-let speedchatMarkedConfigured = false;
+let minnowMarkedConfigured = false;
 
 export function cancelAssistantBubbleRenderDebounce(): void {
   if (assistantRenderDebounceTimer != null) {
@@ -19,8 +19,8 @@ export function cancelAssistantBubbleRenderDebounce(): void {
 
 /** Configure marked once for GitHub-flavored markdown without single-line breaks. */
 function ensureMarkedOptionsConfigured(): void {
-  if (speedchatMarkedConfigured) return;
-  speedchatMarkedConfigured = true;
+  if (minnowMarkedConfigured) return;
+  minnowMarkedConfigured = true;
   try {
     if (typeof marked.use === 'function') {
       marked.use({ gfm: true, breaks: false });

@@ -5,8 +5,8 @@ todos:
   - id: s01-ui-polish
     content: "Step 01: Chat UX polish (spacing, topbar, streaming labels)"
     status: pending
-  - id: s02-speedchat-dir
-    content: "Step 02: ~/.speedchat data layer + localStorage migration"
+  - id: s02-minnow-dir
+    content: "Step 02: ~/.minnow data layer + localStorage migration"
     status: pending
   - id: s03-providers
     content: "Step 03: Multiple providers + API authentication"
@@ -65,7 +65,7 @@ todos:
 isProject: false
 ---
 
-# SpeedChat to-fix — ordered steps for sub-agents
+# Minnow to-fix — ordered steps for sub-agents
 
 Source backlog: [`documentation/plans/to-fix.md`](documentation/plans/to-fix.md)  
 Current architecture: [`documentation/context.md`](documentation/context.md) (Vite SPA + `server.js` tool API; persistence today is **browser `localStorage`** only).
@@ -75,7 +75,7 @@ Current architecture: [`documentation/context.md`](documentation/context.md) (Vi
 ```mermaid
 flowchart TD
   S01[S01 UI quick fixes]
-  S02[S02 ~/.speedchat]
+  S02[S02 ~/.minnow]
   S03[S03 Providers and API keys]
   S04[S04 Programmatic prompts]
   S05[S05 Modes]
@@ -127,7 +127,7 @@ flowchart TD
 
 **Principles:**
 - Fix visible UX bugs and streaming affordances first (low risk, no schema work).
-- Move persistence to **`~/.speedchat`** before anything that needs durable config (providers, prompts, skills, memory, MCP/LSP).
+- Move persistence to **`~/.minnow`** before anything that needs durable config (providers, prompts, skills, memory, MCP/LSP).
 - Build the **prompt / agent intelligence layer** before sub-agents, browser automation, and skills that depend on routing.
 - **Terminal** and **file UI** reuse existing server file/git/command tools ([`server.js`](server.js), [`src/tools/definitions.ts`](src/tools/definitions.ts)).
 - **Skills → Impeccable → UI Designer** is a deliberate chain.
@@ -161,22 +161,22 @@ flowchart TD
 
 ## Wave 1 — Foundation
 
-### Step 02 — `~/.speedchat` data layer and migration
+### Step 02 — `~/.minnow` data layer and migration
 
 **Backlog items:** 2
 
 **Depends on:** Step 01 (optional; can start in parallel)
 
 **High-level concept:**
-- Define a canonical home dir: `~/.speedchat/` (Windows: `%USERPROFILE%\.speedchat`).
-- Layout sketch: `config.json`, **`sessions/state.json`** (single session blob — not per-chat files), `memory/`, `providers/`, `mcp/`, `lsp/`, `prompt-configs/` (saved Full/Lite/**Custom** profiles), backups. **Built-in prompts** in [`src/chat/prompts/`](src/chat/prompts/); **user prompt overrides** in `~/.speedchat/prompts/`. **Built-in skills** in [`src/skills/`](src/skills/); **user skills** in `~/.speedchat/skills/`.
+- Define a canonical home dir: `~/.minnow/` (Windows: `%USERPROFILE%\.minnow`).
+- Layout sketch: `config.json`, **`sessions/state.json`** (single session blob — not per-chat files), `memory/`, `providers/`, `mcp/`, `lsp/`, `prompt-configs/` (saved Full/Lite/**Custom** profiles), backups. **Built-in prompts** in [`src/chat/prompts/`](src/chat/prompts/); **user prompt overrides** in `~/.minnow/prompts/`. **Built-in skills** in [`src/skills/`](src/skills/); **user skills** in `~/.minnow/skills/`.
 - **Server is source of truth** when `npm start` is running: new API routes (e.g. `GET/PUT /api/config/*`) read/write under home dir with safe path guards (extend [`server.js`](server.js) `resolveSafePath` pattern).
-- **One-time migration** from `localStorage` keys (`speedchat-sessions-v1`, `speedchat.tools`, `speedchat.systemPrompt`) on first launch.
+- **One-time migration** from `localStorage` keys (`minnow-sessions-v1`, `minnow.tools`, `minnow.systemPrompt`) on first launch.
 - Browser keeps a thin cache or always proxies to server; degrade gracefully when Vite-only (`npm run dev`).
 
 **Deliverable:** Config module + migration; replace direct `localStorage` usage in [`src/state/sessions.ts`](src/state/sessions.ts), [`src/tools/config.ts`](src/tools/config.ts), [`src/ui/settings.ts`](src/ui/settings.ts).
 
-**Verification:** API tests for config read/write + migration fixture; verifier re-runs on clean `~/.speedchat` temp dir.
+**Verification:** API tests for config read/write + migration fixture; verifier re-runs on clean `~/.minnow` temp dir.
 
 **Blocks:** Steps 03–20.
 
@@ -191,10 +191,10 @@ flowchart TD
 **Depends on:** Step 02
 
 **High-level concept:**
-- Provider registry in `~/.speedchat/providers/` (LM Studio today is one entry; add OpenAI-compatible endpoints).
+- Provider registry in `~/.minnow/providers/` (LM Studio today is one entry; add OpenAI-compatible endpoints).
 - Per-provider: base URL, default models list refresh, optional **API key** / Bearer / custom headers.
 - Refactor [`src/api/models.ts`](src/api/models.ts) and chat URLs in [`src/api/chat.ts`](src/api/chat.ts) / [`src/tools/loop.ts`](src/tools/loop.ts) to resolve provider per request (not only `#serverUrl` in settings drawer).
-- Secrets never in git; stored only under `~/.speedchat`.
+- Secrets never in git; stored only under `~/.minnow`.
 
 **Deliverable:** Provider CRUD + wired chat/model fetch.
 
@@ -204,7 +204,7 @@ flowchart TD
 
 ## Wave 3 — Prompt and agent intelligence
 
-**Prompt home:** All shipped programmatic prompts live under [`src/chat/prompts/`](src/chat/prompts/) (alongside [`src/chat/messaging.ts`](src/chat/messaging.ts)). Optional user overrides merge from `~/.speedchat/prompts/` (same subfolder layout, user wins on `id` conflict).
+**Prompt home:** All shipped programmatic prompts live under [`src/chat/prompts/`](src/chat/prompts/) (alongside [`src/chat/messaging.ts`](src/chat/messaging.ts)). Optional user overrides merge from `~/.minnow/prompts/` (same subfolder layout, user wins on `id` conflict).
 
 **Wave 3 must ship an example template** (Step 04) that documents the full prompt system for humans and sub-agents — not just code.
 
@@ -214,11 +214,11 @@ flowchart TD
 |---------|----------|
 | **Full** | All enabled prompt parts use full shipped templates — maximum guidance, higher token use. |
 | **Lite** | Minimize input tokens: short/lite template variants, omit optional layers, cap memory/history injection; prefer `src/chat/prompts/lite/` or front-matter `liteBody` where defined. |
-| **Custom** | User-defined per-part enable/disable and editable text; **named configurations** saved under `~/.speedchat/prompt-configs/` with **load / save / duplicate / delete** in settings. |
+| **Custom** | User-defined per-part enable/disable and editable text; **named configurations** saved under `~/.minnow/prompt-configs/` with **load / save / duplicate / delete** in settings. |
 
 **Per-profile prompt text in settings (Step 20):** Users can edit **different prompt content for Full, Lite, and Custom** — not a single shared body. Storage pattern:
 - Shipped defaults: `src/chat/prompts/{full|lite}/<part>/` or front-matter `fullBody` / `liteBody` on each file.
-- User edits: `~/.speedchat/prompts/overrides/full/`, `.../lite/`, `.../custom/` (or embedded in `prompt-configs/*.json` for Custom).
+- User edits: `~/.minnow/prompts/overrides/full/`, `.../lite/`, `.../custom/` (or embedded in `prompt-configs/*.json` for Custom).
 - Settings UI switches profile tab → loads the matching override set for each prompt part.
 
 Each **prompt part** is independently **enabled or disabled** (in Custom, and as overrides when not locked by Full/Lite presets).
@@ -255,7 +255,7 @@ src/chat/prompts/
 | Local uploads (workspace) | `uploads/system-prompts-and-models-of-ai-tools-0.md`, `uploads/opencode-1.md`, `uploads/oh-my-opencode-slim-2.md` |
 | [OpenCode docs — Agents / Rules](https://opencode.ai/docs/) | Official config and prompt layering |
 
-Add `documentation/plans/references/prompt-sources.md` summarizing what SpeedChat adopted vs diverged (implementer writes; verifier checks it exists).
+Add `documentation/plans/references/prompt-sources.md` summarizing what Minnow adopted vs diverged (implementer writes; verifier checks it exists).
 
 **High-level concept:**
 
@@ -264,7 +264,7 @@ Add `documentation/plans/references/prompt-sources.md` summarizing what SpeedCha
 | Location | Role |
 |----------|------|
 | [`src/chat/prompts/`](src/chat/prompts/) | **Built-in defaults** — versioned with the app. Add files here to ship new experts, modes, tool-usage fragments, etc. |
-| `~/.speedchat/prompts/` | **User overrides** — custom experts, edited mode packs; same directory layout. |
+| `~/.minnow/prompts/` | **User overrides** — custom experts, edited mode packs; same directory layout. |
 
 **Composable prompt parts** (each is a settings-editable unit with `enabled: boolean` + content source):
 
@@ -282,7 +282,7 @@ Add `documentation/plans/references/prompt-sources.md` summarizing what SpeedCha
 **Profile engine** (`prompt-composer.ts`):
 - **`full`:** enable all parts that the active session features need; load full templates from `src/chat/prompts/`.
 - **`lite`:** apply Lite rules per part (skip optional sections, use `lite/` files or truncated bodies, reduce interpolation payload e.g. shorter `{{enabled_tools}}` summary).
-- **`custom`:** merge the active **saved configuration** from `~/.speedchat/prompt-configs/<name>.json` (per-part `enabled` + optional `contentOverride` text).
+- **`custom`:** merge the active **saved configuration** from `~/.minnow/prompt-configs/<name>.json` (per-part `enabled` + optional `contentOverride` text).
 
 **Composition order:**  
 `base` → `mode` → `expert` → `work-agent` → `tool-usage` → `info` → `skill` → `memory` → user message.  
@@ -290,7 +290,7 @@ Research OpenCode/Cursor layered prompts; wire into `buildApiMessages` in [`src/
 
 Replace or augment hardcoded [`SYSTEM_PROMPT_PRESETS`](src/constants.ts) with loadable templates from `src/chat/prompts/`; keep presets as seed content or migrate into `info/` on first load.
 
-**Custom configuration schema** (persisted in `~/.speedchat/prompt-configs/`):
+**Custom configuration schema** (persisted in `~/.minnow/prompt-configs/`):
 
 ```json
 {
@@ -308,7 +308,7 @@ Replace or augment hardcoded [`SYSTEM_PROMPT_PRESETS`](src/constants.ts) with lo
 
 - `contentOverride: null` → use shipped file; non-null → use edited text from settings.
 - API: `listPromptConfigs`, `loadPromptConfig`, `savePromptConfig`, `deletePromptConfig`.
-- Active config id stored in `~/.speedchat/config.json` (or session-level override later).
+- Active config id stored in `~/.minnow/config.json` (or session-level override later).
 
 **Example template (required deliverable):**  
 Add `src/chat/prompts/_example/` containing:
@@ -321,12 +321,12 @@ Add `src/chat/prompts/_example/` containing:
    - **Composition hints:** which layer this file belongs in and what it must not duplicate
    - **Profile behavior:** how this file is used in **Full** vs **Lite** (e.g. `liteBody` in front matter or sibling file in `lite/`)
    - **Per-part toggles:** which `part id` controls inclusion in settings
-2. **`README.md`** — how to **programmatically** work with SpeedChat’s prompt system:
+2. **`README.md`** — how to **programmatically** work with Minnow’s prompt system:
    - Where the loader scans (`src/chat/prompts/**` + user dir)
    - How to add a new prompt (drop file in the right subfolder; no registry file if glob-based)
    - Which modules to call from the send path (`loadPrompt`, `composeSystemPrompt`, hooks in [`src/chat/messaging.ts`](src/chat/messaging.ts) / loop)
    - How modes, experts, Work Agents, and `/` skills reference prompt `id`s
-   - How overrides in `~/.speedchat/prompts/` merge with built-ins
+   - How overrides in `~/.minnow/prompts/` merge with built-ins
    - **Full / Lite / Custom** profiles and how to add a new **saved custom configuration**
 
 **Deliverable:** Prompt loader + composer with **part-level enable/disable** and **Full / Lite / Custom** profiles (separate content resolution per profile); custom config save/load API; **`_example` template pack**; `documentation/plans/references/prompt-sources.md`; wire-up in send path (settings UI deferred to Step 20). Document schema in [`documentation/context.md`](documentation/context.md).
@@ -350,7 +350,7 @@ Add `src/chat/prompts/_example/` containing:
 **High-level concept:**
 - Four modes, each backed by a prompt file in [`src/chat/prompts/modes/`](src/chat/prompts/) + optional tool policy (e.g. Plan may discourage `execute_command`).
 - **Mode selector UI near the chat window** (composer area or strip above messages — not top bar).
-- Research OpenCode’s mode switching for parity; persist last mode per chat in `~/.speedchat/sessions/`.
+- Research OpenCode’s mode switching for parity; persist last mode per chat in `~/.minnow/sessions/`.
 
 **Mode template pack (required deliverable):**  
 Add `src/chat/prompts/modes/_template/` (and working stubs for each mode):
@@ -378,7 +378,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 **Depends on:** Step 04 (Step 05 recommended first)
 
 **High-level concept:**
-- **Experts** = named prompt profiles in [`src/chat/prompts/experts/`](src/chat/prompts/) (user overrides in `~/.speedchat/prompts/experts/`).
+- **Experts** = named prompt profiles in [`src/chat/prompts/experts/`](src/chat/prompts/) (user overrides in `~/.minnow/prompts/experts/`).
 - **Auto:** lightweight classifier (small model call or rules) picks expert from user input.
 - **Manual:** dropdown near chat (Auto + expert list); overrides auto for the session/turn.
 - Wire into prompt composer from Step 04.
@@ -395,7 +395,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 
 **High-level concept:**
 - On first user message, fire a **short, non-streaming** title job (replace [`maybeAutoTitleChat`](src/state/sessions.ts) heuristic).
-- Use a dedicated title prompt in [`src/chat/prompts/titles/`](src/chat/prompts/); store generated title in session blob under `~/.speedchat`.
+- Use a dedicated title prompt in [`src/chat/prompts/titles/`](src/chat/prompts/); store generated title in session blob under `~/.minnow`.
 - Keep sidebar fast: don’t block send on title (async update + sidebar refresh).
 
 **Deliverable:** Title agent hook + updated sidebar naming.
@@ -413,7 +413,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 **High-level concept:**
 - **Work Agents** = task-specific agents (build, review, test, etc.) with own system prompt file.
 - Per agent: default **provider + model** (from Step 03).
-- Prompt files in [`src/chat/prompts/work-agents/<id>/`](src/chat/prompts/) (user overrides in `~/.speedchat/prompts/work-agents/`); full settings editor UI in Step 20.
+- Prompt files in [`src/chat/prompts/work-agents/<id>/`](src/chat/prompts/) (user overrides in `~/.minnow/prompts/work-agents/`); full settings editor UI in Step 20.
 - Entry point: mode or slash/command or orchestrator picks a Work Agent for a turn.
 
 **Deliverable:** Agent registry, model binding, prompt editor API (UI minimal until Step 20).
@@ -428,7 +428,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 
 **High-level concept:**
 - Parent agent can spawn **sub-agents** (isolated context + tool subset) for parallel work.
-- Settings schema (stored in `~/.speedchat`): per sub-agent type — model/provider, **max concurrent**, allowed tools.
+- Settings schema (stored in `~/.minnow`): per sub-agent type — model/provider, **max concurrent**, allowed tools.
 - Implement orchestration in [`src/tools/loop.ts`](src/tools/loop.ts) or new `src/agents/orchestrator.ts` with clear turn boundaries and aggregated results back to parent chat.
 - Design for **orchestrator control**: cancel a running sub-agent, spawn a replacement with fresh context (required by Step 19 self-healing).
 
@@ -481,7 +481,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 **High-level concept:**
 - Prefer **CDP** over heavy Playwright-only wrapper when possible (align with opencode-browser):
   - `browser_list`, `browser_navigate`, `browser_snapshot` (a11y tree + `[uid]` markers), `browser_click`, `browser_fill`, `browser_eval`, `browser_screenshot`
-  - Each tool call takes `browser_url` (default `http://127.0.0.1:9222` or `OPENCODE_BROWSER_URL`-style env `SPEEDCHAT_BROWSER_URL`)
+  - Each tool call takes `browser_url` (default `http://127.0.0.1:9222` or `OPENCODE_BROWSER_URL`-style env `MINNOW_BROWSER_URL`)
   - Optional `target_id` for multi-tab
 - Implement in `server.js` (Node CDP client) or thin adapter; keep [`src/tools/browser-executor.ts`](src/tools/browser-executor.ts) for simple fetch tools until migrated.
 - **Chat display:** render screenshot attachments inline in message history (extend [`src/types.ts`](src/types.ts) / message renderer).
@@ -511,7 +511,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 | Location | Role |
 |----------|------|
 | [`src/skills/`](src/skills/) | **Built-in defaults** — versioned with the app. User has already started adding skills here; **adding a new folder under `src/skills/` is how we ship more default skills** (e.g. `src/skills/<skill-id>/SKILL.md`). |
-| `~/.speedchat/skills/` | **User-created / agent-authored** skills (self-healing tier 2, manual imports). Overrides built-in on same `id` if configured that way. |
+| `~/.minnow/skills/` | **User-created / agent-authored** skills (self-healing tier 2, manual imports). Overrides built-in on same `id` if configured that way. |
 
 **Discovery:** On `npm start`, server (or client via API) scans both trees — convention: one skill per subdirectory with a `SKILL.md` (Cursor Agent Skills format: front matter + body). List merges built-ins + user skills for the `/` picker.
 
@@ -564,7 +564,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 **Depends on:** Step 02
 
 **High-level concept:**
-- Persistent memory store under `~/.speedchat/memory/` (markdown or JSON chunks with embeddings optional later).
+- Persistent memory store under `~/.minnow/memory/` (markdown or JSON chunks with embeddings optional later).
 - Enable/disable per chat or globally; **clear** and **backup/restore** commands.
 - Inject retrieved memory into prompt composer (Step 04) when enabled.
 
@@ -584,7 +584,7 @@ Lite variants must be substantially shorter (study [oh-my-opencode-slim](https:/
 
 **High-level concept:**
 
-**Defaults enabled out of the box** (user can turn off per server in Step 20 settings). Seed `~/.speedchat/lsp.json` from OpenCode’s built-in table — prioritize SpeedChat’s stack:
+**Defaults enabled out of the box** (user can turn off per server in Step 20 settings). Seed `~/.minnow/lsp.json` from OpenCode’s built-in table — prioritize Minnow’s stack:
 
 | Server id | Extensions (summary) | Notes |
 |-----------|----------------------|--------|
@@ -619,7 +619,7 @@ Sub-agent should import the **full** OpenCode built-in table from [LSP Servers d
 - **On file open / agent tool:** match extension → start server if not running (see OpenCode `launch.ts` flow).
 - **Settings (Step 20):** master LSP on/off; **per-server enable/disable**; **add custom server** UI (command, extensions, env, initialization).
 - **Agent tools:** diagnostics first (`textDocument/publishDiagnostics` → formatted string for LLM); later definitions/references.
-- Persist config in `~/.speedchat/lsp.json`; merge with repo defaults on upgrade.
+- Persist config in `~/.minnow/lsp.json`; merge with repo defaults on upgrade.
 
 **Deliverable:** LSP process manager in `server.js`, default catalog, settings hooks (data model; full UI in Step 20), diagnostic tool(s).
 
@@ -634,8 +634,8 @@ Sub-agent should import the **full** OpenCode built-in table from [LSP Servers d
 **Depends on:** Step 02; Step 03 for auth headers on MCP transports
 
 **High-level concept:**
-- MCP client in Node (`server.js` or sidecar): list tools/resources per configured server in `~/.speedchat/mcp/`.
-- **Context7** bundled and **enabled by default** (document API key in `~/.speedchat` if required).
+- MCP client in Node (`server.js` or sidecar): list tools/resources per configured server in `~/.minnow/mcp/`.
+- **Context7** bundled and **enabled by default** (document API key in `~/.minnow` if required).
 - Bridge MCP tools into OpenAI-style function list for [`getEnabledToolDefinitions`](src/tools/client.ts).
 
 **Deliverable:** MCP registry, Context7 seed config, tool bridge.
@@ -663,7 +663,7 @@ flowchart TD
   again{Same repetition again?}
   tier2[Tier 2: Spawn explorer sub-agent]
   fix[Explore root cause build skill or script]
-  save[Save to ~/.speedchat/skills or scripts]
+  save[Save to ~/.minnow/skills or scripts]
   memory[Optional: record fix in memory]
 
   detect --> tier1 --> stop --> restart --> again
@@ -680,9 +680,9 @@ flowchart TD
 **Tier 2 — Explore and build a fix (second occurrence)**
 - If the **same class of repetition** happens again after a tier-1 restart (same sub-agent type + same failure signature within the parent turn or session window — sub-agent defines exact matching rules).
 - Orchestrator spawns a dedicated **explorer sub-agent** (may use a broader tool set than the original) to investigate the root cause.
-- Explorer may author a **skill** (`~/.speedchat/skills/`) or **script** (`~/.speedchat/scripts/` or repo `scripts/`) to address the issue.
+- Explorer may author a **skill** (`~/.minnow/skills/`) or **script** (`~/.minnow/scripts/` or repo `scripts/`) to address the issue.
 - Optionally record in **memory** (Step 16) that this fix exists so future runs can reuse it.
-- Guardrails: user approval before running new executable scripts; cap disk usage; audit log in `~/.speedchat/logs/`.
+- Guardrails: user approval before running new executable scripts; cap disk usage; audit log in `~/.minnow/logs/`.
 
 **Out of scope for v1:** Auto-running tier 2 on generic tool failures unrelated to repetition; tier 2 is specifically **after tier 1 failed once**.
 
@@ -704,9 +704,9 @@ flowchart TD
 **Prompting section (required):**
 - **Profile toggle:** **Full** | **Lite** | **Custom** (radio or segmented control) — drives composer from Step 04.
 - **Per-profile editing:** Selecting Full, Lite, or Custom switches which **saved prompt overrides** are shown — users edit **different text per profile**, not one shared textarea:
-  - **Full tab:** edit overrides under `~/.speedchat/prompts/overrides/full/` (fallback to `src/chat/prompts/` / `fullBody`)
+  - **Full tab:** edit overrides under `~/.minnow/prompts/overrides/full/` (fallback to `src/chat/prompts/` / `fullBody`)
   - **Lite tab:** edit overrides under `.../lite/` (fallback to `lite/` shipped variants)
-  - **Custom tab:** per-part overrides + named config load/save (`~/.speedchat/prompt-configs/*.json`)
+  - **Custom tab:** per-part overrides + named config load/save (`~/.minnow/prompt-configs/*.json`)
 - **When Custom is selected:**
   - Dropdown to **load** a saved configuration
   - **Save** / **Save as…** / **Delete** / **New configuration**
@@ -721,7 +721,7 @@ flowchart TD
 
 **Top bar quick controls:** expert selector (or link to chat-area control), **per-tool toggles**, **per-MCP-server toggles** (mirror [`src/tools/config.ts`](src/tools/config.ts) patterns).
 
-**Import/export:** full `~/.speedchat` backup including `prompt-configs/` and prompt overrides.
+**Import/export:** full `~/.minnow` backup including `prompt-configs/` and prompt overrides.
 
 **Deliverable:** Unified settings UX with **Full / Lite / Custom** prompting UI and per-part editors; retire scattered drawer-only fields where duplicated.
 
@@ -772,7 +772,7 @@ Then give the **verifier** agent:
 | Step | Title | Backlog #s (`to-fix.md` line = item) | Can parallel after |
 |------|--------|--------------------------------------|-------------------|
 | 01 | Chat UX polish | 15, 16, 24, 25 | — |
-| 02 | ~/.speedchat | 2 | 01 |
+| 02 | ~/.minnow | 2 | 01 |
 | 03 | Providers + API keys | 3, 4 | 02 |
 | 04 | Prompts + Full/Lite/Custom + `_example` | 6 | 02 |
 | 05 | Modes | 7 | 04 |

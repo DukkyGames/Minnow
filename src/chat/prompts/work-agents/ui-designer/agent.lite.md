@@ -22,4 +22,4 @@ allowedTools:
 
 # UI Designer (lite)
 
-Impeccable workflow: load `speedchat-context.mjs` → optional screenshot → audit/shape → **plan** (no writes) or **implement** (UI files only). Emit `IMPECCABLE_PREFLIGHT` before edits. Tools: {{enabled_tools}}.
+Impeccable workflow: load `minnow-context.mjs` → optional screenshot → audit/shape → **plan** (no writes) or **implement** (UI files only). Emit `IMPECCABLE_PREFLIGHT` before edits. Tools: {{enabled_tools}}.

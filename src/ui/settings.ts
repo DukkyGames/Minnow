@@ -112,7 +112,7 @@ export function saveSystemPromptSettings(): void {
 
   if (isServerStorageMode()) {
     void putSystemPrompt(payload).catch(() => {
-      setStatus('err', 'Could not save system prompt to ~/.speedchat');
+      setStatus('err', 'Could not save system prompt to ~/.minnow');
     });
     return;
   }
@@ -131,7 +131,7 @@ export async function loadSystemPromptSettings(): Promise<void> {
       applySystemPromptSettingsToDom(data);
       return;
     } catch {
-      setStatus('err', 'Could not load system prompt from ~/.speedchat');
+      setStatus('err', 'Could not load system prompt from ~/.minnow');
     }
   }
 

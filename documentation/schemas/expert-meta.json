@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://speedchat.local/schemas/expert-meta.json",
+  "$id": "https://minnow.local/schemas/expert-meta.json",
   "title": "ExpertMeta",
   "type": "object",
   "required": ["id", "label", "kind", "version"],

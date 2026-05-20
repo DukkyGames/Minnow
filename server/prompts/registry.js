@@ -4,7 +4,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getSpeedChatHome } from '../config/home.js';
+import { getMinnowHome } from '../config/home.js';
 import { parsePromptMarkdown } from './parse.js';
 
 function shouldSkip(relativePath) {
@@ -44,7 +44,7 @@ async function collectMarkdownFiles(root, prefix = '') {
  */
 export async function buildPromptRegistry(projectRoot) {
   const builtinRoot = path.join(projectRoot, 'src', 'chat', 'prompts');
-  const userRoot = path.join(getSpeedChatHome(), 'prompts');
+  const userRoot = path.join(getMinnowHome(), 'prompts');
 
   const byKey = new Map();
 

@@ -6,7 +6,7 @@
 | **Title** | Bottom terminal panel |
 | **Backlog** | [`documentation/plans/to-fix.md`](../to-fix.md) item 1 |
 | **Roadmap** | [`documentation/plans/to-fix-step-order.md`](../to-fix-step-order.md) — Wave 4 |
-| **Depends on** | **Step 02** (`~/.speedchat` data layer, session persistence, log paths) |
+| **Depends on** | **Step 02** (`~/.minnow` data layer, session persistence, log paths) |
 | **Can parallel with** | Step 11 (file tree) after Step 02 |
 | **Out of scope** | Interactive PTY/shell REPL, remote SSH, Step 20 settings UI (terminal toggle only stubbed here) |
 
@@ -35,12 +35,12 @@ Give users a **dockable bottom panel** below the chat to **watch commands run by
 
 Implementer **must not** start Step 10 until Step 02 delivers:
 
-1. **Home directory** — `~/.speedchat/` (Windows: `%USERPROFILE%\.speedchat\`).
-2. **Sessions API** — read/write chat blobs under `~/.speedchat/sessions/` (or equivalent), not only `localStorage`.
-3. **Log directory** — `~/.speedchat/logs/terminal/` for full run transcripts (append-only files per `runId`).
+1. **Home directory** — `~/.minnow/` (Windows: `%USERPROFILE%\.minnow\`).
+2. **Sessions API** — read/write chat blobs under `~/.minnow/sessions/` (or equivalent), not only `localStorage`.
+3. **Log directory** — `~/.minnow/logs/terminal/` for full run transcripts (append-only files per `runId`).
 4. **`config.json`** — includes UI prefs such as `terminal: { defaultOpen: false, heightPx: 240 }` (exact keys up to Step 02 schema).
 
-**Interim fallback (if Step 02 is partial):** store `terminalHistory` on the in-memory `Chat` object and mirror to `speedchat-sessions-v1` in `localStorage` until server session API exists. **Do not** block streaming on Step 02; only block **durable log files** and **cross-device history**.
+**Interim fallback (if Step 02 is partial):** store `terminalHistory` on the in-memory `Chat` object and mirror to `minnow-sessions-v1` in `localStorage` until server session API exists. **Do not** block streaming on Step 02; only block **durable log files** and **cross-device history**.
 
 ---
 
@@ -144,7 +144,7 @@ Extract from existing [`runProcess`](../../../server.js):
 
 ### Refactor `toolExecuteCommand`
 
-1. If request includes header `X-SpeedChat-Stream: 1` **or** body `stream: true`, delegate to `createRun` + wait for completion, still return **same formatted string** as today for tool history (`formatProcessOutput`).
+1. If request includes header `X-Minnow-Stream: 1` **or** body `stream: true`, delegate to `createRun` + wait for completion, still return **same formatted string** as today for tool history (`formatProcessOutput`).
 2. Non-streaming path keeps current behavior for smoke scripts and backward compatibility.
 
 Alternatively (cleaner): **only** the client terminal path uses `/api/terminal/*`; `POST /api/tools` `execute_command` internally calls `createRun` + `waitForRun()` without SSE when no subscribers — implementer picks one approach and documents in `context.md`.
@@ -154,7 +154,7 @@ Alternatively (cleaner): **only** the client terminal path uses `/api/terminal/*
 On `finishRun`:
 
 1. Append summary to session’s `terminalHistory` (last **50** runs per chat, prune oldest).
-2. Write full log to `~/.speedchat/logs/terminal/<runId>.log`.
+2. Write full log to `~/.minnow/logs/terminal/<runId>.log`.
 3. `PUT` session via Step 02 API (or debounced save helper).
 
 **`TerminalRunRecord` schema:**
@@ -170,7 +170,7 @@ interface TerminalRunRecord {
   finishedAt: number;
   exitCode: number | null;
   timedOut: boolean;
-  logPath: string; // relative to ~/.speedchat
+  logPath: string; // relative to ~/.minnow
 }
 ```
 
@@ -199,7 +199,7 @@ interface TerminalRunRecord {
 |---------|------|
 | **Placement** | Inside `.main-column`, **above** `.input-bar`, below `.chat-area` |
 | **Toggle** | Top bar button `#btnTerminal` + keyboard shortcut `Ctrl+`` (backtick) — register in [`src/main.ts`](../../../src/main.ts) |
-| **Collapsed state** | Persist in `~/.speedchat/config.json` → `terminal.open` |
+| **Collapsed state** | Persist in `~/.minnow/config.json` → `terminal.open` |
 | **Resize** | Drag handle on top edge; min 120px, max 50% viewport; persist `terminal.heightPx` |
 | **Output** | Auto-scroll when pinned to bottom; pause auto-scroll if user scrolls up |
 | **History sidebar** | List prior runs for **active chat**; click loads log tail from server (`GET /api/terminal/log/:runId` optional) or cached summary |
@@ -289,8 +289,8 @@ Run with server up: `node test/terminal-stream.test.mjs http://localhost:5173`
 
 | Test | Setup | Expected (static) |
 |------|--------|-------------------|
-| `run_returns_runId` | `POST /api/terminal/run` `{ command: "echo SPEEDCHAT_STREAM_OK" }` | JSON body contains `"runId"` matching `/^[a-f0-9-]{36}$/` or project id format |
-| `stream_emits_stdout_and_exit` | Stream `runId` from above | Parsed events include `stdout` with `SPEEDCHAT_STREAM_OK` and `exit` with `code: 0` |
+| `run_returns_runId` | `POST /api/terminal/run` `{ command: "echo MINNOW_STREAM_OK" }` | JSON body contains `"runId"` matching `/^[a-f0-9-]{36}$/` or project id format |
+| `stream_emits_stdout_and_exit` | Stream `runId` from above | Parsed events include `stdout` with `MINNOW_STREAM_OK` and `exit` with `code: 0` |
 | `unknown_run_404` | `GET /api/terminal/stream/00000000-0000-0000-0000-000000000000` | HTTP 404 |
 | `invalid_command_400` | `POST` missing `command` | HTTP 400, JSON `error` |
 | `history_scoped_to_chat` | Two `chatId`s, one run each | `GET /api/terminal/history?chatId=A` lists only A’s run |
@@ -333,7 +333,7 @@ Create [`documentation/plans/verification/step-10.md`](../verification/step-10.m
 - [ ] **A2** Refactor `runProcess` to support `onStdout` / `onStderr` callbacks without breaking git/tools callers.
 - [ ] **A3** Implement `POST /api/terminal/run` with validation and `runId` generation (use `crypto.randomUUID()`).
 - [ ] **A4** Implement `GET /api/terminal/stream/:runId` SSE (meta → chunks → exit).
-- [ ] **A5** Append each run to `~/.speedchat/logs/terminal/<runId>.log` (Step 02 path helper).
+- [ ] **A5** Append each run to `~/.minnow/logs/terminal/<runId>.log` (Step 02 path helper).
 - [ ] **A6** Wire `toolExecuteCommand` to shared runner; preserve `formatProcessOutput` return shape.
 - [ ] **A7** (Optional v1) `POST /api/terminal/cancel/:runId` — SIGTERM child.
 - [ ] **A8** Add `GET /api/terminal/history?chatId=` reading session blob from Step 02 store.

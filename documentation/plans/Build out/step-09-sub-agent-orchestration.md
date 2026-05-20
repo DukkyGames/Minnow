@@ -18,11 +18,11 @@ Enable the **parent** chat agent (main tool loop) to **spawn isolated sub-agents
 
 **In scope for Step 09**
 
-- Sub-agent **type registry** (built-in defaults + user overrides in `~/.speedchat`)
+- Sub-agent **type registry** (built-in defaults + user overrides in `~/.minnow`)
 - **Orchestrator** module with spawn / cancel / status / aggregate
 - **Parent-facing tools** (`spawn_sub_agent`, `cancel_sub_agent`, optional `list_sub_agents`)
 - **Concurrency** and **timeouts** enforced centrally
-- **Config persistence** under `~/.speedchat` (via Step 02 config API)
+- **Config persistence** under `~/.minnow` (via Step 02 config API)
 - **Deterministic tests** for spawn, cancel, aggregate
 - **Hooks** documented for Step 19 (no repetition detector in this step)
 
@@ -45,7 +45,7 @@ Do **not** start Step 09 until Step 08 delivers and verifies:
 | `resolveWorkAgent(id)` | Optional: sub-agent type may **reference** a Work Agent id for prompt/model |
 | Provider resolution from Step 03 | Per-type `providerId` + `modelId` on sub-agent config |
 | Prompt composer from Step 04 | Sub-agent system prompt = composed prompt for type (lite/full from active profile) |
-| `~/.speedchat` config API from Step 02 | Read/write `sub-agents.json` |
+| `~/.minnow` config API from Step 02 | Read/write `sub-agents.json` |
 
 If Step 08 is incomplete, stub **only** `generalPurpose` with parent’s model and a minimal system prompt — document the stub in `context.md` and replace when 08 lands.
 
@@ -59,7 +59,7 @@ If Step 08 is incomplete, stub **only** `generalPurpose` with parent’s model a
 |-------|----------|----------------|
 | **Orchestrator** | `src/agents/orchestrator.ts` | Run registry, concurrency pool, isolated runs, cancel/abort, aggregate results |
 | **Sub-agent runner** | `src/agents/sub-agent-runner.ts` | One child run: build messages, stream completion, nested tool loop (subset), return summary |
-| **Config** | `src/agents/sub-agent-config.ts` | Load/merge defaults + `~/.speedchat/sub-agents.json` |
+| **Config** | `src/agents/sub-agent-config.ts` | Load/merge defaults + `~/.minnow/sub-agents.json` |
 | **Types** | `src/agents/types.ts` | `SubAgentType`, `SubAgentRun`, `SubAgentStatus`, spawn/cancel args |
 | **Parent tools** | `src/tools/definitions.ts` + `src/tools/sub-agent-executor.ts` | OpenAI function schemas + `executeTool` routing |
 | **Integration** | `src/tools/loop.ts` | When parent `executeTool` hits spawn/cancel, delegate to orchestrator; do **not** duplicate orchestration logic in loop |
@@ -87,7 +87,7 @@ sequenceDiagram
   Note over Parent,Orch: cancel(runId) aborts fetch + clears slot
 ```
 
-- **Isolated context:** Sub-agent messages are **not** appended to parent `chat.history`. Store ephemeral transcript under `orchestrator` run state (and optionally `~/.speedchat/logs/sub-agents/<runId>.json` for debug).
+- **Isolated context:** Sub-agent messages are **not** appended to parent `chat.history`. Store ephemeral transcript under `orchestrator` run state (and optionally `~/.minnow/logs/sub-agents/<runId>.json` for debug).
 - **Parent visibility:** Tool result is a **JSON string** (static shape in tests) with `runId`, `status`, `summary`, `error?`, `toolCallCount`.
 - **Parallel spawns:** Multiple `spawn_sub_agent` in one parent tool round may run concurrently up to `maxConcurrent` per type (and global cap).
 
@@ -101,18 +101,18 @@ Ship defaults in `src/agents/defaults/sub-agents.json` (merged with user file):
 | `explore` | Read-only codebase exploration | `list_directory`, `read_file`, `read_file_range`, `find_files`, `search_in_file`, `get_file_metadata`, `git_status`, `git_log`, `web_search`, `wikipedia_search`, `fetch_web_content` |
 | `shell` | Command execution focus | `execute_command`, `get_datetime`, `read_file`, `list_directory` (+ server tools per config) |
 
-User may add types in `~/.speedchat/sub-agents.json` (same schema).
+User may add types in `~/.minnow/sub-agents.json` (same schema).
 
 **Step 19:** `explorer` type can alias `explore` with broader tools — define `explorer` stub in defaults with `maxConcurrent: 1` and document extension in Step 19 plan.
 
 ---
 
-## 4. Configuration (`~/.speedchat`)
+## 4. Configuration (`~/.minnow`)
 
 ### 4.1 File layout
 
 ```
-~/.speedchat/
+~/.minnow/
   sub-agents.json          # User overrides + enable flags
   logs/
     sub-agents/            # Optional per-run debug transcripts
@@ -159,12 +159,12 @@ User may add types in `~/.speedchat/sub-agents.json` (same schema).
 | `allowedTools` | If non-null, **whitelist** tool function names (intersect with parent enabled tools) |
 | `deniedTools` | Blacklist applied after whitelist |
 | `workAgentId` | If set, prompt + model come from Work Agent registry (Step 08) |
-| `systemPromptPath` | Optional override relative to `~/.speedchat/prompts/sub-agents/<id>.md` |
+| `systemPromptPath` | Optional override relative to `~/.minnow/prompts/sub-agents/<id>.md` |
 | `timeoutMs` | Hard cancel run after elapsed time |
 
 **API (Step 02):** `GET/PUT /api/config/sub-agents` reading/writing `sub-agents.json` with path guard under home dir.
 
-**Browser cache:** Mirror to `speedchat.subAgents` in memory when server unavailable; sync on `detectLocalServer()` success (same pattern as planned migration off `localStorage` for tools).
+**Browser cache:** Mirror to `minnow.subAgents` in memory when server unavailable; sync on `detectLocalServer()` success (same pattern as planned migration off `localStorage` for tools).
 
 ---
 
@@ -292,7 +292,7 @@ No change required if `executeTool` routes spawn/cancel internally. **Important:
 
 1. Resolve type config from `loadSubAgentConfig()`.
 2. If `workAgentId` → use Step 08 `resolveWorkAgentPrompt(workAgentId)`.
-3. Else if `systemPromptPath` → load from `~/.speedchat/prompts/sub-agents/`.
+3. Else if `systemPromptPath` → load from `~/.minnow/prompts/sub-agents/`.
 4. Else load shipped `src/agents/prompts/sub-agents/<id>.md` (lite/full via active profile from Step 04).
 5. Append **task envelope**:
 
@@ -354,7 +354,7 @@ Use **fixed UUID**: `11111111-1111-1111-1111-111111111111` for run ids in fixtur
 
 `scripts/sa09-sub-agent-smoke.mjs`:
 
-- Requires `npm start` + LM Studio **or** mock fetch injection flag `SPEEDCHAT_MOCK_COMPLETIONS=1`
+- Requires `npm start` + LM Studio **or** mock fetch injection flag `MINNOW_MOCK_COMPLETIONS=1`
 - Parent tool call `spawn_sub_agent` with `type: explore`, short task
 - Assert tool result contains `"status":"completed"`
 
@@ -410,7 +410,7 @@ node scripts/sa09-sub-agent-smoke.mjs http://localhost:5173
 - [ ] **Tool subset:** `explore` type cannot invoke `execute_command` (returns tool error or omitted from schema).
 - [ ] **Cancel:** `cancel_sub_agent` aborts a long-running mock run; status `cancelled`.
 - [ ] **Restart:** `restartSubAgent` produces new `runId` and empty child history (unit test with mock).
-- [ ] Config persists under `~/.speedchat/sub-agents.json` via PUT/GET API when `npm start`.
+- [ ] Config persists under `~/.minnow/sub-agents.json` via PUT/GET API when `npm start`.
 - [ ] Parent chat abort cancels active child runs for that turn.
 - [ ] `npm run build` passes; all `test/sub-agents/*` pass.
 - [ ] `documentation/context.md` updated.
@@ -441,7 +441,7 @@ node scripts/sa09-sub-agent-smoke.mjs http://localhost:5173
 - [ ] **C2** Implement `sub-agent-runner.ts`: isolated `messages[]`, tool loop with `MAX_SUB_AGENT_TOOL_TURNS`
 - [ ] **C3** Runner calls `executeTool` through a **filtered** wrapper that enforces subset
 - [ ] **C4** Runner produces `summary` string (final assistant message or explicit “no output” message)
-- [ ] **C5** Optional debug log write to `~/.speedchat/logs/sub-agents/<runId>.json` behind flag
+- [ ] **C5** Optional debug log write to `~/.minnow/logs/sub-agents/<runId>.json` behind flag
 
 ### Phase D — Orchestrator
 
@@ -497,7 +497,7 @@ node scripts/sa09-sub-agent-smoke.mjs http://localhost:5173
 1. **Queue vs error** when over `maxConcurrent` — recommend **queue** with visible `queued` status in aggregate for `wait: true`.
 2. **Sync-only v1** — Is `wait: false` required for backlog 13, or can Step 20 add async polling UI?
 3. **Work Agent binding** — Should every sub-agent type default to a Work Agent id once Step 08 ships presets?
-4. **Transcript retention** — Default off vs debug flag for `~/.speedchat/logs/sub-agents/`?
+4. **Transcript retention** — Default off vs debug flag for `~/.minnow/logs/sub-agents/`?
 
 Implementer: record decisions at top of PR / verification doc when resolved.
 
@@ -506,7 +506,7 @@ Implementer: record decisions at top of PR / verification doc when resolved.
 ## 18. Sub-agent implementer prompt (copy-paste)
 
 ```
-You are implementing SpeedChat Step 09 — Sub-agent orchestration.
+You are implementing Minnow Step 09 — Sub-agent orchestration.
 
 Read:
 - documentation/plans/Build out/step-09-sub-agent-orchestration.md (this plan)
@@ -519,7 +519,7 @@ Depends on Step 08 (Work Agents). Do not duplicate Work Agent registry — integ
 Deliver:
 - src/agents/orchestrator.ts + sub-agent-runner.ts + config
 - Parent tools spawn_sub_agent, cancel_sub_agent
-- ~/.speedchat/sub-agents.json via /api/config/sub-agents
+- ~/.minnow/sub-agents.json via /api/config/sub-agents
 - cancel + restartSubAgent for Step 19
 - test/sub-agents/* deterministic tests
 - Update documentation/context.md

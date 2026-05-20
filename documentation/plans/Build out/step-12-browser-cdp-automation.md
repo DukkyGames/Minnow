@@ -6,10 +6,10 @@
 | **Title** | Screenshots and full browser control (CDP) |
 | **Backlog** | [`to-fix.md`](../to-fix.md) items **17** (screenshot tools), **18** (full browser control / CDP) |
 | **Roadmap** | [`to-fix-step-order.md`](../to-fix-step-order.md) — Wave 5 |
-| **Depends on** | **Step 02** (`~/.speedchat` config — browser defaults, allowlist, tool toggles); **Step 10** optional (terminal helps debug Chrome/CDP) |
+| **Depends on** | **Step 02** (`~/.minnow` config — browser defaults, allowlist, tool toggles); **Step 10** optional (terminal helps debug Chrome/CDP) |
 | **Blocks** | **Step 15** (UI Designer — needs `browser_screenshot` + inline chat images) |
 | **Primary reference** | [different-ai/opencode-browser](https://github.com/different-ai/opencode-browser) — direct CDP, explicit `browser_url`, snapshot UIDs, no hidden singleton browser |
-| **Workspace** | `c:\Users\dukky\Documents\Development\SpeedChat` |
+| **Workspace** | `c:\Users\dukky\Documents\Development\Minnow` |
 
 ---
 
@@ -20,7 +20,7 @@
 3. Implement CDP in **Node** (`server.js` + extracted modules), not in the browser tab — the SPA cannot speak CDP to arbitrary Chrome instances.
 4. **Keep** existing lightweight browser tools in [`src/tools/browser-executor.ts`](../../../src/tools/browser-executor.ts) (`fetch_web_content`, `web_search`, clipboard, etc.) until explicitly migrated; do **not** duplicate fetch logic in CDP.
 5. **Render screenshots inline** in the chat transcript when `browser_screenshot` runs (backlog 18).
-6. **Security:** URL allowlist for navigation + user toggle persisted under `~/.speedchat` (full settings UI in Step 20; schema + enforcement in this step).
+6. **Security:** URL allowlist for navigation + user toggle persisted under `~/.minnow` (full settings UI in Step 20; schema + enforcement in this step).
 7. **Tests:** integration tests against a **mock CDP HTTP/WebSocket** server with **recorded fixtures** (no flaky dependency on real Chrome in CI).
 
 ## 2. Non-goals (this step)
@@ -43,7 +43,7 @@
 | Tool routing | [`src/tools/client.ts`](../../../src/tools/client.ts) — `serverRequired` → POST; else browser executor |
 | Tool UI | [`src/ui/tool-messages.ts`](../../../src/ui/tool-messages.ts) — text `<pre>` results only; **no** inline images for tool output |
 | Tests | `scripts/sa16-smoke.mjs`; no `test/` CDP suite yet |
-| Env | No `SPEEDCHAT_BROWSER_URL` |
+| Env | No `MINNOW_BROWSER_URL` |
 
 ---
 
@@ -60,7 +60,7 @@ flowchart LR
     API[POST /api/tools]
     CDP[server/cdp/*]
     Snap[snapshot cache Map]
-    SS[~/.speedchat/screenshots/]
+    SS[~/.minnow/screenshots/]
   end
   subgraph chrome [User Chrome / Electron]
     CDPEndpoint[":9222 /json/list + WS"]
@@ -85,13 +85,13 @@ flowchart LR
 
 ## 5. Environment and configuration
 
-### 5.1 `SPEEDCHAT_BROWSER_URL`
+### 5.1 `MINNOW_BROWSER_URL`
 
 | Priority | Source |
 |----------|--------|
 | 1 | Tool arg `browser_url` (if provided and non-empty) |
-| 2 | `process.env.SPEEDCHAT_BROWSER_URL` |
-| 3 | `~/.speedchat/config.json` → `browser.defaultUrl` (after Step 02) |
+| 2 | `process.env.MINNOW_BROWSER_URL` |
+| 3 | `~/.minnow/config.json` → `browser.defaultUrl` (after Step 02) |
 | 4 | `http://127.0.0.1:9222` |
 
 Document in [`README.md`](../../../README.md):
@@ -104,9 +104,9 @@ google-chrome --remote-debugging-port=9222
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
 ```
 
-Optional: `SPEEDCHAT_BROWSER_URL=http://127.0.0.1:9222` in shell profile.
+Optional: `MINNOW_BROWSER_URL=http://127.0.0.1:9222` in shell profile.
 
-### 5.2 `~/.speedchat` keys (Step 02 schema extension)
+### 5.2 `~/.minnow` keys (Step 02 schema extension)
 
 Add to `config.json` (implementer extends Step 02 types if not already present):
 
@@ -128,13 +128,13 @@ Add to `config.json` (implementer extends Step 02 types if not already present):
 
 - **`allowedOriginPatterns`:** glob-like patterns checked in `browser_navigate` before `Page.navigate` (reject with `Error: navigation blocked by allowlist: …`).
 - **`browser.enabled`:** when false, all `browser_*` handlers return `Error: browser automation is disabled in settings`.
-- Screenshots saved under `~/.speedchat/screenshots/` (not system temp) so the SPA can `GET` them via a new safe route.
+- Screenshots saved under `~/.minnow/screenshots/` (not system temp) so the SPA can `GET` them via a new safe route.
 
 ### 5.3 New server route for screenshot serving
 
 | Route | Purpose |
 |-------|---------|
-| `GET /api/browser/screenshot/:id` | Serve PNG from `~/.speedchat/screenshots/` with `resolveSafePath` under home dir only |
+| `GET /api/browser/screenshot/:id` | Serve PNG from `~/.minnow/screenshots/` with `resolveSafePath` under home dir only |
 
 Return `404` for unknown ids; no directory listing.
 
@@ -187,7 +187,7 @@ Shared properties (inject into each schema):
 | `browser_url` | string | no* | CDP HTTP endpoint; default from env/config |
 | `target_id` | string | no | Tab/target id from `browser_list`; omit = first page target |
 
-\*Implementer: document in `description` that omission uses `SPEEDCHAT_BROWSER_URL`.
+\*Implementer: document in `description` that omission uses `MINNOW_BROWSER_URL`.
 
 Per-tool required fields:
 
@@ -270,7 +270,7 @@ Mirror [opencode-browser `src/plugin.ts`](https://github.com/different-ai/openco
 ### 8.6 `browser_screenshot`
 
 1. `Page.captureScreenshot` `{ format: 'png' }`.
-2. Write file to `~/.speedchat/screenshots/{id}.png` (id = fixed-length hex from timestamp + random **or** deterministic test id in tests only).
+2. Write file to `~/.minnow/screenshots/{id}.png` (id = fixed-length hex from timestamp + random **or** deterministic test id in tests only).
 3. Return string + `attachments` array (§7.3).
 
 ---
@@ -332,7 +332,7 @@ Optional cleanup (low priority todo): add comment block at top of `browser-execu
 |--------|------------|
 | Navigate to `file://`, internal IPs, arbitrary domains | `allowedOriginPatterns` + default deny except localhost dev patterns |
 | SSRF via `browser_url` pointing at internal metadata | Optional: restrict `browser_url` host to loopback + allowlist hosts in config (`browser.allowedCdpHosts`) |
-| Screenshot path traversal | Screenshots only under `~/.speedchat/screenshots/`; API route validates basename |
+| Screenshot path traversal | Screenshots only under `~/.minnow/screenshots/`; API route validates basename |
 | Drive-by tool use | Tools default **off**; `browser.enabled` master switch |
 
 **Eval guardrail (v1):** no extra sandbox beyond CDP’s page context; document that `browser_eval` is full page JS. Optional later: block `fetch(` to non-allowlisted origins inside eval — **out of scope**.
@@ -379,7 +379,7 @@ Run with: `node --test test/browser-cdp.test.mjs` (document in `documentation/pl
 | `browser_navigate` blocked URL | Result starts with `Error: navigation blocked` |
 | `browser_snapshot` + `browser_click` without snapshot | Second call returns cache miss message |
 | `browser_screenshot` | File created under temp home; POST response includes `attachments[0].url` |
-| Default `browser_url` | Omit arg; set `SPEEDCHAT_BROWSER_URL` to mock port |
+| Default `browser_url` | Omit arg; set `MINNOW_BROWSER_URL` to mock port |
 
 Use **fixed** target id `TEST-TARGET-11111111` in fixtures.
 
@@ -397,7 +397,7 @@ Extend `scripts/sa16-smoke.mjs` or add `scripts/step12-browser-smoke.mjs`:
 | File | Updates |
 |------|---------|
 | [`documentation/context.md`](../../context.md) | Tool count 39; browser category; CDP env; screenshot route; `ToolResultMessage.attachments` |
-| [`README.md`](../../../README.md) | Chrome debug port, `SPEEDCHAT_BROWSER_URL`, security note |
+| [`README.md`](../../../README.md) | Chrome debug port, `MINNOW_BROWSER_URL`, security note |
 | [`documentation/plans/verification/step-12.md`](../verification/step-12.md) | Commands for implementer + verifier |
 | This plan | Mark todos complete as work lands |
 
@@ -421,7 +421,7 @@ Extend `scripts/sa16-smoke.mjs` or add `scripts/step12-browser-smoke.mjs`:
 ### Phase 0 — Prep
 
 - [ ] **S12-0.1** Read opencode-browser `src/plugin.ts`, `src/lib/cdp.ts`, `src/lib/snapshot.ts` (or `.ts` sources).
-- [ ] **S12-0.2** Confirm Step 02 `~/.speedchat` home resolver exists; if not, implement minimal `resolveSpeedchatHome()` in this step.
+- [ ] **S12-0.2** Confirm Step 02 `~/.minnow` home resolver exists; if not, implement minimal `resolveSpeedchatHome()` in this step.
 - [ ] **S12-0.3** Create `documentation/plans/verification/step-12.md` stub.
 
 ### Phase 1 — Server CDP core
@@ -433,11 +433,11 @@ Extend `scripts/sa16-smoke.mjs` or add `scripts/step12-browser-smoke.mjs`:
 - [ ] **S12-1.5** Add `server/cdp/browser-tools.js` — all seven handlers.
 - [ ] **S12-1.6** Wire handlers into `SERVER_TOOL_HANDLERS` in [`server.js`](../../../server.js).
 - [ ] **S12-1.7** Implement `resolveBrowserUrl(args)` — arg → env → config → default.
-- [ ] **S12-1.8** Load `browser.enabled` + allowlist from `~/.speedchat/config.json` on each call (or cached with mtime).
+- [ ] **S12-1.8** Load `browser.enabled` + allowlist from `~/.minnow/config.json` on each call (or cached with mtime).
 
 ### Phase 2 — Screenshots API
 
-- [ ] **S12-2.1** Ensure `~/.speedchat/screenshots/` exists on write.
+- [ ] **S12-2.1** Ensure `~/.minnow/screenshots/` exists on write.
 - [ ] **S12-2.2** `GET /api/browser/screenshot/:id` middleware (safe path).
 - [ ] **S12-2.3** `browser_screenshot` writes PNG + returns `attachments` in POST body.
 - [ ] **S12-2.4** CORS headers on screenshot route (same as tools API).
@@ -479,7 +479,7 @@ Extend `scripts/sa16-smoke.mjs` or add `scripts/step12-browser-smoke.mjs`:
 **Implementer prompt:**
 
 ```
-Step 12 — CDP browser tools (SpeedChat).
+Step 12 — CDP browser tools (Minnow).
 
 Read:
 - documentation/plans/Build out/step-12-browser-cdp-automation.md (this plan)
@@ -487,7 +487,7 @@ Read:
 - documentation/plans/to-fix.md items 18–19
 - https://github.com/different-ai/opencode-browser (plugin.ts + lib/cdp + lib/snapshot)
 
-Depends on Step 02 (~/.speedchat). Implement server-side CDP tools, screenshot inline chat display, SPEEDCHAT_BROWSER_URL, security allowlist, mock CDP tests.
+Depends on Step 02 (~/.minnow). Implement server-side CDP tools, screenshot inline chat display, MINNOW_BROWSER_URL, security allowlist, mock CDP tests.
 
 Out of scope: Playwright-first stack, Step 20 full settings, migrating fetch_web_content to CDP.
 
@@ -513,10 +513,10 @@ Do not implement fixes; report FAIL with logs.
 | Concurrent tool calls share cache key | Document serial tool usage; later: session-scoped cache key |
 | WebSocket flakiness | Timeouts; single retry on connect |
 | Large screenshots in DOM | Lazy-load img; optional thumbnail gen later |
-| Step 02 not merged | Ship `resolveSpeedchatHome` fallback to `%USERPROFILE%\.speedchat` in Step 12 |
+| Step 02 not merged | Ship `resolveSpeedchatHome` fallback to `%USERPROFILE%\.minnow` in Step 12 |
 
 ---
 
 ## 19. Summary
 
-Step 12 brings **opencode-browser-style CDP tools** into SpeedChat’s existing **`npm start` tool server**, adds **inline screenshot rendering** in chat, centralizes **`SPEEDCHAT_BROWSER_URL`**, and enforces a **navigation allowlist** — while leaving lightweight **browser-executor** fetch/search tools untouched. Delivery is complete when **mock CDP tests pass**, **build is green**, and the verifier confirms **manual screenshot visibility** with debug Chrome.
+Step 12 brings **opencode-browser-style CDP tools** into Minnow’s existing **`npm start` tool server**, adds **inline screenshot rendering** in chat, centralizes **`MINNOW_BROWSER_URL`**, and enforces a **navigation allowlist** — while leaving lightweight **browser-executor** fetch/search tools untouched. Delivery is complete when **mock CDP tests pass**, **build is green**, and the verifier confirms **manual screenshot visibility** with debug Chrome.

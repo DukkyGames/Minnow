@@ -9,7 +9,7 @@ toolPolicy:
   default: allow
 ---
 
-<!-- SPEEDCHAT_MODE_MARKER: build full -->
+<!-- MINNOW_MODE_MARKER: build full -->
 
 # Operating mode: Build ({{mode_label}})
 

@@ -18,7 +18,7 @@ interface SaveSkillResponse {
   error?: string;
 }
 
-/** Create a custom skill from the built-in template under ~/.speedchat/skills/. */
+/** Create a custom skill from the built-in template under ~/.minnow/skills/. */
 export async function createCustomSkill(
   id: string,
   label?: string,

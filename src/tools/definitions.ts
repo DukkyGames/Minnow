@@ -19,7 +19,7 @@ const BROWSER_CDP_PROPERTIES: Record<string, unknown> = {
   browser_url: {
     type: 'string',
     description:
-      'CDP HTTP endpoint (e.g. http://127.0.0.1:9222). Omit to use SPEEDCHAT_BROWSER_URL or ~/.speedchat config.',
+      'CDP HTTP endpoint (e.g. http://127.0.0.1:9222). Omit to use MINNOW_BROWSER_URL or ~/.minnow config.',
   },
   target_id: {
     type: 'string',

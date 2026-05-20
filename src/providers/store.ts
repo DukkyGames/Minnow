@@ -1,5 +1,5 @@
 /**
- * Client access to ~/.speedchat provider registry via /api/providers.
+ * Client access to ~/.minnow provider registry via /api/providers.
  */
 
 import { isServerStorageMode } from '../config/storage-mode';

@@ -16,31 +16,31 @@ node scripts/s13-skills-smoke.mjs http://localhost:5173
 
 Expected: S1–S3 pass (scan + user override). S4–S6 pass when server is up.
 
-### S6 and `SPEEDCHAT_HOME`
+### S6 and `MINNOW_HOME`
 
-The smoke script writes a user override under `SPEEDCHAT_HOME/skills/git-commit/SKILL.md`. The running server only sees that override if it was started with the **same** `SPEEDCHAT_HOME`.
+The smoke script writes a user override under `MINNOW_HOME/skills/git-commit/SKILL.md`. The running server only sees that override if it was started with the **same** `MINNOW_HOME`.
 
 **Coordinated run (S1–S6 all pass):**
 
 ```powershell
 # PowerShell
-$env:SPEEDCHAT_HOME = "$env:TEMP\speedchat-s13-verify"
+$env:MINNOW_HOME = "$env:TEMP\minnow-s13-verify"
 npm start
-# second terminal, same SPEEDCHAT_HOME:
-$env:SPEEDCHAT_HOME = "$env:TEMP\speedchat-s13-verify"
+# second terminal, same MINNOW_HOME:
+$env:MINNOW_HOME = "$env:TEMP\minnow-s13-verify"
 node scripts/s13-skills-smoke.mjs http://localhost:5173
 ```
 
 ```bash
 # Unix
-export SPEEDCHAT_HOME="${TMPDIR:-/tmp}/speedchat-s13-verify"
+export MINNOW_HOME="${TMPDIR:-/tmp}/minnow-s13-verify"
 npm start
 # second terminal:
-export SPEEDCHAT_HOME="${TMPDIR:-/tmp}/speedchat-s13-verify"
+export MINNOW_HOME="${TMPDIR:-/tmp}/minnow-s13-verify"
 node scripts/s13-skills-smoke.mjs http://localhost:5173
 ```
 
-If `SPEEDCHAT_HOME` is unset, the script uses an isolated temp home for S1–S3 and prints the path; S6 is skipped unless the server was started with that same path.
+If `MINNOW_HOME` is unset, the script uses an isolated temp home for S1–S3 and prints the path; S6 is skipped unless the server was started with that same path.
 
 ## Build
 
@@ -53,7 +53,7 @@ npm run build
 1. `npm start` → focus composer → type `/` → picker lists built-in skills (badges Built-in / Custom).
 2. Arrow keys + Enter inserts `/git-commit ` (trailing space).
 3. Send `/git-commit` with a short message → user bubble has no raw slash line; footer `[skill: git-commit]`; system prompt includes skill body (network tab or temporary log).
-4. Create `~/.speedchat/skills/git-commit/SKILL.md` with distinct body → refresh → picker shows **Custom**; send uses override.
+4. Create `~/.minnow/skills/git-commit/SKILL.md` with distinct body → refresh → picker shows **Custom**; send uses override.
 5. `npm run dev` (no server) → built-ins still in picker; user-only skill shows error on send if attempted.
 
 ## Result (verifier re-run 2026-05-19)
@@ -65,7 +65,7 @@ npm run build
 | `npm run build` | **PASS** |
 | `generate-skills-manifest.mjs` | OK (**11** skills) |
 | `s13-skills-smoke.mjs` S1–S3 | **PASS** |
-| `s13-skills-smoke.mjs` S4–S6 | **PASS** with coordinated `SPEEDCHAT_HOME` + `npm start` (use smoke URL matching server port if 5173 busy) |
+| `s13-skills-smoke.mjs` S4–S6 | **PASS** with coordinated `MINNOW_HOME` + `npm start` (use smoke URL matching server port if 5173 busy) |
 | `skill-picker.css` (Impeccable) | OKLCH tokens, flat chrome, label badges |
 | `documentation/context.md` | updated (Step 13 skills) |
 

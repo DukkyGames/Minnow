@@ -17,9 +17,9 @@
 
 ## 1. Problem statement
 
-SpeedChat today uses a single **global** system prompt (`#systemPrompt` textarea + `SYSTEM_PROMPT_PRESETS` in [`src/constants.ts`](../../../src/constants.ts)) and one **model** per chat (`chat.modelId` + `#modelSelect`). Backlog items 10–12 require **task-specific agents** (“Work Agents”) that each have:
+Minnow today uses a single **global** system prompt (`#systemPrompt` textarea + `SYSTEM_PROMPT_PRESETS` in [`src/constants.ts`](../../../src/constants.ts)) and one **model** per chat (`chat.modelId` + `#modelSelect`). Backlog items 10–12 require **task-specific agents** (“Work Agents”) that each have:
 
-1. Their own **system prompt** (shipped under `src/chat/prompts/work-agents/`, overridable in `~/.speedchat/prompts/work-agents/`).
+1. Their own **system prompt** (shipped under `src/chat/prompts/work-agents/`, overridable in `~/.minnow/prompts/work-agents/`).
 2. A default **provider + model** binding (from S03), used when that agent is active for a turn.
 3. A way to **view and set** the prompt per agent (API + persistence now; rich UI in S20).
 
@@ -35,7 +35,7 @@ Work Agents are the foundation for **S09 sub-agents** (parent spawns children wi
 - **Per-agent config:** `id`, `label`, `description`, `providerId`, `modelId`, `promptPath`, optional `toolPolicy`, optional `defaultForModes[]`.
 - **Prompt loader** integration with S04 `composeSystemPrompt` → `work-agent` part.
 - **Model binding resolver:** given active Work Agent + chat fallback → `{ providerId, modelId, baseUrl, authHeaders }` for chat/model fetch (S03).
-- **Persistence:** defaults in repo; user overrides in `~/.speedchat/work-agents.json` (or per-agent files under `~/.speedchat/prompts/work-agents/`).
+- **Persistence:** defaults in repo; user overrides in `~/.minnow/work-agents.json` (or per-agent files under `~/.minnow/prompts/work-agents/`).
 - **Minimal UI:** session-level `workAgentId` (`null` = inherit chat default / “Default assistant”); hidden or dev-only `<select>` near composer until S20.
 - **Prompt editor API** (no full settings page): `GET/PUT` routes to read/write prompt body for an agent id (user override path).
 - **Stub agent pack** (3–5 agents) with `full` + `lite` bodies per S04/S05 profile rules.
@@ -59,7 +59,7 @@ Implementer must verify these exist before wiring S08; if missing, implement min
 
 ### From S03 — Providers
 
-- Provider registry: `~/.speedchat/providers/*.json` (or single `providers.json`).
+- Provider registry: `~/.minnow/providers/*.json` (or single `providers.json`).
 - API: `listProviders()`, `getProvider(id)`, `resolveProviderRequest(providerId)` → `{ baseUrl, headers, modelsPath, chatPath }`.
 - Chat send path uses **resolved provider** instead of only `#serverUrl` when a Work Agent specifies `providerId`.
 
@@ -150,7 +150,7 @@ export interface WorkAgentDefinition {
   disabled?: boolean;
 }
 
-/** User overrides stored under ~/.speedchat */
+/** User overrides stored under ~/.minnow */
 export interface WorkAgentUserOverride {
   providerId?: string | null;
   modelId?: string | null;
@@ -188,8 +188,8 @@ Migration: default `workAgentId: null`, `workAgentAuto: true` for existing sessi
 | `src/chat/prompts/work-agents/<id>/agent.lite.md` | Lite profile body |
 | `src/chat/prompts/work-agents/<id>/meta.json` | Optional metadata mirror (or YAML front matter only in `.md`) |
 | `src/chat/prompts/work-agents/registry.json` | Ordered list of built-in ids + defaults |
-| `~/.speedchat/work-agents.json` | User overrides map `{ [id]: WorkAgentUserOverride }` |
-| `~/.speedchat/prompts/work-agents/<id>/` | User prompt file overrides (same layout as built-in) |
+| `~/.minnow/work-agents.json` | User overrides map `{ [id]: WorkAgentUserOverride }` |
+| `~/.minnow/prompts/work-agents/<id>/` | User prompt file overrides (same layout as built-in) |
 
 **Front matter** (in each `agent.*.md`), aligned with S04 `_example`:
 
@@ -263,7 +263,7 @@ Add **`WORK_AGENT_TEMPLATE.md`** at `src/chat/prompts/work-agents/` (commented r
 
 1. Read `src/chat/prompts/work-agents/registry.json` for ordered `ids[]` and global defaults.
 2. For each id, load `meta.json` if present; else parse front matter from `agent.full.md`.
-3. Merge `~/.speedchat/work-agents.json` overrides (user wins on scalar fields).
+3. Merge `~/.minnow/work-agents.json` overrides (user wins on scalar fields).
 4. Filter `disabled: true` unless `includeDisabled` (settings API).
 5. Validate: unique ids, known `providerId` references (warn, don’t crash if missing).
 
@@ -273,11 +273,11 @@ Add **`WORK_AGENT_TEMPLATE.md`** at `src/chat/prompts/work-agents/` (commented r
 |--------|------|-----------------|
 | `GET` | `/api/work-agents` | `{ agents: WorkAgentDefinition[] }` |
 | `GET` | `/api/work-agents/:id` | Single agent + effective `providerId` / `modelId` |
-| `PUT` | `/api/work-agents/:id` | Partial `WorkAgentUserOverride` → writes `~/.speedchat/work-agents.json` |
+| `PUT` | `/api/work-agents/:id` | Partial `WorkAgentUserOverride` → writes `~/.minnow/work-agents.json` |
 | `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content: string, source: 'builtin' \| 'override' }` |
-| `PUT` | `/api/work-agents/:id/prompt` | `{ profile, content }` → `~/.speedchat/prompts/work-agents/:id/agent.{profile}.md` |
+| `PUT` | `/api/work-agents/:id/prompt` | `{ profile, content }` → `~/.minnow/prompts/work-agents/:id/agent.{profile}.md` |
 
-Path guard: same `resolveSafePath` pattern as other `~/.speedchat` writes (S02).
+Path guard: same `resolveSafePath` pattern as other `~/.minnow` writes (S02).
 
 ### 8.3 Client registry cache
 
@@ -425,7 +425,7 @@ Static expected objects — do not build expected JSON via string concat.
 | 4 | Registry unit tests pass (merge overrides) |
 | 5 | Active Work Agent injects `work-agent` part via S04 composer on send |
 | 6 | Per-agent `providerId`/`modelId` used on chat request when set |
-| 7 | `PUT /api/work-agents/:id/prompt` persists to `~/.speedchat` and subsequent GET returns override |
+| 7 | `PUT /api/work-agents/:id/prompt` persists to `~/.minnow` and subsequent GET returns override |
 | 8 | Session persists `workAgentId` across reload (via S02 storage) |
 | 9 | No full settings page required; dev/minimal selector only |
 | 10 | `npm run build` succeeds; `documentation/context.md` updated |
@@ -457,7 +457,7 @@ Static expected objects — do not build expected JSON via string concat.
 
 - [ ] **B1** Implement `parseWorkAgentMeta` (front matter + meta.json).
 - [ ] **B2** Implement `loadBuiltInWorkAgents()` (glob or registry-driven read).
-- [ ] **B3** Implement `loadUserWorkAgentOverrides()` from `~/.speedchat/work-agents.json`.
+- [ ] **B3** Implement `loadUserWorkAgentOverrides()` from `~/.minnow/work-agents.json`.
 - [ ] **B4** Implement `mergeWorkAgentDefinition(builtin, override)`.
 - [ ] **B5** Export `listWorkAgents()`, `getWorkAgent(id)`, `getDefaultWorkAgentForMode(modeId)`.
 - [ ] **B6** Add server routes `GET /api/work-agents`, `GET /api/work-agents/:id`.
