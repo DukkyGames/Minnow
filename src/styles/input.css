@@ -229,6 +229,25 @@
   cursor: not-allowed;
 }
 
+.send-btn.send-btn--stop {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.send-btn.send-btn--stop:hover:not(:disabled) {
+  background: oklch(0.94 0.02 25);
+  border-color: oklch(0.75 0.12 25);
+  color: oklch(0.35 0.08 25);
+}
+
+.send-btn.send-btn--stop .icon-svg {
+  stroke: currentColor;
+  fill: currentColor;
+  width: 14px;
+  height: 14px;
+}
+
 .send-btn .icon-svg {
   stroke: oklch(100% 0.00011 271.152);
   width: 20px;

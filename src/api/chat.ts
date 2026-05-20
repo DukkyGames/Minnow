@@ -491,6 +491,9 @@ export async function sendMessage(): Promise<void> {
         streamStatus,
         thoughtController,
         partialText: fullText,
+        startedAt: t0,
+        modelId: modelId || chat.modelId,
+        providerId: chat.providerId,
       });
       return;
     }
