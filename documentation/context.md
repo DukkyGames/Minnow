@@ -38,7 +38,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **451** tests (**112** + **339**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **471** tests (**112** + **359**), **0** fail.
 
 ## What it is
 
@@ -73,6 +73,7 @@ Minnow/
 │   │   ├── turn-checkpoint.ts
 │   │   ├── turn-recovery.ts # boot resume + orphan retry orchestration
 │   │   ├── modes/          # Step 05: registry, tool-policy
+│   │   ├── reef/           # Reef mode: widget iframes + bridge (Phase 2)
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
 │   ├── ui/                 # sidebar, theme.ts (Appearance), settings, stats, messages, tool-approval-modal, question-cards-modal, …
@@ -311,7 +312,7 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 
 ### Operating modes (Step 05)
 
-Four primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**.
+Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (inline chat widgets via `reef-widget` fences; prompts in `modes/reef.*.md`, copy-paste templates in `src/chat/reef/widgets/*.md`: calculator, slider-graph, tabs, form, data-table, comparison).
 
 | Concern | Location |
 |---------|----------|
@@ -321,11 +322,48 @@ Four primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**.
 | UI selector | `src/ui/mode-selector.ts` (above composer in `index.html`) |
 | Persistence | `Chat.modeId` in `sessions/state.json` (default `build`) |
 
+### Reef mode widgets (inline iframes)
+
+When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes; other modes leave them as syntax-highlighted code.
+
+| Concern | Location |
+|---------|----------|
+| Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-iframe.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
+| Renderer hook | `mountReefWidgets()` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts` |
+| Bridge init | `initReefBridge()` in `src/main.ts` |
+| Styles | `src/styles/reef-widgets.css` |
+| Widget LLM overrides | `Chat.reefWidgetProviderId`, `Chat.reefWidgetModelId`; Settings → Modes → Reef (`src/ui/reef-widget-settings.ts`) |
+| Example fences | Built-in `src/chat/reef/widgets/*.md`; tools use `@minnow/reef/widgets/<name>.md` (synced to `~/.minnow/reef/widgets/` on `npm start`) |
+
+**Sandbox:** `iframe sandbox="allow-scripts"` only (no `allow-same-origin`). CSP + esm.sh importmap inside srcdoc. Theme tokens forwarded from host `html[data-theme]`.
+
+**Bridge (`window.minnow` in iframe):** `sendPrompt(text)` → fills `#msgInput` (user sends); `callLLM({ messages })` → host streams via `postChatCompletions`; `openLink(url)` → confirm + new tab.
+
+**Tests:** `test/chat/reef/*.test.mts`. Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
+
 **Send path:** `buildComposeContext()` sets `modeId` from active chat → `composeSystemPrompt()` loads `kind: mode` fragment → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
 
 **Plan / Research** deny destructive tools at the API (shell, file writes, git mutations per `registry.ts`).
 
 **Tests:** `test/modes/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md). OpenCode mapping: [`documentation/plans/references/mode-sources.md`](plans/references/mode-sources.md).
+
+### Reef widgets (Phase 2)
+
+When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget ` fences mounts as sandboxed iframes.
+
+| Concern | Location |
+|---------|----------|
+| Public API | `src/chat/reef/index.ts` — `mountReefWidgets`, `unmountReefWidgetsInChat`, `initReefBridge` |
+| Fence scan + host | `widget-block-detector.ts` (skips while `streaming`; marks `data-reef-mounted`) |
+| iframe srcdoc | `widget-iframe.ts` (CSP, esm.sh import map, prelude, theme CSS) |
+| Theme tokens | `theme-forward.ts` (`html[data-theme]` observer) |
+| Bridge API | `widget-prelude.ts` (`window.minnow`), `widget-bridge.ts` (postMessage host) |
+| Widget LLM | `run-widget-completion.ts` (SSE, no tools); overrides `Chat.reefWidgetProviderId` / `reefWidgetModelId` |
+| Settings UI | Settings → Modes → Reef (`src/ui/reef-widget-settings.ts`) |
+| Styles | `src/styles/reef-widgets.css` |
+| Integration | `markdown/renderer.ts` (post-render mount), `main.ts` (`initReefBridge`), `mode-selector.ts` (unmount + re-render on mode change) |
+
+**Tests:** `test/chat/reef/*.test.mts` (13 tests, happy-dom).
 
 ### Expert system (Step 06)
 
@@ -633,11 +671,11 @@ In-flight assistant turns checkpoint to **`chat.pendingTurn`** (not a `history` 
 | Checkpoint API | `src/state/pending-turn.ts`, `src/chat/turn-checkpoint.ts` (first write is **immediate** so fast refresh still persists an empty checkpoint) |
 | Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` / `beforeunload` / **`visibilitychange` (hidden)** flush in `main.ts` |
 | Stop (C1) | `finalizeStoppedTurn` — `pendingTurn` with `stopped: true` (no duplicate assistant in `history`) |
-| Recovery UI | `src/ui/pending-turn-recovery.ts` (manual **Continue** / **Discard** after in-session stop; **Resume** / **Discard** when a checkpoint exists but no model; **Retry last message** / **Dismiss** when the checkpoint was lost), `renderPendingTurn`, `pending-turn-recovery.css` |
-| Boot / switch | `bootTurnRecoveryForChat` in `src/chat/turn-recovery.ts` — **auto-resume** when `pendingTurn` is valid and a model is selected; orphan tail → retry banner (composer blocked until **Retry** or **Dismiss**) |
+| Recovery UI | `src/ui/pending-turn-recovery.ts` (**Resume** / **Discard** when a reload-interrupted checkpoint exists but no model; **Retry last message** / **Dismiss** when the checkpoint was lost), `renderPendingTurn`, `pending-turn-recovery.css` |
+| Boot / switch | `bootTurnRecoveryForChat` in `src/chat/turn-recovery.ts` — **auto-resume** only when `pendingTurn` is valid and **`stopped` is not set** (user **Stop** keeps the thread idle across reload until a new send); orphan tail → retry banner (composer blocked until **Retry** or **Dismiss**) |
 | Continue API | `buildApiMessages` injects checkpoint assistant prose / `tool_calls` before the ephemeral continue user line; clears `pendingTurn` on stream connect |
 
-**Boot / chat switch:** valid `pendingTurn` → new completion is started automatically; in-session stop → **Continue** / **Discard**; lost checkpoint with lone user row → **Retry last message** / **Dismiss** (composer blocked for the orphan case only).
+**Boot / chat switch:** `pendingTurn` without **`stopped`** → auto-resume when a model is selected; `pendingTurn.stopped` (user pressed Stop) → no reload resume and no recovery banner (send a new message to continue); lost checkpoint with lone user row → **Retry last message** / **Dismiss** (composer blocked for the orphan case only).
 
 ### Programmatic chat titles (Step 07)
 
@@ -669,7 +707,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
-- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, files, refresh, metrics, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model row + `.status-pill`). **Model row** (`.model-wrap`): custom combobox [`model-select-picker.ts`](../src/ui/model-select-picker.ts) over hidden `#modelSelect`; trigger + `#modelSelectMenu` list show **load dots** (solid green / grey ring) per model; header `#modelStateDot` mirrors selection via [`model-state-dot.ts`](../src/ui/model-state-dot.ts); optional **Load/Unload** buttons when provider supports it (A3). **Status pill** (`setStatus` / `setReadyStatus` in [`src/ui/status.ts`](../src/ui/status.ts)): operational messages only — after `fetchModels()` success shows **`Ready`**, not `N models, M loaded`. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css) — `z-index: 40` so topbar menus (e.g. `#modelSelectMenu`) stack above chat/file sidebars (`34`–`36`) and below modals/drawers (`50+`). Tests: `test/ui/topbar-layout.test.mjs`, `test/ui/model-state-dot.test.mts`, `test/api/models-status.test.mjs`.
+- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, refresh, metrics, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model row + `.status-pill`). **File tree** opens from `#btnFileSidebarCollapse` on the file sidebar header (document icon; replaces former top-bar `#btnFileTreeToggle` and chevron rail control). **Model row** (`.model-wrap`): custom combobox [`model-select-picker.ts`](../src/ui/model-select-picker.ts) over hidden `#modelSelect`; trigger + `#modelSelectMenu` list show **load dots** (solid green / grey ring) per model; header `#modelStateDot` mirrors selection via [`model-state-dot.ts`](../src/ui/model-state-dot.ts); optional **Load/Unload** buttons when provider supports it (A3). **Status pill** (`setStatus` / `setReadyStatus` in [`src/ui/status.ts`](../src/ui/status.ts)): operational messages only — after `fetchModels()` success shows **`Ready`**, not `N models, M loaded`. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css) — `z-index: 40` so topbar menus (e.g. `#modelSelectMenu`) stack above chat/file sidebars (`34`–`36`) and below modals/drawers (`50+`). Tests: `test/ui/topbar-layout.test.mjs`, `test/ui/model-state-dot.test.mts`, `test/api/models-status.test.mjs`.
 
 ## Dev server architecture (`server.js`)
 
@@ -868,7 +906,7 @@ While **`streaming === true`**, the composer primary button (`#sendBtn`) is a **
 | Composer toggle | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/styles/input.css`](../src/styles/input.css) |
 | Tool-loop abort | [`src/tools/loop.ts`](../src/tools/loop.ts) — `livePartialText`, cooperative skip of remaining tools (`Stopped by user.`), `cancelAllForParentTurn` on abort |
 | Stopped chip | [`src/ui/stopped-affordance.ts`](../src/ui/stopped-affordance.ts), `.msg--stopped` in [`messages.css`](../src/styles/messages.css) |
-| Recovery banner | [`src/ui/pending-turn-recovery.ts`](../src/ui/pending-turn-recovery.ts) after stop |
+| Reload policy | `isUserStoppedPendingCheckpoint` in [`pending-turn-shape.ts`](../src/state/pending-turn-shape.ts) / `bootTurnRecoveryForChat` — user-stopped checkpoints are never auto-resumed after reload |
 | History flag | `AssistantMessage.stopped?: boolean` in [`src/types.ts`](../src/types.ts) for completed rows; reload paints chip when set |
 
 **Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/ui/composer-send.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).

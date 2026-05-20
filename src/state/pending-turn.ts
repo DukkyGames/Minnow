@@ -10,6 +10,7 @@ import {
   clearStalePendingTurnsOnLoad,
   CONTINUE_INTERRUPTED_INSTRUCTION,
   ensurePendingTurn,
+  isUserStoppedPendingCheckpoint,
   shouldOfferRecovery,
 } from './pending-turn-shape';
 import {
@@ -27,6 +28,7 @@ export {
   clearStalePendingTurnsOnLoad,
   CONTINUE_INTERRUPTED_INSTRUCTION,
   ensurePendingTurn,
+  isUserStoppedPendingCheckpoint,
   shouldOfferRecovery,
 };
 

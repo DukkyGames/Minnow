@@ -1,6 +1,6 @@
 /**
- * Interrupted-generation recovery banners (feature 22): pending checkpoint,
- * orphan user tail, missing model, and in-session stop.
+ * Interrupted-generation recovery banners (feature 22): orphan user tail and
+ * missing-model resume for reload-interrupted turns (not user-stopped).
  */
 
 import { clearPendingTurn } from '../state/pending-turn';
@@ -10,7 +10,6 @@ import { setComposerRecoveryBlocked } from './composer-send';
 
 const BANNER_ORPHAN_ID = 'orphanUserRetryBanner';
 const BANNER_NEEDS_MODEL_ID = 'pendingTurnNeedsModelBanner';
-const BANNER_MANUAL_ID = 'pendingTurnRecoveryManualBanner';
 
 function getBannerHost(): HTMLElement | null {
   return document.getElementById('mainColumn');
@@ -20,7 +19,6 @@ function getBannerHost(): HTMLElement | null {
 export function dismissPendingTurnRecovery(): void {
   document.getElementById(BANNER_ORPHAN_ID)?.remove();
   document.getElementById(BANNER_NEEDS_MODEL_ID)?.remove();
-  document.getElementById(BANNER_MANUAL_ID)?.remove();
   setComposerRecoveryBlocked(false);
 }
 
@@ -109,48 +107,6 @@ export function showOrphanUserRetryBanner(chat: Chat): void {
     void import('../chat/resend-from-index').then((m) =>
       m.resendFromIndex(chat.id, idx),
     );
-  });
-
-  host.prepend(banner);
-}
-
-/**
- * In-session interrupt (e.g. Stop): user chooses Continue (same as reload resume) or Discard.
- */
-export function showPendingTurnRecoveryManual(chat: Chat): void {
-  if (!chat.pendingTurn) {
-    dismissPendingTurnRecovery();
-    return;
-  }
-
-  dismissPendingTurnRecovery();
-  const host = getBannerHost();
-  if (!host) return;
-
-  const banner = document.createElement('div');
-  banner.id = BANNER_MANUAL_ID;
-  banner.className = 'pending-turn-recovery';
-  banner.setAttribute('role', 'status');
-  banner.innerHTML =
-    '<p class="pending-turn-recovery__text">Generation was interrupted.</p>' +
-    '<div class="pending-turn-recovery__actions">' +
-    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--primary" data-pending-continue>Continue</button>' +
-    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--secondary" data-pending-discard>Discard</button>' +
-    '</div>';
-
-  banner.querySelector('[data-pending-discard]')?.addEventListener('click', () => {
-    clearPendingTurn(chat);
-    dismissPendingTurnRecovery();
-    renderChat(chat);
-  });
-
-  banner.querySelector('[data-pending-continue]')?.addEventListener('click', () => {
-    dismissPendingTurnRecovery();
-    void resumePendingTurn(chat).catch(() => {
-      void import('./status').then((m) =>
-        m.setStatus('err', 'Could not continue the interrupted reply'),
-      );
-    });
   });
 
   host.prepend(banner);

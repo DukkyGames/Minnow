@@ -4,7 +4,6 @@
   "actionButtonIds": [
     "btnSidebarToggle",
     "btnWorkspace",
-    "btnFileTreeToggle",
     "btnRefreshModels",
     "btnStats",
     "btnTerminal",

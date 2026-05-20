@@ -30,8 +30,8 @@ export interface StoppedTurnContext {
 }
 
 /**
- * Tear down streaming UI, checkpoint partial assistant text on pendingTurn (not history),
- * and offer Continue / Discard after stop or reload.
+ * Tear down streaming UI, checkpoint partial assistant text on pendingTurn (not history).
+ * User-stopped turns set `stopped: true` so reload does not auto-resume; a new send overwrites.
  */
 export function finalizeStoppedTurn(ctx: StoppedTurnContext): void {
   const {

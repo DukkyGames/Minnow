@@ -1,0 +1,27 @@
+/* Reef mode: sandboxed widget hosts inside assistant bubbles */
+
+.reef-widget-host {
+  display: block;
+  width: 100%;
+  max-width: 680px;
+  margin: 0.75em 0;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+  min-height: 120px;
+}
+
+.reef-widget-host .reef-widget-iframe {
+  width: 100%;
+  min-height: 120px;
+  vertical-align: top;
+}
+
+.msg-bubble .reef-widget-host:first-child {
+  margin-top: 0;
+}
+
+.msg-bubble .reef-widget-host:last-child {
+  margin-bottom: 0;
+}

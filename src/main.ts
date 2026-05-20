@@ -26,6 +26,7 @@ import './styles/workspace-folder-picker.css';
 import './styles/settings-page.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
+import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/pending-turn-recovery.css';
 
@@ -97,7 +98,9 @@ import {
   bindExpertsSettingsCheckbox,
   initExpertSelect,
 } from './ui/expert-select';
+import { initReefBridge } from './chat/reef/index.ts';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
+import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
 import {
@@ -183,6 +186,7 @@ export async function initApp(): Promise<void> {
   initComposerToolsPopover();
   initAttachments();
   initModeSelector();
+  initReefBridge();
   initWorkAgentDevUi();
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
@@ -217,6 +221,7 @@ export async function initApp(): Promise<void> {
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
+  syncReefWidgetSettingsFromActiveChat();
   renderSidebar();
 
   window.addEventListener('resize', () => {

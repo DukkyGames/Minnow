@@ -35,6 +35,11 @@ import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
 import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
 import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
+import {
+  tryResolveReefWidgetReadPath,
+  tryResolveReefWidgetsFindRoot,
+} from './server/reef/widget-paths.js';
+import { syncReefWidgetTemplates } from './server/reef/sync-widgets.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -61,6 +66,11 @@ function normalizePath(p) {
 function resolveSafePath(userPath) {
   if (!userPath || typeof userPath !== 'string') {
     throw new Error('Path is required');
+  }
+
+  const reefRead = tryResolveReefWidgetReadPath(userPath);
+  if (reefRead) {
+    return reefRead;
   }
 
   const workspaceRoot = getWorkspaceRoot();
@@ -344,9 +354,24 @@ async function toolFindFiles(args) {
   if (!pattern || typeof pattern !== 'string') {
     return 'Error: pattern is required';
   }
-  const root = resolveSafePath(args?.path ?? '.');
-  const matcher = globToRegExp(pattern.replace(/\\/g, '/'));
+  const reefRoot = tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
+  const root = reefRoot ?? resolveSafePath(args?.path ?? '.');
+  const patternNorm = pattern.replace(/\\/g, '/');
+  const matcher = globToRegExp(
+    reefRoot && patternNorm.includes('reef/widgets')
+      ? patternNorm.replace(/^.*reef\/widgets\//, '')
+      : patternNorm,
+  );
   const matches = [];
+  const displayRoot = reefRoot ? '@minnow/reef/widgets' : toRelativePath(root);
+
+  function formatMatch(absPath) {
+    if (!reefRoot) {
+      return toRelativePath(absPath).replace(/\\/g, '/');
+    }
+    const rel = path.relative(reefRoot, absPath).replace(/\\/g, '/');
+    return rel ? `@minnow/reef/widgets/${rel}` : '@minnow/reef/widgets';
+  }
 
   async function walk(currentDir) {
     if (matches.length >= FIND_FILES_MAX) {
@@ -358,9 +383,9 @@ async function toolFindFiles(args) {
         break;
       }
       const full = path.join(currentDir, ent.name);
-      const rel = toRelativePath(full).replace(/\\/g, '/');
+      const rel = path.relative(root, full).replace(/\\/g, '/');
       if (matcher.test(rel) || matcher.test(ent.name)) {
-        matches.push(rel);
+        matches.push(formatMatch(full));
       }
       if (ent.isDirectory()) {
         await walk(full);
@@ -370,7 +395,7 @@ async function toolFindFiles(args) {
 
   await walk(root);
   if (matches.length === 0) {
-    return `No files matching "${pattern}" under ${toRelativePath(root)}`;
+    return `No files matching "${pattern}" under ${displayRoot}`;
   }
   const suffix =
     matches.length >= FIND_FILES_MAX ? `\n(truncated at ${FIND_FILES_MAX} results)` : '';
@@ -815,6 +840,10 @@ async function main() {
   });
 
   await ensureMinnowLayout();
+  const reefSync = await syncReefWidgetTemplates();
+  if (reefSync.copied > 0) {
+    console.log(`Reef widgets: synced ${reefSync.copied} template(s) to ${reefSync.destDir}`);
+  }
   const workspacePath = await initWorkspaceRoot();
   console.log(`Workspace: ${workspacePath}`);
   await ensureProviderRegistry();

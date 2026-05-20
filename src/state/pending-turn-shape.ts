@@ -120,6 +120,14 @@ export function shouldOfferRecovery(chat: Chat): boolean {
   return ensurePendingTurn(chat.pendingTurn) != null;
 }
 
+/**
+ * True when the checkpoint was created by the user pressing Stop (not a tab crash /
+ * mid-stream refresh). Those turns must not auto-resume on reload or Continue.
+ */
+export function isUserStoppedPendingCheckpoint(chat: Chat): boolean {
+  return ensurePendingTurn(chat.pendingTurn)?.stopped === true;
+}
+
 /** Drop pending turn when history no longer has a user message for that turn. */
 export function clearStalePendingTurn(chat: Chat): void {
   const pending = ensurePendingTurn(chat.pendingTurn);

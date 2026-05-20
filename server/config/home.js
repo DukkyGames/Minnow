@@ -69,6 +69,7 @@ const SCAFFOLD_DIRS = [
   'logs/sub-agents',
   'logs/terminal',
   'screenshots',
+  'reef/widgets',
 ];
 
 const DEFAULT_META = {

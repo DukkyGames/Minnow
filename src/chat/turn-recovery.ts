@@ -6,7 +6,10 @@
 import { streaming } from '../app-state';
 import { indexOfLastUserMessage } from './history-truncate-core';
 import { requestContinueFromPendingTurn } from '../state/pending-turn';
-import { shouldOfferRecovery } from '../state/pending-turn-shape';
+import {
+  isUserStoppedPendingCheckpoint,
+  shouldOfferRecovery,
+} from '../state/pending-turn-shape';
 import type { Chat } from '../types';
 import { setStatus } from '../ui/status';
 
@@ -55,6 +58,12 @@ export async function bootTurnRecoveryForChat(chat: Chat): Promise<void> {
   }
 
   const { dismissPendingTurnRecovery } = await import('../ui/pending-turn-recovery');
+
+  // User explicitly stopped: keep partial visible but never auto-resume after reload.
+  if (isUserStoppedPendingCheckpoint(chat)) {
+    dismissPendingTurnRecovery();
+    return;
+  }
 
   if (shouldOfferRecovery(chat)) {
     dismissPendingTurnRecovery();

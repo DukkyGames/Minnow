@@ -88,6 +88,7 @@ import {
   mountWorkAgentEditor,
   renderEntityEditorList,
 } from './settings-entity-editor';
+import { mountReefWidgetLlmSettings } from './reef-widget-settings';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -617,6 +618,9 @@ async function renderModesSection(): Promise<void> {
     (id, body) => {
       if (id === 'plan') {
         void mountPlanGranularityField(body);
+      }
+      if (id === 'reef') {
+        mountReefWidgetLlmSettings(body);
       }
       if (serverReady) {
         mountPromptFileEditor(body, { family: 'modes', entityId: id });

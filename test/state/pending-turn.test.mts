@@ -7,9 +7,56 @@ import { describe, test } from 'node:test';
 import {
   buildPendingSnapshot,
   ensurePendingTurn,
+  isUserStoppedPendingCheckpoint,
 } from '../../src/state/pending-turn-shape.ts';
+import type { Chat } from '../../src/types.ts';
 
 const FIXED_STARTED = 1710000000000;
+
+const CHAT_ID = '22222222-2222-2222-2222-222222222222';
+
+function minimalChat(overrides: Partial<Chat> = {}): Chat {
+  return {
+    id: CHAT_ID,
+    name: 'T',
+    workspacePath: '',
+    modelId: 'm',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: FIXED_STARTED,
+    ...overrides,
+  };
+}
+
+describe('isUserStoppedPendingCheckpoint', () => {
+  test('false when no pendingTurn', () => {
+    assert.equal(isUserStoppedPendingCheckpoint(minimalChat()), false);
+  });
+
+  test('false when pendingTurn is not user-stopped', () => {
+    const chat = minimalChat({
+      pendingTurn: {
+        role: 'assistant',
+        content: 'partial',
+        startedAt: FIXED_STARTED,
+      },
+    });
+    assert.equal(isUserStoppedPendingCheckpoint(chat), false);
+  });
+
+  test('true when pendingTurn has stopped: true', () => {
+    const chat = minimalChat({
+      pendingTurn: {
+        role: 'assistant',
+        content: 'x',
+        startedAt: FIXED_STARTED,
+        stopped: true,
+      },
+    });
+    assert.equal(isUserStoppedPendingCheckpoint(chat), true);
+  });
+});
 
 describe('ensurePendingTurn', () => {
   test('strips invalid role', () => {

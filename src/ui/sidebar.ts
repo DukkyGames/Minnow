@@ -23,6 +23,7 @@ import {
 } from './messages';
 import { syncExpertSelectForActiveChat } from './expert-select';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
+import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
 import { updateModelStateDot } from './model-state-dot';
@@ -64,6 +65,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncModeSelectorFromActiveChat();
     syncExpertSelectForActiveChat();
     syncWorkAgentDevFromActiveChat();
+    syncReefWidgetSettingsFromActiveChat();
     void refreshTerminalHistoryForActiveChat();
   }
   renderSidebar();
@@ -316,6 +318,7 @@ export function switchChat(id: string): void {
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
   syncWorkAgentDevFromActiveChat();
+  syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
@@ -339,6 +342,7 @@ export function createChat(): void {
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
+  syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
   renderSidebar();
   scheduleSaveSessions();
