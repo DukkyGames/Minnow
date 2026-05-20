@@ -16,8 +16,8 @@ npx tsx --test test/tools/config-bulk-permissions.test.mts
 
 | Check | Status |
 |-------|--------|
-| `config-bulk-permissions.test.mts` | Run with `npm test` |
-| Full `npm test` | Run before ship |
+| `config-bulk-permissions.test.mts` | PASS |
+| Full `npm test` | PASS |
 
 ## Manual QA
 
