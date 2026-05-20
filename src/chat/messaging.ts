@@ -2,8 +2,14 @@
 export {
   buildApiMessages,
   MAX_TOOL_TURNS,
+  runChatTurn,
   sendMessageWithTools,
   sendMessageWithTools as sendMessage,
 } from '../tools/loop';
+export { resendFromIndex } from './resend-from-index';
+export {
+  truncateChatHistory,
+  updateUserMessageAt,
+} from './history-truncate';
 /** Non-tool send (legacy / internal). */
 export { sendMessage as sendMessagePlain } from '../api/chat';
