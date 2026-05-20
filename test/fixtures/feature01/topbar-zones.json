@@ -9,6 +9,6 @@
     "btnTerminal",
     "btnSettings"
   ],
-  "endIds": ["modelSelect", "sDot", "sText"],
+  "endIds": ["modelStateDot", "modelSelect", "sDot", "sText"],
   "forbiddenPatterns": ["workspace-sep"]
 }

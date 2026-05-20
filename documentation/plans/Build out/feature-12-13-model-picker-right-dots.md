@@ -5,7 +5,7 @@
 **To-fix:** [`documentation/plans/to-fix.md`](../to-fix.md) lines 12–13 — move model select far right; remove model/loaded count from status; restore loaded/unloaded dots  
 **Wave:** 1 (Top bar polish; ships before Wave 7 **A3** load/unload — Phase 4 hooks A3 when available)  
 **Size:** M  
-**Status:** Build plan (not implemented)  
+**Status:** Implemented  
 **Depends on:** **A1** (`feature-01-topbar-grouped-actions`), **A2** (`feature-10-model-display-names`); **coordinates with A3** (`feature-11-12-load-unload-model`) for dot refresh after load/unload (not blocking v1 layout + dot)
 
 ---
@@ -387,4 +387,4 @@ Report **PASS** only if criteria **1–10** hold and manual **U1–U8** in [`doc
 
 | Date | Result | Notes |
 |------|--------|-------|
-| | | Fill when implemented |
+| 2026-05-20 | PASS | Model picker in `.topbar-end` with `#modelStateDot`; status `Ready` after fetch |
