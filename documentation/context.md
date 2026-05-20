@@ -471,6 +471,8 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 | `PUT` | `/api/providers/:id/secrets` | Update `secrets.json`; response redacts values |
 | `POST` | `/api/providers/:id/set-active` | Sets `config.json` `activeProviderId` |
 | `GET` | `/api/providers/:id/models` | Proxy upstream models (auth injected) |
+| `POST` | `/api/providers/:id/models/load` | Proxy LM Studio v1 load (`{ model }`; 120s timeout) |
+| `POST` | `/api/providers/:id/models/unload` | Proxy LM Studio v1 unload (`{ instance_id }`) |
 | `POST` | `/api/providers/:id/chat/completions` | Proxy SSE/JSON chat (auth injected) |
 
 **`apiKind`:** `lm-studio-v0` (default paths `/api/v0/...`) or `openai-v1` (`/v1/...`). **`connectionMode`:** `direct` (browser → `baseUrl`, localhost) or `proxy` (browser → Minnow server → upstream with secrets).
@@ -545,7 +547,7 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 | Role | Stored shape | Notes |
 |------|----------------|-------|
 | **user** | `{ role: 'user', content: string }` | Plain string only in history. Attachments are **not** stored as binary: images → `[image: filename.jpg]`; text/PDF → `<file name="…">…</file>` blocks in `content`. |
-| **assistant** (text) | `{ role: 'assistant', content, thinking?, stats?, usage? }` | Markdown-rendered in UI; optional metric chips. **`thinking`** is an optional `string[]` of reasoning segments when LM Studio streams separated reasoning (see **Message rendering**). |
+| **assistant** (text) | `{ role: 'assistant', content, thinking?, thinkingDurationMs?, stats?, usage? }` | Markdown-rendered in UI; optional metric chips. **`thinking`** is an optional `string[]` of reasoning segments when LM Studio streams separated reasoning (see **Message rendering**). **`thinkingDurationMs`** is optional accumulated reasoning-active time in ms (feature-05). |
 | **assistant** (tools) | `{ role: 'assistant', content: string \| null, tool_calls: ToolCall[] }` | OpenAI-style calls: `id`, `type: 'function'`, `function.name`, `function.arguments` (JSON string). |
 | **tool** | `{ role: 'tool', tool_call_id, content }` | Result string for one prior call; paired in UI via `tool_call_id`. |
 
@@ -768,7 +770,8 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 - **Reasoning / “thinking”** (LM Studio **App Settings → Developer**: separate `reasoning_content` and/or `choices.delta.reasoning` for compatible models such as DeepSeek R1 / gpt-oss):
   - **Live stream phases** ([`stream-status.ts`](../src/ui/stream-status.ts), wired from [`messages.ts`](../src/ui/messages.ts), [`loop.ts`](../src/tools/loop.ts), [`chat.ts`](../src/api/chat.ts)): `generating` → optional `thinking` (first reasoning delta) → `generating` again after `endReasoningPhase()` until prose → `prose`. A `.stream-status` row (sibling **before** the hidden prose bubble) shows **Generating response…** or **Thinking…** with animated dots; `role="status"`, `aria-live="polite"`, `aria-busy` until prose. Hidden after [`revealAssistantProseBubble`](../src/ui/messages.ts). Respects `prefers-reduced-motion` (static dots).
   - **Live thought bubbles:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). Boundary splits chain gap/fade work via returned promises (not `tailWork.then` on the in-flight queue — that had deadlocked after the first `\n\n`). When the model streams normal **`content`**, the live stage is torn down.
-  - **After reply:** a **Thoughts** text button above that assistant bubble expands a read-only list of all segments (same controller module). Segments are stored on the assistant message as **`thinking: string[]`** on the **final** text reply of a user send (tool-loop rounds accumulate into one list).
+  - **After reply:** a **Thoughts** text button above that assistant bubble expands a read-only list of all segments (same controller module). Segments are stored on the assistant message as **`thinking: string[]`** on the **final** text reply of a user send (tool-loop rounds accumulate into one list). When reasoning was measurable, the toggle reads **`Thought for X.Xs`** and history stores optional **`thinkingDurationMs`** (accumulated reasoning-active wall time, not TTFT).
+  - **Thinking duration (C4 / feature-05):** [`ThinkingDurationTracker`](../src/ui/thinking-duration.ts) sums SSE reasoning intervals (pauses during tool execution and between `endReasoningPhase` / next delta). Live label: **Thinking…** + muted elapsed on [`.stream-status`](../src/ui/stream-status.ts) via `setThinkingElapsed`. Persisted on `AssistantMessage.thinkingDurationMs`; restored in [`renderChatFromHistory`](../src/ui/messages.ts). Wired in [`loop.ts`](../src/tools/loop.ts) (`runChatTurn`, `sendMessageWithTools`) and [`chat.ts`](../src/api/chat.ts). **Tests:** `test/ui/thinking-duration.test.mjs`. Verification: [`documentation/plans/verification/feature-05.md`](plans/verification/feature-05.md).
   - **Parsing:** [`extractReasoningDelta`](../src/api/reasoning.ts) reads SSE chunks without mixing reasoning into `content` ([`extractStreamDelta`](../src/api/chat.ts) stays prose-only).
   - **Prose caret:** inline `.cursor.cursor--prose` (2px accent bar) during markdown stream; not the old solid block cursor.
 - **Tool calls/results** ([`tool-messages.ts`](../src/ui/tool-messages.ts), used from history in [`messages.ts`](../src/ui/messages.ts) and intended during live tool turns in [`loop.ts`](../src/tools/loop.ts)):
@@ -823,7 +826,7 @@ Order in `initApp()`:
 3. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
 4. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
 5. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
-6. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
+6. `fillToolsSection()` + `fillToolsSection('composerToolsList', { variant: 'composer' })` + `registerToolHandlers()` + `initComposerToolsPopover()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
 7. `await detectLocalServer()` → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
 8. `applySidebarVisuals()` + `renderSidebar()`.
 9. `await loadProviderSelect()` + `registerProviderHandlers()`.

@@ -1523,10 +1523,12 @@ function bindRulesSection(): void {
           enabled: enabledEl.checked,
           text,
         });
-        const serverUp = await detectConfigServer();
+        const mode = await detectConfigServer();
         setStatus(
           'ok',
-          serverUp ? 'User rules saved' : 'Saved locally — start npm start to persist to disk',
+          mode === 'server'
+            ? 'User rules saved'
+            : 'Saved locally — start npm start to persist to disk',
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Save failed';
@@ -1548,8 +1550,8 @@ async function renderRulesSection(): Promise<void> {
   enabledEl.checked = rules.enabled;
   textEl.value = rules.text;
 
-  const serverUp = await detectConfigServer();
-  offlineEl?.classList.toggle('hidden', serverUp);
+  const storageMode = await detectConfigServer();
+  offlineEl?.classList.toggle('hidden', storageMode === 'server');
 }
 
 async function renderFeaturesSection(): Promise<void> {
