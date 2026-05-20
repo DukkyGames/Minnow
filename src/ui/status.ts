@@ -1,5 +1,4 @@
 import { closeMobileFileSidebar } from './file-layout';
-import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 
@@ -50,7 +49,7 @@ export function dismissOpenLayers(): void {
   closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
-    closeDrawer();
+    void import('./settings').then(({ closeDrawer }) => closeDrawer());
     return;
   }
   const fileSide = document.getElementById('fileSidebar');
