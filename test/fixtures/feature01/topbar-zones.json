@@ -1,0 +1,14 @@
+{
+  "zones": ["topbar-brand", "topbar-actions", "topbar-end"],
+  "spacer": "topbar-spacer",
+  "actionButtonIds": [
+    "btnSidebarToggle",
+    "btnWorkspace",
+    "btnFileTreeToggle",
+    "btnRefreshModels",
+    "btnTerminal",
+    "btnSettings"
+  ],
+  "endIds": ["modelSelect", "sDot", "sText"],
+  "forbiddenPatterns": ["workspace-sep"]
+}

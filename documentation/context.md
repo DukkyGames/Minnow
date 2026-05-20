@@ -31,7 +31,7 @@ Minnow/
 │   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── state/sessions.ts   # localStorage chat sessions
-│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo
+│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/
@@ -41,7 +41,9 @@ Minnow/
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
 │   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, tool-approval-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
-│   ├── lib/list-directory-parse.ts
+│   ├── lib/
+│   │   ├── format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
+│   │   └── list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
 │   │   ├── definitions.ts      # 41-tool catalog (OpenAI function schemas)
@@ -581,7 +583,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
-- **Top bar:** **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail.
+- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, files, refresh, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model `#modelSelect` + `.status-pill`). No separator between workspace and model. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css). Tests: `test/ui/topbar-layout.test.mjs`.
 
 ## Dev server architecture (`server.js`)
 
@@ -747,7 +749,7 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 ## API usage (providers)
 
-- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`.
+- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` — **direct** `GET {baseUrl}{modelsPath}` or **proxy** `GET /api/providers/:id/models`. Top-bar `#modelSelect` shows **human-readable labels** via [`formatModelLabel`](../src/lib/format-model-label.ts) (`buildModelOptionHtml`); `option value` and `chat.modelId` remain the canonical LM Studio `id`; each option `title` shows full id + quant + load state. `loadState` is exported for **A4** status dots.
 - **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitionsForMode(chat.modeId)` (user toggles + server ping + mode policy). Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
 - **Settings UI:** `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up).
 

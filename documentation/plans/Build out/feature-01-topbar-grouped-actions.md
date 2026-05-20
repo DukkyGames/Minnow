@@ -4,22 +4,22 @@ overview: Reorganize header.topbar into brand / action icon cluster / right-end 
 todos:
   - id: markup-zones
     content: Restructure index.html topbar into topbar-brand, topbar-actions, topbar-spacer, topbar-end
-    status: pending
+    status: completed
   - id: css-zones
     content: Add zone rules in topbar.css; remove model-wrap flex:1 and status-pill margin-left:auto
-    status: pending
+    status: completed
   - id: responsive-pass
     content: Verify responsive.css breakpoints (600, 380, 641, 900) against new DOM
-    status: pending
+    status: completed
   - id: extract-sync
     content: Sync or deprecate scripts/_extracted-body.html topbar snippet if still used
-    status: pending
+    status: completed
   - id: tests
     content: Add test/fixtures/feature01/topbar-zones.json and test/ui/topbar-layout.test.mjs; wire npm test
     status: pending
   - id: verify-docs
     content: Add documentation/plans/verification/feature-01.md; update documentation/context.md on ship
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -31,7 +31,7 @@ isProject: false
 **Backlog:** [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](../product_backlog_agents_48a41af9.plan.md) — **A1**  
 **Wave:** 1 (Top bar and chat polish)  
 **Size:** S  
-**Status:** Build plan (not implemented)  
+**Status:** Implemented  
 **Depends on:** None (coordinate with A4 layout)  
 **Blocks / coordinates:** **A4** (`feature-12-13-model-picker-right-dots`) — same `.topbar-end` real estate; ship **A1 before A4**  
 **Prototype:** None — use [`DESIGN.md`](../../../DESIGN.md), [`.impeccable/design.json`](../../../.impeccable/design.json), [`documentation/context.md`](../../context.md)
