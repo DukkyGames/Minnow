@@ -84,6 +84,11 @@ export function computeMoveDestination(source: string, destDir: string): string 
   return joinTreePath(dest, basename(src));
 }
 
+/** Directory to paste into when focus is on a file or folder row. */
+export function pasteTargetDirForPath(path: string, kind: 'file' | 'dir'): string {
+  return kind === 'dir' ? path : dirname(path);
+}
+
 /** Validate a single path segment for create/rename prompts. */
 export function isValidEntryName(name: string): boolean {
   const trimmed = name.trim();
