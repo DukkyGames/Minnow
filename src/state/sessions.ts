@@ -19,7 +19,7 @@ import { getWorkspacePath } from './workspace';
 import {
   clearStalePendingTurnsOnLoad,
   ensurePendingTurn,
-} from './pending-turn';
+} from './pending-turn-shape';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,

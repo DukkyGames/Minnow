@@ -580,6 +580,22 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 - **QuotaExceededError** → status pill hint.
 - Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace.
 
+### Stream persistence across reload (feature 22 / C5)
+
+In-flight assistant turns checkpoint to **`chat.pendingTurn`** (not a `history` row) while streaming or after stop, then debounced to **`sessions/state.json`** / **`minnow-sessions-v1`**.
+
+| Concern | Location |
+|---------|----------|
+| Types | `PendingTurn` on `Chat` in `src/types.ts` |
+| Validation | `src/state/pending-turn-shape.ts`; wired in `ensureChatShape` + `server/config/validators.js` |
+| Checkpoint API | `src/state/pending-turn.ts`, `src/chat/turn-checkpoint.ts` |
+| Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` flush in `main.ts` |
+| Stop (C1) | `finalizeStoppedTurn` — `pendingTurn` with `stopped: true` (no duplicate assistant in `history`) |
+| Recovery UI | `src/ui/pending-turn-recovery.ts`, `renderPendingTurn`, `pending-turn-recovery.css` |
+| Continue | New completion via ephemeral user line in `buildApiMessages` only; clears `pendingTurn` on stream connect |
+
+**Boot / chat switch:** partial assistant + **Continue** / **Discard**; composer blocked until resolved.
+
 ### Programmatic chat titles (Step 07)
 
 On the **first user message** while the chat is still named **`New chat`**, an async **non-streaming** title job runs (`scheduleChatTitleGeneration` in [`src/chat/titles/schedule.ts`](../src/chat/titles/schedule.ts)). The main send path is **not** awaited.
@@ -797,6 +813,46 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 - **Chat:** `postChatCompletions()` — **direct** `POST {baseUrl}{chatCompletionsPath}` or **proxy** `POST /api/providers/:id/chat/completions`. Streaming SSE; optional non-streaming fallback; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitionsForMode(chat.modeId)` (user toggles + server ping + mode policy). Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
 - **Settings UI:** `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up).
 
+## Stop generation (feature 14, Epic C1)
+
+While **`streaming === true`**, the composer primary button (`#sendBtn`) is a **Stop** control (`data-mode="stop"`, class `send-btn--stop`); the textarea stays enabled so the user can draft the next message. **`handleComposerPrimaryAction()`** (window + `index.html`) calls **`stopGeneration()`** → **`chatFetchAbort.abort()`**, which ends the active SSE `fetch` and triggers **`AbortError`** handling in **`runChatTurn`** / **`sendMessagePlain`**.
+
+| Concern | Location |
+|---------|----------|
+| Stop API | [`src/chat/stop-generation.ts`](../src/chat/stop-generation.ts) |
+| Abort finalize | [`src/chat/finalize-stopped-turn.ts`](../src/chat/finalize-stopped-turn.ts) — checkpoints **`chat.pendingTurn`** with `stopped: true` (coordinates with feature 22; not a duplicate `history` assistant row) |
+| Composer toggle | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/styles/input.css`](../src/styles/input.css) |
+| Tool-loop abort | [`src/tools/loop.ts`](../src/tools/loop.ts) — `livePartialText`, cooperative skip of remaining tools (`Stopped by user.`), `cancelAllForParentTurn` on abort |
+| Stopped chip | [`src/ui/stopped-affordance.ts`](../src/ui/stopped-affordance.ts), `.msg--stopped` in [`messages.css`](../src/styles/messages.css) |
+| Recovery banner | [`src/ui/pending-turn-recovery.ts`](../src/ui/pending-turn-recovery.ts) after stop |
+| History flag | `AssistantMessage.stopped?: boolean` in [`src/types.ts`](../src/types.ts) for completed rows; reload paints chip when set |
+
+**Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/ui/composer-send.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).
+
+## Message actions (Epic C2 — features 15–17)
+
+Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-flight streaming shells).
+
+| Action | Target | Behavior |
+|--------|--------|----------|
+| **Copy** | User / assistant | Clipboard text from `.msg-bubble` (prose only for tool turns) |
+| **Edit** | User | Truncate after row, composer prefilled (skill `[skill: id]` footer stripped), next send updates row + `resendFromIndex` |
+| **Regenerate from here** | User | Inclusive truncate → `resendFromIndex` (no duplicate user row) |
+| **Remake** | Assistant / tool group | Resend from preceding user message |
+| **Delete message** | Any logical turn | Exclusive truncate (atomic assistant + `tool` rows); confirm when multiple rows removed |
+
+| Concern | Location |
+|---------|----------|
+| Truncate + tail normalize | `src/chat/history-truncate-core.ts`, `src/chat/history-truncate.ts` |
+| Resend orchestration | `src/chat/resend-from-index.ts` → `runChatTurn({ pushUser: false })` in `src/tools/loop.ts` |
+| Menu UI | `src/ui/message-actions.ts`, `src/styles/message-actions.css` |
+| Render indices | `data-history-index`, `data-turn-kind` on `.msg` / tool cards in `renderChatFromHistory` |
+| Skill footer parse | `src/skills/history-content.ts` |
+
+**Guards:** All mutating actions blocked while `streaming` (same pattern as `clearChat`). Works with C1 stop: stop first, then regenerate. **v1:** No undo stack; resend does not re-hydrate attachment chips (history placeholders only). `chat.terminalHistory` is not truncated on delete (follow-up).
+
+**Tests:** `test/chat/history-truncate.test.mts`, `test/chat/resend-from-index.test.mts`, `test/ui/message-actions.test.mjs`. Verification: [`documentation/plans/verification/feature-15-16-17.md`](plans/verification/feature-15-16-17.md).
+
 ## Message rendering
 
 - **User:** plain `textContent` (includes literal markdown if typed).
@@ -870,7 +926,7 @@ Order in `initApp()`:
 - Sidebar rows: no nested buttons; keyboard Enter/Space to switch chats.
 - Overlays: Escape closes drawer / mobile sidebar (`dismissOpenLayers`).
 - `parseServerBaseUrl()` before LM Studio fetch; `AbortController` on model list and chat.
-- Send requires model, temperature 0–2, max tokens ≥ 1; composer disabled while streaming.
+- Send requires model, temperature 0–2, max tokens ≥ 1; while streaming the send button is Stop (enabled) and the textarea stays editable.
 - Rename capped at 120 characters.
 
 ## Key files

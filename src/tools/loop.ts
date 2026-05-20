@@ -65,7 +65,10 @@ import {
   ensurePendingTurn,
 } from '../state/pending-turn';
 import { isComposerRecoveryBlocked } from '../ui/composer-send';
-import { dismissPendingTurnRecovery } from '../ui/pending-turn-recovery';
+import {
+  dismissPendingTurnRecovery,
+  showPendingTurnRecovery,
+} from '../ui/pending-turn-recovery';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setComposerStreamingMode } from '../ui/composer-send';
 import { refreshExpertSelectDisabled } from '../ui/expert-select';
@@ -110,7 +113,7 @@ import {
   getEnabledToolDefinitionsForMode,
 } from './client';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
-import { indexOfLastUserMessage } from '../chat/history-truncate';
+import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   formatHistoryWithSkillTag,
   parseSlashCommand,
@@ -480,7 +483,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     touchChat(chat);
     scheduleSaveSessions();
     renderSidebar();
-    appendBubble('user', historyContent);
+    const userIdx = chat.history.length - 1;
+    const { wrap: userWrap } = appendBubble('user', historyContent, {
+      historyIndex: userIdx,
+      turnKind: 'user',
+      chatId: chat.id,
+    });
+    const { attachMessageActions } = await import('../ui/message-actions');
+    attachMessageActions(userWrap, {
+      chatId: chat.id,
+      historyIndex: userIdx,
+      turnKind: 'user',
+    });
     const input = document.getElementById('msgInput') as HTMLTextAreaElement;
     input.value = '';
     input.style.height = 'auto';
@@ -554,6 +568,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   refreshExpertSelectDisabled();
   setComposerStreamingMode('streaming');
   let livePartialText = '';
+  let currentToolRound = pendingResume?.toolRound ?? 0;
   setStatus(
     'spin',
     uiDesignerCtx.active
@@ -626,7 +641,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
 
     const activeModeId = normalizeModeId(chat.modeId);
-    let currentToolRound = pendingResume?.toolRound ?? 0;
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       currentToolRound = turn;
@@ -882,6 +896,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
+      cancelAllForParentTurn(parentTurnId);
       thinkingTracker?.abort();
       streamCtx.streamStatus.setThinkingElapsed(null);
       turnCheckpoint?.dispose();
@@ -897,8 +912,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         startedAt: turnStartedAt,
         modelId: sendModelId,
         providerId: sendProviderId,
-        toolRound: turn,
+        toolRound: currentToolRound,
       });
+      if (getActiveChat().id === chat.id) {
+        showPendingTurnRecovery(chat);
+      }
       return;
     }
     cancelAssistantBubbleRenderDebounce();
