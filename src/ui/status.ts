@@ -1,4 +1,3 @@
-import { closeComposerToolsPopover } from './composer-tools-popover';
 import { closeMobileFileSidebar } from './file-layout';
 import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
@@ -48,7 +47,6 @@ export function setReadyStatus(): void {
 
 /** Close settings drawer or mobile chat list when Escape is pressed. */
 export function dismissOpenLayers(): void {
-  closeComposerToolsPopover();
   closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {

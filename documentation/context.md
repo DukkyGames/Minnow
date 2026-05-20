@@ -342,20 +342,22 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 ### Workspace folder (AI project root)
 
-The **workspace** is the directory where file/git/terminal tools and the file tree operate. It defaults to the directory where `npm start` was launched; users can change it from the top bar **folder** button (`#btnWorkspace`).
+The **workspace** is the directory where file/git/terminal tools and the file tree operate. It defaults to the directory where `npm start` was launched; users change it from the top bar **folder** button (`#btnWorkspace`) via a **recent workspaces menu** (feature B1), not an immediate OS dialog.
 
 | Concern | Location |
 |---------|----------|
-| Server root + persistence | `server/workspace/root.js` — `getWorkspaceRoot()`, `setWorkspaceRoot()`, saved in `~/.minnow/config.json` as `workspace.path` |
-| API | `GET/PUT /api/workspace`, `POST /api/workspace/pick` (native folder dialog) — `server/workspace/middleware.js` |
-| Native picker | `server/workspace/pick-folder.js` (PowerShell / osascript / zenity) |
-| Client state | `src/state/workspace.ts`, `src/config/workspace-api.ts` |
-| Top bar UI | `src/ui/workspace-button.ts`, `index.html` `#btnWorkspace` |
+| Server root + MRU | `server/workspace/root.js` — `getWorkspaceRoot()`, `setWorkspaceRoot()`, `touchRecentWorkspacePath()`, `buildRecentWorkspaceList()`; `~/.minnow/config.json` → `workspace.path` + `workspace.recentPaths` (max **10**, MRU order) |
+| API | `GET/PUT /api/workspace`, `POST /api/workspace/pick`, `DELETE /api/workspace/recent` — `server/workspace/middleware.js` |
+| Native picker | `server/workspace/pick-folder.js` (PowerShell / osascript / zenity); **Open new workspace…** in menu |
+| Client state | `src/state/workspace.ts`, `src/config/workspace-api.ts` (`WorkspaceRecentItem`, `removeRecentWorkspace`) |
+| Top bar UI | `src/ui/workspace-button.ts` (`applyWorkspaceSwitch`), `src/ui/workspace-recent-menu.ts`, `src/styles/workspace-menu.css` |
 | Prompt `{{cwd}}` | `src/chat/prompts/compose-context.ts` → `resolveComposeCwd()` uses workspace path when set |
+
+**Menu UX:** Click `#btnWorkspace` → popover lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspace…**. Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
 
 **Server wiring:** `server.js` `resolveSafePath`, git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
 
-**Tests:** `test/workspace/workspace-api.test.js`.
+**Tests:** `test/workspace/workspace-api.test.js`, `test/ui/workspace-recent-menu.test.mjs`. Verification: [`documentation/plans/verification/feature-04.md`](plans/verification/feature-04.md).
 
 ### File panel (Step 11)
 
