@@ -8,7 +8,7 @@ import {
 } from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
-import { executeTool, getLocalServerAvailable } from '../tools/client';
+import { isFileTreeServerAvailable } from './file-tree-server';
 import {
   basenameOf,
   ensureWorkspaceIndex,
@@ -24,22 +24,14 @@ import {
   showFileTreeBackgroundContextMenu,
   showFileTreeRowContextMenu,
 } from './file-tree-context-menu';
-import {
-  copyPathToClipboard,
-  cutPathToClipboard,
-  deletePath,
-  getFileTreeClipboard,
-  pasteInto,
-  pasteTargetDirForPath,
-  renamePath,
-  type FileTreeEntryKind,
-} from './file-tree-ops';
+import { getFileTreeClipboard } from './file-tree-clipboard';
+import { pasteTargetDirForPath } from './file-tree-path';
+type FileTreeEntryKind = 'file' | 'dir';
 import {
   dirRowPaddingLeftPx,
   FILE_TREE_DIR_BASE_PADDING_PX,
   fileRowPaddingLeftPx,
 } from './file-tree-indent';
-import { openFileInViewer } from './file-viewer';
 import { isFileViewerEditorFocused } from './file-viewer-focus';
 
 export {
@@ -63,6 +55,7 @@ async function fetchListing(relativePath: string): Promise<ParsedListing | { err
   const cached = listingCache.get(relativePath);
   if (cached) return cached;
 
+  const { executeTool } = await import('../tools/client');
   const raw = (await executeTool('list_directory', { path: relativePath })).content;
   const parsed = parseListDirectoryResult(raw);
   if ('error' in parsed) {
@@ -91,7 +84,7 @@ export function invalidateFileTreeCache(): void {
 let filterRenderGeneration = 0;
 
 export async function expandDir(path: string): Promise<void> {
-  if (!getLocalServerAvailable()) return;
+  if (!isFileTreeServerAvailable()) return;
   setExpanded(path, true);
   loadingDirs.add(path);
   renderFileTree();
@@ -317,12 +310,12 @@ function appendFileRow(
     e.stopPropagation();
     setFocusedRow(fullPath, 'file', row);
     if (drag.consumeClickAfterDrag()) return;
-    void openFileInViewer(fullPath);
+    void import('./file-viewer').then((m) => m.openFileInViewer(fullPath));
   });
   row.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      void openFileInViewer(fullPath);
+      void import('./file-viewer').then((m) => m.openFileInViewer(fullPath));
     }
   });
 
@@ -365,12 +358,12 @@ function appendFlatFileRow(host: HTMLElement, fullPath: string): void {
     e.stopPropagation();
     setFocusedRow(fullPath, 'file', row);
     if (drag.consumeClickAfterDrag()) return;
-    void openFileInViewer(fullPath);
+    void import('./file-viewer').then((m) => m.openFileInViewer(fullPath));
   });
   row.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      void openFileInViewer(fullPath);
+      void import('./file-viewer').then((m) => m.openFileInViewer(fullPath));
     }
   });
 
@@ -439,7 +432,7 @@ export function renderFileTree(): void {
   const host = document.getElementById('fileTreeHost');
   if (!host) return;
 
-  if (!getLocalServerAvailable()) {
+  if (!isFileTreeServerAvailable()) {
     renderOfflineEmpty(host);
     return;
   }
@@ -473,7 +466,7 @@ export function renderFileTree(): void {
 
 export async function refreshFileTree(): Promise<void> {
   invalidateFileTreeCache();
-  if (!getLocalServerAvailable()) {
+  if (!isFileTreeServerAvailable()) {
     renderFileTree();
     return;
   }
@@ -502,7 +495,7 @@ export async function refreshFileTree(): Promise<void> {
 }
 
 export async function initFileTreeIfNeeded(): Promise<void> {
-  if (!getLocalServerAvailable()) {
+  if (!isFileTreeServerAvailable()) {
     renderFileTree();
     return;
   }
@@ -514,7 +507,7 @@ export async function initFileTreeIfNeeded(): Promise<void> {
 }
 
 function handleTreeKeydown(e: KeyboardEvent): void {
-  if (!getLocalServerAvailable()) return;
+  if (!isFileTreeServerAvailable()) return;
   if (isFileViewerEditorFocused()) return;
   if (!focusedTreePath || !focusedTreeKind) return;
 
@@ -522,33 +515,37 @@ function handleTreeKeydown(e: KeyboardEvent): void {
   const ctrl = e.ctrlKey;
   const mod = meta || ctrl;
 
-  if (mod && (e.key === 'c' || e.key === 'C')) {
-    e.preventDefault();
-    if (focusedTreeKind === 'file') copyPathToClipboard(focusedTreePath);
-    return;
-  }
-  if (mod && (e.key === 'x' || e.key === 'X')) {
-    e.preventDefault();
-    cutPathToClipboard(focusedTreePath);
-    return;
-  }
-  if (mod && (e.key === 'v' || e.key === 'V')) {
-    e.preventDefault();
-    const target = pasteTargetDirForPath(focusedTreePath, focusedTreeKind);
-    void pasteInto(target);
-    return;
-  }
+  void (async () => {
+    const ops = await import('./file-tree-ops');
 
-  if (e.key === 'F2') {
-    e.preventDefault();
-    void renamePath(focusedTreePath, focusedTreeKind);
-    return;
-  }
+    if (mod && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      if (focusedTreeKind === 'file') ops.copyPathToClipboard(focusedTreePath);
+      return;
+    }
+    if (mod && (e.key === 'x' || e.key === 'X')) {
+      e.preventDefault();
+      ops.cutPathToClipboard(focusedTreePath);
+      return;
+    }
+    if (mod && (e.key === 'v' || e.key === 'V')) {
+      e.preventDefault();
+      const target = pasteTargetDirForPath(focusedTreePath, focusedTreeKind);
+      void ops.pasteInto(target);
+      return;
+    }
 
-  if (e.key === 'Delete') {
-    e.preventDefault();
-    void deletePath(focusedTreePath, focusedTreeKind);
-  }
+    if (e.key === 'F2') {
+      e.preventDefault();
+      void ops.renamePath(focusedTreePath, focusedTreeKind);
+      return;
+    }
+
+    if (e.key === 'Delete') {
+      e.preventDefault();
+      void ops.deletePath(focusedTreePath, focusedTreeKind);
+    }
+  })();
 }
 
 /** Bind tree host shortcuts and background context menu (once). */
@@ -564,7 +561,7 @@ export function initFileTreeCrud(): void {
   host.addEventListener('contextmenu', (e) => {
     const target = e.target as HTMLElement;
     if (target.closest('.file-tree-row')) return;
-    if (!getLocalServerAvailable()) return;
+    if (!isFileTreeServerAvailable()) return;
     e.preventDefault();
     hideFileTreeContextMenu();
     const root = getFilePanelState().treeRoot || '.';

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { register } from 'node:module';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-import { setLocalServerAvailable } from '../../src/tools/config.ts';
+
+register('../test-loader.mjs', import.meta.url);
+
+import { setFileTreeServerAvailable } from '../../src/ui/file-tree-server.ts';
 
 const { renderFileTree, invalidateFileTreeCache } = await import('../../src/ui/file-tree.ts');
-const { onFilePanelServerAvailabilityChanged } = await import('../../src/ui/init-file-panel.ts');
 
 function setupFileTreeDom() {
   const window = new Window();
@@ -21,7 +24,7 @@ describe('file tree boot', { concurrency: false }, () => {
   test('offline empty state mentions npm start', () => {
     setupFileTreeDom();
     invalidateFileTreeCache();
-    setLocalServerAvailable(false);
+    setFileTreeServerAvailable(false);
     renderFileTree();
     const host = document.getElementById('fileTreeHost');
     assert.match(host?.textContent ?? '', /npm start/i);
@@ -30,22 +33,18 @@ describe('file tree boot', { concurrency: false }, () => {
   test('online with empty cache shows Loading project…', () => {
     setupFileTreeDom();
     invalidateFileTreeCache();
-    setLocalServerAvailable(true);
+    setFileTreeServerAvailable(true);
     renderFileTree();
     const host = document.getElementById('fileTreeHost');
     assert.equal(host?.querySelector('.file-tree-loading')?.textContent, 'Loading project…');
     assert.ok(!(host?.textContent ?? '').includes('Open Files to load tree'));
   });
 
-  test('onFilePanelServerAvailabilityChanged is exported', () => {
-    assert.equal(typeof onFilePanelServerAvailabilityChanged, 'function');
-  });
-
-  test('onFilePanelServerAvailabilityChanged renders offline when server down', () => {
+  test('renderFileTree offline after invalidate cache', () => {
     setupFileTreeDom();
     invalidateFileTreeCache();
-    setLocalServerAvailable(false);
-    onFilePanelServerAvailabilityChanged();
+    setFileTreeServerAvailable(false);
+    renderFileTree();
     const host = document.getElementById('fileTreeHost');
     assert.match(host?.textContent ?? '', /npm start/i);
   });

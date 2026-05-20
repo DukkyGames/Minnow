@@ -16,6 +16,7 @@ import {
 } from './file-layout';
 import { initFileTreeDnD } from './file-tree-dnd';
 import { initFileTreeCrud, initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import { setFileTreeServerAvailable } from './file-tree-server';
 import {
   initFileTreeSearch,
   onFileTreeSearchServerChanged,
@@ -94,6 +95,7 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
+  setFileTreeServerAvailable(getLocalServerAvailable());
   onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {
     void refreshWorkspaceUi();
@@ -106,6 +108,7 @@ export function onFilePanelServerAvailabilityChanged(): void {
 /** Initialize file panel after detectLocalServer(). */
 export async function initFilePanel(): Promise<void> {
   await loadFilePanelPrefs();
+  setFileTreeServerAvailable(getLocalServerAvailable());
   if (getLocalServerAvailable()) {
     void initFileTreeIfNeeded();
   }
