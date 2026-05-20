@@ -14,7 +14,13 @@ import {
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
 } from './file-layout';
-import { initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import { initFileTreeDnD } from './file-tree-dnd';
+import { initFileTreeCrud, initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import {
+  initFileTreeSearch,
+  onFileTreeSearchServerChanged,
+  registerFileTreeFilterRender,
+} from './file-tree-search';
 import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './file-viewer';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
@@ -86,6 +92,7 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
+  onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {
     void refreshWorkspaceUi();
     void refreshFileTree();
@@ -110,6 +117,10 @@ export async function initFilePanel(): Promise<void> {
   bindSplitResizer();
   bindFilePanelControls();
   bindFileViewerControls();
+  initFileTreeCrud();
+  initFileTreeDnD();
+  registerFileTreeFilterRender(renderFileTree);
+  initFileTreeSearch();
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) closeMobileFileSidebar();

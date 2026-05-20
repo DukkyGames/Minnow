@@ -377,9 +377,13 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
 
-**Phase 2 — drag to composer:** File rows in `src/ui/file-tree.ts` are draggable (5px movement threshold so click still opens the viewer). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
+**Phase 2 — drag to composer:** File and folder rows in `src/ui/file-tree.ts` are draggable (5px movement threshold via `wireTreeRowDrag`). Drop on `#msgInput` / `.input-bar` adds a **workspace reference** chip (`kind: workspace`, MIME `application/x-minnow-workspace-file`) via `src/ui/composer-drop.ts` and `src/attachments/workspace-ref.ts`. On send, `resolveWorkspaceReferences()` loads each path with `read_file` and inlines `<file>` blocks through `buildHistoryUserContent` in `src/tools/loop.ts`.
 
-**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md).
+**Tree CRUD (E1 / feature-18):** Context menu + shortcuts on file/folder rows call `executeTool` (`delete_path`, `move_file`, `copy_file`, `save_file`, `make_directory`) through [`src/ui/file-tree-ops.ts`](../src/ui/file-tree-ops.ts) with the same permission/approval gate as chat tools. Path helpers: [`src/ui/file-tree-path.ts`](../src/ui/file-tree-path.ts). Menu UI: [`src/ui/file-tree-context-menu.ts`](../src/ui/file-tree-context-menu.ts).
+
+**Internal tree move (E3 / feature-20):** Drop a file or folder onto a **folder row** in `#fileTreeHost` → [`showMoveConfirmDialog`](../src/ui/file-tree-move-dialog.ts) (`<dialog id="fileTreeMoveDialog">`) → [`movePath`](../src/ui/file-tree-ops.ts) via existing `move_file` (no new REST route). Delegation: [`src/ui/file-tree-dnd.ts`](../src/ui/file-tree-dnd.ts) (`initFileTreeDnD` from `init-file-panel.ts`). Invalid drops (cycle, same parent) use `computeMoveDestination` in `file-tree-path.ts`. Composer drag-and-drop is unchanged (`copy` effect).
+
+**Tests:** `test/file/list-directory-parse.test.mjs`, `test/file/file-tree-boot.test.mjs`, `test/file/file-viewer-save.test.mjs` (happy-dom + tsx), `test/file/path-utils.test.mjs` (path + `computeMoveDestination`), `test/file/file-tree-move-dialog.test.mjs`, `test/file/file-tree-dnd.test.mjs`, `test/file/file-tree-ops.test.mts`, `test/workspace-ref.test.ts`, `scripts/step-11-smoke.mjs`. Verification: [`documentation/plans/verification/step-11.md`](plans/verification/step-11.md), [`documentation/plans/verification/feature-20.md`](plans/verification/feature-20.md).
 
 ### Sub-agent orchestration (Step 09)
 
@@ -613,9 +617,12 @@ Browser (same origin :5173)
     ├─► GET/PUT /api/config/*    → ~/.minnow JSON files
     ├─► GET  /api/tools/ping     → { ok: true }
     ├─► POST /api/tools          → { result: "<string>" }   body: { name, args }
-    ├─► POST /api/terminal/run   → { runId, startedAt }
+    ├─► POST /api/terminal/run   → { runId, startedAt } (agent one-shot runs)
     ├─► GET  /api/terminal/stream/:runId → SSE (stdout/stderr/exit)
-    ├─► GET  /api/terminal/history?chatId= → { runs }
+    ├─► POST /api/terminal/session → { sessionId } (interactive PTY)
+    ├─► WS   /api/terminal/ws?sessionId= → JSON PTY I/O
+    ├─► GET  /api/terminal/shell-profiles → OS-gated shells
+    ├─► GET  /api/terminal/history?chatId= → { runs } (agent runs)
     ├─► GET/POST /api/providers/* → registry + proxy (secrets on server only)
     │
     ├─► LLM upstream (direct localhost or proxied /api/providers/:id/*)
@@ -631,7 +638,13 @@ Browser (same origin :5173)
 | `/api/tools` | POST | `{ "name", "args" }` → `{ "result": "<string>" }` |
 | `/api/terminal/run` | POST | `{ command, chatId?, args?, shell?, source? }` → `{ runId, startedAt }` |
 | `/api/terminal/stream/:runId` | GET | `text/event-stream` — `meta`, `stdout`, `stderr`, `exit` |
-| `/api/terminal/history` | GET | `?chatId=` → `{ runs: TerminalRunRecord[] }` |
+| `/api/terminal/session` | POST | `{ shellProfileId?, cwd?, cols?, rows? }` → `{ sessionId, shell, … }` |
+| `/api/terminal/session/:id` | DELETE | Kill PTY session |
+| `/api/terminal/session/:id/resize` | POST | `{ cols, rows }` |
+| `/api/terminal/ws` | WS | `?sessionId=` — JSON `{ type: input\|resize\|output\|exit\|meta }` |
+| `/api/terminal/shell-profiles` | GET | `{ profiles[], ptyAvailable }` |
+| `/api/terminal/sessions` | GET | Optional `?chatId=` — live PTY metadata |
+| `/api/terminal/history` | GET | `?chatId=` → `{ runs: TerminalRunRecord[] }` (agent runs) |
 | `/api/terminal/log/:runId` | GET | `{ text }` log tail |
 | `/api/terminal/cancel/:runId` | POST | `{ ok: true }` (SIGTERM when supported) |
 

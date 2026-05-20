@@ -1,5 +1,5 @@
 ﻿/**
- * Project file tree — lazy list_directory via executeTool.
+ * Project file tree — lazy list_directory via executeTool; CRUD via file-tree-ops.
  */
 
 import {
@@ -7,17 +7,53 @@ import {
   WORKSPACE_FILE_MIME,
 } from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
-import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
+import { executeTool, getLocalServerAvailable } from '../tools/client';
+import {
+  basenameOf,
+  ensureWorkspaceIndex,
+  filterPaths,
+  getFilterQuery,
+  invalidateFileTreeIndex,
+  sortFilteredPaths,
+} from './file-tree-filter';
+import { joinTreePath } from './file-tree-path';
+import {
+  buildMenuContext,
+  hideFileTreeContextMenu,
+  showFileTreeBackgroundContextMenu,
+  showFileTreeRowContextMenu,
+} from './file-tree-context-menu';
+import {
+  copyPathToClipboard,
+  cutPathToClipboard,
+  deletePath,
+  getFileTreeClipboard,
+  pasteInto,
+  pasteTargetDirForPath,
+  renamePath,
+  type FileTreeEntryKind,
+} from './file-tree-ops';
+import {
+  dirRowPaddingLeftPx,
+  FILE_TREE_DIR_BASE_PADDING_PX,
+  fileRowPaddingLeftPx,
+} from './file-tree-indent';
 import { openFileInViewer } from './file-viewer';
+import { isFileViewerEditorFocused } from './file-viewer-focus';
+
+export {
+  FILE_TREE_DEPTH_INDENT_PX,
+  FILE_TREE_DIR_BASE_PADDING_PX,
+  FILE_TREE_FILE_BASE_PADDING_PX,
+} from './file-tree-indent';
 
 const listingCache = new Map<string, ParsedListing>();
 const loadingDirs = new Set<string>();
 
-function joinPath(parent: string, name: string): string {
-  if (parent === '.' || parent === '') return name;
-  return `${parent}/${name}`;
-}
+let crudBound = false;
+let focusedTreePath: string | null = null;
+let focusedTreeKind: FileTreeEntryKind | null = null;
 
 function isExpanded(path: string): boolean {
   return getFilePanelState().expandedDirs.includes(path);
@@ -49,7 +85,10 @@ function setExpanded(path: string, open: boolean): void {
 
 export function invalidateFileTreeCache(): void {
   listingCache.clear();
+  invalidateFileTreeIndex();
 }
+
+let filterRenderGeneration = 0;
 
 export async function expandDir(path: string): Promise<void> {
   if (!getLocalServerAvailable()) return;
@@ -66,115 +105,17 @@ export function collapseDir(path: string): void {
   renderFileTree();
 }
 
-function renderOfflineEmpty(host: HTMLElement): void {
-  host.innerHTML = '';
-  const msg = document.createElement('p');
-  msg.className = 'file-tree-empty';
-  msg.textContent = 'Start with npm start to browse project files.';
-  host.appendChild(msg);
+function setFocusedRow(path: string, kind: FileTreeEntryKind, row: HTMLElement): void {
+  focusedTreePath = path;
+  focusedTreeKind = kind;
+  document.querySelectorAll('.file-tree-row--focused').forEach((el) => {
+    el.classList.remove('file-tree-row--focused');
+  });
+  row.classList.add('file-tree-row--focused');
 }
 
-function renderTreeError(host: HTMLElement, message: string): void {
-  host.innerHTML = '';
-  const msg = document.createElement('p');
-  msg.className = 'file-tree-empty file-tree-error';
-  msg.textContent = message;
-  host.appendChild(msg);
-}
-
-function createExpandHit(path: string, expanded: boolean): HTMLSpanElement {
-  const hit = document.createElement('span');
-  hit.className = 'file-tree-expand' + (expanded ? ' open' : '');
-  hit.setAttribute('role', 'presentation');
-  hit.tabIndex = 0;
-  hit.setAttribute('aria-label', expanded ? `Collapse ${path}` : `Expand ${path}`);
-  hit.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (expanded) collapseDir(path);
-    else void expandDir(path);
-  });
-  hit.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (expanded) collapseDir(path);
-      else void expandDir(path);
-    }
-  });
-  return hit;
-}
-
-function appendDirRow(
-  host: HTMLElement,
-  parentPath: string,
-  name: string,
-  depth: number,
-): void {
-  const fullPath = joinPath(parentPath, name);
-  const expanded = isExpanded(fullPath);
-  const loading = loadingDirs.has(fullPath);
-
-  const row = document.createElement('div');
-  row.className = 'file-tree-row file-tree-row--dir';
-  row.setAttribute('role', 'treeitem');
-  row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  row.style.paddingLeft = `${8 + depth * 14}px`;
-  row.tabIndex = 0;
-
-  row.appendChild(createExpandHit(fullPath, expanded));
-
-  const label = document.createElement('span');
-  label.className = 'file-tree-label';
-  label.textContent = loading ? `${name} …` : name;
-  row.appendChild(label);
-
-  row.addEventListener('click', () => {
-    if (expanded) collapseDir(fullPath);
-    else void expandDir(fullPath);
-  });
-  row.addEventListener('dblclick', (e) => {
-    e.preventDefault();
-    if (!expanded) void expandDir(fullPath);
-  });
-  row.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      if (expanded) collapseDir(fullPath);
-      else void expandDir(fullPath);
-    }
-  });
-
-  host.appendChild(row);
-
-  if (expanded) {
-    const group = document.createElement('div');
-    group.className = 'file-tree-children';
-    group.setAttribute('role', 'group');
-    host.appendChild(group);
-    renderSubtree(group, fullPath, depth + 1);
-  }
-}
-
-function appendFileRow(
-  host: HTMLElement,
-  parentPath: string,
-  name: string,
-  depth: number,
-): void {
-  const fullPath = joinPath(parentPath, name);
-  const selected = getFilePanelState().selectedPath === fullPath;
-
-  const row = document.createElement('div');
-  row.className = 'file-tree-row file-tree-row--file' + (selected ? ' selected' : '');
-  row.setAttribute('role', 'treeitem');
-  row.style.paddingLeft = `${22 + depth * 14}px`;
-  row.tabIndex = 0;
-
-  const label = document.createElement('span');
-  label.className = 'file-tree-label';
-  label.textContent = name;
-  row.appendChild(label);
-
+/** Drag threshold + workspace MIME payload (composer copy; tree drop uses move). */
+function wireTreeRowDrag(row: HTMLElement, fullPath: string): { consumeClickAfterDrag: () => boolean } {
   row.draggable = true;
   let dragAllowed = false;
   let suppressClick = false;
@@ -229,12 +170,153 @@ function appendFileRow(
     clearPointerTracking();
   });
 
+  return {
+    consumeClickAfterDrag: () => {
+      if (!suppressClick) return false;
+      suppressClick = false;
+      return true;
+    },
+  };
+}
+
+function wireRowContextMenu(
+  row: HTMLElement,
+  path: string,
+  kind: FileTreeEntryKind,
+): void {
+  row.dataset.path = path;
+  row.dataset.entryKind = kind;
+
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFocusedRow(path, kind, row);
+    showFileTreeRowContextMenu(buildMenuContext(path, kind), e.clientX, e.clientY);
+  });
+
+  row.addEventListener('focus', () => setFocusedRow(path, kind, row));
+}
+
+function renderOfflineEmpty(host: HTMLElement): void {
+  host.innerHTML = '';
+  const msg = document.createElement('p');
+  msg.className = 'file-tree-empty';
+  msg.textContent = 'Start with npm start to browse project files.';
+  host.appendChild(msg);
+}
+
+function renderTreeError(host: HTMLElement, message: string): void {
+  host.innerHTML = '';
+  const msg = document.createElement('p');
+  msg.className = 'file-tree-empty file-tree-error';
+  msg.textContent = message;
+  host.appendChild(msg);
+}
+
+function createExpandHit(path: string, expanded: boolean): HTMLSpanElement {
+  const hit = document.createElement('span');
+  hit.className = 'file-tree-expand' + (expanded ? ' open' : '');
+  hit.setAttribute('role', 'presentation');
+  hit.tabIndex = 0;
+  hit.setAttribute('aria-label', expanded ? `Collapse ${path}` : `Expand ${path}`);
+  hit.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (expanded) collapseDir(path);
+    else void expandDir(path);
+  });
+  hit.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (expanded) collapseDir(path);
+      else void expandDir(path);
+    }
+  });
+  return hit;
+}
+
+function appendDirRow(
+  host: HTMLElement,
+  parentPath: string,
+  name: string,
+  depth: number,
+): void {
+  const fullPath = joinTreePath(parentPath, name);
+  const expanded = isExpanded(fullPath);
+  const loading = loadingDirs.has(fullPath);
+
+  const row = document.createElement('div');
+  row.className = 'file-tree-row file-tree-row--dir';
+  row.setAttribute('role', 'treeitem');
+  row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  row.style.paddingLeft = `${dirRowPaddingLeftPx(depth)}px`;
+  row.tabIndex = 0;
+
+  row.appendChild(createExpandHit(fullPath, expanded));
+
+  const label = document.createElement('span');
+  label.className = 'file-tree-label';
+  label.textContent = loading ? `${name} …` : name;
+  row.appendChild(label);
+
+  const drag = wireTreeRowDrag(row, fullPath);
+
+  row.addEventListener('click', () => {
+    if (drag.consumeClickAfterDrag()) return;
+    setFocusedRow(fullPath, 'dir', row);
+    if (expanded) collapseDir(fullPath);
+    else void expandDir(fullPath);
+  });
+  row.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    if (!expanded) void expandDir(fullPath);
+  });
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (expanded) collapseDir(fullPath);
+      else void expandDir(fullPath);
+    }
+  });
+
+  wireRowContextMenu(row, fullPath, 'dir');
+  host.appendChild(row);
+
+  if (expanded) {
+    const group = document.createElement('div');
+    group.className = 'file-tree-children';
+    group.setAttribute('role', 'group');
+    host.appendChild(group);
+    renderSubtree(group, fullPath, depth + 1);
+  }
+}
+
+function appendFileRow(
+  host: HTMLElement,
+  parentPath: string,
+  name: string,
+  depth: number,
+): void {
+  const fullPath = joinTreePath(parentPath, name);
+  const selected = getFilePanelState().selectedPath === fullPath;
+
+  const row = document.createElement('div');
+  row.className = 'file-tree-row file-tree-row--file' + (selected ? ' selected' : '');
+  row.setAttribute('role', 'treeitem');
+  row.style.paddingLeft = `${fileRowPaddingLeftPx(depth)}px`;
+  row.tabIndex = 0;
+
+  const label = document.createElement('span');
+  label.className = 'file-tree-label';
+  label.textContent = name;
+  row.appendChild(label);
+
+  const drag = wireTreeRowDrag(row, fullPath);
+
   row.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (suppressClick) {
-      suppressClick = false;
-      return;
-    }
+    setFocusedRow(fullPath, 'file', row);
+    if (drag.consumeClickAfterDrag()) return;
     void openFileInViewer(fullPath);
   });
   row.addEventListener('keydown', (e) => {
@@ -244,7 +326,93 @@ function appendFileRow(
     }
   });
 
+  wireRowContextMenu(row, fullPath, 'file');
   host.appendChild(row);
+}
+
+function appendFlatFileRow(host: HTMLElement, fullPath: string): void {
+  const selected = getFilePanelState().selectedPath === fullPath;
+  const base = basenameOf(fullPath);
+  const parent =
+    fullPath.includes('/') ? fullPath.slice(0, fullPath.length - base.length - 1) : '';
+
+  const row = document.createElement('div');
+  row.className =
+    'file-tree-row file-tree-row--file file-tree-row--flat' + (selected ? ' selected' : '');
+  row.setAttribute('role', 'option');
+  row.style.paddingLeft = `${FILE_TREE_DIR_BASE_PADDING_PX}px`;
+  row.tabIndex = 0;
+
+  const label = document.createElement('span');
+  label.className = 'file-tree-label file-tree-label--flat';
+  if (parent) {
+    const parentSpan = document.createElement('span');
+    parentSpan.className = 'file-tree-path-parent';
+    parentSpan.textContent = `${parent}/`;
+    const baseSpan = document.createElement('span');
+    baseSpan.className = 'file-tree-path-base';
+    baseSpan.textContent = base;
+    label.appendChild(parentSpan);
+    label.appendChild(baseSpan);
+  } else {
+    label.textContent = base;
+  }
+  row.appendChild(label);
+
+  const drag = wireTreeRowDrag(row, fullPath);
+
+  row.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setFocusedRow(fullPath, 'file', row);
+    if (drag.consumeClickAfterDrag()) return;
+    void openFileInViewer(fullPath);
+  });
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      void openFileInViewer(fullPath);
+    }
+  });
+
+  wireRowContextMenu(row, fullPath, 'file');
+  host.appendChild(row);
+}
+
+async function renderFlatResults(host: HTMLElement, root: string, query: string): Promise<void> {
+  const generation = ++filterRenderGeneration;
+  host.innerHTML = '';
+  host.setAttribute('role', 'listbox');
+  host.setAttribute('aria-label', 'Filtered project files');
+
+  const wait = document.createElement('p');
+  wait.className = 'file-tree-loading';
+  wait.textContent = 'Indexing project…';
+  host.appendChild(wait);
+
+  const indexResult = await ensureWorkspaceIndex(root, fetchListing);
+  if (generation !== filterRenderGeneration) return;
+
+  host.innerHTML = '';
+  host.setAttribute('role', 'listbox');
+  host.setAttribute('aria-label', 'Filtered project files');
+
+  if ('error' in indexResult) {
+    renderTreeError(host, indexResult.error);
+    return;
+  }
+
+  const matched = sortFilteredPaths(filterPaths(indexResult, query), query);
+  if (matched.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'file-tree-empty';
+    empty.textContent = 'No matching files';
+    host.appendChild(empty);
+    return;
+  }
+
+  for (const filePath of matched) {
+    appendFlatFileRow(host, filePath);
+  }
 }
 
 function renderSubtree(host: HTMLElement, dirPath: string, depth: number): void {
@@ -276,11 +444,20 @@ export function renderFileTree(): void {
     return;
   }
 
+  const activeFilter = getFilterQuery().trim();
+  if (activeFilter) {
+    const root = getFilePanelState().treeRoot || '.';
+    void renderFlatResults(host, root, activeFilter);
+    return;
+  }
+
   const root = getFilePanelState().treeRoot || '.';
   const rootListing = listingCache.get(root);
 
   if (!rootListing) {
     host.innerHTML = '';
+    host.setAttribute('role', 'tree');
+    host.setAttribute('aria-label', 'Project files');
     const wait = document.createElement('p');
     wait.className = 'file-tree-loading';
     wait.textContent = 'Loading project…';
@@ -334,4 +511,76 @@ export async function initFileTreeIfNeeded(): Promise<void> {
   } else {
     renderFileTree();
   }
+}
+
+function handleTreeKeydown(e: KeyboardEvent): void {
+  if (!getLocalServerAvailable()) return;
+  if (isFileViewerEditorFocused()) return;
+  if (!focusedTreePath || !focusedTreeKind) return;
+
+  const meta = e.metaKey;
+  const ctrl = e.ctrlKey;
+  const mod = meta || ctrl;
+
+  if (mod && (e.key === 'c' || e.key === 'C')) {
+    e.preventDefault();
+    if (focusedTreeKind === 'file') copyPathToClipboard(focusedTreePath);
+    return;
+  }
+  if (mod && (e.key === 'x' || e.key === 'X')) {
+    e.preventDefault();
+    cutPathToClipboard(focusedTreePath);
+    return;
+  }
+  if (mod && (e.key === 'v' || e.key === 'V')) {
+    e.preventDefault();
+    const target = pasteTargetDirForPath(focusedTreePath, focusedTreeKind);
+    void pasteInto(target);
+    return;
+  }
+
+  if (e.key === 'F2') {
+    e.preventDefault();
+    void renamePath(focusedTreePath, focusedTreeKind);
+    return;
+  }
+
+  if (e.key === 'Delete') {
+    e.preventDefault();
+    void deletePath(focusedTreePath, focusedTreeKind);
+  }
+}
+
+/** Bind tree host shortcuts and background context menu (once). */
+export function initFileTreeCrud(): void {
+  if (crudBound) return;
+  crudBound = true;
+
+  const host = document.getElementById('fileTreeHost');
+  if (!host) return;
+
+  host.addEventListener('keydown', handleTreeKeydown);
+
+  host.addEventListener('contextmenu', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.file-tree-row')) return;
+    if (!getLocalServerAvailable()) return;
+    e.preventDefault();
+    hideFileTreeContextMenu();
+    const root = getFilePanelState().treeRoot || '.';
+    showFileTreeBackgroundContextMenu(root, e.clientX, e.clientY);
+  });
+}
+
+/** Test helper: current keyboard focus path in the tree. */
+export function getFocusedTreePathForTests(): {
+  path: string | null;
+  kind: FileTreeEntryKind | null;
+} {
+  return { path: focusedTreePath, kind: focusedTreeKind };
+}
+
+/** Test helper: whether clipboard has items. */
+export function hasFileTreeClipboardForTests(): boolean {
+  return Boolean(getFileTreeClipboard()?.paths.length);
 }
