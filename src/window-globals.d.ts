@@ -9,6 +9,8 @@ declare global {
     toggleSidebarLayout: () => void;
     createChat: () => void;
     fetchModels: () => Promise<void>;
+    loadSelectedModel: () => Promise<void>;
+    unloadSelectedModel: () => Promise<void>;
     toggleDrawer: () => void;
     openSettingsFromTopbar: () => void;
     closeDrawer: () => void;
@@ -17,6 +19,7 @@ declare global {
     closeMobileSidebar: () => void;
     toggleSidebarCollapsed: () => void;
     sendMessage: () => Promise<void>;
+    handleComposerPrimaryAction: () => void;
     toggleStatsPanel: () => void;
     onModelSelectChange: () => void;
     onSystemPromptPresetChange: () => void;
