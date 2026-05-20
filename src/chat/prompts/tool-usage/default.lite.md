@@ -2,7 +2,7 @@
 id: default
 kind: tool-usage
 label: Tool usage (lite)
-version: 2
+version: 3
 part: tool-usage
 ---
 
@@ -14,3 +14,4 @@ Tools: {{enabled_tools}}.
 - Independent calls in parallel; dependent calls sequential.
 - No `rm -rf`, no force-push, no `--no-verify` without explicit approval.
 - One-line summary after a tool sequence, not a transcript.
+- For scope or priority decisions, use `ask_question` (preset options + Other) instead of long prose.

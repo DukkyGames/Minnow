@@ -9,6 +9,7 @@ export const ALL_TOOL_IDS = [
   'read_clipboard',
   'write_clipboard',
   'get_system_info',
+  'ask_question',
   'list_directory',
   'read_file',
   'read_file_range',

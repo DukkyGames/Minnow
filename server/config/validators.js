@@ -235,18 +235,26 @@ export function validateSessionState(raw) {
  * @returns {object}
  */
 export function normalizeToolConfig(raw) {
+  const DEFAULT_ENABLED_TOOL_IDS = new Set([
+    'get_datetime',
+    'calculate',
+    'web_search',
+    'wikipedia_search',
+    'save_memory',
+    'ask_question',
+  ]);
+  const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
+
   const enabled = {};
   const permissions = {};
   for (const id of ALL_TOOL_IDS) {
-    const on = [
-      'get_datetime',
-      'calculate',
-      'web_search',
-      'wikipedia_search',
-      'save_memory',
-    ].includes(id);
+    const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissions[id] = on ? 'ask' : 'off';
+    permissions[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
+      ? 'full'
+      : on
+        ? 'ask'
+        : 'off';
   }
 
   const config = { enabled, permissions, keys: { braveApiKey: '' } };
@@ -277,13 +285,21 @@ export function normalizeToolConfig(raw) {
 
   if (!hadPermissionsInFile) {
     for (const id of ALL_TOOL_IDS) {
-      config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+      if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id) && config.enabled[id]) {
+        config.permissions[id] = 'full';
+      } else {
+        config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+      }
     }
   } else {
     for (const id of ALL_TOOL_IDS) {
       const v = config.permissions[id];
       if (v !== 'full' && v !== 'ask' && v !== 'off') {
-        config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+        if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id) && config.enabled[id]) {
+          config.permissions[id] = 'full';
+        } else {
+          config.permissions[id] = config.enabled[id] ? 'ask' : 'off';
+        }
       }
     }
   }

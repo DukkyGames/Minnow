@@ -17,10 +17,16 @@ import {
 import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
 import type { TerminalRunRecord } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
-import { initTerminalTabs, onTerminalPanelResize } from './terminal-tabs';
+import {
+  detachAllTerminalTabs,
+  initTerminalTabs,
+  isTerminalTabsInitialized,
+  onTerminalPanelResize,
+} from './terminal-tabs';
 import {
   focusTerminalXterm,
   initTerminalXterm,
+  isTerminalXtermReady,
 } from './terminal-xterm';
 
 const MIN_HEIGHT_PX = 120;
@@ -452,9 +458,22 @@ export async function initTerminalPanel(): Promise<void> {
   const shellSelect = document.getElementById(
     'terminalShellSelect',
   ) as HTMLSelectElement | null;
-  if (tabBar && shellSelect && getLocalServerAvailable()) {
-    await initTerminalTabs(tabBar, shellSelect);
+  if (
+    tabBar &&
+    shellSelect &&
+    getLocalServerAvailable() &&
+    isTerminalXtermReady()
+  ) {
+    try {
+      await initTerminalTabs(tabBar, shellSelect);
+    } catch (err) {
+      console.error('Terminal tabs failed to initialize', err);
+    }
   }
+
+  window.addEventListener('pagehide', () => {
+    void detachAllTerminalTabs();
+  });
 
   document.getElementById('btnTerminal')?.addEventListener('click', () => {
     toggleTerminalPanel();
@@ -485,11 +504,19 @@ export function registerTerminalKeyboardShortcut(): void {
 
 export function onTerminalServerAvailabilityChanged(): void {
   updateOfflineBanner();
+  if (!getLocalServerAvailable() || isTerminalTabsInitialized()) return;
+
+  getElements();
   const tabBar = document.getElementById('terminalTabBar');
   const shellSelect = document.getElementById(
     'terminalShellSelect',
   ) as HTMLSelectElement | null;
-  if (getLocalServerAvailable() && tabBar && shellSelect && tabBar.childElementCount === 0) {
-    void initTerminalTabs(tabBar, shellSelect);
+  if (xtermHostEl && !isTerminalXtermReady()) {
+    initTerminalXterm(xtermHostEl);
+  }
+  if (tabBar && shellSelect && isTerminalXtermReady()) {
+    void initTerminalTabs(tabBar, shellSelect).catch((err) => {
+      console.error('Terminal tabs failed to initialize', err);
+    });
   }
 }

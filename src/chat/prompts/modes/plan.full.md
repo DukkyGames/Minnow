@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 2
+version: 3
 description: Produces a detailed build-plan document. Read-only except for the plan file itself.
 profileBodies: split
 toolPolicy:
@@ -45,8 +45,9 @@ Before writing the plan, you MUST:
    - **`large`** — one task per feature, module, or sub-system. Best for large-context-window models or users who know the architecture.
    - **`medium`** — one task per component, route, or logical unit. Functions are grouped together.
    - **`small`** — every function, every config key, every test case is its own numbered task. Best for small-context local models.
-3. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies.
-4. Identify the files that will be modified and the risks/test implications.
+3. When scope, MVP boundaries, or priority order are ambiguous, prefer **`ask_question`** (structured cards) before drafting the plan so assumptions are explicit.
+4. Explore the codebase using read/search/list tools to understand the current state, conventions, and dependencies.
+5. Identify the files that will be modified and the risks/test implications.
 
 If anything is ambiguous, ask the user before writing the plan. Do not assume.
 

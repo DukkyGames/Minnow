@@ -25,6 +25,7 @@ import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
 import './styles/settings-page.css';
 import './styles/tool-approval.css';
+import './styles/question-cards.css';
 import './styles/sub-agent-drawer.css';
 import './styles/pending-turn-recovery.css';
 
@@ -194,10 +195,10 @@ export async function initApp(): Promise<void> {
   initComposerDrop();
   await initFilePanel();
   onFilePanelServerAvailabilityChanged();
-  onTerminalServerAvailabilityChanged();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await initTerminalPanel();
+  onTerminalServerAvailabilityChanged();
   initStatsStrip();
   initChatScroll();
   registerTerminalKeyboardShortcut();

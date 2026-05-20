@@ -1,6 +1,12 @@
 {
-  "generatedAt": "2026-05-20T16:37:40.577Z",
+  "generatedAt": "2026-05-20T18:24:02.674Z",
   "skills": [
+    {
+      "id": "ask-user",
+      "label": "Ask User",
+      "description": "Gather structured answers from the user with the ask_question tool when requirements, scope, or priorities are ambiguous. Use for /ask-user before large plans or multi-feature work.",
+      "source": "builtin"
+    },
     {
       "id": "browser-automation",
       "label": "Browser Automation",

@@ -194,7 +194,7 @@ export function renderChatFromHistory(chat: Chat): void {
         if (!firstToolEl) firstToolEl = toolWrap;
         const stored = toolResultMap.get(tc.id);
         if (stored !== undefined) {
-          renderToolResult(toolWrap, stored.content, stored.attachments);
+          renderToolResult(toolWrap, stored.content, stored.attachments, argsObj);
         }
       }
       if (!prose && firstToolEl) {

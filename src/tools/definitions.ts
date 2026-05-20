@@ -75,7 +75,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (9 browser-native, 31 server-required including 7 CDP browser tools).
+ * All built-in tools (10 browser-native, 31 server-required including 7 CDP browser tools).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
@@ -214,6 +214,63 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       'get_system_info',
       'Get browser user agent, screen size, and related client environment info.',
       {},
+    ),
+  },
+  {
+    id: 'ask_question',
+    label: 'Ask question',
+    description:
+      'Show one or more multiple-choice questions at the bottom of the chat and wait until the user submits answers or cancels.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'ask_question',
+      'Ask the user structured multiple-choice questions. Each question needs at least two preset options (ids and labels). The client adds an "Other" row with free text. Use when you need mutually exclusive choices, priorities, or scope before continuing. Do not use for facts you can read from the workspace.',
+      {
+        title: {
+          type: 'string',
+          description: 'Optional short category or context label shown above the questions.',
+        },
+        questions: {
+          type: 'array',
+          description: 'Questions to show one per card (max 10).',
+          minItems: 1,
+          maxItems: 10,
+          items: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Stable id for this question (returned in answers).',
+              },
+              prompt: { type: 'string', description: 'The question text shown to the user.' },
+              allow_multiple: {
+                type: 'boolean',
+                description: 'If true, user may pick several preset options (not combined with Other in one answer).',
+              },
+              options: {
+                type: 'array',
+                description: 'At least two preset choices. Do not use id "__other__" (reserved for UI).',
+                minItems: 2,
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', description: 'Stable option id returned in answers.' },
+                    label: { type: 'string', description: 'Short title for the choice.' },
+                    description: {
+                      type: 'string',
+                      description: 'Optional longer explanation under the label.',
+                    },
+                  },
+                  required: ['id', 'label'],
+                },
+              },
+            },
+            required: ['id', 'prompt', 'options'],
+          },
+        },
+      },
+      ['questions'],
     ),
   },
 

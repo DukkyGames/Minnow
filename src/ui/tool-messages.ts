@@ -3,6 +3,7 @@
  */
 
 import type { ToolImageAttachment } from '../types';
+import { formatAskQuestionResultAsListItems } from './format-ask-question-result';
 
 /** Max characters shown in expanded result <pre> blocks. */
 const RESULT_DISPLAY_CAP = 2048;
@@ -99,6 +100,16 @@ export function renderToolCall(
   return wrap;
 }
 
+function tryParseArgsFromToolWrap(wrap: HTMLElement): unknown {
+  const pre = wrap.querySelector('.tool-call-pre--args');
+  if (!pre?.textContent) return undefined;
+  try {
+    return JSON.parse(pre.textContent) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Mark a tool-call bubble complete: status glyph, Success/Failed label, result <pre> in body.
  */
@@ -106,6 +117,7 @@ export function renderToolResult(
   wrap: HTMLElement,
   result: string,
   attachments?: ToolImageAttachment[],
+  toolArgs?: Record<string, unknown> | unknown,
 ): void {
   const details = wrap.querySelector('.tool-call-details');
   const summary = wrap.querySelector('.tool-call-summary');
@@ -152,12 +164,36 @@ export function renderToolResult(
   resultLabel.className = 'tool-call-section-label';
   resultLabel.textContent = 'Result';
 
-  const resultPre = document.createElement('pre');
-  resultPre.className = 'tool-call-pre tool-call-pre--result';
-  resultPre.textContent = capDisplayText(result);
+  const useAskQuestionList =
+    toolName === 'ask_question' && !failed && typeof result === 'string';
 
-  body.appendChild(resultLabel);
-  body.appendChild(resultPre);
+  if (useAskQuestionList) {
+    const argsForFormat = toolArgs ?? tryParseArgsFromToolWrap(wrap);
+    const items = formatAskQuestionResultAsListItems(result, argsForFormat);
+    if (items.length > 0) {
+      const list = document.createElement('ol');
+      list.className = 'tool-call-answer-list';
+      for (const line of items) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        list.appendChild(li);
+      }
+      body.appendChild(resultLabel);
+      body.appendChild(list);
+    } else {
+      const resultPre = document.createElement('pre');
+      resultPre.className = 'tool-call-pre tool-call-pre--result';
+      resultPre.textContent = capDisplayText(result);
+      body.appendChild(resultLabel);
+      body.appendChild(resultPre);
+    }
+  } else {
+    const resultPre = document.createElement('pre');
+    resultPre.className = 'tool-call-pre tool-call-pre--result';
+    resultPre.textContent = capDisplayText(result);
+    body.appendChild(resultLabel);
+    body.appendChild(resultPre);
+  }
 
   if (attachments?.length) {
     for (const att of attachments) {
