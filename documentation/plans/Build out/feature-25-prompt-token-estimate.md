@@ -4,31 +4,31 @@ overview: Show an approximate outbound prompt size (~chars/4) in Settings, drive
 todos:
   - id: token-estimate-util
     content: Add src/chat/prompts/token-estimate.ts (chars/4, breakdown types, sum helper)
-    status: pending
+    status: completed
   - id: outbound-estimate-resolver
     content: Add resolveOutboundPromptEstimate() using buildComposeContext + compose + rules + history + tools JSON
-    status: pending
+    status: completed
   - id: loop-refactor-estimate
     content: Refactor loop.ts debug log to use shared estimateTokensFromText()
-    status: pending
+    status: completed
   - id: html-css-header
     content: Add settings header + Prompting section estimate mounts in index.html and settings-page.css
-    status: pending
+    status: completed
   - id: settings-ui-wire
     content: Wire refresh in settings-page.ts / settings-sections.ts with debounced recompute on toggles
-    status: pending
+    status: completed
   - id: tests-unit
     content: Add test/chat/token-estimate.test.mjs and test/chat/outbound-prompt-estimate.test.mts
-    status: pending
+    status: completed
   - id: tests-html
     content: Extend test/ui/settings-page-html.test.mjs for estimate element ids
-    status: pending
+    status: completed
   - id: build-and-npm-test
     content: Run npm run build and npm test; fix regressions
-    status: pending
+    status: completed
   - id: update-context
     content: Update documentation/context.md Settings / prompting bullets after ship
-    status: pending
+    status: completed
   - id: verify-manual
     content: Manual QA — compare estimate vs console group on send; toggle profile/parts/tools
     status: pending
