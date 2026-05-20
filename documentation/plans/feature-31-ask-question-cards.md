@@ -3,8 +3,8 @@
 **Backlog ID:** G1 · `feature-31-ask-question-cards`  
 **Wave:** 8 (Agent UX)  
 **Size:** L  
-**Status:** Planned  
-**Reference UI:** Cursor-style question strip (category label, prompt, radio options with title + description, carousel, submit, Esc cancel)
+**Status:** Shipped  
+**Reference UI:** Cursor-style question strip (category label, prompt, radio options with title + description, carousel, submit on last card, Esc cancel)
 
 ---
 
@@ -35,11 +35,10 @@ Cursor exposes an **`AskQuestion`** tool that blocks the turn until the user pic
 | **Settings** | Tool row in utility category; default **full** permission (no double approval) |
 | **Tests** | Schema validation, queue, UI state machine (unit); optional smoke |
 
-### Out of scope (v1)
+### Out of scope (post-v1)
 
-- Free-text “Other” option per question (v2)
 - Persisting partial answers across page reload mid-question
-- Server-side `/api/questions` (browser-only is enough)
+- Server-side `/api/questions` (browser-only tool)
 - Embedding question cards **inside** the message list (strip only, like approval)
 - MCP-exposed AskQuestion proxy
 
@@ -372,15 +371,15 @@ Update tool count in `context.md` (41 → 42; 9 → 10 browser-native).
 
 ---
 
-## 11. Open decisions (confirm before build)
+## 11. Resolved product decisions
 
-1. **Host order:** `questionHost` above or below `toolApprovalHost` when both used in one session?
-2. **Submit placement:** only on last card vs sticky footer on all cards?
-3. **Skill id:** new `ask-user` built-in vs vendoring `feature-context-gathering` into `src/skills/`.
-4. **Free-text “Other”** — defer to v2?
-5. **Humanized tool result bubble** — ship JSON-only v1 or short summary line?
-
----
+| Topic | Resolution |
+|-------|----------------|
+| Host order | `#toolApprovalHost` then `#questionHost` (tool approval closer to chat). |
+| Submit | Primary **Submit answers** only on the **last** card; earlier cards use carousel arrows. |
+| Skill | Built-in **`ask-user`** at `src/skills/ask-user/SKILL.md`. |
+| Other | **Shipped in v1** — UI adds **Other** + textarea; result uses `__other__` id. |
+| Tool bubble | Full **JSON** in history; expanded Result shows a **numbered list** via `format-ask-question-result` + `renderToolResult`. |
 
 ## 12. Related files
 
@@ -388,5 +387,5 @@ Update tool count in `context.md` (41 → 42; 9 → 10 browser-native).
 |---------|------|
 | Approval precedent | [`src/ui/tool-approval-modal.ts`](../../src/ui/tool-approval-modal.ts), [`src/styles/tool-approval.css`](../../src/styles/tool-approval.css) |
 | Tool loop | [`src/tools/loop.ts`](../../src/tools/loop.ts) |
-| Permissions | [`src/tools/permission-gate.ts`](../../src/tools/permission-gate.ts) — bypass for `ask_question` |
+| Permissions | [`src/tools/permission-gate.ts`](../../src/tools/permission-gate.ts) — `ask_question` is routed before the gate (dedicated UI) |
 | External skill reference | [`.cursor/skills/feature-context-gathering/SKILL.md`](../../../.cursor/skills/feature-context-gathering/SKILL.md) |

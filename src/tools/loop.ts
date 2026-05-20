@@ -771,7 +771,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 chatId: chat.id,
                 toolCallId: tc.id,
               });
-          renderToolResult(toolWrap, toolOut.content, toolOut.attachments);
+          renderToolResult(toolWrap, toolOut.content, toolOut.attachments, args);
 
           chat.history.push({
             role: 'tool',

@@ -21,7 +21,11 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'web_search',
   'wikipedia_search',
   'save_memory',
+  'ask_question',
 ]);
+
+/** Tools that default to full permission (no approval strip before running). */
+export const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
 
 /** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
@@ -30,7 +34,11 @@ export function defaultToolConfig(): ToolConfig {
   for (const tool of BUILT_IN_TOOLS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
     enabled[tool.id] = on;
-    permissions[tool.id] = on ? 'ask' : 'off';
+    permissions[tool.id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id)
+      ? 'full'
+      : on
+        ? 'ask'
+        : 'off';
   }
   return { enabled, permissions, keys: { braveApiKey: '' } };
 }

@@ -177,8 +177,8 @@ function connectWs(sessionId: string, tabId: string): void {
   };
 }
 
-function ensureTerminal(): Terminal {
-  if (!hostEl) throw new Error('terminal xterm host missing');
+function ensureTerminal(): Terminal | null {
+  if (!hostEl) return null;
   if (term) return term;
 
   term = new Terminal({
@@ -227,6 +227,11 @@ export function initTerminalXterm(host: HTMLElement): void {
   hostEl = host;
 }
 
+/** Whether the xterm host element has been registered. */
+export function isTerminalXtermReady(): boolean {
+  return hostEl !== null;
+}
+
 /** Open or reconnect PTY for a tab. */
 export async function attachTerminalTab(
   tab: TerminalTabSession,
@@ -245,6 +250,8 @@ export async function attachTerminalTab(
   lineBuffer = '';
 
   const t = ensureTerminal();
+  if (!t) return;
+
   t.reset();
   t.focus();
 
@@ -253,14 +260,23 @@ export async function attachTerminalTab(
     return;
   }
 
-  const created = await createTerminalSession({
-    shellProfileId: tab.shellProfileId,
-    cols,
-    rows,
-    chatId: null,
-  });
-  tab.sessionId = created.sessionId;
-  connectWs(created.sessionId, tab.tabId);
+  try {
+    const created = await createTerminalSession({
+      shellProfileId: tab.shellProfileId,
+      cols,
+      rows,
+      chatId: null,
+    });
+    tab.sessionId = created.sessionId;
+    connectWs(created.sessionId, tab.tabId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    t.writeln(`\r\n[Terminal] ${message}`);
+    if (message.includes('Maximum')) {
+      tab.sessionId = null;
+    }
+    throw err;
+  }
 }
 
 let attachedTabId: string | null = null;

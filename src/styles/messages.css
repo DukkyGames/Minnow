@@ -56,6 +56,20 @@
   );
 }
 
+/* Question strip sits below approval; offset chip when either or both are visible */
+.main-column:has(#questionHost:not([hidden])) .chat-jump-latest {
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-question-h, 260px) + var(--chat-jump-gap, 36px)
+  );
+}
+
+.main-column:has(#toolApprovalHost:not([hidden])):has(#questionHost:not([hidden])) .chat-jump-latest {
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-approval-h, 200px) +
+      var(--chat-footer-question-h, 260px) + var(--chat-jump-gap, 36px)
+  );
+}
+
 @media (max-width: 600px) {
   /* Collapsed metrics row (expand control only) */
   .chat-jump-latest {
@@ -571,6 +585,23 @@
   overflow-x: auto;
   max-height: 240px;
   overflow-y: auto;
+}
+
+.tool-call-answer-list {
+  margin: 4px 0 0;
+  padding-left: 1.35em;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.tool-call-answer-list li {
+  margin-bottom: 6px;
+}
+
+.tool-call-answer-list li:last-child {
+  margin-bottom: 0;
 }
 
 .tool-call-screenshot {

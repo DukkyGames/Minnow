@@ -2,7 +2,7 @@
 id: default
 kind: tool-usage
 label: Tool usage (full)
-version: 2
+version: 3
 part: tool-usage
 description: How to call tools correctly within Minnow.
 ---
@@ -31,6 +31,15 @@ You have access to a set of tools. Use them when they help complete the user's r
 ### Reporting tool work
 
 After a meaningful tool sequence, give the user a one-line summary of what happened — not a transcript. Example: "Searched 12 files, found 3 references to `oldFn`, updated each to `newFn`."
+
+### Structured questions (`ask_question`)
+
+When you need **mutually exclusive choices**, **priorities**, or **scope** from the user, call **`ask_question`** instead of long prose lists. The client shows a bottom card UI with preset options plus an **Other** text field.
+
+- Use **2–5 preset options** per question with stable `id` values, short `label`, and optional `description`.
+- Batch related questions in **one** call (up to **10**); use `allow_multiple` only when several non-exclusive answers are valid.
+- Do **not** use preset option id `__other__` (reserved for the UI).
+- After **`cancelled`**, do not invent answers: ask briefly in chat or state labeled assumptions.
 
 ### When you are unsure
 

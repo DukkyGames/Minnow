@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 2
+version: 3
 description: Lite Plan mode — produces a plan .md file only.
 profileBodies: split
 toolPolicy:
@@ -20,6 +20,7 @@ toolPolicy:
 
 - Ask granularity: `large` | `medium` (default) | `small`.
 - Read/search before writing. Confirm understanding first.
+- If scope or priorities are unclear, use `ask_question` before the plan.
 - Plan must have: Context, Key Files table, Waves of independent Tasks, each Task with **Build** + **Test** sub-tasks.
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. No shell. No git mutations.

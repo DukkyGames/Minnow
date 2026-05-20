@@ -36,15 +36,15 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 27 | editor-tab-key | Shipped | `8ad1447` |
 | 28 | composer-tools-button | Shipped | `b2e6f7b` |
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
-| 31 | ask-question-cards | Planned | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
+| 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **435** tests (**112** + **323**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **443** tests (**112** + **331**), **0** fail.
 
 ## What it is
 
 Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **41** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **32** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **42** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **32** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **10** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
@@ -73,19 +73,21 @@ Minnow/
 │   │   ├── modes/          # Step 05: registry, tool-policy
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
-│   ├── ui/                 # sidebar, theme.ts (Appearance), settings, stats, messages, tool-approval-modal, …
+│   ├── ui/                 # sidebar, theme.ts (Appearance), settings, stats, messages, tool-approval-modal, question-cards-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
 │   ├── lib/
 │   │   ├── format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
 │   │   └── list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
-│   │   ├── definitions.ts      # 41-tool catalog (OpenAI function schemas)
+│   │   ├── definitions.ts      # 42-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # tools.json sync, permissions, enabled defs
-│   │   ├── browser-executor.ts # 9 browser-native handlers (not CDP)
-│   │   ├── client.ts           # ping, executeTool router, approval gate
+│   │   ├── browser-executor.ts # 9 browser-native handlers (not CDP; ask_question runs via client + UI)
+│   │   ├── client.ts           # ping, executeTool router, approval gate, ask_question → UI queue
 │   │   ├── permission-gate.ts  # modal + path policy before tool runs
 │   │   ├── approval-queue.ts   # serialized approval requests
+│   │   ├── ask-question-queue.ts
+│   │   ├── ask-question-types.ts
 │   │   ├── tool-approval-types.ts
 │   │   ├── describe-invocation.ts
 │   │   ├── path-args.ts
@@ -98,7 +100,7 @@ Minnow/
 │   ├── markdown/renderer.ts
 │   └── styles/
 │       ├── fonts.css tokens.css global.css topbar.css sidebar.css
-│       ├── messages.css input.css settings.css stats.css file-panel.css tool-approval.css responsive.css
+│       ├── messages.css input.css settings.css stats.css file-panel.css tool-approval.css question-cards.css responsive.css
 │       └── thoughts.css    # live thought bubbles + Thoughts panel
 ├── dist/                   # Production build (gitignored)
 └── documentation/
@@ -179,7 +181,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
 | `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean> }` |
 
-**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `impeccable` (Step 14), `ui-designer` (Step 15).
+**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15).
 
 ### Skills → Impeccable built-in (Step 14)
 
@@ -567,18 +569,18 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
 
 - **`permissions`:** per built-in tool id (and optional `mcp__*` keys), one of **`full`** (no approval modal), **`ask`** (modal before each run), **`off`** (tool hidden from the model). Defaults match legacy **enabled** on first load: previously enabled tools become **`ask`**, disabled become **`off`**.
 - **`enabled`:** mirrored from `permissions` (`true` when not `off`) for backward compatibility and older readers.
-- **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search` **on** with **`ask`**; every other catalog id **off** (`defaultToolConfig()` in [`src/config/defaults.ts`](../src/config/defaults.ts)).
+- **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search`, `save_memory`, and **`ask_question`** on by default; `ask_question` uses permission **`full`** (no approval strip — the question UI is the gate). Other catalog ids default **off** (`defaultToolConfig()` in [`src/config/defaults.ts`](../src/config/defaults.ts)); merging stored `tools.json` without permissions still preserves **`full`** for `ask_question` when enabled ([`normalizeToolConfig`](../src/tools/config.ts) and server [`validators.js`](../server/config/validators.js)).
 - **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with a **permission** `<select>` per tool and global/category **Enable all** controls (bulk sets **`ask`** / **`off`**); list `change` delegates to `setToolPermission()` / `setToolsEnabled()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes aligned, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)). On the **full settings page**, `renderToolsSection()` ([`src/ui/settings-sections.ts`](../src/ui/settings-sections.ts)) hydrates from in-memory caches (`loadToolConfigForSettingsUi()`, `loadToolSecurityMeta()` — no network on repeat visits; one retry if boot-time `GET /api/config/tools` failed). Generation guard drops stale async renders. Server storage mode does **not** fall back to empty browser `minnow.tools` when `GET /api/config/tools` fails. Adds a server banner, intro copy, **Filesystem access** radios (restrict vs full disk, with confirm when enabling full), then a single **`.settings-tools-panel`** wrapping the tool list and Brave API key row (styles in [`src/styles/settings-page.css`](../src/styles/settings-page.css)); **`.settings-tools-list .tool-group-head`** adds top padding so category headers sit below the list toolbar divider. **Filesystem access** persists as `config.json` → `toolSecurity.filesystemAccess` via [`src/config/tool-security-meta.ts`](../src/config/tool-security-meta.ts). Each time **Settings → Tools** mounts, `clearMount` replaces the Brave key `<input>` — input/change listeners are re-attached on that fresh node so the key still persists when revisiting the section (the one-shot `toolsSectionInitialized` gate only wraps `registerToolHandlers()`).
 - **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
 - **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables permission selects, and sets `title` on each. `setToolPermission` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
 
-### Ask Question cards (planned — Feature 31)
+### Ask Question cards (Feature 31)
 
-Structured multiple-choice questions from the model: browser-native tool `ask_question`, bottom strip `#questionHost` (carousel, one card per question; same composer-hide pattern as tool approval). Build plan: [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md).
+Structured Q&A from the model via **`ask_question`**: [`executeTool`](../src/tools/client.ts) validates args, queues [`enqueueAskQuestion`](../src/tools/ask-question-queue.ts), and shows [`showQuestionCardsModal`](../src/ui/question-cards-modal.ts) in **`#questionHost`** ([`index.html`](../index.html)) **below** **`#toolApprovalHost`**. One question per card, prev/next carousel, synthetic **Other** row, **Submit answers** on the last card only, **Esc** cancels. While open: **`main-column--question-pending`** hides the composer (same pattern as tool approval). **Stop** calls [`forceCloseAskQuestionModal`](../src/ui/question-cards-modal.ts) from [`stop-generation.ts`](../src/chat/stop-generation.ts). Tool results stay JSON in history; the chat bubble uses a numbered list via [`formatAskQuestionResultForDisplay`](../src/ui/format-ask-question-result.ts) and [`renderToolResult`](../src/ui/tool-messages.ts). Types: [`ask-question-types.ts`](../src/tools/ask-question-types.ts). Styles: [`question-cards.css`](../src/styles/question-cards.css).
 
 ### Tool approval (execution gate)
 
-Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/client.ts) awaits [`ensureToolConfigReady`](../src/tools/config.ts) then calls [`maybeBlockToolForUserApproval`](../src/tools/permission-gate.ts): **`ask`** always shows the approval strip; **`full`** still shows it when a path argument resolves **outside the workspace** while `toolSecurity.filesystemAccess` is **`workspace`**. The strip mounts in **`#toolApprovalHost`** in [`index.html`](../index.html) (between `#chatArea` and the composer). While it is open, **`#mainColumn`** gets **`main-column--tool-approval-pending`**, which hides **`.input-bar`** (composer) via CSS; the textarea and send button are also disabled until the user chooses **Allow once**, **Always allow** (writes **`full`** for that tool; **`saveToolConfigAsync`** awaits **`PUT /api/config/tools`** when using `npm start`), or **Cancel** (`Error: User denied tool execution`). Optional digit shortcuts **1 / 2 / 3** apply while the strip is open (not only when a button inside it is focused; the composer is disabled so focus often sits on **`<body>`**). They are suppressed if focus is in another editable control outside the host. **Esc** cancels. Queue: [`src/tools/approval-queue.ts`](../src/tools/approval-queue.ts); payload types: [`src/tools/tool-approval-types.ts`](../src/tools/tool-approval-types.ts); UI: [`src/ui/tool-approval-modal.ts`](../src/ui/tool-approval-modal.ts). Sub-agent tools use the same strip with the parent chat id threaded from [`setSubAgentExecutorContext`](../src/tools/sub-agent-executor.ts) → spawn → orchestrator → [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts).
+Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/client.ts) awaits [`ensureToolConfigReady`](../src/tools/config.ts) then calls [`maybeBlockToolForUserApproval`](../src/tools/permission-gate.ts) (**skipped** for `ask_question` — it uses its own strip): **`ask`** always shows the approval strip; **`full`** still shows it when a path argument resolves **outside the workspace** while `toolSecurity.filesystemAccess` is **`workspace`**. The strip mounts in **`#toolApprovalHost`** in [`index.html`](../index.html) (above **`#questionHost`**, between **`#chatArea`** and the composer). While it is open, **`#mainColumn`** gets **`main-column--tool-approval-pending`**, which hides **`.input-bar`** (composer) via CSS; the textarea and send button are also disabled until the user chooses **Allow once**, **Always allow** (writes **`full`** for that tool; **`saveToolConfigAsync`** awaits **`PUT /api/config/tools`** when using `npm start`), or **Cancel** (`Error: User denied tool execution`). Optional digit shortcuts **1 / 2 / 3** apply while the strip is open (not only when a button inside it is focused; the composer is disabled so focus often sits on **`<body>`**). They are suppressed if focus is in another editable control outside the host. **Esc** cancels. Queue: [`src/tools/approval-queue.ts`](../src/tools/approval-queue.ts); payload types: [`src/tools/tool-approval-types.ts`](../src/tools/tool-approval-types.ts); UI: [`src/ui/tool-approval-modal.ts`](../src/ui/tool-approval-modal.ts). Sub-agent tools use the same strip with the parent chat id threaded from [`setSubAgentExecutorContext`](../src/tools/sub-agent-executor.ts) → spawn → orchestrator → [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts).
 
 ### Path policy (server)
 
@@ -725,7 +727,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
 | xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
-| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` |
+| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (init once after `initTerminalXterm`; `pagehide` kills PTY sessions) |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
 | Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun, tabs[], activeTabId, defaultShellProfileId }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
@@ -976,7 +978,7 @@ Order in `initApp()`:
 | [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
-| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 41-tool catalog |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 42-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `minnow.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |

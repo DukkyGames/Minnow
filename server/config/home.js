@@ -157,7 +157,10 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'web_search',
   'wikipedia_search',
   'save_memory',
+  'ask_question',
 ]);
+
+const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
 
 function defaultToolsJson() {
   const enabled = {};
@@ -165,7 +168,11 @@ function defaultToolsJson() {
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissions[id] = on ? 'ask' : 'off';
+    permissions[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
+      ? 'full'
+      : on
+        ? 'ask'
+        : 'off';
   }
   return { enabled, permissions, keys: { braveApiKey: '' } };
 }

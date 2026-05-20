@@ -24,6 +24,7 @@ let tabBarEl: HTMLElement | null = null;
 let shellSelectEl: HTMLSelectElement | null = null;
 let profiles: ShellProfile[] = [];
 const liveTabs = new Map<string, TerminalTabSession>();
+let tabsInitialized = false;
 
 function randomTabId(): string {
   return crypto.randomUUID();
@@ -122,7 +123,13 @@ async function switchTab(tabId: string): Promise<void> {
   if (!tab) return;
 
   disconnectActiveTerminalWs();
-  await attachTerminalTab(tab);
+  try {
+    await attachTerminalTab(tab);
+  } catch {
+    renderTabBar(tabId);
+    await persistTabs(tabId);
+    return;
+  }
   renderTabBar(tabId);
   await persistTabs(tabId);
   focusTerminalXterm();
@@ -175,11 +182,27 @@ export async function closeTab(tabId: string): Promise<void> {
   }
 }
 
+/** Whether tab bar wiring and restore have completed. */
+export function isTerminalTabsInitialized(): boolean {
+  return tabsInitialized;
+}
+
+/** Close all live tabs and kill server PTY sessions (e.g. on page unload). */
+export async function detachAllTerminalTabs(): Promise<void> {
+  for (const tab of liveTabs.values()) {
+    await detachTerminalTab(tab, true);
+  }
+  liveTabs.clear();
+  tabsInitialized = false;
+  if (tabBarEl) tabBarEl.innerHTML = '';
+}
+
 /** Initialize tab UI and restore persisted tabs. */
 export async function initTerminalTabs(
   tabBar: HTMLElement,
   shellSelect: HTMLSelectElement,
 ): Promise<void> {
+  if (tabsInitialized) return;
   tabBarEl = tabBar;
   shellSelectEl = shellSelect;
 
@@ -216,6 +239,8 @@ export async function initTerminalTabs(
   } else {
     await addTab(meta.defaultShellProfileId);
   }
+
+  tabsInitialized = true;
 }
 
 export function onTerminalPanelResize(): void {

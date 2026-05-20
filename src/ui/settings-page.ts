@@ -256,6 +256,8 @@ export function openSettings(section?: SettingsSectionId): void {
   const shell = getChatShell();
   if (!root || !shell) return;
 
+  const wasAlreadyOpen = root.classList.contains('is-open');
+
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');
@@ -267,9 +269,9 @@ export function openSettings(section?: SettingsSectionId): void {
   void detectLocalServer().then(() => refreshPromptTokenEstimate());
 
   const target = section ?? parseHashSection();
-  // Nav clicks update the hash after setActiveSection; hashchange would otherwise
-  // re-open the same section and race async section renders (duplicate lists).
-  if (root.classList.contains('is-open') && target === activeSection) {
+  // Skip re-render only when settings was already open on this section (nav uses
+  // setActiveSection directly). First open must render even when target is general.
+  if (wasAlreadyOpen && target === activeSection) {
     return;
   }
   setActiveSection(target);

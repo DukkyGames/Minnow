@@ -21,6 +21,8 @@ import {
   type OpenAIFunctionDefinition,
   type ToolDefinition,
 } from './definitions';
+import { enqueueAskQuestion } from './ask-question-queue';
+import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 
 /** Ping timeout for local dev server detection (ms). */
@@ -108,6 +110,25 @@ export async function executeTool(
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
   await ensureToolConfigReady();
+
+  if (name === 'ask_question') {
+    if (!isToolEnabled('ask_question')) {
+      return {
+        content:
+          'Error: tool "ask_question" is disabled in Settings (set permission to Ask or Full to use it).',
+      };
+    }
+    const parsed = validateAskQuestionArgs(args);
+    if (parsed.ok === false) {
+      return {
+        content: stringifyAskQuestionResult({ status: 'error', message: parsed.error }),
+      };
+    }
+    const content = await enqueueAskQuestion(parsed.args, {
+      subAgentType: context.subAgentType,
+    });
+    return { content };
+  }
 
   if (name.startsWith('mcp__')) {
     if (!isLocalServerAvailable()) {

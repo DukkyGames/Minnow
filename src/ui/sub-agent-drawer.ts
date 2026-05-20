@@ -112,7 +112,7 @@ function renderTranscript(body: HTMLElement, messages: unknown[]): void {
           body.appendChild(wrap);
           const stored = toolResultMap.get(tc.id);
           if (stored) {
-            renderToolResult(wrap, stored.content, stored.attachments);
+            renderToolResult(wrap, stored.content, stored.attachments, argsObj);
           }
         }
       }
