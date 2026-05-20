@@ -371,6 +371,8 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 | Styles | `src/styles/file-panel.css` |
 | Markup | `index.html` — `#fileSidebar`, `#workspaceSplit`, `#fileViewerPane` |
 
+**Tree row density (E4 / feature-21):** Default rows are compact (`min-height: 0`, tighter padding in `file-panel.css`); `@media (pointer: coarse)` restores `min-height: var(--touch-min)` (44px) and touch padding. Depth indent: `src/ui/file-tree-indent.ts` (`FILE_TREE_DEPTH_INDENT_PX` = 12, dir/file base 6 / 24), re-exported from `file-tree.ts`.
+
 **Server:** Tree and viewer call `executeTool()` directly (`POST /api/tools`); tool catalog toggles in Settings are **not** required. Offline (`npm run dev`): empty state “Start with `npm start`…”. On boot, after `detectLocalServer()`, `initFilePanel()` and `onFilePanelServerAvailabilityChanged()` load the tree when the server is up (no need to open the Files panel or click refresh).
 
 **Persistence (`filePanel`):** `fileSidebarCollapsed`, `viewerOpen`, `splitRatio` (0.35–0.75), `expandedDirs`, `selectedPath`, `treeRoot`. No dedicated `localStorage` key when config API is up.
@@ -552,11 +554,22 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage`.
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **2**).
+
+| Concern | Location |
+|---------|----------|
+| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 2`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts` |
+| Server validate / migrate | `server/config/validators.js` (accepts v1 input, persists v2) |
+| Sidebar filter + Unassigned | `src/ui/sidebar.ts`, `src/styles/sidebar.css` |
+| Workspace switch hook | `onWorkspaceChanged()` in `sessions.ts`; `applyWorkspaceScopedSession()` in `sidebar.ts`; `applyWorkspaceSwitch()` in `workspace-button.ts` (B1 recent menu uses same path) |
+
+**Workspace-scoped chats (B2):** Each chat has **`workspacePath`** (normalized absolute root at create; `''` = unassigned). The sidebar lists chats for **`getWorkspacePath()`** only; legacy pre-v2 chats appear under a collapsible **Unassigned** section (`workspacePath === ''`). **New chat** binds the current workspace. **Workspace switch** restores **`lastActiveChatIdByWorkspace`** (per normalized path key) or newest chat on that path, or creates a new empty scoped chat.
+
+**Migration v1→v2:** Client `parseSessionStateFromJson` and server `validateSessionState` set `workspacePath: ''` on legacy chats (no auto-bind). Defaults: `src/config/defaults.ts`, `server/config/home.js`.
 
 - At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
-- Delete chat: confirm dialog; deleting active chat switches to latest other or creates a new empty session.
+- Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace.
 
 ### Programmatic chat titles (Step 07)
 

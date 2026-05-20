@@ -3,7 +3,7 @@
 **Backlog ID:** F5 · `feature-28-composer-tools-button`  
 **Wave:** 4 (Settings completeness)  
 **Size:** M  
-**Status:** Plan only (not implemented)
+**Status:** Implemented
 
 ---
 
