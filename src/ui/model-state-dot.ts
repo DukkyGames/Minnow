@@ -39,6 +39,7 @@ export function updateModelStateDot(modelId?: string): void {
 
   if (dot) {
     dot.title = DOT_TITLES[dataState];
+    dot.dataset.loadState = dataState;
   }
 
   const optionLabel = sel.options[sel.selectedIndex]?.text?.trim() || id || 'Model';

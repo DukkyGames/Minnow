@@ -9,6 +9,7 @@ import {
   setWorkspaceRoot,
   validateWorkspacePath,
 } from './root.js';
+import { browseWorkspaceFolders } from './browse.js';
 import { pickWorkspaceFolder } from './pick-folder.js';
 
 function setCorsHeaders(res) {
@@ -43,9 +44,10 @@ function readJsonBody(req) {
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
+ * @param {URLSearchParams} [searchParams]
  * @returns {Promise<boolean>}
  */
-export async function handleWorkspaceRequest(req, res, pathname) {
+export async function handleWorkspaceRequest(req, res, pathname, searchParams = new URLSearchParams()) {
   setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
@@ -55,6 +57,13 @@ export async function handleWorkspaceRequest(req, res, pathname) {
   }
 
   try {
+    if (pathname === '/api/workspace/browse' && req.method === 'GET') {
+      const browsePath = searchParams.get('path') ?? '';
+      const listing = await browseWorkspaceFolders(browsePath);
+      sendJson(res, 200, { ok: true, ...listing });
+      return true;
+    }
+
     if (pathname === '/api/workspace' && req.method === 'GET') {
       const recent = await buildRecentWorkspaceList();
       sendJson(res, 200, { ok: true, ...getWorkspaceInfo(), recent });
@@ -129,12 +138,13 @@ export async function handleWorkspaceRequest(req, res, pathname) {
 /** Vite connect middleware factory. */
 export function createWorkspaceMiddleware() {
   return async (req, res, next) => {
-    const url = req.url?.split('?')[0] ?? '';
-    if (!url.startsWith('/api/workspace')) {
+    const rawUrl = req.url ?? '/';
+    const parsed = new URL(rawUrl, 'http://127.0.0.1');
+    if (!parsed.pathname.startsWith('/api/workspace')) {
       next();
       return;
     }
-    const handled = await handleWorkspaceRequest(req, res, url);
+    const handled = await handleWorkspaceRequest(req, res, parsed.pathname, parsed.searchParams);
     if (!handled) {
       next();
     }

@@ -48,7 +48,9 @@ describe('topbar layout (feature-01)', () => {
     assert.match(endBlock, /class="status-pill"/);
     assert.match(endBlock, /class="model-wrap"/);
     assert.match(endBlock, /data-model-state/);
-    assert.match(endBlock, /class="model-state-dot"/);
+    assert.match(endBlock, /class="model-state-dot model-load-dot"/);
+    assert.match(endBlock, /id="modelSelectTrigger"/);
+    assert.match(endBlock, /id="modelSelectMenu"/);
   });
 
   for (const pattern of fixture.forbiddenPatterns) {

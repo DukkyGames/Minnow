@@ -14,6 +14,8 @@ const DROP_TARGET_CLASS = 'file-tree-row--drop-target';
 
 let hostBound: HTMLElement | null = null;
 let moveInFlight = false;
+/** Set on dragstart; dragover cannot read DataTransfer.getData in most browsers. */
+let activeDragSourcePath: string | null = null;
 
 function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
   if (!dataTransfer) return false;
@@ -91,7 +93,23 @@ async function handleTreeDrop(
   }
 }
 
+function pathFromDragRow(target: EventTarget | null): string | null {
+  if (!(target instanceof HTMLElement)) return null;
+  const row = target.closest('.file-tree-row[data-path]');
+  if (!(row instanceof HTMLElement)) return null;
+  const path = row.dataset.path?.trim();
+  return path || null;
+}
+
 function bindHost(host: HTMLElement): void {
+  host.addEventListener(
+    'dragstart',
+    (event) => {
+      activeDragSourcePath = pathFromDragRow(event.target);
+    },
+    true,
+  );
+
   host.addEventListener('dragover', (event) => {
     if (moveInFlight || !getLocalServerAvailable()) return;
     if (!hasWorkspaceDrag(event.dataTransfer)) return;
@@ -99,11 +117,10 @@ function bindHost(host: HTMLElement): void {
     const row = folderRowFromTarget(event.target);
     if (!row?.dataset.path) return;
 
-    const source =
-      event.dataTransfer?.getData(WORKSPACE_FILE_MIME) ||
-      event.dataTransfer?.getData('text/plain') ||
-      '';
-    const destination = computeMoveDestination(source.trim(), row.dataset.path);
+    const source = activeDragSourcePath?.trim() ?? '';
+    if (!source) return;
+
+    const destination = computeMoveDestination(source, row.dataset.path);
     if (!destination) return;
 
     event.preventDefault();
@@ -136,6 +153,7 @@ function bindHost(host: HTMLElement): void {
   });
 
   host.addEventListener('dragend', () => {
+    activeDragSourcePath = null;
     clearDropHighlight(host);
   });
 }
@@ -154,4 +172,5 @@ export function initFileTreeDnD(): void {
 export function resetFileTreeDnDForTests(): void {
   hostBound = null;
   moveInFlight = false;
+  activeDragSourcePath = null;
 }

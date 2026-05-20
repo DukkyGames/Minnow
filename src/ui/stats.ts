@@ -1,3 +1,4 @@
+import { STATS_STRIP_OPEN_KEY } from '../constants';
 import type { LastStats, ModelInfo, Stats, Usage } from '../types';
 
 export function buildLastStatsSnapshot(stats: Stats | undefined, usage: Usage | undefined): LastStats {
@@ -23,8 +24,69 @@ export function formatSidebarStatsPreview(ls: LastStats | null | undefined): str
   return parts.length ? parts.join(' · ') : '—';
 }
 
+/** Whether the bottom metrics strip is visible (not fully collapsed). */
+export function isStatsStripOpen(): boolean {
+  const strip = document.getElementById('statsStrip');
+  return strip ? !strip.classList.contains('is-collapsed') : false;
+}
+
+/** Show or hide the entire metrics strip; syncs the top-bar toggle. */
+export function setStatsStripOpen(open: boolean): void {
+  const strip = document.getElementById('statsStrip');
+  const topBtn = document.getElementById('btnStats');
+  if (!strip) return;
+
+  const wasOpen = isStatsStripOpen();
+  strip.classList.toggle('is-collapsed', !open);
+  topBtn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+  if (!open) {
+    strip.classList.remove('is-expanded');
+    const expandBtn = document.getElementById('statsExpandBtn');
+    expandBtn?.setAttribute('aria-expanded', 'false');
+  }
+
+  if (wasOpen !== open) {
+    try {
+      localStorage.setItem(STATS_STRIP_OPEN_KEY, open ? '1' : '0');
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }
+}
+
+export function openStatsStrip(): void {
+  setStatsStripOpen(true);
+}
+
+export function closeStatsStrip(): void {
+  setStatsStripOpen(false);
+}
+
+export function toggleStatsStrip(): void {
+  setStatsStripOpen(!isStatsStripOpen());
+}
+
+/** Wire top-bar metrics button and restore last open/closed preference. */
+export function initStatsStrip(): void {
+  let open = false;
+  try {
+    open = localStorage.getItem(STATS_STRIP_OPEN_KEY) === '1';
+  } catch {
+    open = false;
+  }
+  setStatsStripOpen(open);
+  document.getElementById('btnStats')?.addEventListener('click', () => {
+    toggleStatsStrip();
+  });
+}
+
+/** Expand or collapse the detailed metrics panel inside an open strip. */
 export function toggleStatsPanel(): void {
   const strip = document.getElementById('statsStrip')!;
+  if (strip.classList.contains('is-collapsed')) {
+    setStatsStripOpen(true);
+  }
   const btn = document.getElementById('statsExpandBtn')!;
   const expanded = strip.classList.toggle('is-expanded');
   btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');

@@ -124,6 +124,9 @@
         <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
       </svg>
     </button>
+    <button class="icon-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
+    </button>
     <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
     </button>
@@ -136,13 +139,16 @@
 
   <div class="topbar-end">
     <div class="model-wrap" data-model-state="unknown">
-      <span class="model-state-dot" id="modelStateDot" aria-hidden="true"></span>
-      <label class="visually-hidden" for="modelSelect">Model</label>
-      <div class="model-select-inner">
-        <select id="modelSelect" onchange="onModelSelectChange()"></select>
+      <label class="visually-hidden" id="modelSelectLabel" for="modelSelectTrigger">Model</label>
+      <div class="model-select-inner" id="modelSelectRoot">
+        <span class="model-state-dot model-load-dot" id="modelStateDot" aria-hidden="true"></span>
+        <select id="modelSelect" class="model-select-native" tabindex="-1" aria-hidden="true" onchange="onModelSelectChange()"></select>
+        <button type="button" class="model-select-trigger" id="modelSelectTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSelectMenu">
+          <span class="model-select-trigger-text" id="modelSelectTriggerText">Loading models…</span>
+        </button>
+        <ul class="model-select-menu hidden" id="modelSelectMenu" role="listbox" aria-labelledby="modelSelectLabel"></ul>
       </div>
-      <button type="button" id="btnLoadModel" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="loadSelectedModel()">Load</button>
-      <button type="button" id="btnUnloadModel" class="model-action-btn" hidden aria-label="Unload model" title="Unload selected model from VRAM" onclick="unloadSelectedModel()">Unload</button>
+      <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="toggleSelectedModelLoad()">Load</button>
     </div>
     <div class="status-pill" role="status" aria-live="polite">
       <div class="s-dot" id="sDot" aria-hidden="true"></div>
@@ -486,7 +492,7 @@
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon" aria-hidden="true">
-          <svg class="minnow-glyph icon-svg" width="32" height="32" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+          <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
@@ -552,7 +558,7 @@
     </div>
 
     <!-- Stats strip -->
-    <div class="stats-strip" id="statsStrip">
+    <div class="stats-strip is-collapsed" id="statsStrip">
       <button type="button" class="stats-expand-btn" id="statsExpandBtn" aria-label="Show inference metrics" aria-expanded="false" aria-controls="statsPanel" onclick="toggleStatsPanel()">
         <span class="stats-expand-label">Metrics</span>
         <span class="stats-expand-preview" id="statsExpandPreview">— t/s · — tokens</span>
@@ -660,20 +666,21 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
+    <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" role="region"
+      aria-labelledby="fileTreeMoveConfirmTitle" hidden>
+      <div class="file-tree-move-confirm__content">
+        <p id="fileTreeMoveConfirmTitle" class="file-tree-move-confirm__title" data-move-title>Move file?</p>
+        <p class="file-tree-move-confirm__body" data-move-body></p>
+        <p class="file-tree-move-confirm__paths" data-move-paths></p>
+      </div>
+      <div class="file-tree-move-confirm__actions">
+        <button type="button" class="file-tree-move-confirm__btn" data-move-cancel>Cancel</button>
+        <button type="button" class="file-tree-move-confirm__btn file-tree-move-confirm__btn--primary" data-move-confirm>Move</button>
+      </div>
+    </div>
     <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
   </aside>
 </div>
-<dialog id="fileTreeMoveDialog" class="file-tree-move-dialog" aria-labelledby="fileTreeMoveDialogTitle">
-  <form method="dialog" class="file-tree-move-dialog__card">
-    <h2 id="fileTreeMoveDialogTitle" class="file-tree-move-dialog__title" data-move-title>Move file?</h2>
-    <p class="file-tree-move-dialog__body" data-move-body></p>
-    <p class="file-tree-move-dialog__paths" data-move-paths></p>
-    <div class="file-tree-move-dialog__actions">
-      <button type="submit" class="file-tree-move-dialog__btn" value="cancel" data-move-cancel>Cancel</button>
-      <button type="submit" class="file-tree-move-dialog__btn file-tree-move-dialog__btn--primary" value="confirm" data-move-confirm>Move</button>
-    </div>
-  </form>
-</dialog>
 <script>
   /* Fallback if the module bundle fails to boot (avoids an infinite loader). */
   setTimeout(function () {

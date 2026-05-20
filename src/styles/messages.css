@@ -18,7 +18,10 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--input-bar-h, 120px) + 16px);
+  /* Above composer + stats strip (old offset ignored metrics and sat on the textarea) */
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-input-h, 172px) + var(--chat-jump-gap, 36px)
+  );
   z-index: 12;
   padding: 8px 16px;
   border-radius: 999px;
@@ -46,6 +49,20 @@
   display: none;
 }
 
+/* Tool approval replaces the composer; keep the chip above that strip */
+.main-column:has(#toolApprovalHost:not([hidden])) .chat-jump-latest {
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-approval-h, 200px) + var(--chat-jump-gap, 36px)
+  );
+}
+
+@media (max-width: 600px) {
+  /* Collapsed metrics row (expand control only) */
+  .chat-jump-latest {
+    --chat-footer-stats-h: 44px;
+  }
+}
+
 /* Empty state */
 .empty-state {
   flex: 1;
@@ -62,8 +79,8 @@
 }
 
 .empty-icon {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   border-radius: var(--radius-md);
   background: var(--accent);
   border: 1px solid var(--border);
@@ -72,6 +89,11 @@
   justify-content: center;
   margin-bottom: 8px;
   color: var(--bg);
+}
+
+.empty-icon svg {
+  width: 48px;
+  height: 48px;
 }
 
 .empty-title {

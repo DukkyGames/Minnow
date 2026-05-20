@@ -31,6 +31,8 @@ export const PLACEHOLDER_CHAT_NAME = 'New chat';
 export const AUTO_TITLE_MAX_LEN = 40;
 /** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */
 export const PRESET_STORAGE_KEY = 'minnow.systemPrompt';
+/** Whether the inference metrics strip is visible (`'1'` / `'0'`). */
+export const STATS_STRIP_OPEN_KEY = 'minnow.statsStripOpen';
 export const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 
 /** Built-in system prompt presets for the settings drawer. */

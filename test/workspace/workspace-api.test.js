@@ -17,7 +17,7 @@ import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 function createWorkspaceTestServer() {
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-    void handleWorkspaceRequest(req, res, url.pathname).then((handled) => {
+    void handleWorkspaceRequest(req, res, url.pathname, url.searchParams).then((handled) => {
       if (!handled) {
         res.statusCode = 404;
         res.end('not found');
@@ -245,5 +245,42 @@ describe('workspace API', () => {
     await initWorkspaceRoot();
     const info = getWorkspaceInfo();
     assert.equal(path.resolve(info.path), path.resolve(workspaceDir));
+  });
+
+  test('GET browse without path returns quick roots', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'GET', '/api/workspace/browse');
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.path, '');
+    assert.equal(json.parent, null);
+    assert.ok(Array.isArray(json.entries));
+    assert.ok(json.entries.length >= 1);
+    const home = json.entries.find((e) => e.name === 'Home');
+    assert.ok(home);
+    assert.ok(typeof home.path === 'string' && home.path.length > 0);
+  });
+
+  test('GET browse lists child directories only', async () => {
+    const childDir = path.join(workspaceDir, 'nested-browse');
+    await fs.mkdir(childDir, { recursive: true });
+    await fs.writeFile(path.join(workspaceDir, 'only-file.txt'), 'x', 'utf8');
+
+    const q = `?path=${encodeURIComponent(workspaceDir)}`;
+    const { status, json } = await httpRequest(baseUrl, 'GET', `/api/workspace/browse${q}`);
+    assert.equal(status, 200);
+    assert.equal(path.resolve(json.path), path.resolve(workspaceDir));
+    assert.ok(json.parent !== null);
+    const names = json.entries.map((e) => e.name);
+    assert.ok(names.includes('nested-browse'));
+    assert.ok(!names.includes('only-file.txt'));
+    assert.ok(!names.includes('README.md'));
+  });
+
+  test('GET browse rejects missing directory', async () => {
+    const missing = path.join(homeDir, 'browse-missing-xyz');
+    const q = `?path=${encodeURIComponent(missing)}`;
+    const { status, json } = await httpRequest(baseUrl, 'GET', `/api/workspace/browse${q}`);
+    assert.equal(status, 400);
+    assert.match(json.error, /does not exist/i);
   });
 });

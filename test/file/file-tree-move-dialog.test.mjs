@@ -10,17 +10,18 @@ function setupDom() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
-  globalThis.HTMLDialogElement = window.HTMLDialogElement;
+  globalThis.HTMLButtonElement = window.HTMLButtonElement;
   document.body.innerHTML = `
-    <dialog id="fileTreeMoveDialog" class="file-tree-move-dialog">
-      <form method="dialog" class="file-tree-move-dialog__card">
-        <h2 data-move-title>Move file?</h2>
+    <aside id="fileSidebar" class="file-sidebar">
+      <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" hidden>
+        <p data-move-title>Move file?</p>
         <p data-move-body></p>
         <p data-move-paths></p>
-        <button type="submit" value="cancel" data-move-cancel>Cancel</button>
-        <button type="submit" value="confirm" data-move-confirm>Move</button>
-      </form>
-    </dialog>
+        <button type="button" data-move-cancel>Cancel</button>
+        <button type="button" data-move-confirm>Move</button>
+      </div>
+      <div id="fileTreeHost" role="tree"></div>
+    </aside>
   `;
 }
 
@@ -31,8 +32,8 @@ describe('file-tree-move-dialog', () => {
 
   test('Cancel resolves false', async () => {
     setupDom();
-    const dialog = document.getElementById('fileTreeMoveDialog');
-    assert.ok(dialog);
+    const banner = document.getElementById('fileTreeMoveConfirm');
+    assert.ok(banner);
 
     const promise = showMoveConfirmDialog({
       source: 'a.ts',
@@ -41,15 +42,17 @@ describe('file-tree-move-dialog', () => {
     });
 
     await Promise.resolve();
-    dialog.close('cancel');
+    assert.equal(banner.hidden, false);
+    banner.querySelector('[data-move-cancel]').click();
     const confirmed = await promise;
     assert.equal(confirmed, false);
+    assert.equal(banner.hidden, true);
   });
 
   test('Move resolves true', async () => {
     setupDom();
-    const dialog = document.getElementById('fileTreeMoveDialog');
-    assert.ok(dialog);
+    const banner = document.getElementById('fileTreeMoveConfirm');
+    assert.ok(banner);
 
     const promise = showMoveConfirmDialog({
       source: 'pkg/index.ts',
@@ -58,8 +61,9 @@ describe('file-tree-move-dialog', () => {
     });
 
     await Promise.resolve();
-    dialog.close('confirm');
+    banner.querySelector('[data-move-confirm]').click();
     const confirmed = await promise;
     assert.equal(confirmed, true);
+    assert.equal(banner.hidden, true);
   });
 });

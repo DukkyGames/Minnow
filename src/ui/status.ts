@@ -1,6 +1,7 @@
 import { parseServerBaseUrl as parseServerBaseUrlImpl } from '../lib/parse-server-base-url';
 import { closeMobileFileSidebar } from './file-layout';
 import { closeMobileSidebar } from './layout';
+import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 
 /** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
@@ -39,6 +40,7 @@ export function setReadyStatus(): void {
 
 /** Close settings drawer or mobile chat list when Escape is pressed. */
 export function dismissOpenLayers(): void {
+  closeModelSelectMenu();
   closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {

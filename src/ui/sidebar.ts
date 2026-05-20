@@ -26,6 +26,7 @@ import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
 import { updateModelStateDot } from './model-state-dot';
+import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
 import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
@@ -39,6 +40,7 @@ export function syncModelSelectForActiveChat(): void {
   if (chat.modelId && opts.includes(chat.modelId)) sel.value = chat.modelId;
   updateModelStateDot(sel.value);
   updateModelLoadUnloadButtons();
+  syncModelSelectPicker();
 }
 
 export function onModelSelectChange(): void {
@@ -48,6 +50,7 @@ export function onModelSelectChange(): void {
   scheduleSaveSessions();
   updateModelStateDot(chat.modelId);
   updateModelLoadUnloadButtons();
+  syncModelSelectPicker();
   showCachedModelInfo();
 }
 

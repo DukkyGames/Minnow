@@ -11,7 +11,8 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
-  z-index: 10;
+  /* Above sidebars (34–36) so topbar dropdowns (model picker, etc.) paint on top */
+  z-index: 40;
 }
 
 /* Topbar zones: brand | actions | spacer | end (model + status) */
@@ -77,26 +78,10 @@
 .model-wrap {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   flex: 0 1 auto;
   min-width: 0;
   max-width: 340px;
-}
-
-.model-state-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-muted);
-}
-
-.model-wrap[data-model-state="loaded"] .model-state-dot {
-  background: var(--success);
-}
-
-.model-wrap[data-model-state="unloaded"] .model-state-dot {
-  background: var(--text-muted);
 }
 
 .model-select-inner {
@@ -105,30 +90,19 @@
   min-width: 10rem;
 }
 
-.model-select-inner select {
-  width: 100%;
-  min-height: 40px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  padding: 8px 32px 8px 12px;
-  outline: none;
-  appearance: none;
-  cursor: pointer;
-  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.model-select-inner .model-state-dot {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
-.model-select-inner select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+.model-wrap[data-model-state="loaded"] .model-state-dot {
+  background: var(--success);
+  border-color: var(--success);
 }
-
-.model-select-inner select option { background: var(--bg); }
 
 .model-select-inner::after {
   content: '';
@@ -147,7 +121,8 @@
 .model-action-btn {
   flex-shrink: 0;
   min-height: 40px;
-  padding: 8px 10px;
+  min-width: 4.5rem;
+  padding: 10px 14px;
   font-size: 12px;
   font-family: var(--font-ui);
   color: var(--text);

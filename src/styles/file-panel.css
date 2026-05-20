@@ -220,6 +220,7 @@
 .file-sidebar.collapsed .file-sidebar-title,
 .file-sidebar.collapsed .file-tree-host,
 .file-sidebar.collapsed .file-tree-search-wrap,
+.file-sidebar.collapsed .file-tree-move-confirm,
 .file-sidebar.collapsed .file-tree-refresh {
   display: none;
 }
@@ -227,8 +228,8 @@
 .file-tree-search-wrap {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px 4px;
+  gap: 6px;
+  padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -236,23 +237,30 @@
 .file-tree-search {
   flex: 1;
   min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 6px 8px;
+  min-height: 32px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-elevated);
+  background: var(--bg);
   color: var(--text);
+  outline: none;
+  appearance: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
 
 .file-tree-search::placeholder {
   color: var(--text-muted);
 }
 
+.file-tree-search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
 .file-tree-search:focus {
-  outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-subtle);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .file-tree-search:disabled {
@@ -302,8 +310,14 @@
   font-size: 13px;
   cursor: pointer;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   margin: 0 4px;
   min-height: 0;
+  color: var(--text);
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
 }
 
 @media (pointer: coarse) {
@@ -313,13 +327,23 @@
   }
 }
 
-.file-tree-row:hover {
-  background: var(--accent-subtle);
+/* Match chat session row hover: dark wash on light sheet, fine pointer only */
+@media (hover: hover) and (pointer: fine) {
+  .file-tree-row:hover:not(.selected) {
+    background: var(--surface-elevated);
+    border-color: var(--border);
+    color: var(--text-hover);
+  }
+
+  .file-tree-row:hover:not(.selected) .file-tree-path-parent,
+  .file-tree-row:hover:not(.selected) .file-tree-path-base {
+    color: var(--text-hover);
+  }
 }
 
 .file-tree-row.selected {
+  border-color: var(--accent);
   background: var(--accent-dim);
-  outline: 1px solid var(--border-strong);
 }
 
 .file-tree-row--drop-target {
@@ -328,43 +352,45 @@
   outline-offset: -2px;
 }
 
-/* Move confirm dialog (internal tree DnD) */
-.file-tree-move-dialog {
-  border: none;
-  padding: 0;
-  max-width: min(420px, calc(100vw - 32px));
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
-  color: var(--text);
-  box-shadow: 0 12px 40px oklch(0.1 0.02 250 / 0.28);
-}
-
-.file-tree-move-dialog::backdrop {
-  background: var(--overlay);
-}
-
-.file-tree-move-dialog__card {
-  margin: 0;
-  padding: 20px 22px 18px;
+/* Move confirm strip (internal tree DnD) — inline in file sidebar, not a native dialog */
+.file-tree-move-confirm {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  color: var(--text);
 }
 
-.file-tree-move-dialog__title {
+.file-tree-move-confirm.hidden,
+.file-tree-move-confirm[hidden] {
+  display: none;
+}
+
+.file-tree-move-confirm__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.file-tree-move-confirm__title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
-.file-tree-move-dialog__body {
+.file-tree-move-confirm__body {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text);
 }
 
-.file-tree-move-dialog__paths {
+.file-tree-move-confirm__paths {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -372,38 +398,52 @@
   word-break: break-all;
 }
 
-.file-tree-move-dialog__actions {
+.file-tree-move-confirm__actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
 }
 
-.file-tree-move-dialog__btn {
+.file-tree-move-confirm__btn {
+  min-height: 36px;
+  padding: 0 14px;
   font-size: 13px;
-  padding: 8px 14px;
+  font-weight: 500;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
   color: var(--text);
   cursor: pointer;
+  transition:
+    background 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
 }
 
-.file-tree-move-dialog__btn--primary {
+.file-tree-move-confirm__btn--primary {
   background: var(--accent);
-  color: var(--surface);
+  color: var(--text-hover);
   border-color: var(--accent);
+  font-weight: 600;
 }
 
-.file-tree-move-dialog__btn:focus-visible {
+@media (hover: hover) and (pointer: fine) {
+  .file-tree-move-confirm__btn--primary:hover {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  .file-tree-move-confirm__btn:not(.file-tree-move-confirm__btn--primary):hover {
+    border-color: var(--border-strong);
+    background: var(--accent-subtle);
+  }
+}
+
+.file-tree-move-confirm__btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .file-tree-move-dialog {
-    transition: none;
-  }
 }
 
 .file-tree-expand {
@@ -455,36 +495,53 @@
   outline-offset: -2px;
 }
 
+/* Light popover menu (matches workspace-menu, model-select; not --surface-elevated) */
 .file-tree-context-menu {
   position: fixed;
   z-index: 60;
   min-width: 168px;
   padding: 4px 0;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px oklch(0.1 0.02 250 / 0.18);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px oklch(0.2 0 0 / 0.1);
+  color: var(--text);
+  font-family: var(--font-ui);
 }
 
 .file-tree-context-menu__item {
   display: block;
-  width: 100%;
-  padding: 8px 14px;
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 8px 10px;
   border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
+  font-family: inherit;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text);
   cursor: pointer;
+  transition: background 0.2s var(--ease-out);
 }
 
-.file-tree-context-menu__item:hover:not(:disabled) {
-  background: var(--accent-subtle);
+.file-tree-context-menu__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .file-tree-context-menu__item:hover:not(:disabled) {
+    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+  }
 }
 
 .file-tree-context-menu__item--disabled,
 .file-tree-context-menu__item:disabled {
-  opacity: 0.45;
+  color: var(--text-muted);
+  opacity: 0.55;
   cursor: not-allowed;
 }
 

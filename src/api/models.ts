@@ -13,6 +13,7 @@ import { buildModelOptionHtml } from '../lib/format-model-label';
 import { isModelLoaded } from './model-loaded-state';
 import type { ModelInfo } from '../types';
 import { updateModelStateDot } from '../ui/model-state-dot';
+import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
 import { updateStrip } from '../ui/stats';
@@ -46,24 +47,22 @@ export function showCachedModelInfo(): void {
   updateStrip({}, {}, resolveModelInfo(modelId));
 }
 
-/** Update Load/Unload visibility and disabled state from selection + provider. */
+/** Update the combined Load/Unload button from selection + provider. */
 export function updateModelLoadUnloadButtons(): void {
-  const loadBtn = document.getElementById('btnLoadModel') as HTMLButtonElement | null;
-  const unloadBtn = document.getElementById('btnUnloadModel') as HTMLButtonElement | null;
-  if (!loadBtn || !unloadBtn) return;
+  const btn = document.getElementById('btnModelLoadUnload') as HTMLButtonElement | null;
+  if (!btn) return;
 
   const serverMode = isServerStorageMode();
   const supports = serverMode && activeProviderSupportsLoadUnload;
 
-  loadBtn.hidden = !supports;
-  unloadBtn.hidden = !supports;
+  btn.hidden = !supports;
   if (!supports) {
-    loadBtn.disabled = true;
-    unloadBtn.disabled = true;
-    loadBtn.title = serverMode
+    btn.disabled = true;
+    btn.textContent = 'Load';
+    btn.setAttribute('aria-label', 'Load model');
+    btn.title = serverMode
       ? 'Model load/unload is not supported for this provider'
       : 'Start with npm start to load or unload models';
-    unloadBtn.title = loadBtn.title;
     return;
   }
 
@@ -73,21 +72,18 @@ export function updateModelLoadUnloadButtons(): void {
   const loaded = row ? isModelLoaded(row.state) : false;
   const busy = modelLoadUnloadInFlight;
 
-  loadBtn.disabled = busy || !modelId || loaded;
-  unloadBtn.disabled = busy || !modelId || !loaded;
+  btn.textContent = loaded ? 'Unload' : 'Load';
+  btn.setAttribute('aria-label', loaded ? 'Unload model' : 'Load model');
+  btn.disabled = busy || !modelId;
 
   if (busy) {
-    loadBtn.title = 'Model action in progress…';
-    unloadBtn.title = loadBtn.title;
+    btn.title = 'Model action in progress…';
   } else if (!modelId) {
-    loadBtn.title = 'Select a model to load';
-    unloadBtn.title = 'Select a model to unload';
+    btn.title = 'Select a model to load or unload';
   } else if (loaded) {
-    loadBtn.title = 'Model is already loaded';
-    unloadBtn.title = 'Unload selected model from VRAM';
+    btn.title = 'Unload selected model from VRAM';
   } else {
-    loadBtn.title = 'Load selected model into VRAM';
-    unloadBtn.title = 'Model is not loaded';
+    btn.title = 'Load selected model into VRAM';
   }
 }
 
@@ -173,6 +169,20 @@ export async function loadSelectedModel(): Promise<void> {
   }
 }
 
+/** Load or unload the model currently selected in the topbar picker. */
+export async function toggleSelectedModelLoad(): Promise<void> {
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
+  const modelId = sel.value;
+  if (!modelId) return;
+  const row = modelCache.get(modelId);
+  const loaded = row ? isModelLoaded(row.state) : false;
+  if (loaded) {
+    await unloadSelectedModel();
+  } else {
+    await loadSelectedModel();
+  }
+}
+
 /** Unload the model currently selected in the topbar picker. */
 export async function unloadSelectedModel(): Promise<void> {
   if (modelLoadUnloadInFlight) return;
@@ -206,6 +216,7 @@ export async function fetchModels(): Promise<void> {
   const { signal } = controller;
 
   sel.innerHTML = '<option value="">Loading models…</option>';
+  syncModelSelectPicker();
   setStatus('spin', 'Loading models…');
   updateModelLoadUnloadButtons();
 
@@ -219,12 +230,14 @@ export async function fetchModels(): Promise<void> {
 
     if (!models.length) {
       sel.innerHTML = '<option value="">No models found</option>';
+      syncModelSelectPicker();
       setStatus('err', `No models for ${provider.label}`);
       updateModelLoadUnloadButtons();
       return;
     }
 
     sel.innerHTML = models.map((m) => buildModelOptionHtml(m)).join('');
+    syncModelSelectPicker();
 
     modelCache.clear();
     models.forEach((m) => modelCache.set(m.id, m));
@@ -248,6 +261,7 @@ export async function fetchModels(): Promise<void> {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;
     sel.innerHTML = '<option value="">Cannot reach provider</option>';
+    syncModelSelectPicker();
     setStatus('err', `Cannot reach ${providerLabel}`);
   } finally {
     if (modelsFetchAbort && modelsFetchAbort.signal === signal) {
@@ -255,5 +269,6 @@ export async function fetchModels(): Promise<void> {
     }
     updateModelLoadUnloadButtons();
     updateModelStateDot(sel.value);
+    syncModelSelectPicker();
   }
 }

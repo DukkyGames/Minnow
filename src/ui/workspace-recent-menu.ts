@@ -4,7 +4,6 @@
 
 import {
   fetchWorkspace,
-  pickWorkspaceFolder,
   removeRecentWorkspace,
   setWorkspacePath,
   type WorkspaceInfo,

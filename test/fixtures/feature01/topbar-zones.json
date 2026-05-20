@@ -6,9 +6,10 @@
     "btnWorkspace",
     "btnFileTreeToggle",
     "btnRefreshModels",
+    "btnStats",
     "btnTerminal",
     "btnSettings"
   ],
-  "endIds": ["modelStateDot", "modelSelect", "sDot", "sText"],
+  "endIds": ["modelStateDot", "modelSelect", "modelSelectTrigger", "modelSelectMenu", "sDot", "sText"],
   "forbiddenPatterns": ["workspace-sep"]
 }

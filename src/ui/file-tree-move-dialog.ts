@@ -1,5 +1,6 @@
 /**
- * Confirmation dialog before an internal file-tree drag-and-drop move.
+ * Inline move confirmation in the file sidebar (internal tree DnD).
+ * Avoids native dialog / window.confirm so the prompt stays in-app.
  */
 
 import { basename, joinTreePath } from './file-tree-path';
@@ -10,48 +11,78 @@ export interface MoveConfirmDialogOptions {
   sourceKind: 'file' | 'dir';
 }
 
-let dialogEl: HTMLDialogElement | null = null;
+const CONFIRM_ID = 'fileTreeMoveConfirm';
+
+let bannerEl: HTMLElement | null = null;
 let titleEl: HTMLElement | null = null;
 let bodyEl: HTMLElement | null = null;
 let pathsEl: HTMLElement | null = null;
 let confirmBtn: HTMLButtonElement | null = null;
 let cancelBtn: HTMLButtonElement | null = null;
 
-function ensureDialog(): void {
-  if (dialogEl) return;
+function getSidebarHost(): HTMLElement | null {
+  return document.getElementById('fileSidebar');
+}
 
-  const existing = document.getElementById('fileTreeMoveDialog');
-  if (existing instanceof HTMLDialogElement) {
-    dialogEl = existing;
-    titleEl = dialogEl.querySelector('[data-move-title]');
-    bodyEl = dialogEl.querySelector('[data-move-body]');
-    pathsEl = dialogEl.querySelector('[data-move-paths]');
-    confirmBtn = dialogEl.querySelector('[data-move-confirm]');
-    cancelBtn = dialogEl.querySelector('[data-move-cancel]');
+function bindBannerElements(root: HTMLElement): void {
+  bannerEl = root;
+  titleEl = root.querySelector('[data-move-title]');
+  bodyEl = root.querySelector('[data-move-body]');
+  pathsEl = root.querySelector('[data-move-paths]');
+  confirmBtn = root.querySelector('[data-move-confirm]');
+  cancelBtn = root.querySelector('[data-move-cancel]');
+}
+
+function ensureBanner(): void {
+  if (bannerEl) return;
+
+  const existing = document.getElementById(CONFIRM_ID);
+  if (existing instanceof HTMLElement) {
+    bindBannerElements(existing);
     return;
   }
 
-  dialogEl = document.createElement('dialog');
-  dialogEl.id = 'fileTreeMoveDialog';
-  dialogEl.className = 'file-tree-move-dialog';
-  dialogEl.innerHTML = `
-    <form method="dialog" class="file-tree-move-dialog__card">
-      <h2 class="file-tree-move-dialog__title" data-move-title>Move file?</h2>
-      <p class="file-tree-move-dialog__body" data-move-body></p>
-      <p class="file-tree-move-dialog__paths" data-move-paths></p>
-      <div class="file-tree-move-dialog__actions">
-        <button type="submit" class="file-tree-move-dialog__btn" value="cancel" data-move-cancel>Cancel</button>
-        <button type="submit" class="file-tree-move-dialog__btn file-tree-move-dialog__btn--primary" value="confirm" data-move-confirm>Move</button>
-      </div>
-    </form>
-  `;
-  document.body.appendChild(dialogEl);
+  const host = getSidebarHost();
+  if (!host) return;
 
-  titleEl = dialogEl.querySelector('[data-move-title]');
-  bodyEl = dialogEl.querySelector('[data-move-body]');
-  pathsEl = dialogEl.querySelector('[data-move-paths]');
-  confirmBtn = dialogEl.querySelector('[data-move-confirm]');
-  cancelBtn = dialogEl.querySelector('[data-move-cancel]');
+  const banner = document.createElement('div');
+  banner.id = CONFIRM_ID;
+  banner.className = 'file-tree-move-confirm hidden';
+  banner.hidden = true;
+  banner.setAttribute('role', 'region');
+  banner.setAttribute('aria-labelledby', 'fileTreeMoveConfirmTitle');
+  banner.innerHTML = `
+    <div class="file-tree-move-confirm__content">
+      <p id="fileTreeMoveConfirmTitle" class="file-tree-move-confirm__title" data-move-title>Move file?</p>
+      <p class="file-tree-move-confirm__body" data-move-body></p>
+      <p class="file-tree-move-confirm__paths" data-move-paths></p>
+    </div>
+    <div class="file-tree-move-confirm__actions">
+      <button type="button" class="file-tree-move-confirm__btn" data-move-cancel>Cancel</button>
+      <button type="button" class="file-tree-move-confirm__btn file-tree-move-confirm__btn--primary" data-move-confirm>Move</button>
+    </div>
+  `;
+
+  const treeHost = document.getElementById('fileTreeHost');
+  if (treeHost) {
+    host.insertBefore(banner, treeHost);
+  } else {
+    host.appendChild(banner);
+  }
+
+  bindBannerElements(banner);
+}
+
+function showBanner(): void {
+  if (!bannerEl) return;
+  bannerEl.hidden = false;
+  bannerEl.classList.remove('hidden');
+}
+
+function hideBanner(): void {
+  if (!bannerEl) return;
+  bannerEl.hidden = true;
+  bannerEl.classList.add('hidden');
 }
 
 /**
@@ -61,8 +92,8 @@ function ensureDialog(): void {
 export function showMoveConfirmDialog(
   opts: MoveConfirmDialogOptions,
 ): Promise<boolean> {
-  ensureDialog();
-  if (!dialogEl || !titleEl || !bodyEl || !pathsEl || !confirmBtn || !cancelBtn) {
+  ensureBanner();
+  if (!bannerEl || !titleEl || !bodyEl || !pathsEl || !confirmBtn || !cancelBtn) {
     return Promise.resolve(false);
   }
 
@@ -80,40 +111,36 @@ export function showMoveConfirmDialog(
     const finish = (confirmed: boolean): void => {
       if (settled) return;
       settled = true;
-      dialogEl?.removeEventListener('close', onClose);
-      dialogEl?.removeEventListener('cancel', onCancel);
+      hideBanner();
+      document.removeEventListener('keydown', onKeyDown);
+      cancelBtn?.removeEventListener('click', onCancel);
+      confirmBtn?.removeEventListener('click', onConfirm);
       resolve(confirmed);
     };
 
-    const onClose = (): void => {
-      finish(dialogEl?.returnValue === 'confirm');
+    const onCancel = (): void => finish(false);
+    const onConfirm = (): void => finish(true);
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
     };
 
-    const onCancel = (event: Event): void => {
-      event.preventDefault();
-      dialogEl?.close('cancel');
-      finish(false);
-    };
+    cancelBtn.addEventListener('click', onCancel);
+    confirmBtn.addEventListener('click', onConfirm);
+    document.addEventListener('keydown', onKeyDown);
 
-    dialogEl.addEventListener('close', onClose);
-    dialogEl.addEventListener('cancel', onCancel);
-
-    if (typeof dialogEl.showModal === 'function') {
-      dialogEl.returnValue = 'cancel';
-      dialogEl.showModal();
-      confirmBtn?.focus();
-    } else {
-      finish(window.confirm(`${titleEl.textContent}\n${pathsEl.textContent}`));
-    }
+    showBanner();
+    confirmBtn.focus();
   });
 }
 
-/** Reset dialog singleton (tests). */
+/** Reset banner singleton (tests). */
 export function resetMoveConfirmDialogForTests(): void {
-  if (dialogEl?.open) {
-    dialogEl.close('cancel');
-  }
-  dialogEl = null;
+  hideBanner();
+  bannerEl = null;
   titleEl = null;
   bodyEl = null;
   pathsEl = null;
