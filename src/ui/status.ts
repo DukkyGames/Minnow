@@ -1,6 +1,7 @@
+import { closeComposerToolsPopover } from './composer-tools-popover';
+import { closeMobileFileSidebar } from './file-layout';
 import { closeDrawer } from './settings';
 import { closeMobileSidebar } from './layout';
-import { closeMobileFileSidebar } from './init-file-panel';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 
 /** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
@@ -31,13 +32,23 @@ export function parseServerBaseUrl(raw: string): string | null {
   }
 }
 
-export function setStatus(state: string, msg: string): void {
+/** Topbar pill states — operational feedback only, not model inventory. */
+export type StatusState = 'idle' | 'ok' | 'err' | 'spin';
+
+/** Update the topbar status pill (connection, streaming, workspace — not model counts). */
+export function setStatus(state: StatusState | string, msg: string): void {
   document.getElementById('sDot')!.className = `s-dot ${state}`;
   document.getElementById('sText')!.textContent = msg;
 }
 
+/** Default idle success after model list refresh (matches chat loop). */
+export function setReadyStatus(): void {
+  setStatus('ok', 'Ready');
+}
+
 /** Close settings drawer or mobile chat list when Escape is pressed. */
 export function dismissOpenLayers(): void {
+  closeComposerToolsPopover();
   closeSubAgentDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
