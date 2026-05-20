@@ -14,6 +14,34 @@
   z-index: 10;
 }
 
+/* Topbar zones: brand | actions | spacer | end (model + status) */
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
 .logo-mark {
   width: 28px;
   height: 28px;
@@ -45,15 +73,22 @@
   flex-shrink: 0;
 }
 
-/* Model picker in topbar */
+/* Model picker in topbar-end */
 .model-wrap {
-  position: relative;
-  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
   max-width: 340px;
 }
 
-.model-wrap select {
+.model-select-inner {
+  position: relative;
+  flex: 1;
+  min-width: 10rem;
+}
+
+.model-select-inner select {
   width: 100%;
   min-height: 40px;
   background: var(--bg);
@@ -71,14 +106,14 @@
   text-overflow: ellipsis;
 }
 
-.model-wrap select:focus {
+.model-select-inner select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-.model-wrap select option { background: var(--bg); }
+.model-select-inner select option { background: var(--bg); }
 
-.model-wrap::after {
+.model-select-inner::after {
   content: '';
   position: absolute;
   right: 12px;
@@ -90,6 +125,29 @@
   border-right: 4px solid transparent;
   border-top: 5px solid var(--text-muted);
   pointer-events: none;
+}
+
+.model-action-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.model-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .icon-btn {
@@ -127,7 +185,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;

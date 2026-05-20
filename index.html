@@ -98,47 +98,55 @@
   <p class="app-loader__status" id="appLoaderStatus">Loading…</p>
 </div>
 <header class="topbar">
-  <div class="logo-mark" aria-hidden="true">
-    <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+  <div class="topbar-brand">
+    <div class="logo-mark" aria-hidden="true">
+      <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+    </div>
+    <div class="app-title">Minnow</div>
   </div>
-  <div class="app-title">Minnow</div>
-  <div class="topbar-sep"></div>
+  <div class="topbar-sep" aria-hidden="true"></div>
 
-  <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
+  <div class="topbar-actions">
+    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 4v4h-4"/>
+        <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
+        <path d="M4 20v-4h4"/>
+        <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
+      </svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
+    </button>
+    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
 
-  <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-  </button>
-  <div class="topbar-sep workspace-sep mid-hide"></div>
+  <div class="topbar-spacer" aria-hidden="true"></div>
 
+  <div class="topbar-end">
   <div class="model-wrap">
     <label class="visually-hidden" for="modelSelect">Model</label>
-    <select id="modelSelect" onchange="onModelSelectChange()"></select>
+    <div class="model-select-inner">
+      <select id="modelSelect" onchange="onModelSelectChange()"></select>
+    </div>
+    <button type="button" id="btnLoadModel" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="loadSelectedModel()">Load</button>
+    <button type="button" id="btnUnloadModel" class="model-action-btn" hidden aria-label="Unload model" title="Unload selected model from VRAM" onclick="unloadSelectedModel()">Unload</button>
   </div>
-
-  <button class="icon-btn" type="button" id="btnFileTreeToggle" aria-label="Project files">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 4v4h-4"/>
-      <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
-      <path d="M4 20v-4h4"/>
-      <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
-    </svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
-  </button>
-  <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
-    <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-  </button>
-
-  <div class="status-pill" role="status" aria-live="polite">
-    <div class="s-dot" id="sDot" aria-hidden="true"></div>
-    <span id="sText">Loading models…</span>
+    <div class="status-pill" role="status" aria-live="polite">
+      <div class="s-dot" id="sDot" aria-hidden="true"></div>
+      <span id="sText">Loading models…</span>
+    </div>
   </div>
 </header>
 
@@ -222,11 +230,19 @@
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
     <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
+    <span
+      id="settingsPromptTokenEstimate"
+      class="settings-prompt-estimate"
+      role="status"
+      aria-live="polite"
+      title="Approximate size using characters ÷ 4. Real prompt tokens depend on the model tokenizer."
+    >~…</span>
   </header>
   <div class="settings-page-body">
     <nav class="settings-nav" aria-label="Settings sections">
       <button type="button" data-settings-nav="general" aria-current="page">General</button>
       <button type="button" data-settings-nav="prompting">Prompting</button>
+      <button type="button" data-settings-nav="rules">Rules</button>
       <button type="button" data-settings-nav="providers">Providers</button>
       <button type="button" data-settings-nav="modes">Modes</button>
       <button type="button" data-settings-nav="experts">Experts</button>
@@ -246,6 +262,12 @@
       </section>
       <section id="settingsSection-prompting" class="settings-section">
         <h2>Prompting</h2>
+        <p
+          id="settingsPromptTokenBreakdown"
+          class="settings-prompt-estimate-breakdown"
+          role="status"
+          aria-live="polite"
+        >Computing estimate…</p>
         <p>Active profile controls which prompt templates are composed on send.</p>
         <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
           <button type="button" data-profile-tab="full" class="is-active">Full</button>
@@ -260,6 +282,25 @@
           <button type="button" id="settingsCustomConfigDelete">Delete</button>
         </div>
         <div id="settingsPromptParts" class="settings-parts-mount"></div>
+      </section>
+      <section id="settingsSection-rules" class="settings-section">
+        <h2>Rules</h2>
+        <p class="field-hint">Global instructions applied on every parent chat send, as a second system message after the composed programmatic prompt.</p>
+        <label class="settings-toggle-row">
+          <span>Enable user rules</span>
+          <input type="checkbox" id="settingsRulesEnabled">
+        </label>
+        <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
+          Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
+        </p>
+        <div class="field settings-rules-field">
+          <label for="settingsRulesText">Instructions</label>
+          <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
+            placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
+        </div>
+        <div class="settings-rules-actions">
+          <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
+        </div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -292,6 +333,36 @@
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
         </div>
+        <p id="settingsMemoryOffline" class="field-hint settings-memory-offline hidden">
+          Start with <code>npm start</code> to add and manage memories.
+        </p>
+        <details id="settingsMemoryAddPanel" class="settings-memory-add-panel hidden">
+          <summary class="settings-memory-add-summary">Add memory</summary>
+          <form id="settingsMemoryAddForm" class="settings-memory-form" novalidate>
+            <div class="field">
+              <label for="settingsMemoryAddTitle">Title</label>
+              <input type="text" id="settingsMemoryAddTitle" name="title" required maxlength="200"
+                autocomplete="off" placeholder="e.g. Preferred test command">
+            </div>
+            <div class="field">
+              <label for="settingsMemoryAddBody">Body</label>
+              <textarea id="settingsMemoryAddBody" name="body" required rows="6"
+                placeholder="What should be remembered across chats?"></textarea>
+              <p class="field-hint">Max 32 KB. Used for retrieval on send when memory injection is enabled.</p>
+            </div>
+            <div class="field">
+              <label for="settingsMemoryAddTags">Tags (optional)</label>
+              <input type="text" id="settingsMemoryAddTags" name="tags" autocomplete="off"
+                placeholder="testing, npm">
+              <p class="field-hint">Comma-separated. Max 64 characters per tag.</p>
+            </div>
+            <p id="settingsMemoryAddError" class="settings-memory-form-error hidden" role="alert"></p>
+            <div class="settings-memory-form-actions">
+              <button type="submit" class="settings-action-btn">Save memory</button>
+              <button type="button" id="settingsMemoryAddReset" class="settings-inline-btn">Clear form</button>
+            </div>
+          </form>
+        </details>
         <div id="settingsMemoryList" class="settings-memory-list" role="list" aria-label="Memory entries"></div>
         <div class="settings-actions">
           <button type="button" id="settingsMemoryBackup" class="settings-action-btn">Backup memory</button>
@@ -421,6 +492,8 @@
       </div>
     </main>
 
+    <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
+
     <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
     <div id="toolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
 
@@ -456,8 +529,9 @@
           </div>
         </div>
       </div>
-      <button class="send-btn" id="sendBtn" type="button" onclick="sendMessage()" aria-label="Send message">
+      <button class="send-btn" id="sendBtn" type="button" onclick="handleComposerPrimaryAction()" aria-label="Send message" data-mode="send">
         <span id="sendIcon"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+        <span id="sendStopIcon" class="hidden"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
         <span id="sendSpinner" class="spinner hidden"></span>
       </button>
     </div>
@@ -562,6 +636,15 @@
           <path d="M4 20v-4h4"/>
           <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
         </svg>
+      </button>
+    </div>
+    <div class="file-tree-search-wrap">
+      <input type="search" id="fileTreeSearch" class="file-tree-search"
+        placeholder="Filter files…" autocomplete="off"
+        aria-label="Filter files by name" role="searchbox" />
+      <button type="button" class="icon-btn file-tree-search-clear hidden"
+        id="btnFileTreeSearchClear" aria-label="Clear filter" title="Clear filter">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
