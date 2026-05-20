@@ -2,7 +2,7 @@
  * File sidebar and split-viewer layout (mirrors chat sidebar layout.ts).
  */
 
-import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
+import { ICON_FILE_TREE } from '../constants';
 import {
   getFilePanelState,
   patchFilePanelState,
@@ -51,23 +51,24 @@ export function applyFileSidebarVisuals(): void {
 
   if (!side || !btn) return;
 
+  btn.innerHTML = ICON_FILE_TREE;
+
   if (!isMobileLayout()) {
     closeMobileFileSidebar();
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
-    btn.innerHTML = state.fileSidebarCollapsed ? ICON_CHEVRON_LEFT : ICON_CHEVRON_RIGHT;
     btn.setAttribute(
       'aria-label',
       state.fileSidebarCollapsed ? 'Expand file tree' : 'Collapse file tree',
     );
+    btn.setAttribute(
+      'title',
+      state.fileSidebarCollapsed ? 'Expand file tree' : 'Collapse file tree',
+    );
   } else {
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
-    btn.innerHTML = side.classList.contains('mobile-open')
-      ? ICON_CHEVRON_RIGHT
-      : ICON_CHEVRON_LEFT;
-    btn.setAttribute(
-      'aria-label',
-      side.classList.contains('mobile-open') ? 'Close file tree' : 'Open file tree',
-    );
+    const open = side.classList.contains('mobile-open');
+    btn.setAttribute('aria-label', open ? 'Close file tree' : 'Open file tree');
+    btn.setAttribute('title', open ? 'Close file tree' : 'Open file tree');
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Operating mode registry — four primary modes and prompt path helpers.
+ * Operating mode registry — five primary modes and prompt path helpers.
  */
 
 import { loadPromptById } from '../prompts/prompt-loader';
@@ -77,9 +77,16 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
       ...RESEARCH_EXTRA_DENIED_TOOLS,
     ]),
   },
+  {
+    id: 'reef',
+    label: 'Reef',
+    description: 'Build interactive widgets inline in chat.',
+    promptId: 'reef',
+    toolPolicy: { default: 'allow' },
+  },
 ];
 
-/** Fixed four modes in display order. */
+/** Fixed five modes in display order. */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }

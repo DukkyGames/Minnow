@@ -46,4 +46,12 @@ describe('resolveModePromptPath', () => {
       resolveModePromptPath('research', 'lite').endsWith('modes/research.lite.md'),
     );
   });
+
+  test('reef full', () => {
+    assert.ok(resolveModePromptPath('reef', 'full').endsWith('modes/reef.full.md'));
+  });
+
+  test('reef lite', () => {
+    assert.ok(resolveModePromptPath('reef', 'lite').endsWith('modes/reef.lite.md'));
+  });
 });

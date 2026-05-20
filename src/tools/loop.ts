@@ -67,10 +67,7 @@ import {
   ensurePendingTurn,
 } from '../state/pending-turn';
 import { isComposerRecoveryBlocked } from '../ui/composer-send';
-import {
-  dismissPendingTurnRecovery,
-  showPendingTurnRecoveryManual,
-} from '../ui/pending-turn-recovery';
+import { dismissPendingTurnRecovery } from '../ui/pending-turn-recovery';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setComposerStreamingMode } from '../ui/composer-send';
 import { refreshExpertSelectDisabled } from '../ui/expert-select';
@@ -288,7 +285,7 @@ function shouldInjectPendingTurnResume(
   if (asst.tool_calls?.length) {
     if (
       pending.toolCalls?.length &&
-      toolCallsShallowEqual(asst.tool_calls, pending.tool_calls) &&
+      toolCallsShallowEqual(asst.tool_calls, pending.toolCalls) &&
       String(asst.content ?? '').trim() === String(pending.content ?? '').trim()
     ) {
       return false;
@@ -1003,9 +1000,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         providerId: sendProviderId,
         toolRound: currentToolRound,
       });
-      if (getActiveChat().id === chat.id) {
-        showPendingTurnRecoveryManual(chat);
-      }
       return;
     }
     cancelAssistantBubbleRenderDebounce();
@@ -1046,9 +1040,14 @@ export async function sendMessageWithTools(): Promise<void> {
   if (streaming) return;
   if (isComposerRecoveryBlocked()) return;
 
-  const continueSend = consumePendingContinueSend();
   const chatEarly = getActiveChat();
-  if (continueSend && ensurePendingTurn(chatEarly.pendingTurn)) {
+  const continueSend = consumePendingContinueSend();
+  const pendingCheckpoint = ensurePendingTurn(chatEarly.pendingTurn);
+  if (continueSend && pendingCheckpoint) {
+    if (pendingCheckpoint.stopped === true) {
+      setStatus('ok', 'Send a new message to continue.');
+      return;
+    }
     const instruction =
       consumeContinueInstructionForNextSend() ?? CONTINUE_INTERRUPTED_INSTRUCTION;
     dismissPendingTurnRecovery();

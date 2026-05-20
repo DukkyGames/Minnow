@@ -84,10 +84,9 @@ function bindFilePanelControls(): void {
     closeBtn.addEventListener('click', () => closeFileViewer());
   }
 
-  const toggleBtn = document.getElementById('btnFileTreeToggle');
+  const toggleBtn = document.getElementById('btnFileSidebarCollapse');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', () => {
-      toggleFileSidebarLayout();
       void initFileTreeIfNeeded();
     });
   }

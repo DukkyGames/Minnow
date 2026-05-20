@@ -5,6 +5,7 @@
 import { streaming } from '../app-state';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
+import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat } from './work-agent-dev';
 import { listModes } from '../chat/modes/registry';
 import type { ModeId } from '../chat/modes/types';
@@ -13,6 +14,8 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
+import { unmountReefWidgetsInChat } from '../chat/reef';
+import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
 
 const MODE_STATUS_MS = 2200;
@@ -89,8 +92,11 @@ function selectMode(modeId: ModeId): void {
   }
   touchChat(chat);
   scheduleSaveSessions();
+  unmountReefWidgetsInChat();
+  renderChatFromHistory(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
+  syncReefWidgetSettingsFromActiveChat();
 
   const mode = listModes().find((m) => m.id === modeId);
   if (mode) showModeStatusPill(mode.label);

@@ -251,6 +251,10 @@ export interface Chat {
   providerId?: string;
   /** Operating mode for prompt + tool policy (Step 05); default build. */
   modeId?: ModeId;
+  /** Reef widget LLM provider override (Reef mode callLLM). */
+  reefWidgetProviderId?: string;
+  /** Reef widget LLM model override; empty = chat default. */
+  reefWidgetModelId?: string;
   /** Expert auto/manual selection (Step 06). */
   expertSelection?: ExpertSelection;
   /** Last auto-routed expert id (UI hint / debug). */

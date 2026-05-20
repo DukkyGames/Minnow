@@ -6,6 +6,7 @@ import {
   assistantRenderDebounceTimer,
   setAssistantRenderDebounceTimer,
 } from '../app-state';
+import { mountReefWidgets } from '../chat/reef/index.ts';
 import { scrollBottom } from '../ui/input';
 
 let minnowMarkedConfigured = false;
@@ -97,6 +98,8 @@ export function setAssistantBubbleContent(
   });
 
   if (streaming && streamCursor) bubble.appendChild(streamCursor);
+
+  mountReefWidgets(bubble);
 }
 
 /** Debounced markdown refresh while the assistant reply is still streaming. */

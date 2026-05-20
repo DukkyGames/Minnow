@@ -12,6 +12,24 @@ describe('chat modeId persistence', () => {
     assert.equal(chat.modeId, 'build');
   });
 
+  test('round-trip preserves reef widget LLM overrides', () => {
+    const raw = {
+      id: '22222222-2222-2222-2222-222222222222',
+      name: 'Reef',
+      modelId: 'm1',
+      modeId: 'reef',
+      reefWidgetProviderId: 'prov-reef',
+      reefWidgetModelId: 'model-reef',
+      history: [],
+      updatedAt: 1710000000000,
+    };
+    const chat = ensureChatShape(raw);
+    assert.equal(chat.reefWidgetProviderId, 'prov-reef');
+    assert.equal(chat.reefWidgetModelId, 'model-reef');
+    const parsed = ensureChatShape(JSON.parse(JSON.stringify(chat)));
+    assert.equal(parsed.reefWidgetModelId, 'model-reef');
+  });
+
   test('round-trip preserves orchestrate', () => {
     const raw = {
       id: '11111111-1111-1111-1111-111111111111',
