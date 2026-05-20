@@ -3,6 +3,7 @@
  */
 
 import { streaming } from '../app-state';
+import { isComposerRecoveryBlocked } from './composer-send';
 import { listExperts } from '../chat/experts/registry';
 /** Hint payload after auto-routing on send. */
 export interface ExpertHintContext {
@@ -177,7 +178,7 @@ export function refreshExpertSelectDisabled(): void {
   const sel = getExpertSelect();
   if (!sel) return;
   void loadExpertsConfig().then((config) => {
-    sel.disabled = streaming || !config.enabled;
+    sel.disabled = streaming || isComposerRecoveryBlocked() || !config.enabled;
   });
 }
 

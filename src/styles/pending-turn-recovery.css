@@ -1,0 +1,34 @@
+/* Interrupted generation recovery banner (feature 22) */
+.pending-turn-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 0 0 8px;
+  border: 1px solid var(--border, oklch(88% 0.02 250));
+  border-radius: 8px;
+  background: var(--surface-elevated, oklch(97% 0.01 250));
+}
+
+.pending-turn-recovery__text {
+  margin: 0;
+  flex: 1 1 200px;
+  font-size: 13px;
+  color: var(--text-muted, oklch(45% 0.02 250));
+}
+
+.pending-turn-recovery__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.msg.msg--interrupted .msg-bubble {
+  border-left: 3px solid var(--accent, oklch(31% 0.04 271));
+}
+
+.tool-call-msg--interrupted {
+  opacity: 0.85;
+}

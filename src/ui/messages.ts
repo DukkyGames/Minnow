@@ -6,12 +6,14 @@ import {
   touchChat,
   scheduleSaveSessions,
 } from '../state/sessions';
+import { ensurePendingTurn } from '../state/pending-turn-shape';
 import type {
   AssistantToolCallMessage,
   AssistantMessage,
   Chat,
   Message,
   ModelInfo,
+  PendingTurn,
   Stats,
   ToolResultMessage,
   Usage,
@@ -27,6 +29,7 @@ import { updateStrip } from './stats';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
+import { markMessageStopped } from './stopped-affordance';
 import {
   clearSubAgentCardDomRegistry,
   renderPersistedSubAgentCardsForChat,
@@ -36,6 +39,10 @@ import {
   type StreamingStatusHandle,
   type StreamPhase,
 } from './stream-status';
+import {
+  attachMessageActions,
+  type MessageTurnKind,
+} from './message-actions';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
@@ -122,6 +129,8 @@ export function renderChatFromHistory(chat: Chat): void {
     empty.innerHTML = EMPTY_STATE_HTML;
     area.appendChild(empty);
     renderPersistedSubAgentCardsForChat(chat);
+    const pendingOnly = ensurePendingTurn(chat.pendingTurn);
+    if (pendingOnly) renderPendingTurn(chat, pendingOnly);
     scrollChatToBottom();
     return;
   }
@@ -138,32 +147,62 @@ export function renderChatFromHistory(chat: Chat): void {
     });
   }
 
-  for (const msg of chat.history) {
+  for (let i = 0; i < chat.history.length; i += 1) {
+    const msg = chat.history[i];
     if (!msg || !msg.role) continue;
     if (msg.role === 'tool') continue;
 
     if (msg.role === 'user') {
-      appendBubble('user', msg.content);
+      const { wrap } = appendBubble('user', msg.content, {
+        historyIndex: i,
+        turnKind: 'user',
+        chatId: chat.id,
+      });
+      attachMessageActions(wrap, {
+        chatId: chat.id,
+        historyIndex: i,
+        turnKind: 'user',
+      });
       continue;
     }
 
     if (isAssistantToolCallMessage(msg)) {
       const prose = msg.content != null ? String(msg.content).trim() : '';
       if (prose) {
-        const { wrap } = appendBubble('assistant', prose);
+        const { wrap } = appendBubble('assistant', prose, {
+          historyIndex: i,
+          turnKind: 'assistant-tools',
+          chatId: chat.id,
+        });
         if (msg.stats || msg.usage) {
           appendStats(wrap, msg.stats || {}, msg.usage || {});
         }
+        attachMessageActions(wrap, {
+          chatId: chat.id,
+          historyIndex: i,
+          turnKind: 'assistant-tools',
+        });
       }
 
+      let firstToolEl: HTMLElement | null = null;
       for (const tc of msg.tool_calls) {
         const argsObj = parseToolArgsForDisplay(tc.function.arguments);
         const toolWrap = renderToolCall(tc.function.name, argsObj);
+        toolWrap.dataset.historyIndex = String(i);
+        toolWrap.dataset.turnKind = 'assistant-tools';
         area.appendChild(toolWrap);
+        if (!firstToolEl) firstToolEl = toolWrap;
         const stored = toolResultMap.get(tc.id);
         if (stored !== undefined) {
           renderToolResult(toolWrap, stored.content, stored.attachments);
         }
+      }
+      if (!prose && firstToolEl) {
+        attachMessageActions(firstToolEl, {
+          chatId: chat.id,
+          historyIndex: i,
+          turnKind: 'assistant-tools',
+        });
       }
       continue;
     }
@@ -176,7 +215,11 @@ export function renderChatFromHistory(chat: Chat): void {
     if (!trimmed && !hasThinking) {
       continue;
     }
-    const { wrap } = appendBubble('assistant', trimmed);
+    const { wrap } = appendBubble('assistant', trimmed, {
+      historyIndex: i,
+      turnKind: 'assistant',
+      chatId: chat.id,
+    });
     if (withThinking.thinking && withThinking.thinking.length > 0) {
       const durationMs = withThinking.thinkingDurationMs;
       renderThoughtsToggle(wrap, withThinking.thinking, {
@@ -189,20 +232,74 @@ export function renderChatFromHistory(chat: Chat): void {
     if (msg.stats || msg.usage) {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
+    attachMessageActions(wrap, {
+      chatId: chat.id,
+      historyIndex: i,
+      turnKind: 'assistant',
+    });
   }
   renderPersistedSubAgentCardsForChat(chat);
+  const pending = ensurePendingTurn(chat.pendingTurn);
+  if (pending) renderPendingTurn(chat, pending);
   scrollChatToBottom();
+}
+
+/** Paint checkpointed assistant prose from pendingTurn (not in history). */
+export function renderPendingTurn(_chat: Chat, pending: PendingTurn): void {
+  const text = pending.content?.trim() ?? '';
+  const hasThinking = pending.thinking != null && pending.thinking.length > 0;
+  if (!text && !hasThinking && !pending.toolCalls?.length) return;
+
+  const { wrap } = appendBubble('assistant', text);
+  wrap.classList.add('msg--interrupted');
+  wrap.dataset.pendingTurn = 'true';
+  if (pending.stopped) {
+    markMessageStopped(wrap);
+  }
+  if (hasThinking && pending.thinking) {
+    renderThoughtsToggle(wrap, pending.thinking, {
+      durationMs:
+        pending.thinkingDurationMs && pending.thinkingDurationMs > 0
+          ? pending.thinkingDurationMs
+          : undefined,
+    });
+  }
+
+  const area = document.getElementById('chatArea')!;
+  if (pending.toolCalls?.length) {
+    for (const tc of pending.toolCalls) {
+      const argsObj = parseToolArgsForDisplay(tc.function.arguments);
+      const toolWrap = renderToolCall(tc.function.name, argsObj);
+      toolWrap.dataset.toolCallId = tc.id;
+      toolWrap.classList.add('tool-call-msg--interrupted');
+      area.appendChild(toolWrap);
+    }
+  }
+  scrollChatToBottom();
+}
+
+/** Optional history index for message action menus. */
+export interface BubbleRenderMeta {
+  historyIndex: number;
+  turnKind: MessageTurnKind;
+  chatId: string;
 }
 
 export function appendBubble(
   role: 'user' | 'assistant',
-  content: string
+  content: string,
+  meta?: BubbleRenderMeta,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const empty = document.getElementById('emptyState');
   if (empty) empty.remove();
 
   const wrap = document.createElement('div');
   wrap.className = `msg ${role}`;
+  if (meta) {
+    wrap.dataset.historyIndex = String(meta.historyIndex);
+    wrap.dataset.turnKind = meta.turnKind;
+    wrap.dataset.chatId = meta.chatId;
+  }
 
   const label = document.createElement('div');
   label.className = 'msg-label';
@@ -302,21 +399,6 @@ export function revealAssistantProseBubble(
   wrap.classList.remove('msg--awaiting-prose');
   bubble.classList.remove('msg-bubble--awaiting');
   streamStatus?.setPhase('prose');
-}
-
-/** Label a finished assistant row as user-stopped (live stream or history reload). */
-export function markMessageStopped(wrap: HTMLElement): void {
-  wrap.classList.add('msg--stopped');
-  if (wrap.querySelector('.msg-stopped-chip')) return;
-  const chip = document.createElement('div');
-  chip.className = 'msg-stopped-chip';
-  chip.textContent = 'Generation stopped';
-  const label = wrap.querySelector('.msg-label');
-  if (label?.parentElement === wrap) {
-    label.insertAdjacentElement('afterend', chip);
-  } else {
-    wrap.prepend(chip);
-  }
 }
 
 /** Add per-turn metric chips under an assistant bubble. */
