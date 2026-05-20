@@ -16,7 +16,11 @@ import type {
   ToolResultMessage,
   Usage,
 } from '../types';
-import { scrollBottom } from './input';
+import {
+  pinChatScroll,
+  scrollChatIfPinned,
+  scrollChatToBottom,
+} from './chat-scroll';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
@@ -118,7 +122,7 @@ export function renderChatFromHistory(chat: Chat): void {
     empty.innerHTML = EMPTY_STATE_HTML;
     area.appendChild(empty);
     renderPersistedSubAgentCardsForChat(chat);
-    scrollBottom();
+    scrollChatToBottom();
     return;
   }
   const toolResultMap = new Map<
@@ -174,14 +178,20 @@ export function renderChatFromHistory(chat: Chat): void {
     }
     const { wrap } = appendBubble('assistant', trimmed);
     if (withThinking.thinking && withThinking.thinking.length > 0) {
-      renderThoughtsToggle(wrap, withThinking.thinking);
+      const durationMs = withThinking.thinkingDurationMs;
+      renderThoughtsToggle(wrap, withThinking.thinking, {
+        durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
+      });
+    }
+    if (withThinking.stopped) {
+      markMessageStopped(wrap);
     }
     if (msg.stats || msg.usage) {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
   }
   renderPersistedSubAgentCardsForChat(chat);
-  scrollBottom();
+  scrollChatToBottom();
 }
 
 export function appendBubble(
@@ -209,7 +219,11 @@ export function appendBubble(
   wrap.appendChild(label);
   wrap.appendChild(bubble);
   document.getElementById('chatArea')!.appendChild(wrap);
-  scrollBottom();
+  if (role === 'user') {
+    scrollChatToBottom();
+  } else {
+    scrollChatIfPinned();
+  }
   return { wrap, bubble };
 }
 
@@ -274,7 +288,8 @@ export function appendStreamingAssistantRow(): StreamingAssistantRow {
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   document.getElementById('chatArea')!.appendChild(wrap);
-  scrollBottom();
+  pinChatScroll();
+  scrollChatToBottom();
   return { wrap, bubble, cursor, streamStatus };
 }
 
@@ -287,6 +302,21 @@ export function revealAssistantProseBubble(
   wrap.classList.remove('msg--awaiting-prose');
   bubble.classList.remove('msg-bubble--awaiting');
   streamStatus?.setPhase('prose');
+}
+
+/** Label a finished assistant row as user-stopped (live stream or history reload). */
+export function markMessageStopped(wrap: HTMLElement): void {
+  wrap.classList.add('msg--stopped');
+  if (wrap.querySelector('.msg-stopped-chip')) return;
+  const chip = document.createElement('div');
+  chip.className = 'msg-stopped-chip';
+  chip.textContent = 'Generation stopped';
+  const label = wrap.querySelector('.msg-label');
+  if (label?.parentElement === wrap) {
+    label.insertAdjacentElement('afterend', chip);
+  } else {
+    wrap.prepend(chip);
+  }
 }
 
 /** Add per-turn metric chips under an assistant bubble. */
