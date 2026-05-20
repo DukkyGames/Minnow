@@ -69,7 +69,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px oklch(0.2 0 0 / 0.1);
+  box-shadow: var(--shadow-popover-soft);
 }
 
 .model-select-menu.hidden {

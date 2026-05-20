@@ -125,7 +125,7 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text);
-  background: oklch(0.97 0.02 25);
+  background: var(--banner-danger-bg);
   border: 1px solid color-mix(in oklch, var(--danger) 38%, var(--border));
   border-radius: var(--radius-sm);
 }
@@ -142,7 +142,7 @@
   overflow-wrap: anywhere;
   tab-size: 2;
   color: var(--text);
-  background: oklch(0.97 0.012 250);
+  background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }

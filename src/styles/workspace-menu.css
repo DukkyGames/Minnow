@@ -13,7 +13,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px oklch(0.2 0 0 / 0.1);
+  box-shadow: var(--shadow-popover-soft);
   color: var(--text);
 }
 
@@ -46,7 +46,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-menu__item:not(.workspace-menu__item--disabled):not([aria-current='true']):hover {
-    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+    background: var(--code-inline-bg);
   }
 
   .workspace-menu__item[aria-current='true']:hover {
@@ -145,6 +145,6 @@
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-menu__action:hover {
-    background: var(--code-inline-bg, oklch(0.94 0.015 250));
+    background: var(--code-inline-bg);
   }
 }

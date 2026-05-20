@@ -31,13 +31,13 @@
   font-size: 12px;
   font-family: inherit;
   letter-spacing: 0.03em;
-  box-shadow: 0 4px 16px oklch(0 0 0 / 0.12);
+  box-shadow: var(--shadow-popover);
   cursor: pointer;
 }
 
 .chat-jump-latest:hover {
   background: var(--surface-elevated);
-  color: var(--text-hover);
+  color: var(--elevated-fg);
 }
 
 .chat-jump-latest:focus-visible {
@@ -314,7 +314,7 @@
 }
 
 .msg-bubble.msg-bubble--md th {
-  background: oklch(0.96 0.01 250);
+  background: var(--markdown-table-header-bg);
 }
 
 /* Inline code inside prose */
@@ -323,8 +323,8 @@
   font-size: 0.9em;
   padding: 0.12em 0.4em;
   border-radius: var(--radius-sm);
-  background: oklch(0.94 0.015 250);
-  border: 1px solid oklch(0.88 0.02 250 / 0.5);
+  background: var(--markdown-inline-code-bg);
+  border: 1px solid var(--markdown-inline-code-border);
 }
 
 /* Fenced code blocks: shell around hljs theme */
@@ -335,7 +335,7 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   /* Slight lift from bubble bg so fenced blocks stay readable (tokens file uses dark overlay elsewhere) */
-  background: oklch(0.97 0.012 250);
+  background: var(--code-bg);
   overflow-x: auto;
   max-width: 100%;
 }
@@ -409,10 +409,10 @@
 }
 
 .stat-chip span { font-weight: 700; }
-.stat-chip.c { color: var(--accent); border-color: oklch(0.72 0.12 220 / 0.35); }
-.stat-chip.g { color: var(--success); border-color: oklch(0.72 0.14 155 / 0.35); }
-.stat-chip.y { color: var(--warning); border-color: oklch(0.8 0.12 85 / 0.35); }
-.stat-chip.r { color: var(--danger); border-color: oklch(0.62 0.18 15 / 0.35); }
+.stat-chip.c { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
+.stat-chip.g { color: var(--success); border-color: color-mix(in oklch, var(--success) 35%, transparent); }
+.stat-chip.y { color: var(--warning); border-color: color-mix(in oklch, var(--warning) 35%, transparent); }
+.stat-chip.r { color: var(--danger); border-color: color-mix(in oklch, var(--danger) 35%, transparent); }
 
 /* Tool call / result bubbles (SA-8) */
 .tool-call-msg {
@@ -425,7 +425,7 @@
 .tool-call-details {
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-strong);
-  background: oklch(0.98 0.008 250);
+  background: var(--tool-call-panel-bg);
   font-size: 13px;
   color: var(--text);
 }
@@ -484,7 +484,7 @@
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  background: oklch(0.97 0.01 250);
+  background: var(--tool-call-status-bg);
 }
 
 .tool-call-status-label--pending {
@@ -494,14 +494,14 @@
 
 .tool-call-status-label--ok {
   color: var(--success);
-  border-color: oklch(0.72 0.14 155 / 0.35);
-  background: oklch(0.96 0.04 155 / 0.35);
+  border-color: var(--tool-call-status-ok-border);
+  background: var(--tool-call-status-ok-bg);
 }
 
 .tool-call-status-label--fail {
   color: var(--danger);
-  border-color: oklch(0.62 0.18 15 / 0.35);
-  background: oklch(0.96 0.04 15 / 0.25);
+  border-color: var(--tool-call-status-fail-border);
+  background: var(--tool-call-status-fail-bg);
 }
 
 .tool-call-spinner {
@@ -562,7 +562,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: oklch(0.97 0.012 250);
+  background: var(--tool-call-pre-bg);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;

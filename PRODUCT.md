@@ -26,10 +26,10 @@ Calm, capable, technical without cosplay. Copy is short and direct. Stats read a
 ## Strategic principles
 
 1. Chat readability comes first; metrics stay visible but compact.
-2. Light theme tuned for normal indoor lighting (desk, laptop): bright surfaces, ink-black accent, not a bunker terminal or neon HUD.
+2. Default **light** theme for bright rooms; optional **dark** (Settings → General → Appearance) inverts OKLCH tokens for low light without changing layout or metric semantics.
 3. Restrained accent: one primary color for actions and live state; semantic colors only for metrics.
 4. Familiar patterns: top bar, session sidebar, settings drawer, message composer.
 
 ## Scene (theme)
 
-Developer at a desk with LM Studio on localhost, glancing between conversation and throughput on a laptop or ultrawide in normal room lighting.
+Developer at a desk with LM Studio on localhost, glancing between conversation and throughput on a laptop or ultrawide in normal room lighting. Optional dark mode targets the same flow in a dim room: same bench layout, softer sheet, inverted ink accent, unchanged metric green / amber / red.
