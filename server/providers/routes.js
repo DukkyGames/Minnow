@@ -12,7 +12,7 @@ import {
   updateProvider,
   updateProviderSecrets,
 } from './store.js';
-import { proxyChatCompletions, proxyModels } from './proxy.js';
+import { proxyChatCompletions, proxyModelLoad, proxyModelUnload, proxyModels } from './proxy.js';
 import { isSafeProviderPathSegment } from './validate.js';
 
 /** CORS headers aligned with /api/config and /api/tools. */
@@ -131,6 +131,60 @@ export async function handleProviderRequest(req, res, pathname) {
       }
       await setActiveProviderId(id);
       sendJson(res, 200, { ok: true, activeProviderId: id });
+      return true;
+    }
+
+    const modelsLoadMatch = pathname.match(/^\/api\/providers\/([^/]+)\/models\/load$/);
+    if (modelsLoadMatch && req.method === 'POST') {
+      const id = modelsLoadMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      if (!body || typeof body.model !== 'string' || !body.model.trim()) {
+        sendJson(res, 400, { error: 'model is required' });
+        return true;
+      }
+      try {
+        sendJson(res, 200, await proxyModelLoad(id, { model: body.model.trim() }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('does not support model load/unload')) {
+          sendJson(res, 400, { error: message });
+          return true;
+        }
+        throw err;
+      }
+      return true;
+    }
+
+    const modelsUnloadMatch = pathname.match(/^\/api\/providers\/([^/]+)\/models\/unload$/);
+    if (modelsUnloadMatch && req.method === 'POST') {
+      const id = modelsUnloadMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      if (!body || typeof body.instance_id !== 'string' || !body.instance_id.trim()) {
+        sendJson(res, 400, { error: 'instance_id is required' });
+        return true;
+      }
+      try {
+        sendJson(
+          res,
+          200,
+          await proxyModelUnload(id, { instance_id: body.instance_id.trim() }),
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('does not support model load/unload')) {
+          sendJson(res, 400, { error: message });
+          return true;
+        }
+        throw err;
+      }
       return true;
     }
 

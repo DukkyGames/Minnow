@@ -7,7 +7,7 @@ import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { buildAuthHeaders, secretsFlags } from './auth-headers.js';
-import { getDefaultPaths } from './paths.js';
+import { getDefaultPaths, getProviderCapabilities } from './paths.js';
 import {
   validateApiKind,
   validateAuthStyle,
@@ -49,6 +49,12 @@ function providerDir(id) {
  * @param {{ hasApiKey: boolean, hasBearer: boolean }} flags
  */
 export function toProviderPublic(profile, flags) {
+  const caps = getProviderCapabilities(profile.apiKind);
+  const supportsModelLoadUnload =
+    profile.supportsModelLoadUnload !== undefined
+      ? profile.supportsModelLoadUnload === true
+      : caps.supportsModelLoadUnload;
+
   return {
     id: profile.id,
     label: profile.label,
@@ -59,6 +65,9 @@ export function toProviderPublic(profile, flags) {
     authStyle: profile.authStyle || 'bearer',
     modelsPath: profile.modelsPath,
     chatCompletionsPath: profile.chatCompletionsPath,
+    supportsModelLoadUnload,
+    modelsLoadPath: profile.modelsLoadPath,
+    modelsUnloadPath: profile.modelsUnloadPath,
     customHeaders: profile.customHeaders || {},
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
@@ -195,6 +204,9 @@ async function seedLmStudioLocal(legacyServerUrl) {
     authStyle: 'bearer',
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
+    supportsModelLoadUnload: true,
+    modelsLoadPath: paths.modelsLoadPath,
+    modelsUnloadPath: paths.modelsUnloadPath,
     customHeaders: {},
     createdAt: now,
     updatedAt: now,
@@ -218,19 +230,57 @@ async function seedLmStudioLocal(legacyServerUrl) {
 /**
  * Ensure provider registry exists; seed default LM Studio provider when empty.
  */
+/**
+ * Backfill load/unload capability fields on existing provider profiles.
+ */
+async function migrateProviderCapabilities() {
+  const ids = await listProviderIds();
+  for (const id of ids) {
+    let profile;
+    try {
+      profile = await readProfile(id);
+    } catch {
+      continue;
+    }
+    const caps = getProviderCapabilities(profile.apiKind);
+    const paths = getDefaultPaths(profile.apiKind, profile);
+    let changed = false;
+
+    if (profile.supportsModelLoadUnload === undefined) {
+      profile.supportsModelLoadUnload = caps.supportsModelLoadUnload;
+      changed = true;
+    }
+    if (caps.supportsModelLoadUnload) {
+      if (!profile.modelsLoadPath && paths.modelsLoadPath) {
+        profile.modelsLoadPath = paths.modelsLoadPath;
+        changed = true;
+      }
+      if (!profile.modelsUnloadPath && paths.modelsUnloadPath) {
+        profile.modelsUnloadPath = paths.modelsUnloadPath;
+        changed = true;
+      }
+    }
+    if (changed) {
+      profile.updatedAt = new Date().toISOString();
+      await writeProfile(id, profile);
+    }
+  }
+}
+
 export async function ensureProviderRegistry() {
   await fs.mkdir(providersRoot(), { recursive: true });
   const ids = await listProviderIds();
-  if (ids.length > 0) {
+  if (ids.length === 0) {
+    const meta = (await readConfigJson('config.json')) ?? {};
+    const legacyUrl =
+      typeof meta.serverUrl === 'string' && meta.serverUrl.trim()
+        ? meta.serverUrl
+        : DEFAULT_LM_STUDIO_URL;
+    await seedLmStudioLocal(legacyUrl);
     return;
   }
 
-  const meta = (await readConfigJson('config.json')) ?? {};
-  const legacyUrl =
-    typeof meta.serverUrl === 'string' && meta.serverUrl.trim()
-      ? meta.serverUrl
-      : DEFAULT_LM_STUDIO_URL;
-  await seedLmStudioLocal(legacyUrl);
+  await migrateProviderCapabilities();
 }
 
 /**
@@ -286,6 +336,7 @@ export async function createProvider(body) {
   );
   const authStyle = validateAuthStyle(body.authStyle);
   const paths = getDefaultPaths(apiKind, body);
+  const caps = getProviderCapabilities(apiKind);
   const now = new Date().toISOString();
 
   const profile = {
@@ -298,6 +349,12 @@ export async function createProvider(body) {
     authStyle,
     modelsPath: body.modelsPath || paths.modelsPath,
     chatCompletionsPath: body.chatCompletionsPath || paths.chatCompletionsPath,
+    supportsModelLoadUnload:
+      body.supportsModelLoadUnload !== undefined
+        ? body.supportsModelLoadUnload === true
+        : caps.supportsModelLoadUnload,
+    modelsLoadPath: body.modelsLoadPath || paths.modelsLoadPath,
+    modelsUnloadPath: body.modelsUnloadPath || paths.modelsUnloadPath,
     customHeaders:
       body.customHeaders && typeof body.customHeaders === 'object' ? body.customHeaders : {},
     createdAt: now,
@@ -413,11 +470,18 @@ export async function getProviderRuntime(id) {
   const profile = await readProfile(id);
   const secrets = await readSecrets(id);
   const paths = getDefaultPaths(profile.apiKind, profile);
+  const caps = getProviderCapabilities(profile.apiKind);
+  const supportsModelLoadUnload =
+    profile.supportsModelLoadUnload !== undefined
+      ? profile.supportsModelLoadUnload === true
+      : caps.supportsModelLoadUnload;
+
   return {
     profile,
     secrets,
     headers: buildAuthHeaders(profile, secrets),
     paths,
+    capabilities: { supportsModelLoadUnload },
   };
 }
 
