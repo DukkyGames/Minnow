@@ -16,6 +16,7 @@ import {
   type AskQuestionAnswerDraft,
 } from './question-cards-state';
 import { setComposerStreamingMode } from './composer-send';
+import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 
 export interface QuestionCardsModalContext {
   subAgentType?: string;
@@ -27,6 +28,7 @@ let requestQuestionCardsCancel: (() => void) | null = null;
 export function forceCloseAskQuestionModal(): void {
   requestQuestionCardsCancel?.();
   requestQuestionCardsCancel = null;
+  setSidebarInputPendingForActiveChat(false);
 }
 
 function getQuestionHost(): HTMLElement | null {
@@ -69,6 +71,7 @@ export function showQuestionCardsModal(
 
     mainColumn?.classList.add('main-column--question-pending');
     host.hidden = false;
+    setSidebarInputPendingForActiveChat(true);
     host.replaceChildren();
 
     const drafts = new Map<string, AskQuestionAnswerDraft>();
@@ -162,6 +165,7 @@ export function showQuestionCardsModal(
       mainColumn?.classList.remove('main-column--question-pending');
       host.replaceChildren();
       host.hidden = true;
+      setSidebarInputPendingForActiveChat(false);
       if (msgInput) {
         msgInput.disabled = streaming ? false : prevInputDisabled;
       }

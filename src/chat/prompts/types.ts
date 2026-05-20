@@ -96,6 +96,8 @@ export interface ComposeContext {
   userMessagePreview?: string;
   includeChatHistorySummary?: boolean;
   planGranularity?: string | null;
+  /** Workspace-relative plan path when mode is orchestrate (for {{orchestrate_plan}}). */
+  orchestratePlanPath?: string | null;
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */
@@ -115,6 +117,7 @@ export interface InterpolationVars {
   date: string;
   os: string;
   plan_granularity: string;
+  orchestrate_plan: string;
 }
 
 /** List entry returned by GET /api/prompt-configs. */

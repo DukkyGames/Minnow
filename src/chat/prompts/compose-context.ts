@@ -26,6 +26,7 @@ import { shouldInjectMemory } from '../../memory/config';
 import { loadPromptConfig } from './prompt-configs';
 import { getWorkspacePath } from '../../state/workspace';
 import type { ComposeContext, PromptProfile } from './types';
+import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
 
 /** Workspace folder path for {{cwd}} in system prompts (falls back to origin). */
 export function resolveComposeCwd(): string {
@@ -99,6 +100,10 @@ export async function buildComposeContext(
   }
 
   const modeId = normalizeModeId(chat.modeId);
+  const orchestratePlanPath =
+    modeId === 'orchestrate'
+      ? normalizeOrchestratePlanPath(chat.orchestratePlanPath) ?? null
+      : null;
   const enabledToolIds = getEnabledToolIdsForChat(chat);
   void getEnabledToolDefinitionsForMode(modeId);
 
@@ -127,6 +132,7 @@ export async function buildComposeContext(
     customConfig,
     cwd: resolveComposeCwd(),
     modeId,
+    orchestratePlanPath,
     expertId: null,
     workAgentId: null,
     skillBody: null,

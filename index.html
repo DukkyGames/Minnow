@@ -561,6 +561,15 @@
             </label>
           </div>
         </div>
+        <div id="orchestratePlanStrip" class="orchestrate-plan-strip hidden" aria-live="polite">
+          <span class="orchestrate-plan-strip__label" id="orchestratePlanLabel">Plan</span>
+          <label class="visually-hidden" for="orchestratePlanSelect">Plan file</label>
+          <select id="orchestratePlanSelect" aria-labelledby="orchestratePlanLabel" disabled>
+            <option value="">Select a plan…</option>
+          </select>
+          <button type="button" class="orchestrate-plan-refresh" id="orchestratePlanRefresh" aria-label="Refresh plan list">↻</button>
+          <span id="orchestratePlanHint" class="orchestrate-plan-hint hidden" role="status"></span>
+        </div>
         <div id="attachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
         <div class="input-row">
           <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files">

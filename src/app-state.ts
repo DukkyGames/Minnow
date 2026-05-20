@@ -4,6 +4,9 @@ import type { LmModelRecord } from './types';
 
 export let streaming = false;
 
+/** Which chat is driving the global streaming flag (sidebar thinking dot). */
+export let streamingChatId: string | null = null;
+
 /** Model id → metadata from GET /api/v0/models (used by stats strip). */
 export const modelCache = new Map<string, LmModelRecord>();
 export let modelsFetchAbort: AbortController | null = null;
@@ -19,8 +22,17 @@ export let suppressSystemPromptSelectChange = false;
 /** Debounced assistant markdown render while SSE tokens arrive. */
 export let assistantRenderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function setStreaming(value: boolean): void {
+export function setStreaming(value: boolean, chatId?: string | null): void {
   streaming = value;
+  if (!value) {
+    streamingChatId = null;
+    return;
+  }
+  if (chatId != null && chatId !== '') {
+    streamingChatId = chatId;
+  } else {
+    streamingChatId = null;
+  }
 }
 
 export function setModelsFetchAbort(controller: AbortController | null): void {

@@ -1,0 +1,94 @@
+/**
+ * Orchestrate plan strip: sits between composer controls and attachment preview.
+ */
+
+.orchestrate-plan-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 2px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.orchestrate-plan-strip.hidden {
+  display: none;
+}
+
+.orchestrate-plan-strip__label {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+#orchestratePlanSelect {
+  flex: 1;
+  min-width: 8rem;
+  max-width: 24rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+#orchestratePlanSelect:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#orchestratePlanSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.orchestrate-plan-refresh {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.orchestrate-plan-refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .orchestrate-plan-refresh:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+}
+
+.orchestrate-plan-hint {
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.orchestrate-plan-hint.hidden {
+  display: none;
+}

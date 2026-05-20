@@ -29,6 +29,7 @@ import './styles/question-cards.css';
 import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/pending-turn-recovery.css';
+import './styles/orchestrate-plan-selector.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -93,12 +94,17 @@ import {
   renderSidebar,
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
+import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import {
   bindExpertsSettingsCheckbox,
   initExpertSelect,
 } from './ui/expert-select';
 import { initReefBridge } from './chat/reef/index.ts';
+import {
+  initOrchestratePlanSelector,
+  syncOrchestratePlanStripFromActiveChat,
+} from './ui/orchestrate-plan-selector';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
@@ -186,6 +192,7 @@ export async function initApp(): Promise<void> {
   initComposerToolsPopover();
   initAttachments();
   initModeSelector();
+  initOrchestratePlanSelector();
   initReefBridge();
   initWorkAgentDevUi();
   await initExpertSelect();
@@ -222,7 +229,9 @@ export async function initApp(): Promise<void> {
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
   renderSidebar();
+  bootstrapActiveChatOpenedTimestamp();
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) {

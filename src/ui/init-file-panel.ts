@@ -27,6 +27,7 @@ import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './fil
 import { isLocalServerAvailable } from '../tools/config';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
+import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 
 let resizerBound = false;
 
@@ -99,6 +100,7 @@ export function onFilePanelServerAvailabilityChanged(): void {
   if (getLocalServerAvailable()) {
     void refreshWorkspaceUi();
     void refreshFileTree();
+    void syncOrchestratePlanStripFromActiveChat();
   } else {
     renderFileTree();
   }

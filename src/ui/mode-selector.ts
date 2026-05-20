@@ -17,6 +17,7 @@ import {
 import { unmountReefWidgetsInChat } from '../chat/reef';
 import { renderChatFromHistory } from './messages';
 import { setStatus } from './status';
+import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 
 const MODE_STATUS_MS = 2200;
 
@@ -95,6 +96,7 @@ function selectMode(modeId: ModeId): void {
   unmountReefWidgetsInChat();
   renderChatFromHistory(getActiveChat());
   syncModeSelectorFromActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
 

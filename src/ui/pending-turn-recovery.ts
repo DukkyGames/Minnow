@@ -5,10 +5,15 @@
 
 import { clearPendingTurn } from '../state/pending-turn';
 import type { Chat } from '../types';
-import { getOrphanUserTurnIndex, resumePendingTurn } from '../chat/turn-recovery';
+import {
+  getOrphanToolTailUserIndex,
+  getOrphanUserTurnIndex,
+  resumePendingTurn,
+} from '../chat/turn-recovery';
 import { setComposerRecoveryBlocked } from './composer-send';
 
 const BANNER_ORPHAN_ID = 'orphanUserRetryBanner';
+const BANNER_ORPHAN_TOOL_ID = 'orphanToolTailRetryBanner';
 const BANNER_NEEDS_MODEL_ID = 'pendingTurnNeedsModelBanner';
 
 function getBannerHost(): HTMLElement | null {
@@ -18,6 +23,7 @@ function getBannerHost(): HTMLElement | null {
 /** Remove any recovery banner from the main column. */
 export function dismissPendingTurnRecovery(): void {
   document.getElementById(BANNER_ORPHAN_ID)?.remove();
+  document.getElementById(BANNER_ORPHAN_TOOL_ID)?.remove();
   document.getElementById(BANNER_NEEDS_MODEL_ID)?.remove();
   setComposerRecoveryBlocked(false);
 }
@@ -99,6 +105,47 @@ export function showOrphanUserRetryBanner(chat: Chat): void {
 
   banner.querySelector('[data-orphan-retry]')?.addEventListener('click', () => {
     const idx = getOrphanUserTurnIndex(chat);
+    if (idx == null) {
+      dismissPendingTurnRecovery();
+      return;
+    }
+    dismissPendingTurnRecovery();
+    void import('../chat/resend-from-index').then((m) =>
+      m.resendFromIndex(chat.id, idx),
+    );
+  });
+
+  host.prepend(banner);
+}
+
+/**
+ * History ends with tool rows but no final assistant reply: offer retry from the
+ * last user message (same resend path as orphan user tail).
+ */
+export function showOrphanToolTailRetryBanner(chat: Chat): void {
+  dismissPendingTurnRecovery();
+  const host = getBannerHost();
+  if (!host) return;
+
+  setComposerRecoveryBlocked(true);
+
+  const banner = document.createElement('div');
+  banner.id = BANNER_ORPHAN_TOOL_ID;
+  banner.className = 'pending-turn-recovery';
+  banner.setAttribute('role', 'status');
+  banner.innerHTML =
+    '<p class="pending-turn-recovery__text">Tools finished but the assistant never sent a final reply. Retry to continue.</p>' +
+    '<div class="pending-turn-recovery__actions">' +
+    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--primary" data-orphan-tool-retry>Retry last message</button>' +
+    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--secondary" data-orphan-tool-dismiss>Dismiss</button>' +
+    '</div>';
+
+  banner.querySelector('[data-orphan-tool-dismiss]')?.addEventListener('click', () => {
+    dismissPendingTurnRecovery();
+  });
+
+  banner.querySelector('[data-orphan-tool-retry]')?.addEventListener('click', () => {
+    const idx = getOrphanToolTailUserIndex(chat);
     if (idx == null) {
       dismissPendingTurnRecovery();
       return;

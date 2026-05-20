@@ -6,6 +6,7 @@
 import { streaming } from '../app-state';
 import type { ToolApprovalRequest } from '../tools/tool-approval-types';
 import { setComposerStreamingMode } from './composer-send';
+import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 
 export type ToolApprovalModalResult = 'allow-once' | 'always-allow' | 'cancel';
 
@@ -215,6 +216,7 @@ export function showToolApprovalModal(
       mainColumn?.classList.remove('main-column--tool-approval-pending');
       host.replaceChildren();
       host.hidden = true;
+      setSidebarInputPendingForActiveChat(false);
       if (msgInput) {
         msgInput.disabled = streaming ? false : prevInputDisabled;
       }

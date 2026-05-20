@@ -14,7 +14,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: orchestrate lite -->
 <!-- LITE -->
 
-**Orchestrate mode.** Execute an existing plan from `documentation/plans/`. Track in `documentation/progress/<plan>-progress.md`.
+**Orchestrate mode.** Active plan path (may be empty): `{{orchestrate_plan}}` — when set, `read_file` it first; otherwise ask the user. Execute from `documentation/plans/`. Track in `documentation/progress/<plan>-progress.md`.
 
 Loop per task (parallel within a wave, sequential between waves, max `globalMaxConcurrent`):
 1. Spawn **Builder** with task's Build spec — default **`wait: true`**, or **`wait: false`** + poll with **`list_sub_agents`** / **`get_sub_agent_status`** when overlapping runs.

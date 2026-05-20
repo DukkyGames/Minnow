@@ -3,6 +3,7 @@
  */
 
 import { addWorkspaceReference, WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import { applyOrchestratePlanFromWorkspacePath } from './orchestrate-plan-selector';
 
 const DROP_ACTIVE_CLASS = 'composer-drop-active';
 
@@ -69,7 +70,11 @@ function bindDropTarget(
     setDropActive(dropTargets, false);
 
     const path = pathFromDataTransfer(event.dataTransfer!);
-    if (path) addWorkspaceReference(path);
+    if (path) {
+      if (!applyOrchestratePlanFromWorkspacePath(path)) {
+        addWorkspaceReference(path);
+      }
+    }
   });
 }
 

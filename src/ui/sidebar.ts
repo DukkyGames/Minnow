@@ -23,6 +23,7 @@ import {
 } from './messages';
 import { syncExpertSelectForActiveChat } from './expert-select';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
+import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
@@ -31,6 +32,14 @@ import { syncModelSelectPicker } from './model-select-picker';
 import { setStatus } from './status';
 import { formatSidebarStatsPreview } from './stats';
 import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
+import {
+  applyChatItemDotClasses,
+  getChatItemDotContext,
+  maybeMarkChatUnreadAfterLeave,
+  recordChatOpened,
+  resolveChatItemDotState,
+  syncChatItemDotsInDom,
+} from './chat-item-dot';
 
 /** Keep model picker aligned with the active chat's stored model id. */
 export function syncModelSelectForActiveChat(): void {
@@ -59,11 +68,13 @@ export function onModelSelectChange(): void {
 export function applyWorkspaceScopedSession(newPath: string, previousPath?: string): void {
   const { activeChat, activeChanged } = onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
+    recordChatOpened(activeChat.id);
     syncModelSelectForActiveChat();
     renderChatFromHistory(activeChat);
     renderStatsForChat(activeChat);
     syncModeSelectorFromActiveChat();
     syncExpertSelectForActiveChat();
+    void syncOrchestratePlanStripFromActiveChat();
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     void refreshTerminalHistoryForActiveChat();
@@ -97,16 +108,18 @@ function appendChatListSection(
   list.appendChild(head);
 
   for (const chat of chats) {
-    appendChatRow(list, chat, chat.id === activeId);
+    appendChatRow(list, chat, activeId);
   }
 }
 
-function appendChatRow(list: HTMLElement, chat: Chat, isActive: boolean): void {
+function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): void {
+  const isActive = chat.id === activeId;
   const modelLabel = chat.modelId || 'No model selected';
   const statsPreview = formatSidebarStatsPreview(chat.lastStats);
   const rowLabel = `${chat.name}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
 
   const row = document.createElement('div');
+  row.dataset.chatId = chat.id;
   row.className = 'chat-item-row' + (isActive ? ' active' : '');
   row.setAttribute('role', 'listitem');
   row.setAttribute('aria-label', rowLabel);
@@ -133,6 +146,8 @@ function appendChatRow(list: HTMLElement, chat: Chat, isActive: boolean): void {
   const dot = document.createElement('div');
   dot.className = 'chat-item-dot';
   dot.setAttribute('aria-hidden', 'true');
+  const dotCtx = getChatItemDotContext(activeId);
+  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx));
   titleRow.appendChild(dot);
 
   const nameSpan = document.createElement('span');
@@ -197,11 +212,12 @@ export function renderSidebar(): void {
 
   const workspaceChats = getChatsForWorkspace(getWorkspacePath(), sessionState);
   for (const chat of workspaceChats) {
-    appendChatRow(list, chat, chat.id === sessionState.activeId);
+    appendChatRow(list, chat, sessionState.activeId);
   }
 
   const unassigned = getUnassignedChats(sessionState);
   appendChatListSection(list, 'Unassigned', unassigned, sessionState.activeId);
+  syncChatItemDotsInDom();
 }
 
 function beginRenameChat(
@@ -289,6 +305,7 @@ export function deleteChat(chatId: string, evt?: Event): void {
 
   if (mainNeedsRefresh) {
     const active = getActiveChat();
+    recordChatOpened(active.id);
     syncModelSelectForActiveChat();
     renderChatFromHistory(active);
     renderStatsForChat(active);
@@ -308,15 +325,26 @@ export function switchChat(id: string): void {
     applySidebarVisuals();
     return;
   }
+  const prevActiveId = sessionState.activeId;
+  const leaving = prevActiveId
+    ? sessionState.chats.find((c) => c.id === prevActiveId)
+    : undefined;
+  if (leaving) {
+    maybeMarkChatUnreadAfterLeave(leaving);
+  }
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
   sessionState.activeId = id;
+  chat.unread = false;
+  touchChat(chat);
+  recordChatOpened(id);
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
   void bootTurnRecoveryForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
@@ -337,11 +365,14 @@ export function createChat(): void {
   sessionState!.chats.unshift(chat);
   sessionState!.activeId = chat.id;
   touchChat(chat);
+  recordChatOpened(chat.id);
   renderChatFromHistory(chat);
   void bootTurnRecoveryForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
+  syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
   renderSidebar();
