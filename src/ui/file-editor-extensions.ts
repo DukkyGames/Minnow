@@ -1,6 +1,13 @@
 /**
  * CodeMirror extensions for the file viewer — LSP autocomplete via local server.
+ * Tab/Escape keymaps live in `file-editor-keymap.ts`.
  */
+
+export {
+  fileEditorEscapeBlurBinding,
+  fileEditorKeymapBindings,
+  fileEditorKeymapExtensions,
+} from './file-editor-keymap';
 
 import {
   autocompletion,
