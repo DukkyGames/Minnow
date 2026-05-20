@@ -4,30 +4,34 @@
 
 import { SYSTEM_PROMPT_PRESETS } from '../constants';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
+import type { ToolConfig, ToolPermissionMode } from '../tools/tool-settings-types';
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
 import type { SkillConfig } from '../skills/config';
-import type { ToolConfig } from '../tools/config';
-
-const DEFAULT_ENABLED_IDS = new Set([
-  'get_datetime',
-  'calculate',
-  'web_search',
-  'wikipedia_search',
-]);
 
 /** Default skill toggles (all enabled). */
 export function defaultSkillConfig(): SkillConfig {
   return buildDefaultSkillConfig();
 }
 
-/** Default tool toggles aligned with defaultToolConfig(). */
+const DEFAULT_ENABLED_TOOL_IDS = new Set([
+  'get_datetime',
+  'calculate',
+  'web_search',
+  'wikipedia_search',
+  'save_memory',
+]);
+
+/** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
   const enabled: Record<string, boolean> = {};
+  const permissions: Record<string, ToolPermissionMode> = {};
   for (const tool of BUILT_IN_TOOLS) {
-    enabled[tool.id] = DEFAULT_ENABLED_IDS.has(tool.id);
+    const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
+    enabled[tool.id] = on;
+    permissions[tool.id] = on ? 'ask' : 'off';
   }
-  return { enabled, keys: { braveApiKey: '' } };
+  return { enabled, permissions, keys: { braveApiKey: '' } };
 }
 
 /** Default system prompt file contents. */

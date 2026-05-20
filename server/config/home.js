@@ -110,6 +110,9 @@ const DEFAULT_META = {
     modelId: '',
     fallbackToChatModel: true,
   },
+  toolSecurity: {
+    filesystemAccess: 'workspace',
+  },
   selfHealing: {
     enabled: false,
     tier1: {
@@ -131,6 +134,9 @@ const DEFAULT_META = {
     retrieveLimit: 20,
     defaultTags: [],
   },
+  planning: {
+    granularity: 'medium',
+  },
 };
 
 const DEFAULT_SYSTEM_PROMPT = {
@@ -144,14 +150,18 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'calculate',
   'web_search',
   'wikipedia_search',
+  'save_memory',
 ]);
 
 function defaultToolsJson() {
   const enabled = {};
+  const permissions = {};
   for (const id of ALL_TOOL_IDS) {
-    enabled[id] = DEFAULT_ENABLED_TOOL_IDS.has(id);
+    const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
+    enabled[id] = on;
+    permissions[id] = on ? 'ask' : 'off';
   }
-  return { enabled, keys: { braveApiKey: '' } };
+  return { enabled, permissions, keys: { braveApiKey: '' } };
 }
 
 /** Per-skill enable flags; missing ids default to enabled. */

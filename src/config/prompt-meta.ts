@@ -6,10 +6,13 @@ import { detectConfigServer } from './storage-mode';
 
 export type PromptProfileName = 'full' | 'lite' | 'custom';
 
+export type PlanGranularity = 'large' | 'medium' | 'small';
+
 export interface PromptMetaSettings {
   activePromptProfile: PromptProfileName;
   activePromptConfigId: string | null;
   activeInfoPresetId: string;
+  planGranularity: PlanGranularity;
 }
 
 const PROMPT_META_STORAGE_KEY = 'minnow.promptMeta';
@@ -18,9 +21,15 @@ const DEFAULT_PROMPT_META: PromptMetaSettings = {
   activePromptProfile: 'full',
   activePromptConfigId: null,
   activeInfoPresetId: 'general-assistant',
+  planGranularity: 'medium',
 };
 
 let cachedMeta: PromptMetaSettings | null = null;
+
+function parsePlanGranularity(value: unknown): PlanGranularity {
+  if (value === 'large' || value === 'small') return value;
+  return 'medium';
+}
 
 function readLocalPromptMeta(): PromptMetaSettings {
   try {
@@ -42,6 +51,7 @@ function readLocalPromptMeta(): PromptMetaSettings {
         typeof parsed.activeInfoPresetId === 'string'
           ? parsed.activeInfoPresetId
           : DEFAULT_PROMPT_META.activeInfoPresetId,
+      planGranularity: parsePlanGranularity(parsed.planGranularity),
     };
   } catch {
     return { ...DEFAULT_PROMPT_META };
@@ -57,6 +67,9 @@ async function fetchPromptMetaFromServer(): Promise<PromptMetaSettings> {
   const res = await fetch('/api/config/meta', { cache: 'no-store' });
   if (!res.ok) return readLocalPromptMeta();
   const meta = (await res.json()) as Record<string, unknown>;
+  const planning = meta.planning && typeof meta.planning === 'object'
+    ? (meta.planning as Record<string, unknown>)
+    : {};
   return {
     activePromptProfile:
       meta.activePromptProfile === 'lite' ||
@@ -70,6 +83,7 @@ async function fetchPromptMetaFromServer(): Promise<PromptMetaSettings> {
       typeof meta.activeInfoPresetId === 'string'
         ? meta.activeInfoPresetId
         : DEFAULT_PROMPT_META.activeInfoPresetId,
+    planGranularity: parsePlanGranularity(planning.granularity),
   };
 }
 
@@ -101,7 +115,10 @@ export async function savePromptMetaSettings(
     const res = await fetch('/api/config/meta', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(next),
+      body: JSON.stringify({
+        ...next,
+        planning: { granularity: next.planGranularity },
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

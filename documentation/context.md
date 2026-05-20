@@ -10,13 +10,13 @@ Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-su
 
 Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **39** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **30** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **41** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **32** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **9** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
 ```
 Minnow/
-├── index.html              # Vite shell: markup + <script type="module" src="/src/main.ts">
+├── index.html              # Vite shell: inline `#app-loader` until `html.app-ready` (set when `main.ts` module runs)
 ├── server.js               # Dev server: Vite + /api/tools (npm start)
 ├── package.json
 ├── tsconfig.json
@@ -39,15 +39,21 @@ Minnow/
 │   │   ├── modes/          # Step 05: registry, tool-policy
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
-│   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, …
+│   ├── ui/                 # sidebar, file-tree, file-viewer, settings, stats, messages, tool-approval-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
 │   ├── lib/list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
-│   │   ├── definitions.ts      # 39-tool catalog (OpenAI function schemas)
-│   │   ├── config.ts           # minnow.tools localStorage
+│   │   ├── definitions.ts      # 41-tool catalog (OpenAI function schemas)
+│   │   ├── config.ts           # tools.json sync, permissions, enabled defs
 │   │   ├── browser-executor.ts # 9 browser-native handlers (not CDP)
-│   │   ├── client.ts           # ping, executeTool router, enabled defs
+│   │   ├── client.ts           # ping, executeTool router, approval gate
+│   │   ├── permission-gate.ts  # modal + path policy before tool runs
+│   │   ├── approval-queue.ts   # serialized approval requests
+│   │   ├── tool-approval-types.ts
+│   │   ├── describe-invocation.ts
+│   │   ├── path-args.ts
+│   │   ├── workspace-path-guard.ts
 │   │   └── loop.ts             # buildApiMessages, sendMessageWithTools
 │   ├── attachments/
 │   │   ├── types.ts
@@ -56,7 +62,7 @@ Minnow/
 │   ├── markdown/renderer.ts
 │   └── styles/
 │       ├── fonts.css tokens.css global.css topbar.css sidebar.css
-│       ├── messages.css input.css settings.css stats.css file-panel.css responsive.css
+│       ├── messages.css input.css settings.css stats.css file-panel.css tool-approval.css responsive.css
 │       └── thoughts.css    # live thought bubbles + Thoughts panel
 ├── dist/                   # Production build (gitignored)
 └── documentation/
@@ -79,9 +85,9 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
 
 ```text
 ~/.minnow/
-  config.json              # schemaVersion, activeProviderId, migration flags
+  config.json              # schemaVersion, activeProviderId, toolSecurity.filesystemAccess, …
   sessions/state.json      # full SessionState blob (all chats — canonical)
-  tools.json               # ToolConfig (enabled + braveApiKey)
+  tools.json               # ToolConfig (permissions, mirrored enabled, braveApiKey)
   system-prompt.json       # { presetId, text }
   memory/                  # scaffold (Step 16)
   providers/               # one dir per provider (Step 03)
@@ -167,6 +173,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 | Runner / preflight | `src/agents/ui-designer/runner.ts`, `preflight.ts` |
 | Tool allowlist | `src/agents/ui-designer/tools.ts` — plan mode blocks writes |
 | Send wiring | `src/tools/loop.ts` — binding, tool filter, one-turn `workAgentId` pin |
+| Impeccable context tool | `load_impeccable_context` → `server/impeccable/load-impeccable-context.js` (script from app root, reads `PRODUCT.md` / `DESIGN.md` / `.impeccable/design.json` from workspace) |
 | Impeccable CLI tool | `run_impeccable` → `server/impeccable/run-impeccable.js` |
 
 **Modes:** `plan` (default, no file mutations) or `implement` (UI paths only). Composer hint after picking `/ui-designer`.
@@ -186,7 +193,11 @@ Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`).
 | `POST /api/memory/clear` | Clear (optional archive) |
 | `POST /api/memory/backup` / `restore` | Folder backup under `backups/` |
 
-**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`. **Client:** `src/memory/client.ts` (`fetchMemoryStatus`, `fetchMemoryEntries`, `retrieveMemoryBlock`, …). **Settings UI:** `#/settings/memory` — toggle store, live entry count via `GET /api/memory/status`, scrollable list of entries (title, tags, body) via `GET /api/memory/entries?includeBody=1`, per-entry delete, backup/clear actions. **Tests:** `npm run test:memory`; smoke: `npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173`.
+| Tool | Purpose |
+|------|---------|
+| `save_memory` | Agent persists `title` + `body` (+ optional `tags`) as `source: agent` via `server/tools/memory-tools.js` |
+
+**Config:** `config.json` → `memory.enabled`, `maxInjectCharsFull` / `maxInjectCharsLite`; `features.memoryInjection` gates retrieval on send (default on). **Client:** `src/memory/client.ts` (`fetchMemoryStatus`, `fetchMemoryEntries`, `retrieveMemoryBlock`, `createMemoryEntry`, …); `src/memory/config.ts` (`shouldInjectMemory`). **Settings UI:** `#/settings/memory` — toggle store, live entry count via `GET /api/memory/status`, scrollable list of entries (title, tags, body) via `GET /api/memory/entries?includeBody=1`, per-entry delete, backup/clear actions. **`save_memory`** is enabled by default (permission **ask**). **Tests:** `npm run test:memory`; smoke: `npx tsx scripts/step16-memory-smoke.mjs http://localhost:5173`.
 
 ### LSP integration (Step 17)
 
@@ -212,7 +223,7 @@ MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabl
 | `DELETE /api/mcp/servers/:id` | Remove user-added server (built-ins cannot be deleted) |
 | `PUT /api/mcp/servers/:id/enabled` | Toggle server in `mcp.json` |
 
-**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). **Add MCP server** form (stdio: id, label, command, args, env). Custom servers can be removed; Context7 is built-in with enable toggle; test `fixture` server is hidden in UI.
+**Settings UI:** `#/settings/mcp` loads servers from `GET /api/mcp/servers` (requires `npm start`). Each server row (`createMcpSettingsRow` in `src/ui/settings-sections.ts`, styles in `src/styles/settings-page.css`) uses a title line (checkbox + name, built-in badge or remove), then a stacked block: muted description, mono status line with a small dot (green when connected), and optional Context7 API key hint. **Add MCP server** form (stdio: id, label, command, args, env). Custom servers can be removed; Context7 is built-in with enable toggle; test `fixture` server is hidden in UI.
 
 **Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
 
@@ -229,7 +240,7 @@ Off by default (`config.json` → `selfHealing.enabled`). Toggle in **Settings �
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.minnow/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). The sidebar `.settings-nav` stacks section buttons in a column with a small vertical `gap` between them. Topbar gear opens settings; each section loads live data from Step 02–18 APIs (providers, prompt-configs, modes, experts, work/sub-agents, tools, MCP, LSP, skills, memory). **Plan granularity** (`large` / `medium` / `small`) lives under **Modes → Plan** (expand the Plan row); persisted in `config.json` via `prompt-meta` (`planGranularity`). Nav clicks update the hash after `setActiveSection`; `openSettings()` skips re-entry when the page is already open on that section so `hashchange` does not race async section renders (duplicate entity lists on work/sub-agents). Async sections (providers, work agents, sub-agents) use a render-generation guard like the Tools panel. **Skills** panel (`#settingsSection-skills` / `#settingsSkillsBody`): each skill shows full description, **Built-In** or **Custom** badge, enable toggle (persisted in `skills.json`), and expandable **Edit SKILL.md**; **Add custom skill** copies `src/skills/_template/SKILL.md` to `~/.minnow/skills/<id>/` via `POST /api/skills` (requires `npm start`). Disabled skills are hidden from the slash picker. Custom prompt configs use `GET/PUT/DELETE /api/prompt-configs` with toolbar New/Save/Duplicate/Delete.
 
 **Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
 
@@ -369,17 +380,22 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 Parent tool loop can spawn **isolated sub-agents** (separate messages, model, tool subset). Results return as JSON aggregate tool results; child transcripts are **not** appended to parent `chat.history`.
 
+**Visibility (feature 30):** Each spawn shows a **sub-agent card** in the parent chat (`src/ui/sub-agent-cards.ts`) with live status; clicking opens a **slide-over drawer** with a read-only transcript (`src/ui/sub-agent-drawer.ts`, `src/styles/sub-agent-drawer.css`). The orchestrator can **check in** without blocking via **`list_sub_agents`** and **`get_sub_agent_status`** (same executor as spawn/cancel). Terminal runs are copied into `chat.subAgentRuns` (`PersistedSubAgentRun[]` in `src/types.ts`) via `src/state/sub-agent-session-sync.ts` so the drawer works after reload. Live updates use `src/agents/sub-agent-events.ts` (subscribe/emit from `src/agents/orchestrator.ts`). Spawn rows anchor after the parent tool bubble using `data-tool-call-id` on `.tool-call-msg` (`src/tools/loop.ts`).
+
 | Concern | Location |
 |---------|----------|
 | Types | `src/agents/types.ts` |
 | Config merge | `src/agents/sub-agent-config.ts`, `src/agents/defaults/sub-agents.json` |
-| Orchestrator | `src/agents/orchestrator.ts` — spawn, cancel, queue, `restartSubAgent`, `cancelAllForParentTurn` |
+| Orchestrator | `src/agents/orchestrator.ts` — spawn, cancel, queue, `restartSubAgent`, `cancelAllForParentTurn`, list/status helpers |
+| Events | `src/agents/sub-agent-events.ts` |
 | Runner | `src/agents/sub-agent-runner.ts` — headless tool loop (`MAX_SUB_AGENT_TOOL_TURNS = 6`) |
 | Tool subset | `src/agents/sub-agent-tools.ts` |
 | Prompts | `src/agents/shipped-sub-agent-prompts.ts`, `src/agents/prompts/sub-agents/*.md` |
-| Parent tools | `spawn_sub_agent`, `cancel_sub_agent` in `src/tools/definitions.ts` |
+| Parent tools | `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` in `src/tools/definitions.ts` |
 | Executor | `src/tools/sub-agent-executor.ts`; routed in `src/tools/client.ts` |
 | Parent abort | `src/tools/loop.ts` — `parentTurnId` + `cancelAllForParentTurn` on `AbortError` |
+| Session hydrate | `src/state/sessions.ts` — `ensurePersistedSubAgentRuns` |
+| Boot | `src/main.ts` — `initSubAgentUi()` after `loadSessionsFromStorage()` |
 
 **Built-in types:** `generalPurpose`, `explore`, `shell`, `explorer` (Step 19 self-heal stub, `maxConcurrent: 1`).
 
@@ -389,7 +405,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Step 19 hooks (exported, not wired):** `restartSubAgent`, `recordToolCallForRun`, `getRunToolCallFingerprint`.
 
-**Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `minnow.subAgents` in `localStorage` when Vite-only.
+**Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `minnow.subAgents` in `localStorage` when Vite-only. Settled sub-agent transcripts also persist on **`chat.subAgentRuns`** in `sessions/state.json` (capped message list).
 
 **Tests:** `test/sub-agents/**/*.test.mts`. Verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
@@ -456,7 +472,7 @@ Client: [`src/providers/`](../src/providers/) (`store.ts`, `resolve.ts`, `fetch-
 
 **Vite-only (`npm run dev`):** No `/api/providers`; client uses a single **direct** fallback from read-only (or editable) `#serverUrl`. Settings shows **Provider management requires npm start**.
 
-Client modules: [`src/config/storage-mode.ts`](../src/config/storage-mode.ts), [`api-client.ts`](../src/config/api-client.ts), [`migrate.ts`](../src/config/migrate.ts).
+Client modules: [`src/config/storage-mode.ts`](../src/config/storage-mode.ts), [`api-client.ts`](../src/config/api-client.ts), [`migrate.ts`](../src/config/migrate.ts), [`tool-security-meta.ts`](../src/config/tool-security-meta.ts) (`toolSecurity.filesystemAccess`).
 
 ### Migration from `localStorage`
 
@@ -487,16 +503,31 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
     "wikipedia_search": true,
     "read_file": false
   },
+  "permissions": {
+    "read_file": "off",
+    "web_search": "ask",
+    "save_file": "full"
+  },
   "keys": {
     "braveApiKey": ""
   }
 }
 ```
 
-- **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search` **on**; every other catalog id **off** (`defaultToolConfig()` in [`src/tools/config.ts`](../src/tools/config.ts)).
-- **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with global and per-category **Enable all** controls; list `change` delegates to `setToolsEnabled()` / `onToolToggle()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes checked or indeterminate, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)).
+- **`permissions`:** per built-in tool id (and optional `mcp__*` keys), one of **`full`** (no approval modal), **`ask`** (modal before each run), **`off`** (tool hidden from the model). Defaults match legacy **enabled** on first load: previously enabled tools become **`ask`**, disabled become **`off`**.
+- **`enabled`:** mirrored from `permissions` (`true` when not `off`) for backward compatibility and older readers.
+- **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search` **on** with **`ask`**; every other catalog id **off** (`defaultToolConfig()` in [`src/config/defaults.ts`](../src/config/defaults.ts)).
+- **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with a **permission** `<select>` per tool and global/category **Enable all** controls (bulk sets **`ask`** / **`off`**); list `change` delegates to `setToolPermission()` / `setToolsEnabled()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes aligned, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)). On the **full settings page**, `renderToolsSection()` ([`src/ui/settings-sections.ts`](../src/ui/settings-sections.ts)) hydrates from in-memory caches (`loadToolConfigForSettingsUi()`, `loadToolSecurityMeta()` — no network on repeat visits; one retry if boot-time `GET /api/config/tools` failed). Generation guard drops stale async renders. Server storage mode does **not** fall back to empty browser `minnow.tools` when `GET /api/config/tools` fails. Adds a server banner, intro copy, **Filesystem access** radios (restrict vs full disk, with confirm when enabling full), then a single **`.settings-tools-panel`** wrapping the tool list and Brave API key row (styles in [`src/styles/settings-page.css`](../src/styles/settings-page.css)); **`.settings-tools-list .tool-group-head`** adds top padding so category headers sit below the list toolbar divider. **Filesystem access** persists as `config.json` → `toolSecurity.filesystemAccess` via [`src/config/tool-security-meta.ts`](../src/config/tool-security-meta.ts). Each time **Settings → Tools** mounts, `clearMount` replaces the Brave key `<input>` — input/change listeners are re-attached on that fresh node so the key still persists when revisiting the section (the one-shot `toolsSectionInitialized` gate only wraps `registerToolHandlers()`).
 - **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
-- **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables checkboxes, and sets `title` on each. `onToolToggle` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
+- **Offline UX:** Static Tools hint in [`index.html`](../index.html) (`tools-section-hint`: server tools need `npm start`). When ping fails, `#toolsServerBanner` is shown (“Server tools need npm start (not npm run dev).”), `refreshServerToolDisabledState()` dims server rows, disables permission selects, and sets `title` on each. `setToolPermission` reverts enabling a server tool while offline and calls `setStatus('err', …)` with “Start with npm start to use file/git tools.”
+
+### Tool approval (execution gate)
+
+Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/client.ts) awaits [`ensureToolConfigReady`](../src/tools/config.ts) then calls [`maybeBlockToolForUserApproval`](../src/tools/permission-gate.ts): **`ask`** always shows the approval strip; **`full`** still shows it when a path argument resolves **outside the workspace** while `toolSecurity.filesystemAccess` is **`workspace`**. The strip mounts in **`#toolApprovalHost`** in [`index.html`](../index.html) (between `#chatArea` and the composer). While it is open, **`#mainColumn`** gets **`main-column--tool-approval-pending`**, which hides **`.input-bar`** (composer) via CSS; the textarea and send button are also disabled until the user chooses **Allow once**, **Always allow** (writes **`full`** for that tool; **`saveToolConfigAsync`** awaits **`PUT /api/config/tools`** when using `npm start`), or **Cancel** (`Error: User denied tool execution`). Optional digit shortcuts **1 / 2 / 3** apply while the strip is open (not only when a button inside it is focused; the composer is disabled so focus often sits on **`<body>`**). They are suppressed if focus is in another editable control outside the host. **Esc** cancels. Queue: [`src/tools/approval-queue.ts`](../src/tools/approval-queue.ts); payload types: [`src/tools/tool-approval-types.ts`](../src/tools/tool-approval-types.ts); UI: [`src/ui/tool-approval-modal.ts`](../src/ui/tool-approval-modal.ts). Sub-agent tools use the same strip with the parent chat id threaded from [`setSubAgentExecutorContext`](../src/tools/sub-agent-executor.ts) → spawn → orchestrator → [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts).
+
+### Path policy (server)
+
+- **Workspace-only (default):** [`server.js`](../server.js) `resolveSafePath()` keeps paths under `getWorkspaceRoot()` unless **`toolSecurity.filesystemAccess`** in `config.json` is **`full`** or **`TOOLS_ALLOW_ALL_PATHS=1`** (automation escape hatch). Read from disk per tool request via [`server/config/tool-security.js`](../server/config/tool-security.js) and `AsyncLocalStorage` so nested calls stay scoped.
 
 ## Persisted message types (`chat.history`)
 
@@ -527,10 +558,11 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 
 | Topic | Detail |
 |-------|--------|
-| **Trigger** | First `role: 'user'` row only; `chat.name === 'New chat'` at schedule time |
+| **Trigger** | First `role: 'user'` row only; placeholder name check is case-insensitive (`New chat` / `New Chat`) |
 | **Prompt** | Shipped [`src/chat/prompts/titles/default.md`](../src/chat/prompts/titles/default.md); override `~/.minnow/prompts/titles/default.md` via prompt registry when `npm start` |
-| **Config** | `config.json` → `titles.enabled`, `titles.modelId`, `titles.providerId`, `titles.maxTokens`, `titles.temperature` (see [`src/config/titles-meta.ts`](../src/config/titles-meta.ts)) |
-| **Provider** | Step 03 `postChatCompletions` / active provider; empty `titles.modelId` → chat `modelId` |
+| **Config** | `config.json` → `titles.enabled`, `titles.modelId`, `titles.providerId`, `titles.maxTokens`, `titles.temperature` (see [`src/config/titles-meta.ts`](../src/config/titles-meta.ts)); `GET /api/config/meta` merges default `titles` when missing |
+| **Provider** | Step 03 `postChatCompletions`; schedule uses resolved send `modelId` / `providerId` (work-agent / UI Designer bindings), then config overrides, then chat fields |
+| **Reasoning models** | Title completion reads `message.content` then `reasoning` / `reasoning_content` ([`generate.ts`](../src/chat/titles/generate.ts)) |
 | **Apply** | `applyGeneratedChatTitle` only if still placeholder (rename/delete races discard) |
 | **UI** | `renderSidebar()` after successful apply only |
 | **Delete** | `removeChatById` aborts in-flight title job for that `chatId` |
@@ -542,6 +574,8 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 ### Layout (summary)
 
 - **Desktop:** header toggle collapses sidebar (wide vs narrow rail).
+- **Chat list row actions:** rename (✎) and delete (🗑) use **32×32px** controls with **no gap** on fine pointers (`sidebar.css`); **`pointer: coarse`** keeps **`--touch-min` (44px)** for touch targets.
+- **Session row hover:** fine-pointer hover on non-active rows uses `--surface-elevated` fill; title and rename/delete use `--text-hover` (direct button hover: green/red). **Active** row keeps accent styling on hover (`sidebar.css`).
 - **Mobile (≤640px):** sidebar overlay + backdrop; safe-area padding.
 - **Compact (≤600px):** 16px input (iOS zoom), collapsible stats strip.
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
@@ -583,7 +617,7 @@ Browser (same origin :5173)
 | `/api/terminal/cancel/:runId` | POST | `{ ok: true }` (SIGTERM when supported) |
 
 - **CORS:** `*` for local dev; **OPTIONS** → 204.
-- **Path guard:** `resolveSafePath()` — paths under `process.cwd()` unless `TOOLS_ALLOW_ALL_PATHS=1`.
+- **Path guard:** `resolveSafePath()` — paths under the workspace root unless `toolSecurity.filesystemAccess` is `full` in `config.json` or `TOOLS_ALLOW_ALL_PATHS=1`.
 - **Errors:** Handlers return **strings**; failures use `Error: …` prefix (not thrown to the client).
 - **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected — the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
 - **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
@@ -723,7 +757,7 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 - **Assistant:** **marked** + **DOMPurify** + **highlight.js**; streaming debounced ~100 ms.
 - **Reasoning / “thinking”** (LM Studio **App Settings → Developer**: separate `reasoning_content` and/or `choices.delta.reasoning` for compatible models such as DeepSeek R1 / gpt-oss):
   - **Live stream phases** ([`stream-status.ts`](../src/ui/stream-status.ts), wired from [`messages.ts`](../src/ui/messages.ts), [`loop.ts`](../src/tools/loop.ts), [`chat.ts`](../src/api/chat.ts)): `generating` → optional `thinking` (first reasoning delta) → `generating` again after `endReasoningPhase()` until prose → `prose`. A `.stream-status` row (sibling **before** the hidden prose bubble) shows **Generating response…** or **Thinking…** with animated dots; `role="status"`, `aria-live="polite"`, `aria-busy` until prose. Hidden after [`revealAssistantProseBubble`](../src/ui/messages.ts). Respects `prefers-reduced-motion` (static dots).
-  - **Live thought bubbles:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). When the model streams normal **`content`**, the live stage is torn down.
+  - **Live thought bubbles:** [`ThoughtBubbleController`](../src/ui/thought-bubbles.ts) shows one dashed **thought** bubble above the streaming assistant bubble; text appears with a typewriter effect; paragraph breaks (`\n\n`) start a new thought (previous bubble fades out). Boundary splits chain gap/fade work via returned promises (not `tailWork.then` on the in-flight queue — that had deadlocked after the first `\n\n`). When the model streams normal **`content`**, the live stage is torn down.
   - **After reply:** a **Thoughts** text button above that assistant bubble expands a read-only list of all segments (same controller module). Segments are stored on the assistant message as **`thinking: string[]`** on the **final** text reply of a user send (tool-loop rounds accumulate into one list).
   - **Parsing:** [`extractReasoningDelta`](../src/api/reasoning.ts) reads SSE chunks without mixing reasoning into `content` ([`extractStreamDelta`](../src/api/chat.ts) stays prose-only).
   - **Prose caret:** inline `.cursor.cursor--prose` (2px accent bar) during markdown stream; not the old solid block cursor.
@@ -770,17 +804,20 @@ Use the port printed by `server.js` (default **5173**; another port if busy).
 
 ### App bootstrap (`initApp`)
 
-Order in [`src/main.ts`](../src/main.ts) `initApp()`:
+[`src/main.ts`](../src/main.ts) calls `markAppReady()` as soon as the module evaluates (Vite CSS is injected), then runs `initApp()` on `DOMContentLoaded` or immediately if the document is already parsed — **not** on `window.load` (that event often fires before deferred modules run, which left the loader stuck).
 
-1. `await detectConfigServer()` → `runMigrationIfNeeded()` if server mode.
-2. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
-2b. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
-3. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
-4. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
-5. `await detectLocalServer()` → `await loadToolConfigFromStorage()` → `loadToolConfigIntoDrawer()`.
-6. `applySidebarVisuals()` + `renderSidebar()`.
-7. `await loadProviderSelect()` + `registerProviderHandlers()`.
-8. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
+Order in `initApp()`:
+
+1. `await detectConfigServer()` → `await runMigrationIfNeeded()` if server mode.
+2. `await loadToolConfigFromStorage()` — read `tools.json` (or `minnow.tools`) **before** prompt/session UI so permission state is never stale on first paint; overlapping calls share one in-flight promise and the loader always resolves (falls back to `defaultToolConfig()` on unexpected errors, so Node tests never see a rejected load).
+3. `await initPromptSystem()` — built-in prompts + user registry from `/api/prompts/registry`.
+4. `await initWorkAgentSystem()` — work agents from glob + `/api/work-agents` overrides.
+5. `await loadSessionsFromStorage()`; `fillSystemPromptPresetSelect()` + `await loadSystemPromptSettings()`.
+6. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
+7. `await detectLocalServer()` → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
+8. `applySidebarVisuals()` + `renderSidebar()`.
+9. `await loadProviderSelect()` + `registerProviderHandlers()`.
+10. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
 
 ## Hardening (production edge cases)
 
@@ -798,7 +835,7 @@ Order in [`src/main.ts`](../src/main.ts) `initApp()`:
 | [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
-| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 39-tool catalog |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 41-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `minnow.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |

@@ -77,7 +77,10 @@ function setActiveSection(section: SettingsSectionId): void {
       nav.setAttribute('aria-current', id === section ? 'page' : 'false');
     }
   }
-  window.location.hash = `#/settings/${section}`;
+  const nextHash = `#/settings/${section}`;
+  if (window.location.hash !== nextHash) {
+    window.location.hash = nextHash;
+  }
   void refreshSettingsSection(section);
 }
 
@@ -251,7 +254,14 @@ export function openSettings(section?: SettingsSectionId): void {
 
   bindStaticSections();
   void hydrateStaticFields();
-  setActiveSection(section ?? parseHashSection());
+
+  const target = section ?? parseHashSection();
+  // Nav clicks update the hash after setActiveSection; hashchange would otherwise
+  // re-open the same section and race async section renders (duplicate lists).
+  if (root.classList.contains('is-open') && target === activeSection) {
+    return;
+  }
+  setActiveSection(target);
 }
 
 /** Close settings and return to chat. */

@@ -2,14 +2,19 @@
  * Call the LLM once (non-streaming) to produce a normalized chat title.
  */
 
+import { extractMessageText } from '../../api/chat';
+import { extractReasoningMessage } from '../../api/reasoning';
 import { buildTitleMessages } from './prompt';
 import { normalizeTitle } from './sanitize';
 import type { TitleGenerationOptions, TitleProviderPort } from './types';
 
-/** Plain text from a non-streaming completion message (avoids importing chat.ts). */
-function extractCompletionText(message: { content?: string } | null | undefined): string {
-  if (!message?.content) return '';
-  return String(message.content);
+/** Visible or reasoning text from a non-streaming completion message. */
+function extractTitleCompletionText(
+  message: { content?: string; reasoning?: string; reasoning_content?: string } | null | undefined,
+): string {
+  const content = extractMessageText(message).trim();
+  if (content) return content;
+  return extractReasoningMessage(message).trim();
 }
 
 /**
@@ -33,7 +38,7 @@ export async function generateChatTitle(
       options.signal,
     );
 
-    const raw = extractCompletionText(chunk.choices?.[0]?.message);
+    const raw = extractTitleCompletionText(chunk.choices?.[0]?.message);
     return normalizeTitle(raw);
   } catch {
     return null;

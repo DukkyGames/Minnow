@@ -19,6 +19,7 @@ export const UI_DESIGNER_TOOL_ALLOWLIST = [
   'replace_text_in_file',
   'save_file',
   'list_directory',
+  'load_impeccable_context',
   'run_impeccable',
 ] as const;
 

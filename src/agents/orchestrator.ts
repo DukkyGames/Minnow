@@ -10,6 +10,7 @@ import { createSubAgentRunId } from './sub-agent-run-id';
 import { getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
+import { clearSubAgentRunListeners, emitSubAgentRunUpdated } from './sub-agent-events';
 import type {
   AggregateResult,
   CancelSubAgentResult,
@@ -129,12 +130,14 @@ function settleRun(
   run.summary = summary;
   run.error = error;
   run.endedAt = nowIso();
+  run.liveNestedToolCalls = undefined;
   clearTimeoutFor(internals);
   if (!internals.queued) {
     decActive(run.type);
   }
   internals.queued = false;
   drainQueue();
+  emitSubAgentRunUpdated(run);
 }
 
 async function executeRun(internals: RunInternals, modeId: string): Promise<void> {
@@ -148,6 +151,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 
   setStatus(run, 'running');
   if (!run.startedAt) run.startedAt = nowIso();
+  emitSubAgentRunUpdated(run);
 
   const parentTools = getEnabledToolDefinitionsForMode(modeId);
   const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
@@ -157,6 +161,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
   const filteredExecute = async (
     name: string,
     args: Record<string, unknown>,
+    ctx?: import('../tools/client').ExecuteToolContext,
   ) => {
     if (!allowedNames.has(name)) {
       return {
@@ -164,7 +169,11 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       };
     }
     recordToolCallForRun(run.runId, name, args);
-    return executeTool(name, args);
+    return executeTool(name, args, {
+      ...ctx,
+      chatId: run.parentChatId ?? undefined,
+      subAgentType: run.type,
+    });
   };
 
   try {
@@ -177,6 +186,10 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       providerId: typeConfig.providerId,
       modelId: typeConfig.modelId,
       signal: abort.signal,
+      toolExecuteContext: {
+        chatId: run.parentChatId ?? undefined,
+        subAgentType: run.type,
+      },
       executeTool: filteredExecute,
     });
 
@@ -262,6 +275,8 @@ async function spawnSubAgentInternal(
     type: input.type,
     task: input.task,
     status: 'queued',
+    parentChatId: input.parentChatId ?? null,
+    parentToolCallId: input.parentToolCallId ?? null,
     parentTurnId: input.parentTurnId ?? null,
     summary: '',
     error: null,
@@ -296,10 +311,12 @@ async function spawnSubAgentInternal(
     setStatus(run, 'running');
     run.startedAt = nowIso();
     void executeRun(internals, modeId);
+    emitSubAgentRunUpdated(run);
     return { runId, status: 'running' };
   }
 
   globalQueue.push({ runId, modeId });
+  emitSubAgentRunUpdated(run);
   return { runId, status: 'queued' };
 }
 
@@ -357,7 +374,7 @@ export async function restartSubAgent(
     throw new Error(`Error: unknown sub-agent run ${runId}`);
   }
 
-  const { type, task, parentTurnId } = internals.run;
+  const { type, task, parentTurnId, parentChatId } = internals.run;
   cancelSubAgent(runId, 'restart');
 
   let nextTask = task;
@@ -370,6 +387,8 @@ export async function restartSubAgent(
     task: nextTask,
     wait: false,
     parentTurnId,
+    parentChatId,
+    parentToolCallId: internals.run.parentToolCallId,
     modeId: undefined,
   });
 }
@@ -457,6 +476,8 @@ export function recordToolCallForRun(
     internals.run.type,
     internals.toolCallLog.map((e) => ({ name: e.name, argsJson: e.args })),
   );
+  internals.run.liveNestedToolCalls = (internals.run.liveNestedToolCalls ?? 0) + 1;
+  emitSubAgentRunUpdated(internals.run);
 }
 
 /** Stable fingerprint hash for repetition detection (Step 19). */
@@ -473,8 +494,103 @@ export function getRunToolCallFingerprint(runId: string): string {
   return `fp_${runId.slice(0, 8)}_${hash}`;
 }
 
+const STATUS_PREVIEW_MAX = 480;
+
+/** Last non-system message text for parent status tools (capped). */
+function lastNonSystemPreview(messages: SubAgentRun['messages']): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as {
+      role?: string;
+      content?: unknown;
+    };
+    if (!m || m.role === 'system') continue;
+    let text = '';
+    if (m.role === 'user' || m.role === 'assistant') {
+      const c = m.content;
+      if (typeof c === 'string') text = c;
+      else if (c != null) text = JSON.stringify(c);
+    } else if (m.role === 'tool') {
+      text = typeof m.content === 'string' ? String(m.content) : '';
+    }
+    const t = text.trim();
+    if (!t) continue;
+    return t.length > STATUS_PREVIEW_MAX ? `${t.slice(0, STATUS_PREVIEW_MAX)}…` : t;
+  }
+  return '';
+}
+
+/** Active or settled runs registered for a parent user-send turn. */
+export function listSubAgentRunsForParentTurn(
+  parentTurnId: string | null | undefined,
+): SubAgentRun[] {
+  if (!parentTurnId) return [];
+  const set = parentTurnRuns.get(parentTurnId);
+  if (!set || set.size === 0) return [];
+  const out: SubAgentRun[] = [];
+  for (const id of set) {
+    const row = runs.get(id)?.run;
+    if (row) out.push(row);
+  }
+  return out.sort((a, b) =>
+    String(a.startedAt ?? '').localeCompare(String(b.startedAt ?? '')),
+  );
+}
+
+/** JSON body for the `list_sub_agents` parent tool. */
+export function formatSubAgentListToolResult(parentTurnId: string | null | undefined): string {
+  const rows = listSubAgentRunsForParentTurn(parentTurnId).map((r) => ({
+    runId: r.runId,
+    type: r.type,
+    status: r.status,
+    taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
+    startedAt: r.startedAt,
+    toolTurns: r.toolTurns,
+    liveNestedToolCalls: r.liveNestedToolCalls,
+  }));
+  return JSON.stringify({ runs: rows }, null, 2);
+}
+
+/** Serializable snapshot for `get_sub_agent_status`. */
+export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    runId: run.runId,
+    type: run.type,
+    status: run.status,
+    summary: run.summary,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    toolTurns: run.toolTurns,
+    cancelled: run.cancelled,
+    lastMessagePreview: lastNonSystemPreview(run.messages),
+  };
+  if (run.error) payload.error = run.error;
+  if (run.liveNestedToolCalls != null) payload.liveNestedToolCalls = run.liveNestedToolCalls;
+  return payload;
+}
+
+/**
+ * Ensures a run id is tied to the current parent tool context (turn + optional chat),
+ * then returns the live run row.
+ */
+export function assertSubAgentRunReadableByParent(
+  run: SubAgentRun | undefined,
+  ctx: { parentTurnId: string; parentChatId?: string },
+): SubAgentRun {
+  if (!run) {
+    throw new Error('Error: unknown sub-agent run');
+  }
+  if (run.parentTurnId !== ctx.parentTurnId) {
+    throw new Error('Error: sub-agent run is not visible from this parent turn');
+  }
+  if (ctx.parentChatId && run.parentChatId && run.parentChatId !== ctx.parentChatId) {
+    throw new Error('Error: sub-agent run is not visible from this chat');
+  }
+  return run;
+}
+
 /** Test reset: clear orchestrator state. */
 export function resetSubAgentOrchestrator(): void {
+  clearSubAgentRunListeners();
   for (const internals of runs.values()) {
     clearTimeoutFor(internals);
     internals.abort.abort();

@@ -11,11 +11,95 @@
 <link rel="icon" href="/logos/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/logos/apple-touch-icon.png">
 <title>Minnow</title>
+<style>
+  /* Critical: loading shell only (Vite CSS + app boot hide this via html.app-ready). */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    background: #fefefe;
+  }
+  html:not(.app-ready) body > :not(#app-loader) {
+    visibility: hidden;
+  }
+  .app-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: max(16px, env(safe-area-inset-top)) 24px max(16px, env(safe-area-inset-bottom));
+    background: #fefefe;
+    color: oklch(31.714% 0.00004 271.152);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  html.app-ready .app-loader {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-loader__mark {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    background: #000;
+    color: #fefefe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .app-loader__mark svg {
+    width: 32px;
+    height: 32px;
+    display: block;
+  }
+  .app-loader__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .app-loader__status {
+    margin: 0;
+    font-size: 12px;
+    color: oklch(62% 0.025 250);
+    letter-spacing: 0.02em;
+  }
+  .app-loader__spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid oklch(90% 0.01 250);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: app-loader-spin 0.75s linear infinite;
+  }
+  @keyframes app-loader-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-loader__spinner { animation: none; opacity: 0.5; }
+    .app-loader { transition-duration: 0.01ms; }
+  }
+</style>
 </head>
 <body>
+<div id="app-loader" class="app-loader" role="status" aria-live="polite" aria-busy="true" aria-label="Loading Minnow">
+  <div class="app-loader__mark" aria-hidden="true">
+    <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+  </div>
+  <p class="app-loader__title">Minnow</p>
+  <div class="app-loader__spinner" aria-hidden="true"></div>
+  <p class="app-loader__status" id="appLoaderStatus">Loading…</p>
+</div>
 <header class="topbar">
   <div class="logo-mark" aria-hidden="true">
-    <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+    <svg class="minnow-glyph icon-svg" width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
   </div>
   <div class="app-title">Minnow</div>
   <div class="topbar-sep"></div>
@@ -23,7 +107,6 @@
   <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
-  <div class="topbar-sep mid-hide"></div>
 
   <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
     <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -331,12 +414,15 @@
     <main class="chat-area" id="chatArea">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon" aria-hidden="true">
-          <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" style="width:32px;height:32px;margin:0 auto" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+          <svg class="minnow-glyph icon-svg" width="32" height="32" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
       </div>
     </main>
+
+    <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
+    <div id="toolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
 
     <!-- Input bar -->
     <div class="input-bar">
@@ -481,6 +567,12 @@
     <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
   </aside>
 </div>
+<script>
+  /* Fallback if the module bundle fails to boot (avoids an infinite loader). */
+  setTimeout(function () {
+    document.documentElement.classList.add('app-ready');
+  }, 30000);
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

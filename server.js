@@ -10,6 +10,7 @@ import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from './server/pr
 import { createTerminalMiddleware } from './server/terminal/middleware.js';
 import { executeCommandBlocking } from './server/terminal-runner.js';
 import { promisify } from 'node:util';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createConfigMiddleware } from './server/config/middleware.js';
@@ -22,6 +23,8 @@ import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
 import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
+import { toolLoadImpeccableContext } from './server/impeccable/load-impeccable-context.js';
+import { toolSaveMemory } from './server/tools/memory-tools.js';
 import { createMemoryMiddleware } from './server/memory/middleware.js';
 import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
@@ -29,6 +32,7 @@ import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
 import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
 import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
+import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
 
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 5173;
@@ -39,13 +43,17 @@ const DDG_MAX_SNIPPETS = 8;
 /** Max decoded PDF size for read_document (aligns with attachment limit). */
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
+/** Per-request flag: allow paths outside workspace when config grants full filesystem access. */
+const pathAccessStore = new AsyncLocalStorage();
+
 /** Normalize slashes for consistent prefix checks on Windows. */
 function normalizePath(p) {
   return path.normalize(p).replace(/\\/g, '/');
 }
 
 /**
- * Resolve a user-supplied path under the workspace root unless TOOLS_ALLOW_ALL_PATHS=1.
+ * Resolve a user-supplied path under the workspace root unless full access is allowed
+ * (TOOLS_ALLOW_ALL_PATHS=1 or persisted toolSecurity.filesystemAccess === 'full').
  * Returns absolute path string, or throws with a message suitable for tool results.
  */
 function resolveSafePath(userPath) {
@@ -58,7 +66,10 @@ function resolveSafePath(userPath) {
     ? path.resolve(userPath)
     : path.resolve(workspaceRoot, userPath);
 
-  if (ALLOW_ALL_PATHS) {
+  const store = pathAccessStore.getStore();
+  const allowOutside = ALLOW_ALL_PATHS || store?.allowOutsideWorkspace === true;
+
+  if (allowOutside) {
     return resolved;
   }
 
@@ -70,7 +81,7 @@ function resolveSafePath(userPath) {
   }
 
   throw new Error(
-    `Path "${userPath}" resolves outside the workspace directory. Set TOOLS_ALLOW_ALL_PATHS=1 to allow.`,
+    `Path "${userPath}" resolves outside the workspace directory. Enable full filesystem access in Settings (dangerous) or set TOOLS_ALLOW_ALL_PATHS=1 for automation.`,
   );
 }
 
@@ -623,6 +634,8 @@ const SERVER_TOOL_HANDLERS = {
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
   run_impeccable: (args) => toolRunImpeccable(args, getWorkspaceRoot()),
+  load_impeccable_context: () =>
+    toolLoadImpeccableContext(APP_ROOT, getWorkspaceRoot()),
   get_lsp_diagnostics: async (args) => {
     const { getLspDiagnostics } = await import('./server/lsp/manager.js');
     return getLspDiagnostics(String(args?.path ?? ''));
@@ -631,6 +644,7 @@ const SERVER_TOOL_HANDLERS = {
     const { listLspServers } = await import('./server/lsp/manager.js');
     return JSON.stringify(await listLspServers(), null, 2);
   },
+  save_memory: toolSaveMemory,
   ...BROWSER_TOOL_HANDLERS,
 };
 
@@ -639,24 +653,28 @@ const SERVER_TOOL_HANDLERS = {
  * All tools return strings; errors are returned as string messages, not thrown to HTTP layer.
  */
 async function executeServerTool(name, args) {
-  try {
-    if (isMcpToolName(name)) {
-      const result = await callMcpTool(name, args ?? {});
-      return { result: String(result) };
+  const fsAccess = await getFilesystemAccessFromConfig();
+  const allowOutsideWorkspace = fsAccess === 'full';
+  return pathAccessStore.run({ allowOutsideWorkspace }, async () => {
+    try {
+      if (isMcpToolName(name)) {
+        const result = await callMcpTool(name, args ?? {});
+        return { result: String(result) };
+      }
+      const handler = SERVER_TOOL_HANDLERS[name];
+      if (!handler) {
+        return { result: `Not implemented: ${name}` };
+      }
+      const out = await handler(args ?? {});
+      if (out && typeof out === 'object' && 'result' in out) {
+        return out;
+      }
+      return { result: String(out) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { result: `Error: ${message}` };
     }
-    const handler = SERVER_TOOL_HANDLERS[name];
-    if (!handler) {
-      return { result: `Not implemented: ${name}` };
-    }
-    const out = await handler(args ?? {});
-    if (out && typeof out === 'object' && 'result' in out) {
-      return out;
-    }
-    return { result: String(out) };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { result: `Error: ${message}` };
-  }
+  });
 }
 
 /** CORS headers for local Vite dev (browser tools calling same origin or localhost). */

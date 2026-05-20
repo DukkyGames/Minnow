@@ -3,8 +3,12 @@
  */
 
 import {
+  assertSubAgentRunReadableByParent,
+  buildSubAgentStatusPayload,
   cancelSubAgent,
   formatAggregateResult,
+  formatSubAgentListToolResult,
+  getSubAgentRun,
   spawnSubAgent,
 } from '../agents/orchestrator';
 import type { SubAgentExecutorContext } from '../agents/types';
@@ -18,7 +22,7 @@ export function setSubAgentExecutorContext(
   executorContext = ctx;
 }
 
-/** Execute spawn_sub_agent or cancel_sub_agent. */
+/** Execute spawn/cancel/list/status sub-agent parent tools. */
 export async function executeSubAgentTool(
   name: string,
   args: Record<string, unknown>,
@@ -37,6 +41,8 @@ export async function executeSubAgentTool(
         task,
         wait,
         parentTurnId: executorContext?.parentTurnId ?? null,
+        parentChatId: executorContext?.parentChatId ?? null,
+        parentToolCallId: executorContext?.parentToolCallId ?? null,
         modeId: executorContext?.modeId,
       });
 
@@ -67,6 +73,39 @@ export async function executeSubAgentTool(
 
     const result = cancelSubAgent(runId, reason);
     return JSON.stringify(result, null, 2);
+  }
+
+  if (name === 'list_sub_agents') {
+    const parentTurnId = executorContext?.parentTurnId;
+    if (!parentTurnId) {
+      return 'Error: list_sub_agents requires an active parent chat turn';
+    }
+    return formatSubAgentListToolResult(parentTurnId);
+  }
+
+  if (name === 'get_sub_agent_status') {
+    const parentTurnId = executorContext?.parentTurnId;
+    if (!parentTurnId) {
+      return 'Error: get_sub_agent_status requires an active parent chat turn';
+    }
+    const runId =
+      typeof args.run_id === 'string'
+        ? args.run_id.trim()
+        : typeof args.runId === 'string'
+          ? args.runId.trim()
+          : '';
+    if (!runId) return 'Error: get_sub_agent_status requires "run_id"';
+
+    try {
+      const run = assertSubAgentRunReadableByParent(getSubAgentRun(runId), {
+        parentTurnId,
+        parentChatId: executorContext?.parentChatId,
+      });
+      return JSON.stringify(buildSubAgentStatusPayload(run), null, 2);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return message.startsWith('Error:') ? message : `Error: ${message}`;
+    }
   }
 
   return `Error: unknown sub-agent tool "${name}"`;

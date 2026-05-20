@@ -7,6 +7,7 @@ import { executeBrowserTool } from './browser-executor';
 import { executeSubAgentTool } from './sub-agent-executor';
 import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
+  ensureToolConfigReady,
   isLocalServerAvailable,
   isToolEnabled,
   loadToolConfig,
@@ -20,6 +21,7 @@ import {
   type OpenAIFunctionDefinition,
   type ToolDefinition,
 } from './definitions';
+import { maybeBlockToolForUserApproval } from './permission-gate';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -65,10 +67,12 @@ export function getLocalServerAvailable(): boolean {
   return isLocalServerAvailable();
 }
 
-/** Optional context for streaming terminal runs from the tool loop. */
+/** Optional context for streaming terminal runs and approval UI. */
 export interface ExecuteToolContext {
   chatId?: string;
   toolCallId?: string;
+  /** When tools run inside a sub-agent, shown on the approval modal. */
+  subAgentType?: string;
 }
 
 const STREAMING_TOOL_NAMES = new Set([
@@ -103,6 +107,8 @@ export async function executeTool(
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
+  await ensureToolConfigReady();
+
   if (name.startsWith('mcp__')) {
     if (!isLocalServerAvailable()) {
       return {
@@ -110,10 +116,19 @@ export async function executeTool(
           'Error: MCP tools require the local server. Run `npm start` (not Vite-only dev).',
       };
     }
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
     return executeServerTool(name, args);
   }
 
-  if (name === 'spawn_sub_agent' || name === 'cancel_sub_agent') {
+  if (
+    name === 'spawn_sub_agent' ||
+    name === 'cancel_sub_agent' ||
+    name === 'list_sub_agents' ||
+    name === 'get_sub_agent_status'
+  ) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
     const text = await executeSubAgentTool(name, args);
     return { content: text };
   }
@@ -122,6 +137,13 @@ export async function executeTool(
   const enrichedArgs = mergeConfigKeysIntoArgs(name, args, config);
 
   if (name === 'web_search' && !hasBraveApiKey(enrichedArgs, config)) {
+    const blocked = await maybeBlockToolForUserApproval(
+      'web_search',
+      enrichedArgs,
+      context,
+      'web_search',
+    );
+    if (blocked) return blocked;
     if (isLocalServerAvailable()) {
       return executeServerTool('web_search_ddg', {
         query: enrichedArgs.query,
@@ -134,6 +156,15 @@ export async function executeTool(
   if (!tool) {
     return { content: `Error: unknown tool "${name}"` };
   }
+
+  const permissionId = name === 'web_search_ddg' ? 'web_search' : tool.id;
+  const blocked = await maybeBlockToolForUserApproval(
+    permissionId,
+    enrichedArgs,
+    context,
+    name,
+  );
+  if (blocked) return blocked;
 
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {

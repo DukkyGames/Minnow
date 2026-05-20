@@ -5,7 +5,12 @@
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { SubAgentTypeConfig } from './types';
 
-const META_SPAWN_TOOLS = new Set(['spawn_sub_agent', 'cancel_sub_agent']);
+const META_SPAWN_TOOLS = new Set([
+  'spawn_sub_agent',
+  'cancel_sub_agent',
+  'list_sub_agents',
+  'get_sub_agent_status',
+]);
 
 /**
  * Filter parent-enabled tools by sub-agent allow/deny lists.

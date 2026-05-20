@@ -24,6 +24,10 @@ import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import {
+  clearSubAgentCardDomRegistry,
+  renderPersistedSubAgentCardsForChat,
+} from './sub-agent-cards';
+import {
   attachStreamStatus,
   type StreamingStatusHandle,
   type StreamPhase,
@@ -104,6 +108,7 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
+  clearSubAgentCardDomRegistry();
   const area = document.getElementById('chatArea')!;
   area.innerHTML = '';
   if (!chat.history.length) {
@@ -112,6 +117,8 @@ export function renderChatFromHistory(chat: Chat): void {
     empty.id = 'emptyState';
     empty.innerHTML = EMPTY_STATE_HTML;
     area.appendChild(empty);
+    renderPersistedSubAgentCardsForChat(chat);
+    scrollBottom();
     return;
   }
   const toolResultMap = new Map<
@@ -173,6 +180,7 @@ export function renderChatFromHistory(chat: Chat): void {
       appendStats(wrap, msg.stats || {}, msg.usage || {});
     }
   }
+  renderPersistedSubAgentCardsForChat(chat);
   scrollBottom();
 }
 

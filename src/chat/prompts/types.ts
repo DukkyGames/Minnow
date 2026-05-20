@@ -95,6 +95,7 @@ export interface ComposeContext {
   infoPresetId: string | null;
   userMessagePreview?: string;
   includeChatHistorySummary?: boolean;
+  planGranularity?: string | null;
 }
 
 /** Tokens replaced in composed bodies via interpolate.ts. */
@@ -113,6 +114,7 @@ export interface InterpolationVars {
   skill: string;
   date: string;
   os: string;
+  plan_granularity: string;
 }
 
 /** List entry returned by GET /api/prompt-configs. */

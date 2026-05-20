@@ -37,6 +37,10 @@ export interface SubAgentRun {
   type: string;
   task: string;
   status: SubAgentStatus;
+  /** Parent chat id for tool approval UI when sub-agent tools run. */
+  parentChatId: string | null;
+  /** Parent assistant `tool_calls[].id` when spawned from the main tool loop (UI anchor). */
+  parentToolCallId: string | null;
   parentTurnId: string | null;
   summary: string;
   error: string | null;
@@ -45,6 +49,11 @@ export interface SubAgentRun {
   toolTurns: number;
   cancelled: boolean;
   messages: ApiMessage[];
+  /**
+   * Count of nested tool invocations so far (UI progress); cleared when the run settles.
+   * Distinct from `toolTurns`, which reflects the runner’s completed tool rounds in the summary.
+   */
+  liveNestedToolCalls?: number;
 }
 
 /** Input to spawn a sub-agent. */
@@ -53,6 +62,10 @@ export interface SpawnSubAgentInput {
   task: string;
   wait?: boolean;
   parentTurnId?: string | null;
+  /** Parent chat id for tool approval modals during sub-agent runs. */
+  parentChatId?: string | null;
+  /** Parent `tool_calls[].id` for the spawn invocation (card placement). */
+  parentToolCallId?: string | null;
   /** Parent mode for tool policy when resolving enabled tools. */
   modeId?: string;
 }
@@ -87,6 +100,10 @@ export interface AggregateResult {
 export interface SubAgentExecutorContext {
   parentTurnId: string;
   modeId: string;
+  /** When set, nested tool approvals are attributed to this chat. */
+  parentChatId?: string;
+  /** Current parent tool_call id (spawn/cancel correlation). */
+  parentToolCallId?: string;
 }
 
 /** Runner output after an isolated sub-agent completes. */
@@ -107,9 +124,15 @@ export interface SubAgentRunner {
     providerId: string;
     modelId: string;
     signal: AbortSignal;
+    /** Passed into each nested tool call (chat id, sub-agent label). */
+    toolExecuteContext?: {
+      chatId?: string;
+      subAgentType?: string;
+    };
     executeTool: (
       name: string,
       args: Record<string, unknown>,
+      toolContext?: import('../tools/client').ExecuteToolContext,
     ) => Promise<import('../types').ToolExecutionResult>;
   }): Promise<SubAgentRunnerOutput>;
 }

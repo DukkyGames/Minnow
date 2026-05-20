@@ -55,10 +55,18 @@ import {
 import {
   getToolConfig,
   isLocalServerAvailable,
-  loadToolConfigFromStorage,
+  isToolConfigReadyForSettingsUi,
+  loadToolConfigForSettingsUi,
   loadToolConfigIntoDrawer,
   saveToolConfig,
 } from '../tools/config';
+import type { ToolSecurityMeta } from '../config/tool-security-meta';
+import {
+  getToolSecurityMetaCached,
+  isToolSecurityMetaLoaded,
+  loadToolSecurityMeta,
+  saveToolSecurityMeta,
+} from '../config/tool-security-meta';
 import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page';
@@ -151,6 +159,7 @@ async function renderGeneralSection(): Promise<void> {
 async function renderProvidersSection(): Promise<void> {
   const mount = clearMount('settingsProvidersBody');
   if (!mount) return;
+  const generation = beginAsyncSectionRender('providers');
 
   if (!isServerStorageMode() || !isProvidersApiAvailable()) {
     mount.appendChild(
@@ -160,6 +169,7 @@ async function renderProvidersSection(): Promise<void> {
   }
 
   const { providers, activeProviderId } = await listProviders();
+  if (isAsyncSectionRenderStale('providers', generation)) return;
   const list = el('ul', 'settings-entity-list');
 
   for (const p of providers) {
@@ -480,24 +490,66 @@ async function renderPromptingSection(): Promise<void> {
   await renderPromptPartsPanel(meta.activePromptProfile, meta.activePromptConfigId);
 }
 
+/** Plan granularity control inside Modes → Plan expandable row. */
+async function mountPlanGranularityField(container: HTMLElement): Promise<void> {
+  const field = el('div', 'settings-field');
+  const label = el('label', 'settings-field-label', 'Plan granularity');
+  label.htmlFor = 'settingsPlanGranularity';
+
+  const select = document.createElement('select');
+  select.id = 'settingsPlanGranularity';
+  select.className = 'settings-select';
+
+  const options: { value: string; label: string }[] = [
+    { value: 'large', label: 'Large — one task per feature or module' },
+    { value: 'medium', label: 'Medium — one task per component or function group (default)' },
+    { value: 'small', label: 'Small — every function and config key as its own task' },
+  ];
+  for (const opt of options) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    select.appendChild(option);
+  }
+
+  field.appendChild(label);
+  field.appendChild(select);
+  field.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Controls how finely the Planner breaks work into tasks. The user can override this per session.',
+    ),
+  );
+  container.appendChild(field);
+
+  const meta = await loadPromptMetaSettings();
+  select.value = meta.planGranularity ?? 'medium';
+  select.onchange = async () => {
+    const value = select.value as 'large' | 'medium' | 'small';
+    await savePromptMetaSettings({ planGranularity: value });
+  };
+}
+
 async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
 
-  if (!isServerStorageMode()) {
+  const serverReady = isServerStorageMode();
+
+  if (!serverReady) {
     mount.appendChild(
       serverBanner('Mode prompt editing requires <code>npm start</code>.'),
     );
-    return;
+  } else {
+    mount.appendChild(
+      el(
+        'p',
+        'settings-field-hint',
+        'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.minnow/prompts/modes/.',
+      ),
+    );
   }
-
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.minnow/prompts/modes/.',
-    ),
-  );
 
   renderEntityEditorList(
     mount,
@@ -507,7 +559,12 @@ async function renderModesSection(): Promise<void> {
       hint: `${mode.description} · Tool policy: ${mode.toolPolicy.default}`,
     })),
     (id, body) => {
-      mountPromptFileEditor(body, { family: 'modes', entityId: id });
+      if (id === 'plan') {
+        void mountPlanGranularityField(body);
+      }
+      if (serverReady) {
+        mountPromptFileEditor(body, { family: 'modes', entityId: id });
+      }
     },
   );
 }
@@ -547,6 +604,7 @@ async function renderExpertsSection(): Promise<void> {
 async function renderWorkAgentsSection(): Promise<void> {
   const mount = clearMount('settingsWorkAgentsBody');
   if (!mount) return;
+  const generation = beginAsyncSectionRender('work-agents');
 
   if (!isServerStorageMode()) {
     mount.appendChild(
@@ -556,6 +614,7 @@ async function renderWorkAgentsSection(): Promise<void> {
   }
 
   const remote = await fetchWorkAgentsList();
+  if (isAsyncSectionRenderStale('work-agents', generation)) return;
   const agents = remote?.agents ?? [];
 
   mount.appendChild(
@@ -594,8 +653,10 @@ async function renderWorkAgentsSection(): Promise<void> {
 async function renderSubAgentsSection(): Promise<void> {
   const mount = clearMount('settingsSubAgentsBody');
   if (!mount) return;
+  const generation = beginAsyncSectionRender('sub-agents');
 
   const config = await loadSubAgentConfig();
+  if (isAsyncSectionRenderStale('sub-agents', generation)) return;
 
   const summary = el('dl', 'settings-kv');
   const addRow = (term: string, value: string) => {
@@ -672,11 +733,43 @@ async function renderSubAgentsSection(): Promise<void> {
 
 let toolsSectionInitialized = false;
 
+/** Bumped on each render so stale async work cannot hydrate a replaced DOM. */
+let toolsSectionRenderGeneration = 0;
+
+const asyncSectionRenderGeneration: Partial<Record<SettingsSectionId, number>> =
+  {};
+
+function beginAsyncSectionRender(section: SettingsSectionId): number {
+  const next = (asyncSectionRenderGeneration[section] ?? 0) + 1;
+  asyncSectionRenderGeneration[section] = next;
+  return next;
+}
+
+function isAsyncSectionRenderStale(
+  section: SettingsSectionId,
+  generation: number,
+): boolean {
+  return asyncSectionRenderGeneration[section] !== generation;
+}
+
 async function renderToolsSection(): Promise<void> {
   const mount = clearMount('settingsToolsBody');
   if (!mount) return;
 
-  await loadToolConfigFromStorage();
+  const generation = ++toolsSectionRenderGeneration;
+
+  let toolSecurity: ToolSecurityMeta;
+  if (isToolConfigReadyForSettingsUi() && isToolSecurityMetaLoaded()) {
+    toolSecurity = getToolSecurityMetaCached();
+  } else {
+    [toolSecurity] = await Promise.all([
+      loadToolSecurityMeta().catch(
+        (): ToolSecurityMeta => ({ filesystemAccess: 'workspace' }),
+      ),
+      loadToolConfigForSettingsUi(),
+    ]);
+    if (generation !== toolsSectionRenderGeneration) return;
+  }
 
   const banner = document.createElement('p');
   banner.id = 'settingsToolsServerBanner';
@@ -688,17 +781,91 @@ async function renderToolsSection(): Promise<void> {
   mount.appendChild(
     el(
       'p',
-      'field-hint settings-tools-hint',
-      'Enable function calling per tool. Use Enable all or category All to toggle a group. Server tools need npm start.',
+      'settings-section-note settings-tools-intro',
+      'Each tool can be off, require confirmation before each run, or run with full permission. Bulk enable sets tools to require confirmation. File and git tools need npm start.',
     ),
   );
+
+  const fsSection = document.createElement('section');
+  fsSection.className = 'settings-tool-filesystem';
+  const fsHeading = document.createElement('h3');
+  fsHeading.className = 'settings-subheading';
+  fsHeading.textContent = 'Filesystem access for AI tools';
+  fsSection.appendChild(fsHeading);
+  fsSection.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'When restricted, the server blocks file tools from resolving paths outside the workspace. Full access removes that restriction for all tools (dangerous on untrusted models).',
+    ),
+  );
+  const fsRadios = document.createElement('div');
+  fsRadios.className = 'settings-filesystem-radios';
+  const rWorkspace = document.createElement('input');
+  rWorkspace.type = 'radio';
+  rWorkspace.name = 'minnow-fs-access-settings';
+  rWorkspace.value = 'workspace';
+  rWorkspace.id = 'fsAccessWorkspaceSettings';
+  const lWorkspace = document.createElement('label');
+  lWorkspace.className = 'settings-radio-option';
+  const spanWorkspace = document.createElement('span');
+  spanWorkspace.className = 'settings-radio-option__text';
+  spanWorkspace.textContent = 'Restrict to workspace (default)';
+  lWorkspace.append(rWorkspace, spanWorkspace);
+  const rFull = document.createElement('input');
+  rFull.type = 'radio';
+  rFull.name = 'minnow-fs-access-settings';
+  rFull.value = 'full';
+  rFull.id = 'fsAccessFullSettings';
+  const lFull = document.createElement('label');
+  lFull.className = 'settings-radio-option';
+  const spanFull = document.createElement('span');
+  spanFull.className = 'settings-radio-option__text';
+  spanFull.textContent = 'Full filesystem access (dangerous)';
+  lFull.append(rFull, spanFull);
+  fsRadios.append(lWorkspace, lFull);
+  fsSection.appendChild(fsRadios);
+  mount.appendChild(fsSection);
+
+  const applyFsRadios = (meta: ToolSecurityMeta = getToolSecurityMetaCached()): void => {
+    const mode = meta.filesystemAccess;
+    rWorkspace.checked = mode === 'workspace';
+    rFull.checked = mode === 'full';
+  };
+  applyFsRadios(toolSecurity);
+
+  const persistFs = async (): Promise<void> => {
+    const next = rFull.checked ? 'full' : 'workspace';
+    if (next === 'full') {
+      const ok = window.confirm(
+        'Enable full filesystem access?\n\nFile and git tools will be able to resolve paths outside your current workspace. A malicious or mistaken model could read or modify sensitive files anywhere on this computer.\n\nOnly continue if you understand and accept this risk.',
+      );
+      if (!ok) {
+        applyFsRadios();
+        return;
+      }
+    }
+    try {
+      await saveToolSecurityMeta({ filesystemAccess: next });
+      setStatus('ok', 'Filesystem access setting saved');
+    } catch {
+      setStatus('err', 'Could not save — use npm start');
+      applyFsRadios();
+    }
+  };
+
+  rWorkspace.addEventListener('change', () => {
+    if (rWorkspace.checked) void persistFs();
+  });
+  rFull.addEventListener('change', () => {
+    if (rFull.checked) void persistFs();
+  });
 
   const list = document.createElement('div');
   list.id = 'settingsToolsList';
   list.className = 'tools-list settings-tools-list';
-  mount.appendChild(list);
 
-  const keyRow = el('div', 'tool-key-row field settings-tool-key-row');
+  const keyRow = el('div', 'settings-tool-key-row field');
   const keyLabel = document.createElement('label');
   keyLabel.htmlFor = 'settingsBraveApiKey';
   keyLabel.textContent = 'Brave Search API key';
@@ -711,21 +878,37 @@ async function renderToolsSection(): Promise<void> {
   keyRow.appendChild(keyLabel);
   keyRow.appendChild(keyInput);
   keyRow.appendChild(
-    el('p', 'settings-field-hint', 'Stored in ~/.minnow/tools.json when npm start is running.'),
+    el(
+      'p',
+      'settings-field-hint settings-tool-key-hint',
+      'Stored in ~/.minnow/tools.json when npm start is running.',
+    ),
   );
-  mount.appendChild(keyRow);
+
+  /** One hairline-framed block for the permission list and Brave key (matches bench-instrument settings). */
+  const toolsPanel = el('div', 'settings-tools-panel');
+  toolsPanel.appendChild(list);
+  toolsPanel.appendChild(keyRow);
+  mount.appendChild(toolsPanel);
 
   fillToolsSection('settingsToolsList');
 
   if (!toolsSectionInitialized) {
     toolsSectionInitialized = true;
     registerToolHandlers();
-    keyInput.addEventListener('input', () => {
-      const config = getToolConfig();
-      config.keys.braveApiKey = keyInput.value.trim();
-      saveToolConfig(config);
-    });
   }
+
+  // Re-bind every time this section mounts: clearMount removes the previous input node,
+  // so listeners must not be one-shot behind toolsSectionInitialized.
+  const persistBraveKey = (): void => {
+    const config = getToolConfig();
+    config.keys.braveApiKey = keyInput.value.trim();
+    saveToolConfig(config);
+  };
+  keyInput.addEventListener('input', persistBraveKey);
+  keyInput.addEventListener('change', persistBraveKey);
+
+  if (generation !== toolsSectionRenderGeneration) return;
 
   const config = getToolConfig();
   keyInput.value = config.keys.braveApiKey;
@@ -755,10 +938,12 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
   row.setAttribute('role', 'listitem');
   row.dataset.serverId = server.id;
 
+  // Top line: enable toggle + display name on the left, built-in badge or remove on the right.
   const head = document.createElement('div');
   head.className = 'settings-mcp-row-head';
 
   const label = document.createElement('label');
+  label.className = 'settings-mcp-toggle';
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.checked = server.enabled;
@@ -769,6 +954,7 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
   );
 
   const title = document.createElement('span');
+  title.className = 'settings-mcp-name';
   title.textContent = server.label;
   label.append(checkbox, title);
   head.append(label);
@@ -790,34 +976,43 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
 
   row.append(head);
 
-  const meta = document.createElement('div');
-  meta.className = 'settings-mcp-meta';
+  // Secondary block: description, then a compact status line (dot + label), then optional hints.
+  const detail = document.createElement('div');
+  detail.className = 'settings-mcp-detail';
 
   if (server.description) {
-    const desc = document.createElement('span');
-    desc.className = 'settings-mcp-description';
+    const desc = document.createElement('p');
+    desc.className = 'settings-mcp-desc';
     desc.textContent = server.description;
-    meta.append(desc);
+    detail.append(desc);
   }
 
   const status = document.createElement('span');
-  status.className = `settings-mcp-badge ${
-    server.connected
-      ? 'settings-mcp-badge--connected'
-      : 'settings-mcp-badge--idle'
+  status.className = `settings-mcp-status ${
+    server.connected ? 'settings-mcp-status--ok' : 'settings-mcp-status--idle'
   }`;
-  status.textContent = server.connected ? 'Connected' : 'Not connected';
-  meta.append(status);
+  status.setAttribute(
+    'aria-label',
+    server.connected ? 'Server reachable' : 'Server not reachable',
+  );
+  const statusDot = document.createElement('span');
+  statusDot.className = 'settings-mcp-status-dot';
+  statusDot.setAttribute('aria-hidden', 'true');
+  const statusText = document.createElement('span');
+  statusText.className = 'settings-mcp-status-text';
+  statusText.textContent = server.connected ? 'Connected' : 'Not connected';
+  status.append(statusDot, statusText);
+  detail.append(status);
 
   if (server.id === 'context7') {
-    const keyHint = document.createElement('span');
-    keyHint.className = 'settings-mcp-key-hint';
+    const keyHint = document.createElement('p');
+    keyHint.className = 'settings-mcp-hint';
     keyHint.textContent =
-      'Set CONTEXT7_API_KEY or context7ApiKey in provider secrets for live docs.';
-    meta.append(keyHint);
+      'Optional: set CONTEXT7_API_KEY or context7ApiKey in provider secrets for live docs.';
+    detail.append(keyHint);
   }
 
-  row.append(meta);
+  row.append(detail);
   return row;
 }
 

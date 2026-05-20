@@ -40,6 +40,24 @@ describe('generateChatTitle', () => {
     void FIXED_CHAT_ID;
   });
 
+  test('uses reasoning field when content is empty', async () => {
+    const port = {
+      async complete() {
+        return {
+          choices: [{ message: { content: '', reasoning: 'Redis cache tuning' } }],
+        };
+      },
+    };
+
+    const result = await generateChatTitle(
+      'How do I tune Redis?',
+      { modelId: 'test-model', maxTokens: 24, temperature: 0.3 },
+      port,
+    );
+
+    assert.equal(result, 'Redis cache tuning');
+  });
+
   test('HTTP failure returns null', async () => {
     const port = {
       async complete() {

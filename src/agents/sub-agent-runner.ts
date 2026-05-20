@@ -145,7 +145,10 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
         for (const tc of turnResult.toolCalls) {
           const args = parseToolArguments(tc.function.arguments);
-          const toolOut = await input.executeTool(tc.function.name, args);
+          const toolOut = await input.executeTool(tc.function.name, args, {
+            ...input.toolExecuteContext,
+            toolCallId: tc.id,
+          });
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,

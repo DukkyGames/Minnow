@@ -23,8 +23,16 @@ const parentEnabled = [
   {
     type: 'function' as const,
     function: {
-      name: 'spawn_sub_agent',
-      description: 'spawn',
+      name: 'list_sub_agents',
+      description: 'list',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_sub_agent_status',
+      description: 'status',
       parameters: { type: 'object', properties: {} },
     },
   },
@@ -59,11 +67,13 @@ describe('resolveSubAgentTools', () => {
       timeoutMs: 300000,
       workAgentId: null,
       allowedTools: null,
-      deniedTools: ['spawn_sub_agent'],
+      deniedTools: ['spawn_sub_agent', 'list_sub_agents', 'get_sub_agent_status'],
       systemPromptPath: null,
     };
     const tools = resolveSubAgentTools(cfg, 'generalPurpose', parentEnabled);
     assert.ok(!tools.some((t) => t.function.name === 'spawn_sub_agent'));
+    assert.ok(!tools.some((t) => t.function.name === 'list_sub_agents'));
+    assert.ok(!tools.some((t) => t.function.name === 'get_sub_agent_status'));
     assert.ok(tools.some((t) => t.function.name === 'read_file'));
   });
 
@@ -76,7 +86,7 @@ describe('resolveSubAgentTools', () => {
       timeoutMs: 300000,
       workAgentId: null,
       allowedTools: ['read_file', 'list_directory'],
-      deniedTools: ['spawn_sub_agent', 'execute_command'],
+      deniedTools: ['spawn_sub_agent', 'list_sub_agents', 'get_sub_agent_status', 'execute_command'],
       systemPromptPath: null,
     };
     const tools = resolveSubAgentTools(cfg, 'explore', parentEnabled);
