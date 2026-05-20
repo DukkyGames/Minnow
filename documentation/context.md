@@ -38,7 +38,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **443** tests (**112** + **331**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **451** tests (**112** + **339**), **0** fail.
 
 ## What it is
 
@@ -70,6 +70,8 @@ Minnow/
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── chat/
 │   │   ├── messaging.ts    # sendMessage → sendMessageWithTools
+│   │   ├── turn-checkpoint.ts
+│   │   ├── turn-recovery.ts # boot resume + orphan retry orchestration
 │   │   ├── modes/          # Step 05: registry, tool-policy
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
@@ -628,13 +630,14 @@ In-flight assistant turns checkpoint to **`chat.pendingTurn`** (not a `history` 
 |---------|----------|
 | Types | `PendingTurn` on `Chat` in `src/types.ts` |
 | Validation | `src/state/pending-turn-shape.ts`; wired in `ensureChatShape` + `server/config/validators.js` |
-| Checkpoint API | `src/state/pending-turn.ts`, `src/chat/turn-checkpoint.ts` |
-| Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` flush in `main.ts` |
+| Checkpoint API | `src/state/pending-turn.ts`, `src/chat/turn-checkpoint.ts` (first write is **immediate** so fast refresh still persists an empty checkpoint) |
+| Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` / `beforeunload` / **`visibilitychange` (hidden)** flush in `main.ts` |
 | Stop (C1) | `finalizeStoppedTurn` — `pendingTurn` with `stopped: true` (no duplicate assistant in `history`) |
-| Recovery UI | `src/ui/pending-turn-recovery.ts`, `renderPendingTurn`, `pending-turn-recovery.css` (light sheet bar at top of `#mainColumn`: `--code-inline-bg`, ink primary + outlined secondary buttons; not `--surface-elevated`) |
-| Continue | New completion via ephemeral user line in `buildApiMessages` only; clears `pendingTurn` on stream connect |
+| Recovery UI | `src/ui/pending-turn-recovery.ts` (manual **Continue** / **Discard** after in-session stop; **Resume** / **Discard** when a checkpoint exists but no model; **Retry last message** / **Dismiss** when the checkpoint was lost), `renderPendingTurn`, `pending-turn-recovery.css` |
+| Boot / switch | `bootTurnRecoveryForChat` in `src/chat/turn-recovery.ts` — **auto-resume** when `pendingTurn` is valid and a model is selected; orphan tail → retry banner (composer blocked until **Retry** or **Dismiss**) |
+| Continue API | `buildApiMessages` injects checkpoint assistant prose / `tool_calls` before the ephemeral continue user line; clears `pendingTurn` on stream connect |
 
-**Boot / chat switch:** partial assistant + **Continue** / **Discard**; composer blocked until resolved.
+**Boot / chat switch:** valid `pendingTurn` → new completion is started automatically; in-session stop → **Continue** / **Discard**; lost checkpoint with lone user row → **Retry last message** / **Dismiss** (composer blocked for the orphan case only).
 
 ### Programmatic chat titles (Step 07)
 
