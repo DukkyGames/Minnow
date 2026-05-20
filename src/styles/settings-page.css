@@ -33,6 +33,24 @@
   letter-spacing: -0.02em;
 }
 
+.settings-prompt-estimate {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.settings-prompt-estimate-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .settings-page-body {
   display: flex;
   flex: 1;
@@ -505,6 +523,42 @@
   overflow: auto;
 }
 
+.settings-memory-add-panel {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.settings-memory-add-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+}
+
+.settings-memory-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.settings-memory-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-memory-form-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.settings-memory-offline.hidden,
 .settings-mcp-list,
 .settings-lsp-list {
   display: flex;
@@ -763,6 +817,26 @@
 /* Tools page: bench panel (list + Brave key), filesystem radios, subsection titles */
 .settings-tools-intro {
   max-width: 72ch;
+}
+
+.settings-tools-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.settings-tools-bulk-actions .settings-inline-btn {
+  margin-top: 0;
+}
+
+.settings-tools-bulk-all-full {
+  border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+}
+
+.settings-tools-bulk-all-full:hover {
+  background: color-mix(in oklch, var(--accent) 12%, var(--bg));
+  color: var(--text);
 }
 
 .settings-subheading {
