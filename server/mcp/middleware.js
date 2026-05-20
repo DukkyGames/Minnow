@@ -11,11 +11,13 @@ import {
   listEnabledMcpTools,
   callMcpTool,
   reloadMcp,
+  createMcpServer,
+  deleteMcpServer,
 } from './registry.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -70,6 +72,13 @@ export function createMcpMiddleware() {
         return;
       }
 
+      if (url === '/api/mcp/servers' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const server = await createMcpServer(body);
+        sendJson(res, 201, { server });
+        return;
+      }
+
       if (url === '/api/mcp/tools' && req.method === 'GET') {
         const tools = await listEnabledMcpTools();
         sendJson(res, 200, { tools });
@@ -85,6 +94,14 @@ export function createMcpMiddleware() {
 
       if (url === '/api/mcp/reload' && req.method === 'POST') {
         await reloadMcp();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      const serverMatch = url.match(/^\/api\/mcp\/servers\/([^/]+)$/);
+      if (serverMatch && req.method === 'DELETE') {
+        const id = decodeURIComponent(serverMatch[1]);
+        await deleteMcpServer(id);
         sendJson(res, 200, { ok: true });
         return;
       }
@@ -109,7 +126,17 @@ export function createMcpMiddleware() {
       sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      sendJson(res, 500, { error: message });
+      const status =
+        message.includes('already exists') ||
+        message.includes('Invalid') ||
+        message.includes('required') ||
+        message.includes('reserved') ||
+        message.includes('Unknown MCP')
+          ? 400
+          : message.includes('Cannot delete')
+            ? 403
+            : 500;
+      sendJson(res, status, { error: message });
     }
   };
 }

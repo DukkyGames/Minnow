@@ -7,7 +7,7 @@ import { getTools, putTools } from '../config/api-client';
 import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
-import { BUILT_IN_TOOLS } from './definitions';
+import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
 
 /** @deprecated Direct localStorage use — migration read / Vite-only fallback only. */
 export const TOOL_CONFIG_STORAGE_KEY = 'speedchat.tools';
@@ -152,6 +152,109 @@ export function loadToolConfigIntoDrawer(
   }
 
   refreshServerToolDisabledState();
+  syncToolSelectAllControls(root);
+}
+
+/** Tool ids that can be enabled right now (server tools only when npm start is up). */
+export function getEligibleToolIds(ids: string[]): string[] {
+  return ids.filter((id) => {
+    const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
+    if (!tool) return false;
+    return !tool.serverRequired || localServerAvailable;
+  });
+}
+
+/** Checked / indeterminate state for a bulk "select all" control over `ids`. */
+export function getToolBulkCheckboxState(ids: string[]): {
+  checked: boolean;
+  indeterminate: boolean;
+} {
+  const config = loadToolConfig();
+  const eligible = getEligibleToolIds(ids);
+  if (eligible.length === 0) {
+    return { checked: false, indeterminate: false };
+  }
+
+  const enabledCount = eligible.filter((id) => config.enabled[id] === true).length;
+  if (enabledCount === 0) {
+    return { checked: false, indeterminate: false };
+  }
+  if (enabledCount === eligible.length) {
+    return { checked: true, indeterminate: false };
+  }
+  return { checked: false, indeterminate: true };
+}
+
+/** Apply enabled flag to many tools, persist, and refresh list UI under `root`. */
+export function setToolsEnabled(
+  ids: string[],
+  enabled: boolean,
+  root: ParentNode = document,
+): { applied: number; skipped: number } {
+  const config = loadToolConfig();
+  let applied = 0;
+  let skipped = 0;
+
+  for (const id of ids) {
+    const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
+    if (!tool) continue;
+
+    if (enabled && tool.serverRequired && !localServerAvailable) {
+      skipped += 1;
+      continue;
+    }
+
+    if (config.enabled[id] === enabled) continue;
+    config.enabled[id] = enabled;
+    applied += 1;
+  }
+
+  if (applied > 0) {
+    saveToolConfig(config);
+  }
+
+  loadToolConfigIntoDrawer(root);
+  syncToolSelectAllControls(root);
+
+  if (enabled && skipped > 0) {
+    setStatus('err', 'Start with npm start to use file/git tools.');
+  }
+
+  return { applied, skipped };
+}
+
+/** All built-in tool ids in a settings category. */
+export function getToolIdsForCategory(category: ToolCategory): string[] {
+  return BUILT_IN_TOOLS.filter((tool) => tool.category === category).map(
+    (tool) => tool.id,
+  );
+}
+
+/** Update global and per-category "select all" checkboxes under `root`. */
+export function syncToolSelectAllControls(root: ParentNode = document): void {
+  if (typeof document === 'undefined') return;
+
+  const applyState = (checkbox: HTMLInputElement, ids: string[]) => {
+    const { checked, indeterminate } = getToolBulkCheckboxState(ids);
+    checkbox.checked = checked;
+    checkbox.indeterminate = indeterminate;
+  };
+
+  const global = root.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][data-select-all="global"]',
+  );
+  if (global) {
+    applyState(global, BUILT_IN_TOOLS.map((tool) => tool.id));
+  }
+
+  const categoryBoxes = root.querySelectorAll<HTMLInputElement>(
+    'input[type="checkbox"][data-select-all-category]',
+  );
+  for (const checkbox of categoryBoxes) {
+    const category = checkbox.getAttribute('data-select-all-category');
+    if (!category) continue;
+    applyState(checkbox, getToolIdsForCategory(category as ToolCategory));
+  }
 }
 
 /** Flip enabled state for one tool, persist, and update drawer UI. */
@@ -187,6 +290,7 @@ export function onToolToggle(id: string): void {
   }
 
   refreshServerToolDisabledState();
+  syncToolSelectAllControls(document);
 }
 
 /** Disable server-required tool rows when the local tool server is down. */
@@ -221,6 +325,8 @@ export function refreshServerToolDisabledState(): void {
       checkbox.removeAttribute('title');
     }
   }
+
+  syncToolSelectAllControls(document);
 }
 
 /** Persist Brave API key from the settings drawer (call on input/blur). */

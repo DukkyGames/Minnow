@@ -4,6 +4,8 @@
 
 const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
+const BLOCK_SCALAR_MARKERS = new Set(['>', '>-', '|-', '|']);
+
 /** @param {string} line */
 function parseYamlLine(line) {
   const trimmed = line.trim();
@@ -22,6 +24,58 @@ function parseYamlLine(line) {
 }
 
 /**
+ * Parse YAML front matter; supports folded block scalars (e.g. description: >-).
+ * @param {string} yamlBlock
+ * @returns {Record<string, string>}
+ */
+export function parseYamlFrontmatterBlock(yamlBlock) {
+  /** @type {Record<string, string>} */
+  const meta = {};
+  const lines = yamlBlock.split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const parsed = parseYamlLine(lines[i]);
+    if (!parsed) {
+      i += 1;
+      continue;
+    }
+
+    const { key, value } = parsed;
+    if (BLOCK_SCALAR_MARKERS.has(value)) {
+      /** @type {string[]} */
+      const blockLines = [];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i];
+        if (next.trim() === '') {
+          blockLines.push('');
+          i += 1;
+          continue;
+        }
+        if (/^\s+/.test(next)) {
+          blockLines.push(next.replace(/^\s{2,}/, ''));
+          i += 1;
+          continue;
+        }
+        break;
+      }
+      const folded = blockLines
+        .join(value.startsWith('|') ? '\n' : ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      meta[key] = folded;
+      continue;
+    }
+
+    meta[key] = value;
+    i += 1;
+  }
+
+  return meta;
+}
+
+/**
  * @param {string} raw
  * @returns {{ meta: Record<string, string>, body: string }}
  */
@@ -37,13 +91,7 @@ export function parseSkillFrontmatter(raw) {
 
   const yamlBlock = match[1];
   const body = match[2] ?? '';
-  /** @type {Record<string, string>} */
-  const meta = {};
-
-  for (const line of yamlBlock.split('\n')) {
-    const parsed = parseYamlLine(line);
-    if (parsed) meta[parsed.key] = parsed.value;
-  }
+  const meta = parseYamlFrontmatterBlock(yamlBlock);
 
   if (!meta.name?.trim()) {
     throw new Error('SKILL.md front matter requires "name"');

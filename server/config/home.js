@@ -130,6 +130,11 @@ function defaultToolsJson() {
   return { enabled, keys: { braveApiKey: '' } };
 }
 
+/** Per-skill enable flags; missing ids default to enabled. */
+function defaultSkillsJson() {
+  return { enabled: {} };
+}
+
 function defaultSessionStateJson() {
   const chatId = '00000000-0000-0000-0000-000000000001';
   return {
@@ -183,6 +188,7 @@ export async function ensureSpeedChatLayout() {
     { rel: 'config.json', data: DEFAULT_META },
     { rel: 'sessions/state.json', data: defaultSessionStateJson() },
     { rel: 'tools.json', data: defaultToolsJson() },
+    { rel: 'skills.json', data: defaultSkillsJson() },
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
   ];
 
@@ -202,4 +208,10 @@ export async function ensureSpeedChatLayout() {
   return home;
 }
 
-export { DEFAULT_META, defaultSessionStateJson, defaultToolsJson, DEFAULT_SYSTEM_PROMPT };
+export {
+  DEFAULT_META,
+  defaultSessionStateJson,
+  defaultToolsJson,
+  defaultSkillsJson,
+  DEFAULT_SYSTEM_PROMPT,
+};

@@ -14,6 +14,8 @@ export interface SkillListItem {
 /** Full skill for send-path injection. */
 export interface SkillDetail extends SkillListItem {
   body: string;
+  /** Full SKILL.md source when loaded from API (editor). */
+  raw?: string;
   disableModelInvocation?: boolean;
 }
 

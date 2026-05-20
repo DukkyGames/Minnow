@@ -26,6 +26,23 @@ export async function fetchWorkAgentPrompt(
   }
 }
 
+/** Remove user prompt override for a profile. */
+export async function resetWorkAgentPromptOverride(
+  agentId: string,
+  profile: WorkAgentPromptProfile,
+): Promise<WorkAgentPromptResponse | null> {
+  try {
+    const res = await fetch(
+      `/api/work-agents/${encodeURIComponent(agentId)}/prompt?profile=${profile}`,
+      { method: 'DELETE' },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as WorkAgentPromptResponse;
+  } catch {
+    return null;
+  }
+}
+
 /** Persist user prompt override under ~/.speedchat/prompts/work-agents/. */
 export async function saveWorkAgentPromptOverride(
   agentId: string,
@@ -41,6 +58,29 @@ export async function saveWorkAgentPromptOverride(
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** Patch provider/model/disabled overrides in ~/.speedchat/work-agents.json. */
+export async function patchWorkAgentOverride(
+  agentId: string,
+  patch: {
+    providerId?: string | null;
+    modelId?: string | null;
+    disabled?: boolean;
+  },
+): Promise<import('./work-agent-types').WorkAgentDefinition | null> {
+  try {
+    const res = await fetch(`/api/work-agents/${encodeURIComponent(agentId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { agent: import('./work-agent-types').WorkAgentDefinition };
+    return data.agent ?? null;
+  } catch {
+    return null;
   }
 }
 

@@ -196,10 +196,16 @@ export async function createRun({
 
   const runChild = async () => {
     try {
-      const result = await runProcess(command, args, {
+      const winOneShot =
+        process.platform === 'win32' && args.length === 0 && typeof command === 'string';
+      const execCommand = winOneShot ? 'cmd.exe' : command;
+      const execArgs = winOneShot ? ['/d', '/s', '/c', command] : args;
+      const useShell = winOneShot ? false : shell === true;
+
+      const result = await runProcess(execCommand, execArgs, {
         cwd,
         timeout: COMMAND_TIMEOUT_MS,
-        shell: shell || (args.length === 0 && process.platform === 'win32'),
+        shell: useShell,
         onSpawn: (child) => {
           state.child = child;
         },

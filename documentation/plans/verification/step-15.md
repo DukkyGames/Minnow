@@ -40,11 +40,17 @@ Expected: all **U1–U6** and **I1–I4** PASS; `npm test` includes `test/ui-des
 2. `/ui-designer plan` — audit/shape; no repo file writes.
 3. Set `uiDesigner.modelId` in config — request uses that model when configured.
 
-## Result (implementer)
+## Result (verifier — 2026-05-19)
 
 | Check | Status |
 |-------|--------|
-| `npm run build` | (run verifier) |
-| `npm run test:ui-designer` | (run verifier) |
-| `npm test` | (run verifier) |
-| Step 14 impeccable | Required — skill present at `src/skills/impeccable/SKILL.md` |
+| `npm run build` | **PASS** |
+| `npm run test:ui-designer` | **PASS** (U1–U6, I1–I4) |
+| `tsx --test test/ui-designer/**/*.test.mts` | **PASS** (9/9) |
+| `node scripts/step15-smoke.mjs` | **PASS** |
+| `npm test` | **PASS** (176/176) |
+| Step 14 impeccable | **PASS** — `src/skills/impeccable/SKILL.md` present; `speedchat-context.mjs` loads PRODUCT + DESIGN |
+| Impeccable UI spot-check | **PASS** — skill picker `UI Designer`; work agent label `UI Designer`; no gradient-text / AI-slop in Step 15 surfaces (settings model UI deferred Step 20) |
+| Manual QA (1–3) | **Deferred** — Chrome CDP + vision model E2E |
+
+**Overall: PASS** (automated + static UI review)

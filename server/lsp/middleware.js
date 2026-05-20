@@ -10,7 +10,12 @@ import {
   invalidateLspConfigCache,
   seedLspJson,
 } from './config-loader.js';
-import { getLspDiagnostics, listLspServers } from './manager.js';
+import {
+  getLspCompletions,
+  getLspDiagnostics,
+  listLspServers,
+  notifyLspDocument,
+} from './manager.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -81,7 +86,57 @@ export function createLspMiddleware(projectRoot) {
       }
 
       if (url === '/api/lsp/notify' && req.method === 'POST') {
-        sendJson(res, 200, { ok: true });
+        const body = await readJsonBody(req);
+        const rel = String(body.path ?? '');
+        if (!rel || rel.includes('..')) {
+          sendJson(res, 400, { error: 'Invalid path' });
+          return;
+        }
+        const abs = path.resolve(projectRoot, rel);
+        const rootNorm = path.resolve(projectRoot);
+        if (!abs.startsWith(rootNorm)) {
+          sendJson(res, 400, { error: 'Path outside project' });
+          return;
+        }
+        const event = String(body.event ?? '');
+        if (!['open', 'change', 'close'].includes(event)) {
+          sendJson(res, 400, { error: 'Invalid event' });
+          return;
+        }
+        const result = await notifyLspDocument(
+          rel,
+          event,
+          typeof body.text === 'string' ? body.text : undefined,
+        );
+        if (!result.ok) {
+          sendJson(res, 400, result);
+          return;
+        }
+        sendJson(res, 200, result);
+        return;
+      }
+
+      if (url === '/api/lsp/completion' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const rel = String(body.path ?? '');
+        if (!rel || rel.includes('..')) {
+          sendJson(res, 400, { error: 'Invalid path' });
+          return;
+        }
+        const abs = path.resolve(projectRoot, rel);
+        const rootNorm = path.resolve(projectRoot);
+        if (!abs.startsWith(rootNorm)) {
+          sendJson(res, 400, { error: 'Path outside project' });
+          return;
+        }
+        const line = Number(body.line);
+        const character = Number(body.character);
+        if (!Number.isInteger(line) || !Number.isInteger(character) || line < 0 || character < 0) {
+          sendJson(res, 400, { error: 'Invalid position' });
+          return;
+        }
+        const { items, error } = await getLspCompletions(rel, line, character);
+        sendJson(res, 200, { items, ...(error ? { error } : {}) });
         return;
       }
 
@@ -118,6 +173,13 @@ export function createLspMiddleware(projectRoot) {
           ...body,
           lsp: { ...(current.lsp ?? {}), ...(body.lsp ?? {}) },
         };
+        if (Array.isArray(body.removeLspIds)) {
+          for (const id of body.removeLspIds) {
+            if (typeof id === 'string' && id) {
+              delete nextCfg.lsp[id];
+            }
+          }
+        }
         await fs.writeFile(filePath, `${JSON.stringify(nextCfg, null, 2)}\n`, 'utf8');
         invalidateLspConfigCache();
         sendJson(res, 200, { ok: true });

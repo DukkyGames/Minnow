@@ -183,6 +183,23 @@
   cursor: not-allowed;
 }
 
+/* File-tree drag target highlight */
+.input-bar.composer-drop-active,
+.input-bar-composer.composer-drop-active,
+#msgInput.composer-drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.input-bar.composer-drop-active #msgInput {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.attach-chip--workspace {
+  border-style: dashed;
+}
+
 .send-btn {
   display: flex;
   align-items: center;

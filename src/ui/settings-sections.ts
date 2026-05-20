@@ -2,8 +2,9 @@
  * Populate full settings page sections from Step 02–18 APIs (no placeholder stubs).
  */
 
-import { listWorkAgents } from '../agents/work-agent-registry';
+import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import { loadSubAgentConfig, saveSubAgentConfigToServer } from '../agents/sub-agent-config';
+import type { SubAgentTypeConfig } from '../agents/types';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import {
@@ -32,7 +33,7 @@ import {
   setActiveProvider,
 } from '../providers/store';
 import { fetchMemoryStatus } from '../memory/client';
-import { refreshSkillCatalog, getSkillCatalog } from '../skills/client';
+import { renderSkillsSettingsSection } from './settings-skills';
 import {
   fillToolsSection,
   loadProviderSelect,
@@ -40,6 +41,8 @@ import {
   registerToolHandlers,
 } from './settings';
 import {
+  createMcpServer,
+  deleteMcpServer,
   fetchMcpServers,
   setMcpServerEnabled,
   type McpServerSummary,
@@ -49,11 +52,17 @@ import {
   isLocalServerAvailable,
   loadToolConfigFromStorage,
   loadToolConfigIntoDrawer,
-  onToolToggle,
   saveToolConfig,
 } from '../tools/config';
+import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page';
+import {
+  mountPromptFileEditor,
+  mountSubAgentTypeEditor,
+  mountWorkAgentEditor,
+  renderEntityEditorList,
+} from './settings-entity-editor';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -470,60 +479,111 @@ async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
 
-  const list = el('ul', 'settings-entity-list');
-  for (const mode of listModes()) {
-    const item = el('li', 'settings-entity-list__item');
-    item.appendChild(el('span', 'settings-entity-list__head', mode.label));
-    item.appendChild(el('p', 'settings-field-hint', mode.description));
-    item.appendChild(
-      el('p', 'settings-field-hint', `Prompt id: ${mode.promptId} · Policy: ${mode.toolPolicy.default}`),
+  if (!isServerStorageMode()) {
+    mount.appendChild(
+      serverBanner('Mode prompt editing requires <code>npm start</code>.'),
     );
-    list.appendChild(item);
+    return;
   }
-  mount.appendChild(list);
+
+  mount.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.speedchat/prompts/modes/.',
+    ),
+  );
+
+  renderEntityEditorList(
+    mount,
+    listModes().map((mode) => ({
+      id: mode.id,
+      label: mode.label,
+      hint: `${mode.description} · Tool policy: ${mode.toolPolicy.default}`,
+    })),
+    (id, body) => {
+      mountPromptFileEditor(body, { family: 'modes', entityId: id });
+    },
+  );
 }
 
 async function renderExpertsSection(): Promise<void> {
   const mount = clearMount('settingsExpertsBody');
   if (!mount) return;
 
-  const list = el('ul', 'settings-entity-list');
-  for (const expert of listExperts()) {
-    const item = el('li', 'settings-entity-list__item');
-    item.appendChild(el('span', 'settings-entity-list__head', expert.meta.label));
-    item.appendChild(
-      el(
-        'p',
-        'settings-field-hint',
-        `${expert.meta.id} · ${expert.meta.description ?? ''}`.trim(),
-      ),
+  if (!isServerStorageMode()) {
+    mount.appendChild(
+      serverBanner('Expert prompt editing requires <code>npm start</code>.'),
     );
-    list.appendChild(item);
+    return;
   }
-  mount.appendChild(list);
+
+  mount.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Edit persona prompts per expert. Overrides live in ~/.speedchat/prompts/experts/.',
+    ),
+  );
+
+  renderEntityEditorList(
+    mount,
+    listExperts().map((expert) => ({
+      id: expert.meta.id,
+      label: expert.meta.label,
+      hint: expert.meta.description ?? '',
+    })),
+    (id, body) => {
+      mountPromptFileEditor(body, { family: 'experts', entityId: id });
+    },
+  );
 }
 
 async function renderWorkAgentsSection(): Promise<void> {
   const mount = clearMount('settingsWorkAgentsBody');
   if (!mount) return;
 
-  const list = el('ul', 'settings-entity-list');
-  for (const agent of listWorkAgents(true)) {
-    const item = el('li', 'settings-entity-list__item');
-    const title = `${agent.label} (${agent.id})${agent.disabled ? ' — disabled' : ''}`;
-    item.appendChild(el('span', 'settings-entity-list__head', title));
-    const model = [agent.providerId, agent.modelId].filter(Boolean).join(' / ');
-    if (model) {
-      item.appendChild(el('p', 'settings-field-hint', `Model: ${model}`));
-    }
-    if (agent.defaultForModes?.length) {
-      item.appendChild(
-        el('p', 'settings-field-hint', `Default for modes: ${agent.defaultForModes.join(', ')}`),
-      );
-    }
-    list.appendChild(item);
+  if (!isServerStorageMode()) {
+    mount.appendChild(
+      serverBanner('Work agent editing requires <code>npm start</code>.'),
+    );
+    return;
   }
-  mount.appendChild(list);
+
+  const remote = await fetchWorkAgentsList();
+  const agents = remote?.agents ?? [];
+
+  mount.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.speedchat/work-agents.json.',
+    ),
+  );
+
+  renderEntityEditorList(
+    mount,
+    agents.map((agent) => ({
+      id: agent.id,
+      label: `${agent.label}${agent.disabled ? ' (disabled)' : ''}`,
+      hint: agent.defaultForModes?.length
+        ? `Default for modes: ${agent.defaultForModes.join(', ')}`
+        : agent.description,
+    })),
+    (id, body) => {
+      const agent = agents.find((a) => a.id === id);
+      if (!agent) return;
+      mountWorkAgentEditor(body, {
+        agentId: id,
+        initialProviderId: agent.providerId,
+        initialModelId: agent.modelId,
+        initialDisabled: agent.disabled === true,
+        onModelSaved: () => {
+          void renderWorkAgentsSection();
+        },
+      });
+    },
+  );
 }
 
 async function renderSubAgentsSection(): Promise<void> {
@@ -550,31 +610,58 @@ async function renderSubAgentsSection(): Promise<void> {
   enableWrap.appendChild(el('span', '', 'Enable sub-agents'));
   mount.appendChild(enableWrap);
 
-  const list = el('ul', 'settings-entity-list');
-  for (const [id, type] of Object.entries(config.types)) {
-    const item = el('li', 'settings-entity-list__item');
-    item.appendChild(
-      el(
-        'span',
-        'settings-entity-list__head',
-        `${id}${type.enabled === false ? ' (disabled)' : ''}`,
-      ),
-    );
-    item.appendChild(
-      el(
-        'p',
-        'settings-field-hint',
-        `Model: ${type.providerId ?? '—'} / ${type.modelId || '—'} · max ${type.maxConcurrent} concurrent`,
-      ),
-    );
-    list.appendChild(item);
-  }
-  mount.appendChild(list);
+  mount.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Expand a sub-agent type to edit its system prompt and model binding.',
+    ),
+  );
+
+  const saveTypePatch = async (
+    typeId: string,
+    patch: Partial<SubAgentTypeConfig>,
+  ): Promise<boolean> => {
+    const fresh = await loadSubAgentConfig();
+    const types = { ...fresh.types };
+    types[typeId] = { ...types[typeId], ...patch };
+    return saveSubAgentConfigToServer({ types });
+  };
+
+  renderEntityEditorList(
+    mount,
+    Object.entries(config.types).map(([id, type]) => ({
+      id,
+      label: type.label ?? id.replace(/([A-Z])/g, ' $1').trim(),
+      hint: `Provider ${type.providerId ?? '—'} · model ${type.modelId || '(chat default)'}`,
+    })),
+    (id, body) => {
+      const type = config.types[id];
+      if (!type) return;
+      mountSubAgentTypeEditor(
+        body,
+        id,
+        id,
+        {
+          providerId: type.providerId ?? '',
+          modelId: type.modelId ?? '',
+          enabled: type.enabled !== false,
+          maxConcurrent: type.maxConcurrent,
+        },
+        (patch) => saveTypePatch(id, patch),
+      );
+    },
+  );
 
   enableCb.addEventListener('change', () => {
-    void saveSubAgentConfigToServer({ enabled: enableCb.checked }).then((ok) => {
+    void (async () => {
+      const fresh = await loadSubAgentConfig();
+      const ok = await saveSubAgentConfigToServer({
+        ...fresh,
+        enabled: enableCb.checked,
+      });
       setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
-    });
+    })();
   });
 }
 
@@ -593,12 +680,20 @@ async function renderToolsSection(): Promise<void> {
   banner.textContent = 'Server tools need npm start (not npm run dev).';
   mount.appendChild(banner);
 
+  mount.appendChild(
+    el(
+      'p',
+      'field-hint settings-tools-hint',
+      'Enable function calling per tool. Use Enable all or category All to toggle a group. Server tools need npm start.',
+    ),
+  );
+
   const list = document.createElement('div');
   list.id = 'settingsToolsList';
   list.className = 'tools-list settings-tools-list';
   mount.appendChild(list);
 
-  const keyRow = el('div', 'tool-key-row field');
+  const keyRow = el('div', 'tool-key-row field settings-tool-key-row');
   const keyLabel = document.createElement('label');
   keyLabel.htmlFor = 'settingsBraveApiKey';
   keyLabel.textContent = 'Brave Search API key';
@@ -620,14 +715,6 @@ async function renderToolsSection(): Promise<void> {
   if (!toolsSectionInitialized) {
     toolsSectionInitialized = true;
     registerToolHandlers();
-    list.addEventListener('change', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
-      const row = target.closest<HTMLElement>('[data-tool-id]');
-      const id = row?.getAttribute('data-tool-id');
-      if (!id) return;
-      onToolToggle(id);
-    });
     keyInput.addEventListener('input', () => {
       const config = getToolConfig();
       config.keys.braveApiKey = keyInput.value.trim();
@@ -686,6 +773,14 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
     badge.className = 'settings-mcp-badge settings-mcp-badge--builtin';
     badge.textContent = 'Built-in';
     head.append(badge);
+  } else {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'settings-inline-btn settings-mcp-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.setAttribute('aria-label', `Remove ${server.label}`);
+    removeBtn.dataset.mcpRemove = server.id;
+    head.append(removeBtn);
   }
 
   row.append(head);
@@ -722,14 +817,114 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
 }
 
 let mcpToggleHandlerBound = false;
+let mcpAddFormBound = false;
+
+/** Split textarea lines into trimmed non-empty strings. */
+function parseMultilineField(raw: string): string[] {
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/** Parse KEY=value lines into an env map (ignores malformed lines). */
+function parseEnvLines(raw: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const line of parseMultilineField(raw)) {
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1).trim();
+    if (key) env[key] = value;
+  }
+  return env;
+}
+
+function clearMcpAddForm(): void {
+  const form = document.getElementById('settingsMcpAddForm') as HTMLFormElement | null;
+  form?.reset();
+  const enabled = document.getElementById('settingsMcpAddEnabled') as HTMLInputElement | null;
+  if (enabled) enabled.checked = true;
+  const err = document.getElementById('settingsMcpAddError');
+  err?.classList.add('hidden');
+  if (err) err.textContent = '';
+}
+
+function bindMcpAddForm(): void {
+  if (mcpAddFormBound) return;
+  mcpAddFormBound = true;
+
+  const form = document.getElementById('settingsMcpAddForm') as HTMLFormElement | null;
+  const errEl = document.getElementById('settingsMcpAddError');
+  const resetBtn = document.getElementById('settingsMcpAddReset');
+
+  resetBtn?.addEventListener('click', () => clearMcpAddForm());
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void (async () => {
+      const idInput = document.getElementById('settingsMcpAddId') as HTMLInputElement | null;
+      const labelInput = document.getElementById('settingsMcpAddLabel') as HTMLInputElement | null;
+      const descInput = document.getElementById('settingsMcpAddDescription') as HTMLInputElement | null;
+      const cmdInput = document.getElementById('settingsMcpAddCommand') as HTMLInputElement | null;
+      const argsInput = document.getElementById('settingsMcpAddArgs') as HTMLTextAreaElement | null;
+      const envInput = document.getElementById('settingsMcpAddEnv') as HTMLTextAreaElement | null;
+      const enabledInput = document.getElementById('settingsMcpAddEnabled') as HTMLInputElement | null;
+
+      const id = idInput?.value.trim().toLowerCase() ?? '';
+      const label = labelInput?.value.trim() ?? '';
+      const command = cmdInput?.value.trim() ?? '';
+      if (!id || !label || !command) {
+        if (errEl) {
+          errEl.textContent = 'Server id, display name, and command are required.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const env = parseEnvLines(envInput?.value ?? '');
+      const result = await createMcpServer({
+        id,
+        label,
+        description: descInput?.value.trim() ?? '',
+        enabled: enabledInput?.checked !== false,
+        transport: {
+          type: 'stdio',
+          command,
+          args: parseMultilineField(argsInput?.value ?? ''),
+          ...(Object.keys(env).length ? { env } : {}),
+        },
+      });
+
+      if (result.ok === false) {
+        const errMsg = result.error;
+        if (errEl) {
+          errEl.textContent = errMsg;
+          errEl.classList.remove('hidden');
+        }
+        setStatus('err', errMsg);
+        return;
+      }
+
+      if (errEl) errEl.classList.add('hidden');
+      clearMcpAddForm();
+      setStatus('ok', `Added MCP server ${result.server.label}`);
+      await renderMcpSection();
+    })();
+  });
+}
 
 async function renderMcpSection(): Promise<void> {
   const listEl = document.getElementById('settingsMcpServerList');
   const offlineEl = document.getElementById('settingsMcpOffline');
+  const addPanel = document.getElementById('settingsMcpAddPanel');
   if (!listEl) return;
+
+  bindMcpAddForm();
 
   const online = isLocalServerAvailable();
   offlineEl?.classList.toggle('hidden', online);
+  addPanel?.classList.toggle('hidden', !online);
 
   if (!online) {
     listEl.replaceChildren();
@@ -778,110 +973,31 @@ async function renderMcpSection(): Promise<void> {
       target.checked = !target.checked;
       setStatus('err', 'MCP toggle failed — use npm start');
     });
-  }
-}
 
-async function renderLspSection(): Promise<void> {
-  const list = document.getElementById('settingsLspServerList');
-  const offline = document.getElementById('settingsLspOffline');
-  const masterCb = document.getElementById(
-    'settingsLspMasterEnabled',
-  ) as HTMLInputElement | null;
-  if (!list) return;
-  list.replaceChildren();
+    listEl.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const serverId = target.dataset.mcpRemove;
+      if (!serverId) return;
 
-  if (!isLocalServerAvailable()) {
-    offline?.classList.remove('hidden');
-    return;
-  }
-  offline?.classList.add('hidden');
-
-  try {
-    const res = await fetch('/api/config/lsp', { cache: 'no-store' });
-    if (!res.ok) return;
-    const body = (await res.json()) as {
-      enabled?: boolean;
-      servers?: { id: string; label?: string }[];
-      lsp?: Record<string, { enabled?: boolean }>;
-    };
-
-    if (masterCb) {
-      masterCb.checked = body.enabled !== false;
-      masterCb.onchange = () => {
-        void fetch('/api/config/lsp', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: masterCb.checked }),
-        }).then((put) => {
-          setStatus(put.ok ? 'ok' : 'err', put.ok ? 'LSP master saved' : 'Save failed');
-        });
-      };
-    }
-
-    for (const server of body.servers ?? []) {
-      const item = el('div', 'settings-lsp-list__item');
-      item.setAttribute('role', 'listitem');
-      const row = el('label', 'settings-toggle-row');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = body.lsp?.[server.id]?.enabled !== false;
-      cb.addEventListener('change', () => {
-        const nextLsp = { ...(body.lsp ?? {}), [server.id]: { enabled: cb.checked } };
-        void fetch('/api/config/lsp', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lsp: nextLsp }),
-        }).then((put) => {
-          setStatus(put.ok ? 'ok' : 'err', put.ok ? `${server.id} updated` : 'LSP save failed');
-          if (put.ok) body.lsp = nextLsp;
-        });
-      });
-      row.appendChild(cb);
-      row.appendChild(el('span', '', server.label ?? server.id));
-      item.appendChild(row);
-      list.appendChild(item);
-    }
-  } catch {
-    offline?.classList.remove('hidden');
+      void (async () => {
+        if (!confirm(`Remove MCP server "${serverId}"?`)) return;
+        const ok = await deleteMcpServer(serverId);
+        if (ok) {
+          setStatus('ok', `Removed ${serverId}`);
+          await renderMcpSection();
+          return;
+        }
+        setStatus('err', 'Could not remove MCP server');
+      })();
+    });
   }
 }
 
 async function renderSkillsSection(): Promise<void> {
   const mount = clearMount('settingsSkillsBody');
   if (!mount) return;
-
-  await refreshSkillCatalog();
-  const skills = getSkillCatalog();
-
-  const paths = el('dl', 'settings-kv');
-  paths.appendChild(el('dt', 'settings-kv__term', 'Built-in'));
-  paths.appendChild(
-    el('dd', 'settings-kv__value', 'src/skills/ (shipped with SpeedChat)'),
-  );
-  paths.appendChild(el('dt', 'settings-kv__term', 'User'));
-  paths.appendChild(
-    el('dd', 'settings-kv__value', '~/.speedchat/skills/ (npm start)'),
-  );
-  mount.appendChild(paths);
-
-  const list = el('ul', 'settings-entity-list');
-  for (const skill of skills) {
-    const item = el('li', 'settings-entity-list__item');
-    item.appendChild(
-      el('span', 'settings-entity-list__head', `${skill.label} (${skill.id})`),
-    );
-    item.appendChild(
-      el('p', 'settings-field-hint', `${skill.source}${skill.description ? ` · ${skill.description}` : ''}`),
-    );
-    list.appendChild(item);
-  }
-  mount.appendChild(list);
-
-  if (!isLocalServerAvailable()) {
-    mount.appendChild(
-      serverBanner('Rescan user skills with <code>npm start</code> for ~/.speedchat/skills.'),
-    );
-  }
+  await renderSkillsSettingsSection(mount);
 }
 
 async function renderMemorySection(): Promise<void> {

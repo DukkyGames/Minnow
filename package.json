@@ -12,10 +12,11 @@
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
     "test:skills": "tsx --test test/skills-loader.test.ts",
+    "test:attachments": "tsx --test test/workspace-ref.test.ts",
     "test:skills-impeccable": "node --test test/skills-impeccable.test.mjs",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js test/file/*.test.mjs test/cdp/*.test.js test/browser-cdp.test.mjs test/skills-impeccable.test.mjs test/memory/*.test.mjs test/lsp/*.test.mjs test/mcp/*.test.mjs && tsx --test test/self-healing/**/*.test.mts test/ui-designer/**/*.test.mts test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/skills-loader.test.ts",
+    "test": "node --test test/config/*.test.js test/providers/*.test.js test/prompts/*.test.js test/cdp/*.test.js test/browser-cdp.test.mjs test/skills-impeccable.test.mjs test/memory/*.test.mjs test/lsp/*.test.mjs test/mcp/*.test.mjs && tsx --test test/file/*.test.mjs test/self-healing/**/*.test.mts test/ui-designer/**/*.test.mts test/ui/*.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/skills-loader.test.ts test/workspace-ref.test.ts",
     "test:memory": "node --test test/memory/*.test.mjs",
     "test:lsp": "node --test test/lsp/*.test.mjs",
     "test:mcp": "node --test test/mcp/*.test.mjs",
@@ -23,6 +24,7 @@
     "test:browser": "node --test test/cdp/*.test.js test/browser-cdp.test.mjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.2",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.11",
     "@codemirror/lang-javascript": "^6.2.5",

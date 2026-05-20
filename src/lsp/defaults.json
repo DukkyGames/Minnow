@@ -9,23 +9,286 @@
     },
     "eslint": {
       "disabled": true,
-      "extensions": [".ts", ".js", ".tsx", ".jsx", ".vue"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
       "defaultEnabled": false,
-      "label": "ESLint"
+      "label": "ESLint",
+      "requirements": { "package": "eslint" }
+    },
+    "oxlint": {
+      "disabled": true,
+      "command": ["oxlint", "--lsp"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".astro", ".svelte"],
+      "defaultEnabled": false,
+      "label": "Oxlint",
+      "requirements": { "package": "oxlint" }
+    },
+    "biome": {
+      "disabled": true,
+      "command": ["biome", "lsp-proxy", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".json", ".jsonc", ".vue", ".astro", ".svelte", ".css", ".graphql", ".gql", ".html"],
+      "defaultEnabled": false,
+      "label": "Biome",
+      "requirements": { "package": "biome" }
+    },
+    "deno": {
+      "disabled": true,
+      "command": ["deno", "lsp"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs"],
+      "defaultEnabled": false,
+      "label": "Deno",
+      "requirements": { "command": "deno" }
+    },
+    "vue": {
+      "disabled": true,
+      "command": ["vue-language-server", "--stdio"],
+      "extensions": [".vue"],
+      "defaultEnabled": false,
+      "label": "Vue"
+    },
+    "svelte": {
+      "disabled": true,
+      "command": ["svelteserver", "--stdio"],
+      "extensions": [".svelte"],
+      "defaultEnabled": false,
+      "label": "Svelte"
+    },
+    "astro": {
+      "disabled": true,
+      "command": ["astro-ls", "--stdio"],
+      "extensions": [".astro"],
+      "defaultEnabled": false,
+      "label": "Astro"
     },
     "pyright": {
       "disabled": true,
       "command": ["pyright-langserver", "--stdio"],
       "extensions": [".py", ".pyi"],
       "defaultEnabled": false,
-      "label": "Pyright"
+      "label": "Pyright",
+      "requirements": { "package": "pyright" }
     },
     "rust": {
       "disabled": true,
       "command": ["rust-analyzer"],
       "extensions": [".rs"],
       "defaultEnabled": false,
-      "label": "Rust Analyzer"
+      "label": "Rust Analyzer",
+      "requirements": { "binary": "rust-analyzer" }
+    },
+    "gopls": {
+      "disabled": true,
+      "command": ["gopls"],
+      "extensions": [".go"],
+      "defaultEnabled": false,
+      "label": "gopls",
+      "requirements": { "command": "go" }
+    },
+    "clangd": {
+      "disabled": true,
+      "command": ["clangd", "--background-index", "--clang-tidy"],
+      "extensions": [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
+      "defaultEnabled": false,
+      "label": "clangd",
+      "requirements": { "binary": "clangd" }
+    },
+    "csharp": {
+      "disabled": true,
+      "command": ["roslyn-language-server", "--stdio", "--autoLoadProjects"],
+      "extensions": [".cs", ".csx"],
+      "defaultEnabled": false,
+      "label": "C# (Roslyn)",
+      "requirements": { "command": "dotnet" }
+    },
+    "fsharp": {
+      "disabled": true,
+      "command": ["fsautocomplete"],
+      "extensions": [".fs", ".fsi", ".fsx", ".fsscript"],
+      "defaultEnabled": false,
+      "label": "F#",
+      "requirements": { "command": "dotnet" }
+    },
+    "razor": {
+      "disabled": true,
+      "extensions": [".razor", ".cshtml"],
+      "defaultEnabled": false,
+      "label": "Razor",
+      "requirements": { "command": "dotnet" }
+    },
+    "jdtls": {
+      "disabled": true,
+      "extensions": [".java"],
+      "defaultEnabled": false,
+      "label": "Java (JDTLS)",
+      "requirements": { "command": "java" }
+    },
+    "kotlin-ls": {
+      "disabled": true,
+      "command": ["kotlin-lsp", "--stdio"],
+      "extensions": [".kt", ".kts"],
+      "defaultEnabled": false,
+      "label": "Kotlin"
+    },
+    "ruby-lsp": {
+      "disabled": true,
+      "command": ["rubocop", "--lsp"],
+      "extensions": [".rb", ".rake", ".gemspec", ".ru"],
+      "defaultEnabled": false,
+      "label": "Ruby (RuboCop LSP)",
+      "requirements": { "command": "ruby" }
+    },
+    "elixir-ls": {
+      "disabled": true,
+      "extensions": [".ex", ".exs"],
+      "defaultEnabled": false,
+      "label": "Elixir LS",
+      "requirements": { "command": "elixir" }
+    },
+    "lua-ls": {
+      "disabled": true,
+      "command": ["lua-language-server"],
+      "extensions": [".lua"],
+      "defaultEnabled": false,
+      "label": "Lua"
+    },
+    "yaml-ls": {
+      "disabled": true,
+      "command": ["yaml-language-server", "--stdio"],
+      "extensions": [".yaml", ".yml"],
+      "defaultEnabled": false,
+      "label": "YAML"
+    },
+    "bash": {
+      "disabled": true,
+      "command": ["bash-language-server", "start"],
+      "extensions": [".sh", ".bash", ".zsh", ".ksh"],
+      "defaultEnabled": false,
+      "label": "Bash"
+    },
+    "terraform": {
+      "disabled": true,
+      "command": ["terraform-ls", "serve"],
+      "extensions": [".tf", ".tfvars"],
+      "defaultEnabled": false,
+      "label": "Terraform",
+      "requirements": { "binary": "terraform-ls" }
+    },
+    "dart": {
+      "disabled": true,
+      "command": ["dart", "language-server", "--lsp"],
+      "extensions": [".dart"],
+      "defaultEnabled": false,
+      "label": "Dart",
+      "requirements": { "command": "dart" }
+    },
+    "prisma": {
+      "disabled": true,
+      "command": ["prisma", "language-server"],
+      "extensions": [".prisma"],
+      "defaultEnabled": false,
+      "label": "Prisma",
+      "requirements": { "command": "prisma" }
+    },
+    "intelephense": {
+      "disabled": true,
+      "command": ["intelephense", "--stdio"],
+      "extensions": [".php"],
+      "defaultEnabled": false,
+      "label": "PHP (Intelephense)"
+    },
+    "ocaml-lsp": {
+      "disabled": true,
+      "command": ["ocamllsp"],
+      "extensions": [".ml", ".mli"],
+      "defaultEnabled": false,
+      "label": "OCaml",
+      "requirements": { "binary": "ocamllsp" }
+    },
+    "clojure-lsp": {
+      "disabled": true,
+      "command": ["clojure-lsp", "listen"],
+      "extensions": [".clj", ".cljs", ".cljc", ".edn"],
+      "defaultEnabled": false,
+      "label": "Clojure",
+      "requirements": { "binary": "clojure-lsp" }
+    },
+    "gleam": {
+      "disabled": true,
+      "command": ["gleam", "lsp"],
+      "extensions": [".gleam"],
+      "defaultEnabled": false,
+      "label": "Gleam",
+      "requirements": { "command": "gleam" }
+    },
+    "nixd": {
+      "disabled": true,
+      "command": ["nixd"],
+      "extensions": [".nix"],
+      "defaultEnabled": false,
+      "label": "nixd",
+      "requirements": { "binary": "nixd" }
+    },
+    "zls": {
+      "disabled": true,
+      "command": ["zls"],
+      "extensions": [".zig", ".zon"],
+      "defaultEnabled": false,
+      "label": "Zig (zls)",
+      "requirements": { "command": "zig" }
+    },
+    "sourcekit-lsp": {
+      "disabled": true,
+      "command": ["sourcekit-lsp"],
+      "extensions": [".swift", ".objc", ".objcpp"],
+      "defaultEnabled": false,
+      "label": "Swift (SourceKit)",
+      "requirements": { "command": "swift" }
+    },
+    "hls": {
+      "disabled": true,
+      "command": ["haskell-language-server-wrapper", "--lsp"],
+      "extensions": [".hs", ".lhs"],
+      "defaultEnabled": false,
+      "label": "Haskell (HLS)",
+      "requirements": { "binary": "haskell-language-server-wrapper" }
+    },
+    "julials": {
+      "disabled": true,
+      "command": ["julia", "--startup-file=no", "--history-file=no", "-e", "using LanguageServer; runserver()"],
+      "extensions": [".jl"],
+      "defaultEnabled": false,
+      "label": "Julia",
+      "requirements": { "command": "julia" }
+    },
+    "tinymist": {
+      "disabled": true,
+      "command": ["tinymist"],
+      "extensions": [".typ", ".typc"],
+      "defaultEnabled": false,
+      "label": "Typst (Tinymist)",
+      "requirements": { "binary": "tinymist" }
+    },
+    "texlab": {
+      "disabled": true,
+      "command": ["texlab"],
+      "extensions": [".tex", ".bib"],
+      "defaultEnabled": false,
+      "label": "TeX (TexLab)",
+      "requirements": { "binary": "texlab" }
+    },
+    "dockerfile": {
+      "disabled": true,
+      "command": ["docker-langserver", "--stdio"],
+      "extensions": [".dockerfile", "Dockerfile"],
+      "defaultEnabled": false,
+      "label": "Dockerfile"
+    },
+    "ty": {
+      "disabled": true,
+      "command": ["ty", "server"],
+      "extensions": [".py", ".pyi"],
+      "defaultEnabled": false,
+      "label": "ty (Python)",
+      "requirements": { "binary": "ty" }
     },
     "fake": {
       "disabled": false,

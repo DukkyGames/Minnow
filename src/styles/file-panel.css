@@ -1,4 +1,4 @@
-/* File tree sidebar, workspace split, and read-only viewer */
+/* File tree sidebar, workspace split, and editable viewer */
 
 .file-sidebar-backdrop {
   display: none;
@@ -90,10 +90,67 @@
   white-space: nowrap;
 }
 
+.file-viewer-path--dirty {
+  color: var(--text);
+}
+
+.file-viewer-save {
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+
+.file-viewer-save:not(:disabled) {
+  opacity: 1;
+}
+
+.file-viewer-save--active {
+  color: var(--accent);
+}
+
+.file-viewer-save[aria-busy='true'] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.file-viewer-readonly-banner {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--warning);
+  background: oklch(from var(--warning) l c h / 0.12);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .file-viewer-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-viewer-editor-mount {
+  flex: 1;
+  min-height: 0;
+}
+
+.file-viewer-editor-mount .cm-editor {
+  height: 100%;
+}
+
+.file-viewer-body .cm-editor {
+  height: 100%;
+  background: var(--surface);
+}
+
+.file-viewer-body .cm-editor .cm-scroller {
+  background: var(--surface);
+}
+
+.file-viewer-body .cm-content {
+  color: var(--text);
 }
 
 .file-viewer-status {
@@ -122,6 +179,19 @@
 .file-sidebar.collapsed {
   width: var(--file-sidebar-rail);
   overflow: hidden;
+}
+
+/* Collapsed rail: center controls; 40px icon-btn + 20px padding overflows 48px width */
+.file-sidebar.collapsed .file-sidebar-header {
+  padding: 8px 4px;
+  justify-content: center;
+  gap: 0;
+}
+
+.file-sidebar.collapsed .file-sidebar-header .icon-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
 }
 
 .file-sidebar-header {

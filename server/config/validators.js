@@ -175,6 +175,29 @@ export function normalizeToolConfig(raw) {
 
 /**
  * @param {unknown} raw
+ * @returns {{ enabled: Record<string, boolean> }}
+ */
+export function normalizeSkillConfig(raw) {
+  const config = { enabled: {} };
+
+  if (!raw || typeof raw !== 'object') return config;
+
+  const stored = /** @type {Record<string, unknown>} */ (raw);
+  if (!stored.enabled || typeof stored.enabled !== 'object') return config;
+
+  const enabledMap = /** @type {Record<string, unknown>} */ (stored.enabled);
+  for (const [id, value] of Object.entries(enabledMap)) {
+    if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(id)) continue;
+    if (typeof value === 'boolean') {
+      config.enabled[id] = value;
+    }
+  }
+
+  return config;
+}
+
+/**
+ * @param {unknown} raw
  * @returns {{ presetId: string, text: string }}
  */
 export function validateSystemPromptSettings(raw) {

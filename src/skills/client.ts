@@ -4,6 +4,7 @@
 
 import { isLocalServerAvailable } from '../tools/config';
 import builtinManifest from './builtin-manifest.json';
+import { isSkillEnabled } from './config';
 import { mergeSkillLists } from './loader';
 import type { SkillDetail, SkillListItem } from './types';
 
@@ -49,8 +50,18 @@ function getBuiltinListFromManifest(): SkillListItem[] {
   return manifest.skills.map((s) => ({ ...s, source: 'builtin' as const }));
 }
 
+/** Catalog rows that are enabled in settings (default: enabled). */
+function filterEnabledSkills(skills: SkillListItem[]): SkillListItem[] {
+  return skills.filter((skill) => isSkillEnabled(skill.id));
+}
+
 /** Current merged catalog (built-in + user when server available). */
 export function getSkillCatalog(): readonly SkillListItem[] {
+  return filterEnabledSkills(skillCatalog);
+}
+
+/** Full catalog including disabled skills (settings UI). */
+export function getAllSkillCatalog(): readonly SkillListItem[] {
   return skillCatalog;
 }
 
@@ -84,7 +95,7 @@ export async function fetchSkillById(id: string): Promise<SkillDetail | null> {
   if (cached) return cached;
 
   const inCatalog = skillCatalog.find((s) => s.id === id);
-  if (!inCatalog) return null;
+  if (!inCatalog || !isSkillEnabled(id)) return null;
 
   if (!isLocalServerAvailable()) {
     if (inCatalog.source !== 'builtin') {
@@ -101,6 +112,7 @@ export async function fetchSkillById(id: string): Promise<SkillDetail | null> {
         description: meta.description.trim(),
         source: 'builtin',
         body,
+        raw,
       };
       detailCache.set(id, detail);
       return detail;

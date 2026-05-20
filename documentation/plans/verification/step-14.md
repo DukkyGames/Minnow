@@ -54,11 +54,15 @@ npm start
 | `npm install` + postinstall sync | **PASS** |
 | `test/skills-impeccable.test.mjs` | **PASS** (10/10) |
 | `npm run test:skills-impeccable` | **PASS** (10/10) |
-| `npm test` | **PASS** (node 43/43 + tsx 98/98 = **141/141**) |
-| `npm run build` | **PASS** (`prebuild` manifest 10 skills incl. `impeccable`) |
+| `npm test` | **PASS** (node **67/67** + tsx **109/109** = **176/176**) |
+| `npm run build` | **PASS** (`prebuild` manifest **11** skills incl. `impeccable`) |
 | `npm run impeccable:sync` | **PASS** (idempotent) |
 | `GET /api/skills` includes impeccable | **PASS** @ `http://localhost:5197` (`SPEEDCHAT_HOME` temp) |
+| SKILL.md → PRODUCT.md / DESIGN.md / design.json (no OKLCH dup) | **PASS** |
+| Skill picker label `Impeccable`, `/impeccable` id (DESIGN tokens in CSS) | **PASS** (no settings-page entry) |
 | `npm run impeccable:detect` | (optional; not run in verifier pass) |
 | Manual `/` picker | (deferred) |
+
+**Fix during verify:** `test/memory/memory-api.test.mjs` now uses `os.tmpdir()` instead of wiping git fixture `memory-home-empty` (Windows `ENOTEMPTY` on `logs/`).
 
 **Overall: PASS**

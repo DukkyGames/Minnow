@@ -18,13 +18,43 @@ function handleMessage(msg) {
       jsonrpc: '2.0',
       id: msg.id,
       result: {
-        capabilities: { textDocumentSync: 1 },
+        capabilities: {
+          textDocumentSync: 1,
+          completionProvider: { triggerCharacters: ['.'] },
+        },
       },
     });
     return;
   }
 
   if (msg.method === 'initialized') {
+    return;
+  }
+
+  if (msg.method === 'textDocument/completion') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const items =
+      uri.includes('sample.fake') || uri.endsWith('.fake')
+        ? [
+            {
+              label: 'fakeKeyword',
+              kind: 14,
+              detail: 'Fake LSP keyword',
+              insertText: 'fakeKeyword',
+            },
+            {
+              label: 'console.log',
+              kind: 3,
+              detail: 'Log to console',
+              insertText: 'console.log($0)',
+            },
+          ]
+        : [];
+    send({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: { isIncomplete: false, items },
+    });
     return;
   }
 

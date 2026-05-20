@@ -23,6 +23,7 @@ import './styles/settings-page.css';
 import 'highlight.js/styles/github.min.css';
 
 import { initAttachments, onFileSelected } from './attachments/store';
+import { initComposerDrop } from './ui/composer-drop';
 import { fetchModels } from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
@@ -31,6 +32,7 @@ import { detectConfigServer, refreshConfigStorageBanner } from './config/storage
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
 import { refreshSkillCatalog } from './skills/client';
+import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
@@ -77,6 +79,7 @@ import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-ag
 import { dismissOpenLayers } from './ui/status';
 import {
   initFilePanel,
+  onFilePanelServerAvailabilityChanged,
   closeMobileFileSidebar,
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
@@ -141,9 +144,12 @@ export async function initApp(): Promise<void> {
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) mountSlashPicker(msgInput);
+  initComposerDrop();
   await initFilePanel();
+  onFilePanelServerAvailabilityChanged();
   onTerminalServerAvailabilityChanged();
   await loadToolConfigFromStorage();
+  await loadSkillConfigFromStorage();
   await initTerminalPanel();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();

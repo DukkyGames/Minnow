@@ -2,7 +2,9 @@
  * Build system prompts for sub-agent runs.
  */
 
+import { fetchPromptFile } from '../chat/prompts/prompt-file-api';
 import { getPromptMetaSettingsSync } from '../config/prompt-meta';
+import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { SHIPPED_SUB_AGENT_PROMPTS } from './shipped-sub-agent-prompts';
 import { getWorkAgentPromptOverride } from './work-agent-registry';
 import { fetchWorkAgentPrompt } from './work-agent-prompt-api';
@@ -33,6 +35,13 @@ export async function resolveSubAgentBasePrompt(
 
   const meta = getPromptMetaSettingsSync();
   const profile = meta.activePromptProfile === 'lite' ? 'lite' : 'full';
+
+  await detectConfigServer();
+  if (isServerStorageMode()) {
+    const fromApi = await fetchPromptFile('sub-agents', typeId, profile);
+    if (fromApi?.content?.trim()) return fromApi.content.trim();
+  }
+
   const shipped = loadShippedSubAgentPrompt(typeId, profile);
   if (shipped) return shipped;
 

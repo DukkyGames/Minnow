@@ -204,6 +204,12 @@
   gap: 8px;
 }
 
+.settings-parts-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .settings-part-block {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -279,6 +285,80 @@
   margin-bottom: 4px;
 }
 
+.settings-entity-details {
+  margin-top: 4px;
+}
+
+.settings-entity-details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-entity-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-entity-editor-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-profile-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.settings-profile-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.settings-profile-tab.is-active {
+  background: var(--accent);
+  color: var(--text-hover);
+  font-weight: 600;
+}
+
+.settings-model-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.settings-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.settings-select {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font: inherit;
+  color: var(--text);
+}
+
+.settings-subagent-extra {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
 .settings-badge {
   display: inline-block;
   margin-top: 8px;
@@ -324,6 +404,17 @@
   background: var(--accent-subtle);
 }
 
+.settings-action-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-hover);
+  font-weight: 600;
+}
+
+.settings-action-btn--primary:hover {
+  filter: brightness(1.05);
+}
+
 .settings-action-btn--danger:hover {
   background: var(--danger);
   color: var(--text-hover);
@@ -351,11 +442,102 @@
 }
 
 .settings-mcp-row,
+.settings-lsp-row,
 .settings-lsp-list__item,
 .settings-mcp-list__item {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+}
+
+.settings-lsp-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-lsp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-lsp-extensions {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.settings-lsp-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-lsp-badge--builtin {
+  background: var(--code-inline-bg);
+}
+
+.settings-lsp-badge--running {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.settings-lsp-badge--idle {
+  color: var(--text-muted);
+}
+
+.settings-lsp-warn {
+  color: var(--warning);
+}
+
+.settings-lsp-remove {
+  font-size: 12px;
+  color: var(--danger);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.settings-lsp-remove:hover {
+  text-decoration: underline;
+}
+
+.settings-lsp-add-panel {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.settings-lsp-add-summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+}
+
+.settings-lsp-custom-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-lsp-custom-title {
+  font-size: 14px;
+  margin: 0;
+}
+
+.settings-lsp-custom-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .settings-mcp-row-head {
@@ -391,14 +573,113 @@
   border-color: var(--success);
 }
 
+.settings-mcp-add-panel {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.settings-mcp-add-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+}
+
+.settings-mcp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.settings-mcp-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-mcp-form-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.settings-mcp-remove {
+  margin-left: auto;
+}
+
 .settings-mcp-offline.hidden,
 .settings-lsp-offline.hidden,
 .hidden {
   display: none;
 }
 
+.settings-tools-hint {
+  margin: 0 0 12px;
+  max-width: 52ch;
+}
+
+.settings-tools-list {
+  margin-top: 4px;
+}
+
+.settings-tools-list .tool-list-toolbar {
+  background: var(--surface);
+}
+
+.settings-tools-list .tool-group {
+  padding: 0 2px;
+}
+
 .settings-tools-list .tool-row {
-  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-bottom-color: var(--border);
+}
+
+.settings-tools-list .tool-group .tool-row:last-child {
+  border-bottom-color: transparent;
+}
+
+.settings-tools-list .tool-row:hover:not(.is-server-unavailable) {
+  background: var(--bg);
+}
+
+.settings-tools-list .tool-desc {
+  margin-left: 26px;
+}
+
+.settings-tool-key-row {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.settings-tool-key-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-tool-key-row input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font: inherit;
+  color: var(--text);
+}
+
+.settings-tool-key-row input:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 @media (max-width: 768px) {
@@ -423,4 +704,140 @@
   .settings-kv {
     grid-template-columns: 1fr;
   }
+}
+
+/* Skills settings (Step 13 / Step 20) */
+.settings-skills-toolbar {
+  margin-bottom: 16px;
+}
+
+.settings-skills-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-skill-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.settings-skill-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-skill-card__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-skill-card__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-skill-card__label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-badge--builtin {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10px;
+}
+
+.settings-badge--user {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.settings-skill-card__id {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-skill-card__desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.settings-skill-card__edit-toggle {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-skill-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  min-width: 40px;
+  min-height: 22px;
+}
+
+.settings-skill-switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.settings-skill-switch__track {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border-strong);
+  transition: background 0.2s var(--ease-out);
+}
+
+.settings-skill-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-hover);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.settings-skill-switch__input:checked + .settings-skill-switch__track {
+  background: var(--accent);
+}
+
+.settings-skill-switch__input:checked + .settings-skill-switch__track .settings-skill-switch__thumb {
+  transform: translateX(18px);
+}
+
+.settings-skill-switch__input:focus-visible + .settings-skill-switch__track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

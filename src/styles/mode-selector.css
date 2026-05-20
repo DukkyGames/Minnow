@@ -15,35 +15,41 @@
   flex-wrap: wrap;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface-2, oklch(0.96 0.01 260));
-  border: 1px solid var(--border-subtle, oklch(0.88 0.02 260));
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  border: 1px solid var(--border);
 }
 
 .mode-segment {
   appearance: none;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-muted, oklch(0.45 0.02 260));
+  color: var(--text-muted);
   font-family: inherit;
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.2;
   padding: 4px 10px;
-  border-radius: calc(var(--radius-md, 8px) - 2px);
+  border-radius: calc(var(--radius-md) - 2px);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out);
 }
 
-.mode-segment:hover:not(:disabled) {
-  color: var(--ink, oklch(0.25 0.02 260));
-  background: var(--surface-1, oklch(0.99 0 260));
+@media (hover: hover) and (pointer: fine) {
+  .mode-segment:hover:not(:disabled):not([aria-checked='true']) {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+  }
 }
 
 .mode-segment[aria-checked='true'] {
-  background: var(--accent, oklch(0.55 0.18 250));
-  color: var(--on-accent, oklch(0.99 0 260));
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.08);
+  background: var(--accent);
+  color: var(--text-hover);
+  border-color: var(--accent);
 }
 
 .mode-segment:disabled {
@@ -52,7 +58,7 @@
 }
 
 .mode-segment:focus-visible {
-  outline: 2px solid var(--accent, oklch(0.55 0.18 250));
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

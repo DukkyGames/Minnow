@@ -2,6 +2,10 @@
  * Project file tree — lazy list_directory via executeTool.
  */
 
+import {
+  FILE_TREE_DRAG_THRESHOLD_PX,
+  WORKSPACE_FILE_MIME,
+} from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
@@ -171,8 +175,66 @@ function appendFileRow(
   label.textContent = name;
   row.appendChild(label);
 
+  row.draggable = true;
+  let dragAllowed = false;
+  let suppressClick = false;
+  let pointerStartX = 0;
+  let pointerStartY = 0;
+
+  const clearPointerTracking = (): void => {
+    document.removeEventListener('mousemove', onPointerMove);
+    document.removeEventListener('mouseup', onPointerUp);
+  };
+
+  const onPointerMove = (event: MouseEvent): void => {
+    const dx = event.clientX - pointerStartX;
+    const dy = event.clientY - pointerStartY;
+    if (Math.hypot(dx, dy) >= FILE_TREE_DRAG_THRESHOLD_PX) {
+      dragAllowed = true;
+    }
+  };
+
+  const onPointerUp = (): void => {
+    clearPointerTracking();
+    window.setTimeout(() => {
+      dragAllowed = false;
+    }, 0);
+  };
+
+  row.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    dragAllowed = false;
+    suppressClick = false;
+    pointerStartX = event.clientX;
+    pointerStartY = event.clientY;
+    document.addEventListener('mousemove', onPointerMove);
+    document.addEventListener('mouseup', onPointerUp);
+  });
+
+  row.addEventListener('dragstart', (event) => {
+    if (!dragAllowed) {
+      event.preventDefault();
+      return;
+    }
+    suppressClick = true;
+    const transfer = event.dataTransfer;
+    if (!transfer) return;
+    transfer.effectAllowed = 'copy';
+    transfer.setData(WORKSPACE_FILE_MIME, fullPath);
+    transfer.setData('text/plain', fullPath);
+  });
+
+  row.addEventListener('dragend', () => {
+    suppressClick = true;
+    clearPointerTracking();
+  });
+
   row.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     void openFileInViewer(fullPath);
   });
   row.addEventListener('keydown', (e) => {
@@ -221,7 +283,7 @@ export function renderFileTree(): void {
     host.innerHTML = '';
     const wait = document.createElement('p');
     wait.className = 'file-tree-loading';
-    wait.textContent = loadingDirs.has(root) ? 'Loading project…' : 'Open Files to load tree';
+    wait.textContent = 'Loading project…';
     host.appendChild(wait);
     return;
   }
