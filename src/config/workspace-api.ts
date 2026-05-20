@@ -2,11 +2,19 @@
  * Workspace folder API — directory where AI tools operate.
  */
 
+export interface WorkspaceRecentItem {
+  path: string;
+  label: string;
+  exists: boolean;
+  isCurrent: boolean;
+}
+
 export interface WorkspaceInfo {
   ok?: boolean;
   path: string;
   label: string;
   isDefault: boolean;
+  recent?: WorkspaceRecentItem[];
 }
 
 export interface WorkspacePickResult {
@@ -60,4 +68,20 @@ export async function setWorkspacePath(absPath: string): Promise<WorkspaceInfo> 
     throw new Error(json.error ?? `HTTP ${res.status}`);
   }
   return json;
+}
+
+/** Remove one path from the MRU list without changing the active workspace. */
+export async function removeRecentWorkspace(
+  absPath: string,
+): Promise<WorkspaceRecentItem[]> {
+  const res = await fetch('/api/workspace/recent', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: absPath }),
+  });
+  const json = (await res.json()) as { recent?: WorkspaceRecentItem[]; error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  return json.recent ?? [];
 }
