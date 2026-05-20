@@ -5,11 +5,13 @@
 import type { SessionState, SystemPromptSettings } from '../types';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
+import type { UserRulesSettings } from './user-rules';
 import {
   defaultSessionState,
   defaultSystemPromptSettings,
   defaultSkillConfig,
   defaultToolConfig,
+  defaultUserRulesSettings,
 } from './defaults';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -120,6 +122,22 @@ export async function putSystemPrompt(settings: SystemPromptSettings): Promise<v
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
+/** GET /api/config/rules */
+export async function getRules(): Promise<UserRulesSettings> {
+  const res = await fetch('/api/config/rules', { cache: 'no-store' });
+  return parseJsonResponse<UserRulesSettings>(res);
+}
+
+/** PUT /api/config/rules */
+export async function putRules(settings: UserRulesSettings): Promise<void> {
+  const res = await fetch('/api/config/rules', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(settings),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
 /** POST /api/config/migrate */
 export async function postMigrate(body: MigrateBody): Promise<MigrateResponse> {
   const res = await fetch('/api/config/migrate', {
@@ -135,4 +153,5 @@ export {
   defaultSkillConfig,
   defaultToolConfig,
   defaultSystemPromptSettings,
+  defaultUserRulesSettings,
 };

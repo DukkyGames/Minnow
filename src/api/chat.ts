@@ -30,8 +30,9 @@ import type {
   ToolCallAccumulator,
   Usage,
 } from '../types';
+import { finalizeStoppedTurn } from '../chat/finalize-stopped-turn';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
-import { setSendLoading } from '../ui/input';
+import { setComposerStreamingMode } from '../ui/composer-send';
 import {
   appendBubble,
   appendStats,
@@ -348,7 +349,7 @@ export async function sendMessage(): Promise<void> {
   });
 
   setStreaming(true);
-  setSendLoading(true);
+  setComposerStreamingMode('streaming');
   setStatus('spin', 'Generating reply…');
 
   let fullText = '';
@@ -480,10 +481,17 @@ export async function sendMessage(): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
-      thoughtController.abort();
       thinkingTracker.abort();
       streamStatus.setThinkingElapsed(null);
-      streamStatus.dispose();
+      finalizeStoppedTurn({
+        chat,
+        wrap,
+        bubble,
+        cursor,
+        streamStatus,
+        thoughtController,
+        partialText: fullText,
+      });
       return;
     }
     cancelAssistantBubbleRenderDebounce();
@@ -500,7 +508,7 @@ export async function sendMessage(): Promise<void> {
   } finally {
     thoughtController.abort();
     setStreaming(false);
-    setSendLoading(false);
+    setComposerStreamingMode('idle');
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);
     }

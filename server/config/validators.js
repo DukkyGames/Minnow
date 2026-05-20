@@ -6,6 +6,32 @@ import { ALL_TOOL_IDS } from './tool-ids.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
+const SESSION_SCHEMA_VERSION = 2;
+
+/** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
+function normalizeWorkspacePath(fsPath) {
+  if (typeof fsPath !== 'string') return '';
+  let p = fsPath.trim().replace(/\\/g, '/');
+  p = p.replace(/\/+/g, '/');
+  if (/^[a-zA-Z]:\//.test(p)) {
+    p = p.charAt(0).toUpperCase() + p.slice(1);
+  }
+  if (p.length > 1 && p.endsWith('/')) {
+    p = p.slice(0, -1);
+  }
+  return p;
+}
+
+function ensureLastActiveMap(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof key === 'string' && typeof value === 'string' && value.trim()) {
+      out[normalizeWorkspacePath(key)] = value.trim();
+    }
+  }
+  return out;
+}
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
 const MODE_IDS = ['build', 'plan', 'orchestrate', 'research'];
@@ -41,11 +67,65 @@ function newChatId() {
   return `c_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
+/** Validate in-flight assistant checkpoint (mirror src/state/pending-turn.ts). */
+function ensurePendingTurn(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  if (row.role !== 'assistant') return undefined;
+  const startedAt = row.startedAt;
+  if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) {
+    return undefined;
+  }
+  const content = typeof row.content === 'string' ? row.content : '';
+  const out = { role: 'assistant', content, startedAt };
+  if (Array.isArray(row.thinking)) {
+    const thinking = row.thinking
+      .filter((s) => typeof s === 'string' && s.trim())
+      .map((s) => String(s).trim());
+    if (thinking.length) out.thinking = thinking;
+  }
+  if (Array.isArray(row.toolCalls)) {
+    const toolCalls = row.toolCalls.filter(
+      (tc) =>
+        tc &&
+        typeof tc === 'object' &&
+        typeof tc.id === 'string' &&
+        tc.function &&
+        typeof tc.function.name === 'string',
+    );
+    if (toolCalls.length) out.toolCalls = toolCalls;
+  }
+  if (typeof row.modelId === 'string' && row.modelId) out.modelId = row.modelId;
+  if (typeof row.providerId === 'string' && row.providerId) {
+    out.providerId = row.providerId;
+  }
+  if (
+    row.phase === 'streaming' ||
+    row.phase === 'tools' ||
+    row.phase === 'thinking'
+  ) {
+    out.phase = row.phase;
+  }
+  if (typeof row.toolRound === 'number' && Number.isInteger(row.toolRound) && row.toolRound >= 0) {
+    out.toolRound = row.toolRound;
+  }
+  if (row.stopped === true) out.stopped = true;
+  if (
+    typeof row.thinkingDurationMs === 'number' &&
+    Number.isFinite(row.thinkingDurationMs) &&
+    row.thinkingDurationMs >= 0
+  ) {
+    out.thinkingDurationMs = row.thinkingDurationMs;
+  }
+  return out;
+}
+
 function ensureChatShape(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
       id: newChatId(),
       name: PLACEHOLDER_CHAT_NAME,
+      workspacePath: '',
       modelId: '',
       modeId: DEFAULT_MODE_ID,
       expertSelection: defaultExpertSelection(),
@@ -66,12 +146,20 @@ function ensureChatShape(raw) {
     ? row.terminalHistory.filter((r) => r && typeof r === 'object')
     : undefined;
 
+  const workspacePath =
+    typeof row.workspacePath === 'string'
+      ? normalizeWorkspacePath(row.workspacePath)
+      : '';
+
+  const pendingTurn = ensurePendingTurn(row.pendingTurn);
+
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
       typeof row.name === 'string' && row.name.trim()
         ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
+    workspacePath,
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
     modeId: normalizeModeId(
       typeof row.modeId === 'string' ? row.modeId : undefined,
@@ -80,6 +168,7 @@ function ensureChatShape(raw) {
     lastResolvedExpertId:
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(terminalHistory?.length ? { terminalHistory } : {}),
+    ...(pendingTurn ? { pendingTurn } : {}),
     history,
     lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
     modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},
@@ -110,7 +199,8 @@ export function validateSessionState(raw) {
   }
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
-  if (parsed.version !== 1) {
+  const version = parsed.version;
+  if (version !== 1 && version !== 2) {
     throw new Error('Invalid session version');
   }
 
@@ -120,9 +210,10 @@ export function validateSessionState(raw) {
 
   const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
   const state = {
-    version: 1,
+    version: SESSION_SCHEMA_VERSION,
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
+    lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
     chats: chats.length ? chats : [ensureChatShape(null)],
   };
 
@@ -251,6 +342,33 @@ export function validateSystemPromptSettings(raw) {
   };
 }
 
+const MAX_USER_RULES_BYTES = 16 * 1024;
+
+/**
+ * @param {unknown} raw
+ * @returns {{ version: 1, enabled: boolean, text: string }}
+ */
+export function validateUserRulesSettings(raw) {
+  if (!raw || typeof raw !== 'object') {
+    const err = new Error('Invalid user rules settings');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const parsed = /** @type {Record<string, unknown>} */ (raw);
+  const version = parsed.version === 1 ? 1 : 1;
+  const enabled = parsed.enabled === true;
+  const text = typeof parsed.text === 'string' ? parsed.text : '';
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > MAX_USER_RULES_BYTES) {
+    const err = new Error(`User rules text exceeds ${MAX_USER_RULES_BYTES} bytes`);
+    err.statusCode = 413;
+    throw err;
+  }
+
+  return { version, enabled, text };
+}
+
 /**
  * Merge allowed fields into config.json meta.
  * @param {object} existing
@@ -344,6 +462,13 @@ export function mergeConfigMeta(existing, patch) {
     const w = /** @type {Record<string, unknown>} */ (p.workspace);
     if (typeof w.path === 'string' && w.path.trim()) {
       existingWorkspace.path = w.path.trim();
+    }
+    if (Array.isArray(w.recentPaths)) {
+      const trimmed = w.recentPaths
+        .filter((p) => typeof p === 'string')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      existingWorkspace.recentPaths = trimmed.slice(0, 10);
     }
     base.workspace = existingWorkspace;
   }

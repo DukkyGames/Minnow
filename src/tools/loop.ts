@@ -61,6 +61,7 @@ import {
   clearPendingTurn,
   consumeContinueInstructionForNextSend,
   consumePendingContinueSend,
+  CONTINUE_INTERRUPTED_INSTRUCTION,
   ensurePendingTurn,
 } from '../state/pending-turn';
 import { isComposerRecoveryBlocked } from '../ui/composer-send';
@@ -83,10 +84,7 @@ import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
-import {
-  resolveComposedSystemPrompt,
-  resolveOutboundSystemMessages,
-} from '../chat/prompts/compose-context';
+import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
@@ -247,6 +245,10 @@ export interface RunChatTurnOptions {
   shouldScheduleTitle?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
+  /** Resume from pendingTurn (Continue after reload). */
+  continueFromPending?: boolean;
+  /** Ephemeral API user line for continue (not stored in history). */
+  ephemeralContinueInstruction?: string;
 }
 
 /**
@@ -444,6 +446,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
     skillBody: presetSkillBody = null,
+    continueFromPending = false,
+    ephemeralContinueInstruction,
   } = options;
 
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
@@ -466,6 +470,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   chat.modelId = modelId || chat.modelId;
 
+  const pendingResume = continueFromPending
+    ? ensurePendingTurn(chat.pendingTurn)
+    : undefined;
+  const turnStartedAt = pendingResume?.startedAt ?? Date.now();
+
   if (pushUser) {
     chat.history.push({ role: 'user', content: historyContent });
     touchChat(chat);
@@ -478,8 +487,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
-  let sendModelId = modelId || chat.modelId;
-  let sendProviderId = chat.providerId;
+  let sendModelId = pendingResume?.modelId || modelId || chat.modelId;
+  let sendProviderId = pendingResume?.providerId || chat.providerId;
 
   const uiDesignerCtx = prepareUiDesignerTurn(chat, {
     skillId,
@@ -571,6 +580,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     onThinkingStart: (): void => {
       streamCtx.streamStatus.setPhase('thinking');
       thinkingTracker?.startSegment();
+      turnCheckpoint?.setPhase('thinking');
     },
     onReasoningEnded: (): void => {
       thinkingTracker?.endSegment();
@@ -600,13 +610,26 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const sysPrompt = outbound.composed;
   const userRulesContent = outbound.userRules;
 
+  let turnCheckpoint: TurnCheckpointHandle | null = null;
+
   try {
     const provider = await getActiveProvider(sendProviderId);
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
+    turnCheckpoint = beginTurnCheckpoint(chat, {
+      startedAt: turnStartedAt,
+      modelId: sendModelId,
+      providerId: sendProviderId,
+      thoughtController,
+    });
+    if (pendingResume?.toolRound != null) {
+      turnCheckpoint.setToolRound(pendingResume.toolRound);
+    }
 
     const activeModeId = normalizeModeId(chat.modeId);
+    let currentToolRound = pendingResume?.toolRound ?? 0;
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      currentToolRound = turn;
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
@@ -622,6 +645,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         pendingUserText: pushUser ? userText || rawText : undefined,
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
+        ephemeralContinueInstruction: continueFromPending
+          ? ephemeralContinueInstruction
+          : undefined,
       });
       const body: ChatCompletionBody = {
         model: sendModelId || undefined,
@@ -637,6 +663,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       thoughtController.setAssistantWrap(wrap);
+      turnCheckpoint.setPhase('streaming');
+      turnCheckpoint.setToolRound(turn);
       const turnResult = await streamCompletionTurn(
         provider,
         body,
@@ -647,7 +675,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         revealProse,
         (text) => {
           livePartialText = text;
+          turnCheckpoint?.updateLiveText(text);
         },
+        continueFromPending
+          ? () => {
+              clearPendingTurn(chat);
+            }
+          : undefined,
       );
 
       cancelAssistantBubbleRenderDebounce();
@@ -673,6 +707,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         chat.history.push(assistantToolMsg);
         touchChat(chat);
         scheduleSaveSessions();
+        turnCheckpoint?.setToolCalls(turnResult.toolCalls);
+        turnCheckpoint?.setPhase('tools');
 
         setStatus('spin', 'Running tools…');
 
@@ -793,6 +829,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (fullText) {
+        turnCheckpoint?.complete();
         const meta = finalizeResponseMeta(
           streamMeta,
           turnResult.t0,
@@ -847,6 +884,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (e && e.name === 'AbortError') {
       thinkingTracker?.abort();
       streamCtx.streamStatus.setThinkingElapsed(null);
+      turnCheckpoint?.dispose();
       finalizeStoppedTurn({
         chat,
         wrap: streamCtx.wrap,
@@ -856,6 +894,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         thoughtController,
         partialText: livePartialText,
         parentTurnId,
+        startedAt: turnStartedAt,
+        modelId: sendModelId,
+        providerId: sendProviderId,
+        toolRound: turn,
       });
       return;
     }
@@ -877,6 +919,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     setSubAgentExecutorContext(null);
     thoughtController?.abort();
     thinkingTracker?.abort();
+    turnCheckpoint?.dispose();
     if (completedNormally) {
       clearAttachments();
     }
@@ -894,8 +937,45 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 /** Send the composer text with tool calling (SSE loop, max {@link MAX_TOOL_TURNS} rounds). */
 export async function sendMessageWithTools(): Promise<void> {
   if (streaming) return;
+  if (isComposerRecoveryBlocked()) return;
+
+  const continueSend = consumePendingContinueSend();
+  const chatEarly = getActiveChat();
+  if (continueSend && ensurePendingTurn(chatEarly.pendingTurn)) {
+    const instruction =
+      consumeContinueInstructionForNextSend() ?? CONTINUE_INTERRUPTED_INSTRUCTION;
+    dismissPendingTurnRecovery();
+    await runChatTurn({
+      chat: chatEarly,
+      pushUser: false,
+      rawText: '',
+      userText: '',
+      skillId: null,
+      displayText: '',
+      historyContent: '',
+      validAttachments: [],
+      continueFromPending: true,
+      ephemeralContinueInstruction: instruction,
+    });
+    return;
+  }
+
   const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const rawText = input.value.trim();
+  const { consumePendingMessageEdit, completePendingMessageEdit } = await import(
+    '../ui/message-actions'
+  );
+  const pendingEdit = consumePendingMessageEdit();
+  if (pendingEdit) {
+    input.value = '';
+    input.style.height = 'auto';
+    await completePendingMessageEdit(
+      pendingEdit.chatId,
+      pendingEdit.historyIndex,
+      rawText,
+    );
+    return;
+  }
   const pending = getPendingAttachments();
   const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
   const { skillId, userText } = parseSlashCommand(rawText);
