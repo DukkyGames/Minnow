@@ -5,7 +5,11 @@ import { Window } from 'happy-dom';
 const { applyFileSidebarVisuals } = await import('../../src/ui/file-layout.ts');
 const {
   collapseStatsPanelForSplit,
+  initStatsStrip,
+  isStatsStripOpen,
+  setStatsStripOpen,
   syncStatsStripLayoutForViewer,
+  toggleStatsStrip,
 } = await import('../../src/ui/stats.ts');
 const {
   DEFAULT_FILE_PANEL_STATE,
@@ -19,11 +23,15 @@ function setupSplitDom() {
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
   document.body.innerHTML = `
+    <button type="button" id="btnStats" aria-expanded="false"></button>
     <div id="workspaceSplit" class="workspace-split">
       <div class="main-column" id="mainColumn">
-        <div class="stats-strip" id="statsStrip">
-          <button type="button" id="statsExpandBtn" aria-expanded="true"></button>
+        <div class="stats-strip is-collapsed" id="statsStrip">
+          <button type="button" id="statsExpandBtn" aria-expanded="false"></button>
+          <span id="statsExpandPreview"></span>
           <div class="stats-panel" id="statsPanel"></div>
+          <span id="stripTPS">—</span>
+          <span id="stripTotal">—</span>
         </div>
       </div>
     </div>
@@ -67,6 +75,42 @@ describe('stats split layout', { concurrency: false }, () => {
     assert.equal(split.classList.contains('viewer-open'), true);
     assert.equal(document.getElementById('statsStrip').classList.contains('is-expanded'), false);
     assert.equal(document.getElementById('statsExpandBtn').getAttribute('aria-expanded'), 'false');
+  });
+
+  test('setStatsStripOpen toggles is-collapsed and btnStats aria-expanded', () => {
+    setupSplitDom();
+    setStatsStripOpen(true);
+    assert.equal(document.getElementById('statsStrip').classList.contains('is-collapsed'), false);
+    assert.equal(document.getElementById('btnStats').getAttribute('aria-expanded'), 'true');
+    setStatsStripOpen(false);
+    assert.equal(document.getElementById('statsStrip').classList.contains('is-collapsed'), true);
+    assert.equal(document.getElementById('btnStats').getAttribute('aria-expanded'), 'false');
+  });
+
+  test('toggleStatsStrip flips open state', () => {
+    setupSplitDom();
+    assert.equal(isStatsStripOpen(), false);
+    toggleStatsStrip();
+    assert.equal(isStatsStripOpen(), true);
+    toggleStatsStrip();
+    assert.equal(isStatsStripOpen(), false);
+  });
+
+  test('initStatsStrip restores open preference from localStorage', () => {
+    setupSplitDom();
+    const store = new Map([['minnow.statsStripOpen', '1']]);
+    globalThis.localStorage = {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => {
+        store.set(key, String(value));
+      },
+      removeItem: (key) => {
+        store.delete(key);
+      },
+    };
+    initStatsStrip();
+    assert.equal(isStatsStripOpen(), true);
+    delete globalThis.localStorage;
   });
 
   test('applyFileSidebarVisuals removes viewer-open when split closes', () => {

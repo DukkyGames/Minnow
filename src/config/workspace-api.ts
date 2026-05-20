@@ -26,6 +26,19 @@ export interface WorkspacePickResult {
   error?: string;
 }
 
+export interface WorkspaceBrowseEntry {
+  name: string;
+  path: string;
+}
+
+export interface WorkspaceBrowseResult {
+  ok?: boolean;
+  path: string;
+  parent: string | null;
+  entries: WorkspaceBrowseEntry[];
+  error?: string;
+}
+
 /** Fetch the current workspace from the dev server. */
 export async function fetchWorkspace(): Promise<WorkspaceInfo | null> {
   try {
@@ -35,6 +48,21 @@ export async function fetchWorkspace(): Promise<WorkspaceInfo | null> {
   } catch {
     return null;
   }
+}
+
+/** List directories for the in-app workspace folder picker. */
+export async function browseWorkspaceFolders(
+  browsePath = '',
+): Promise<WorkspaceBrowseResult> {
+  const query = browsePath.trim()
+    ? `?path=${encodeURIComponent(browsePath.trim())}`
+    : '';
+  const res = await fetch(`/api/workspace/browse${query}`, { cache: 'no-store' });
+  const json = (await res.json()) as WorkspaceBrowseResult & { error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  return json;
 }
 
 /** Open the native folder picker and set workspace when a folder is chosen. */

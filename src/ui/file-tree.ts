@@ -2,10 +2,7 @@
  * Project file tree — lazy list_directory via executeTool; CRUD via file-tree-ops.
  */
 
-import {
-  FILE_TREE_DRAG_THRESHOLD_PX,
-  WORKSPACE_FILE_MIME,
-} from '../attachments/workspace-ref';
+import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { isFileTreeServerAvailable } from './file-tree-server';
@@ -107,60 +104,30 @@ function setFocusedRow(path: string, kind: FileTreeEntryKind, row: HTMLElement):
   row.classList.add('file-tree-row--focused');
 }
 
-/** Drag threshold + workspace MIME payload (composer copy; tree drop uses move). */
+/**
+ * Draggable file-tree row (composer copy + internal move).
+ * Click-vs-drag uses the browser drag threshold; suppressClick avoids opening the
+ * viewer after a completed drag.
+ */
 function wireTreeRowDrag(row: HTMLElement, fullPath: string): { consumeClickAfterDrag: () => boolean } {
   row.draggable = true;
-  let dragAllowed = false;
   let suppressClick = false;
-  let pointerStartX = 0;
-  let pointerStartY = 0;
 
-  const clearPointerTracking = (): void => {
-    document.removeEventListener('mousemove', onPointerMove);
-    document.removeEventListener('mouseup', onPointerUp);
-  };
-
-  const onPointerMove = (event: MouseEvent): void => {
-    const dx = event.clientX - pointerStartX;
-    const dy = event.clientY - pointerStartY;
-    if (Math.hypot(dx, dy) >= FILE_TREE_DRAG_THRESHOLD_PX) {
-      dragAllowed = true;
-    }
-  };
-
-  const onPointerUp = (): void => {
-    clearPointerTracking();
-    window.setTimeout(() => {
-      dragAllowed = false;
-    }, 0);
-  };
-
-  row.addEventListener('mousedown', (event) => {
-    if (event.button !== 0) return;
-    dragAllowed = false;
+  row.addEventListener('mousedown', () => {
     suppressClick = false;
-    pointerStartX = event.clientX;
-    pointerStartY = event.clientY;
-    document.addEventListener('mousemove', onPointerMove);
-    document.addEventListener('mouseup', onPointerUp);
   });
 
   row.addEventListener('dragstart', (event) => {
-    if (!dragAllowed) {
-      event.preventDefault();
-      return;
-    }
     suppressClick = true;
     const transfer = event.dataTransfer;
     if (!transfer) return;
-    transfer.effectAllowed = 'copy';
+    transfer.effectAllowed = 'copyMove';
     transfer.setData(WORKSPACE_FILE_MIME, fullPath);
     transfer.setData('text/plain', fullPath);
   });
 
   row.addEventListener('dragend', () => {
     suppressClick = true;
-    clearPointerTracking();
   });
 
   return {

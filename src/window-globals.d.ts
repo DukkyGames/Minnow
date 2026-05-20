@@ -9,8 +9,7 @@ declare global {
     toggleSidebarLayout: () => void;
     createChat: () => void;
     fetchModels: () => Promise<void>;
-    loadSelectedModel: () => Promise<void>;
-    unloadSelectedModel: () => Promise<void>;
+    toggleSelectedModelLoad: () => Promise<void>;
     toggleDrawer: () => void;
     openSettingsFromTopbar: () => void;
     closeDrawer: () => void;

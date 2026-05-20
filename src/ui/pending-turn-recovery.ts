@@ -32,10 +32,10 @@ export function showPendingTurnRecovery(chat: Chat): void {
   banner.className = 'pending-turn-recovery';
   banner.setAttribute('role', 'status');
   banner.innerHTML =
-    '<p>Generation was interrupted.</p>' +
-    '<div class="pending-turn-recovery-actions">' +
-    '<button type="button" class="btn-primary" data-pending-continue>Continue</button>' +
-    '<button type="button" class="btn-secondary" data-pending-discard>Discard</button>' +
+    '<p class="pending-turn-recovery__text">Generation was interrupted.</p>' +
+    '<div class="pending-turn-recovery__actions">' +
+    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--primary" data-pending-continue>Continue</button>' +
+    '<button type="button" class="pending-turn-recovery__btn pending-turn-recovery__btn--secondary" data-pending-discard>Discard</button>' +
     '</div>';
 
   banner.querySelector('[data-pending-discard]')?.addEventListener('click', () => {

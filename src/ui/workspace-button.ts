@@ -1,8 +1,8 @@
 /**
- * Top bar workspace folder button — recent workspaces menu + native picker.
+ * Top bar workspace folder button — recent workspaces menu + in-app folder picker.
  */
 
-import { pickWorkspaceFolder, type WorkspaceInfo } from '../config/workspace-api';
+import { setWorkspacePath, type WorkspaceInfo } from '../config/workspace-api';
 import { patchFilePanelState } from '../state/file-panel';
 import {
   getWorkspacePath,
@@ -13,6 +13,7 @@ import { getLocalServerAvailable } from '../tools/client';
 import { setStatus } from './status';
 import { invalidateFileTreeCache, refreshFileTree } from './file-tree';
 import { applyWorkspaceScopedSession } from './sidebar';
+import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import {
   closeWorkspaceMenu,
   configureWorkspaceRecentMenu,
@@ -69,24 +70,21 @@ async function onOpenNewWorkspace(): Promise<void> {
 
   setStatus('spin', 'Choose workspace folder…');
   try {
-    const result = await pickWorkspaceFolder();
+    const initialPath = getWorkspacePath();
+    const result = await openWorkspaceFolderPicker({
+      initialPath: initialPath || undefined,
+    });
     if (result.cancelled) {
       setStatus('ok', 'Workspace unchanged');
       return;
     }
     if (!result.path) {
-      setStatus(
-        'err',
-        result.error ?? 'Could not open folder picker. Enter path in Settings later.',
-      );
+      setStatus('err', 'No folder selected');
       return;
     }
 
-    await applyWorkspaceSwitch({
-      path: result.path,
-      label: result.label ?? result.path,
-      isDefault: result.isDefault === true,
-    });
+    const info = await setWorkspacePath(result.path);
+    await applyWorkspaceSwitch(info);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatus('err', message);

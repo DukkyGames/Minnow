@@ -6,6 +6,11 @@
   font-family: var(--font-mono);
 }
 
+/* Hidden until opened from the top bar (or restored preference) */
+.stats-strip.is-collapsed {
+  display: none;
+}
+
 .stats-expand-btn {
   display: none;
   width: 100%;

@@ -6,6 +6,7 @@ import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/topbar.css';
+import './styles/model-select.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
@@ -21,6 +22,7 @@ import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
+import './styles/workspace-folder-picker.css';
 import './styles/settings-page.css';
 import './styles/tool-approval.css';
 import './styles/sub-agent-drawer.css';
@@ -32,8 +34,7 @@ import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
 import {
   fetchModels,
-  loadSelectedModel,
-  unloadSelectedModel,
+  toggleSelectedModelLoad,
   updateModelLoadUnloadButtons,
 } from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
@@ -80,12 +81,16 @@ import {
 } from './ui/settings-page';
 import { loadToolConfigIntoDrawer } from './tools/config';
 import {
+  initModelSelectPicker,
+  syncModelSelectPicker,
+} from './ui/model-select-picker';
+import {
   createChat,
   onModelSelectChange,
   renderSidebar,
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
-import { toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
+import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import {
   bindExpertsSettingsCheckbox,
   initExpertSelect,
@@ -118,6 +123,7 @@ function registerWindowHandlers(): void {
   window.toggleSidebarLayout = toggleSidebarLayout;
   window.createChat = createChat;
   window.fetchModels = fetchModels;
+  window.toggleSelectedModelLoad = toggleSelectedModelLoad;
   window.toggleDrawer = toggleDrawer;
   window.openSettingsFromTopbar = openSettingsFromTopbar;
   window.closeDrawer = closeDrawer;
@@ -180,6 +186,7 @@ export async function initApp(): Promise<void> {
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   initWorkspaceButton();
+  initModelSelectPicker();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) mountSlashPicker(msgInput);
@@ -190,6 +197,7 @@ export async function initApp(): Promise<void> {
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await initTerminalPanel();
+  initStatsStrip();
   initChatScroll();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
