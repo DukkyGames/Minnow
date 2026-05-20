@@ -5,8 +5,8 @@
 
 import type { ModeId } from './chat/modes/types';
 
-/** Persisted session blob schema version (`minnow-sessions-v1`). */
-export const SESSION_SCHEMA_VERSION = 1 as const;
+/** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
+export const SESSION_SCHEMA_VERSION = 2 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
@@ -63,6 +63,10 @@ export interface AssistantMessage {
   content: string;
   /** Ordered reasoning segments from LM Studio (when Developer reasoning split is on). */
   thinking?: string[];
+  /** Accumulated reasoning-active wall time for this reply (ms), not TTFT. */
+  thinkingDurationMs?: number;
+  /** User stopped generation before the model finished. */
+  stopped?: boolean;
   stats?: Stats;
   usage?: Usage;
 }
@@ -216,9 +220,32 @@ export interface PersistedSubAgentRun {
   messages: unknown[];
 }
 
+/** In-flight assistant turn checkpoint (survives reload; not a history row). */
+export interface PendingTurn {
+  role: 'assistant';
+  /** Accumulated visible prose (markdown source). */
+  content: string;
+  /** Reasoning segments (same shape as AssistantMessage.thinking). */
+  thinking?: string[];
+  /** Finalized tool calls for the current incomplete assistant leg. */
+  toolCalls?: ToolCall[];
+  /** Epoch ms when the user message for this turn was committed. */
+  startedAt: number;
+  modelId?: string;
+  providerId?: string;
+  /** 0-based tool loop index when checkpointed during multi-round tool use. */
+  toolRound?: number;
+  phase?: 'streaming' | 'tools' | 'thinking';
+  /** Set when the user stopped generation before reload. */
+  stopped?: boolean;
+  thinkingDurationMs?: number;
+}
+
 export interface Chat {
   id: string;
   name: string;
+  /** Normalized absolute workspace root at chat creation; '' = unassigned (legacy). */
+  workspacePath: string;
   modelId: string;
   /** Optional per-chat provider override (Step 03). */
   providerId?: string;
@@ -238,6 +265,8 @@ export interface Chat {
   terminalHistory?: TerminalRunRecord[];
   /** Settled sub-agent transcripts keyed per chat (Step 09 + visibility). */
   subAgentRuns?: PersistedSubAgentRun[];
+  /** Checkpoint for an interrupted or in-progress assistant turn (feature 22). */
+  pendingTurn?: PendingTurn | null;
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
@@ -249,6 +278,8 @@ export interface SessionState {
   activeId: string | null;
   sidebarCollapsed: boolean;
   chats: Chat[];
+  /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
+  lastActiveChatIdByWorkspace?: Record<string, string>;
 }
 
 /** Built-in system prompt template for the settings drawer. */
