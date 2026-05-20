@@ -24,6 +24,7 @@ import {
 import { syncExpertSelectForActiveChat } from './expert-select';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
+import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
 import { updateModelLoadUnloadButtons } from '../api/models';
@@ -75,6 +76,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     syncModeSelectorFromActiveChat();
     syncExpertSelectForActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
+    syncViewModeToggleFromActiveChat();
     syncWorkAgentDevFromActiveChat();
     syncReefWidgetSettingsFromActiveChat();
     void refreshTerminalHistoryForActiveChat();
@@ -345,6 +347,7 @@ export function switchChat(id: string): void {
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
+  syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
@@ -372,6 +375,7 @@ export function createChat(): void {
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
+  syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();

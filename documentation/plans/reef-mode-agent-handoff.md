@@ -88,7 +88,7 @@ flowchart LR
 
 ### Templates (built-in)
 
-`src/chat/reef/widgets/`: `calculator.md`, `slider-graph.md`, `tabs.md`, `form.md`, `data-table.md`, `comparison.md` — each has description + one `reef-widget` fence.
+`src/chat/reef/widgets/`: 15 built-ins (7 originals + 8 Phase 1: checklist, stats-dashboard, pie-chart, heatmap, quiz, qa-callllm, timeline, unit-converter) — each has description + one `reef-widget` fence.
 
 **Tool path (not workspace):** `@minnow/reef/widgets/<name>.md`  
 **Also synced to:** `~/.minnow/reef/widgets/` on `npm start`  

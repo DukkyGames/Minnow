@@ -50,6 +50,8 @@ export function persistSubAgentRunSnapshot(run: SubAgentRun): void {
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,
     messages: capMessages(run.messages),
+    ...(run.category ? { category: run.category } : {}),
+    ...(run.boardTaskId !== undefined ? { boardTaskId: run.boardTaskId } : {}),
   };
 
   const prev = chat.subAgentRuns ?? [];

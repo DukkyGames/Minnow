@@ -1,4 +1,5 @@
 import { EMPTY_STATE_HTML } from '../constants';
+import { normalizeModeId } from '../chat/modes/types';
 import { modelCache, streaming } from '../app-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import {
@@ -119,6 +120,10 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
+  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+    void import('./orchestrate-board').then((m) => m.renderBoardView(chat));
+    return;
+  }
   clearSubAgentCardDomRegistry();
   const area = document.getElementById('chatArea')!;
   area.innerHTML = '';
@@ -157,6 +162,7 @@ export function renderChatFromHistory(chat: Chat): void {
         historyIndex: i,
         turnKind: 'user',
         chatId: chat.id,
+        modeId: chat.modeId,
       });
       attachMessageActions(wrap, {
         chatId: chat.id,
@@ -173,6 +179,7 @@ export function renderChatFromHistory(chat: Chat): void {
           historyIndex: i,
           turnKind: 'assistant-tools',
           chatId: chat.id,
+          modeId: chat.modeId,
         });
         if (msg.stats || msg.usage) {
           appendStats(wrap, msg.stats || {}, msg.usage || {});
@@ -219,6 +226,7 @@ export function renderChatFromHistory(chat: Chat): void {
       historyIndex: i,
       turnKind: 'assistant',
       chatId: chat.id,
+      modeId: chat.modeId,
     });
     if (withThinking.thinking && withThinking.thinking.length > 0) {
       const durationMs = withThinking.thinkingDurationMs;
@@ -283,6 +291,8 @@ export interface BubbleRenderMeta {
   historyIndex: number;
   turnKind: MessageTurnKind;
   chatId: string;
+  /** Mode of the chat being rendered (reef widget mount guard). */
+  modeId?: string;
 }
 
 export function appendBubble(
@@ -290,6 +300,11 @@ export function appendBubble(
   content: string,
   meta?: BubbleRenderMeta,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
+  const chat = getActiveChat();
+  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+    const stub = document.createElement('div');
+    return { wrap: stub, bubble: stub };
+  }
   const empty = document.getElementById('emptyState');
   if (empty) empty.remove();
 
@@ -308,7 +323,10 @@ export function appendBubble(
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
   if (role === 'assistant') {
-    setAssistantBubbleContent(bubble, content, { streaming: false });
+    setAssistantBubbleContent(bubble, content, {
+      streaming: false,
+      modeId: meta?.modeId ?? chat.modeId,
+    });
   } else {
     bubble.textContent = content;
   }
@@ -363,6 +381,22 @@ export function setStreamingRowPhase(wrap: HTMLElement, phase: StreamPhase): voi
  * Thought bubbles attach to `wrap`; call {@link revealAssistantProseBubble} on first prose delta.
  */
 export function appendStreamingAssistantRow(): StreamingAssistantRow {
+  const chat = getActiveChat();
+  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+    const stub = document.createElement('div');
+    const bubble = document.createElement('div');
+    const cursor = document.createElement('div');
+    return {
+      wrap: stub,
+      bubble,
+      cursor,
+      streamStatus: {
+        setPhase: () => {},
+        setThinkingElapsed: () => {},
+        dispose: () => {},
+      },
+    };
+  }
   const empty = document.getElementById('emptyState');
   if (empty) empty.remove();
 

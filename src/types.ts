@@ -218,6 +218,56 @@ export interface PersistedSubAgentRun {
   toolTurns: number;
   /** Transcript (ApiMessage-shaped JSON); capped when persisting. */
   messages: unknown[];
+  /** Board category when spawned from Orchestrate board (restore drawer/cards). */
+  category?: BoardCategory;
+  /** Linked board task id (e.g. W1-A). */
+  boardTaskId?: string | null;
+}
+
+/** Orchestrate board task lifecycle. */
+export type BoardTaskStatus =
+  | 'planned'
+  | 'in_progress'
+  | 'testing'
+  | 'complete'
+  | 'failed'
+  | 'blocked';
+
+/** Sub-agent category for board agent grid styling. */
+export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
+
+/** One task on the Orchestrate Kanban board. */
+export interface BoardTask {
+  id: string;
+  title: string;
+  wave: number | string;
+  category: BoardCategory;
+  status: BoardTaskStatus;
+  assignedRunId?: string;
+  startedAt?: number;
+  endedAt?: number;
+  filesChanged?: number;
+  notes?: string;
+  error?: string;
+}
+
+/** Wave rollup row (status derived from tasks). */
+export interface BoardWave {
+  id: number | string;
+  status: BoardTaskStatus;
+  taskCount?: number;
+  completeCount?: number;
+}
+
+/** Structured Orchestrate plan execution state (persisted on chat). */
+export interface OrchestrateBoardState {
+  planPath: string;
+  tasks: BoardTask[];
+  waves: BoardWave[];
+  startedAt: number;
+  lastUpdatedAt: number;
+  /** Parent turn id for Stop orchestrator (minted in tool loop). */
+  activeParentTurnId?: string;
 }
 
 /** In-flight assistant turn checkpoint (survives reload; not a history row). */
@@ -271,6 +321,10 @@ export interface Chat {
   terminalHistory?: TerminalRunRecord[];
   /** Settled sub-agent transcripts keyed per chat (Step 09 + visibility). */
   subAgentRuns?: PersistedSubAgentRun[];
+  /** Orchestrate board state (Kanban + waves); Orchestrate mode only. */
+  orchestrateBoard?: OrchestrateBoardState;
+  /** Chat vs Board rendering for Orchestrate (default implicit chat). */
+  viewMode?: 'chat' | 'board';
   /** Checkpoint for an interrupted or in-progress assistant turn (feature 22). */
   pendingTurn?: PendingTurn | null;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */

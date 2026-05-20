@@ -1,0 +1,34 @@
+/**
+ * Orchestrate Chat / Board icon toggle (top bar).
+ */
+
+.view-mode-toggle-btn {
+  position: relative;
+}
+
+.view-mode-toggle-btn__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.view-mode-toggle-btn__icon--chat {
+  display: none;
+}
+
+.view-mode-toggle-btn[aria-pressed='true'] .view-mode-toggle-btn__icon--board {
+  display: none;
+}
+
+.view-mode-toggle-btn[aria-pressed='true'] .view-mode-toggle-btn__icon--chat {
+  display: block;
+}
+
+.view-mode-toggle-btn[aria-pressed='true']:not(:disabled) {
+  color: var(--accent);
+}
+
+/* Board view: hide the main chat composer (board has its own composer) */
+.main-column.main-column--board-view .input-bar {
+  display: none !important;
+}
+
