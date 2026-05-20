@@ -365,14 +365,72 @@ export function setToolsEnabled(
     saveToolConfig(config);
   }
 
-  loadToolConfigIntoDrawer(root);
-  syncToolSelectAllControls(root);
+  refreshAllToolListUis(root);
 
   if (enabled && skipped > 0) {
     setStatus('err', 'Start with npm start to use file/git tools.');
   }
 
   return { applied, skipped };
+}
+
+/** Pure: set every built-in catalog tool to `mode` and mirror `enabled`. */
+export function applyAllBuiltInToolPermissions(
+  config: ToolConfig,
+  mode: ToolPermissionMode,
+): ToolConfig {
+  for (const tool of BUILT_IN_TOOLS) {
+    config.permissions[tool.id] = mode;
+  }
+  syncEnabledFromPermissions(config);
+  return config;
+}
+
+/** Pure: restore built-in permissions/enabled from defaults; keep keys and non-catalog ids. */
+export function applyDefaultBuiltInPermissions(config: ToolConfig): ToolConfig {
+  const defaults = buildDefaultToolConfig();
+  for (const tool of BUILT_IN_TOOLS) {
+    config.permissions[tool.id] = defaults.permissions[tool.id] ?? 'off';
+    config.enabled[tool.id] = defaults.enabled[tool.id] ?? false;
+  }
+  syncEnabledFromPermissions(config);
+  return config;
+}
+
+/** Refresh permission selects and bulk checkboxes on every mounted tool list. */
+export function refreshAllToolListUis(_root: ParentNode = document): void {
+  if (typeof document === 'undefined') return;
+
+  loadToolConfigIntoDrawer(document);
+
+  for (const listId of ['toolsList', 'settingsToolsList', 'composerToolsList'] as const) {
+    const list = document.getElementById(listId);
+    if (list) {
+      syncToolSelectAllControls(list);
+    }
+  }
+}
+
+/** Set every built-in tool to `mode`, persist, and refresh all tool list UIs. */
+export async function setAllBuiltInToolPermissions(
+  mode: ToolPermissionMode,
+  root: ParentNode = document,
+): Promise<{ updated: number }> {
+  const config = loadToolConfig();
+  applyAllBuiltInToolPermissions(config, mode);
+  await saveToolConfigAsync(config);
+  refreshAllToolListUis(root);
+  return { updated: BUILT_IN_TOOLS.length };
+}
+
+/** Restore built-in permissions to factory defaults, persist, and refresh lists. */
+export async function resetBuiltInToolPermissionsToDefaults(
+  root: ParentNode = document,
+): Promise<void> {
+  const config = loadToolConfig();
+  applyDefaultBuiltInPermissions(config);
+  await saveToolConfigAsync(config);
+  refreshAllToolListUis(root);
 }
 
 /** Set one built-in tool permission mode and refresh UI. */
@@ -386,7 +444,7 @@ export function setToolPermission(
 
   if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
     setStatus('err', 'Start with npm start to use file/git tools.');
-    loadToolConfigIntoDrawer(root);
+    refreshAllToolListUis(root);
     return;
   }
 
@@ -395,7 +453,7 @@ export function setToolPermission(
   syncEnabledFromPermissions(config);
   saveToolConfig(config);
 
-  loadToolConfigIntoDrawer(root);
+  refreshAllToolListUis(root);
 }
 
 /** All built-in tool ids in a settings category. */
@@ -461,6 +519,11 @@ export function refreshServerToolDisabledState(): void {
     settingsBanner.classList.toggle('hidden', !unavailable);
   }
 
+  const composerBanner = document.getElementById('composerToolsServerBanner');
+  if (composerBanner) {
+    composerBanner.classList.toggle('hidden', !unavailable);
+  }
+
   const serverRows = document.querySelectorAll<HTMLElement>(
     '.tool-row[data-server-required], [data-tool-id][data-server-required]',
   );
@@ -482,11 +545,6 @@ export function refreshServerToolDisabledState(): void {
   }
 
   syncToolSelectAllControls(document);
-
-  const settingsList = document.getElementById('settingsToolsList');
-  if (settingsList) {
-    syncToolSelectAllControls(settingsList);
-  }
 }
 
 /** Persist Brave API key from the settings drawer (call on input/blur). */
