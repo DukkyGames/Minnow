@@ -66,6 +66,23 @@ describe('widget-block-detector', { concurrency: false }, () => {
     assert.equal(bubble.querySelector('pre[data-lang="reef-widget"]'), null);
   });
 
+  test('mounts when opts.modeId is reef even if global session is build', () => {
+    setupDom();
+    const chat = createEmptyChatObject('model-a');
+    chat.modeId = 'build';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const bubble = reefBubbleWithFence();
+    mountReefWidgetBlocks(bubble, { modeId: 'reef' });
+
+    assert.ok(bubble.querySelector('.reef-widget-host'));
+  });
+
   test('skips mount when mode is not reef', () => {
     setupDom();
     const chat = createEmptyChatObject('model-a');

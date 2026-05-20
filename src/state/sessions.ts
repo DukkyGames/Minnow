@@ -24,9 +24,14 @@ import {
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
+  BoardCategory,
+  BoardTask,
+  BoardTaskStatus,
+  BoardWave,
   Chat,
   ExpertSelection,
   Message,
+  OrchestrateBoardState,
   PersistedSubAgentRun,
   PersistedSubAgentStatus,
   SessionState,
@@ -205,6 +210,113 @@ const PERSISTED_SUB_AGENT_STATUSES = new Set<PersistedSubAgentStatus>([
   'cancelled',
 ]);
 
+const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
+  'planned',
+  'in_progress',
+  'testing',
+  'complete',
+  'failed',
+  'blocked',
+]);
+
+const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
+
+function ensureBoardWaveId(raw: unknown): number | string | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  return null;
+}
+
+function ensureBoardCategory(raw: unknown): BoardCategory | null {
+  return typeof raw === 'string' && BOARD_CATEGORIES.has(raw as BoardCategory)
+    ? (raw as BoardCategory)
+    : null;
+}
+
+function ensureBoardTask(raw: unknown): BoardTask | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const title = typeof r.title === 'string' ? r.title : '';
+  const wave = ensureBoardWaveId(r.wave);
+  const category = ensureBoardCategory(r.category);
+  const statusRaw = typeof r.status === 'string' ? r.status : '';
+  if (!id || wave === null || !category || !BOARD_TASK_STATUSES.has(statusRaw as BoardTaskStatus)) {
+    return null;
+  }
+  const status = statusRaw as BoardTaskStatus;
+  const assignedRunId =
+    typeof r.assignedRunId === 'string' && r.assignedRunId.trim()
+      ? r.assignedRunId.trim()
+      : undefined;
+  const filesChanged =
+    typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)
+      ? r.filesChanged
+      : undefined;
+  return {
+    id,
+    title,
+    wave,
+    category,
+    status,
+    ...(assignedRunId ? { assignedRunId } : {}),
+    ...(typeof r.startedAt === 'number' ? { startedAt: r.startedAt } : {}),
+    ...(typeof r.endedAt === 'number' ? { endedAt: r.endedAt } : {}),
+    ...(filesChanged !== undefined ? { filesChanged } : {}),
+    ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
+    ...(typeof r.error === 'string' ? { error: r.error } : {}),
+  };
+}
+
+function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const planPath = typeof r.planPath === 'string' ? r.planPath.trim() : '';
+  if (!planPath || !Array.isArray(r.tasks) || !Array.isArray(r.waves)) return undefined;
+  const tasks: BoardTask[] = [];
+  for (const item of r.tasks) {
+    const task = ensureBoardTask(item);
+    if (task) tasks.push(task);
+  }
+  if (!tasks.length) return undefined;
+  const waves: BoardWave[] = [];
+  for (const item of r.waves) {
+    if (!item || typeof item !== 'object') continue;
+    const w = item as Record<string, unknown>;
+    const id = ensureBoardWaveId(w.id);
+    const statusRaw = typeof w.status === 'string' ? w.status : 'planned';
+    const status = BOARD_TASK_STATUSES.has(statusRaw as BoardTaskStatus)
+      ? (statusRaw as BoardTaskStatus)
+      : 'planned';
+    if (id === null) continue;
+    waves.push({
+      id,
+      status,
+      ...(typeof w.taskCount === 'number' ? { taskCount: w.taskCount } : {}),
+      ...(typeof w.completeCount === 'number' ? { completeCount: w.completeCount } : {}),
+    });
+  }
+  if (!waves.length) return undefined;
+  const startedAt = typeof r.startedAt === 'number' ? r.startedAt : Date.now();
+  const lastUpdatedAt = typeof r.lastUpdatedAt === 'number' ? r.lastUpdatedAt : startedAt;
+  const activeParentTurnId =
+    typeof r.activeParentTurnId === 'string' && r.activeParentTurnId.trim()
+      ? r.activeParentTurnId.trim()
+      : undefined;
+  return {
+    planPath,
+    tasks,
+    waves,
+    startedAt,
+    lastUpdatedAt,
+    ...(activeParentTurnId ? { activeParentTurnId } : {}),
+  };
+}
+
+function ensureViewMode(raw: unknown): 'chat' | 'board' | undefined {
+  return raw === 'chat' || raw === 'board' ? raw : undefined;
+}
+
 function ensurePersistedSubAgentRuns(
   raw: unknown,
 ): PersistedSubAgentRun[] | undefined {
@@ -228,6 +340,11 @@ function ensurePersistedSubAgentRuns(
         ? r.parentToolCallId.trim()
         : undefined;
     const err = r.error;
+    const category = ensureBoardCategory(r.category);
+    const boardTaskId =
+      r.boardTaskId === null || typeof r.boardTaskId === 'string'
+        ? (r.boardTaskId as string | null)
+        : undefined;
     out.push({
       runId,
       parentTurnId,
@@ -241,6 +358,8 @@ function ensurePersistedSubAgentRuns(
       endedAt: typeof r.endedAt === 'string' ? r.endedAt : null,
       toolTurns: typeof r.toolTurns === 'number' ? r.toolTurns : 0,
       messages,
+      ...(category ? { category } : {}),
+      ...(boardTaskId !== undefined ? { boardTaskId } : {}),
     });
   }
   return out.length ? out : undefined;
@@ -258,6 +377,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       ? normalizeWorkspacePath(raw.workspacePath)
       : '';
   const orchestratePlanPath = normalizeOrchestratePlanPath(raw.orchestratePlanPath);
+  const orchestrateBoard = ensureOrchestrateBoard(raw.orchestrateBoard);
+  const viewMode = ensureViewMode(raw.viewMode);
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -281,6 +402,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         : null,
     workAgentAuto: raw.workAgentAuto !== false,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(orchestrateBoard ? { orchestrateBoard } : {}),
+    ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     ...(subAgentRuns ? { subAgentRuns } : {}),
     ...(pendingTurn ? { pendingTurn } : {}),

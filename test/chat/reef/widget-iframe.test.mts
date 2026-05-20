@@ -25,6 +25,7 @@ describe('widget-iframe', () => {
     assert.match(srcdoc, /Tip calc/);
     assert.match(srcdoc, /w-test-1/);
     assert.match(srcdoc, /react@19/);
+    assert.doesNotMatch(srcdoc, /react@19\?dev/);
     assert.match(srcdoc, /requestResize/);
     assert.match(srcdoc, /width=device-width/);
     assert.match(srcdoc, /\.rw-chart/);

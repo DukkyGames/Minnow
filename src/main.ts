@@ -30,6 +30,8 @@ import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/pending-turn-recovery.css';
 import './styles/orchestrate-plan-selector.css';
+import './styles/view-mode-toggle.css';
+import './styles/orchestrate-board.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -105,6 +107,10 @@ import {
   initOrchestratePlanSelector,
   syncOrchestratePlanStripFromActiveChat,
 } from './ui/orchestrate-plan-selector';
+import {
+  initViewModeToggle,
+  syncViewModeToggleFromActiveChat,
+} from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
@@ -193,6 +199,7 @@ export async function initApp(): Promise<void> {
   initAttachments();
   initModeSelector();
   initOrchestratePlanSelector();
+  initViewModeToggle();
   initReefBridge();
   initWorkAgentDevUi();
   await initExpertSelect();
@@ -230,6 +237,7 @@ export async function initApp(): Promise<void> {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
+  syncViewModeToggleFromActiveChat();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
 

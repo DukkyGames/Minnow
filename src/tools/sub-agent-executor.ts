@@ -11,7 +11,10 @@ import {
   getSubAgentRun,
   spawnSubAgent,
 } from '../agents/orchestrator';
+import type { BoardCategory } from '../types';
 import type { SubAgentExecutorContext } from '../agents/types';
+
+const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
 let executorContext: SubAgentExecutorContext | null = null;
 
@@ -35,6 +38,17 @@ export async function executeSubAgentTool(
     if (!type) return 'Error: spawn_sub_agent requires "type"';
     if (!task) return 'Error: spawn_sub_agent requires "task"';
 
+    const categoryRaw = typeof args.category === 'string' ? args.category.trim() : '';
+    const category = BOARD_CATEGORIES.has(categoryRaw as BoardCategory)
+      ? (categoryRaw as BoardCategory)
+      : undefined;
+    const boardTaskId =
+      typeof args.board_task_id === 'string'
+        ? args.board_task_id.trim()
+        : typeof args.boardTaskId === 'string'
+          ? args.boardTaskId.trim()
+          : undefined;
+
     try {
       const result = await spawnSubAgent({
         type,
@@ -44,6 +58,8 @@ export async function executeSubAgentTool(
         parentChatId: executorContext?.parentChatId ?? null,
         parentToolCallId: executorContext?.parentToolCallId ?? null,
         modeId: executorContext?.modeId,
+        ...(category ? { category } : {}),
+        ...(boardTaskId ? { boardTaskId } : {}),
       });
 
       if ('summary' in result && 'toolTurns' in result) {

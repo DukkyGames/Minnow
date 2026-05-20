@@ -3,6 +3,8 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
+import { updateTask } from '../state/orchestrate-board-store';
+import { findChatById } from '../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../tools/client';
 import { loadSubAgentConfig } from './sub-agent-config';
 import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
@@ -138,6 +140,38 @@ function settleRun(
   internals.queued = false;
   drainQueue();
   emitSubAgentRunUpdated(run);
+  syncBoardTaskOnSettle(run, status, error);
+}
+
+/** Map terminal sub-agent status onto linked board task. */
+function syncBoardTaskOnSettle(
+  run: SubAgentRun,
+  status: SubAgentStatus,
+  error: string | null,
+): void {
+  const taskId = run.boardTaskId;
+  const chatId = run.parentChatId;
+  if (!taskId || !chatId) return;
+  const chat = findChatById(chatId);
+  if (!chat?.orchestrateBoard) return;
+
+  const endedAt = Date.now();
+  if (status === 'completed') {
+    updateTask(chat, taskId, {
+      status: 'complete',
+      endedAt,
+      assignedRunId: null,
+    });
+    return;
+  }
+  if (status === 'failed' || status === 'cancelled') {
+    updateTask(chat, taskId, {
+      status: 'failed',
+      endedAt,
+      error: error || (status === 'cancelled' ? 'cancelled' : 'failed'),
+      assignedRunId: null,
+    });
+  }
 }
 
 async function executeRun(internals: RunInternals, modeId: string): Promise<void> {
@@ -285,7 +319,20 @@ async function spawnSubAgentInternal(
     toolTurns: 0,
     cancelled: false,
     messages: [],
+    ...(input.category ? { category: input.category } : {}),
+    ...(input.boardTaskId ? { boardTaskId: input.boardTaskId } : {}),
   };
+
+  if (input.boardTaskId && input.parentChatId) {
+    const parentChat = findChatById(input.parentChatId);
+    if (parentChat?.orchestrateBoard) {
+      updateTask(parentChat, input.boardTaskId, {
+        status: 'in_progress',
+        assignedRunId: runId,
+        startedAt: Date.now(),
+      });
+    }
+  }
 
   const abort = new AbortController();
   const internals: RunInternals = {

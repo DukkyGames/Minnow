@@ -15,6 +15,7 @@ import {
   touchChat,
 } from '../state/sessions';
 import { isComposerRecoveryBlocked } from './composer-send';
+import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 
 let planStripEl: HTMLElement | null = null;
 let planSelectEl: HTMLSelectElement | null = null;
@@ -154,6 +155,7 @@ function onPlanSelectChange(): void {
   }
   touchChat(chat);
   scheduleSaveSessions();
+  syncViewModeToggleFromActiveChat();
 }
 
 /**
@@ -169,6 +171,7 @@ export function applyOrchestratePlanFromWorkspacePath(workspacePath: string): bo
   touchChat(chat);
   scheduleSaveSessions();
   void syncOrchestratePlanStripFromActiveChat();
+  syncViewModeToggleFromActiveChat();
   return true;
 }
 

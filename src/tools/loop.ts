@@ -74,6 +74,11 @@ import { refreshExpertSelectDisabled } from '../ui/expert-select';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
+  isOrchestrateBoardViewActive,
+  refreshViewModeToggleDisabled,
+  syncViewModeToggleFromActiveChat,
+} from '../ui/view-mode-toggle';
+import {
   appendBubble,
   appendStats,
   appendStreamingAssistantRow,
@@ -121,6 +126,7 @@ import {
   executeTool,
   getEnabledToolDefinitionsForMode,
 } from './client';
+import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
@@ -567,11 +573,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   setChatFetchAbort(controller);
   const chatSignal = controller.signal;
   const parentTurnId = createSubAgentRunId();
+  const loopModeId = normalizeModeId(chat.modeId);
   setSubAgentExecutorContext({
     parentTurnId,
-    modeId: normalizeModeId(chat.modeId),
+    modeId: loopModeId,
     parentChatId: chat.id,
   });
+  setBoardExecutorContext({ chatId: chat.id });
+
+  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.orchestrateBoard) {
+    chat.orchestrateBoard.activeParentTurnId = parentTurnId;
+    touchChat(chat);
+    scheduleSaveSessions();
+  }
 
   chat.modelId = modelId || chat.modelId;
 
@@ -669,6 +683,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   refreshModeSelectorDisabled();
   refreshExpertSelectDisabled();
   refreshOrchestratePlanSelectorDisabled();
+  refreshViewModeToggleDisabled();
   setComposerStreamingMode('streaming');
   let livePartialText = '';
   let currentToolRound = pendingResume?.toolRound ?? 0;
@@ -852,6 +867,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         setStatus('spin', 'Running tools…');
 
         const area = document.getElementById('chatArea')!;
+        const paintToolCallsInChat = !isOrchestrateBoardViewActive();
         const STOPPED_TOOL_MSG = 'Stopped by user.';
         for (let ti = 0; ti < turnResult.toolCalls.length; ti++) {
           if (chatSignal.aborted) {
@@ -860,7 +876,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               const skipArgs = parseToolArguments(skipped.function.arguments);
               const skipWrap = renderToolCall(skipped.function.name, skipArgs);
               skipWrap.dataset.toolCallId = skipped.id;
-              area.appendChild(skipWrap);
+              if (paintToolCallsInChat) {
+                area.appendChild(skipWrap);
+              }
               renderToolResult(skipWrap, STOPPED_TOOL_MSG);
               chat.history.push({
                 role: 'tool',
@@ -877,15 +895,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           const args = parseToolArguments(tc.function.arguments);
           const toolWrap = renderToolCall(tc.function.name, args);
           toolWrap.dataset.toolCallId = tc.id;
-          area.appendChild(toolWrap);
-          scrollChatIfPinned();
+          if (paintToolCallsInChat) {
+            area.appendChild(toolWrap);
+            scrollChatIfPinned();
+          }
 
+          const toolLoopModeId = normalizeModeId(chat.modeId);
           setSubAgentExecutorContext({
             parentTurnId,
-            modeId: normalizeModeId(chat.modeId),
+            modeId: toolLoopModeId,
             parentChatId: chat.id,
             parentToolCallId: tc.id,
           });
+          setBoardExecutorContext({ chatId: chat.id });
 
           const planBlock = uiDesignerCtx.active
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
@@ -906,12 +928,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               ? { attachments: toolOut.attachments }
               : {}),
           });
-          scrollChatIfPinned();
+          if (paintToolCallsInChat) {
+            scrollChatIfPinned();
+          }
         }
 
         touchChat(chat);
         scheduleSaveSessions();
         renderSidebar();
+
+        if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+          void import('../ui/orchestrate-board').then((m) => m.renderBoardView(chat));
+        }
 
         if (turn + 1 >= MAX_TOOL_TURNS) {
           setStatus('err', 'Maximum tool turns reached');
@@ -1095,6 +1123,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.workAgentId = savedWorkAgentId;
     }
     setSubAgentExecutorContext(null);
+    setBoardExecutorContext(null);
+    if (
+      normalizeModeId(chat.modeId) === 'orchestrate' &&
+      chat.orchestrateBoard?.activeParentTurnId
+    ) {
+      chat.orchestrateBoard.activeParentTurnId = null;
+      touchChat(chat);
+      scheduleSaveSessions();
+    }
     thoughtController?.abort();
     thinkingTracker?.abort();
     turnCheckpoint?.dispose();
@@ -1107,6 +1144,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     refreshModeSelectorDisabled();
     refreshExpertSelectDisabled();
     refreshOrchestratePlanSelectorDisabled();
+    syncViewModeToggleFromActiveChat();
+    refreshViewModeToggleDisabled();
+    if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+      void import('../ui/orchestrate-board').then((m) => m.renderBoardView(chat));
+    }
     setComposerStreamingMode('idle');
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);

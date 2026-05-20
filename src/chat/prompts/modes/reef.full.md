@@ -88,8 +88,29 @@ Widget templates ship **with Minnow**, not in the user's workspace. Do **not** s
 | Form | `@minnow/reef/widgets/form.md` |
 | Data table | `@minnow/reef/widgets/data-table.md` |
 | Comparison | `@minnow/reef/widgets/comparison.md` |
+| Checklist | `@minnow/reef/widgets/checklist.md` |
+| Stats dashboard | `@minnow/reef/widgets/stats-dashboard.md` |
+| Pie chart | `@minnow/reef/widgets/pie-chart.md` |
+| Heatmap | `@minnow/reef/widgets/heatmap.md` |
+| Quiz | `@minnow/reef/widgets/quiz.md` |
+| Q&A (callLLM) | `@minnow/reef/widgets/qa-callllm.md` |
+| Timeline | `@minnow/reef/widgets/timeline.md` |
+| Unit converter | `@minnow/reef/widgets/unit-converter.md` |
 
-To list all: `find_files` with `path: "@minnow/reef/widgets"`, `pattern: "*.md"`. When the ask matches a template, read it and adapt the fence.
+**Templates** are full-widget examples — when the ask matches one file, `read_file` that path and adapt the fence. To list all: `find_files` with `path: "@minnow/reef/widgets"`, `pattern: "*.md"` (exclude `snippet-*.md` if you only need full apps).
+
+### Snippets
+
+**Snippets** are smaller `snippet-*.md` building blocks (one chart, table, control row, etc.). Compose them into a custom fence or combine several. Discover: `find_files` with `path: "@minnow/reef/widgets"`, `pattern: "snippet-*.md"`.
+
+| Snippet | `read_file` path |
+|---------|------------------|
+| Line chart | `@minnow/reef/widgets/snippet-chart-line.md` |
+| Bar chart | `@minnow/reef/widgets/snippet-chart-bar.md` |
+| Table | `@minnow/reef/widgets/snippet-table.md` |
+| Stat card | `@minnow/reef/widgets/snippet-stat-card.md` |
+| Input row | `@minnow/reef/widgets/snippet-input-row.md` |
+| Sparkline | `@minnow/reef/widgets/snippet-sparkline.md` |
 
 ## Bridge API (`window.minnow`)
 
@@ -116,8 +137,8 @@ const reply = await window.minnow.callLLM({
 
 When using React, rely on the host import map (do not add your own bundler):
 
-- `react` → `https://esm.sh/react@19?dev`
-- `react-dom/client` → `https://esm.sh/react-dom@19/client?dev`
+- `react` → `https://esm.sh/react@19`
+- `react-dom/client` → `https://esm.sh/react-dom@19/client`
 - `recharts` → `https://esm.sh/recharts@2?deps=react@19,react-dom@19`
 - `lodash` → `https://esm.sh/lodash-es@4`
 - `mathjs` → `https://esm.sh/mathjs@14`

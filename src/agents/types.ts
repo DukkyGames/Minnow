@@ -2,7 +2,7 @@
  * Sub-agent orchestration types (Step 09).
  */
 
-import type { ApiMessage } from '../types';
+import type { ApiMessage, BoardCategory } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 
 /** Lifecycle status for a sub-agent run. */
@@ -54,6 +54,10 @@ export interface SubAgentRun {
    * Distinct from `toolTurns`, which reflects the runner’s completed tool rounds in the summary.
    */
   liveNestedToolCalls?: number;
+  /** Board category chip (Orchestrate board agent grid). */
+  category?: BoardCategory;
+  /** Linked board task id when spawned from board_init tasks. */
+  boardTaskId?: string | null;
 }
 
 /** Input to spawn a sub-agent. */
@@ -68,6 +72,10 @@ export interface SpawnSubAgentInput {
   parentToolCallId?: string | null;
   /** Parent mode for tool policy when resolving enabled tools. */
   modeId?: string;
+  /** Board category for Orchestrate board UI. */
+  category?: BoardCategory;
+  /** Board task id (board_update_task / spawn hook). */
+  boardTaskId?: string | null;
 }
 
 /** Immediate spawn acknowledgement. */

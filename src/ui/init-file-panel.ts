@@ -28,6 +28,7 @@ import { isLocalServerAvailable } from '../tools/config';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
+import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 
 let resizerBound = false;
 
@@ -101,6 +102,7 @@ export function onFilePanelServerAvailabilityChanged(): void {
     void refreshWorkspaceUi();
     void refreshFileTree();
     void syncOrchestratePlanStripFromActiveChat();
+    syncViewModeToggleFromActiveChat();
   } else {
     renderFileTree();
   }

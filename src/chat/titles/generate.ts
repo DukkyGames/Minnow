@@ -3,18 +3,15 @@
  */
 
 import { extractMessageText } from '../../api/chat';
-import { extractReasoningMessage } from '../../api/reasoning';
 import { buildTitleMessages } from './prompt';
 import { normalizeTitle } from './sanitize';
 import type { TitleGenerationOptions, TitleProviderPort } from './types';
 
-/** Visible or reasoning text from a non-streaming completion message. */
+/** Visible assistant content only — never chain-of-thought / reasoning fields. */
 function extractTitleCompletionText(
-  message: { content?: string; reasoning?: string; reasoning_content?: string } | null | undefined,
+  message: { content?: string } | null | undefined,
 ): string {
-  const content = extractMessageText(message).trim();
-  if (content) return content;
-  return extractReasoningMessage(message).trim();
+  return extractMessageText(message).trim();
 }
 
 /**

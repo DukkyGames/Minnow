@@ -121,6 +121,87 @@ function ensurePendingTurn(raw) {
   return out;
 }
 
+const BOARD_TASK_STATUSES = new Set([
+  'planned',
+  'in_progress',
+  'testing',
+  'complete',
+  'failed',
+  'blocked',
+]);
+const BOARD_CATEGORIES = new Set(['build', 'fix', 'test', 'research']);
+
+function ensureBoardWaveId(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  return null;
+}
+
+function ensureBoardCategory(raw) {
+  return typeof raw === 'string' && BOARD_CATEGORIES.has(raw) ? raw : null;
+}
+
+function ensureBoardTask(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const title = typeof r.title === 'string' ? r.title : '';
+  const wave = ensureBoardWaveId(r.wave);
+  const category = ensureBoardCategory(r.category);
+  const statusRaw = typeof r.status === 'string' ? r.status : '';
+  if (!id || wave === null || !category || !BOARD_TASK_STATUSES.has(statusRaw)) return null;
+  const out = { id, title, wave, category, status: statusRaw };
+  if (typeof r.assignedRunId === 'string' && r.assignedRunId.trim()) {
+    out.assignedRunId = r.assignedRunId.trim();
+  }
+  if (typeof r.startedAt === 'number') out.startedAt = r.startedAt;
+  if (typeof r.endedAt === 'number') out.endedAt = r.endedAt;
+  if (typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)) {
+    out.filesChanged = r.filesChanged;
+  }
+  if (typeof r.notes === 'string') out.notes = r.notes;
+  if (typeof r.error === 'string') out.error = r.error;
+  return out;
+}
+
+function ensureOrchestrateBoard(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const planPath = typeof r.planPath === 'string' ? r.planPath.trim() : '';
+  if (!planPath || !Array.isArray(r.tasks) || !Array.isArray(r.waves)) return undefined;
+  const tasks = [];
+  for (const item of r.tasks) {
+    const task = ensureBoardTask(item);
+    if (task) tasks.push(task);
+  }
+  if (!tasks.length) return undefined;
+  const waves = [];
+  for (const item of r.waves) {
+    if (!item || typeof item !== 'object') continue;
+    const w = /** @type {Record<string, unknown>} */ (item);
+    const id = ensureBoardWaveId(w.id);
+    const statusRaw = typeof w.status === 'string' ? w.status : 'planned';
+    const status = BOARD_TASK_STATUSES.has(statusRaw) ? statusRaw : 'planned';
+    if (id === null) continue;
+    const wave = { id, status };
+    if (typeof w.taskCount === 'number') wave.taskCount = w.taskCount;
+    if (typeof w.completeCount === 'number') wave.completeCount = w.completeCount;
+    waves.push(wave);
+  }
+  if (!waves.length) return undefined;
+  const startedAt = typeof r.startedAt === 'number' ? r.startedAt : Date.now();
+  const lastUpdatedAt = typeof r.lastUpdatedAt === 'number' ? r.lastUpdatedAt : startedAt;
+  const out = { planPath, tasks, waves, startedAt, lastUpdatedAt };
+  if (typeof r.activeParentTurnId === 'string' && r.activeParentTurnId.trim()) {
+    out.activeParentTurnId = r.activeParentTurnId.trim();
+  }
+  return out;
+}
+
+function ensureViewMode(raw) {
+  return raw === 'chat' || raw === 'board' ? raw : undefined;
+}
+
 function ensureChatShape(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -155,6 +236,8 @@ function ensureChatShape(raw) {
   const pendingTurn = ensurePendingTurn(row.pendingTurn);
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
+  const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
+  const viewMode = ensureViewMode(row.viewMode);
 
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -171,6 +254,8 @@ function ensureChatShape(raw) {
     lastResolvedExpertId:
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(orchestrateBoard ? { orchestrateBoard } : {}),
+    ...(viewMode ? { viewMode } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(pendingTurn ? { pendingTurn } : {}),
     ...(row.unread === true ? { unread: true } : {}),

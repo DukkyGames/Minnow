@@ -1,0 +1,224 @@
+/**
+ * Orchestrate Board View layout and tokens.
+ */
+
+.board-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 4px 16px;
+  min-height: 12rem;
+}
+
+.board-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.board-header__title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.board-header__stats {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.board-header__progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.board-header__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width var(--ease-out);
+}
+
+.board-header__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.board-btn {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.board-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.board-btn--danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.board-main {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .board-main {
+    grid-template-columns: 1fr 220px;
+  }
+}
+
+.kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 80px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.kanban-column h3 {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.kanban-column__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-task-card {
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.72rem;
+}
+
+.board-task-card--alert {
+  border-color: var(--red);
+}
+
+.board-task-card__id {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.board-task-card__title {
+  margin: 4px 0;
+  color: var(--text);
+}
+
+.board-task-card__cat {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.bt--build { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.bt--fix { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--text); }
+.bt--test { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); }
+.bt--research { background: color-mix(in srgb, var(--ink-muted) 20%, transparent); color: var(--text); }
+
+.board-agents h3 {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.board-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.board-agent-card {
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.board-agent-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.board-agent-card__stop {
+  border: none;
+  background: transparent;
+  color: var(--red);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.board-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.board-composer__input {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.board-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.board-plan-panel {
+  font-size: 0.75rem;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.board-plan-panel__body {
+  padding: 8px 0;
+}

@@ -4,6 +4,7 @@
  */
 
 import { executeBrowserTool } from './browser-executor';
+import { executeBoardTool } from './board-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
 import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
@@ -151,6 +152,17 @@ export async function executeTool(
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
     const text = await executeSubAgentTool(name, args);
+    return { content: text };
+  }
+
+  if (
+    name === 'board_init' ||
+    name === 'board_update_task' ||
+    name === 'board_get_state'
+  ) {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeBoardTool(name, args);
     return { content: text };
   }
 

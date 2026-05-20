@@ -20,8 +20,8 @@ const REEF_CSP = [
 /** esm.sh import map pins (reef.full.md). */
 const REEF_IMPORT_MAP = {
   imports: {
-    react: 'https://esm.sh/react@19?dev',
-    'react-dom/client': 'https://esm.sh/react-dom@19/client?dev',
+    react: 'https://esm.sh/react@19',
+    'react-dom/client': 'https://esm.sh/react-dom@19/client',
     recharts: 'https://esm.sh/recharts@2?deps=react@19,react-dom@19',
     lodash: 'https://esm.sh/lodash-es@4',
     mathjs: 'https://esm.sh/mathjs@14',

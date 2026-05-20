@@ -2,6 +2,7 @@
  * Sub-agent status cards in the parent chat (live updates via events + persisted replay).
  */
 
+import { normalizeModeId } from '../chat/modes/types';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync';
@@ -92,6 +93,12 @@ export function upsertSubAgentCardForRun(
 ): HTMLElement | null {
   const active = getActiveChat();
   if (active.id !== chatId) return null;
+  if (
+    normalizeModeId(active.modeId) === 'orchestrate' &&
+    active.viewMode === 'board'
+  ) {
+    return null;
+  }
 
   const area = document.getElementById('chatArea');
   if (!area) return null;

@@ -16,6 +16,8 @@ const REEF_WIDGET_LANG = 'reef-widget';
 export interface MountReefWidgetBlocksOptions {
   /** True while this bubble's markdown is still streaming (debounced updates). */
   bubbleStreaming?: boolean;
+  /** Chat mode for this bubble; avoids re-reading global session during history render. */
+  modeId?: string;
 }
 
 /** True when the code block looks like a complete fence (not an open stream tail). */
@@ -37,7 +39,8 @@ export function mountReefWidgetBlocks(
   bubble: HTMLElement,
   opts: MountReefWidgetBlocksOptions = {},
 ): void {
-  if (getActiveChat().modeId !== 'reef') return;
+  const effectiveModeId = opts.modeId ?? getActiveChat().modeId;
+  if (effectiveModeId !== 'reef') return;
 
   const pres = bubble.querySelectorAll<HTMLPreElement>(
     `pre[data-lang="${REEF_WIDGET_LANG}"]`,

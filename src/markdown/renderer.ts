@@ -38,6 +38,8 @@ function ensureMarkedOptionsConfigured(): void {
 export interface AssistantBubbleOptions {
   streaming?: boolean;
   streamCursor?: HTMLElement | null;
+  /** Chat mode for reef widget mounting (history render passes explicit mode). */
+  modeId?: string;
 }
 
 /**
@@ -90,7 +92,7 @@ export function setAssistantBubbleContent(
   });
 
   /* Mount widgets before highlight so reef fences never hit hljs (unknown language). */
-  mountReefWidgets(bubble, { bubbleStreaming: streaming });
+  mountReefWidgets(bubble, { bubbleStreaming: streaming, modeId: options.modeId });
 
   bubble.querySelectorAll('pre code').forEach((block) => {
     const langMatch = /\blanguage-([\w-]+)\b/.exec(block.className || '');

@@ -669,9 +669,115 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'boolean',
           description: 'If true (default), block until the sub-agent finishes',
         },
+        category: {
+          type: 'string',
+          enum: ['build', 'fix', 'test', 'research'],
+          description: 'Board category for Orchestrate agent grid (required in Orchestrate)',
+        },
+        board_task_id: {
+          type: 'string',
+          description: 'Linked board task id (e.g. W1-A) from board_init',
+        },
       },
       ['type', 'task'],
     ),
+  },
+  {
+    id: 'board_init',
+    label: 'Board init',
+    description:
+      'Initialize Orchestrate Kanban board after read_file + parsing Wave Breakdown. Requires non-empty tasks and waves arrays.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_init',
+      'Create or replace orchestrateBoard. Call only after parsing the plan: pass plan_path plus every task (tasks[].id) and wave (waves[].id). plan_path alone fails validation.',
+      {
+        plan_path: {
+          type: 'string',
+          description:
+            'Workspace-relative plan path (e.g. documentation/plans/my-feature.md)',
+        },
+        tasks: {
+          type: 'array',
+          description:
+            'All tasks from the plan Wave Breakdown. Each item uses id (not task_id), title, wave, category.',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Stable task id from plan headings (e.g. W1-A)',
+              },
+              title: { type: 'string', description: 'Short task title' },
+              wave: {
+                type: 'string',
+                description: 'Wave id string or number; must match a waves[].id',
+              },
+              category: {
+                type: 'string',
+                enum: ['build', 'fix', 'test', 'research'],
+                description: 'Sub-agent category for this task',
+              },
+            },
+            required: ['id', 'title', 'wave', 'category'],
+          },
+        },
+        waves: {
+          type: 'array',
+          description: 'Wave ids referenced by tasks[].wave',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Wave id (e.g. W1 or 1)',
+              },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      ['plan_path', 'tasks', 'waves'],
+    ),
+  },
+  {
+    id: 'board_update_task',
+    label: 'Board update task',
+    description: 'Update one board task status and metadata after board_init.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_update_task',
+      'Patch one task by task_id (not id). Requires board_init first.',
+      {
+        task_id: {
+          type: 'string',
+          description:
+            'Task id from board_init tasks[].id (e.g. W1-A). Do not use the field name id.',
+        },
+        status: {
+          type: 'string',
+          enum: ['planned', 'in_progress', 'testing', 'complete', 'failed', 'blocked'],
+          description: 'New task status',
+        },
+        run_id: { type: 'string', description: 'Optional assigned sub-agent run id' },
+        files_changed: { type: 'array', description: 'Paths changed on complete' },
+        notes: { type: 'string' },
+        error: { type: 'string' },
+      },
+      ['task_id', 'status'],
+    ),
+  },
+  {
+    id: 'board_get_state',
+    label: 'Board get state',
+    description: 'Return full Orchestrate board JSON for resume or UI.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
   },
   {
     id: 'cancel_sub_agent',

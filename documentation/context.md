@@ -4,7 +4,7 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
-**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
+**To-fix roadmap:** Backlog in [`documentation/plans/to-fix.md`](plans/to-fix.md). **Implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) — `switch-chats-while-waiting`, `reef-files-minnow-home`, `reef-optional-save-prompt`, `no-auto-open-terminal`, `no-restart-finished-chat`, `llm-mode-switch-suggestions`, `fix-chat-titles-thinking-leak`, `files-sidebar-close-arrow` (line numbers in each plan link to `to-fix.md`). Product backlog plans remain `feature-01` … `feature-30` in the same folder. **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
 
 ## Product backlog (features 01–29)
 
@@ -38,13 +38,13 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **510** tests (**116** + **394**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **459** tests, **457** pass (**2** fail: `messages-stream-row` session init — unrelated to Reef); all **63** reef tests pass (paths, conventions, prompts catalog, iframe/bridge).
 
 ## What it is
 
 Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **42** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts); **32** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **10** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **45** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts) (includes Orchestrate `board_*` trio); **32** execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **10** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
@@ -313,7 +313,7 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 
 ### Operating modes (Step 05)
 
-Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (inline chat widgets via `reef-widget` fences; prompts in `modes/reef.*.md`, copy-paste templates in `src/chat/reef/widgets/*.md`: calculator, calculator-with-chart, slider-graph, tabs, form, data-table, comparison).
+Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (inline chat widgets via `reef-widget` fences; prompts in `modes/reef.*.md`, copy-paste templates in `src/chat/reef/widgets/*.md` — **15 full templates:** calculator, calculator-with-chart, slider-graph, tabs, form, data-table, comparison, checklist, stats-dashboard, pie-chart, heatmap, quiz, qa-callllm, timeline, unit-converter; **6 composable snippets** (`snippet-*.md`): chart-line, chart-bar, table, stat-card, input-row, sparkline).
 
 | Concern | Location |
 |---------|----------|
@@ -322,9 +322,11 @@ Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**,
 | Template pack | `src/chat/prompts/modes/_template/` |
 | UI mode selector | `src/ui/mode-selector.ts` (in `#composerControls` in `index.html`) |
 | Orchestrate plan strip | `#orchestratePlanStrip` — `src/ui/orchestrate-plan-selector.ts`, `src/styles/orchestrate-plan-selector.css`; refresh on mode/chat/workspace change and when server tools become available (`init-file-panel.ts`) |
+| Orchestrate view toggle (Phase 4) | `#btnViewModeToggle` (top bar) — `src/ui/view-mode-toggle.ts`, `src/styles/view-mode-toggle.css`; sets `Chat.viewMode` (`chat` \| `board`); disabled when chat is not Orchestrate, has no plan, or while streaming/recovery; sync on mode/chat/plan change (`loop.ts`, sidebar, plan selector) |
 | Plan listing | `src/chat/orchestrate/list-plans.ts` (`find_files`); path rules `src/chat/orchestrate/plan-path.ts` |
 | Send gate (Orchestrate) | `src/chat/orchestrate/send-gate.ts` + `sendMessageWithTools` in `src/tools/loop.ts` (requires `Chat.orchestratePlanPath`; empty composer uses default line) |
 | Persistence | `Chat.modeId` and optional `Chat.orchestratePlanPath` in `sessions/state.json` (default mode `build`; plan path normalized in `ensureChatShape`); server: `server/config/validators.js` + `orchestrate-plan-path.js` |
+| Board View | `Chat.orchestrateBoard?: OrchestrateBoardState`, `Chat.viewMode?: 'chat' \| 'board'`. Store: `src/state/orchestrate-board-store.ts`, `src/state/orchestrate-board-events.ts`. Tools: `board_init`, `board_update_task`, `board_get_state` (`src/tools/board-tools.ts`) — **`board_init`** uses `tasks[].id` + non-empty `waves`; **`board_update_task`** uses **`task_id`** (not `id`); **`spawn_sub_agent`** uses **`board_task_id`**. Schemas: `src/tools/definitions.ts`; copy-paste JSON examples in `orchestrate.*.md` § Board tool API. UI: `src/ui/orchestrate-board.ts`, `src/styles/orchestrate-board.css`; dispatch in `renderChatFromHistory` (`messages.ts`); board-only streaming guards (`appendBubble`, `appendStreamingAssistantRow`, `sub-agent-cards.ts`, tool-call DOM in `loop.ts`). Board mode: `#mainColumn.main-column--board-view` hides chat composer; message via in-board `board-composer`; toggle in top bar `#btnViewModeToggle`. Controls: stop orchestrator/sub-agent, send, resume. `activeParentTurnId` on board in `loop.ts`. Prompts: `orchestrate.*.md` (no `documentation/progress/`). Tests: `test/state/orchestrate-board-shape.test.mts`, `test/orchestrate/board-store.test.mts`, `test/tools/board-tools.test.mts`, `test/orchestrate/orchestrator-board-link.test.mts`, `test/ui/view-mode-toggle.test.mjs`, `test/ui/orchestrate-board-streaming.test.mjs`, `test/prompts/orchestrate-board-prompt.test.mjs`; `test/orchestrate/**` in `npm test`. Verification: [`documentation/plans/verification/feature-orchestrate-board.md`](plans/verification/feature-orchestrate-board.md). Plan: [`documentation/plans/shiny-minsky-board-view.md`](plans/shiny-minsky-board-view.md) |
 
 ### Reef mode widgets (inline iframes)
 
@@ -333,19 +335,19 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 | Concern | Location |
 |---------|----------|
 | Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-pending-ui.ts`, `widget-iframe.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
-| Renderer hook | `mountReefWidgets(bubble, { bubbleStreaming })` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts` |
+| Renderer hook | `mountReefWidgets(bubble, { bubbleStreaming, modeId })` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts`; history render passes `chat.modeId` via `appendBubble` meta |
 | Bridge init | `initReefBridge()` in `src/main.ts` |
 | Styles | `src/styles/reef-widgets.css` |
 | Widget LLM overrides | `Chat.reefWidgetProviderId`, `Chat.reefWidgetModelId`; Settings → Modes → Reef (`src/ui/reef-widget-settings.ts`) |
-| Example fences | Built-in `src/chat/reef/widgets/*.md`; tools use `@minnow/reef/widgets/<name>.md` (synced to `~/.minnow/reef/widgets/` on `npm start`) |
+| Widget library | **15 templates** + **6 snippets** under `src/chat/reef/widgets/`; catalog in `modes/reef.full.md` (Templates table + Snippets subsection); lite prompt notes `snippet-*.md`. Tools: `@minnow/reef/widgets/<name>.md` (synced to `~/.minnow/reef/widgets/` on `npm start`) |
 
-**Sandbox:** `iframe sandbox="allow-scripts"` only (no `allow-same-origin`). CSP + esm.sh importmap inside srcdoc. Theme tokens forwarded from host `html[data-theme]`.
+**Sandbox:** `iframe sandbox="allow-scripts"` only (no `allow-same-origin`). CSP + esm.sh importmap inside srcdoc (`react@19` / `react-dom@19/client` without `?dev` so widget code and Recharts share one React instance). Theme tokens forwarded from host `html[data-theme]`.
 
 **Bridge (`window.minnow` in iframe):** `sendPrompt(text)` → fills `#msgInput` (user sends); `callLLM({ messages })` → host streams via `postChatCompletions`; `openLink(url)` → confirm + new tab; `requestResize()` → re-measure iframe document height so the host matches widget content (charts should call this from `useLayoutEffect` after layout).
 
 **Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` / `.mw-chart` → 220px tall) and the prelude sizes chart wrappers plus parents of `.recharts-responsive-container` when height collapses to ~0 (including after async ESM load via `MutationObserver`). Widgets should use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout. **`reef-widget` fences are not passed to highlight.js** — mount runs before hljs so the unknown `reef-widget` language warnings do not spam the console during stream or after mount.
 
-**Tests:** `test/chat/reef/*.test.mts`. Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
+**Tests:** `test/chat/reef/*.test.mts`, `test/chat/reef/*.test.mjs` (template/snippet conventions, `reef-prompts-catalog.test.mjs`). Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md), expansion: [`documentation/plans/reef-widget-library-expansion.md`](plans/reef-widget-library-expansion.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 
 **Send path:** `buildComposeContext()` sets `modeId` (and `orchestratePlanPath` when mode is Orchestrate) from active chat → `composeSystemPrompt()` loads `kind: mode` fragment with `{{orchestrate_plan}}` where applicable → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
 
@@ -370,6 +372,8 @@ When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget
 | Integration | `markdown/renderer.ts` (post-render mount), `main.ts` (`initReefBridge`), `mode-selector.ts` (unmount + re-render on mode change) |
 
 **Tests:** `test/chat/reef/*.test.mts` (21 tests, happy-dom).
+
+**Widget library (snippets):** Six composable `snippet-*.md` files — `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; theme tokens only; snippets omit title chrome.
 
 ### Expert system (Step 06)
 

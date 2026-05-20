@@ -20,6 +20,6 @@ toolPolicy:
 
 **React import map (esm.sh):** `react@19`, `react-dom@19/client`, `recharts@2`, `lodash-es@4`, `mathjs@14` — use host map, do not bundle.
 
-Templates (Minnow install, not workspace): `read_file` `@minnow/reef/widgets/<name>.md` or `find_files` path `@minnow/reef/widgets` pattern `*.md`. Polish: `/impeccable`.
+Templates (Minnow install, not workspace): `read_file` `@minnow/reef/widgets/<name>.md` or `find_files` path `@minnow/reef/widgets` pattern `*.md`. Snippets exist as `snippet-*.md` alongside full templates. Polish: `/impeccable`.
 
 Cwd: `{{cwd}}` · Tools: {{enabled_tools}}
