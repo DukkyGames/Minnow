@@ -4,7 +4,40 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
 
-**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `node --import tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
+**To-fix roadmap:** Ordered steps in [`documentation/plans/to-fix-step-order.md`](plans/to-fix-step-order.md) (backlog line numbers match [`documentation/plans/to-fix.md`](plans/to-fix.md)). Per-step **implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) (`step-01` … `step-20`). **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
+
+## Product backlog (features 01–29)
+
+Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](plans/product_backlog_agents_48a41af9.plan.md). Build plans: [`documentation/plans/Build out/`](plans/Build%20out/) (`feature-01` … `feature-30`). Verification: [`documentation/plans/verification/`](plans/verification/).
+
+| ID | Slug | Status | Primary commit (`Large-Feature-Add`) |
+| --- | --- | --- | --- |
+| 01 | topbar-grouped-actions | Shipped | `5f3adb9` |
+| 02 | lsp-full-catalog | Shipped | settings wave + `8ad1447` (fixture) |
+| 03 | workspace-scoped-chats | Shipped | `5bc076a` |
+| 04 | recent-workspaces-menu | Shipped | workspace API + UI tests |
+| 05 | thinking-duration | Shipped | `ade9c45` |
+| 06–09 | terminal-pty | Shipped | `15cc1dc` |
+| 10 | model-display-names | Shipped | `bf63994` |
+| 11–12 | load-unload-model | Shipped | `2d49c52` |
+| 12–13 | model-picker-right-dots | Shipped | `b4735b6` |
+| 14 | stop-generation | Shipped | `9df9f12` |
+| 15–17 | message-actions | Shipped | `618f7c3` |
+| 17 | chat-scroll-during-stream | Shipped | `4ade7a3` |
+| 18 | file-tree-crud | Shipped | `1c9293b` |
+| 19 | file-search | Shipped | `42887a3` |
+| 20 | drag-drop-move-confirm | Shipped | `2d21408` |
+| 21 | file-tree-padding | Shipped | `17eb130` |
+| 22 | stream-persistence-reload | Shipped | `9860d41` |
+| 23 | manual-memory-add | Shipped | `e3f209c` |
+| 24 | user-rules-settings | Shipped | `c118962` |
+| 25 | prompt-token-estimate | Shipped | `38fe81a` |
+| 26 | stats-strip-with-editor | Shipped | `b1ca5c6` |
+| 27 | editor-tab-key | Shipped | `8ad1447` |
+| 28 | composer-tools-button | Shipped | `b2e6f7b` |
+| 29 | all-full-permissions | Shipped | `1cf8c45` |
+
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **424** tests (**109** + **315**), **0** fail.
 
 ## What it is
 
