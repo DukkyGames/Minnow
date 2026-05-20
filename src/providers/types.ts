@@ -18,6 +18,10 @@ export interface ProviderPublic {
   authStyle?: AuthStyle;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  /** LM Studio v1 load/unload; default true for lm-studio-v0. */
+  supportsModelLoadUnload?: boolean;
+  modelsLoadPath?: string;
+  modelsUnloadPath?: string;
   customHeaders?: Record<string, string>;
   createdAt?: string;
   updatedAt?: string;
@@ -36,4 +40,6 @@ export interface ProviderEndpoints {
   mode: ConnectionMode;
   modelsUrl: string;
   chatUrl: string;
+  modelsLoadUrl?: string;
+  modelsUnloadUrl?: string;
 }

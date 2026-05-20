@@ -2,11 +2,19 @@
  * Workspace folder API — directory where AI tools operate.
  */
 
+export interface WorkspaceRecentItem {
+  path: string;
+  label: string;
+  exists: boolean;
+  isCurrent: boolean;
+}
+
 export interface WorkspaceInfo {
   ok?: boolean;
   path: string;
   label: string;
   isDefault: boolean;
+  recent?: WorkspaceRecentItem[];
 }
 
 export interface WorkspacePickResult {
@@ -15,6 +23,19 @@ export interface WorkspacePickResult {
   path: string | null;
   label?: string;
   isDefault?: boolean;
+  error?: string;
+}
+
+export interface WorkspaceBrowseEntry {
+  name: string;
+  path: string;
+}
+
+export interface WorkspaceBrowseResult {
+  ok?: boolean;
+  path: string;
+  parent: string | null;
+  entries: WorkspaceBrowseEntry[];
   error?: string;
 }
 
@@ -27,6 +48,21 @@ export async function fetchWorkspace(): Promise<WorkspaceInfo | null> {
   } catch {
     return null;
   }
+}
+
+/** List directories for the in-app workspace folder picker. */
+export async function browseWorkspaceFolders(
+  browsePath = '',
+): Promise<WorkspaceBrowseResult> {
+  const query = browsePath.trim()
+    ? `?path=${encodeURIComponent(browsePath.trim())}`
+    : '';
+  const res = await fetch(`/api/workspace/browse${query}`, { cache: 'no-store' });
+  const json = (await res.json()) as WorkspaceBrowseResult & { error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  return json;
 }
 
 /** Open the native folder picker and set workspace when a folder is chosen. */
@@ -60,4 +96,20 @@ export async function setWorkspacePath(absPath: string): Promise<WorkspaceInfo> 
     throw new Error(json.error ?? `HTTP ${res.status}`);
   }
   return json;
+}
+
+/** Remove one path from the MRU list without changing the active workspace. */
+export async function removeRecentWorkspace(
+  absPath: string,
+): Promise<WorkspaceRecentItem[]> {
+  const res = await fetch('/api/workspace/recent', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: absPath }),
+  });
+  const json = (await res.json()) as { recent?: WorkspaceRecentItem[]; error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  return json.recent ?? [];
 }

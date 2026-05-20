@@ -12,6 +12,7 @@ export const ALLOWED_CONFIG_FILES = new Set([
   'tools.json',
   'skills.json',
   'system-prompt.json',
+  'rules.json',
   'sub-agents.json',
 ]);
 
@@ -32,6 +33,8 @@ export function resourceToRelativeKey(resource) {
       return 'skills.json';
     case 'system-prompt':
       return 'system-prompt.json';
+    case 'rules':
+      return 'rules.json';
     case 'sub-agents':
       return 'sub-agents.json';
     default:

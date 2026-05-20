@@ -1,0 +1,122 @@
+/* Model picker combobox — custom list matches bench-instrument inputs (DESIGN.md) */
+
+.model-select-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.model-select-trigger {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 32px 8px 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+
+.model-select-trigger-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.model-select-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.model-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.model-select-inner.is-open .model-select-trigger {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.model-select-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 60;
+  max-height: min(16rem, 50vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px oklch(0.2 0 0 / 0.1);
+}
+
+.model-select-menu.hidden {
+  display: none;
+}
+
+.model-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.model-select-option--selected {
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .model-select-option:hover {
+    background: var(--accent-subtle);
+  }
+}
+
+.model-select-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Load dot: solid when loaded, ring when unloaded / unknown */
+.model-load-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid var(--text-muted);
+}
+
+.model-load-dot[data-load-state='loaded'] {
+  background: var(--success);
+  border-color: var(--success);
+}

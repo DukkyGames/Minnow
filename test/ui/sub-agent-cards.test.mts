@@ -30,7 +30,7 @@ describe('sub-agent cards', { concurrency: false }, () => {
     const chat = createEmptyChatObject('');
     chat.id = 'chat-sub-1';
     setSessionStateForTests({
-      version: 1,
+      version: 2,
       activeId: chat.id,
       sidebarCollapsed: false,
       chats: [chat],

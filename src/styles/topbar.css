@@ -11,7 +11,36 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
-  z-index: 10;
+  /* Above sidebars (34–36) so topbar dropdowns (model picker, etc.) paint on top */
+  z-index: 40;
+}
+
+/* Topbar zones: brand | actions | spacer | end (model + status) */
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .logo-mark {
@@ -45,40 +74,37 @@
   flex-shrink: 0;
 }
 
-/* Model picker in topbar */
+/* Model picker in topbar-end */
 .model-wrap {
-  position: relative;
-  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 340px;
 }
 
-.model-wrap select {
-  width: 100%;
-  min-height: 40px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  padding: 8px 32px 8px 12px;
-  outline: none;
-  appearance: none;
-  cursor: pointer;
-  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.model-select-inner {
+  position: relative;
+  flex: 1;
+  min-width: 10rem;
 }
 
-.model-wrap select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+.model-select-inner .model-state-dot {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
-.model-wrap select option { background: var(--bg); }
+.model-wrap[data-model-state="loaded"] .model-state-dot {
+  background: var(--success);
+  border-color: var(--success);
+}
 
-.model-wrap::after {
+.model-select-inner::after {
   content: '';
   position: absolute;
   right: 12px;
@@ -90,6 +116,30 @@
   border-right: 4px solid transparent;
   border-top: 5px solid var(--text-muted);
   pointer-events: none;
+}
+
+.model-action-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  min-width: 4.5rem;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.model-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .icon-btn {
@@ -127,7 +177,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;

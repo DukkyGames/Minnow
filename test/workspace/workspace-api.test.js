@@ -6,8 +6,10 @@ import { after, before, describe, test } from 'node:test';
 import { ensureMinnowLayout } from '../../server/config/home.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
 import {
+  dedupeRecentPaths,
   getWorkspaceInfo,
   initWorkspaceRoot,
+  normalizeWorkspacePathKey,
   setWorkspaceRoot,
 } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
@@ -15,7 +17,7 @@ import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 function createWorkspaceTestServer() {
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-    void handleWorkspaceRequest(req, res, url.pathname).then((handled) => {
+    void handleWorkspaceRequest(req, res, url.pathname, url.searchParams).then((handled) => {
       if (!handled) {
         res.statusCode = 404;
         res.end('not found');
@@ -32,7 +34,12 @@ function httpRequest(baseUrl, method, pathname, body) {
       url,
       {
         method,
-        headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+        headers: payload
+          ? {
+              'Content-Type': 'application/json',
+              'Content-Length': String(Buffer.byteLength(payload)),
+            }
+          : undefined,
       },
       (res) => {
         const chunks = [];
@@ -60,12 +67,15 @@ describe('workspace API', () => {
   let server;
   let baseUrl;
   let workspaceDir;
+  let workspaceDirB;
 
   before(async () => {
     homeDir = setTestHome(process.env, 'minnow-test-workspace');
     await ensureMinnowLayout();
     workspaceDir = path.join(homeDir, 'sample-project');
+    workspaceDirB = path.join(homeDir, 'other-project');
     await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.mkdir(workspaceDirB, { recursive: true });
     await fs.writeFile(path.join(workspaceDir, 'README.md'), '# sample\n', 'utf8');
 
     await initWorkspaceRoot();
@@ -89,6 +99,7 @@ describe('workspace API', () => {
     assert.equal(json.ok, true);
     assert.ok(typeof json.path === 'string' && json.path.length > 0);
     assert.ok(typeof json.label === 'string');
+    assert.ok(Array.isArray(json.recent));
   });
 
   test('PUT sets workspace and persists to config.json', async () => {
@@ -105,6 +116,119 @@ describe('workspace API', () => {
     const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
     const config = JSON.parse(configRaw);
     assert.equal(path.resolve(config.workspace.path), path.resolve(workspaceDir));
+    assert.ok(Array.isArray(config.workspace.recentPaths));
+    assert.ok(
+      config.workspace.recentPaths.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(workspaceDir),
+      ),
+    );
+    assert.ok(config.workspace.recentPaths.length <= 10);
+  });
+
+  test('second PUT adds both paths with newer first', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'PUT', '/api/workspace', {
+      path: workspaceDirB,
+    });
+    assert.equal(status, 200);
+    assert.equal(path.resolve(json.path), path.resolve(workspaceDirB));
+
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    const recents = config.workspace.recentPaths;
+    assert.ok(recents.length >= 2);
+    assert.equal(
+      normalizeWorkspacePathKey(recents[0]),
+      normalizeWorkspacePathKey(workspaceDirB),
+    );
+    assert.ok(
+      recents.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(workspaceDir),
+      ),
+    );
+  });
+
+  test('PUT same path again dedupes and keeps path first', async () => {
+    await httpRequest(baseUrl, 'PUT', '/api/workspace', { path: workspaceDir });
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    const recents = config.workspace.recentPaths;
+    const keys = recents.map((p) => normalizeWorkspacePathKey(p));
+    const unique = new Set(keys);
+    assert.equal(keys.length, unique.size);
+    assert.equal(
+      normalizeWorkspacePathKey(recents[0]),
+      normalizeWorkspacePathKey(workspaceDir),
+    );
+  });
+
+  test('GET recent includes exists and isCurrent', async () => {
+    await setWorkspaceRoot(workspaceDir);
+    const missing = path.join(homeDir, 'ghost-workspace-removed');
+    const metaRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const meta = JSON.parse(metaRaw);
+    meta.workspace.recentPaths = dedupeRecentPaths([
+      workspaceDir,
+      missing,
+      workspaceDirB,
+    ]);
+    await fs.writeFile(path.join(homeDir, 'config.json'), JSON.stringify(meta), 'utf8');
+
+    const { status, json } = await httpRequest(baseUrl, 'GET', '/api/workspace');
+    assert.equal(status, 200);
+    const missingRow = json.recent.find(
+      (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(missing),
+    );
+    const currentRow = json.recent.find((r) => r.isCurrent);
+    assert.ok(missingRow);
+    assert.equal(missingRow.exists, false);
+    assert.ok(currentRow);
+    assert.equal(currentRow.exists, true);
+    assert.equal(currentRow.isCurrent, true);
+  });
+
+  test('DELETE recent removes entry without changing active path', async () => {
+    await setWorkspaceRoot(workspaceDir);
+    const activeBefore = getWorkspaceInfo().path;
+
+    const { status, json } = await httpRequest(baseUrl, 'DELETE', '/api/workspace/recent', {
+      path: workspaceDirB,
+    });
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    assert.ok(Array.isArray(json.recent));
+    assert.ok(
+      !json.recent.some(
+        (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(workspaceDirB),
+      ),
+    );
+    assert.equal(path.resolve(getWorkspaceInfo().path), path.resolve(activeBefore));
+
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    assert.ok(
+      !config.workspace.recentPaths.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(workspaceDirB),
+      ),
+    );
+  });
+
+  test('11th distinct path caps list at 10', async () => {
+    const dirs = [];
+    for (let i = 0; i < 11; i++) {
+      const dir = path.join(homeDir, `ws-cap-${i}`);
+      await fs.mkdir(dir, { recursive: true });
+      dirs.push(dir);
+    }
+    for (const dir of dirs) {
+      await httpRequest(baseUrl, 'PUT', '/api/workspace', { path: dir });
+    }
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    assert.equal(config.workspace.recentPaths.length, 10);
+    assert.equal(
+      normalizeWorkspacePathKey(config.workspace.recentPaths[0]),
+      normalizeWorkspacePathKey(dirs[10]),
+    );
   });
 
   test('PUT rejects missing directory', async () => {
@@ -121,5 +245,42 @@ describe('workspace API', () => {
     await initWorkspaceRoot();
     const info = getWorkspaceInfo();
     assert.equal(path.resolve(info.path), path.resolve(workspaceDir));
+  });
+
+  test('GET browse without path returns quick roots', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'GET', '/api/workspace/browse');
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.path, '');
+    assert.equal(json.parent, null);
+    assert.ok(Array.isArray(json.entries));
+    assert.ok(json.entries.length >= 1);
+    const home = json.entries.find((e) => e.name === 'Home');
+    assert.ok(home);
+    assert.ok(typeof home.path === 'string' && home.path.length > 0);
+  });
+
+  test('GET browse lists child directories only', async () => {
+    const childDir = path.join(workspaceDir, 'nested-browse');
+    await fs.mkdir(childDir, { recursive: true });
+    await fs.writeFile(path.join(workspaceDir, 'only-file.txt'), 'x', 'utf8');
+
+    const q = `?path=${encodeURIComponent(workspaceDir)}`;
+    const { status, json } = await httpRequest(baseUrl, 'GET', `/api/workspace/browse${q}`);
+    assert.equal(status, 200);
+    assert.equal(path.resolve(json.path), path.resolve(workspaceDir));
+    assert.ok(json.parent !== null);
+    const names = json.entries.map((e) => e.name);
+    assert.ok(names.includes('nested-browse'));
+    assert.ok(!names.includes('only-file.txt'));
+    assert.ok(!names.includes('README.md'));
+  });
+
+  test('GET browse rejects missing directory', async () => {
+    const missing = path.join(homeDir, 'browse-missing-xyz');
+    const q = `?path=${encodeURIComponent(missing)}`;
+    const { status, json } = await httpRequest(baseUrl, 'GET', `/api/workspace/browse${q}`);
+    assert.equal(status, 400);
+    assert.match(json.error, /does not exist/i);
   });
 });

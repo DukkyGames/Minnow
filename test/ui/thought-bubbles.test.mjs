@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-const { ThoughtBubbleController } = await import('../../src/ui/thought-bubbles.ts');
+const { ThoughtBubbleController, renderThoughtsToggle } = await import(
+  '../../src/ui/thought-bubbles.ts'
+);
 
 function setupDom() {
   const window = new Window();
@@ -45,5 +47,16 @@ describe('ThoughtBubbleController', { concurrency: false }, () => {
     ]);
 
     ctrl.endReasoningPhase();
+  });
+});
+
+describe('renderThoughtsToggle', () => {
+  test('durationMs updates button label', () => {
+    setupDom();
+    const wrap = assistantWrap();
+    renderThoughtsToggle(wrap, ['Segment one'], { durationMs: 5000 });
+    const btn = wrap.querySelector('.thoughts-toggle');
+    assert.equal(btn?.textContent, 'Thought for 5.0s');
+    assert.equal(btn?.getAttribute('aria-label'), 'Thought for 5.0s');
   });
 });

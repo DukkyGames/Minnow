@@ -3,8 +3,9 @@
  * after the assistant reply completes.
  */
 
-import { scrollBottom } from './input';
+import { scrollChatIfPinned } from './chat-scroll';
 import { splitThinkingSegments } from '../api/reasoning';
+import { formatThinkingDuration } from './thinking-duration';
 
 /** Milliseconds between typewriter steps when catching up long text. */
 const TYPEWRITER_STEP_MS = 28;
@@ -339,7 +340,7 @@ export class ThoughtBubbleController {
   }
 
   private scrollChat(): void {
-    scrollBottom();
+    scrollChatIfPinned();
   }
 }
 
@@ -347,11 +348,19 @@ export class ThoughtBubbleController {
  * Renders the "Thoughts" control and expandable flow above the assistant bubble.
  * Skips when there are no segments. Idempotent if already present.
  */
+export interface ThoughtsToggleOptions {
+  expanded?: boolean;
+  durationMs?: number;
+}
+
 export function renderThoughtsToggle(
   wrap: HTMLElement,
   segments: string[],
-  expanded = false,
+  opts: ThoughtsToggleOptions | boolean = {},
 ): void {
+  const resolved =
+    typeof opts === 'boolean' ? { expanded: opts } : opts;
+  const expanded = resolved.expanded ?? false;
   const normalized = splitThinkingSegments(segments.join('\n\n'));
   const list = normalized.length > 0 ? normalized : segments.filter((s) => s.trim());
   if (list.length === 0) return;
@@ -363,7 +372,15 @@ export function renderThoughtsToggle(
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'thoughts-toggle';
-  btn.textContent = 'Thoughts';
+  const durationMs = resolved.durationMs;
+  if (durationMs != null && durationMs > 0) {
+    const label = `Thought for ${formatThinkingDuration(durationMs)}`;
+    btn.textContent = label;
+    btn.setAttribute('aria-label', label);
+  } else {
+    btn.textContent = 'Thoughts';
+    btn.setAttribute('aria-label', 'Show model reasoning thoughts');
+  }
   btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
 
   const flow = document.createElement('div');

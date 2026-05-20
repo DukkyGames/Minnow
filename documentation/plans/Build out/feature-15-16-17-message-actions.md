@@ -358,7 +358,7 @@ After implementation, complete [`documentation/plans/verification/feature-15-16-
 | Date | Result | Notes |
 |------|--------|-------|
 | 2026-05-20 | **PASS** (plan review) | Aligned to backlog § C2 + per-agent template; see verification doc § Plan review |
-| | | Implementation sign-off — pending ship |
+| 2026-05-20 | **PASS** (shipped) | Implementation sign-off — see verification doc |
 
 ---
 
@@ -389,13 +389,13 @@ After implementation, complete [`documentation/plans/verification/feature-15-16-
 
 ## Todos (execution checklist)
 
-- [ ] C1 stop generation merged
-- [ ] `history-truncate.ts` + tests
-- [ ] `loop.ts` refactor + `resendFromIndex` + tests
-- [ ] Render `data-history-index` + message menu UI
-- [ ] Wire all five actions + streaming guards
-- [ ] `npm run build` + `npm test`
-- [ ] Update `documentation/context.md`
+- [x] C1 stop generation merged (streaming guard; stop via `finalizeStoppedTurn`)
+- [x] `history-truncate.ts` + tests
+- [x] `loop.ts` refactor + `resendFromIndex` + tests
+- [x] Render `data-history-index` + message menu UI
+- [x] Wire all five actions + streaming guards
+- [x] `npm run build` + targeted tests (full `npm test` has pre-existing xterm import failures in other suites)
+- [x] Update `documentation/context.md`
 
 ---
 

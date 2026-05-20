@@ -1,0 +1,100 @@
+/**
+ * Chat history truncation with atomic assistant + tool_call chains.
+ */
+
+import { streaming } from '../app-state';
+import {
+  findChatById,
+  getActiveChat,
+  scheduleSaveSessions,
+  touchChat,
+} from '../state/sessions';
+import type { Chat } from '../types';
+import {
+  expandAtomicRange,
+  indexOfLastUserMessage,
+  indexOfUserBeforeBlock,
+  normalizeHistoryTail,
+  sliceHistoryAtTurn,
+  findToolResultRange,
+} from './history-truncate-core';
+
+export type TruncateMode = 'inclusive' | 'exclusive';
+
+export interface TruncateResult {
+  ok: boolean;
+  error?: 'not_found' | 'streaming' | 'invalid_index' | 'invalid_target';
+  removedCount?: number;
+  chat?: Chat;
+}
+
+export {
+  expandAtomicRange,
+  findToolResultRange,
+  indexOfLastUserMessage,
+  indexOfUserBeforeBlock,
+  normalizeHistoryTail,
+  sliceHistoryAtTurn,
+};
+
+/**
+ * Truncate chat history at a logical turn boundary.
+ * Inclusive keeps through the target block; exclusive removes the block and after.
+ */
+export function truncateChatHistory(
+  chatId: string,
+  cutIndex: number,
+  mode: TruncateMode,
+): TruncateResult {
+  if (streaming) {
+    return { ok: false, error: 'streaming' };
+  }
+
+  const chat =
+    findChatById(chatId) ??
+    (getActiveChat().id === chatId ? getActiveChat() : undefined);
+  if (!chat) {
+    return { ok: false, error: 'not_found' };
+  }
+
+  if (!Number.isInteger(cutIndex) || cutIndex < 0 || cutIndex >= chat.history.length) {
+    return { ok: false, error: 'invalid_index' };
+  }
+
+  const row = chat.history[cutIndex];
+  if (row.role === 'tool') {
+    const { start } = expandAtomicRange(chat.history, cutIndex);
+    if (start < 0 || chat.history[start]?.role !== 'assistant') {
+      return { ok: false, error: 'invalid_target' };
+    }
+  }
+
+  const beforeLen = chat.history.length;
+  chat.history = sliceHistoryAtTurn(chat.history, cutIndex, mode);
+  const removedCount = beforeLen - chat.history.length;
+
+  touchChat(chat);
+  scheduleSaveSessions();
+
+  return { ok: true, removedCount, chat };
+}
+
+/** Replace user row content after an inclusive truncate at the same index. */
+export function updateUserMessageAt(
+  chatId: string,
+  userIndex: number,
+  newContent: string,
+): boolean {
+  const truncated = truncateChatHistory(chatId, userIndex, 'inclusive');
+  if (!truncated.ok || !truncated.chat) return false;
+
+  const chat = truncated.chat;
+  if (userIndex < 0 || userIndex >= chat.history.length) return false;
+  const row = chat.history[userIndex];
+  if (row.role !== 'user') return false;
+
+  row.content = newContent;
+  touchChat(chat);
+  scheduleSaveSessions();
+  return true;
+}

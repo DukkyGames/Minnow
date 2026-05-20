@@ -291,19 +291,65 @@ export async function getLspDiagnostics(relativePath) {
   return parts.join('\n\n');
 }
 
+/** Human-readable install hint from defaults requirements block. */
+function formatRequirements(requirements) {
+  if (!requirements || typeof requirements !== 'object') return undefined;
+  const bits = [];
+  if (requirements.package) {
+    bits.push(`npm package ${requirements.package}`);
+  }
+  if (requirements.binary) {
+    bits.push(`binary ${requirements.binary}`);
+  }
+  if (requirements.command) {
+    bits.push(`command ${requirements.command}`);
+  }
+  if (bits.length === 0) return undefined;
+  return `Requires: ${bits.join(', ')}`;
+}
+
+/** Single-line explanation for settings UI (disable, no command, tooling). */
+function deriveDisabledReason(cfg, { disabled, hasCommand, running }) {
+  if (running) return undefined;
+  const parts = [];
+  if (disabled) {
+    parts.push('Disabled in settings');
+  }
+  if (!hasCommand && !disabled) {
+    parts.push(
+      'No command configured — add command in ~/.minnow/lsp.json or install tooling',
+    );
+  }
+  const reqLine = formatRequirements(cfg.requirements);
+  if (reqLine) parts.push(reqLine);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
+}
+
 /** List configured servers and running state. */
 export async function listLspServers() {
   const merged = await loadMergedLspConfig();
   const builtinIds = await getBuiltinLspIds();
-  return Object.entries(merged.lsp ?? {}).map(([id, cfg]) => ({
-    id,
-    label: cfg.label ?? id,
-    disabled: cfg.disabled === true,
-    running: processes.has(id),
-    extensions: cfg.extensions ?? [],
-    builtin: builtinIds.has(id),
-    hasCommand: Array.isArray(cfg.command) && cfg.command.length > 0,
-  }));
+  return Object.entries(merged.lsp ?? {}).map(([id, cfg]) => {
+    const disabled = cfg.disabled === true;
+    const hasCommand = Array.isArray(cfg.command) && cfg.command.length > 0;
+    const running = processes.has(id);
+    const requirements =
+      cfg.requirements && typeof cfg.requirements === 'object'
+        ? cfg.requirements
+        : undefined;
+    return {
+      id,
+      label: cfg.label ?? id,
+      disabled,
+      running,
+      extensions: cfg.extensions ?? [],
+      builtin: builtinIds.has(id),
+      hasCommand,
+      requirements,
+      disabledReason: deriveDisabledReason(cfg, { disabled, hasCommand, running }),
+      defaultEnabled: cfg.defaultEnabled === true,
+    };
+  });
 }
 
 export function shutdownAllLsp() {

@@ -4,7 +4,7 @@
 **Backlog:** [`documentation/plans/product_backlog_agents_48a41af9.plan.md`](../product_backlog_agents_48a41af9.plan.md) — Epic E, **E4**  
 **Wave:** 1 (parallel-safe with **E5**, **A1**, **C3** per backlog)  
 **Size:** S  
-**Status:** Build plan (not yet implemented)  
+**Status:** Implemented  
 **Depends on:** Step 11 file panel (tree + viewer) — no E1/E18/E20 dependency  
 **Blocks:** None
 

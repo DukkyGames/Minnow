@@ -3,7 +3,9 @@
  * Matches Minnow bench tokens: --surface, --border, mono for payload preview.
  */
 
+import { streaming } from '../app-state';
 import type { ToolApprovalRequest } from '../tools/tool-approval-types';
+import { setComposerStreamingMode } from './composer-send';
 
 export type ToolApprovalModalResult = 'allow-once' | 'always-allow' | 'cancel';
 
@@ -213,8 +215,16 @@ export function showToolApprovalModal(
       mainColumn?.classList.remove('main-column--tool-approval-pending');
       host.replaceChildren();
       host.hidden = true;
-      if (msgInput) msgInput.disabled = prevInputDisabled;
-      if (sendBtn) sendBtn.disabled = prevSendDisabled;
+      if (msgInput) {
+        msgInput.disabled = streaming ? false : prevInputDisabled;
+      }
+      if (sendBtn) {
+        if (streaming) {
+          setComposerStreamingMode('streaming');
+        } else {
+          sendBtn.disabled = prevSendDisabled;
+        }
+      }
       msgInput?.focus();
       resolve(value);
     };

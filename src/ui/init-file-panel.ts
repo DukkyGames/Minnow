@@ -14,8 +14,17 @@ import {
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
 } from './file-layout';
-import { initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import { initFileTreeDnD } from './file-tree-dnd';
+import { initFileTreeCrud, initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import { setFileTreeServerAvailable } from './file-tree-server';
+import {
+  initFileTreeSearch,
+  onFileTreeSearchServerChanged,
+  registerFileTreeFilterRender,
+  registerFileTreeServerCheck,
+} from './file-tree-search';
 import { bindFileViewerControls, closeFileViewer, openFileInViewer } from './file-viewer';
+import { isLocalServerAvailable } from '../tools/config';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
 
@@ -86,6 +95,8 @@ function bindFilePanelControls(): void {
 
 /** React to local server ping success/failure (after detectLocalServer). */
 export function onFilePanelServerAvailabilityChanged(): void {
+  setFileTreeServerAvailable(getLocalServerAvailable());
+  onFileTreeSearchServerChanged();
   if (getLocalServerAvailable()) {
     void refreshWorkspaceUi();
     void refreshFileTree();
@@ -97,6 +108,7 @@ export function onFilePanelServerAvailabilityChanged(): void {
 /** Initialize file panel after detectLocalServer(). */
 export async function initFilePanel(): Promise<void> {
   await loadFilePanelPrefs();
+  setFileTreeServerAvailable(getLocalServerAvailable());
   if (getLocalServerAvailable()) {
     void initFileTreeIfNeeded();
   }
@@ -110,6 +122,11 @@ export async function initFilePanel(): Promise<void> {
   bindSplitResizer();
   bindFilePanelControls();
   bindFileViewerControls();
+  initFileTreeCrud();
+  initFileTreeDnD();
+  registerFileTreeFilterRender(renderFileTree);
+  registerFileTreeServerCheck(isLocalServerAvailable);
+  initFileTreeSearch();
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) closeMobileFileSidebar();

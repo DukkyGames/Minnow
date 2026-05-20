@@ -3,12 +3,20 @@
  */
 
 import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail } from '../terminal-runner.js';
+import { getAvailableShellProfiles } from './shell-profiles.js';
+import {
+  createPtySession,
+  destroyPtySession,
+  resizePtySession,
+  listPtySessionMeta,
+  getPtyAvailability,
+} from './pty-host.js';
 
 const HEARTBEAT_MS = 15_000;
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -156,6 +164,76 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
       return true;
     }
     sendJson(res, 200, { text: tail });
+    return true;
+  }
+
+  if (pathname === '/api/terminal/shell-profiles' && req.method === 'GET') {
+    const pty = getPtyAvailability();
+    sendJson(res, 200, {
+      profiles: getAvailableShellProfiles(),
+      ptyAvailable: pty.available,
+      ...(pty.error ? { ptyError: pty.error } : {}),
+    });
+    return true;
+  }
+
+  if (pathname === '/api/terminal/session' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const cwd =
+        typeof body?.cwd === 'string' && body.cwd.trim()
+          ? body.cwd.trim()
+          : projectRoot;
+      const chatId =
+        typeof body?.chatId === 'string' ? body.chatId : null;
+      const shellProfileId =
+        typeof body?.shellProfileId === 'string' ? body.shellProfileId : undefined;
+      const cols = typeof body?.cols === 'number' ? body.cols : 80;
+      const rows = typeof body?.rows === 'number' ? body.rows : 24;
+
+      const created = createPtySession({
+        shellProfileId,
+        cwd,
+        cols,
+        rows,
+        chatId,
+      });
+      sendJson(res, 200, created);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = message.includes('Maximum') ? 429 : 500;
+      sendJson(res, status, { error: message });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/terminal/sessions' && req.method === 'GET') {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const chatId = url.searchParams.get('chatId') ?? undefined;
+    const sessions = listPtySessionMeta(chatId ? { chatId } : {});
+    sendJson(res, 200, { sessions });
+    return true;
+  }
+
+  const resizeMatch = pathname.match(/^\/api\/terminal\/session\/([^/]+)\/resize$/);
+  if (resizeMatch && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const cols = Number(body?.cols);
+      const rows = Number(body?.rows);
+      resizePtySession(resizeMatch[1], cols, rows);
+      sendJson(res, 200, { ok: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 404, { error: message });
+    }
+    return true;
+  }
+
+  const sessionMatch = pathname.match(/^\/api\/terminal\/session\/([^/]+)$/);
+  if (sessionMatch && req.method === 'DELETE') {
+    destroyPtySession(sessionMatch[1]);
+    sendJson(res, 200, { ok: true });
     return true;
   }
 

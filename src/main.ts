@@ -6,8 +6,10 @@ import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/topbar.css';
+import './styles/model-select.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
+import './styles/message-actions.css';
 import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/settings.css';
@@ -18,15 +20,23 @@ import './styles/composer-controls.css';
 import './styles/file-panel.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
+import './styles/composer-tools-popover.css';
+import './styles/workspace-menu.css';
+import './styles/workspace-folder-picker.css';
 import './styles/settings-page.css';
 import './styles/tool-approval.css';
 import './styles/sub-agent-drawer.css';
+import './styles/pending-turn-recovery.css';
 
 import 'highlight.js/styles/github.min.css';
 
 import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
-import { fetchModels } from './api/models';
+import {
+  fetchModels,
+  toggleSelectedModelLoad,
+  updateModelLoadUnloadButtons,
+} from './api/models';
 import { initWorkAgentSystem } from './agents/init-work-agents';
 import { initPromptSystem } from './chat/prompts/init-prompts';
 import { sendMessage } from './chat/messaging';
@@ -39,8 +49,12 @@ import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
+import { initChatScroll } from './ui/chat-scroll';
+import { streaming } from './app-state';
+import { flushPendingTurnNow } from './state/pending-turn';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
-import { autoResize, handleKey } from './ui/input';
+import { initPendingTurnRecoveryForChat } from './ui/pending-turn-recovery';
+import { autoResize, handleComposerPrimaryAction, handleKey } from './ui/input';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
@@ -67,12 +81,16 @@ import {
 } from './ui/settings-page';
 import { loadToolConfigIntoDrawer } from './tools/config';
 import {
+  initModelSelectPicker,
+  syncModelSelectPicker,
+} from './ui/model-select-picker';
+import {
   createChat,
   onModelSelectChange,
   renderSidebar,
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
-import { toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
+import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import {
   bindExpertsSettingsCheckbox,
   initExpertSelect,
@@ -80,6 +98,10 @@ import {
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
+import {
+  closeComposerToolsPopover,
+  initComposerToolsPopover,
+} from './ui/composer-tools-popover';
 import { dismissOpenLayers } from './ui/status';
 import {
   initFilePanel,
@@ -101,6 +123,7 @@ function registerWindowHandlers(): void {
   window.toggleSidebarLayout = toggleSidebarLayout;
   window.createChat = createChat;
   window.fetchModels = fetchModels;
+  window.toggleSelectedModelLoad = toggleSelectedModelLoad;
   window.toggleDrawer = toggleDrawer;
   window.openSettingsFromTopbar = openSettingsFromTopbar;
   window.closeDrawer = closeDrawer;
@@ -109,6 +132,7 @@ function registerWindowHandlers(): void {
   window.closeMobileSidebar = closeMobileSidebar;
   window.toggleSidebarCollapsed = toggleSidebarCollapsed;
   window.sendMessage = sendMessage;
+  window.handleComposerPrimaryAction = handleComposerPrimaryAction;
   window.toggleStatsPanel = toggleStatsPanel;
   window.onModelSelectChange = onModelSelectChange;
   window.onSystemPromptPresetChange = onSystemPromptPresetChange;
@@ -152,7 +176,9 @@ export async function initApp(): Promise<void> {
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();
+  fillToolsSection('composerToolsList', { variant: 'composer' });
   registerToolHandlers();
+  initComposerToolsPopover();
   initAttachments();
   initModeSelector();
   initWorkAgentDevUi();
@@ -160,6 +186,7 @@ export async function initApp(): Promise<void> {
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   initWorkspaceButton();
+  initModelSelectPicker();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) mountSlashPicker(msgInput);
@@ -170,6 +197,8 @@ export async function initApp(): Promise<void> {
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await initTerminalPanel();
+  initStatsStrip();
+  initChatScroll();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
@@ -180,7 +209,9 @@ export async function initApp(): Promise<void> {
   initSettingsPage();
   await fetchModels();
   syncModelSelectForActiveChat();
+  updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
+  initPendingTurnRecoveryForChat(getActiveChat());
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
@@ -195,8 +226,17 @@ export async function initApp(): Promise<void> {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') dismissOpenLayers();
+    if (e.key === 'Escape') {
+      closeComposerToolsPopover();
+      dismissOpenLayers();
+    }
   });
+
+  const flushOnExit = (): void => {
+    if (streaming) flushPendingTurnNow();
+  };
+  window.addEventListener('pagehide', flushOnExit);
+  window.addEventListener('beforeunload', flushOnExit);
 
   const drawerOverlay = document.getElementById('drawerOverlay');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');

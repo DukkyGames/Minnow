@@ -144,6 +144,12 @@ const DEFAULT_SYSTEM_PROMPT = {
   text: 'You are a helpful, concise assistant. Respond clearly and directly. Avoid unnecessary preamble.',
 };
 
+const DEFAULT_RULES = {
+  version: 1,
+  enabled: false,
+  text: '',
+};
+
 /** Tool ids enabled on first run (matches client defaultToolConfig). */
 const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'get_datetime',
@@ -172,13 +178,15 @@ function defaultSkillsJson() {
 function defaultSessionStateJson() {
   const chatId = '00000000-0000-0000-0000-000000000001';
   return {
-    version: 1,
+    version: 2,
     activeId: chatId,
     sidebarCollapsed: false,
+    lastActiveChatIdByWorkspace: {},
     chats: [
       {
         id: chatId,
         name: 'New chat',
+        workspacePath: '',
         modelId: '',
         history: [],
         lastStats: null,
@@ -224,6 +232,7 @@ export async function ensureMinnowLayout() {
     { rel: 'tools.json', data: defaultToolsJson() },
     { rel: 'skills.json', data: defaultSkillsJson() },
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
+    { rel: 'rules.json', data: DEFAULT_RULES },
   ];
 
   for (const { rel, data } of defaults) {
@@ -251,4 +260,5 @@ export {
   defaultToolsJson,
   defaultSkillsJson,
   DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_RULES,
 };

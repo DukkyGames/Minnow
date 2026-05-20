@@ -13,6 +13,7 @@ import {
   normalizeSubAgentsConfig,
   validateSessionState,
   validateSystemPromptSettings,
+  validateUserRulesSettings,
 } from './validators.js';
 import {
   DEFAULT_META,
@@ -20,6 +21,7 @@ import {
   defaultToolsJson,
   defaultSkillsJson,
   DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_RULES,
 } from './home.js';
 
 /** Best-effort chmod for secret-bearing files on Unix. */
@@ -105,6 +107,10 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? DEFAULT_SYSTEM_PROMPT;
   }
+  if (resource === 'rules') {
+    const data = await readConfigJson(key);
+    return data ?? DEFAULT_RULES;
+  }
   if (resource === 'meta') {
     let data = await readConfigJson(key);
     if (!data) {
@@ -156,6 +162,11 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'system-prompt') {
     const validated = validateSystemPromptSettings(body);
+    await writeConfigJson(key, validated);
+    return validated;
+  }
+  if (resource === 'rules') {
+    const validated = validateUserRulesSettings(body);
     await writeConfigJson(key, validated);
     return validated;
   }

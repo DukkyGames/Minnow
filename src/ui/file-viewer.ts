@@ -14,6 +14,7 @@ import {
 } from './file-layout';
 import { refreshFileTree, renderFileTree } from './file-tree';
 import { minnowEditorExtensions } from './codemirror-theme';
+import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 
 export const LARGE_FILE_BYTES = 512_000;
@@ -214,6 +215,7 @@ function mountEditor(content: string, path: string): void {
             markDirty(nextDirty);
           }
         }),
+        ...fileEditorKeymapExtensions(),
         keymap.of([
           {
             key: 'Mod-s',
@@ -350,8 +352,16 @@ export function bindFileViewerControls(): void {
 }
 
 /** Open a project file in the split viewer. */
-export async function openFileInViewer(relativePath: string): Promise<void> {
-  if (isDirty && currentPath && currentPath !== relativePath) {
+export async function openFileInViewer(
+  relativePath: string,
+  options?: { skipUnsavedGuard?: boolean },
+): Promise<void> {
+  if (
+    !options?.skipUnsavedGuard &&
+    isDirty &&
+    currentPath &&
+    currentPath !== relativePath
+  ) {
     const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
     if (!proceed) return;
   }
@@ -376,13 +386,7 @@ export async function openFileInViewer(relativePath: string): Promise<void> {
   }
 }
 
-/** Close viewer pane and clear selection. */
-export function closeFileViewer(): void {
-  if (isDirty) {
-    const proceed = window.confirm('You have unsaved changes. Close without saving?');
-    if (!proceed) return;
-  }
-
+function resetViewerPane(): void {
   currentPath = null;
   originalContent = '';
   isDirty = false;
@@ -399,6 +403,29 @@ export function closeFileViewer(): void {
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   hideViewerSplit();
+  renderFileTree();
+}
+
+/** Close viewer pane and clear selection. */
+export function closeFileViewer(): void {
+  if (isDirty) {
+    const proceed = window.confirm('You have unsaved changes. Close without saving?');
+    if (!proceed) return;
+  }
+  resetViewerPane();
+}
+
+/** Close viewer without unsaved prompt (path already removed on disk). */
+export function closeFileViewerForce(): void {
+  resetViewerPane();
+}
+
+/** Update open path after rename/move without reloading editor content. */
+export function retargetOpenViewerPath(newPath: string): void {
+  if (!currentPath) return;
+  currentPath = newPath;
+  patchFilePanelState({ selectedPath: newPath });
+  updateViewerChrome();
   renderFileTree();
 }
 

@@ -13,6 +13,56 @@
 .chat-area::-webkit-scrollbar-track { background: transparent; }
 .chat-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+/* Jump to latest when user scrolls up during a stream */
+.chat-jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Above composer + stats strip (old offset ignored metrics and sat on the textarea) */
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-input-h, 172px) + var(--chat-jump-gap, 36px)
+  );
+  z-index: 12;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.12);
+  cursor: pointer;
+}
+
+.chat-jump-latest:hover {
+  background: var(--surface-elevated);
+  color: var(--text-hover);
+}
+
+.chat-jump-latest:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-jump-latest.hidden {
+  display: none;
+}
+
+/* Tool approval replaces the composer; keep the chip above that strip */
+.main-column:has(#toolApprovalHost:not([hidden])) .chat-jump-latest {
+  bottom: calc(
+    var(--chat-footer-stats-h, 76px) + var(--chat-footer-approval-h, 200px) + var(--chat-jump-gap, 36px)
+  );
+}
+
+@media (max-width: 600px) {
+  /* Collapsed metrics row (expand control only) */
+  .chat-jump-latest {
+    --chat-footer-stats-h: 44px;
+  }
+}
+
 /* Empty state */
 .empty-state {
   flex: 1;
@@ -29,8 +79,8 @@
 }
 
 .empty-icon {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   border-radius: var(--radius-md);
   background: var(--accent);
   border: 1px solid var(--border);
@@ -39,6 +89,11 @@
   justify-content: center;
   margin-bottom: 8px;
   color: var(--bg);
+}
+
+.empty-icon svg {
+  width: 48px;
+  height: 48px;
 }
 
 .empty-title {
@@ -75,6 +130,14 @@
 
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+.msg.assistant.msg--stopped .msg-stopped-chip {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
 
 /* In-flight assistant reply: hide prose shell until the first streamed token */
 .msg.assistant.msg--awaiting-prose .msg-bubble.msg-bubble--awaiting {
@@ -128,6 +191,15 @@
     animation: none;
     opacity: 0.65;
   }
+}
+
+.stream-status__elapsed {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }
 
 .msg-label {

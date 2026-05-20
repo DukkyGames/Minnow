@@ -8,6 +8,8 @@ import { validateProviderId } from './validate.js';
 
 const MODELS_TIMEOUT_MS = 15_000;
 const CHAT_TIMEOUT_MS = 120_000;
+const MODEL_LOAD_TIMEOUT_MS = 120_000;
+const MODEL_UNLOAD_TIMEOUT_MS = 60_000;
 
 /**
  * @param {string} id
@@ -102,4 +104,84 @@ export async function proxyChatCompletions(id, req, res) {
   }
 
   res.end();
+}
+
+/**
+ * @param {string} id
+ * @param {object} body
+ */
+export async function proxyModelLoad(id, body) {
+  validateProviderId(id);
+  const runtime = await getProviderRuntime(id);
+  if (!runtime.capabilities.supportsModelLoadUnload) {
+    throw new Error('Provider does not support model load/unload');
+  }
+  const loadPath = runtime.paths.modelsLoadPath;
+  if (!loadPath) {
+    throw new Error('Provider does not support model load/unload');
+  }
+
+  const url = `${runtime.profile.baseUrl}${loadPath}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_LOAD_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...runtime.headers,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Upstream load HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * @param {string} id
+ * @param {object} body
+ */
+export async function proxyModelUnload(id, body) {
+  validateProviderId(id);
+  const runtime = await getProviderRuntime(id);
+  if (!runtime.capabilities.supportsModelLoadUnload) {
+    throw new Error('Provider does not support model load/unload');
+  }
+  const unloadPath = runtime.paths.modelsUnloadPath;
+  if (!unloadPath) {
+    throw new Error('Provider does not support model load/unload');
+  }
+
+  const url = `${runtime.profile.baseUrl}${unloadPath}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_UNLOAD_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...runtime.headers,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Upstream unload HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }

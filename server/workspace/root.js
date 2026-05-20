@@ -11,6 +11,9 @@ import { mergeConfigMeta } from '../config/validators.js';
 /** Directory where `npm start` was launched (Minnow install). */
 const APP_ROOT = path.resolve(process.cwd());
 
+/** Max MRU workspace folders stored in config.json. */
+export const MAX_RECENT_WORKSPACES = 10;
+
 let workspaceRoot = APP_ROOT;
 
 /** Minnow install root (Vite, built-in skills/prompts). */
@@ -27,6 +30,134 @@ export function getWorkspaceRoot() {
 export function workspaceLabel(absPath) {
   const base = path.basename(absPath);
   return base || absPath;
+}
+
+/**
+ * Normalize an absolute path for dedupe keys (resolve + Windows case-fold).
+ * @param {string} absPath
+ * @returns {string}
+ */
+export function normalizeWorkspacePathKey(absPath) {
+  const resolved = path.resolve(String(absPath).trim());
+  if (process.platform === 'win32') {
+    return resolved.toLowerCase();
+  }
+  return resolved;
+}
+
+/**
+ * @param {object} meta
+ * @returns {string[]}
+ */
+export function readRecentPathsFromMeta(meta) {
+  const ws = meta?.workspace;
+  if (!ws || typeof ws !== 'object') return [];
+  const arr = ws.recentPaths;
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((p) => typeof p === 'string' && p.trim())
+    .map((p) => path.resolve(p.trim()));
+}
+
+/**
+ * Dedupe by normalized key, preserve MRU order, cap length.
+ * @param {string[]} paths
+ * @returns {string[]}
+ */
+export function dedupeRecentPaths(paths) {
+  const seen = new Set();
+  const out = [];
+  for (const p of paths) {
+    if (!p || typeof p !== 'string' || !p.trim()) continue;
+    const resolved = path.resolve(p.trim());
+    const key = normalizeWorkspacePathKey(resolved);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(resolved);
+    if (out.length >= MAX_RECENT_WORKSPACES) break;
+  }
+  return out;
+}
+
+/**
+ * @param {object} meta
+ * @returns {Promise<string[]>}
+ */
+async function loadRecentPathsFromDisk() {
+  const meta = (await readConfigJson('config.json')) ?? {};
+  return readRecentPathsFromMeta(meta);
+}
+
+/**
+ * @param {string[]} recentPaths
+ */
+async function persistRecentPaths(recentPaths) {
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const merged = mergeConfigMeta(meta, {
+    workspace: { recentPaths: dedupeRecentPaths(recentPaths) },
+  });
+  await writeConfigJson('config.json', merged);
+}
+
+/**
+ * Prepend a workspace path to MRU list and persist.
+ * @param {string} absPath
+ * @returns {Promise<string[]>}
+ */
+export async function touchRecentWorkspacePath(absPath) {
+  const resolved = path.resolve(absPath);
+  const existing = await loadRecentPathsFromDisk();
+  const next = dedupeRecentPaths([resolved, ...existing]);
+  await persistRecentPaths(next);
+  return next;
+}
+
+/**
+ * Remove one path from MRU list (does not change active workspace.path).
+ * @param {string} absPath
+ * @returns {Promise<string[]>}
+ */
+export async function removeRecentWorkspacePath(absPath) {
+  const key = normalizeWorkspacePathKey(absPath);
+  const existing = await loadRecentPathsFromDisk();
+  const next = existing.filter((p) => normalizeWorkspacePathKey(p) !== key);
+  await persistRecentPaths(next);
+  return next;
+}
+
+/**
+ * @param {string} absPath
+ * @returns {Promise<boolean>}
+ */
+async function pathExistsAsDirectory(absPath) {
+  try {
+    const stat = await fs.stat(absPath);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build recent workspace rows for GET /api/workspace (includes current path).
+ * @returns {Promise<Array<{ path: string, label: string, exists: boolean, isCurrent: boolean }>>}
+ */
+export async function buildRecentWorkspaceList() {
+  const stored = await loadRecentPathsFromDisk();
+  const current = getWorkspaceRoot();
+  const currentKey = normalizeWorkspacePathKey(current);
+  const allPaths = dedupeRecentPaths([current, ...stored]);
+  const recent = [];
+  for (const p of allPaths) {
+    const exists = await pathExistsAsDirectory(p);
+    recent.push({
+      path: p,
+      label: workspaceLabel(p),
+      exists,
+      isCurrent: normalizeWorkspacePathKey(p) === currentKey,
+    });
+  }
+  return recent;
 }
 
 /**
@@ -88,6 +219,7 @@ export async function setWorkspaceRoot(userPath) {
   const meta = (await readConfigJson('config.json')) ?? {};
   const merged = mergeConfigMeta(meta, { workspace: { path: resolved } });
   await writeConfigJson('config.json', merged);
+  await touchRecentWorkspacePath(resolved);
   return resolved;
 }
 

@@ -1,0 +1,289 @@
+/**
+ * File tree CRUD — executes workspace tools, updates panel state, syncs viewer.
+ */
+
+import { isLocalServerAvailable } from '../tools/config';
+import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
+import { setStatus } from './status';
+import {
+  clearFileTreeClipboard,
+  getFileTreeClipboard,
+  setFileTreeClipboard,
+} from './file-tree-clipboard';
+import { parseToolResult } from './file-tree-parse-result';
+import {
+  basename,
+  dirname,
+  isAncestorPath,
+  isValidEntryName,
+  joinTreePath,
+  normalizeTreePath,
+  pruneExpandedDirs,
+  remapExpandedDirs,
+} from './file-tree-path';
+
+export type FileTreeEntryKind = 'file' | 'dir';
+
+export type { FileTreeClipboard } from './file-tree-clipboard';
+export { parseToolResult } from './file-tree-parse-result';
+export {
+  clearFileTreeClipboard,
+  getFileTreeClipboard,
+  setFileTreeClipboard,
+} from './file-tree-clipboard';
+
+export type FileTreeMutationOp = 'delete' | 'rename' | 'move' | 'create';
+
+/** Run a server file tool and surface status for the file tree UI. */
+export async function runFileTreeTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; message: string }> {
+  if (!isLocalServerAvailable()) {
+    return { ok: false, message: 'Start with npm start to use file tools.' };
+  }
+  try {
+    const { executeTool } = await import('../tools/client');
+    const { content } = await executeTool(name, args);
+    const parsed = parseToolResult(content);
+    if (parsed.ok) {
+      setStatus('ok', parsed.message);
+    } else {
+      setStatus('err', parsed.message);
+    }
+    return parsed;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setStatus('err', message);
+    return { ok: false, message };
+  }
+}
+
+/** Update expandedDirs and selectedPath after delete/rename/move. */
+export function applyPathChangeToFilePanelState(
+  oldPath: string | null,
+  newPath: string | null,
+): void {
+  if (!oldPath) return;
+  const state = getFilePanelState();
+  let expandedDirs = remapExpandedDirs(state.expandedDirs, oldPath, newPath);
+  let selectedPath = state.selectedPath;
+
+  const oldNorm = normalizeTreePath(oldPath);
+  if (selectedPath) {
+    const selNorm = normalizeTreePath(selectedPath);
+    if (newPath === null) {
+      if (selNorm === oldNorm || isAncestorPath(oldNorm, selNorm)) {
+        selectedPath = null;
+      }
+    } else {
+      const newNorm = normalizeTreePath(newPath);
+      if (selNorm === oldNorm) {
+        selectedPath = newNorm;
+      } else if (isAncestorPath(oldNorm, selNorm)) {
+        selectedPath = newNorm + selNorm.slice(oldNorm.length);
+      }
+    }
+  }
+
+  if (newPath === null) {
+    expandedDirs = pruneExpandedDirs(expandedDirs, oldPath);
+  }
+
+  patchFilePanelState({ expandedDirs, selectedPath });
+}
+
+/** Align viewer with deleted, renamed, or moved paths. */
+export function syncViewerAfterPathChange(
+  oldPath: string | null,
+  newPath: string | null,
+  operation: FileTreeMutationOp,
+): void {
+  void (async () => {
+    const viewer = await import('./file-viewer');
+    const openPath = viewer.getOpenViewerPath();
+    if (!openPath || !oldPath) return;
+
+    const openNorm = normalizeTreePath(openPath);
+    const oldNorm = normalizeTreePath(oldPath);
+
+    if (operation === 'delete') {
+      if (openNorm === oldNorm || isAncestorPath(oldNorm, openNorm)) {
+        viewer.closeFileViewerForce();
+      }
+      return;
+    }
+
+    if (!newPath) return;
+    const newNorm = normalizeTreePath(newPath);
+
+    if (openNorm === oldNorm) {
+      if (operation === 'rename' || operation === 'move') {
+        viewer.retargetOpenViewerPath(newNorm);
+      } else {
+        void viewer.openFileInViewer(newNorm, { skipUnsavedGuard: true });
+      }
+      return;
+    }
+
+    if (isAncestorPath(oldNorm, openNorm)) {
+      const remapped = normalizeTreePath(newNorm + openNorm.slice(oldNorm.length));
+      void viewer.openFileInViewer(remapped, { skipUnsavedGuard: true });
+    }
+  })();
+}
+
+async function finishMutation(
+  oldPath: string | null,
+  newPath: string | null,
+  operation: FileTreeMutationOp,
+): Promise<void> {
+  applyPathChangeToFilePanelState(oldPath, newPath);
+  syncViewerAfterPathChange(oldPath, newPath, operation);
+  const tree = await import('./file-tree');
+  tree.invalidateFileTreeCache();
+  await tree.refreshFileTree();
+}
+
+async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boolean> {
+  const viewer = await import('./file-viewer');
+  const openPath = viewer.getOpenViewerPath();
+  const norm = normalizeTreePath(path);
+  if (
+    openPath &&
+    normalizeTreePath(openPath) === norm &&
+    viewer.isFileViewerDirty()
+  ) {
+    const ok = window.confirm(
+      'This file has unsaved changes. Delete anyway? Changes will be lost.',
+    );
+    if (!ok) return false;
+  }
+  if (kind === 'dir') {
+    return window.confirm(
+      `Delete folder "${basename(path)}" and everything inside it? This cannot be undone.`,
+    );
+  }
+  return window.confirm(`Delete "${basename(path)}"?`);
+}
+
+/** Delete a file or directory via delete_path. */
+export async function deletePath(path: string, kind: FileTreeEntryKind): Promise<boolean> {
+  if (!(await confirmDelete(path, kind))) return false;
+  setStatus('spin', 'Deleting…');
+  const result = await runFileTreeTool('delete_path', { path: normalizeTreePath(path) });
+  if (!result.ok) return false;
+  await finishMutation(path, null, 'delete');
+  return true;
+}
+
+/** Rename via move_file (same parent, new basename). */
+export async function renamePath(path: string, kind: FileTreeEntryKind): Promise<boolean> {
+  const currentName = basename(path);
+  const nextName = window.prompt(
+    kind === 'dir' ? 'New folder name:' : 'New file name:',
+    currentName,
+  );
+  if (nextName === null) return false;
+  if (!isValidEntryName(nextName)) {
+    setStatus('err', 'Invalid name. Use a single name without / or \\.');
+    return false;
+  }
+  if (nextName.trim() === currentName) return false;
+
+  const parent = dirname(path);
+  const destination = joinTreePath(parent, nextName.trim());
+  return movePath(path, destination, 'rename');
+}
+
+/** Move or rename with move_file. */
+export async function movePath(
+  source: string,
+  destination: string,
+  operation: 'rename' | 'move' = 'move',
+): Promise<boolean> {
+  setStatus('spin', operation === 'rename' ? 'Renaming…' : 'Moving…');
+  const result = await runFileTreeTool('move_file', {
+    source: normalizeTreePath(source),
+    destination: normalizeTreePath(destination),
+  });
+  if (!result.ok) return false;
+  await finishMutation(source, destination, operation);
+  return true;
+}
+
+/** Copy or cut clipboard item into target directory. */
+export async function pasteInto(targetDir: string): Promise<boolean> {
+  const clip = getFileTreeClipboard();
+  if (!clip || clip.paths.length === 0) {
+    setStatus('err', 'Nothing to paste. Copy or cut a file first.');
+    return false;
+  }
+
+  const dir = normalizeTreePath(targetDir === '.' ? '.' : targetDir);
+  const source = clip.paths[0];
+  const dest = joinTreePath(dir, basename(source));
+  const toolName = clip.mode === 'cut' ? 'move_file' : 'copy_file';
+  const op: FileTreeMutationOp = clip.mode === 'cut' ? 'move' : 'create';
+
+  setStatus('spin', clip.mode === 'cut' ? 'Moving…' : 'Copying…');
+  const result = await runFileTreeTool(toolName, {
+    source: normalizeTreePath(source),
+    destination: normalizeTreePath(dest),
+  });
+  if (!result.ok) return false;
+
+  if (clip.mode === 'cut') {
+    clearFileTreeClipboard();
+    await finishMutation(source, dest, op);
+  } else {
+    await finishMutation(null, null, 'create');
+  }
+  return true;
+}
+
+/** Create an empty text file under parentDir. */
+export async function createFileInDir(parentDir: string): Promise<boolean> {
+  const name = window.prompt('New file name:', 'untitled.txt');
+  if (name === null) return false;
+  if (!isValidEntryName(name)) {
+    setStatus('err', 'Invalid name. Use a single name without / or \\.');
+    return false;
+  }
+  const path = joinTreePath(parentDir, name.trim());
+  setStatus('spin', 'Creating file…');
+  const result = await runFileTreeTool('save_file', { path, content: '' });
+  if (!result.ok) return false;
+  await finishMutation(null, null, 'create');
+  return true;
+}
+
+/** Create a folder under parentDir. */
+export async function createFolderInDir(parentDir: string): Promise<boolean> {
+  const name = window.prompt('New folder name:', 'new-folder');
+  if (name === null) return false;
+  if (!isValidEntryName(name)) {
+    setStatus('err', 'Invalid name. Use a single name without / or \\.');
+    return false;
+  }
+  const path = joinTreePath(parentDir, name.trim());
+  setStatus('spin', 'Creating folder…');
+  const result = await runFileTreeTool('make_directory', { path });
+  if (!result.ok) return false;
+  await finishMutation(null, null, 'create');
+  return true;
+}
+
+/** Copy path to in-memory clipboard. */
+export function copyPathToClipboard(path: string): void {
+  setFileTreeClipboard('copy', [normalizeTreePath(path)]);
+  setStatus('ok', `Copied ${basename(path)}`);
+}
+
+/** Cut path to in-memory clipboard. */
+export function cutPathToClipboard(path: string): void {
+  setFileTreeClipboard('cut', [normalizeTreePath(path)]);
+  setStatus('ok', `Cut ${basename(path)}`);
+}
+
+export { pasteTargetDirForPath } from './file-tree-path';
