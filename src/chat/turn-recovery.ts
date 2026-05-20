@@ -4,6 +4,7 @@
  */
 
 import { streaming } from '../app-state';
+import { hasPostToolTail } from '../tools/turn-continuation';
 import { indexOfLastUserMessage } from './history-truncate-core';
 import { requestContinueFromPendingTurn } from '../state/pending-turn';
 import {
@@ -25,6 +26,29 @@ export function hasOrphanUserTurnAwaitingReply(chat: Chat): boolean {
 /** Index of the last user message when {@link hasOrphanUserTurnAwaitingReply} is true. */
 export function getOrphanUserTurnIndex(chat: Chat): number | null {
   if (!hasOrphanUserTurnAwaitingReply(chat)) {
+    return null;
+  }
+  const idx = indexOfLastUserMessage(chat.history);
+  return idx >= 0 ? idx : null;
+}
+
+/**
+ * True when tools ran (or tool_calls were recorded) but no final assistant prose
+ * was saved — e.g. empty post-tool model completion with no checkpoint.
+ */
+export function hasOrphanToolTailAwaitingReply(chat: Chat): boolean {
+  if (shouldOfferRecovery(chat)) {
+    return false;
+  }
+  if (hasOrphanUserTurnAwaitingReply(chat)) {
+    return false;
+  }
+  return hasPostToolTail(chat.history);
+}
+
+/** Last user index to resend when {@link hasOrphanToolTailAwaitingReply} is true. */
+export function getOrphanToolTailUserIndex(chat: Chat): number | null {
+  if (!hasOrphanToolTailAwaitingReply(chat)) {
     return null;
   }
   const idx = indexOfLastUserMessage(chat.history);
@@ -82,6 +106,9 @@ export async function bootTurnRecoveryForChat(chat: Chat): Promise<void> {
       if (hasOrphanUserTurnAwaitingReply(chat)) {
         const { showOrphanUserRetryBanner } = await import('../ui/pending-turn-recovery');
         showOrphanUserRetryBanner(chat);
+      } else if (hasOrphanToolTailAwaitingReply(chat)) {
+        const { showOrphanToolTailRetryBanner } = await import('../ui/pending-turn-recovery');
+        showOrphanToolTailRetryBanner(chat);
       } else {
         setStatus('err', 'Could not resume the interrupted reply');
       }
@@ -93,7 +120,15 @@ export async function bootTurnRecoveryForChat(chat: Chat): Promise<void> {
     dismissPendingTurnRecovery();
     const { showOrphanUserRetryBanner } = await import('../ui/pending-turn-recovery');
     showOrphanUserRetryBanner(chat);
-  } else {
-    dismissPendingTurnRecovery();
+    return;
   }
+
+  if (hasOrphanToolTailAwaitingReply(chat)) {
+    dismissPendingTurnRecovery();
+    const { showOrphanToolTailRetryBanner } = await import('../ui/pending-turn-recovery');
+    showOrphanToolTailRetryBanner(chat);
+    return;
+  }
+
+  dismissPendingTurnRecovery();
 }

@@ -3,6 +3,7 @@
  */
 
 import { ALL_TOOL_IDS } from './tool-ids.js';
+import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
@@ -153,6 +154,8 @@ function ensureChatShape(raw) {
 
   const pendingTurn = ensurePendingTurn(row.pendingTurn);
 
+  const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
+
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
@@ -167,8 +170,15 @@ function ensureChatShape(raw) {
     expertSelection: ensureExpertSelection(row.expertSelection),
     lastResolvedExpertId:
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
+    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(pendingTurn ? { pendingTurn } : {}),
+    ...(row.unread === true ? { unread: true } : {}),
+    ...(typeof row.lastAssistantAt === 'number' &&
+    Number.isFinite(row.lastAssistantAt) &&
+    row.lastAssistantAt > 0
+      ? { lastAssistantAt: row.lastAssistantAt }
+      : {}),
     history,
     lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
     modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},

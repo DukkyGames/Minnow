@@ -327,16 +327,48 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--border2);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.chat-item-dot:hover {
-  color: var(--bg);
+/* Semantic states (see src/ui/chat-item-dot.ts). */
+.chat-item-dot[data-dot-state='idle'] {
+  background: var(--text-muted);
 }
 
-.chat-item-row.active .chat-item-dot {
-  background: var(--accent);
+.chat-item-dot[data-dot-state='unread'] {
+  background: var(--success);
+}
+
+.chat-item-dot[data-dot-state='needs-input'] {
+  background: var(--warning);
+}
+
+.chat-item-dot[data-dot-state='thinking'] {
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* Ring spinner; @keyframes tool-call-spin from messages.css */
+.chat-item-dot__spinner {
+  display: block;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: tool-call-spin 0.75s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-item-dot__spinner {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 .chat-sidebar.collapsed .chat-item-model,

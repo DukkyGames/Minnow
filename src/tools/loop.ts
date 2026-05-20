@@ -72,6 +72,7 @@ import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { setComposerStreamingMode } from '../ui/composer-send';
 import { refreshExpertSelectDisabled } from '../ui/expert-select';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
+import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   appendBubble,
   appendStats,
@@ -81,6 +82,11 @@ import {
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
+import {
+  recordAssistantReplyOnChat,
+  setSidebarStreamPhase,
+  syncChatItemDotsInDom,
+} from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
@@ -90,6 +96,10 @@ import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
+import {
+  orchestrateRequiresPlanBlock,
+  resolveOrchestrateSlashInput,
+} from '../chat/orchestrate/send-gate';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { UI_DESIGNER_AGENT_ID } from '../agents/ui-designer/constants';
@@ -118,6 +128,13 @@ import {
   parseSlashCommand,
   resolveActiveSkill,
 } from '../skills';
+import {
+  EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
+  hasPostToolTail,
+  logTurnDebug,
+  resolveFinalAssistantContent,
+  resolveTurnContinuation,
+} from './turn-continuation';
 
 /** Maximum assistantâ†’tool rounds before aborting with an error. */
 export const MAX_TOOL_TURNS = 8;
@@ -648,9 +665,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? ` (${activeWorkAgent.label})`
       : '';
 
-  setStreaming(true);
+  setStreaming(true, chat.id);
   refreshModeSelectorDisabled();
   refreshExpertSelectDisabled();
+  refreshOrchestratePlanSelectorDisabled();
   setComposerStreamingMode('streaming');
   let livePartialText = '';
   let currentToolRound = pendingResume?.toolRound ?? 0;
@@ -679,6 +697,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const thoughtPhaseCallbacks = {
     onThinkingStart: (): void => {
       streamCtx.streamStatus.setPhase('thinking');
+      setSidebarStreamPhase('thinking');
       thinkingTracker?.startSegment();
       turnCheckpoint?.setPhase('thinking');
     },
@@ -687,6 +706,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       streamCtx.streamStatus.setThinkingElapsed(null);
       if (streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
         streamCtx.streamStatus.setPhase('generating');
+        setSidebarStreamPhase('generating');
+      } else {
+        setSidebarStreamPhase(null);
       }
     },
   };
@@ -726,6 +748,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
 
     const activeModeId = normalizeModeId(chat.modeId);
+    let emptyPostToolRetries = 0;
+    let ephemeralPostToolInstruction: string | undefined;
 
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       currentToolRound = turn;
@@ -746,7 +770,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: continueFromPending
           ? ephemeralContinueInstruction
-          : undefined,
+          : ephemeralPostToolInstruction,
         pendingTurnResume: continueFromPending ? pendingResume : undefined,
       });
       const body: ChatCompletionBody = {
@@ -791,6 +815,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         turnResult.finishReason ||
         (turnResult.toolCalls.length > 0 ? 'tool_calls' : undefined);
 
+      const lastHistoryRole = chat.history[chat.history.length - 1]?.role;
+      logTurnDebug({
+        turn,
+        finishReason: finishReason ?? null,
+        toolCalls: turnResult.toolCalls.length,
+        fullTextLen: turnResult.fullText.length,
+        lastHistoryRole: lastHistoryRole ?? null,
+        emptyPostToolRetries,
+      });
+
+      if (finishReason === 'tool_calls' && turnResult.toolCalls.length === 0) {
+        logTurnDebug({ event: 'empty_tool_calls_after_finalize', turn });
+      }
+
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
         if (turnResult.fullText) {
           revealProse();
@@ -805,6 +843,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           tool_calls: turnResult.toolCalls,
         };
         chat.history.push(assistantToolMsg);
+        recordAssistantReplyOnChat(chat);
         touchChat(chat);
         scheduleSaveSessions();
         turnCheckpoint?.setToolCalls(turnResult.toolCalls);
@@ -890,13 +929,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         thoughtController.resetStreamPhaseHints();
 
         setStatus('spin', 'Generating reply…');
+        ephemeralPostToolInstruction = undefined;
         continue;
       }
 
       let fullText = turnResult.fullText;
       let streamMeta = turnResult.streamMeta;
 
-      if (!fullText) {
+      if (!fullText.trim()) {
         revealProse();
         const fallbackBody: ChatCompletionBody = {
           model: sendModelId || undefined,
@@ -920,55 +960,92 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           thoughtController?.ingestCompletedReasoning(fbReason);
         }
         streamMeta = mergeStreamMeta(streamMeta, fallback);
-        setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', {
-          streaming: false,
-        });
-      } else {
-        revealProse();
-        setAssistantBubbleContent(bubble, fullText, { streaming: false });
       }
 
-      if (fullText) {
-        turnCheckpoint?.complete();
-        const meta = finalizeResponseMeta(
-          streamMeta,
-          turnResult.t0,
-          turnResult.tFirst ?? turnResult.tEnd,
-          turnResult.tEnd,
-        );
-        const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
-        const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
-        const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
-        const assistantMsg: AssistantMessage = {
-          role: 'assistant',
-          content: fullText,
-          stats: meta.stats,
-          usage: meta.usage,
-        };
-        if (thinkingNorm.length > 0) {
-          assistantMsg.thinking = thinkingNorm;
-          if (thinkingDurationMs > 0) {
-            assistantMsg.thinkingDurationMs = thinkingDurationMs;
-          }
-        }
-        chat.history.push(assistantMsg);
-        chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
-        chat.modelInfo = { ...modelInfo };
-        chat.modelId =
-          (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
-        touchChat(chat);
-        appendStats(lastWrap, meta.stats, meta.usage);
-        if (thinkingNorm.length > 0) {
-          renderThoughtsToggle(lastWrap, thinkingNorm, {
-            durationMs:
-              thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
-          });
-        }
-        updateStrip(meta.stats, meta.usage, modelInfo);
-        setStatus('ok', 'Ready');
-        renderSidebar();
-        scheduleSaveSessions();
+      const continuation = resolveTurnContinuation({
+        finishReason,
+        toolCallsCount: turnResult.toolCalls.length,
+        fullTextLength: fullText.trim().length,
+        hasPostToolTail: hasPostToolTail(chat.history),
+        emptyPostToolRetries,
+      });
+
+      if (continuation === 'retryEmpty') {
+        emptyPostToolRetries += 1;
+        ephemeralPostToolInstruction = EMPTY_POST_TOOL_CONTINUE_INSTRUCTION;
+        logTurnDebug({
+          event: 'retry_empty_post_tool',
+          turn,
+          emptyPostToolRetries,
+        });
+        wrap.remove();
+        streamRow = appendStreamingAssistantRow();
+        ({ wrap, bubble, cursor, streamStatus } = streamRow);
+        streamCtx.wrap = wrap;
+        streamCtx.streamStatus = streamStatus;
+        lastWrap = wrap;
+        revealProse = (): void =>
+          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
+        thoughtController.setAssistantWrap(wrap);
+        thoughtController.resetStreamPhaseHints();
+        setStatus('spin', 'Generating reply…');
+        continue;
       }
+
+      const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
+      const { content: finalContent, usedThinkingAsContent } =
+        resolveFinalAssistantContent(fullText, thinkingNorm);
+
+      revealProse();
+      setAssistantBubbleContent(bubble, finalContent, { streaming: false });
+
+      if (!fullText.trim()) {
+        logTurnDebug({
+          event: 'finalize_empty_completion',
+          turn,
+          finalContentLen: finalContent.length,
+          usedThinkingAsContent,
+        });
+      }
+
+      turnCheckpoint?.complete();
+      const meta = finalizeResponseMeta(
+        streamMeta,
+        turnResult.t0,
+        turnResult.tFirst ?? turnResult.tEnd,
+        turnResult.tEnd,
+      );
+      const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
+      const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
+      const assistantMsg: AssistantMessage = {
+        role: 'assistant',
+        content: finalContent,
+        stats: meta.stats,
+        usage: meta.usage,
+      };
+      if (thinkingNorm.length > 0) {
+        assistantMsg.thinking = thinkingNorm;
+        if (thinkingDurationMs > 0) {
+          assistantMsg.thinkingDurationMs = thinkingDurationMs;
+        }
+      }
+      chat.history.push(assistantMsg);
+      recordAssistantReplyOnChat(chat);
+      chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
+      chat.modelInfo = { ...modelInfo };
+      chat.modelId =
+        (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
+      touchChat(chat);
+      appendStats(lastWrap, meta.stats, meta.usage);
+      if (thinkingNorm.length > 0) {
+        renderThoughtsToggle(lastWrap, thinkingNorm, {
+          durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+        });
+      }
+      updateStrip(meta.stats, meta.usage, modelInfo);
+      setStatus('ok', 'Ready');
+      renderSidebar();
+      scheduleSaveSessions();
 
       completedNormally = true;
       break;
@@ -1025,8 +1102,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       clearAttachments();
     }
     setStreaming(false);
+    setSidebarStreamPhase(null);
+    syncChatItemDotsInDom();
     refreshModeSelectorDisabled();
     refreshExpertSelectDisabled();
+    refreshOrchestratePlanSelectorDisabled();
     setComposerStreamingMode('idle');
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);
@@ -1084,12 +1164,30 @@ export async function sendMessageWithTools(): Promise<void> {
   }
   const pending = getPendingAttachments();
   const pendingWithoutErrors = pending.filter((a) => a.kind !== 'error');
-  const { skillId, userText } = parseSlashCommand(rawText);
+  const chat = getActiveChat();
+
+  if (
+    orchestrateRequiresPlanBlock(
+      chat.modeId,
+      chat.orchestratePlanPath,
+      rawText,
+      pendingWithoutErrors.length,
+    ) === 'block'
+  ) {
+    setStatus('err', 'Select a plan to orchestrate');
+    return;
+  }
+
+  const slashInput = resolveOrchestrateSlashInput(
+    chat.modeId,
+    chat.orchestratePlanPath,
+    rawText,
+  );
+  const { skillId, userText } = parseSlashCommand(slashInput);
   const hasUserText = Boolean(userText.trim());
-  if (!rawText && pendingWithoutErrors.length === 0) return;
+  if (!rawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
 
-  const chat = getActiveChat();
   const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
   const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);

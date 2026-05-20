@@ -183,6 +183,7 @@ function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): In
     date: new Date().toISOString().slice(0, 10),
     os: typeof navigator !== 'undefined' ? navigator.platform : 'node',
     plan_granularity: ctx.planGranularity ?? 'medium',
+    orchestrate_plan: ctx.orchestratePlanPath ?? '',
   };
 }
 

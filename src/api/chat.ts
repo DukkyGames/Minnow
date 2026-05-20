@@ -43,6 +43,11 @@ import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
+import {
+  recordAssistantReplyOnChat,
+  setSidebarStreamPhase,
+  syncChatItemDotsInDom,
+} from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
@@ -68,7 +73,7 @@ export interface ChatCompletionBody {
   tool_choice?: 'auto';
 }
 
-// â”€â”€ Stream / stats helpers â”€â”€
+// --- Stream / stats helpers ---
 // LM Studio v0 streaming omits stats/model_info; usage arrives in a final chunk when requested.
 // Assistant prose uses `content` only; reasoning uses `extractReasoningDelta` (see `./reasoning`).
 
@@ -337,6 +342,7 @@ export async function sendMessage(): Promise<void> {
   const thoughtController = new ThoughtBubbleController(wrap, {
     onThinkingStart: (): void => {
       streamStatus.setPhase('thinking');
+      setSidebarStreamPhase('thinking');
       thinkingTracker.startSegment();
     },
     onReasoningEnded: (): void => {
@@ -344,11 +350,14 @@ export async function sendMessage(): Promise<void> {
       streamStatus.setThinkingElapsed(null);
       if (wrap.classList.contains('msg--awaiting-prose')) {
         streamStatus.setPhase('generating');
+        setSidebarStreamPhase('generating');
+      } else {
+        setSidebarStreamPhase(null);
       }
     },
   });
 
-  setStreaming(true);
+  setStreaming(true, chat.id);
   setComposerStreamingMode('streaming');
   setStatus('spin', 'Generating reply…');
 
@@ -462,6 +471,7 @@ export async function sendMessage(): Promise<void> {
         }
       }
       chat.history.push(assistantMsg);
+      recordAssistantReplyOnChat(chat);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
       chat.modelId =
@@ -511,6 +521,8 @@ export async function sendMessage(): Promise<void> {
   } finally {
     thoughtController.abort();
     setStreaming(false);
+    setSidebarStreamPhase(null);
+    syncChatItemDotsInDom();
     setComposerStreamingMode('idle');
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);

@@ -6,6 +6,7 @@ import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
+import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
   getChatsForWorkspace as filterChatsForWorkspace,
@@ -256,6 +257,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     typeof raw.workspacePath === 'string'
       ? normalizeWorkspacePath(raw.workspacePath)
       : '';
+  const orchestratePlanPath = normalizeOrchestratePlanPath(raw.orchestratePlanPath);
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -278,9 +280,16 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         ? raw.workAgentId.trim()
         : null,
     workAgentAuto: raw.workAgentAuto !== false,
+    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     ...(subAgentRuns ? { subAgentRuns } : {}),
     ...(pendingTurn ? { pendingTurn } : {}),
+    ...(raw.unread === true ? { unread: true } : {}),
+    ...(typeof raw.lastAssistantAt === 'number' &&
+    Number.isFinite(raw.lastAssistantAt) &&
+    raw.lastAssistantAt > 0
+      ? { lastAssistantAt: raw.lastAssistantAt }
+      : {}),
     history,
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},

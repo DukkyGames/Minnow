@@ -5,7 +5,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  getOrphanToolTailUserIndex,
   getOrphanUserTurnIndex,
+  hasOrphanToolTailAwaitingReply,
   hasOrphanUserTurnAwaitingReply,
 } from '../../src/chat/turn-recovery.ts';
 import type { Chat } from '../../src/types.ts';
@@ -68,5 +70,71 @@ describe('getOrphanUserTurnIndex', () => {
 
   test('returns null when not orphan', () => {
     assert.equal(getOrphanUserTurnIndex(makeChat({ history: [] })), null);
+  });
+});
+
+describe('hasOrphanToolTailAwaitingReply', () => {
+  test('true when history ends with tool row', () => {
+    const chat = makeChat({
+      history: [
+        { role: 'user', content: 'Read file' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'tc1',
+              type: 'function',
+              function: { name: 'read_file', arguments: '{}' },
+            },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'tc1', content: '{"text":"ok"}' },
+      ],
+    });
+    assert.equal(hasOrphanToolTailAwaitingReply(chat), true);
+  });
+
+  test('false when pendingTurn is valid', () => {
+    const chat = makeChat({
+      history: [
+        { role: 'user', content: 'Go' },
+        { role: 'tool', tool_call_id: 'tc1', content: 'done' },
+      ],
+      pendingTurn: {
+        role: 'assistant',
+        content: 'partial',
+        startedAt: STARTED,
+      },
+    });
+    assert.equal(hasOrphanToolTailAwaitingReply(chat), false);
+  });
+
+  test('false when last row is assistant prose', () => {
+    const chat = makeChat({
+      history: [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'All set.' },
+      ],
+    });
+    assert.equal(hasOrphanToolTailAwaitingReply(chat), false);
+  });
+
+  test('false when orphan user tail (user takes precedence)', () => {
+    assert.equal(hasOrphanToolTailAwaitingReply(makeChat()), false);
+  });
+});
+
+describe('getOrphanToolTailUserIndex', () => {
+  test('returns last user index for tool tail orphan', () => {
+    const chat = makeChat({
+      history: [
+        { role: 'user', content: 'First' },
+        { role: 'assistant', content: 'Mid' },
+        { role: 'user', content: 'Last' },
+        { role: 'tool', tool_call_id: 'tc1', content: 'x' },
+      ],
+    });
+    assert.equal(getOrphanToolTailUserIndex(chat), 2);
   });
 });

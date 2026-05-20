@@ -251,6 +251,8 @@ export interface Chat {
   providerId?: string;
   /** Operating mode for prompt + tool policy (Step 05); default build. */
   modeId?: ModeId;
+  /** Workspace-relative plan path for Orchestrate mode (documentation/plans/*.md). */
+  orchestratePlanPath?: string;
   /** Reef widget LLM provider override (Reef mode callLLM). */
   reefWidgetProviderId?: string;
   /** Reef widget LLM model override; empty = chat default. */
@@ -271,6 +273,10 @@ export interface Chat {
   subAgentRuns?: PersistedSubAgentRun[];
   /** Checkpoint for an interrupted or in-progress assistant turn (feature 22). */
   pendingTurn?: PendingTurn | null;
+  /** Sidebar: green dot on inactive rows until the user opens this chat again. */
+  unread?: boolean;
+  /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
+  lastAssistantAt?: number;
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;

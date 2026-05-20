@@ -73,6 +73,7 @@ Minnow/
 │   │   ├── turn-checkpoint.ts
 │   │   ├── turn-recovery.ts # boot resume + orphan retry orchestration
 │   │   ├── modes/          # Step 05: registry, tool-policy
+│   │   ├── orchestrate/    # Orchestrate: plan paths, list plans (find_files), send gate
 │   │   ├── reef/           # Reef mode: widget iframes + bridge (Phase 2)
 │   │   ├── prompts/        # Step 04 composer; `prompts/titles/` for title templates (Step 07)
 │   │   └── titles/         # Step 07: schedule, generate, sanitize
@@ -319,8 +320,11 @@ Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**,
 | Registry + tool policy | `src/chat/modes/registry.ts`, `tool-policy.ts` |
 | Prompt bodies | `src/chat/prompts/modes/{id}.full.md`, `{id}.lite.md` |
 | Template pack | `src/chat/prompts/modes/_template/` |
-| UI selector | `src/ui/mode-selector.ts` (above composer in `index.html`) |
-| Persistence | `Chat.modeId` in `sessions/state.json` (default `build`) |
+| UI mode selector | `src/ui/mode-selector.ts` (in `#composerControls` in `index.html`) |
+| Orchestrate plan strip | `#orchestratePlanStrip` — `src/ui/orchestrate-plan-selector.ts`, `src/styles/orchestrate-plan-selector.css`; refresh on mode/chat/workspace change and when server tools become available (`init-file-panel.ts`) |
+| Plan listing | `src/chat/orchestrate/list-plans.ts` (`find_files`); path rules `src/chat/orchestrate/plan-path.ts` |
+| Send gate (Orchestrate) | `src/chat/orchestrate/send-gate.ts` + `sendMessageWithTools` in `src/tools/loop.ts` (requires `Chat.orchestratePlanPath`; empty composer uses default line) |
+| Persistence | `Chat.modeId` and optional `Chat.orchestratePlanPath` in `sessions/state.json` (default mode `build`; plan path normalized in `ensureChatShape`); server: `server/config/validators.js` + `orchestrate-plan-path.js` |
 
 ### Reef mode widgets (inline iframes)
 
@@ -341,11 +345,11 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 **Tests:** `test/chat/reef/*.test.mts`. Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 
-**Send path:** `buildComposeContext()` sets `modeId` from active chat → `composeSystemPrompt()` loads `kind: mode` fragment → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
+**Send path:** `buildComposeContext()` sets `modeId` (and `orchestratePlanPath` when mode is Orchestrate) from active chat → `composeSystemPrompt()` loads `kind: mode` fragment with `{{orchestrate_plan}}` where applicable → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
 
 **Plan / Research** deny destructive tools at the API (shell, file writes, git mutations per `registry.ts`).
 
-**Tests:** `test/modes/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md). OpenCode mapping: [`documentation/plans/references/mode-sources.md`](plans/references/mode-sources.md).
+**Tests:** `test/modes/*.test.mts`, `test/orchestrate/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md). OpenCode mapping: [`documentation/plans/references/mode-sources.md`](plans/references/mode-sources.md).
 
 ### Reef widgets (Phase 2)
 
@@ -654,6 +658,8 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 
 **Workspace-scoped chats (B2):** Each chat has **`workspacePath`** (normalized absolute root at create; `''` = unassigned). The sidebar lists chats for **`getWorkspacePath()`** only; legacy pre-v2 chats appear under a collapsible **Unassigned** section (`workspacePath === ''`). **New chat** binds the current workspace. **Workspace switch** restores **`lastActiveChatIdByWorkspace`** (per normalized path key) or newest chat on that path, or creates a new empty scoped chat.
 
+**Chat list row dot (`.chat-item-dot`):** Each row has `data-chat-id` on `.chat-item-row`. Visual state is resolved in [`src/ui/chat-item-dot.ts`](../src/ui/chat-item-dot.ts): **idle** (muted `--text-muted`), **unread** (green `--success` on inactive chats after a completed assistant reply since the user last viewed that chat; `chat.unread` + `lastAssistantAt`), **needs-input** (yellow `--warning` while tool approval or `ask_question` UI is open), **thinking** (ring spinner during reasoning SSE or `pendingTurn.phase === 'thinking'`). Row selection uses `.chat-item-row.active` border/hover only; the dot does not mirror selection accent. `bootstrapActiveChatOpenedTimestamp()` in `main.ts` seeds the “opened” baseline for the initial active chat.
+
 **Migration v1→v2:** Client `parseSessionStateFromJson` and server `validateSessionState` set `workspacePath: ''` on legacy chats (no auto-bind). Defaults: `src/config/defaults.ts`, `server/config/home.js`.
 
 - At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
@@ -850,6 +856,8 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 - **`detectLocalServer()`** — `GET /api/tools/ping`, **800 ms** timeout ([`src/tools/client.ts`](../src/tools/client.ts)).
 - **`executeTool(name, args, context?)`** — returns `{ content, attachments? }`; browser executor, terminal stream for code tools, or `POST /api/tools`; merges saved `braveApiKey` into `web_search`.
 - **`sendMessageWithTools()`** — up to **`MAX_TOOL_TURNS` = 8**; streams SSE, `mergeToolCallDelta` / `finalizeToolCalls`, runs enabled tools, appends assistant + tool messages ([`src/tools/loop.ts`](../src/tools/loop.ts)).
+- **Post-tool empty completion** — if the model returns `stop` with no prose after tool rows, the loop may run **one** extra round with an ephemeral API user line (`EMPTY_POST_TOOL_CONTINUE_INSTRUCTION` in [`src/tools/turn-continuation.ts`](../src/tools/turn-continuation.ts)); otherwise it **always** commits a final `assistant` row (prose, thinking-only, or `'The model returned no text.'`) and sets status **Ready**. Dev logging: `localStorage.minnowDebugTurns = '1'`.
+- **Orphan tool tail recovery** — reload when history ends with `tool` (no final assistant): [`hasOrphanToolTailAwaitingReply`](../src/chat/turn-recovery.ts) + retry banner ([`src/ui/pending-turn-recovery.ts`](../src/ui/pending-turn-recovery.ts)); resend via [`resendFromIndex`](../src/chat/resend-from-index.ts).
 - **Send entry:** [`src/chat/messaging.ts`](../src/chat/messaging.ts) exports `sendMessage` as alias of `sendMessageWithTools`; `sendMessagePlain` remains for non-tool chat ([`src/api/chat.ts`](../src/api/chat.ts)).
 
 ### Browser executor summary
