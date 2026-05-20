@@ -38,7 +38,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **471** tests (**112** + **359**), **0** fail.
+**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **510** tests (**116** + **394**), **0** fail.
 
 ## What it is
 
@@ -313,7 +313,7 @@ Composable system prompt at send time via `composeSystemPrompt()` ([`src/chat/pr
 
 ### Operating modes (Step 05)
 
-Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (inline chat widgets via `reef-widget` fences; prompts in `modes/reef.*.md`, copy-paste templates in `src/chat/reef/widgets/*.md`: calculator, slider-graph, tabs, form, data-table, comparison).
+Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (inline chat widgets via `reef-widget` fences; prompts in `modes/reef.*.md`, copy-paste templates in `src/chat/reef/widgets/*.md`: calculator, calculator-with-chart, slider-graph, tabs, form, data-table, comparison).
 
 | Concern | Location |
 |---------|----------|
@@ -328,12 +328,12 @@ Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**,
 
 ### Reef mode widgets (inline iframes)
 
-When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes; other modes leave them as syntax-highlighted code.
+When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes; other modes leave them as syntax-highlighted code. While that bubble is still streaming (`setAssistantBubbleContent` with `streaming: true`), each fence shows a **pending** row (phase label + dot pulse) instead of raw highlighted code; the final non-streaming render mounts the iframe. Mounting does **not** use the global `app-state.streaming` flag (it can stay true until after the final render).
 
 | Concern | Location |
 |---------|----------|
-| Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-iframe.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
-| Renderer hook | `mountReefWidgets()` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts` |
+| Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-pending-ui.ts`, `widget-iframe.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
+| Renderer hook | `mountReefWidgets(bubble, { bubbleStreaming })` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts` |
 | Bridge init | `initReefBridge()` in `src/main.ts` |
 | Styles | `src/styles/reef-widgets.css` |
 | Widget LLM overrides | `Chat.reefWidgetProviderId`, `Chat.reefWidgetModelId`; Settings → Modes → Reef (`src/ui/reef-widget-settings.ts`) |
@@ -341,7 +341,9 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 **Sandbox:** `iframe sandbox="allow-scripts"` only (no `allow-same-origin`). CSP + esm.sh importmap inside srcdoc. Theme tokens forwarded from host `html[data-theme]`.
 
-**Bridge (`window.minnow` in iframe):** `sendPrompt(text)` → fills `#msgInput` (user sends); `callLLM({ messages })` → host streams via `postChatCompletions`; `openLink(url)` → confirm + new tab.
+**Bridge (`window.minnow` in iframe):** `sendPrompt(text)` → fills `#msgInput` (user sends); `callLLM({ messages })` → host streams via `postChatCompletions`; `openLink(url)` → confirm + new tab; `requestResize()` → re-measure iframe document height so the host matches widget content (charts should call this from `useLayoutEffect` after layout).
+
+**Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` → 220px tall) and the prelude sizes parents of `.recharts-responsive-container` when height collapses to ~0 — models often omit chart wrapper styles. Widgets should still use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout.
 
 **Tests:** `test/chat/reef/*.test.mts`. Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 
@@ -353,12 +355,12 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 ### Reef widgets (Phase 2)
 
-When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget ` fences mounts as sandboxed iframes.
+When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget ` fences mounts as sandboxed iframes after the bubble’s final non-streaming render; while streaming, pending labels replace visible fence code.
 
 | Concern | Location |
 |---------|----------|
 | Public API | `src/chat/reef/index.ts` — `mountReefWidgets`, `unmountReefWidgetsInChat`, `initReefBridge` |
-| Fence scan + host | `widget-block-detector.ts` (skips while `streaming`; marks `data-reef-mounted`) |
+| Fence scan + host | `widget-block-detector.ts` (pending UI while bubble streams; iframe when `bubbleStreaming` is false; marks `data-reef-mounted`) |
 | iframe srcdoc | `widget-iframe.ts` (CSP, esm.sh import map, prelude, theme CSS) |
 | Theme tokens | `theme-forward.ts` (`html[data-theme]` observer) |
 | Bridge API | `widget-prelude.ts` (`window.minnow`), `widget-bridge.ts` (postMessage host) |
@@ -367,7 +369,7 @@ When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget
 | Styles | `src/styles/reef-widgets.css` |
 | Integration | `markdown/renderer.ts` (post-render mount), `main.ts` (`initReefBridge`), `mode-selector.ts` (unmount + re-render on mode change) |
 
-**Tests:** `test/chat/reef/*.test.mts` (13 tests, happy-dom).
+**Tests:** `test/chat/reef/*.test.mts` (21 tests, happy-dom).
 
 ### Expert system (Step 06)
 

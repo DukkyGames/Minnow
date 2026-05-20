@@ -2,12 +2,21 @@
  * Scan assistant bubbles for ```reef-widget fences and mount sandboxed iframes.
  */
 
-import { streaming } from '../../app-state.ts';
 import { getActiveChat } from '../../state/sessions.ts';
 import { createReefWidgetIframe } from './widget-iframe.ts';
 import { registerReefWidgetHost } from './widget-bridge.ts';
+import {
+  applyReefWidgetPendingUi,
+  inferReefWidgetBuildPhase,
+} from './widget-pending-ui.ts';
 
 const REEF_WIDGET_LANG = 'reef-widget';
+
+/** Options for mounting; use per-bubble streaming, not global app-state. */
+export interface MountReefWidgetBlocksOptions {
+  /** True while this bubble's markdown is still streaming (debounced updates). */
+  bubbleStreaming?: boolean;
+}
 
 /** True when the code block looks like a complete fence (not an open stream tail). */
 function isClosedReefFence(code: HTMLElement): boolean {
@@ -21,15 +30,30 @@ function isClosedReefFence(code: HTMLElement): boolean {
 
 /**
  * Replace matching `<pre data-lang="reef-widget">` nodes with iframe hosts.
- * Skips when not in reef mode, already mounted, or assistant is still streaming.
+ * Skips when not in reef mode or already mounted. When `bubbleStreaming`, shows
+ * pending UI instead of code and defers iframe mount until the final render.
  */
-export function mountReefWidgetBlocks(bubble: HTMLElement): void {
+export function mountReefWidgetBlocks(
+  bubble: HTMLElement,
+  opts: MountReefWidgetBlocksOptions = {},
+): void {
   if (getActiveChat().modeId !== 'reef') return;
-  if (streaming) return;
 
   const pres = bubble.querySelectorAll<HTMLPreElement>(
     `pre[data-lang="${REEF_WIDGET_LANG}"]`,
   );
+
+  if (opts.bubbleStreaming === true) {
+    pres.forEach((pre) => {
+      if (pre.dataset.reefMounted === 'true') return;
+      const code = pre.querySelector('code');
+      if (!code) return;
+      const body = code.textContent ?? '';
+      const phase = inferReefWidgetBuildPhase(body);
+      applyReefWidgetPendingUi(pre, phase);
+    });
+    return;
+  }
 
   pres.forEach((pre) => {
     if (pre.dataset.reefMounted === 'true') return;

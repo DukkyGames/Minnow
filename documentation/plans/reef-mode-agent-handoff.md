@@ -40,8 +40,8 @@ flowchart LR
 ```
 
 1. `setAssistantBubbleContent` (renderer) parses markdown, sanitizes, highlights code.
-2. `mountReefWidgets(bubble)` scans `pre[data-lang="reef-widget"]`.
-3. If reef mode + fence closed + not `streaming`, replace `<pre>` with `.reef-widget-host` + iframe.
+2. `mountReefWidgets(bubble, { bubbleStreaming })` scans `pre[data-lang="reef-widget"]`.
+3. If reef mode and `bubbleStreaming`: apply pending row (Building widget… / Styling… / Finishing up…) and return; if not streaming and fence is complete, replace `<pre>` with `.reef-widget-host` + iframe.
 4. Iframe `srcdoc`: CSP, esm.sh importmap, theme CSS, widget HTML, injected prelude script.
 5. Prelude defines `window.minnow.*`; posts to parent; host bridge handles actions.
 
@@ -78,10 +78,11 @@ flowchart LR
 | Path | Role |
 |------|------|
 | `index.ts` | `mountReefWidgets`, `unmountReefWidgetsInChat`, re-exports `initReefBridge` |
-| `widget-block-detector.ts` | Finds fences; gates reef mode + `!streaming`; `data-reef-mounted` idempotency |
+| `widget-block-detector.ts` | Finds fences; gates reef mode + per-bubble `bubbleStreaming`; pending UI while stream; `data-reef-mounted` idempotency |
+| `widget-pending-ui.ts` | Phase labels + dot row for streaming `reef-widget` fences |
 | `widget-iframe.ts` | `buildReefWidgetSrcdoc`, `createReefWidgetIframe`; CSP + importmap |
 | `theme-forward.ts` | Read host CSS vars; `subscribeThemeChanges` on `html[data-theme]` |
-| `widget-prelude.ts` | `PRELUDE_SCRIPT` string injected in iframe → `window.minnow` |
+| `widget-prelude.ts` | `PRELUDE_SCRIPT` → `window.minnow` + auto-resize (`ResizeObserver`, `requestResize`) |
 | `widget-bridge.ts` | Host `message` listener; sendPrompt / callLLM / resize / openLink |
 | `run-widget-completion.ts` | SSE via `postChatCompletions`; `resolveWidgetLlmBinding()` |
 
@@ -97,7 +98,7 @@ flowchart LR
 
 | Path | Role |
 |------|------|
-| `src/markdown/renderer.ts` | Calls `mountReefWidgets(bubble)` after render |
+| `src/markdown/renderer.ts` | Calls `mountReefWidgets(bubble, { bubbleStreaming })` after render |
 | `src/main.ts` | Imports `reef-widgets.css`, `initReefBridge()` |
 | `src/styles/reef-widgets.css` | `.reef-widget-host` styling |
 | `src/types.ts` | `Chat.reefWidgetProviderId?`, `reefWidgetModelId?` |
@@ -108,11 +109,11 @@ flowchart LR
 
 | Path | Count |
 |------|-------|
-| `test/chat/reef/*.test.mts` | 13 (happy-dom: detector, bridge, iframe, theme) |
+| `test/chat/reef/*.test.mts` | 21 (happy-dom: detector, pending-ui, bridge, iframe, theme) |
 | `test/server/reef-widget-paths.test.mjs` | 4 (install path resolution) |
 | `test/modes/*` | reef in `MODE_IDS`, compose/load tests |
 
-**Gate:** `npm run build` && `npm test` (~471 tests, 0 fail as of ship).
+**Gate:** `npm run build` && `npm test` (~510 tests, 0 fail as of ship).
 
 ---
 
@@ -133,8 +134,8 @@ All messages: `{ type: 'reef', action, widgetId, ... }`. Origin: `'null'` (srcdo
 
 ## Streaming behavior
 
-- Partial/open fences: stay as `<pre><code>` during stream (`streaming` skips mount).
-- Closed fence on next debounced render: swaps to iframe once.
+- While the **bubble** render is streaming (`bubbleStreaming: true` from `setAssistantBubbleContent`), each `reef-widget` `<pre>` shows a pending row (Building widget… → Styling… → Finishing up… by tag order) with a dot pulse; raw fence code is hidden.
+- On the **final** non-streaming render for that bubble, closed fences swap to iframe once. Global `app-state.streaming` may still be true on that final render; the mount gate uses only the per-bubble flag.
 - `data-reef-mounted` on `<pre>` prevents duplicate mounts.
 
 ---

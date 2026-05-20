@@ -22,6 +22,14 @@ describe('reef widget-paths', () => {
     const dir = getBuiltinReefWidgetsDir();
     assert.equal(dir, path.join(getAppRoot(), 'src', 'chat', 'reef', 'widgets'));
     assert.ok(fs.existsSync(path.join(dir, 'calculator.md')));
+    assert.ok(fs.existsSync(path.join(dir, 'calculator-with-chart.md')));
+  });
+
+  test('@minnow/reef/widgets/calculator-with-chart.md resolves', () => {
+    const resolved = tryResolveReefWidgetReadPath('@minnow/reef/widgets/calculator-with-chart.md');
+    assert.ok(resolved);
+    assert.ok(resolved.endsWith('calculator-with-chart.md'));
+    assert.ok(fs.existsSync(resolved));
   });
 
   test('@minnow/reef/widgets/calculator.md resolves to install template', () => {

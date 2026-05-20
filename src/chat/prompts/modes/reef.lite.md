@@ -16,9 +16,7 @@ toolPolicy:
 
 **Fragment:** `<style>` → markup → `<script>` last. Vanilla (HTML + script) or React (`#root` + `type="module"`). No `<!DOCTYPE>` / `<html>` / `<body>`.
 
-**Tokens:** CSS vars only (`--bg`, `--surface`, `--text`, `--border`, `--accent`, `--radius-*`, `--font-ui`). No hex, gradients, shadows, blur. No `localStorage`, no `position: fixed`. CDNs: cdnjs, esm.sh, cdn.jsdelivr.net, unpkg.
-
-**Bridge:** `window.minnow.sendPrompt(text)` (composer only), `callLLM({ messages })`, `openLink(url)`.
+**Tokens:** CSS vars only (`--bg`, `--surface`, `--text`, …). No hex or invented dark themes; pair surfaces with `color: var(--text)`. **Charts:** fixed-height wrapper for `ResponsiveContainer`; `requestResize()` after layout. **Bridge:** `sendPrompt`, `callLLM`, `openLink`, `requestResize`. No `localStorage`, no `position: fixed`. CDNs: cdnjs, esm.sh, cdn.jsdelivr.net, unpkg.
 
 **React import map (esm.sh):** `react@19`, `react-dom@19/client`, `recharts@2`, `lodash-es@4`, `mathjs@14` — use host map, do not bundle.
 

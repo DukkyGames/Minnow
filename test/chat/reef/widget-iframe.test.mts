@@ -25,7 +25,11 @@ describe('widget-iframe', () => {
     assert.match(srcdoc, /Tip calc/);
     assert.match(srcdoc, /w-test-1/);
     assert.match(srcdoc, /react@19/);
-    assert.ok(!srcdoc.includes('allow-same-origin'));
+    assert.match(srcdoc, /requestResize/);
+    assert.match(srcdoc, /width=device-width/);
+    assert.match(srcdoc, /\.rw-chart/);
+    assert.match(srcdoc, /min-height: 220px/);
+    assert.match(srcdoc, /ensureChartParentsSized/);
   });
 
   test('import map pins curated libraries', () => {

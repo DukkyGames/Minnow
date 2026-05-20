@@ -58,20 +58,31 @@ Typography and layout:
 - Main widget container: `max-width: 680px`
 - No gradients, box-shadows, or backdrop blur
 
+### Match the host UI (light / dark)
+
+The iframe receives the same CSS variables as the Minnow app. Widgets must look native in whichever theme the user has selected.
+
+- **Never invent a separate palette** (no `#000`, `#fff`, `#0d1117`, `rgb(20,20,30)`, navy + random grays). Use only forwarded tokens: `--bg`, `--surface`, `--surface-elevated`, `--text`, `--text-muted`, `--border`, `--accent`, etc.
+- **Readable pairs:** Any panel with `background: var(--surface)` or `var(--surface-elevated)` must set `color: var(--text)` on that panel and on primary values. Use `var(--text-muted)` only for captions or helper lines, never as the only text color on a tinted or dark panel (avoids “dark on dark”).
+- **Forms:** Use `grid-template-columns: repeat(N, minmax(0, 1fr))` (or `minmax(140px, 1fr)`) so labels with parentheses or currency do not wrap one character per line. Short control labels may use `white-space: nowrap` when the string is guaranteed short.
+- **Charts (Recharts):** Wrap `ResponsiveContainer` in a `div` with an explicit **pixel** `height` and `min-width: 0` on flex parents. Set axis `stroke` / tick `fill` from `var(--text-muted)` and series `stroke` from `var(--accent)`. Leave enough `margin.left` for Y-axis labels. After layout-affecting React state, call `window.minnow.requestResize()` from `useLayoutEffect` so the host iframe height tracks the chart.
+- **Sizing:** Do not use `100vh` inside a widget. Avoid `overflow: auto` on the outermost root (the host sizes the iframe to content; inner scrollbars fight that pipeline).
+
+Visual polish expectations follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md)): restrained tokens, clear hierarchy, no “AI default” dark slabs.
+
 ## Environment constraints
 
 - No `localStorage` / `sessionStorage`
 - No `position: fixed`
 - External scripts/styles only from: `cdnjs.cloudflare.com`, `esm.sh`, `cdn.jsdelivr.net`, `unpkg.com`
-- Self-critique layout before emitting; for user polish requests follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md))
-
-## Pre-built templates
+- Self-critique layout and **theme contrast** before emitting; for user polish requests follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md))
 
 Widget templates ship **with Minnow**, not in the user's workspace. Do **not** search `{{cwd}}` for `src/chat/reef/widgets/`.
 
 | Template | `read_file` path |
 |----------|------------------|
 | Calculator | `@minnow/reef/widgets/calculator.md` |
+| Calculator + bar chart | `@minnow/reef/widgets/calculator-with-chart.md` |
 | Slider + chart | `@minnow/reef/widgets/slider-graph.md` |
 | Tabs | `@minnow/reef/widgets/tabs.md` |
 | Form | `@minnow/reef/widgets/form.md` |
@@ -89,6 +100,7 @@ Injected in every mounted iframe:
 | `sendPrompt(text)` | Fills the composer with `text` and focuses it — **does not** send; user presses Send |
 | `callLLM({ messages, model? })` | Streams an LLM reply into the widget via `postMessage` (provider/model from Reef widget settings or chat defaults) |
 | `openLink(url)` | Host confirms, then opens in a new tab |
+| `requestResize()` | Re-measure document height and notify the host (call from `useLayoutEffect` after charts or dynamic panels render) |
 
 Example:
 
@@ -97,6 +109,7 @@ window.minnow.sendPrompt('Explain this result');
 const reply = await window.minnow.callLLM({
   messages: [{ role: 'user', content: 'Summarize: ' + value }],
 });
+// After changing layout (e.g. charts): window.minnow.requestResize();
 ```
 
 ## React import map (esm.sh — pin these majors)

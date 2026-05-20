@@ -4,15 +4,15 @@ Basic tip and bill-split calculator with multiple numeric fields. Vanilla HTML a
 <style>
 .rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
-.rw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--text-muted); }
+.rw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--text-muted); min-width: 0; }
 .rw input {
   padding: 8px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
 }
 .rw-out {
   margin-top: 12px; padding: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface-elevated); font-family: var(--font-mono); font-size: 0.875rem;
+  background: var(--surface-elevated); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
 }
 .rw-out strong { color: var(--accent); font-weight: 500; }
 </style>
