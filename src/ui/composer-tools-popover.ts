@@ -3,7 +3,6 @@
  */
 
 import { loadToolConfigIntoDrawer } from '../tools/config';
-import { openSettings } from './settings-page';
 
 let popoverOpen = false;
 
@@ -92,6 +91,6 @@ export function initComposerToolsPopover(): void {
 
   settingsLink?.addEventListener('click', () => {
     closeComposerToolsPopover();
-    openSettings('tools');
+    void import('./settings-page').then(({ openSettings }) => openSettings('tools'));
   });
 }
