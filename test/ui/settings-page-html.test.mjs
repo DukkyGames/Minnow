@@ -73,4 +73,12 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsPromptTokenBreakdown"/);
     assert.match(html, /class="settings-prompt-estimate"/);
   });
+
+  test('user rules section controls exist in index.html', () => {
+    assert.match(html, /id="settingsSection-rules"/);
+    assert.match(html, /id="settingsRulesEnabled"/);
+    assert.match(html, /id="settingsRulesText"/);
+    assert.match(html, /id="settingsRulesSave"/);
+    assert.match(html, /data-settings-nav="rules"/);
+  });
 });

@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "id": "qwen/qwen3.6-27b",
+      "quantization": "Q4_K_M",
+      "state": "loaded",
+      "primary": "Qwen3.6 27B",
+      "optionText": "Qwen3.6 27B · Q4_K_M",
+      "title": "qwen/qwen3.6-27b · Q4_K_M — loaded",
+      "loadState": "loaded"
+    },
+    {
+      "id": "mock-model-fixed",
+      "primary": "Mock model fixed",
+      "optionText": "Mock model fixed",
+      "title": "mock-model-fixed — loaded",
+      "state": "loaded",
+      "loadState": "loaded"
+    },
+    {
+      "id": "some-vendor/foo_bar-7b",
+      "primary": "Foo bar 7B",
+      "optionText": "Foo bar 7B",
+      "title": "some-vendor/foo_bar-7b — not loaded",
+      "state": "not loaded",
+      "loadState": "not_loaded"
+    },
+    {
+      "id": "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
+      "quantization": "Q4_0",
+      "state": "loaded",
+      "primary": "Meta Llama 3.1 8B Instruct GGUF",
+      "optionText": "Meta Llama 3.1 8B Instruct GGUF · Q4_0",
+      "title": "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF · Q4_0 — loaded",
+      "loadState": "loaded"
+    },
+    {
+      "id": "flat-no-quant",
+      "primary": "Flat no quant",
+      "optionText": "Flat no quant",
+      "title": "flat-no-quant",
+      "loadState": "unknown"
+    },
+    {
+      "id": "vendor/deep/path/model-8b",
+      "primary": "Model 8B",
+      "optionText": "Model 8B",
+      "title": "vendor/deep/path/model-8b — loaded",
+      "state": "loaded",
+      "loadState": "loaded"
+    },
+    {
+      "id": "   ",
+      "primary": "   ",
+      "optionText": "   ",
+      "title": "   ",
+      "loadState": "unknown"
+    },
+    {
+      "id": "weird<tag>&\"model'",
+      "primary": "Weird<tag>&\"model'",
+      "optionText": "Weird<tag>&\"model'",
+      "title": "weird<tag>&\"model'",
+      "loadState": "unknown"
+    }
+  ]
+}

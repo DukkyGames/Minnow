@@ -4,16 +4,16 @@ overview: Derive human-readable model labels from canonical LM Studio ids for th
 todos:
   - id: f10-formatter
     content: Add src/lib/format-model-label.ts (slug, humanize, formatModelLabel, buildModelOptionHtml)
-    status: pending
+    status: completed
   - id: f10-fixtures-tests
     content: Add test/fixtures/format-model-label.json and test/lib/format-model-label.test.mts; wire npm test
-    status: pending
+    status: completed
   - id: f10-integrate
     content: Refactor fetchModels() in src/api/models.ts to use buildModelOptionHtml
-    status: pending
+    status: completed
   - id: f10-verify-docs
     content: Manual UAT; documentation/plans/verification/feature-10.md sign-off; update context.md
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -26,7 +26,7 @@ isProject: false
 **To-fix:** [`documentation/plans/to-fix.md`](../to-fix.md) line 10 — “clean up model list names”  
 **Wave:** 1 (Top bar and chat polish)  
 **Size:** S  
-**Status:** Implementation plan (not yet implemented)  
+**Status:** Implemented (2026-05-20)  
 **Depends on:** None  
 **Coordinate with:** **A1** (`feature-01-topbar-grouped-actions`) — same `#modelSelect` real estate; **A4** (`feature-12-13-model-picker-right-dots`) — will replace `(loaded)` text with status dots; keep `state` in formatter API for A4  
 **Blocks:** **A3** (load/unload) and **A4** (picker layout) benefit from readable labels first  
