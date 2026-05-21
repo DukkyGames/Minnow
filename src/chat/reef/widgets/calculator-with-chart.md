@@ -40,12 +40,19 @@ function App() {
     return { taxAmt, tipAmt, total, each: total / Math.max(1, split) };
   }, [bill, tipPct, taxPct, split]);
 
+  const barColors = [
+    'var(--accent)',
+    'color-mix(in oklch, var(--accent) 65%, var(--text-muted))',
+    'color-mix(in oklch, var(--accent) 40%, var(--surface-elevated))',
+    'var(--text-muted)',
+  ];
+
   const data = useMemo(
     () => [
-      { name: 'Subtotal', value: bill, color: '#4f8ef7' },
-      { name: 'Tax', value: calc.taxAmt, color: '#f97316' },
-      { name: 'Tip', value: calc.tipAmt, color: '#22c55e' },
-      { name: 'Total', value: calc.total, color: '#a855f7' },
+      { name: 'Subtotal', value: bill },
+      { name: 'Tax', value: calc.taxAmt },
+      { name: 'Tip', value: calc.tipAmt },
+      { name: 'Total', value: calc.total },
     ],
     [bill, calc.taxAmt, calc.tipAmt, calc.total],
   );
@@ -125,7 +132,7 @@ function App() {
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {data.map((d, i) => (
-                <Cell key={i} fill={d.color} />
+                <Cell key={i} fill={barColors[i % barColors.length]} />
               ))}
             </Bar>
           </BarChart>

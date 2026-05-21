@@ -38,7 +38,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **459** tests, **457** pass (**2** fail: `messages-stream-row` session init â€” unrelated to Reef); all **63** reef tests pass (paths, conventions, prompts catalog, iframe/bridge).
+**Integration QA (2026-05-21):** Reef widget chart templates/snippets use theme tokens only (`var(--accent)`, `color-mix(in oklch, var(--accent) …)` for multi-series/heatmap levels — no hex). `node --test test/chat/reef/*.test.mjs` convention suites pass (24 tests). Full `npm test` may still report unrelated failures (e.g. `messages-stream-row` session init).
 
 ## What it is
 
@@ -384,7 +384,7 @@ When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget
 
 **Tests:** `test/chat/reef/*.test.mts` (21 tests, happy-dom).
 
-**Widget library (snippets):** Six composable `snippet-*.md` files â€” `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; theme tokens only; snippets omit title chrome.
+**Widget library (snippets):** Six composable `snippet-*.md` files â€” `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; **no hex colors** (use `var(--*)` and `color-mix` with forwarded tokens for charts/heatmaps); snippets omit title chrome.
 
 ### Expert system (Step 06)
 
