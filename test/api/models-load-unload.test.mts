@@ -24,7 +24,6 @@ describe('providerSupportsModelLoadUnload', () => {
     baseUrl: 'http://localhost:1234',
     apiKind: 'lm-studio-v0',
     enabled: true,
-    connectionMode: 'proxy',
     hasApiKey: false,
     hasBearer: false,
   };
@@ -46,19 +45,19 @@ describe('providerSupportsModelLoadUnload', () => {
 });
 
 describe('resolveProviderEndpoints load/unload URLs', () => {
-  it('proxy mode exposes Minnow load/unload routes for lm-studio-v0', () => {
+  it('exposes Minnow proxy load/unload routes for lm-studio-v0', () => {
     const provider: ProviderPublic = {
       id: 'lm-studio-local',
       label: 'LM Studio',
       baseUrl: 'http://localhost:1234',
       apiKind: 'lm-studio-v0',
       enabled: true,
-      connectionMode: 'proxy',
       supportsModelLoadUnload: true,
       hasApiKey: false,
       hasBearer: false,
     };
     const endpoints = resolveProviderEndpoints(provider);
+    assert.equal(endpoints.modelsUrl, '/api/providers/lm-studio-local/models');
     assert.equal(endpoints.modelsLoadUrl, '/api/providers/lm-studio-local/models/load');
     assert.equal(endpoints.modelsUnloadUrl, '/api/providers/lm-studio-local/models/unload');
   });
@@ -70,13 +69,12 @@ describe('resolveProviderEndpoints load/unload URLs', () => {
       baseUrl: 'https://api.example.com',
       apiKind: 'openai-v1',
       enabled: true,
-      connectionMode: 'proxy',
       hasApiKey: true,
       hasBearer: false,
     };
     const endpoints = resolveProviderEndpoints(provider);
+    assert.equal(endpoints.modelsUrl, '/api/providers/remote/models');
     assert.equal(endpoints.modelsLoadUrl, undefined);
     assert.equal(endpoints.modelsUnloadUrl, undefined);
   });
 });
-

@@ -15,7 +15,6 @@ import {
 } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus } from '../agents/types';
-import { isUserStoppedPendingCheckpoint } from '../state/pending-turn-shape';
 import { getBoardProgressPercent } from '../state/orchestrate-board-store';
 import { subscribeBoardChanges } from '../state/orchestrate-board-events';
 import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
@@ -42,6 +41,20 @@ export interface TaskAgentBadge {
 }
 
 type RunStatusHint = SubAgentStatus | PersistedSubAgentStatus | null | undefined;
+
+/** True when the user stopped the latest assistant message in this chat. */
+function isUserStoppedChat(chat: Chat): boolean {
+  for (let i = chat.history.length - 1; i >= 0; i--) {
+    const msg = chat.history[i];
+    if (msg.role === 'assistant' && 'stopped' in msg && msg.stopped) {
+      return true;
+    }
+    if (msg.role === 'user') {
+      return false;
+    }
+  }
+  return false;
+}
 
 /** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete). */
 export function deriveTaskAgentBadge(
@@ -409,7 +422,7 @@ function buildBoardHeader(
   bar.setAttribute('aria-valuemax', '100');
   const fill = document.createElement('div');
   fill.className = 'board-header__progress-fill';
-  fill.style.width = `${metrics.progress}%`;
+  fill.style.setProperty('--progress-scale', String(metrics.progress / 100));
   bar.appendChild(fill);
 
   meta.appendChild(stats);
@@ -568,7 +581,7 @@ function refreshBoardDom(
   );
   const isStreaming = isActiveChatStreaming();
   const metrics = boardHeaderMetrics(board, activeRuns.length);
-  const userStopped = isUserStoppedPendingCheckpoint(chat);
+  const userStopped = isUserStoppedChat(chat);
   const headerStatus = deriveBoardHeaderStatus(
     board,
     isStreaming,
@@ -594,7 +607,7 @@ function refreshBoardDom(
   const fill = root.querySelector(
     '.board-header__progress-fill',
   ) as HTMLElement | null;
-  if (fill) fill.style.width = `${metrics.progress}%`;
+  if (fill) fill.style.setProperty('--progress-scale', String(metrics.progress / 100));
 
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
@@ -731,7 +744,7 @@ export function renderBoardView(chat: Chat): void {
     board,
     isStreaming,
     activeRuns.length,
-    isUserStoppedPendingCheckpoint(chatForRender),
+    isUserStoppedChat(chatForRender),
   );
   const activity = deriveOrchestratorLastActivity(chatForRender, isStreaming);
   const metrics = boardHeaderMetrics(board, activeRuns.length);

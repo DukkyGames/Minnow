@@ -25,6 +25,7 @@
   font-size: 14px;
   line-height: 1.5;
   outline: none;
+  animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
 }
 
 .question-cards-panel__header {
@@ -84,9 +85,11 @@
   cursor: pointer;
 }
 
-.question-cards-icon-btn:hover {
-  background: var(--bg-elevated);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .question-cards-icon-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
 }
 
 .question-cards-nav {
@@ -116,8 +119,10 @@
   cursor: not-allowed;
 }
 
-.question-cards-nav-btn:not(:disabled):hover {
-  background: var(--bg-elevated);
+@media (hover: hover) and (pointer: fine) {
+  .question-cards-nav-btn:not(:disabled):hover {
+    background: var(--bg-elevated);
+  }
 }
 
 .question-cards-nav-indicator {
@@ -139,6 +144,17 @@
   letter-spacing: -0.02em;
   color: var(--text);
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.question-cards-validation {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.question-cards-validation[hidden] {
+  display: none;
 }
 
 .question-cards-options {
@@ -158,8 +174,10 @@
   cursor: pointer;
 }
 
-.question-cards-option:hover {
-  border-color: var(--border-strong);
+@media (hover: hover) and (pointer: fine) {
+  .question-cards-option:hover {
+    border-color: var(--border-strong);
+  }
 }
 
 .question-cards-option--selected {
@@ -176,6 +194,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
@@ -244,4 +264,42 @@
 .question-cards-nav-btn .icon-svg {
   width: 18px;
   height: 18px;
+}
+
+/* Compact: safe-area padding, 44px controls, room above home indicator */
+@media (max-width: 600px) {
+  .question-host {
+    max-height: min(56vh, calc(100dvh - var(--topbar-h) - 8rem));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .question-cards-panel {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .question-cards-panel__title-row {
+    flex-wrap: wrap;
+  }
+
+  .question-cards-icon-btn,
+  .question-cards-nav-btn {
+    width: var(--touch-min);
+    height: var(--touch-min);
+  }
+
+  .question-cards-submit {
+    min-height: var(--touch-min);
+  }
+
+  .question-cards-option {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .question-host {
+    max-height: min(42vh, 320px);
+  }
 }

@@ -42,10 +42,10 @@ function App() {
 
   const data = useMemo(
     () => [
-      { name: 'Subtotal', value: bill, color: 'var(--accent)' },
-      { name: 'Tax', value: calc.taxAmt, color: 'var(--text-muted)' },
-      { name: 'Tip', value: calc.tipAmt, color: 'var(--accent-dim)' },
-      { name: 'Total', value: calc.total, color: 'var(--accent)' },
+      { name: 'Subtotal', value: bill, color: '#4f8ef7' },
+      { name: 'Tax', value: calc.taxAmt, color: '#f97316' },
+      { name: 'Tip', value: calc.tipAmt, color: '#22c55e' },
+      { name: 'Total', value: calc.total, color: '#a855f7' },
     ],
     [bill, calc.taxAmt, calc.tipAmt, calc.total],
   );

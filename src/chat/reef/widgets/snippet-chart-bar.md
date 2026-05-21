@@ -1,7 +1,7 @@
 Minimal bar chart inside `.rw-chart`. Same axis/tooltip/resize pattern as the line snippet; `BarChart` / `Bar` from Recharts.
 
 - Replace `DATA` with `{ name, value }` rows (or change `dataKey`s).
-- Set `fill` on `<Bar>` or per-row `fill` for multi-series palettes using theme tokens only.
+- Set `fill` on `<Bar>` or per-row `fill` for multi-series palettes using actual colors (not theme tokens).
 
 ```reef-widget
 <style>
@@ -37,7 +37,7 @@ function App() {
             <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
             <YAxis stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
             <Tooltip contentStyle={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-            <Bar dataKey="value" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="value" fill="#4f8ef7" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

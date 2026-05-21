@@ -2,10 +2,8 @@
  * UI Designer model binding from ~/.minnow config.json (Step 15).
  */
 
-import { resolveProviderEndpoints } from '../../providers/resolve';
 import { listProviders } from '../../providers/store';
 import type { ProviderPublic } from '../../providers/types';
-import { parseServerBaseUrl, serverUrl } from '../../ui/status';
 import type { Chat } from '../../types';
 import type { WorkAgentBinding } from '../work-agent-types';
 import { WorkAgentConfigError } from '../work-agent-types';
@@ -62,28 +60,7 @@ export async function resolveUiDesignerBinding(
     throw new WorkAgentConfigError(`Unknown provider id: ${resolved.providerId}`);
   }
 
-  let baseUrl: string;
-  try {
-    const endpoints = resolveProviderEndpoints(provider);
-    if (endpoints.mode === 'proxy') {
-      baseUrl = '';
-    } else {
-      baseUrl = parseServerBaseUrl(provider.baseUrl) ?? '';
-      if (!baseUrl) {
-        throw new WorkAgentConfigError(
-          `Invalid base URL for provider: ${resolved.providerId}`,
-        );
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new WorkAgentConfigError(message);
-  }
-
-  if (!baseUrl && provider.connectionMode !== 'proxy') {
-    const legacy = parseServerBaseUrl(serverUrl());
-    baseUrl = legacy ?? 'http://localhost:1234';
-  }
+  const baseUrl = '';
 
   return {
     agentId: 'ui-designer',

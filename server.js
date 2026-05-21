@@ -19,6 +19,8 @@ import { createConfigMiddleware } from './server/config/middleware.js';
 import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
 import { ensureMinnowLayout, getMinnowHome } from './server/config/home.js';
 import { createProviderMiddleware } from './server/providers/routes.js';
+import { createGenerationsMiddleware } from './server/generations/routes.js';
+import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
@@ -864,6 +866,7 @@ async function main() {
           server.middlewares.use(createMcpMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProviderMiddleware());
+          server.middlewares.use(createGenerationsMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
           server.middlewares.use(createBrowserScreenshotMiddleware());
           server.middlewares.use(createToolsMiddleware());
@@ -894,6 +897,7 @@ async function main() {
   console.log(`Minnow dev server: ${localUrl}`);
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
+  console.log(`Generations API: ${localUrl.replace(/\/$/, '')}/api/generations`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
@@ -902,7 +906,10 @@ async function main() {
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
-  process.on('exit', () => destroyAllPtySessions());
+  process.on('exit', () => {
+    destroyAllPtySessions();
+    deleteGenerationsForProviderShutdown();
+  });
   openBrowser(localUrl);
 }
 

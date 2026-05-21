@@ -8,14 +8,12 @@ import {
   touchChat,
   scheduleSaveSessions,
 } from '../state/sessions';
-import { ensurePendingTurn } from '../state/pending-turn-shape';
 import type {
   AssistantToolCallMessage,
   AssistantMessage,
   Chat,
   Message,
   ModelInfo,
-  PendingTurn,
   Stats,
   ToolResultMessage,
   Usage,
@@ -138,8 +136,6 @@ export function renderChatFromHistory(chat: Chat): void {
     empty.innerHTML = EMPTY_STATE_HTML;
     area.appendChild(empty);
     renderPersistedSubAgentCardsForChat(chat);
-    const pendingOnly = ensurePendingTurn(chat.pendingTurn);
-    if (pendingOnly) renderPendingTurn(chat, pendingOnly);
     scrollChatToBottom();
     return;
   }
@@ -251,42 +247,6 @@ export function renderChatFromHistory(chat: Chat): void {
     });
   }
   renderPersistedSubAgentCardsForChat(chat);
-  const pending = ensurePendingTurn(chat.pendingTurn);
-  if (pending) renderPendingTurn(chat, pending);
-  scrollChatToBottom();
-}
-
-/** Paint checkpointed assistant prose from pendingTurn (not in history). */
-export function renderPendingTurn(_chat: Chat, pending: PendingTurn): void {
-  const text = pending.content?.trim() ?? '';
-  const hasThinking = pending.thinking != null && pending.thinking.length > 0;
-  if (!text && !hasThinking && !pending.toolCalls?.length) return;
-
-  const { wrap } = appendBubble('assistant', text);
-  wrap.classList.add('msg--interrupted');
-  wrap.dataset.pendingTurn = 'true';
-  if (pending.stopped) {
-    markMessageStopped(wrap);
-  }
-  if (hasThinking && pending.thinking) {
-    renderThoughtsToggle(wrap, pending.thinking, {
-      durationMs:
-        pending.thinkingDurationMs && pending.thinkingDurationMs > 0
-          ? pending.thinkingDurationMs
-          : undefined,
-    });
-  }
-
-  const area = document.getElementById('chatArea')!;
-  if (pending.toolCalls?.length) {
-    for (const tc of pending.toolCalls) {
-      const argsObj = parseToolArgsForDisplay(tc.function.arguments);
-      const toolWrap = renderToolCall(tc.function.name, argsObj);
-      toolWrap.dataset.toolCallId = tc.id;
-      toolWrap.classList.add('tool-call-msg--interrupted');
-      area.appendChild(toolWrap);
-    }
-  }
   scrollChatToBottom();
 }
 
@@ -344,6 +304,13 @@ export function appendBubble(
     scrollChatIfPinned();
   }
   return { wrap, bubble };
+}
+
+/** Inline assistant failure copy (network, provider, or lost generation). */
+export function setAssistantErrorBubble(bubble: HTMLDivElement, message: string): void {
+  bubble.classList.remove('msg-bubble--md', 'msg-bubble--awaiting');
+  bubble.classList.add('msg-bubble--error');
+  bubble.textContent = message;
 }
 
 /** DOM row for an in-flight assistant reply (prose bubble hidden until first token). */

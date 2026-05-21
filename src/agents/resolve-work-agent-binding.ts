@@ -2,10 +2,8 @@
  * Resolve provider + model for an active Work Agent turn.
  */
 
-import { resolveProviderEndpoints } from '../providers/resolve';
 import { listProviders } from '../providers/store';
 import type { ProviderPublic } from '../providers/types';
-import { parseServerBaseUrl, serverUrl } from '../ui/status';
 import type { Chat } from '../types';
 import type {
   WorkAgentBinding,
@@ -65,29 +63,9 @@ export async function resolveWorkAgentBinding(
     throw new WorkAgentConfigError(`Unknown provider id: ${providerId}`);
   }
 
-  let baseUrl: string;
-  let headers: Record<string, string> = {};
-
-  try {
-    const endpoints = resolveProviderEndpoints(provider);
-    if (endpoints.mode === 'proxy') {
-      baseUrl = '';
-      headers = {};
-    } else {
-      baseUrl = parseServerBaseUrl(provider.baseUrl) ?? '';
-      if (!baseUrl) {
-        throw new WorkAgentConfigError(`Invalid base URL for provider: ${providerId}`);
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new WorkAgentConfigError(message);
-  }
-
-  if (!baseUrl && provider.connectionMode !== 'proxy') {
-    const legacy = parseServerBaseUrl(serverUrl());
-    baseUrl = legacy ?? 'http://localhost:1234';
-  }
+  // Chat and tools use /api/generations; binding carries provider id only.
+  const baseUrl = '';
+  const headers: Record<string, string> = {};
 
   return {
     agentId,

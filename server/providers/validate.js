@@ -4,7 +4,6 @@
 
 const PROVIDER_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const API_KINDS = new Set(['lm-studio-v0', 'openai-v1']);
-const CONNECTION_MODES = new Set(['direct', 'proxy']);
 const AUTH_STYLES = new Set(['bearer', 'api-key', 'x-api-key']);
 
 /**
@@ -49,17 +48,6 @@ export function validateApiKind(apiKind) {
     throw new Error('Invalid apiKind');
   }
   return /** @type {'lm-studio-v0' | 'openai-v1'} */ (apiKind);
-}
-
-/**
- * @param {string} mode
- * @returns {'direct' | 'proxy'}
- */
-export function validateConnectionMode(mode) {
-  if (!CONNECTION_MODES.has(mode)) {
-    throw new Error('Invalid connectionMode');
-  }
-  return /** @type {'direct' | 'proxy'} */ (mode);
 }
 
 /**

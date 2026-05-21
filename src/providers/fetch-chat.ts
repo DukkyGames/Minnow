@@ -1,18 +1,24 @@
 /**
- * Central chat completions fetch for direct and proxy providers.
+ * Central chat completions fetch — backed by /api/generations with a synthetic Response
+ * so existing SSE readers stay unchanged.
  */
 
+import {
+  createGeneration,
+  subscribeToGenerationRaw,
+  type GenerationEndEvent,
+} from '../api/generations';
 import type { ChatCompletionBody } from '../api/chat';
-import { resolveProviderEndpoints } from './resolve';
 import type { ProviderPublic } from './types';
+import { resolveProviderEndpoints } from './resolve';
 
 export interface PostChatOptions {
   stream?: boolean;
 }
 
 /**
- * POST chat/completions for the given provider.
- * Proxy mode: same-origin /api/providers/:id/chat/completions (auth on server).
+ * POST chat/completions for the given provider via backend generations (persist: false).
+ * Returns a Response whose body replays upstream SSE bytes from the generation stream.
  */
 export async function postChatCompletions(
   provider: ProviderPublic,
@@ -20,17 +26,60 @@ export async function postChatCompletions(
   signal: AbortSignal,
   options: PostChatOptions = {},
 ): Promise<Response> {
-  const endpoints = resolveProviderEndpoints(provider);
   const payload = {
     ...body,
     stream: options.stream ?? body.stream ?? true,
   };
 
-  return fetch(endpoints.chatUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal,
+  const { generationId } = await createGeneration(provider.id, payload, { persist: false });
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+
+      const closeStream = (): void => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      };
+
+      const unsubscribe = subscribeToGenerationRaw(
+        generationId,
+        {
+          onChunk: (text) => {
+            if (closed) return;
+            controller.enqueue(new TextEncoder().encode(text));
+          },
+          onEnd: (_event?: GenerationEndEvent) => {
+            closeStream();
+          },
+          onTransportError: (err) => {
+            if (closed) return;
+            closed = true;
+            controller.error(err);
+          },
+        },
+        signal,
+      );
+
+      signal.addEventListener(
+        'abort',
+        () => {
+          unsubscribe();
+          closeStream();
+        },
+        { once: true },
+      );
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
   });
 }
 
