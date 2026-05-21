@@ -40,11 +40,18 @@ describe('generateChatTitle', () => {
     void FIXED_CHAT_ID;
   });
 
-  test('uses reasoning field when content is empty', async () => {
+  test('ignores reasoning when content is empty', async () => {
     const port = {
       async complete() {
         return {
-          choices: [{ message: { content: '', reasoning: 'Redis cache tuning' } }],
+          choices: [
+            {
+              message: {
+                content: '',
+                reasoning: "Here's a thinking process for your request",
+              },
+            },
+          ],
         };
       },
     };
@@ -55,7 +62,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, 'Redis cache tuning');
+    assert.equal(result, null);
   });
 
   test('HTTP failure returns null', async () => {

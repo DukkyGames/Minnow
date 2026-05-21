@@ -4,7 +4,10 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { normalizeTitle } from '../../src/chat/titles/sanitize.ts';
+import {
+  fallbackTitleFromSeed,
+  normalizeTitle,
+} from '../../src/chat/titles/sanitize.ts';
 
 describe('normalizeTitle', () => {
   test('plain trim', () => {
@@ -33,5 +36,32 @@ describe('normalizeTitle', () => {
 
   test('accepts non-Latin letters', () => {
     assert.equal(normalizeTitle('Redis 缓存调优'), 'Redis 缓存调优');
+  });
+
+  test('rejects thinking boilerplate openers', () => {
+    assert.equal(
+      normalizeTitle("Here's a thinking process for your request"),
+      null,
+    );
+    assert.equal(normalizeTitle('Let me analyze this step by step'), null);
+  });
+
+  test('UNTITLED maps to null', () => {
+    assert.equal(normalizeTitle('UNTITLED'), null);
+    assert.equal(normalizeTitle('untitled'), null);
+  });
+});
+
+describe('fallbackTitleFromSeed', () => {
+  test('truncates long user message', () => {
+    const seed = 'a'.repeat(80);
+    const out = fallbackTitleFromSeed(seed);
+    assert.ok(out);
+    assert.equal(out.length, 41);
+    assert.ok(out.endsWith('…'));
+  });
+
+  test('returns trimmed seed for short message', () => {
+    assert.equal(fallbackTitleFromSeed('  How do I tune Redis?  '), 'How do I tune Redis?');
   });
 });
