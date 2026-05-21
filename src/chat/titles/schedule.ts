@@ -11,6 +11,7 @@ import {
 } from '../../state/sessions';
 import { renderSidebar } from '../../ui/sidebar';
 import { generateChatTitle } from './generate';
+import { fallbackTitleFromSeed } from './sanitize';
 import {
   hasTitleJobInflight,
   registerTitleJobInflight,
@@ -110,7 +111,7 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
   const resolved = resolveTitleGenerationOptions(chatBefore, config, scheduled);
   if (!resolved) return;
 
-  const title = await titleGenerateImpl(
+  const generated = await titleGenerateImpl(
     seed,
     {
       modelId: resolved.modelId,
@@ -122,6 +123,7 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
     createTitleProviderPort(resolved.providerId),
   );
 
+  const title = generated ?? fallbackTitleFromSeed(seed);
   if (!title || signal.aborted) return;
 
   const applied = applyGeneratedChatTitle(chatId, title);
