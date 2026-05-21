@@ -67,6 +67,14 @@ export const PRELUDE_SCRIPT = `(function () {
     });
   }
 
+  /** Catch dynamic DOM (sync scripts, ESM, charts) that mount after the first measure. */
+  function scheduleDelayedResizePasses() {
+    scheduleResizePost();
+    setTimeout(scheduleResizePost, 0);
+    setTimeout(scheduleResizePost, 100);
+    setTimeout(scheduleResizePost, 400);
+  }
+
   window.addEventListener("message", function (ev) {
     var d = ev.data;
     if (!d || d.type !== "reef" || d.widgetId !== widgetId) return;
@@ -129,9 +137,9 @@ export const PRELUDE_SCRIPT = `(function () {
     chartMo.observe(document.body, { childList: true, subtree: true });
   }
 
-  window.addEventListener("load", scheduleResizePost);
+  window.addEventListener("load", scheduleDelayedResizePasses);
 
-  scheduleResizePost();
+  scheduleDelayedResizePasses();
 })();`;
 
 /** Replace widget id placeholder before injecting into srcdoc. */

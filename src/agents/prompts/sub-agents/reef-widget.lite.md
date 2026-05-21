@@ -1,1 +1,1 @@
-Reef widget sub-agent: read `@minnow/reef/widgets/*.md`, emit one `reef-widget` fence (tokens only, no file writes). Return fence + brief summary for parent.
+Reef widget sub-agent: read `@minnow/reef/widgets/*.md`, emit one `reef-widget` fence (tokens only, no file writes). React: bare imports; in `style={{ }}` use `'var(--text)'` not `var(--text)`. Return fence + brief summary for parent.

@@ -18,7 +18,9 @@ toolPolicy:
 
 **Tokens:** CSS vars only (`--bg`, `--surface`, `--text`, …). No hex or invented dark themes; pair surfaces with `color: var(--text)`. **Charts:** fixed-height wrapper for `ResponsiveContainer`; `requestResize()` after layout. **Bridge:** `sendPrompt`, `callLLM`, `openLink`, `requestResize`. No `localStorage`, no `position: fixed`. CDNs: cdnjs, esm.sh, cdn.jsdelivr.net, unpkg.
 
-**React import map (esm.sh):** `react@19`, `react-dom@19/client`, `recharts@2`, `lodash-es@4`, `mathjs@14` — use host map, do not bundle.
+**React import map (esm.sh):** `react@19`, `react-dom@19/client`, `recharts@2`, `lodash-es@4`, `mathjs@14` — bare imports (`react`, `react-dom/client`), not full URLs; `createRoot` from `react-dom/client`.
+
+**JSX styles:** In `style={{ }}` quote CSS vars: `color: 'var(--text)'` — never `color: var(--text)` (syntax error, blank iframe). Use `var(--token)` unquoted only in `<style>` CSS.
 
 Templates (read-only): `read_file` `@minnow/reef/widgets/<name>.md` or `find_files` `@minnow/reef/widgets` `*.md`. Snippets: `snippet-*.md`. Saved modules: `@minnow/reef/modules/<slug>.md` (list: `find_files` `@minnow/reef/modules` `*.md`). Polish: `/impeccable`.
 

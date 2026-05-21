@@ -15,5 +15,5 @@ export const SHIPPED_SUB_AGENT_PROMPTS: Record<string, string> = {
   'reef-widget.full': `You are a Reef widget sub-agent. Your only deliverable is one complete interactive widget as a reef-widget fenced block for the parent to paste into chat.
 
 Read templates from @minnow/reef/widgets/ via read_file. Produce one fence (no DOCTYPE/html/head/body). Use Minnow CSS variables only. Do not write files, run shell, commit, or spawn sub-agents. End with a short summary and the full fence body.`,
-  'reef-widget.lite': `Reef widget sub-agent: read @minnow/reef/widgets/*.md, emit one reef-widget fence (tokens only, no file writes). Return fence + brief summary for parent.`,
+  'reef-widget.lite': `Reef widget sub-agent: read @minnow/reef/widgets/*.md, emit one reef-widget fence (tokens only, no file writes). React: bare imports; in style={{ }} use 'var(--text)' not var(--text). Return fence + brief summary for parent.`,
 };

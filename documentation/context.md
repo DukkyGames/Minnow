@@ -352,6 +352,10 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 **Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` / `.mw-chart` â†’ 220px tall) and the prelude sizes chart wrappers plus parents of `.recharts-responsive-container` when height collapses to ~0 (including after async ESM load via `MutationObserver`). Widgets should use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout. **`reef-widget` fences are not passed to highlight.js** â€” mount runs before hljs so the unknown `reef-widget` language warnings do not spam the console during stream or after mount.
 
+**JSX guard:** Before Babel, the iframe runner auto-quotes `color: var(--text)` â†’ `color: 'var(--text)'` in widget scripts (`widget-jsx-guard.ts`); prompts tell models to quote tokens in `style={{ }}` (bare `var()` is valid only in `<style>` CSS).
+
+**Iframe height:** Prelude posts resize on load plus delayed passes (0 / 100 / 400 ms) so dynamic vanilla DOM and async React/Recharts still expand the host iframe; widgets should still call `requestResize()` after tab/layout changes.
+
 **Tests:** `test/chat/reef/*.test.mts`, `test/chat/reef/*.test.mjs` (template/snippet conventions, `reef-prompts-catalog.test.mjs`, `reef-save-prompt.test.mjs`). Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md), expansion: [`documentation/plans/reef-widget-library-expansion.md`](plans/reef-widget-library-expansion.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 
 **Send path:** `buildComposeContext()` sets `modeId` (and `orchestratePlanPath` when mode is Orchestrate) from active chat â†’ `composeSystemPrompt()` loads `kind: mode` fragment with `{{orchestrate_plan}}` where applicable â†’ `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.

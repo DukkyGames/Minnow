@@ -4,6 +4,7 @@
 
 import { REEF_WIDGET_BASELINE_CSS } from './widget-baseline-styles.ts';
 import { buildThemeCssBlock, readThemeVarsFromHost } from './theme-forward.ts';
+import { REEF_JSX_CSS_VAR_GUARD_NOTE } from './widget-jsx-guard.ts';
 import { injectWidgetIdIntoPrelude, PRELUDE_SCRIPT } from './widget-prelude.ts';
 
 /** CDN hosts allowed in widget CSP (matches reef.full.md). */
@@ -72,20 +73,29 @@ function markModuleScriptsAsJsx(html: string): string {
  */
 function buildJsxRunnerScript(specifierMap: Record<string, string>): string {
   const mapJson = JSON.stringify(specifierMap);
+  const guardNoteJson = JSON.stringify(REEF_JSX_CSS_VAR_GUARD_NOTE);
   /* eslint-disable no-useless-escape */
   return `(function(){
 var __im=${mapJson};
+var __guardNote=${guardNoteJson};
 function __res(c){
   return c
     .replace(/\\bfrom\\s+(["'])([\\w@][^"']*)\\1/g,function(m,q,s){return 'from "'+(__im[s]||s)+'"';})
     .replace(/\\bimport\\s+(["'])([\\w@][^"']*)\\1/g,function(m,q,s){return 'import "'+(__im[s]||s)+'"';});
+}
+function __quoteCssVarsInJsx(src){
+  var n=0;
+  var out=src.replace(/:\\s*var\\((--[\\w-]+)\\)/g,function(m,t){n++;return ": 'var("+t+")'";});
+  if(n>0) console.warn(__guardNote+' ('+n+' fix'+(n===1?'':'es')+')');
+  return out;
 }
 function __run(){
   if(typeof Babel==='undefined'){console.warn('[reef] Babel not loaded; JSX widgets skipped.');return;}
   var ss=document.querySelectorAll('script[type="text/jsx"]');
   for(var i=0;i<ss.length;i++){(function(s){
     try{
-      var out=Babel.transform(s.textContent,{presets:[['react',{runtime:'classic'}]]});
+      var src=__quoteCssVarsInJsx(s.textContent);
+      var out=Babel.transform(src,{presets:[['react',{runtime:'classic'}]]});
       var src=__res(out.code);
       var blob=new Blob([src],{type:'text/javascript'});
       var url=URL.createObjectURL(blob);

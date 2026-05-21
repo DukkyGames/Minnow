@@ -32,6 +32,18 @@ describe('widget-iframe', () => {
     assert.match(srcdoc, /\.mw-chart/);
     assert.match(srcdoc, /min-height: 220px/);
     assert.match(srcdoc, /ensureChartParentsSized/);
+    assert.match(srcdoc, /scheduleDelayedResizePasses/);
+    assert.match(srcdoc, /setTimeout\(scheduleResizePost, 400\)/);
+  });
+
+  test('JSX srcdoc includes css var guard before Babel', () => {
+    const srcdoc = buildReefWidgetSrcdoc({
+      widgetHtml: '<div id="r"></div><script type="module">export default <span className="x"/>;</script>',
+      widgetId: 'jsx-guard',
+      themeVars: { '--bg': '#eee' },
+    });
+    assert.match(srcdoc, /__quoteCssVarsInJsx/);
+    assert.match(srcdoc, /text\/jsx/);
   });
 
   test('import map pins curated libraries', () => {
