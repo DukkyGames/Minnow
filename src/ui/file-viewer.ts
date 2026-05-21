@@ -188,7 +188,7 @@ function mountMarkdownPreview(content: string): void {
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
     banner.textContent =
-      `Read-only preview — file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
+      `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
     host.appendChild(banner);
   }
 
@@ -211,7 +211,7 @@ function mountEditor(content: string, path: string): void {
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
     banner.textContent =
-      `Read-only preview — file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
+      `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
     host.appendChild(banner);
   }
 

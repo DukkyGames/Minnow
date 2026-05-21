@@ -26,7 +26,6 @@ export function getViteOnlyFallbackProvider(): ProviderPublic {
     baseUrl,
     apiKind: 'lm-studio-v0',
     enabled: true,
-    connectionMode: 'direct',
     hasApiKey: false,
     hasBearer: false,
   };

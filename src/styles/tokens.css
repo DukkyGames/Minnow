@@ -8,7 +8,8 @@
   --border: oklch(28.094% 0.00003 271.152);
   --border-strong: oklch(0.34 0.028 250);
   --text: oklch(31.714% 0.00004 271.152);
-  --text-muted: oklch(0.62 0.025 250);
+  /* Slightly darker than 0.62 for WCAG AA body/label contrast on --bg */
+  --text-muted: oklch(0.52 0.028 250);
   /* On ink accent buttons and on dark hover veils */
   --text-hover: oklch(100% 0.00011 271.152);
   --accent: oklch(0% 0 0);
@@ -76,6 +77,10 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Motion timing (product UI: 150–250ms state feedback) */
+  --duration-fast: 0.15s;
+  --duration-normal: 0.22s;
+  --duration-slow: 0.35s;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   /* Layout breakpoints (content-driven; used in @media below) */

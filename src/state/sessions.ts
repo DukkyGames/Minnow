@@ -18,10 +18,38 @@ import {
 } from './session-workspace-scope';
 import { setStatus } from '../ui/status';
 import { getWorkspacePath } from './workspace';
-import {
-  clearStalePendingTurnsOnLoad,
-  ensurePendingTurn,
-} from './pending-turn-shape';
+const GENERATION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Normalize persisted backend generation id (invalid values are dropped). */
+function ensureCurrentGenerationId(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim();
+  return GENERATION_ID_RE.test(id) ? id : undefined;
+}
+
+/**
+ * Drop generation ids that cannot still be in-flight (finished assistant already saved).
+ */
+export function clearStaleGenerationIdsOnLoad(chats: Chat[]): void {
+  for (const chat of chats) {
+    const id = ensureCurrentGenerationId(chat.currentGenerationId);
+    if (!id) {
+      if (chat.currentGenerationId != null) {
+        delete chat.currentGenerationId;
+      }
+      continue;
+    }
+    chat.currentGenerationId = id;
+    const last = chat.history[chat.history.length - 1];
+    if (last?.role === 'assistant') {
+      const text = typeof last.content === 'string' ? last.content.trim() : '';
+      if (text.length > 0) {
+        delete chat.currentGenerationId;
+      }
+    }
+  }
+}
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
@@ -373,7 +401,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ? raw.history.map(ensureMessageEntry).filter((x): x is Message => Boolean(x))
     : [];
   const subAgentRuns = ensurePersistedSubAgentRuns(raw.subAgentRuns);
-  const pendingTurn = ensurePendingTurn(raw.pendingTurn);
+  const currentGenerationId = ensureCurrentGenerationId(raw.currentGenerationId);
   const workspacePath =
     typeof raw.workspacePath === 'string'
       ? normalizeWorkspacePath(raw.workspacePath)
@@ -408,7 +436,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     ...(subAgentRuns ? { subAgentRuns } : {}),
-    ...(pendingTurn ? { pendingTurn } : {}),
+    ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(raw.unread === true ? { unread: true } : {}),
     ...(typeof raw.lastAssistantAt === 'number' &&
     Number.isFinite(raw.lastAssistantAt) &&
@@ -440,7 +468,7 @@ export function migrateSessionStateV1ToV2(parsed: RawSessionJson): SessionState 
     (c) => ensureChatShape(c as Partial<Chat>),
     () => createEmptyChatObject(''),
   );
-  clearStalePendingTurnsOnLoad(state.chats);
+  clearStaleGenerationIdsOnLoad(state.chats);
   return state;
 }
 

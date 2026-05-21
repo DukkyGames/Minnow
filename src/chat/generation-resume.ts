@@ -60,7 +60,7 @@ export async function bootGenerationResumeForChat(
 
   const modelId = getSelectedModelIdFromDom();
   if (!modelId) {
-    setStatus('err', 'Select a model to resume');
+    setStatus('err', 'Select a model to resume this reply');
     return;
   }
 

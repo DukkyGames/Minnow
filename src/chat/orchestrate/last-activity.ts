@@ -3,7 +3,7 @@
  */
 
 import { describeToolInvocation } from '../../tools/describe-invocation';
-import type { Chat, PendingTurn, ToolCall } from '../../types';
+import type { Chat } from '../../types';
 
 /** Chip label length; CSS may ellipsis further in narrow headers. */
 const PREVIEW_MAX = 240;
@@ -32,54 +32,10 @@ function parseToolArgs(raw: string): Record<string, unknown> {
   }
 }
 
-function lastToolFromCalls(toolCalls?: ToolCall[]): { name: string; label: string } | null {
-  if (!toolCalls?.length) return null;
-  const tc = toolCalls[toolCalls.length - 1];
-  const name = tc.function?.name?.trim() ?? '';
-  if (!name) return null;
-  const args = parseToolArgs(tc.function.arguments ?? '{}');
-  return { name, label: describeToolInvocation(name, args).title };
-}
-
 function truncatePreview(text: string, max = PREVIEW_MAX): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   if (!flat) return '';
   return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
-}
-
-function activityFromPending(pending: PendingTurn): OrchestratorActivity | null {
-  if (pending.phase === 'thinking') {
-    return {
-      kind: 'thinking',
-      text: 'Thinking…',
-      title: 'Orchestrator is reasoning',
-    };
-  }
-
-  const tool = lastToolFromCalls(pending.toolCalls);
-  if (pending.phase === 'tools' || tool) {
-    const label = tool?.label ?? 'Running tools…';
-    return {
-      kind: 'tool',
-      text: label,
-      title: tool ? `Tool: ${tool.name}` : 'Executing tools',
-    };
-  }
-
-  const prose = pending.content?.trim();
-  if (prose) {
-    return {
-      kind: 'message',
-      text: truncatePreview(prose),
-      title: prose,
-    };
-  }
-
-  return {
-    kind: 'waiting',
-    text: 'Generating…',
-    title: 'Waiting for model output',
-  };
 }
 
 /** Latest orchestrator tool or message for the board header activity chip. */
@@ -87,16 +43,12 @@ export function deriveOrchestratorLastActivity(
   chat: Chat,
   isStreaming: boolean,
 ): OrchestratorActivity | null {
-  const pending = chat.pendingTurn;
-  if (isStreaming && pending) {
-    return activityFromPending(pending);
-  }
-
-  if (pending?.stopped) {
-    const fromPending = activityFromPending(pending);
-    if (fromPending && fromPending.kind !== 'waiting') {
-      return fromPending;
-    }
+  if (isStreaming) {
+    return {
+      kind: 'waiting',
+      text: 'Generating…',
+      title: 'Waiting for model output',
+    };
   }
 
   for (let i = chat.history.length - 1; i >= 0; i--) {
@@ -104,12 +56,15 @@ export function deriveOrchestratorLastActivity(
     if (msg.role !== 'assistant') continue;
 
     if ('tool_calls' in msg && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
-      const tool = lastToolFromCalls(msg.tool_calls);
-      if (tool) {
+      const tc = msg.tool_calls[msg.tool_calls.length - 1];
+      const name = tc.function?.name?.trim() ?? '';
+      if (name) {
+        const args = parseToolArgs(tc.function.arguments ?? '{}');
+        const label = describeToolInvocation(name, args).title;
         return {
           kind: 'tool',
-          text: tool.label,
-          title: `Last tool: ${tool.name}`,
+          text: label,
+          title: `Last tool: ${name}`,
         };
       }
     }

@@ -163,7 +163,9 @@ export function syncViewModeToggleFromActiveChat(): void {
 
   const boardBtn = getBoardToggleButton();
   if (boardBtn) {
-    boardBtn.hidden = !enabled || boardActive;
+    const showBoardToggle = enabled && !boardActive;
+    boardBtn.hidden = !showBoardToggle;
+    boardBtn.classList.toggle('hidden', !showBoardToggle);
     wireViewToggleButton(boardBtn, 'board');
   }
 

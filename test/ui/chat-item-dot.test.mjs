@@ -74,21 +74,16 @@ describe('chat-item-dot resolveChatItemDotState', () => {
     assert.equal(resolveChatItemDotState(chat({}), ctx), 'thinking');
   });
 
-  test('active chat with pendingTurn phase thinking shows thinking when not streaming', () => {
+  test('active chat with currentGenerationId in thinking phase shows thinking when not streaming', () => {
     const ctx = {
       activeChatId: 'chat-a',
       streaming: false,
       streamingChatId: null,
-      streamPhase: null,
+      streamPhase: 'thinking',
       inputPendingChatId: null,
     };
     const c = chat({
-      pendingTurn: {
-        role: 'assistant',
-        content: '',
-        startedAt: 1,
-        phase: 'thinking',
-      },
+      currentGenerationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     });
     assert.equal(resolveChatItemDotState(c, ctx), 'thinking');
   });

@@ -55,7 +55,7 @@
   width: 18px;
   height: 18px;
   color: var(--text-muted);
-  transition: transform 0.22s var(--ease-out);
+  transition: transform var(--duration-normal) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -190,9 +190,11 @@
 
 .token-fill {
   height: 100%;
+  width: 100%;
   border-radius: 3px;
-  width: 0%;
-  transition: width 0.5s var(--ease-out);
+  transform: scaleX(var(--fill-scale, 0));
+  transform-origin: left center;
+  transition: transform var(--duration-slow) var(--ease-out);
 }
 
 .token-fill.prompt { background: var(--warning); }

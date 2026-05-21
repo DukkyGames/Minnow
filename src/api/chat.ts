@@ -18,7 +18,6 @@ import {
   isFirstUserMessagePending,
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
-import { clearPendingTurn } from '../state/pending-turn';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -35,7 +34,7 @@ import type {
   ToolCallAccumulator,
   Usage,
 } from '../types';
-import { finalizeStoppedTurn } from '../chat/finalize-stopped-turn';
+import { markMessageStopped } from '../ui/stopped-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
   setComposerStreamingMode,
@@ -46,6 +45,7 @@ import {
   appendStats,
   appendStreamingAssistantRow,
   revealAssistantProseBubble,
+  setAssistantErrorBubble,
 } from '../ui/messages';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
@@ -496,7 +496,6 @@ export async function sendMessage(): Promise<void> {
       }
       chat.history.push(assistantMsg);
       recordAssistantReplyOnChat(chat);
-      clearPendingTurn(chat);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
       chat.modelId =
@@ -518,26 +517,47 @@ export async function sendMessage(): Promise<void> {
     if (e && e.name === 'AbortError') {
       thinkingTracker.abort();
       streamStatus.setThinkingElapsed(null);
-      finalizeStoppedTurn({
-        chat,
-        wrap,
-        bubble,
-        cursor,
-        streamStatus,
-        thoughtController,
-        partialText: fullText,
-        startedAt: t0,
-        modelId: modelId || chat.modelId,
-        providerId: chat.providerId,
-      });
+      cancelAssistantBubbleRenderDebounce();
+      if (cursor.parentElement) cursor.remove();
+      thoughtController.abort();
+
+      const text = fullText.trim();
+      const thinkingNorm = thoughtController.getSegmentsNormalized();
+      if (text && wrap.isConnected) {
+        wrap.classList.remove('msg--awaiting-prose');
+        bubble.classList.remove('msg-bubble--awaiting');
+        setAssistantBubbleContent(bubble, text, { streaming: false, modeId: chat.modeId });
+        markMessageStopped(wrap);
+      } else if (wrap.isConnected && wrap.classList.contains('msg--awaiting-prose')) {
+        wrap.remove();
+      }
+
+      if (text || thinkingNorm.length > 0) {
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: text || thinkingNorm.join('\n\n'),
+          stopped: true,
+        };
+        if (thinkingNorm.length > 0) {
+          assistantMsg.thinking = thinkingNorm;
+        }
+        chat.history.push(assistantMsg);
+        recordAssistantReplyOnChat(chat);
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+      }
+
+      streamStatus.dispose();
+      setStatus('ok', 'Stopped');
       return;
     }
     cancelAssistantBubbleRenderDebounce();
     cursor.remove();
     revealProse();
-    bubble.classList.remove('msg-bubble--md');
-    bubble.textContent = `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
-    bubble.style.color = 'var(--red)';
+    setAssistantErrorBubble(
+      bubble,
+      `Could not complete this reply: ${e.message ?? 'Unknown error'}`,
+    );
     const msg = e.message ?? '';
     const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
     setStatus('err', statusMsg);

@@ -25,14 +25,33 @@ function getWorkspaceButton(): HTMLButtonElement | null {
   return document.getElementById('btnWorkspace') as HTMLButtonElement | null;
 }
 
-/** Reflect current workspace on the top bar button. */
+function getWorkspacePathLabel(): HTMLElement | null {
+  return document.getElementById('workspacePathLabel');
+}
+
+/** Reflect current workspace on the top bar button and path label. */
 export function updateWorkspaceButtonLabel(label: string, fullPath: string): void {
   const btn = getWorkspaceButton();
   if (!btn) return;
   const short = label.trim() || 'Workspace';
-  btn.title = fullPath ? `Workspace: ${fullPath}` : 'Choose workspace folder';
+  const path = fullPath.trim();
+  btn.title = path ? `Workspace: ${path}` : 'Choose workspace folder';
   btn.setAttribute('aria-label', `Workspace: ${short}. Click to open recent workspaces.`);
   btn.setAttribute('aria-haspopup', 'menu');
+
+  const pathLabel = getWorkspacePathLabel();
+  if (!pathLabel) return;
+  if (path) {
+    pathLabel.textContent = path;
+    pathLabel.title = path;
+    pathLabel.hidden = false;
+    btn.setAttribute('aria-describedby', 'workspacePathLabel');
+  } else {
+    pathLabel.textContent = '';
+    pathLabel.removeAttribute('title');
+    pathLabel.hidden = true;
+    btn.removeAttribute('aria-describedby');
+  }
 }
 
 /**

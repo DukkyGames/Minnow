@@ -1,0 +1,21 @@
+/**
+ * Shared motion primitives: state feedback only (no page-load choreography).
+ */
+
+@keyframes minnow-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-approval-panel,
+  .question-cards-panel {
+    animation: none;
+  }
+}

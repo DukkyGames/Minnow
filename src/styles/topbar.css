@@ -15,7 +15,7 @@
   z-index: 40;
 }
 
-/* Topbar zones: brand | actions | spacer | end (model + status) */
+/* Topbar zones: brand | end (model + status) | spacer | actions */
 .topbar-brand {
   display: flex;
   align-items: center;
@@ -146,6 +146,11 @@
   outline-offset: 2px;
 }
 
+/* Refresh sits in the model row, immediately left of the model picker */
+.model-refresh-btn {
+  flex-shrink: 0;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .model-action-btn:hover:not(:disabled) {
     border-color: var(--accent);
@@ -201,6 +206,23 @@
   }
 }
 
+.workspace-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(28rem, 42vw);
+}
+
+.workspace-path-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .workspace-btn .icon-svg {
   width: 18px;
   height: 18px;
@@ -223,7 +245,6 @@
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
-  min-width: 0;
 }
 
 .s-dot {

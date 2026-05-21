@@ -19,7 +19,7 @@ import {
   applySidebarVisuals,
   closeMobileSidebar,
 } from './layout';
-import { bootTurnRecoveryForChat } from '../chat/turn-recovery';
+import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -154,7 +154,7 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   dot.className = 'chat-item-dot';
   dot.setAttribute('aria-hidden', 'true');
   const dotCtx = getChatItemDotContext(activeId);
-  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx));
+  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), row);
   titleRow.appendChild(dot);
 
   const nameSpan = document.createElement('span');
@@ -342,7 +342,7 @@ export function switchChat(id: string): void {
   recordChatOpened(id);
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
-  void bootTurnRecoveryForChat(chat);
+  void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();
@@ -404,7 +404,7 @@ export function createChatWithMode(
   if (!initial) touchChat(chat);
   recordChatOpened(chat.id);
   renderChatFromHistory(chat);
-  void bootTurnRecoveryForChat(chat);
+  void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncExpertSelectForActiveChat();

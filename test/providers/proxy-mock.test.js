@@ -88,7 +88,6 @@ describe('provider CRUD + proxy', () => {
       label: 'Mock Remote',
       baseUrl: mockBaseUrl,
       apiKind: 'lm-studio-v0',
-      connectionMode: 'proxy',
     });
     assert.equal(create.status, 201);
     assert.equal(create.json.id, 'mock-remote-fixed');
@@ -167,7 +166,6 @@ describe('provider CRUD + proxy', () => {
       label: 'OpenAI',
       baseUrl: mockBaseUrl,
       apiKind: 'openai-v1',
-      connectionMode: 'proxy',
       supportsModelLoadUnload: false,
     });
     assert.equal(create.status, 201);
@@ -182,8 +180,7 @@ describe('provider CRUD + proxy', () => {
     assert.match(load.json.error, /does not support model load\/unload/);
   });
 
-  it('proxy chat forwards POST with auth', async () => {
-    lastMockHeaders = {};
+  it('provider chat/completions route is removed (chat uses /api/generations)', async () => {
     const chat = await httpRequest(
       baseUrl,
       'POST',
@@ -194,8 +191,7 @@ describe('provider CRUD + proxy', () => {
         stream: true,
       },
     );
-    assert.equal(chat.status, 200);
-    assert.equal(lastMockHeaders.authorization, `Bearer ${FIXED_KEY}`);
+    assert.equal(chat.status, 404);
   });
 
   it('rejects deleting last provider', async () => {

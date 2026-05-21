@@ -68,59 +68,6 @@ function newChatId() {
   return `c_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-/** Validate in-flight assistant checkpoint (mirror src/state/pending-turn.ts). */
-function ensurePendingTurn(raw) {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = /** @type {Record<string, unknown>} */ (raw);
-  if (row.role !== 'assistant') return undefined;
-  const startedAt = row.startedAt;
-  if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) {
-    return undefined;
-  }
-  const content = typeof row.content === 'string' ? row.content : '';
-  const out = { role: 'assistant', content, startedAt };
-  if (Array.isArray(row.thinking)) {
-    const thinking = row.thinking
-      .filter((s) => typeof s === 'string' && s.trim())
-      .map((s) => String(s).trim());
-    if (thinking.length) out.thinking = thinking;
-  }
-  if (Array.isArray(row.toolCalls)) {
-    const toolCalls = row.toolCalls.filter(
-      (tc) =>
-        tc &&
-        typeof tc === 'object' &&
-        typeof tc.id === 'string' &&
-        tc.function &&
-        typeof tc.function.name === 'string',
-    );
-    if (toolCalls.length) out.toolCalls = toolCalls;
-  }
-  if (typeof row.modelId === 'string' && row.modelId) out.modelId = row.modelId;
-  if (typeof row.providerId === 'string' && row.providerId) {
-    out.providerId = row.providerId;
-  }
-  if (
-    row.phase === 'streaming' ||
-    row.phase === 'tools' ||
-    row.phase === 'thinking'
-  ) {
-    out.phase = row.phase;
-  }
-  if (typeof row.toolRound === 'number' && Number.isInteger(row.toolRound) && row.toolRound >= 0) {
-    out.toolRound = row.toolRound;
-  }
-  if (row.stopped === true) out.stopped = true;
-  if (
-    typeof row.thinkingDurationMs === 'number' &&
-    Number.isFinite(row.thinkingDurationMs) &&
-    row.thinkingDurationMs >= 0
-  ) {
-    out.thinkingDurationMs = row.thinkingDurationMs;
-  }
-  return out;
-}
-
 const BOARD_TASK_STATUSES = new Set([
   'planned',
   'in_progress',
@@ -202,6 +149,16 @@ function ensureViewMode(raw) {
   return raw === 'chat' || raw === 'board' ? raw : undefined;
 }
 
+const GENERATION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Persisted backend generation id for reload re-subscribe. */
+function ensureCurrentGenerationId(raw) {
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim();
+  return GENERATION_ID_RE.test(id) ? id : undefined;
+}
+
 function ensureChatShape(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -233,7 +190,7 @@ function ensureChatShape(raw) {
       ? normalizeWorkspacePath(row.workspacePath)
       : '';
 
-  const pendingTurn = ensurePendingTurn(row.pendingTurn);
+  const currentGenerationId = ensureCurrentGenerationId(row.currentGenerationId);
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
@@ -257,7 +214,7 @@ function ensureChatShape(raw) {
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
-    ...(pendingTurn ? { pendingTurn } : {}),
+    ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(row.unread === true ? { unread: true } : {}),
     ...(typeof row.lastAssistantAt === 'number' &&
     Number.isFinite(row.lastAssistantAt) &&

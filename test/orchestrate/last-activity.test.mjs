@@ -10,26 +10,11 @@ const { deriveOrchestratorLastActivity } = await import(
 );
 
 describe('deriveOrchestratorLastActivity', () => {
-  test('returns tool label from pending turn while streaming', () => {
-    const chat = {
-      history: [],
-      pendingTurn: {
-        role: 'assistant',
-        content: '',
-        startedAt: 1,
-        phase: 'tools',
-        toolCalls: [
-          {
-            id: 'tc-1',
-            type: 'function',
-            function: { name: 'board_get_state', arguments: '{}' },
-          },
-        ],
-      },
-    };
+  test('returns generating label while streaming', () => {
+    const chat = { history: [] };
     const activity = deriveOrchestratorLastActivity(chat, true);
-    assert.equal(activity?.kind, 'tool');
-    assert.equal(activity?.text, 'Board get state');
+    assert.equal(activity?.kind, 'waiting');
+    assert.equal(activity?.text, 'Generating…');
   });
 
   test('returns last assistant message from history when idle', () => {
@@ -41,7 +26,6 @@ describe('deriveOrchestratorLastActivity', () => {
           content: 'Continuing with wave two of the plan.',
         },
       ],
-      pendingTurn: null,
     };
     const activity = deriveOrchestratorLastActivity(chat, false);
     assert.equal(activity?.kind, 'message');

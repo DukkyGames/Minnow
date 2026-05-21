@@ -136,7 +136,8 @@ button.board-header__activity {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: max-content;
   max-width: min(42rem, 62vw);
   min-width: 0;
   padding: 3px 9px;
@@ -152,9 +153,11 @@ button.board-header__activity {
     background 0.2s var(--ease-out);
 }
 
-.board-header__activity:hover {
-  border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
-  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+@media (hover: hover) and (pointer: fine) {
+  .board-header__activity:hover {
+    border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+    background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+  }
 }
 
 .board-header__activity:focus-visible {
@@ -171,6 +174,8 @@ button.board-header__activity {
 }
 
 .board-header__activity-text {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -225,9 +230,12 @@ button.board-header__activity {
 
 .board-header__progress-fill {
   height: 100%;
+  width: 100%;
   background: var(--accent);
   border-radius: 999px;
-  transition: width var(--ease-out);
+  transform: scaleX(var(--progress-scale, 0));
+  transform-origin: left center;
+  transition: transform var(--duration-normal) var(--ease-out);
 }
 
 .board-header__controls {
@@ -351,11 +359,18 @@ button.board-header__activity {
   cursor: pointer;
 }
 
-.board-task-card--clickable:hover,
 .board-task-card--clickable:focus-visible {
   border-color: var(--accent);
   outline: none;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-task-card--clickable:hover {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
 }
 
 .board-task-card__head {
@@ -474,5 +489,61 @@ button.board-header__activity {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* Tablet: two-lane kanban before desktop four-up */
+@media (max-width: 899px) {
+  .kanban-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phone: stack header controls; swipe lanes instead of four squeezed columns */
+@media (max-width: 600px) {
+  .board-header__toolbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .board-header__leading {
+    flex: 1 1 100%;
+  }
+
+  .board-header__activity {
+    max-width: 100%;
+  }
+
+  .board-header__controls {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .board-btn {
+    min-height: var(--touch-min);
+    flex: 1 1 auto;
+  }
+
+  .kanban-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .kanban-column {
+    flex: 0 0 min(78vw, 280px);
+    scroll-snap-align: start;
+    max-height: min(52vh, 420px);
+  }
+
+  .kanban-column__list {
+    overflow-y: auto;
+  }
 }
 

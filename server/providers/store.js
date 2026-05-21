@@ -12,7 +12,6 @@ import {
   validateApiKind,
   validateAuthStyle,
   validateBaseUrl,
-  validateConnectionMode,
   validateProviderId,
 } from './validate.js';
 
@@ -61,7 +60,6 @@ export function toProviderPublic(profile, flags) {
     baseUrl: profile.baseUrl,
     apiKind: profile.apiKind,
     enabled: profile.enabled !== false,
-    connectionMode: profile.connectionMode,
     authStyle: profile.authStyle || 'bearer',
     modelsPath: profile.modelsPath,
     chatCompletionsPath: profile.chatCompletionsPath,
@@ -172,22 +170,6 @@ export async function setActiveProviderId(id) {
 }
 
 /**
- * Infer connection mode: localhost → direct, else proxy.
- * @param {string} baseUrl
- */
-function defaultConnectionMode(baseUrl) {
-  try {
-    const host = new URL(baseUrl).hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
-      return 'direct';
-    }
-  } catch {
-    /* fall through */
-  }
-  return 'proxy';
-}
-
-/**
  * @param {string} [legacyServerUrl]
  */
 async function seedLmStudioLocal(legacyServerUrl) {
@@ -200,7 +182,6 @@ async function seedLmStudioLocal(legacyServerUrl) {
     baseUrl,
     apiKind: 'lm-studio-v0',
     enabled: true,
-    connectionMode: defaultConnectionMode(baseUrl),
     authStyle: 'bearer',
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
@@ -331,9 +312,6 @@ export async function createProvider(body) {
 
   const apiKind = validateApiKind(body.apiKind || 'lm-studio-v0');
   const baseUrl = validateBaseUrl(body.baseUrl);
-  const connectionMode = validateConnectionMode(
-    body.connectionMode || defaultConnectionMode(baseUrl),
-  );
   const authStyle = validateAuthStyle(body.authStyle);
   const paths = getDefaultPaths(apiKind, body);
   const caps = getProviderCapabilities(apiKind);
@@ -345,7 +323,6 @@ export async function createProvider(body) {
     baseUrl,
     apiKind,
     enabled: body.enabled !== false,
-    connectionMode,
     authStyle,
     modelsPath: body.modelsPath || paths.modelsPath,
     chatCompletionsPath: body.chatCompletionsPath || paths.chatCompletionsPath,
@@ -396,9 +373,6 @@ export async function updateProvider(id, body) {
   } else {
     if (body.modelsPath) profile.modelsPath = body.modelsPath;
     if (body.chatCompletionsPath) profile.chatCompletionsPath = body.chatCompletionsPath;
-  }
-  if (body.connectionMode !== undefined) {
-    profile.connectionMode = validateConnectionMode(body.connectionMode);
   }
   if (body.enabled !== undefined) {
     profile.enabled = Boolean(body.enabled);

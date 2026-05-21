@@ -31,22 +31,41 @@ describe('topbar layout (feature-01)', () => {
     assert.match(html, new RegExp(`class="${fixture.spacer}"`));
   });
 
-  test('T3: all action buttons live between topbar-actions and topbar-end', () => {
-    const actionsBlock = sliceBetween(html, 'class="topbar-actions"', 'class="topbar-spacer"');
+  test('T3: topbar DOM order is brand, end, spacer, actions', () => {
+    const header = sliceBetween(html, '<header class="topbar">', '</header>');
+    const brandIdx = header.indexOf('class="topbar-brand"');
+    const endIdx = header.indexOf('class="topbar-end"');
+    const spacerIdx = header.indexOf(`class="${fixture.spacer}"`);
+    const actionsIdx = header.indexOf('class="topbar-actions"');
+    assert.ok(brandIdx >= 0 && endIdx > brandIdx && spacerIdx > endIdx && actionsIdx > spacerIdx);
+  });
+
+  test('T3b: action buttons live in topbar-actions after spacer', () => {
+    const actionsBlock = sliceBetween(html, 'class="topbar-actions"', '</header>');
     for (const id of fixture.actionButtonIds) {
       assert.match(actionsBlock, new RegExp(`id="${id}"`));
     }
+    assert.match(actionsBlock, new RegExp(`id="${fixture.workspacePathLabelId}"`));
+    assert.match(actionsBlock, /class="workspace-control"/);
+    const pathIdx = actionsBlock.indexOf(`id="${fixture.workspacePathLabelId}"`);
+    const btnIdx = actionsBlock.indexOf('id="btnWorkspace"');
+    assert.ok(pathIdx >= 0 && btnIdx > pathIdx, 'workspace path precedes workspace button');
     assert.doesNotMatch(actionsBlock, /class="model-wrap"/);
     assert.doesNotMatch(actionsBlock, /id="modelSelect"/);
   });
 
-  test('T4–T5: model and status inside topbar-end', () => {
-    const endBlock = sliceBetween(html, 'class="topbar-end"', '</header>');
+  test('T4–T5: model and status inside topbar-end before spacer', () => {
+    const endBlock = sliceBetween(html, 'class="topbar-end"', `class="${fixture.spacer}"`);
     for (const id of fixture.endIds) {
       assert.match(endBlock, new RegExp(`id="${id}"`));
     }
     assert.match(endBlock, /class="status-pill"/);
     assert.match(endBlock, /class="model-wrap"/);
+    const refreshIdx = endBlock.indexOf('id="btnRefreshModels"');
+    const selectIdx = endBlock.indexOf('id="modelSelectRoot"');
+    const statusIdx = endBlock.indexOf('class="status-pill"');
+    assert.ok(refreshIdx >= 0 && selectIdx > refreshIdx, 'refresh precedes model select');
+    assert.ok(statusIdx > refreshIdx, 'status-pill follows refresh button');
     assert.match(endBlock, /data-model-state/);
     assert.match(endBlock, /class="model-state-dot model-load-dot"/);
     assert.match(endBlock, /id="modelSelectTrigger"/);

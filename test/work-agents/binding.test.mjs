@@ -10,7 +10,6 @@ const MOCK_PROVIDERS = [
     baseUrl: 'https://api.openai.com',
     apiKind: 'openai-v1',
     enabled: true,
-    connectionMode: 'proxy',
     hasApiKey: true,
     hasBearer: false,
   },
@@ -20,7 +19,6 @@ const MOCK_PROVIDERS = [
     baseUrl: 'http://localhost:1234',
     apiKind: 'lm-studio-v0',
     enabled: true,
-    connectionMode: 'direct',
     hasApiKey: false,
     hasBearer: false,
   },
@@ -82,7 +80,7 @@ describe('resolveWorkAgentBinding', () => {
     );
     assert.equal(binding.modelId, 'local-model');
     assert.equal(binding.providerId, 'lm-studio-local');
-    assert.equal(binding.baseUrl, 'http://localhost:1234');
+    assert.equal(binding.baseUrl, '');
   });
 
   test('override sets model only', async () => {

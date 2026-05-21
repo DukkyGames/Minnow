@@ -270,27 +270,6 @@ export interface OrchestrateBoardState {
   activeParentTurnId?: string;
 }
 
-/** In-flight assistant turn checkpoint (survives reload; not a history row). */
-export interface PendingTurn {
-  role: 'assistant';
-  /** Accumulated visible prose (markdown source). */
-  content: string;
-  /** Reasoning segments (same shape as AssistantMessage.thinking). */
-  thinking?: string[];
-  /** Finalized tool calls for the current incomplete assistant leg. */
-  toolCalls?: ToolCall[];
-  /** Epoch ms when the user message for this turn was committed. */
-  startedAt: number;
-  modelId?: string;
-  providerId?: string;
-  /** 0-based tool loop index when checkpointed during multi-round tool use. */
-  toolRound?: number;
-  phase?: 'streaming' | 'tools' | 'thinking';
-  /** Set when the user stopped generation before reload. */
-  stopped?: boolean;
-  thinkingDurationMs?: number;
-}
-
 export interface Chat {
   id: string;
   name: string;
@@ -325,8 +304,8 @@ export interface Chat {
   orchestrateBoard?: OrchestrateBoardState;
   /** Chat vs Board rendering for Orchestrate (default implicit chat). */
   viewMode?: 'chat' | 'board';
-  /** Checkpoint for an interrupted or in-progress assistant turn (feature 22). */
-  pendingTurn?: PendingTurn | null;
+  /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
+  currentGenerationId?: string;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
