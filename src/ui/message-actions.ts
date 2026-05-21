@@ -2,7 +2,7 @@
  * Per-message ⋮ menu: copy, edit, delete, regenerate, remake (Epic C2).
  */
 
-import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   indexOfUserBeforeBlock,
   truncateChatHistory,
@@ -44,7 +44,7 @@ export function closeMessageActionsMenu(): void {
 }
 
 function guardStreaming(): boolean {
-  if (!streaming) return false;
+  if (!isActiveChatStreaming()) return false;
   setStatus('spin', 'Finish or stop the current reply first');
   return true;
 }

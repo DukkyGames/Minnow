@@ -3,7 +3,7 @@
  */
 
 import { getMode } from '../modes/registry';
-import { isModeId } from '../modes/types';
+import { isModeId, type ModeId } from '../modes/types';
 import { interpolatePromptBody } from './interpolate';
 import { loadPromptById } from './prompt-loader';
 import type {
@@ -29,6 +29,15 @@ export const PART_ORDER: PromptPartId[] = [
 ];
 
 const PART_SEPARATOR = '\n\n---\n\n';
+
+/** Operating modes that receive the shared mode-handoff tool-usage fragment. */
+const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
+  'plan',
+  'build',
+  'research',
+  'orchestrate',
+  'reef',
+]);
 
 /** Lite truncation caps when no lite template exists. */
 const LITE_TRUNCATE_CAPS: Record<PromptPartId, number> = {
@@ -156,6 +165,17 @@ function resolvePartBody(
   return body;
 }
 
+/** Shared mode-switch / Reef handoff rules appended after default tool-usage. */
+function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (!modeId || !isModeId(modeId) || !MODE_HANDOFF_MODE_IDS.has(modeId)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'mode-handoff', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
   const includeSummary =
     profile !== 'lite' || ctx.includeChatHistorySummary === true;
@@ -210,6 +230,16 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
     const interpolated = interpolatePromptBody(rawBody, vars);
     if (interpolated.trim()) {
       sections.push(interpolated.trim());
+    }
+
+    if (partId === 'tool-usage') {
+      const handoffRaw = resolveModeHandoffBody(ctx, effectiveProfile === 'lite' ? 'lite' : 'full');
+      if (handoffRaw.trim()) {
+        const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);
+        if (handoffInterpolated.trim()) {
+          sections.push(handoffInterpolated.trim());
+        }
+      }
     }
   }
 

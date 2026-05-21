@@ -9,6 +9,7 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
+  getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
   getUnassignedChats as filterUnassignedChats,
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
@@ -103,6 +104,7 @@ export function createEmptyChatObject(modelId: string, workspacePath?: string): 
     lastStats: null,
     modelInfo: {},
     updatedAt: Date.now(),
+    lastMessageAt: Date.now(),
   };
 }
 
@@ -417,6 +419,12 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     lastStats: raw.lastStats && typeof raw.lastStats === 'object' ? raw.lastStats : null,
     modelInfo: raw.modelInfo && typeof raw.modelInfo === 'object' ? raw.modelInfo : {},
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
+    lastMessageAt:
+      typeof raw.lastMessageAt === 'number'
+        ? raw.lastMessageAt
+        : typeof raw.updatedAt === 'number'
+          ? raw.updatedAt
+          : Date.now(),
   };
 }
 
@@ -546,9 +554,11 @@ export function findChatById(chatId: string): Chat | undefined {
   return requireSessionState().chats.find((c) => c.id === chatId);
 }
 
-/** Chats ordered newest-first for sidebar display. */
+/** Chats ordered newest-first for sidebar display (by last committed message). */
 export function getChatsSortedByUpdatedDesc(): Chat[] {
-  return [...requireSessionState().chats].sort((a, b) => b.updatedAt - a.updatedAt);
+  return [...requireSessionState().chats].sort(
+    (a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a),
+  );
 }
 
 export function getActiveChat(): Chat {
@@ -561,11 +571,20 @@ export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
 }
 
+/** Bump sidebar sort time when user or assistant history is committed. */
+export function recordChatMessage(chat: Chat): void {
+  const now = Date.now();
+  chat.lastMessageAt = now;
+  chat.updatedAt = now;
+}
+
 function trimChatsIfNeeded(): void {
   const state = sessionState;
   if (!state || state.chats.length <= MAX_CHATS) return;
   const activeId = state.activeId;
-  const sortedOldestFirst = [...state.chats].sort((a, b) => a.updatedAt - b.updatedAt);
+  const sortedOldestFirst = [...state.chats].sort(
+    (a, b) => getChatLastMessageAt(a) - getChatLastMessageAt(b),
+  );
   let toDrop = state.chats.length - MAX_CHATS;
   for (const c of sortedOldestFirst) {
     if (toDrop <= 0) break;

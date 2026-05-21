@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import { normalizeWorkspacePath } from '../../src/lib/normalize-workspace-path.ts';
 import {
   coerceChatWorkspaceFields,
+  getChatLastMessageAt,
   getChatsForWorkspace,
   getUnassignedChats,
   migrateSessionStateV1ToV2,
@@ -28,6 +29,7 @@ function chatRow(
   name: string,
   workspacePath: string,
   updatedAt: number,
+  lastMessageAt?: number,
 ) {
   return {
     id,
@@ -38,6 +40,7 @@ function chatRow(
     lastStats: null,
     modelInfo: {},
     updatedAt,
+    lastMessageAt: lastMessageAt ?? updatedAt,
   };
 }
 
@@ -109,6 +112,22 @@ describe('normalizeWorkspacePath', () => {
 });
 
 describe('getChatsForWorkspace', () => {
+  it('orders by lastMessageAt, not recent updatedAt alone', () => {
+    const state = seedState({
+      activeId: CHAT_A,
+      chats: [
+        chatRow(CHAT_A, 'Older message', PATH_A, 500, 100),
+        chatRow(CHAT_B, 'Newer message', PATH_A, 100, 400),
+      ],
+    });
+
+    const onA = getChatsForWorkspace(PATH_A, state);
+    assert.equal(onA.length, 2);
+    assert.equal(onA[0].id, CHAT_B);
+    assert.equal(onA[1].id, CHAT_A);
+    assert.equal(getChatLastMessageAt(onA[0]), 400);
+  });
+
   it('returns only chats for the requested workspace', () => {
     const state = seedState({
       activeId: CHAT_A,

@@ -19,7 +19,7 @@
   "terminal": {
     "open": false,
     "heightPx": 240,
-    "autoOpenOnAgentRun": true
+    "autoOpenOnAgentRun": false
   },
   "browser": {
     "enabled": true,

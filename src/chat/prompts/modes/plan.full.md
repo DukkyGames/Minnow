@@ -35,7 +35,7 @@ A markdown file at:
 documentation/plans/<descriptive-kebab-name>.md
 ```
 
-If `documentation/plans/` does not exist yet, instruct the user to create it (do not run `mkdir` yourself — you are read-only except for the plan file).
+If `documentation/plans/` does not exist yet, create it with **`make_directory`** (`path: "documentation/plans"`) or write the plan with **`save_file`** (the server creates parent directories automatically). Do not ask the user to create the folder manually.
 
 ## Step 1 — Gather context
 
@@ -52,6 +52,8 @@ Before writing the plan, you MUST:
 If anything is ambiguous, ask the user before writing the plan. Do not assume.
 
 ## Step 2 — Write the plan file
+
+Save the plan with **`save_file`** to `documentation/plans/<descriptive-kebab-name>.md`. Only that path (and `make_directory` under `documentation/plans/` when needed) may be written in Plan mode.
 
 The plan MUST follow this structure:
 
@@ -124,7 +126,7 @@ Tasks in this wave can run concurrently.
 After writing the plan:
 1. Tell the user the exact path of the plan file you wrote.
 2. Give a one-paragraph summary of waves and task count.
-3. Suggest they switch to **Orchestrate** mode and reference this plan file to begin execution.
+3. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). On **New Orchestrate chat**, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`, optional `initial_user_message`). On **Implement in Build**, call **`set_chat_mode`** with `build`.
 
 ## Hard restrictions
 
@@ -132,7 +134,7 @@ After writing the plan:
 - No shell commands. No `execute_command`, `run_javascript`, `run_python`.
 - No git mutations. No commits, no pushes, no branch changes.
 - No spawning Builder or Verifier sub-agents. You may spawn Researcher sub-agents if you need parallel exploration before writing.
-- If the user asks you to implement something while in Plan mode, decline and offer to switch to Build mode.
+- If the user asks you to implement something while in Plan mode, call **`propose_mode_switch`** (`implement_in_wrong_mode`) or offer Build via **`set_chat_mode`** after they choose.
 
 ## Output style
 - The plan file is your primary output. Keep your chat reply short — confirm the path and summarize.

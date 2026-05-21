@@ -16,6 +16,24 @@ const MAX_SCROLLBACK_BYTES = 512 * 1024;
 /** @type {Map<string, PtySessionRecord>} */
 const sessions = new Map();
 
+/** Drop exited sessions from the registry (frees slots after shell exit or reload leaks). */
+function pruneExitedPtySessions() {
+  for (const [sessionId, session] of sessions) {
+    if (session.exited) {
+      destroyPtySession(sessionId);
+    }
+  }
+}
+
+/** Count sessions that still hold a live PTY process. */
+function countActivePtySessions() {
+  let n = 0;
+  for (const session of sessions.values()) {
+    if (!session.exited) n += 1;
+  }
+  return n;
+}
+
 /**
  * @typedef {object} PtySessionRecord
  * @property {string} sessionId
@@ -102,7 +120,8 @@ export function getPtyAvailability() {
  * @param {string | null} [options.chatId]
  */
 export function createPtySession(options) {
-  if (sessions.size >= MAX_SESSIONS) {
+  pruneExitedPtySessions();
+  if (countActivePtySessions() >= MAX_SESSIONS) {
     throw new Error('Maximum PTY sessions reached (8)');
   }
 
@@ -162,7 +181,9 @@ export function createPtySession(options) {
     session.exited = true;
     session.exitCode = exitCode ?? 0;
     broadcast(session, formatServerMessage('exit', { code: session.exitCode }));
-    auditLog(`destroy sessionId=${sessionId} exit=${session.exitCode}`);
+    auditLog(`exit sessionId=${sessionId} code=${session.exitCode}`);
+    // Release the slot so reloads and tab churn do not exhaust the 8-session cap.
+    destroyPtySession(sessionId);
   });
 
   sessions.set(sessionId, session);

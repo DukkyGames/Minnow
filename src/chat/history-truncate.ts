@@ -2,7 +2,7 @@
  * Chat history truncation with atomic assistant + tool_call chains.
  */
 
-import { streaming } from '../app-state';
+import { isChatStreaming } from '../chat/streaming-state';
 import {
   findChatById,
   getActiveChat,
@@ -46,7 +46,7 @@ export function truncateChatHistory(
   cutIndex: number,
   mode: TruncateMode,
 ): TruncateResult {
-  if (streaming) {
+  if (isChatStreaming(chatId)) {
     return { ok: false, error: 'streaming' };
   }
 

@@ -14,6 +14,7 @@ import {
   loadToolConfig,
   setLocalServerAvailable,
 } from './config';
+import { blockPlanModeWrite } from '../chat/modes/plan-write-guard';
 import { filterToolsByMode } from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { ToolExecutionResult } from '../types';
@@ -23,6 +24,11 @@ import {
   type ToolDefinition,
 } from './definitions';
 import { enqueueAskQuestion } from './ask-question-queue';
+import {
+  executeCreateChatWithMode,
+  executeProposeModeSwitch,
+  executeSetChatMode,
+} from './mode-handoff-tools';
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 
@@ -74,6 +80,8 @@ export function getLocalServerAvailable(): boolean {
 export interface ExecuteToolContext {
   chatId?: string;
   toolCallId?: string;
+  /** Active operating mode for scoped write guards (e.g. Plan → documentation/plans/). */
+  modeId?: ModeId | string;
   /** When tools run inside a sub-agent, shown on the approval modal. */
   subAgentType?: string;
 }
@@ -111,6 +119,39 @@ export async function executeTool(
   context: ExecuteToolContext = {},
 ): Promise<ToolExecutionResult> {
   await ensureToolConfigReady();
+
+  if (name === 'set_chat_mode') {
+    if (!isToolEnabled('set_chat_mode')) {
+      return {
+        content:
+          'Error: tool "set_chat_mode" is disabled in Settings (enable it to switch modes from the model).',
+      };
+    }
+    return { content: executeSetChatMode(args) };
+  }
+
+  if (name === 'create_chat_with_mode') {
+    if (!isToolEnabled('create_chat_with_mode')) {
+      return {
+        content:
+          'Error: tool "create_chat_with_mode" is disabled in Settings (enable it to fork chats by mode).',
+      };
+    }
+    return { content: executeCreateChatWithMode(args) };
+  }
+
+  if (name === 'propose_mode_switch') {
+    if (!isToolEnabled('propose_mode_switch')) {
+      return {
+        content:
+          'Error: tool "propose_mode_switch" is disabled in Settings (enable it or use ask_question).',
+      };
+    }
+    const content = await executeProposeModeSwitch(args, {
+      subAgentType: context.subAgentType,
+    });
+    return { content };
+  }
 
   if (name === 'ask_question') {
     if (!isToolEnabled('ask_question')) {
@@ -198,6 +239,11 @@ export async function executeTool(
     name,
   );
   if (blocked) return blocked;
+
+  const planWriteBlock = blockPlanModeWrite(context.modeId, name, enrichedArgs);
+  if (planWriteBlock) {
+    return { content: planWriteBlock };
+  }
 
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {

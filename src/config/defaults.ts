@@ -22,10 +22,18 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'wikipedia_search',
   'save_memory',
   'ask_question',
+  'set_chat_mode',
+  'create_chat_with_mode',
+  'propose_mode_switch',
 ]);
 
 /** Tools that default to full permission (no approval strip before running). */
-export const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
+export const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set([
+  'ask_question',
+  'set_chat_mode',
+  'create_chat_with_mode',
+  'propose_mode_switch',
+]);
 
 /** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
@@ -79,6 +87,7 @@ export function defaultSessionState(): SessionState {
         lastStats: null,
         modelInfo: {},
         updatedAt: Date.now(),
+        lastMessageAt: Date.now(),
       },
     ],
   };

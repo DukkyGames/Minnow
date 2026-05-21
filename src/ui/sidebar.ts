@@ -1,4 +1,5 @@
-import { streaming } from '../app-state';
+﻿import { isChatStreaming } from '../chat/streaming-state';
+import { syncComposerFromStreamingState } from './composer-send';
 import {
   createEmptyChatObject,
   getActiveChat,
@@ -7,9 +8,12 @@ import {
   onWorkspaceChanged,
   sessionState,
   touchChat,
+  recordChatMessage,
   scheduleSaveSessions,
 } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
+import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import type { Chat } from '../types';
 import {
   applySidebarVisuals,
@@ -22,6 +26,7 @@ import {
   showCachedModelInfo,
 } from './messages';
 import { syncExpertSelectForActiveChat } from './expert-select';
+import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
@@ -172,7 +177,7 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   const renameBtn = document.createElement('button');
   renameBtn.type = 'button';
   renameBtn.className = 'chat-rename-btn';
-  renameBtn.textContent = '✎';
+  renameBtn.textContent = '\u270E';
   renameBtn.setAttribute('aria-label', `Rename chat: ${chat.name}`);
   renameBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -182,7 +187,7 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'chat-delete-btn';
-  deleteBtn.textContent = '🗑';
+  deleteBtn.textContent = '\u{1F5D1}';
   deleteBtn.setAttribute('aria-label', `Delete chat: ${chat.name}`);
   deleteBtn.addEventListener('click', (e) => deleteChat(chat.id, e));
 
@@ -194,7 +199,7 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
 
   const modelEl = document.createElement('div');
   modelEl.className = 'chat-item-model';
-  modelEl.textContent = chat.modelId || '—';
+  modelEl.textContent = chat.modelId || '\u2014';
 
   const statsEl = document.createElement('div');
   statsEl.className = 'chat-item-stats';
@@ -268,7 +273,7 @@ function beginRenameChat(
 
 export function deleteChat(chatId: string, evt?: Event): void {
   if (evt) evt.stopPropagation();
-  if (streaming) {
+  if (isChatStreaming(chatId)) {
     setStatus('spin', 'Finish the current reply first');
     return;
   }
@@ -318,10 +323,6 @@ export function deleteChat(chatId: string, evt?: Event): void {
 }
 
 export function switchChat(id: string): void {
-  if (streaming) {
-    setStatus('spin', 'Finish the current reply first');
-    return;
-  }
   if (!sessionState || id === sessionState.activeId) {
     closeMobileSidebar();
     applySidebarVisuals();
@@ -338,7 +339,6 @@ export function switchChat(id: string): void {
   if (!chat) return;
   sessionState.activeId = id;
   chat.unread = false;
-  touchChat(chat);
   recordChatOpened(id);
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
@@ -351,23 +351,57 @@ export function switchChat(id: string): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
+  syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();
   applySidebarVisuals();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(id));
 }
 
-export function createChat(): void {
-  if (streaming) {
-    setStatus('spin', 'Finish the current reply first');
-    return;
-  }
+export interface CreateChatWithModeOptions {
+  modeId: ModeId;
+  orchestratePlanPath?: string;
+  initialUserMessage?: string;
+}
+
+export interface CreateChatWithModeResult {
+  ok: boolean;
+  chatId?: string;
+  modeId?: ModeId;
+  orchestratePlanPath?: string;
+  error?: string;
+}
+
+/** Create and activate a chat with a preset operating mode (tool handoff). */
+export function createChatWithMode(
+  options: CreateChatWithModeOptions,
+): CreateChatWithModeResult {
+  const modeId = normalizeModeId(options.modeId);
   const modelId =
-    (document.getElementById('modelSelect') as HTMLSelectElement).value || '';
+    (document.getElementById('modelSelect') as HTMLSelectElement)?.value || '';
   const chat = createEmptyChatObject(modelId);
+  chat.modeId = modeId;
+  if (chat.workAgentAuto !== false) {
+    const agent = getDefaultWorkAgentForMode(modeId);
+    chat.workAgentId = agent?.id ?? null;
+  }
+
+  const planPath = options.orchestratePlanPath?.trim();
+  if (planPath) {
+    const normalized = normalizeOrchestratePlanPath(planPath);
+    if (normalized) chat.orchestratePlanPath = normalized;
+  }
+
+  const initial = options.initialUserMessage?.trim();
+  if (initial) {
+    chat.history.push({ role: 'user', content: initial });
+    recordChatMessage(chat);
+  }
+
   sessionState!.chats.unshift(chat);
   sessionState!.activeId = chat.id;
-  touchChat(chat);
+  if (!initial) touchChat(chat);
   recordChatOpened(chat.id);
   renderChatFromHistory(chat);
   void bootTurnRecoveryForChat(chat);
@@ -379,8 +413,20 @@ export function createChat(): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void refreshTerminalHistoryForActiveChat();
+  syncComposerFromStreamingState();
   renderSidebar();
   scheduleSaveSessions();
   closeMobileSidebar();
   applySidebarVisuals();
+
+  return {
+    ok: true,
+    chatId: chat.id,
+    modeId,
+    orchestratePlanPath: chat.orchestratePlanPath,
+  };
+}
+
+export function createChat(): void {
+  createChatWithMode({ modeId: normalizeModeId(getActiveChat().modeId) });
 }

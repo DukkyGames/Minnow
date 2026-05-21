@@ -22,7 +22,7 @@
 2. [ ] Orchestrator calls `board_init` → tasks and waves appear; columns update on `board_update_task`.
 3. [ ] Sub-agent grid shows category styling; per-card stop works.
 4. [ ] Stop orchestrator aborts turn and child runs.
-5. [ ] Board send and Resume enqueue turns; model continues from `board_get_state`.
+5. [ ] Board **Resume** (and Chat-view composer send) enqueue turns; composer hidden in board view; model continues from `board_get_state`.
 6. [ ] Toggle Chat → full history unchanged; toggle Board → board restored from session.
 7. [ ] Switch sidebar chat → correct board per chat.
 8. [ ] Reload mid-run → board state persists; live agents may be empty until new spawns.

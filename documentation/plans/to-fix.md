@@ -1,8 +1,2 @@
--Should be able to switch to other chats while waiting for a response
--reef files should be saved to the users .minnow folder not the workspace
--Let the user choose if they want to save the reef module or not.
--Dont automaticlly open terminal when the agent runs a command. 
--Dont restart a chat that has a finished response. right now if we open an old chat. it restarts the chat unless the user perviously manually stopped it.
--Give the llm the ability to ask the user if they want to switch modes for this task. ie after planning, ask the user if they want to switch to a new orchistrator chat to start the plan. if the user asks to plan something in build mode. ask if the user wants to switch to build mode and vice versa. if the user is asking about things, give the LLM the ability to ask if they would like to see it as an interactive element in reef mode. If the user says yes to reef mode, the current agent should call a sub agent to make them a reef widget and then the current agent should display it in the chat. 
--all chat titles just end up with "here's a thinking process" which is the start of our llms thinking process. 
-- when the files side bar is open. the close icon should be an arrow pointing towards the right.
+- make .md files open in markdown, right click option to open as code
+

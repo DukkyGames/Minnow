@@ -19,8 +19,20 @@ export function isChatAtBottom(el?: HTMLElement): boolean {
   return distance <= CHAT_PIN_THRESHOLD_PX;
 }
 
+/** Board view replaces chat scroll UX; jump chip is chat-only. */
+function isBoardViewChromeActive(): boolean {
+  return (
+    document.getElementById('mainColumn')?.classList.contains('main-column--board-view') ??
+    false
+  );
+}
+
 function updateJumpChipVisibility(): void {
   if (!jumpChipEl || !chatAreaEl) return;
+  if (isBoardViewChromeActive()) {
+    jumpChipEl.classList.add('hidden');
+    return;
+  }
   const hasOverflow = chatAreaEl.scrollHeight > chatAreaEl.clientHeight;
   const show = hasOverflow && !stickToBottom;
   jumpChipEl.classList.toggle('hidden', !show);
@@ -63,6 +75,11 @@ export function pinChatScroll(): void {
 
 export function isChatScrollPinned(): boolean {
   return stickToBottom;
+}
+
+/** Re-evaluate jump chip after board/chat chrome toggles (call from view-mode sync). */
+export function refreshChatJumpChipVisibility(): void {
+  updateJumpChipVisibility();
 }
 
 /** Wire #chatArea scroll listener and Jump to latest chip (call once from main). */

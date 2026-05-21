@@ -1,6 +1,7 @@
 import { EMPTY_STATE_HTML } from '../constants';
 import { normalizeModeId } from '../chat/modes/types';
-import { modelCache, streaming } from '../app-state';
+import { modelCache } from '../app-state';
+import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import {
   getActiveChat,
@@ -121,7 +122,10 @@ export function renderStatsForChat(chat: Chat): void {
 
 export function renderChatFromHistory(chat: Chat): void {
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
-    void import('./orchestrate-board').then((m) => m.renderBoardView(chat));
+    void import('./orchestrate-board').then((m) => {
+      m.renderBoardView(chat);
+      m.refreshActiveBoardIfMounted();
+    });
     return;
   }
   clearSubAgentCardDomRegistry();
@@ -380,8 +384,29 @@ export function setStreamingRowPhase(wrap: HTMLElement, phase: StreamPhase): voi
  * Create an assistant message shell for SSE streaming without showing an empty bubble.
  * Thought bubbles attach to `wrap`; call {@link revealAssistantProseBubble} on first prose delta.
  */
-export function appendStreamingAssistantRow(): StreamingAssistantRow {
+/** Stub row when the stream targets a chat that is not visible in #chatArea. */
+function streamingAssistantRowStub(): StreamingAssistantRow {
+  const stub = document.createElement('div');
+  const bubble = document.createElement('div');
+  const cursor = document.createElement('div');
+  return {
+    wrap: stub,
+    bubble,
+    cursor,
+    streamStatus: {
+      setPhase: () => {},
+      setThinkingElapsed: () => {},
+      dispose: () => {},
+    },
+  };
+}
+
+export function appendStreamingAssistantRow(forChatId?: string): StreamingAssistantRow {
   const chat = getActiveChat();
+  const targetId = forChatId ?? chat.id;
+  if (!isStreamDomVisible(targetId)) {
+    return streamingAssistantRowStub();
+  }
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
     const stub = document.createElement('div');
     const bubble = document.createElement('div');
@@ -467,7 +492,7 @@ export function appendStats(
 
 /** Clear the active chat's message history (session row remains). */
 export function clearChat(): void {
-  if (streaming) {
+  if (isActiveChatStreaming()) {
     setStatus('spin', 'Finish the current reply first');
     return;
   }
@@ -476,6 +501,7 @@ export function clearChat(): void {
   chat.history = [];
   chat.lastStats = null;
   chat.modelInfo = {};
+  chat.lastMessageAt = 0;
   touchChat(chat);
   renderChatFromHistory(chat);
   renderStatsForChat(chat);

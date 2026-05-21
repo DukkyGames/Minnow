@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
+const { setSessionStateForTests, createEmptyChatObject } = await import(
+  '../../src/state/sessions.ts'
+);
 const {
   appendStreamingAssistantRow,
   revealAssistantProseBubble,
@@ -14,10 +17,22 @@ function setupChatDom() {
   globalThis.Node = window.Node;
   document.body.innerHTML =
     '<main id="chatArea"><div id="emptyState">Empty</div></main>';
+  const chat = createEmptyChatObject('');
+  chat.id = 'chat-stream-row';
+  setSessionStateForTests({
+    version: 2,
+    activeId: chat.id,
+    sidebarCollapsed: false,
+    chats: [chat],
+  });
   return window;
 }
 
 describe('messages stream row', { concurrency: false }, () => {
+  afterEach(() => {
+    setSessionStateForTests(null);
+  });
+
 test('appendStreamingAssistantRow inserts stream-status before awaiting bubble', () => {
   setupChatDom();
   const { wrap, bubble, streamStatus } = appendStreamingAssistantRow();

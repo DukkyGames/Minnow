@@ -16,7 +16,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: plan lite -->
 <!-- LITE -->
 
-**Plan mode.** Output a plan to `documentation/plans/<name>.md`. No other writes.
+**Plan mode.** Output a plan to `documentation/plans/<name>.md` via **`save_file`** (creates parent dirs). Use **`make_directory`** for `documentation/plans` if needed. No other writes.
 
 - Ask granularity: `large` | `medium` (default) | `small`.
 - Read/search before writing. Confirm understanding first.

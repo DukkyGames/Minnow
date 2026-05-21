@@ -64,6 +64,7 @@ Minnow/
 │   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
 │   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY, THEME_STORAGE_KEY
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
+│   ├── chat/streaming-state.ts # per-chat streaming helpers (active vs background)
 │   ├── state/sessions.ts   # localStorage chat sessions
 │   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
@@ -148,6 +149,9 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
   screenshots/             # browser_screenshot PNGs (Step 12)
   skills/                  # user skills (Step 13)
   skills.json              # per-skill enabled flags (Step 20 settings)
+  reef/
+    widgets/               # synced built-in templates (read)
+    modules/               # user-saved custom widgets (read/write after ask_question)
   backups/                 # scaffold
 ```
 
@@ -287,7 +291,7 @@ Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui
 
 **Prompt token estimate (Feature 25 / F4):** While settings is open, `#settingsPromptTokenEstimate` in `.settings-page-header` shows **~N tokens (estimate)** for the next main-chat send (active session). **Prompting** adds `#settingsPromptTokenBreakdown` (System · History · Tools · Rules). Heuristic: `chars ÷ 4` (`estimateTokensFromText` in `src/chat/prompts/token-estimate-core.ts`). `resolveOutboundPromptEstimate()` in `src/chat/prompts/token-estimate.ts` mirrors send via `resolveOutboundSystemMessages()`, full `chat.history`, and mode-filtered tool JSON (work-agent allowlist + UI Designer filter). UI: `src/ui/settings-prompt-estimate.ts`. Refreshes on settings open, section change, and profile/part toggles (300 ms debounce). Not provider `usage.prompt_tokens`. Verification: [`documentation/plans/verification/feature-25.md`](plans/verification/feature-25.md).
 
-**Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. Sub-agent type settings persist via `PUT /api/config/sub-agents` (merged full config).
+**Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. **Sub-agents** (`#/settings/sub-agents`): top **settings-kv** row uses inline controls — **Enabled** (checkbox), **Max concurrent** (1–16), **Default timeout** (ms, min 1000) — each saves on change via `PUT /api/config/sub-agents`; per-type rows still expand for prompt + model overrides.
 
 **Tests:** `npm test`, `npm run build`, `test/ui/settings-sections.test.mjs`, `test/ui/settings-page-html.test.mjs`. Verification: [`documentation/plans/verification/step-20.md`](plans/verification/step-20.md).
 
@@ -317,16 +321,16 @@ Five primary modes per chat: **Build**, **Plan**, **Orchestrate**, **Research**,
 
 | Concern | Location |
 |---------|----------|
-| Registry + tool policy | `src/chat/modes/registry.ts`, `tool-policy.ts` |
+| Registry + tool policy | `src/chat/modes/registry.ts`, `tool-policy.ts` — Plan allows **`save_file`** / **`make_directory`** only under `documentation/plans/` (`plan-write-guard.ts` + prompts in `modes/plan.*.md`; `save_file` creates parent dirs on the server) |
 | Prompt bodies | `src/chat/prompts/modes/{id}.full.md`, `{id}.lite.md` |
 | Template pack | `src/chat/prompts/modes/_template/` |
 | UI mode selector | `src/ui/mode-selector.ts` (in `#composerControls` in `index.html`) |
-| Orchestrate plan strip | `#orchestratePlanStrip` — `src/ui/orchestrate-plan-selector.ts`, `src/styles/orchestrate-plan-selector.css`; refresh on mode/chat/workspace change and when server tools become available (`init-file-panel.ts`) |
-| Orchestrate view toggle (Phase 4) | `#btnViewModeToggle` (top bar) — `src/ui/view-mode-toggle.ts`, `src/styles/view-mode-toggle.css`; sets `Chat.viewMode` (`chat` \| `board`); disabled when chat is not Orchestrate, has no plan, or while streaming/recovery; sync on mode/chat/plan change (`loop.ts`, sidebar, plan selector) |
+| Orchestrate plan control | `#orchestratePlanStrip.orchestrate-plan-control` inline in `#composerControls` after mode segments — `src/ui/orchestrate-plan-selector.ts`, `src/styles/orchestrate-plan-selector.css`; refresh on mode/chat/workspace change and when server tools become available (`init-file-panel.ts`); missing `documentation/plans/` maps to `no_plans_dir` in `list-plans.ts` |
+| Orchestrate view toggle (Phase 4) | Split toggles: `#btnViewModeToggleBoard` (composer column above `#sendBtn`) and `#btnViewModeToggleChat` (board `board-header__controls`, after Stop) — `src/ui/view-mode-toggle.ts`, `src/styles/view-mode-toggle.css`; sets `Chat.viewMode` (`chat` \| `board`); enabled in Orchestrate mode anytime (including mid-stream; plan optional); hidden/disabled outside Orchestrate or when the target view is already active; sync on mode/chat/plan change (`loop.ts`, sidebar, plan selector, board header wire) |
 | Plan listing | `src/chat/orchestrate/list-plans.ts` (`find_files`); path rules `src/chat/orchestrate/plan-path.ts` |
 | Send gate (Orchestrate) | `src/chat/orchestrate/send-gate.ts` + `sendMessageWithTools` in `src/tools/loop.ts` (requires `Chat.orchestratePlanPath`; empty composer uses default line) |
 | Persistence | `Chat.modeId` and optional `Chat.orchestratePlanPath` in `sessions/state.json` (default mode `build`; plan path normalized in `ensureChatShape`); server: `server/config/validators.js` + `orchestrate-plan-path.js` |
-| Board View | `Chat.orchestrateBoard?: OrchestrateBoardState`, `Chat.viewMode?: 'chat' \| 'board'`. Store: `src/state/orchestrate-board-store.ts`, `src/state/orchestrate-board-events.ts`. Tools: `board_init`, `board_update_task`, `board_get_state` (`src/tools/board-tools.ts`) — **`board_init`** uses `tasks[].id` + non-empty `waves`; **`board_update_task`** uses **`task_id`** (not `id`); **`spawn_sub_agent`** uses **`board_task_id`**. Schemas: `src/tools/definitions.ts`; copy-paste JSON examples in `orchestrate.*.md` § Board tool API. UI: `src/ui/orchestrate-board.ts`, `src/styles/orchestrate-board.css`; dispatch in `renderChatFromHistory` (`messages.ts`); board-only streaming guards (`appendBubble`, `appendStreamingAssistantRow`, `sub-agent-cards.ts`, tool-call DOM in `loop.ts`). Board mode: `#mainColumn.main-column--board-view` hides chat composer; message via in-board `board-composer`; toggle in top bar `#btnViewModeToggle`. Controls: stop orchestrator/sub-agent, send, resume. `activeParentTurnId` on board in `loop.ts`. Prompts: `orchestrate.*.md` (no `documentation/progress/`). Tests: `test/state/orchestrate-board-shape.test.mts`, `test/orchestrate/board-store.test.mts`, `test/tools/board-tools.test.mts`, `test/orchestrate/orchestrator-board-link.test.mts`, `test/ui/view-mode-toggle.test.mjs`, `test/ui/orchestrate-board-streaming.test.mjs`, `test/prompts/orchestrate-board-prompt.test.mjs`; `test/orchestrate/**` in `npm test`. Verification: [`documentation/plans/verification/feature-orchestrate-board.md`](plans/verification/feature-orchestrate-board.md). Plan: [`documentation/plans/shiny-minsky-board-view.md`](plans/shiny-minsky-board-view.md) |
+| Board View | `Chat.orchestrateBoard?: OrchestrateBoardState`, `Chat.viewMode?: 'chat' \| 'board'`. Store: `src/state/orchestrate-board-store.ts`, `src/state/orchestrate-board-events.ts` (`emitBoardChange` → live kanban refresh). Tools: `board_init`, `board_update_task`, `board_get_state` (`src/tools/board-tools.ts`) — **`board_init`** uses `tasks[].id` + non-empty `waves`; **`board_update_task`** uses **`task_id`** (not `id`); **`spawn_sub_agent`** uses **`board_task_id`**. Schemas: `src/tools/definitions.ts`; copy-paste JSON examples in `orchestrate.*.md` § Board tool API. UI: `src/ui/orchestrate-board.ts` (header **status badge** via `deriveBoardHeaderStatus` (semantic chips: warning/success/danger) plus **activity chip** (`deriveOrchestratorLastActivity` in `chat/orchestrate/last-activity.ts` — last tool label or message preview up to 240 chars; click opens Chat view via `setOrchestrateViewMode('chat')`); toolbar layout with **Start**/**Stop**/`Open plan` plus **Chat view** icon toggle on the right (`board-header__controls`); board view toggle in composer above send; `.board-btn` hover fills match top-bar outlined controls (`orchestrate-board.css`, fine-pointer only); subscribes on empty board; in-place `refreshBoardDom` + 1s live tick; kanban task cards show agent badge and open `openSubAgentDrawer` on click), `src/styles/orchestrate-board.css` (board view: `.board-root` flex-fills `#chatArea` inside existing `.chat-area` padding; kanban columns scroll per-column); dispatch in `renderChatFromHistory` (`messages.ts`); board-only streaming guards (`appendBubble`, `appendStreamingAssistantRow`, `sub-agent-cards.ts`, tool-call DOM in `loop.ts`). Board mode: `#mainColumn.main-column--board-view` hides `.input-bar` and `#chatJumpLatest` (no in-board composer); toggle in top bar `#btnViewModeToggle`. Controls: stop orchestrator, **Open plan** (opens `orchestratePlanPath` in split file viewer as rendered markdown), **Resume** (fixed resume line). New user messages: switch to Chat view or use header controls. No inline plan sidebar — plans use `openFileInViewer` + markdown preview for `.md`. `activeParentTurnId` on board in `loop.ts`. Prompts: `orchestrate.*.md` (no `documentation/progress/`). Tests: `test/state/orchestrate-board-shape.test.mts`, `test/orchestrate/board-store.test.mts`, `test/tools/board-tools.test.mts`, `test/orchestrate/orchestrator-board-link.test.mts`, `test/ui/view-mode-toggle.test.mjs`, `test/ui/orchestrate-board-streaming.test.mjs`, `test/ui/orchestrate-board-live-update.test.mjs`, `test/prompts/orchestrate-board-prompt.test.mjs`; `test/orchestrate/**` in `npm test`. Verification: [`documentation/plans/verification/feature-orchestrate-board.md`](plans/verification/feature-orchestrate-board.md). Plan: [`documentation/plans/shiny-minsky-board-view.md`](plans/shiny-minsky-board-view.md) |
 
 ### Reef mode widgets (inline iframes)
 
@@ -339,7 +343,8 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 | Bridge init | `initReefBridge()` in `src/main.ts` |
 | Styles | `src/styles/reef-widgets.css` |
 | Widget LLM overrides | `Chat.reefWidgetProviderId`, `Chat.reefWidgetModelId`; Settings → Modes → Reef (`src/ui/reef-widget-settings.ts`) |
-| Widget library | **15 templates** + **6 snippets** under `src/chat/reef/widgets/`; catalog in `modes/reef.full.md` (Templates table + Snippets subsection); lite prompt notes `snippet-*.md`. Tools: `@minnow/reef/widgets/<name>.md` (synced to `~/.minnow/reef/widgets/` on `npm start`) |
+| Widget library | **15 templates** + **6 snippets** under `src/chat/reef/widgets/`; catalog in `modes/reef.full.md` (Templates table + Snippets subsection); lite prompt notes `snippet-*.md`. Tools: `@minnow/reef/widgets/<name>.md` (read-only; synced to `~/.minnow/reef/widgets/` on `npm start`). **User modules:** `@minnow/reef/modules/<slug>.md` (read/write under `~/.minnow/reef/modules/`, scaffolded on `npm start`; `server/reef/widget-paths.js` + `resolveSafePath` in `server.js`) |
+| User modules | Custom widgets saved only after **`ask_question`** confirmation → `@minnow/reef/modules/<slug>.md` under `~/.minnow/reef/modules/` (scaffold on `npm start`; path resolution in `server/reef/widget-paths.js`). Prompt rules: `modes/reef.full.md` § User module library; `/ask-user` skill preset. Plan: [`documentation/plans/Build out/reef-optional-save-prompt.md`](plans/Build%20out/reef-optional-save-prompt.md) |
 
 **Sandbox:** `iframe sandbox="allow-scripts"` only (no `allow-same-origin`). CSP + esm.sh importmap inside srcdoc (`react@19` / `react-dom@19/client` without `?dev` so widget code and Recharts share one React instance). Theme tokens forwarded from host `html[data-theme]`.
 
@@ -347,11 +352,13 @@ When `Chat.modeId === 'reef'`, closed ` ```reef-widget ` fences in assistant bub
 
 **Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` / `.mw-chart` → 220px tall) and the prelude sizes chart wrappers plus parents of `.recharts-responsive-container` when height collapses to ~0 (including after async ESM load via `MutationObserver`). Widgets should use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout. **`reef-widget` fences are not passed to highlight.js** — mount runs before hljs so the unknown `reef-widget` language warnings do not spam the console during stream or after mount.
 
-**Tests:** `test/chat/reef/*.test.mts`, `test/chat/reef/*.test.mjs` (template/snippet conventions, `reef-prompts-catalog.test.mjs`). Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md), expansion: [`documentation/plans/reef-widget-library-expansion.md`](plans/reef-widget-library-expansion.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
+**Tests:** `test/chat/reef/*.test.mts`, `test/chat/reef/*.test.mjs` (template/snippet conventions, `reef-prompts-catalog.test.mjs`, `reef-save-prompt.test.mjs`). Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md), expansion: [`documentation/plans/reef-widget-library-expansion.md`](plans/reef-widget-library-expansion.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 
 **Send path:** `buildComposeContext()` sets `modeId` (and `orchestratePlanPath` when mode is Orchestrate) from active chat → `composeSystemPrompt()` loads `kind: mode` fragment with `{{orchestrate_plan}}` where applicable → `getEnabledToolDefinitionsForMode(modeId)` filters tools in `loop.ts`.
 
 **Plan / Research** deny destructive tools at the API (shell, file writes, git mutations per `registry.ts`).
+
+**Mode handoff (LLM suggestions):** Shared rules in `src/chat/prompts/tool-usage/mode-handoff.md` — appended by `composeSystemPrompt()` for Build, Plan, Orchestrate, Research, and Reef. Host tools (browser, default on): **`propose_mode_switch`** (standard `ask_question` presets), **`set_chat_mode`** (`setChatMode` in `mode-selector.ts`), **`create_chat_with_mode`** (`createChatWithMode` in `sidebar.ts` — optional `orchestratePlanPath`, seed user message). Reef visualization from other modes: **`spawn_sub_agent`** `type: reef-widget` (`sub-agents.json` + `agents/prompts/sub-agents/reef-widget.*.md`, read-only template tools) then **`set_chat_mode`** `reef` so fences mount. Tests: `test/prompts/mode-handoff-prompt.test.mjs`, `test/tools/mode-handoff-tools.test.mjs`. Plan: [`documentation/plans/Build out/llm-mode-switch-suggestions.md`](plans/Build%20out/llm-mode-switch-suggestions.md).
 
 **Tests:** `test/modes/*.test.mts`, `test/orchestrate/*.test.mts`. Verification: [`documentation/plans/verification/step-05.md`](plans/verification/step-05.md). OpenCode mapping: [`documentation/plans/references/mode-sources.md`](plans/references/mode-sources.md).
 
@@ -455,7 +462,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 |---------|----------|
 | File tree | `src/ui/file-tree.ts` — lazy `list_directory`, expand/collapse, `refreshFileTree()` after save |
 | **Name filter (F19)** | `#fileTreeSearch` — debounced subsequence match on basename; filter mode BFS-indexes via `list_directory` (skips `.git`, `node_modules`, `dist`, `.minnow`) and shows flat results; browse mode when query empty. `src/ui/file-tree-filter.ts`, `src/ui/file-tree-search.ts`. Phase 2 content search not shipped. |
-| Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range` / `save_file`, CodeMirror 6 + GitHub-style highlight (`src/ui/codemirror-theme.ts`); Save button + Ctrl/Cmd+S; dirty ● on path; large files (>512 KB) load lines 1–2000 read-only; LSP completions via `src/ui/file-editor-extensions.ts` + `POST /api/lsp/completion` when LSP enabled |
+| Viewer | `src/ui/file-viewer.ts` — `read_file` / `read_file_range` / `save_file`; **`.md` / `.markdown`** render as read-only GFM preview (`setAssistantBubbleContent`, `.file-viewer-markdown-preview` — full pane width; chat `msg-bubble--md` max-width overridden in `file-panel.css`); other files use CodeMirror 6 + GitHub-style highlight (`src/ui/codemirror-theme.ts`); Save button + Ctrl/Cmd+S (editor only); dirty ● on path; large files (>512 KB) load lines 1–2000 read-only; LSP completions via `src/ui/file-editor-extensions.ts` + `POST /api/lsp/completion` when LSP enabled |
 | Layout | `src/ui/file-layout.ts`, `src/ui/init-file-panel.ts` |
 | Parser | `src/lib/list-directory-parse.ts` |
 | State / prefs | `src/state/file-panel.ts` → `config.json` `filePanel` via `GET/PUT /api/config/meta` |
@@ -668,7 +675,8 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 
 **Migration v1→v2:** Client `parseSessionStateFromJson` and server `validateSessionState` set `workspacePath: ''` on legacy chats (no auto-bind). Defaults: `src/config/defaults.ts`, `server/config/home.js`.
 
-- At most **50** chats; oldest by `updatedAt` pruned on save (active chat never removed).
+- Sidebar order is **newest `lastMessageAt` first** (last committed user/assistant/tool history entry); opening or renaming a chat does not reorder. Legacy sessions without `lastMessageAt` fall back to `updatedAt` until the next message.
+- At most **50** chats; oldest by `lastMessageAt` (then `updatedAt`) pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
 - Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace.
 
@@ -684,10 +692,10 @@ In-flight assistant turns checkpoint to **`chat.pendingTurn`** (not a `history` 
 | Send loop | `runChatTurn` in `src/tools/loop.ts` — debounced **150ms** checkpoints; `pagehide` / `beforeunload` / **`visibilitychange` (hidden)** flush in `main.ts` |
 | Stop (C1) | `finalizeStoppedTurn` — `pendingTurn` with `stopped: true` (no duplicate assistant in `history`) |
 | Recovery UI | `src/ui/pending-turn-recovery.ts` (**Resume** / **Discard** when a reload-interrupted checkpoint exists but no model; **Retry last message** / **Dismiss** when the checkpoint was lost), `renderPendingTurn`, `pending-turn-recovery.css` |
-| Boot / switch | `bootTurnRecoveryForChat` in `src/chat/turn-recovery.ts` — **auto-resume** only when `pendingTurn` is valid and **`stopped` is not set** (user **Stop** keeps the thread idle across reload until a new send); orphan tail → retry banner (composer blocked until **Retry** or **Dismiss**) |
+| Boot / switch | `bootTurnRecoveryForChat` in `src/chat/turn-recovery.ts` — **auto-resume** only when `pendingTurn` is valid, **`stopped` is not set**, and **`isPendingTurnObsolete`** is false (history already has final assistant prose → clear stale checkpoint, no re-send); user **Stop** keeps the thread idle across reload; orphan tail → retry banner (composer blocked until **Retry** or **Dismiss**) |
 | Continue API | `buildApiMessages` injects checkpoint assistant prose / `tool_calls` before the ephemeral continue user line; clears `pendingTurn` on stream connect |
 
-**Boot / chat switch:** `pendingTurn` without **`stopped`** → auto-resume when a model is selected; `pendingTurn.stopped` (user pressed Stop) → no reload resume and no recovery banner (send a new message to continue); lost checkpoint with lone user row → **Retry last message** / **Dismiss** (composer blocked for the orphan case only).
+**Boot / chat switch:** `pendingTurn` without **`stopped`** → auto-resume when a model is selected unless history already ends with a finished assistant reply (`isPendingTurnObsolete` — cleared on load via `clearStalePendingTurnsOnLoad` and on switch in `bootTurnRecoveryForChat`); `pendingTurn.stopped` (user pressed Stop) → no reload resume and no recovery banner (send a new message to continue); lost checkpoint with lone user row → **Retry last message** / **Dismiss** (composer blocked for the orphan case only).
 
 ### Programmatic chat titles (Step 07)
 
@@ -699,7 +707,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 | **Prompt** | Shipped [`src/chat/prompts/titles/default.md`](../src/chat/prompts/titles/default.md); override `~/.minnow/prompts/titles/default.md` via prompt registry when `npm start` |
 | **Config** | `config.json` → `titles.enabled`, `titles.modelId`, `titles.providerId`, `titles.maxTokens`, `titles.temperature` (see [`src/config/titles-meta.ts`](../src/config/titles-meta.ts)); `GET /api/config/meta` merges default `titles` when missing |
 | **Provider** | Step 03 `postChatCompletions`; schedule uses resolved send `modelId` / `providerId` (work-agent / UI Designer bindings), then config overrides, then chat fields |
-| **Reasoning models** | Title completion reads `message.content` then `reasoning` / `reasoning_content` ([`generate.ts`](../src/chat/titles/generate.ts)) |
+| **Reasoning models** | Title completion uses **`message.content` only** ([`generate.ts`](../src/chat/titles/generate.ts)); empty content → null; [`sanitize.ts`](../src/chat/titles/sanitize.ts) rejects thinking boilerplate and `UNTITLED`; [`schedule.ts`](../src/chat/titles/schedule.ts) falls back to truncated user seed |
 | **Apply** | `applyGeneratedChatTitle` only if still placeholder (rename/delete races discard) |
 | **UI** | `renderSidebar()` after successful apply only |
 | **Delete** | `removeChatById` aborts in-flight title job for that `chatId` |
@@ -719,7 +727,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Operating mode:** segmented control above attachments ([`mode-selector.ts`](../src/ui/mode-selector.ts), `Chat.modeId` per session).
 - **Attachments:** `#fileInput`, `#attachBtn`, `#attachPreview` row above the composer ([`input.css`](../src/styles/input.css), [`initAttachments()`](../src/attachments/store.ts)). Composer column gap **10px**; input row gap **10px**; preview strip **2px** bottom margin when visible. Chips clear from `#attachPreview` only after a **successful** send (same `completedNormally` gate as `clearAttachments()` in the tool loop).
-- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, refresh, metrics, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model row + `.status-pill`). **File tree** opens from `#btnFileSidebarCollapse` on the file sidebar header (document icon; replaces former top-bar `#btnFileTreeToggle` and chevron rail control). **Model row** (`.model-wrap`): custom combobox [`model-select-picker.ts`](../src/ui/model-select-picker.ts) over hidden `#modelSelect`; trigger + `#modelSelectMenu` list show **load dots** (solid green / grey ring) per model; header `#modelStateDot` mirrors selection via [`model-state-dot.ts`](../src/ui/model-state-dot.ts); optional **Load/Unload** buttons when provider supports it (A3). **Status pill** (`setStatus` / `setReadyStatus` in [`src/ui/status.ts`](../src/ui/status.ts)): operational messages only — after `fetchModels()` success shows **`Ready`**, not `N models, M loaded`. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css) — `z-index: 40` so topbar menus (e.g. `#modelSelectMenu`) stack above chat/file sidebars (`34`–`36`) and below modals/drawers (`50+`). Tests: `test/ui/topbar-layout.test.mjs`, `test/ui/model-state-dot.test.mts`, `test/api/models-status.test.mjs`.
+- **Top bar:** Three zones in `header.topbar` — **`.topbar-brand`** (logo + title), **`.topbar-actions`** (contiguous icon buttons: sidebar toggle, workspace, refresh, metrics, terminal, settings; 4px gap), **`.topbar-spacer`** (`flex: 1`), **`.topbar-end`** (model row + `.status-pill`). **File tree** toggle is `#btnFileSidebarCollapse` on the file sidebar header (`applyFileSidebarVisuals` in [`file-layout.ts`](../src/ui/file-layout.ts)): **right chevron** when the panel is expanded (desktop) or the mobile overlay is open; **file-tree icon** when collapsed or closed — mirrors chat sidebar direction semantics (collapse toward workspace). **Model row** (`.model-wrap`): custom combobox [`model-select-picker.ts`](../src/ui/model-select-picker.ts) over hidden `#modelSelect`; trigger + `#modelSelectMenu` list show **load dots** (solid green / grey ring) per model; header `#modelStateDot` mirrors selection via [`model-state-dot.ts`](../src/ui/model-state-dot.ts); optional **Load/Unload** buttons when provider supports it (A3). **Status pill** (`setStatus` / `setReadyStatus` in [`src/ui/status.ts`](../src/ui/status.ts)): operational messages only — after `fetchModels()` success shows **`Ready`**, not `N models, M loaded`. **New chat** only via sidebar (`chat-new-wide` / `chat-new-compact`). `#btnNewChatTop` removed. `#btnSidebarToggle` (class `topbar-sidebar-toggle`) is **mobile-only** (hidden ≥641px); desktop uses `#btnSidebarCollapse` on the sidebar rail. Styles: [`src/styles/topbar.css`](../src/styles/topbar.css) — `z-index: 40` so topbar menus (e.g. `#modelSelectMenu`) stack above chat/file sidebars (`34`–`36`) and below modals/drawers (`50+`). Tests: `test/ui/topbar-layout.test.mjs`, `test/ui/model-state-dot.test.mts`, `test/api/models-status.test.mjs`.
 
 ## Dev server architecture (`server.js`)
 
@@ -780,10 +788,10 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
 | xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
-| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (init once after `initTerminalXterm`; `pagehide` kills PTY sessions) |
+| Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions) |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
-| Prefs | `config.json` → `terminal: { open, heightPx, autoOpenOnAgentRun, tabs[], activeTabId, defaultShellProfileId }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts) |
+| Prefs | `config.json` → `terminal: { open, heightPx, tabs[], activeTabId, defaultShellProfileId }` via [`src/config/terminal-meta.ts`](../src/config/terminal-meta.ts). Agent/sub-agent shell tools **never** auto-open the panel; `#btnTerminal` pulses while a run is in progress. Interactive PTY tabs attach only when the panel is open. Server removes exited PTY sessions so reloads do not hit the 8-session cap. |
 | Agent persistence | `Chat.terminalHistory` (last **50** runs); logs `~/.minnow/logs/terminal/<runId>.log` |
 | PTY audit | `~/.minnow/logs/terminal/pty-sessions.log` (create/kill only) |
 
@@ -911,7 +919,21 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 ## Stop generation (feature 14, Epic C1)
 
-While **`streaming === true`**, the composer primary button (`#sendBtn`) is a **Stop** control (`data-mode="stop"`, class `send-btn--stop`); the textarea stays enabled so the user can draft the next message. **`handleComposerPrimaryAction()`** (window + `index.html`) calls **`stopGeneration()`** → **`chatFetchAbort.abort()`**, which ends the active SSE `fetch` and triggers **`AbortError`** handling in **`runChatTurn`** / **`sendMessagePlain`**.
+While the **active** chat is streaming (`isActiveChatStreaming()` in [`streaming-state.ts`](../src/chat/streaming-state.ts)), the composer primary button (`#sendBtn`) is a **Stop** control (`data-mode="stop"`, class `send-btn--stop`); the textarea stays enabled so the user can draft the next message. **`handleComposerPrimaryAction()`** calls **`stopGeneration()`** → **`chatFetchAbort.abort()`** (v1: one in-flight turn; abort targets the streaming chat even when the user is viewing another thread). When another chat is streaming in the background, the active chat keeps **Send** and shows a composer hint (`composer-stream-hint.ts`: “Reply in progress in …” + **Go to chat**).
+
+## Switch chats while waiting (sidebar multitask)
+
+Users can **`switchChat`** / **`createChat`** while a reply runs in a different thread. Global **`streaming`** + **`streamingChatId`** still track the in-flight turn (v1: one concurrent stream); sidebar dots use the streaming chat id. **`switchChat`** does not abort the fetch; **`renderChatFromHistory`** loads the active thread; the tool loop skips live `#chatArea` DOM when `isStreamDomVisible(chatId)` is false and keeps checkpointing via **`turn-checkpoint`**. Returning to the streaming chat remounts the stream shell via [`stream-chat-dom.ts`](../src/tools/stream-chat-dom.ts). Sending on the active chat is blocked while a **background** stream runs (`isBackgroundStreamBlockingSend`) so a second turn does not clobber the in-flight chat. Mode/view toggles and expert/plan selects disable only when the **active** chat is streaming. **`deleteChat`** is blocked only for the chat that is currently streaming.
+
+| Concern | Location |
+|---------|----------|
+| Helpers | [`src/chat/streaming-state.ts`](../src/chat/streaming-state.ts) |
+| Sidebar | [`src/ui/sidebar.ts`](../src/ui/sidebar.ts) |
+| Loop DOM gate | [`src/tools/loop.ts`](../src/tools/loop.ts), [`src/ui/messages.ts`](../src/ui/messages.ts) (`appendStreamingAssistantRow(forChatId)`) |
+| Composer UX | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/ui/composer-stream-hint.ts`](../src/ui/composer-stream-hint.ts) |
+| Pending flush | [`src/state/pending-turn.ts`](../src/state/pending-turn.ts) — `flushPendingTurnNow` uses streaming chat id |
+
+**Tests:** `test/chat/streaming-state.test.mjs`, `test/ui/sidebar-streaming-switch.test.mjs`, `test/ui/composer-stream-hint.test.mjs`.
 
 | Concern | Location |
 |---------|----------|
@@ -920,7 +942,7 @@ While **`streaming === true`**, the composer primary button (`#sendBtn`) is a **
 | Composer toggle | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/styles/input.css`](../src/styles/input.css) |
 | Tool-loop abort | [`src/tools/loop.ts`](../src/tools/loop.ts) — `livePartialText`, cooperative skip of remaining tools (`Stopped by user.`), `cancelAllForParentTurn` on abort |
 | Stopped chip | [`src/ui/stopped-affordance.ts`](../src/ui/stopped-affordance.ts), `.msg--stopped` in [`messages.css`](../src/styles/messages.css) |
-| Reload policy | `isUserStoppedPendingCheckpoint` in [`pending-turn-shape.ts`](../src/state/pending-turn-shape.ts) / `bootTurnRecoveryForChat` — user-stopped checkpoints are never auto-resumed after reload |
+| Reload policy | `isUserStoppedPendingCheckpoint` / `isPendingTurnObsolete` in [`pending-turn-shape.ts`](../src/state/pending-turn-shape.ts) + `bootTurnRecoveryForChat` — user-stopped checkpoints are never auto-resumed; stale checkpoints after a finished assistant in `history` are cleared instead of re-sent |
 | History flag | `AssistantMessage.stopped?: boolean` in [`src/types.ts`](../src/types.ts) for completed rows; reload paints chip when set |
 
 **Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/ui/composer-send.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).

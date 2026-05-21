@@ -2,7 +2,8 @@
  * Pure pendingTurn validation (no session / UI imports — safe for unit tests).
  */
 
-import type { Chat, PendingTurn, ToolCall } from '../types';
+import { hasPostToolTail } from '../tools/turn-continuation';
+import type { AssistantToolCallMessage, Chat, PendingTurn, ToolCall } from '../types';
 
 /** Ephemeral user line appended to API context on Continue (not stored in history). */
 export const CONTINUE_INTERRUPTED_INSTRUCTION =
@@ -115,8 +116,35 @@ export function buildPendingSnapshot(input: {
   return snap;
 }
 
+/**
+ * True when `pendingTurn` was left on disk but `history` already has a finished
+ * assistant reply (crash before `complete()`, partial persistence, etc.).
+ */
+export function isPendingTurnObsolete(chat: Chat): boolean {
+  const pending = ensurePendingTurn(chat.pendingTurn);
+  if (!pending) return false;
+  if (pending.stopped === true) return false;
+
+  const history = chat.history;
+  if (history.length === 0) return false;
+
+  const last = history[history.length - 1];
+  if (last?.role === 'user') return false;
+  if (hasPostToolTail(history)) return false;
+
+  if (last?.role === 'assistant') {
+    const text = typeof last.content === 'string' ? last.content.trim() : '';
+    if (text.length > 0) return true;
+    const withTools = last as AssistantToolCallMessage;
+    if (withTools.tool_calls?.length) return false;
+  }
+
+  return false;
+}
+
 /** True when the chat has a recoverable interrupted turn. */
 export function shouldOfferRecovery(chat: Chat): boolean {
+  if (isPendingTurnObsolete(chat)) return false;
   return ensurePendingTurn(chat.pendingTurn) != null;
 }
 
@@ -130,6 +158,10 @@ export function isUserStoppedPendingCheckpoint(chat: Chat): boolean {
 
 /** Drop pending turn when history no longer has a user message for that turn. */
 export function clearStalePendingTurn(chat: Chat): void {
+  if (isPendingTurnObsolete(chat)) {
+    chat.pendingTurn = undefined;
+    return;
+  }
   const pending = ensurePendingTurn(chat.pendingTurn);
   if (!pending) {
     if (chat.pendingTurn != null) chat.pendingTurn = undefined;

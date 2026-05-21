@@ -2,8 +2,12 @@
   chatFetchAbort,
   setChatFetchAbort,
   setStreaming,
-  streaming,
 } from '../app-state';
+import {
+  isActiveChatStreaming,
+  isBackgroundStreamBlockingSend,
+  isStreamDomVisible,
+} from '../chat/streaming-state';
 import {
   cancelAssistantBubbleRenderDebounce,
   scheduleAssistantBubbleRender,
@@ -14,10 +18,11 @@ import {
   isFirstUserMessagePending,
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
+import { clearPendingTurn } from '../state/pending-turn';
 import {
   getActiveChat,
   scheduleSaveSessions,
-  touchChat,
+  recordChatMessage,
 } from '../state/sessions';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type {
@@ -32,7 +37,10 @@ import type {
 } from '../types';
 import { finalizeStoppedTurn } from '../chat/finalize-stopped-turn';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
-import { setComposerStreamingMode } from '../ui/composer-send';
+import {
+  setComposerStreamingMode,
+  syncComposerFromStreamingState,
+} from '../ui/composer-send';
 import {
   appendBubble,
   appendStats,
@@ -247,7 +255,11 @@ export async function tryNonStreamingFallback(
 
 /** Send the composer text to LM Studio with SSE streaming and optional JSON fallback. */
 export async function sendMessage(): Promise<void> {
-  if (streaming) return;
+  if (isActiveChatStreaming()) return;
+  if (isBackgroundStreamBlockingSend()) {
+    setStatus('spin', 'Stop or wait for the reply in the other chat first');
+    return;
+  }
   const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const text = input.value.trim();
   if (!text) return;
@@ -280,7 +292,7 @@ export async function sendMessage(): Promise<void> {
   chat.modelId = modelId || chat.modelId;
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   chat.history.push({ role: 'user', content: text });
-  touchChat(chat);
+  recordChatMessage(chat);
   scheduleSaveSessions();
   renderSidebar();
   appendBubble('user', text);
@@ -332,8 +344,11 @@ export async function sendMessage(): Promise<void> {
     stream_options: { include_usage: true },
   };
 
-  const { wrap, bubble, cursor, streamStatus } = appendStreamingAssistantRow();
-  const revealProse = (): void => revealAssistantProseBubble(wrap, bubble, streamStatus);
+  const { wrap, bubble, cursor, streamStatus } = appendStreamingAssistantRow(chat.id);
+  const revealProse = (): void => {
+    if (!isStreamDomVisible(chat.id)) return;
+    revealAssistantProseBubble(wrap, bubble, streamStatus);
+  };
 
   const thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
     streamStatus.setThinkingElapsed(elapsedMs);
@@ -358,8 +373,12 @@ export async function sendMessage(): Promise<void> {
   });
 
   setStreaming(true, chat.id);
-  setComposerStreamingMode('streaming');
-  setStatus('spin', 'Generating reply…');
+  if (isStreamDomVisible(chat.id)) {
+    setComposerStreamingMode('streaming');
+    setStatus('spin', 'Generating reply…');
+  } else {
+    syncComposerFromStreamingState();
+  }
 
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
@@ -398,9 +417,13 @@ export async function sendMessage(): Promise<void> {
         revealProse();
         if (tFirst == null) tFirst = performance.now();
         fullText += delta;
-        scheduleAssistantBubbleRender(bubble, fullText, cursor);
+        if (isStreamDomVisible(chat.id)) {
+          scheduleAssistantBubbleRender(bubble, fullText, cursor);
+        }
       }
-      scrollChatIfPinned();
+      if (isStreamDomVisible(chat.id)) {
+        scrollChatIfPinned();
+      }
     }
 
     while (true) {
@@ -442,10 +465,11 @@ export async function sendMessage(): Promise<void> {
       streamMeta = mergeStreamMeta(streamMeta, fallback);
       setAssistantBubbleContent(bubble, fullText || 'The model returned no text.', {
         streaming: false,
+        modeId: chat.modeId,
       });
     } else {
       revealProse();
-      setAssistantBubbleContent(bubble, fullText, { streaming: false });
+      setAssistantBubbleContent(bubble, fullText, { streaming: false, modeId: chat.modeId });
     }
 
     if (fullText) {
@@ -472,11 +496,12 @@ export async function sendMessage(): Promise<void> {
       }
       chat.history.push(assistantMsg);
       recordAssistantReplyOnChat(chat);
+      clearPendingTurn(chat);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
       chat.modelId =
         (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
-      touchChat(chat);
+      recordChatMessage(chat);
       appendStats(wrap, meta.stats, meta.usage);
       if (thinkingNorm.length > 0) {
         renderThoughtsToggle(wrap, thinkingNorm, {
@@ -523,10 +548,12 @@ export async function sendMessage(): Promise<void> {
     setStreaming(false);
     setSidebarStreamPhase(null);
     syncChatItemDotsInDom();
-    setComposerStreamingMode('idle');
+    syncComposerFromStreamingState();
     if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
       setChatFetchAbort(null);
     }
-    scrollChatIfPinned();
+    if (isStreamDomVisible(chat.id)) {
+      scrollChatIfPinned();
+    }
   }
 }

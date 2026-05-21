@@ -155,6 +155,26 @@
   color: var(--text);
 }
 
+.file-viewer-markdown-preview {
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  overflow: auto;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+}
+
+/* Chat bubbles cap prose width; file viewer preview uses the full pane */
+.file-viewer-body .file-viewer-markdown-preview.msg-bubble--md {
+  max-width: none;
+}
+
 .file-viewer-status {
   padding: 16px;
   font-size: 13px;

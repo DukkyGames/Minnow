@@ -1,8 +1,13 @@
 /**
- * Orchestrate mode: plan dropdown above the attachment strip (per-chat persisted path).
+ * Orchestrate mode: plan dropdown inline in composer controls (per-chat persisted path).
  */
 
-import { streaming } from '../app-state';
+const PLAN_LIST_HINTS: Record<string, string> = {
+  server_off: 'Start npm start to list plans.',
+  no_plans_dir: 'No documentation/plans folder in this workspace.',
+};
+
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { discoverOrchestratePlans } from '../chat/orchestrate/list-plans';
 import {
   isExecutableOrchestratePlan,
@@ -55,7 +60,7 @@ export function refreshOrchestratePlanSelectorDisabled(): void {
     if (refreshBtn) refreshBtn.disabled = true;
     return;
   }
-  const disabled = streaming || isComposerRecoveryBlocked();
+  const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
   if (sel && !strip.classList.contains('hidden')) {
     sel.disabled = disabled;
   }
@@ -95,7 +100,7 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
   sel.replaceChildren();
   const emptyOpt = document.createElement('option');
   emptyOpt.value = '';
-  emptyOpt.textContent = 'Select a plan…';
+  emptyOpt.textContent = 'Select plan…';
   sel.appendChild(emptyOpt);
 
   for (const p of plans) {
@@ -122,15 +127,12 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
 
   hint.textContent = '';
   hint.classList.add('hidden');
-  if (error === 'server_off') {
-    hint.textContent = 'Start npm start to list plans.';
-    hint.classList.remove('hidden');
-  } else if (error) {
-    hint.textContent = `Could not list plans: ${error}`;
+  if (error) {
+    hint.textContent =
+      PLAN_LIST_HINTS[error] ?? 'Could not load plans.';
     hint.classList.remove('hidden');
   } else if (plans.length === 0) {
-    hint.textContent =
-      'No plans in documentation/plans/ — use Plan mode first.';
+    hint.textContent = 'No plans yet. Use Plan mode or add documentation/plans/.';
     hint.classList.remove('hidden');
   }
 
@@ -138,7 +140,7 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
 }
 
 function onPlanSelectChange(): void {
-  if (streaming) return;
+  if (isActiveChatStreaming()) return;
   const sel = getPlanSelect();
   const chat = getActiveChat();
   if (!sel) return;

@@ -19,7 +19,6 @@ const PLAN_DENIED_TOOLS: string[] = [
   'execute_command',
   'run_javascript',
   'run_python',
-  'save_file',
   'append_file',
   'insert_at_line',
   'replace_text_in_file',
@@ -32,6 +31,7 @@ const PLAN_DENIED_TOOLS: string[] = [
 
 /** Additional write/mutate tools denied in Research (read-only emphasis). */
 const RESEARCH_EXTRA_DENIED_TOOLS: string[] = [
+  'save_file',
   'make_directory',
   'copy_file',
   'write_clipboard',

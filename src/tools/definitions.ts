@@ -75,7 +75,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (10 browser-native, 31 server-required including 7 CDP browser tools).
+ * All built-in tools (13 browser-native, 31 server-required including 7 CDP browser tools).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
@@ -271,6 +271,84 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['questions'],
+    ),
+  },
+  {
+    id: 'set_chat_mode',
+    label: 'Set chat mode',
+    description:
+      'Switch the active chat operating mode (Build, Plan, Orchestrate, Research, Reef) after the user chooses a handoff option.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'set_chat_mode',
+      'Set the active chat operating mode. Use only after the user selects a mode switch (never auto-switch without consent).',
+      {
+        mode_id: {
+          type: 'string',
+          enum: ['build', 'plan', 'orchestrate', 'research', 'reef'],
+          description: 'Target operating mode for the active chat',
+        },
+      },
+      ['mode_id'],
+    ),
+  },
+  {
+    id: 'create_chat_with_mode',
+    label: 'Create chat with mode',
+    description:
+      'Create a new chat with a preset operating mode, optional Orchestrate plan path, and optional seed user message.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'create_chat_with_mode',
+      'Create and activate a new chat with the given mode. For Orchestrate handoff, pass plan_path and optional initial_user_message (e.g. Execute plan at documentation/plans/foo.md).',
+      {
+        mode_id: {
+          type: 'string',
+          enum: ['build', 'plan', 'orchestrate', 'research', 'reef'],
+          description: 'Operating mode for the new chat',
+        },
+        plan_path: {
+          type: 'string',
+          description:
+            'Workspace-relative plan path for Orchestrate (documentation/plans/*.md)',
+        },
+        initial_user_message: {
+          type: 'string',
+          description: 'Optional first user message seeded into the new chat history',
+        },
+      },
+      ['mode_id'],
+    ),
+  },
+  {
+    id: 'propose_mode_switch',
+    label: 'Propose mode switch',
+    description:
+      'Show standard mode-handoff multiple-choice cards (plan complete, wrong mode, Reef widget offer).',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'propose_mode_switch',
+      'Ask the user a standard mode-handoff question via the ask_question UI. Situations: plan_complete, implement_in_wrong_mode, plan_in_build, reef_visualization.',
+      {
+        situation: {
+          type: 'string',
+          enum: [
+            'plan_complete',
+            'implement_in_wrong_mode',
+            'plan_in_build',
+            'reef_visualization',
+          ],
+          description: 'Which handoff preset to show',
+        },
+        plan_path: {
+          type: 'string',
+          description: 'Plan file path when situation is plan_complete',
+        },
+      },
+      ['situation'],
     ),
   },
 
@@ -662,7 +740,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         type: {
           type: 'string',
-          description: 'Sub-agent type id (e.g. generalPurpose, explore, shell)',
+          description:
+            'Sub-agent type id (e.g. generalPurpose, explore, shell, reef-widget)',
         },
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {

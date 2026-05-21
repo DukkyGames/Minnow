@@ -130,16 +130,28 @@
   border-radius: var(--radius-sm);
   background: var(--bg);
   cursor: pointer;
-}
-
-.model-action-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  transition:
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
 }
 
 .model-action-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.model-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .model-action-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
 }
 
 .icon-btn {
@@ -158,6 +170,36 @@
 }
 
 .icon-btn:active { background: var(--bg); }
+
+/* Agent shell run while terminal panel is closed (see terminal-panel.ts). */
+.icon-btn.icon-btn--agent-run {
+  position: relative;
+}
+
+.icon-btn.icon-btn--agent-run::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  animation: terminal-agent-run-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes terminal-agent-run-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.92);
+  }
+}
 
 .workspace-btn .icon-svg {
   width: 18px;

@@ -6,10 +6,24 @@ import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
 import { isExecutableOrchestratePlan } from './plan-path';
 
+export type PlanDiscoverError = 'server_off' | 'no_plans_dir' | string;
+
 export interface DiscoverOrchestratePlansResult {
   plans: string[];
   /** Present when listing failed or server is unavailable (UI maps to hints). */
-  error?: 'server_off' | string;
+  error?: PlanDiscoverError;
+}
+
+/**
+ * Maps raw find_files errors to stable codes the UI can phrase briefly.
+ */
+export function normalizePlanDiscoverError(raw: string): PlanDiscoverError {
+  const msg = raw.trim();
+  if (!msg) return 'find_files failed';
+  if (/ENOENT|no such file or directory/i.test(msg)) {
+    return 'no_plans_dir';
+  }
+  return msg;
 }
 
 /**
@@ -42,9 +56,10 @@ export async function discoverOrchestratePlans(): Promise<DiscoverOrchestratePla
   const content = typeof raw === 'string' ? raw : '';
   const trimmed = content.trim();
   if (trimmed.startsWith('Error:')) {
+    const rawMsg = trimmed.replace(/^Error:\s*/i, '').trim() || 'find_files failed';
     return {
       plans: [],
-      error: trimmed.replace(/^Error:\s*/i, '').trim() || 'find_files failed',
+      error: normalizePlanDiscoverError(rawMsg),
     };
   }
 

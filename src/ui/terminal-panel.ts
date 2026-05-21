@@ -42,6 +42,12 @@ let stickToBottom = true;
 let displayBytes = 0;
 const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
 let agentOutputVisible = false;
+/** Depth of agent runs that requested the top-bar hint while the panel was closed. */
+let agentRunHintDepth = 0;
+
+const TERMINAL_BTN_DEFAULT_TITLE = 'Terminal (Ctrl+`)';
+const TERMINAL_BTN_AGENT_RUN_TITLE =
+  'Agent command running — click Terminal to view';
 
 /** Hooks for tool loop streaming integration. */
 export interface TerminalStreamHooks {
@@ -161,6 +167,19 @@ export function appendTerminalOutput(
   externalHooks.onChunk?.(runId, stream, text);
 }
 
+function syncTerminalAgentRunHint(): void {
+  const btn = document.getElementById('btnTerminal');
+  if (!btn) return;
+  const show = agentRunHintDepth > 0;
+  btn.classList.toggle('icon-btn--agent-run', show);
+  btn.setAttribute('title', show ? TERMINAL_BTN_AGENT_RUN_TITLE : TERMINAL_BTN_DEFAULT_TITLE);
+}
+
+function bumpAgentRunHint(delta: number): void {
+  agentRunHintDepth = Math.max(0, agentRunHintDepth + delta);
+  syncTerminalAgentRunHint();
+}
+
 function setPanelOpen(open: boolean): void {
   if (!panelEl) return;
   const currentlyOpen = isTerminalPanelOpen();
@@ -172,6 +191,9 @@ function setPanelOpen(open: boolean): void {
   panelEl.classList.toggle('is-collapsed', !open);
   void saveTerminalMeta({ open });
   if (open) {
+    agentRunHintDepth = 0;
+    syncTerminalAgentRunHint();
+    void ensureTerminalTabsWhenOpen();
     requestAnimationFrame(() => {
       onTerminalPanelResize();
       focusTerminalXterm();
@@ -185,8 +207,33 @@ function ensureTerminalPanelVisible(): void {
   }
 }
 
+/** Wire PTY tabs and attach the active tab only after the user opens the panel. */
+async function ensureTerminalTabsWhenOpen(): Promise<void> {
+  if (!isTerminalPanelOpen()) return;
+
+  const tabBar = document.getElementById('terminalTabBar');
+  const shellSelect = document.getElementById(
+    'terminalShellSelect',
+  ) as HTMLSelectElement | null;
+  if (
+    !tabBar ||
+    !shellSelect ||
+    !getLocalServerAvailable() ||
+    !isTerminalXtermReady()
+  ) {
+    return;
+  }
+
+  try {
+    await initTerminalTabs(tabBar, shellSelect);
+  } catch (err) {
+    console.error('Terminal tabs failed to initialize', err);
+  }
+}
+
 export function openTerminalPanel(): void {
   ensureTerminalPanelVisible();
+  void ensureTerminalTabsWhenOpen();
   void refreshTerminalHistoryForActiveChat();
 }
 
@@ -354,11 +401,14 @@ export async function runCommandWithTerminalStream(
     hooks?: TerminalStreamHooks;
   },
 ): Promise<string> {
-  const meta = getTerminalMetaCached();
-  if (options.source === 'agent' && meta.autoOpenOnAgentRun) {
-    ensureTerminalPanelVisible();
+  const panelWasClosed = !isTerminalPanelOpen();
+  // Agent/sub-agent shell tools never raise the panel; output streams in the background.
+  const showAgentRunHint = options.source === 'agent' && panelWasClosed;
+  if (showAgentRunHint) {
+    bumpAgentRunHint(1);
   }
 
+  try {
   const label = options.displayLabel ?? command;
   beginCommandOutput(label, { clear: true });
 
@@ -434,46 +484,20 @@ export async function runCommandWithTerminalStream(
     parts.push('(no output)');
   }
   return parts.join('\n\n');
+  } finally {
+    if (showAgentRunHint) {
+      bumpAgentRunHint(-1);
+    }
+  }
 }
 
 export function setTerminalStreamHooks(hooks: TerminalStreamHooks): void {
   externalHooks = hooks;
 }
 
-export async function initTerminalPanel(): Promise<void> {
-  getElements();
-  if (!panelEl) return;
-
-  const meta = await loadTerminalMeta();
-  applyPanelHeight(meta.heightPx);
-  setPanelOpen(meta.open);
-  updateOfflineBanner();
-  hideAgentOutputPane();
-
-  if (xtermHostEl) {
-    initTerminalXterm(xtermHostEl);
-  }
-
-  const tabBar = document.getElementById('terminalTabBar');
-  const shellSelect = document.getElementById(
-    'terminalShellSelect',
-  ) as HTMLSelectElement | null;
-  if (
-    tabBar &&
-    shellSelect &&
-    getLocalServerAvailable() &&
-    isTerminalXtermReady()
-  ) {
-    try {
-      await initTerminalTabs(tabBar, shellSelect);
-    } catch (err) {
-      console.error('Terminal tabs failed to initialize', err);
-    }
-  }
-
-  window.addEventListener('pagehide', () => {
-    void detachAllTerminalTabs();
-  });
+function wireTerminalPanelButtons(): void {
+  if (panelEl?.dataset.buttonsWired === 'true') return;
+  if (panelEl) panelEl.dataset.buttonsWired = 'true';
 
   document.getElementById('btnTerminal')?.addEventListener('click', () => {
     toggleTerminalPanel();
@@ -486,6 +510,32 @@ export async function initTerminalPanel(): Promise<void> {
 
   document.getElementById('btnTerminalCollapse')?.addEventListener('click', () => {
     closeTerminalPanel();
+  });
+}
+
+export async function initTerminalPanel(): Promise<void> {
+  getElements();
+  if (!panelEl) return;
+
+  wireTerminalPanelButtons();
+
+  const meta = await loadTerminalMeta();
+  applyPanelHeight(meta.heightPx);
+  setPanelOpen(meta.open);
+  updateOfflineBanner();
+  hideAgentOutputPane();
+
+  if (xtermHostEl) {
+    initTerminalXterm(xtermHostEl);
+  }
+
+  // PTY tabs attach only when the panel is opened (avoids orphan sessions on reload).
+  if (meta.open) {
+    await ensureTerminalTabsWhenOpen();
+  }
+
+  window.addEventListener('pagehide', () => {
+    void detachAllTerminalTabs();
   });
 
   setupResizeHandle();
@@ -504,19 +554,13 @@ export function registerTerminalKeyboardShortcut(): void {
 
 export function onTerminalServerAvailabilityChanged(): void {
   updateOfflineBanner();
-  if (!getLocalServerAvailable() || isTerminalTabsInitialized()) return;
+  if (!getLocalServerAvailable()) return;
 
   getElements();
-  const tabBar = document.getElementById('terminalTabBar');
-  const shellSelect = document.getElementById(
-    'terminalShellSelect',
-  ) as HTMLSelectElement | null;
   if (xtermHostEl && !isTerminalXtermReady()) {
     initTerminalXterm(xtermHostEl);
   }
-  if (tabBar && shellSelect && isTerminalXtermReady()) {
-    void initTerminalTabs(tabBar, shellSelect).catch((err) => {
-      console.error('Terminal tabs failed to initialize', err);
-    });
+  if (isTerminalPanelOpen()) {
+    void ensureTerminalTabsWhenOpen();
   }
 }

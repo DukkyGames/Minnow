@@ -206,6 +206,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     return executeTool(name, args, {
       ...ctx,
       chatId: run.parentChatId ?? undefined,
+      modeId,
       subAgentType: run.type,
     });
   };

@@ -31,4 +31,12 @@ describe('sub-agent config', () => {
     const config = await loadSubAgentConfig();
     assert.equal(config.enabled, false);
   });
+
+  test('reef-widget type is registered with read-only allow list', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const reef = merged.types['reef-widget'];
+    assert.ok(reef);
+    assert.ok(reef.allowedTools?.includes('read_file'));
+    assert.ok(reef.deniedTools.includes('save_file'));
+  });
 });

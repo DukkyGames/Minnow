@@ -5,6 +5,7 @@ const {
   parseReadFileRangeBody,
   formatViewerPathLabel,
   hasLargeFileExcerptFooter,
+  isMarkdownFilePath,
   LARGE_FILE_BYTES,
   saveCurrentFile,
   bindFileViewerControls,
@@ -29,6 +30,12 @@ describe('file viewer save helpers', () => {
 
   test('LARGE_FILE_BYTES is 512000', () => {
     assert.equal(LARGE_FILE_BYTES, 512_000);
+  });
+
+  test('isMarkdownFilePath matches md and markdown extensions', () => {
+    assert.equal(isMarkdownFilePath('documentation/plans/foo.md'), true);
+    assert.equal(isMarkdownFilePath('README.markdown'), true);
+    assert.equal(isMarkdownFilePath('src/app.ts'), false);
   });
 
   test('saveCurrentFile returns false when nothing open', async () => {

@@ -4,6 +4,7 @@
 
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
@@ -26,6 +27,7 @@ export const LARGE_FILE_EXCERPT_FOOTER_RE =
   /\n\n\/\* Showing lines 1–\d+ only \(\d+ bytes total\)\. \*\/\s*$/;
 
 let editorView: EditorView | null = null;
+let markdownPreviewEl: HTMLElement | null = null;
 let currentPath: string | null = null;
 let originalContent = '';
 let isDirty = false;
@@ -51,6 +53,12 @@ export function formatViewerPathLabel(path: string, dirty: boolean): string {
 /** Whether content ends with the large-file excerpt notice. */
 export function hasLargeFileExcerptFooter(content: string): boolean {
   return LARGE_FILE_EXCERPT_FOOTER_RE.test(content);
+}
+
+/** True when the path should render as read-only markdown preview (not CodeMirror). */
+export function isMarkdownFilePath(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  return ext === 'md' || ext === 'markdown';
 }
 
 function buildLargeFileExcerptFooter(byteLength: number): string {
@@ -140,6 +148,7 @@ function destroyEditor(): void {
     editorView.destroy();
     editorView = null;
   }
+  markdownPreviewEl = null;
 }
 
 function markDirty(dirty: boolean): void {
@@ -166,6 +175,29 @@ function updateViewerChrome(): void {
   if (banner) {
     banner.hidden = !readOnlyExcerpt;
   }
+}
+
+function mountMarkdownPreview(content: string): void {
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  host.innerHTML = '';
+
+  if (readOnlyExcerpt) {
+    const banner = document.createElement('p');
+    banner.id = 'fileViewerReadOnlyBanner';
+    banner.className = 'file-viewer-readonly-banner';
+    banner.textContent =
+      `Read-only preview — file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
+    host.appendChild(banner);
+  }
+
+  const preview = document.createElement('div');
+  preview.className = 'file-viewer-markdown-preview msg-bubble msg-bubble--md';
+  host.appendChild(preview);
+  markdownPreviewEl = preview;
+  setAssistantBubbleContent(preview, content, { streaming: false });
+  updateViewerChrome();
 }
 
 function mountEditor(content: string, path: string): void {
@@ -379,7 +411,11 @@ export async function openFileInViewer(
     originalContent = loaded.content;
     readOnlyExcerpt = loaded.readOnlyExcerpt;
     isDirty = false;
-    mountEditor(loaded.content, relativePath);
+    if (isMarkdownFilePath(relativePath)) {
+      mountMarkdownPreview(loaded.content);
+    } else {
+      mountEditor(loaded.content, relativePath);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setViewerError(message || 'Could not open file');

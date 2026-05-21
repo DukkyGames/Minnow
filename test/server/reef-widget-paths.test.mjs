@@ -9,9 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import {
   getBuiltinReefWidgetsDir,
+  getHomeReefModulesDir,
+  isReefWidgetPathAlias,
+  tryResolveReefModulePath,
+  tryResolveReefModulesFindRoot,
   tryResolveReefWidgetReadPath,
   tryResolveReefWidgetsFindRoot,
 } from '../../server/reef/widget-paths.js';
+import { ensureMinnowLayout, resetMinnowHomeCache } from '../../server/config/home.js';
 import { getAppRoot } from '../../server/workspace/root.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,5 +113,56 @@ describe('reef widget-paths', () => {
     const root = tryResolveReefWidgetsFindRoot('src/chat/reef/widgets/snippet-*.md', '.');
     assert.ok(root);
     assert.ok(fs.existsSync(root));
+  });
+});
+
+describe('reef module-paths', () => {
+  /** @type {string} */
+  let tempHome;
+
+  test('setup temp MINNOW_HOME with reef/modules scaffold', async () => {
+    tempHome = path.join(REPO_ROOT, 'test', 'tmp', 'reef-modules-home');
+    await fs.promises.rm(tempHome, { recursive: true, force: true });
+    process.env.MINNOW_HOME = tempHome;
+    resetMinnowHomeCache();
+    await ensureMinnowLayout();
+    const modulesDir = getHomeReefModulesDir();
+    assert.ok(fs.existsSync(modulesDir));
+    assert.ok(fs.existsSync(path.join(modulesDir, '.gitkeep')));
+  });
+
+  test('@minnow/reef/modules/my-widget.md resolves under home', () => {
+    const resolved = tryResolveReefModulePath('@minnow/reef/modules/my-widget.md');
+    assert.ok(resolved);
+    assert.equal(resolved, path.join(getHomeReefModulesDir(), 'my-widget.md'));
+  });
+
+  test('reef/modules/*.md resolves under home', () => {
+    const resolved = tryResolveReefModulePath('reef/modules/saved.md');
+    assert.ok(resolved);
+    assert.equal(resolved, path.join(getHomeReefModulesDir(), 'saved.md'));
+  });
+
+  test('path traversal outside modules dir is rejected', () => {
+    const resolved = tryResolveReefModulePath('@minnow/reef/modules/../../../outside.md');
+    assert.equal(resolved, null);
+  });
+
+  test('find_files: @minnow/reef/modules redirects to home modules dir', () => {
+    const root = tryResolveReefModulesFindRoot('*.md', '@minnow/reef/modules');
+    assert.ok(root);
+    assert.equal(root, getHomeReefModulesDir());
+  });
+
+  test('isReefWidgetPathAlias detects template paths', () => {
+    assert.equal(isReefWidgetPathAlias('@minnow/reef/widgets/calculator.md'), true);
+    assert.equal(isReefWidgetPathAlias('src/chat/reef/widgets/tabs.md'), true);
+    assert.equal(isReefWidgetPathAlias('@minnow/reef/modules/foo.md'), false);
+  });
+
+  test('teardown temp MINNOW_HOME', async () => {
+    await fs.promises.rm(tempHome, { recursive: true, force: true });
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
   });
 });

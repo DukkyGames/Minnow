@@ -161,6 +161,22 @@
   word-break: break-word;
 }
 
+.settings-kv__value .settings-kv-input {
+  max-width: 140px;
+}
+
+.settings-kv-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-kv-suffix {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .settings-profile-tabs {
   display: flex;
   flex-wrap: wrap;

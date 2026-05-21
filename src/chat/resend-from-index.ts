@@ -2,7 +2,7 @@
  * Replay the assistant turn from an existing user message (no duplicate user row).
  */
 
-import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { clearAttachments } from '../attachments/store';
 import { parseSlashCommand } from '../skills/parse-slash';
 import { parseSkillTagFromHistory } from '../skills/history-content';
@@ -17,7 +17,7 @@ export async function resendFromIndex(
   chatId: string,
   userHistoryIndex: number,
 ): Promise<void> {
-  if (streaming) {
+  if (isActiveChatStreaming()) {
     setStatus('spin', 'Finish or stop the current reply first');
     return;
   }

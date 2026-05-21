@@ -96,6 +96,43 @@ describe('chat-scroll', () => {
     assert.equal(chip.classList.contains('hidden'), true);
   });
 
+  test('jump chip stays hidden in board view chrome', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 0;
+    };
+
+    const main = document.createElement('div');
+    main.id = 'mainColumn';
+    main.className = 'main-column main-column--board-view';
+    document.body.appendChild(main);
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    Object.defineProperty(area, 'scrollHeight', { value: 1200, configurable: true });
+    Object.defineProperty(area, 'clientHeight', { value: 400, configurable: true });
+    let scrollTop = 0;
+    Object.defineProperty(area, 'scrollTop', {
+      get: () => scrollTop,
+      set: (v) => {
+        scrollTop = v;
+      },
+      configurable: true,
+    });
+    main.appendChild(area);
+
+    const chip = document.createElement('button');
+    chip.id = 'chatJumpLatest';
+    chip.className = 'chat-jump-latest';
+    main.appendChild(chip);
+
+    initChatScroll();
+    area.dispatchEvent(new window.Event('scroll'));
+    assert.equal(chip.classList.contains('hidden'), true);
+  });
+
   test('scrollChatIfPinned does not scroll when detached', () => {
     const window = new Window();
     globalThis.document = window.document;
