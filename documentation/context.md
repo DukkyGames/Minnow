@@ -38,7 +38,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-20):** `npm run build` PASS; `npm test` **459** tests, **457** pass (**2** fail: `messages-stream-row` session init â€” unrelated to Reef); all **63** reef tests pass (paths, conventions, prompts catalog, iframe/bridge).
+**Integration QA (2026-05-21):** Reef widget chart templates/snippets use theme tokens only (`var(--accent)`, `color-mix(in oklch, var(--accent) …)` for multi-series/heatmap levels — no hex). `node --test test/chat/reef/*.test.mjs` convention suites pass (24 tests). Full `npm test` may still report unrelated failures (e.g. `messages-stream-row` session init).
 
 ## What it is
 

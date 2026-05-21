@@ -1,4 +1,4 @@
-Pure SVG sparkline (~80×24px, `stroke: #4f8ef7`). No chart library.
+Pure SVG sparkline (~80×24px, `stroke: var(--accent)`). No chart library.
 
 **Embed in a stat card:** copy the `<svg class="rw-sparkline">` into the `.rw-spark` slot on `snippet-stat-card.md` (replace the placeholder). Keep the card’s `.rw-spark { margin-top: 8px; height: 36px; … }` wrapper so the line centers in the reserved band.
 
@@ -9,10 +9,11 @@ Pure SVG sparkline (~80×24px, `stroke: #4f8ef7`). No chart library.
 <style>
 .rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
 .rw-sparkline { display: block; width: 80px; height: 24px; }
+.rw-sparkline polyline { stroke: var(--accent); }
 </style>
 <div class="rw">
   <svg class="rw-sparkline" viewBox="0 0 80 24" width="80" height="24" aria-hidden="true">
-    <polyline id="spark" fill="none" stroke="#4f8ef7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    <polyline id="spark" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
 </div>
 <script>
