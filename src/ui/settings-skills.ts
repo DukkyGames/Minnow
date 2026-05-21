@@ -232,7 +232,7 @@ export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<v
     void (async () => {
       try {
         await createCustomSkill(id, labelRaw.trim() || undefined);
-        setStatus('ok', `Custom skill "${id}" created — expand to edit SKILL.md`);
+        setStatus('ok', `Custom skill "${id}" created. Expand to edit SKILL.md.`);
         await redrawList();
         const card = list.querySelector(`[data-skill-id="${id}"]`);
         const details = card?.querySelector('details');

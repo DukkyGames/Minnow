@@ -12,7 +12,7 @@ import {
   updateProvider,
   updateProviderSecrets,
 } from './store.js';
-import { proxyChatCompletions, proxyModelLoad, proxyModelUnload, proxyModels } from './proxy.js';
+import { proxyModelLoad, proxyModelUnload, proxyModels } from './proxy.js';
 import { isSafeProviderPathSegment } from './validate.js';
 
 /** CORS headers aligned with /api/config and /api/tools. */
@@ -199,17 +199,6 @@ export async function handleProviderRequest(req, res, pathname) {
       return true;
     }
 
-    const chatMatch = pathname.match(/^\/api\/providers\/([^/]+)\/chat\/completions$/);
-    if (chatMatch && req.method === 'POST') {
-      const id = chatMatch[1];
-      if (!isSafeProviderPathSegment(id)) {
-        sendJson(res, 400, { error: 'Invalid provider id' });
-        return true;
-      }
-      await proxyChatCompletions(id, req, res);
-      return true;
-    }
-
     if (pathname.includes('..')) {
       sendJson(res, 400, { error: 'Invalid path' });
       return true;
@@ -222,8 +211,7 @@ export async function handleProviderRequest(req, res, pathname) {
     if (
       message === 'Invalid provider id' ||
       message === 'Invalid baseUrl' ||
-      message.includes('Invalid apiKind') ||
-      message.includes('Invalid connectionMode')
+      message.includes('Invalid apiKind')
     ) {
       sendJson(res, 400, { error: message });
       return true;

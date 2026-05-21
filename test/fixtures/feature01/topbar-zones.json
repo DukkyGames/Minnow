@@ -1,14 +1,13 @@
 {
-  "zones": ["topbar-brand", "topbar-actions", "topbar-end"],
+  "zones": ["topbar-brand", "topbar-end", "topbar-actions"],
+  "domOrder": ["topbar-brand", "topbar-end", "topbar-spacer", "topbar-actions"],
   "spacer": "topbar-spacer",
   "actionButtonIds": [
     "btnSidebarToggle",
     "btnWorkspace",
-    "btnRefreshModels",
-    "btnStats",
-    "btnTerminal",
     "btnSettings"
   ],
-  "endIds": ["modelStateDot", "modelSelect", "modelSelectTrigger", "modelSelectMenu", "sDot", "sText"],
+  "workspacePathLabelId": "workspacePathLabel",
+  "endIds": ["modelStateDot", "modelSelect", "modelSelectTrigger", "modelSelectMenu", "btnModelLoadUnload", "btnRefreshModels", "sDot", "sText"],
   "forbiddenPatterns": ["workspace-sep"]
 }

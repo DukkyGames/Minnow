@@ -145,11 +145,17 @@ export function showQuestionCardsModal(
     btnSubmit.className = 'question-cards-submit';
     btnSubmit.textContent = 'Submit answers';
 
+    const validation = document.createElement('p');
+    validation.className = 'question-cards-validation';
+    validation.setAttribute('role', 'status');
+    validation.setAttribute('aria-live', 'polite');
+    validation.hidden = true;
+
     const hints = document.createElement('p');
     hints.className = 'question-cards-hints';
     hints.textContent = 'Esc to cancel · Arrow keys to change card';
 
-    footer.append(btnSubmit, hints);
+    footer.append(validation, btnSubmit, hints);
     panel.append(header, nav, cardBody, footer);
     host.appendChild(panel);
 
@@ -195,8 +201,16 @@ export function showQuestionCardsModal(
       btnNext.disabled = cardIndex >= last;
       indicator.textContent = `${cardIndex + 1} / ${questions.length}`;
       const onLast = cardIndex === last;
+      const allValid = areAllDraftsValid(questions, drafts);
       btnSubmit.hidden = !onLast;
-      btnSubmit.disabled = !areAllDraftsValid(questions, drafts);
+      btnSubmit.disabled = !allValid;
+      if (onLast && !allValid) {
+        validation.textContent = 'Answer every question to continue.';
+        validation.hidden = false;
+      } else {
+        validation.textContent = '';
+        validation.hidden = true;
+      }
     }
 
     function renderQuestion(q: AskQuestionItem): void {

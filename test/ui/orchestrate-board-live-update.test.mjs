@@ -369,12 +369,10 @@ describe('orchestrate board live updates', () => {
       waves: [{ id: 'W1' }],
     });
     updateTask(chat, 'W1-A', { status: 'in_progress' });
-    chat.pendingTurn = {
-      role: 'assistant',
-      content: '',
-      startedAt: 1_700_000_000_000,
-      stopped: true,
-    };
+    chat.history = [
+      { role: 'user', content: 'Run plan' },
+      { role: 'assistant', content: 'Partial', stopped: true },
+    ];
     setSessionStateForTests({
       version: 2,
       activeId: chat.id,

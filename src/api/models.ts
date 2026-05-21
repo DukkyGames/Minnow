@@ -262,7 +262,7 @@ export async function fetchModels(): Promise<void> {
     if (e && e.name === 'AbortError') return;
     sel.innerHTML = '<option value="">Cannot reach provider</option>';
     syncModelSelectPicker();
-    setStatus('err', `Cannot reach ${providerLabel}`);
+    setStatus('err', `Cannot reach ${providerLabel}. Check Settings → Providers.`);
   } finally {
     if (modelsFetchAbort && modelsFetchAbort.signal === signal) {
       setModelsFetchAbort(null);

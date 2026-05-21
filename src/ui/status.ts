@@ -29,8 +29,17 @@ export type StatusState = 'idle' | 'ok' | 'err' | 'spin';
 
 /** Update the topbar status pill (connection, streaming, workspace — not model counts). */
 export function setStatus(state: StatusState | string, msg: string): void {
-  document.getElementById('sDot')!.className = `s-dot ${state}`;
-  document.getElementById('sText')!.textContent = msg;
+  const dot = document.getElementById('sDot');
+  const text = document.getElementById('sText');
+  if (!dot || !text) return;
+  dot.className = `s-dot ${state}`;
+  text.textContent = msg;
+  const trimmed = msg.trim();
+  if (trimmed.length > 24) {
+    text.setAttribute('title', trimmed);
+  } else {
+    text.removeAttribute('title');
+  }
 }
 
 /** Default idle success after model list refresh (matches chat loop). */

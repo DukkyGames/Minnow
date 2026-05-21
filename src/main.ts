@@ -5,6 +5,7 @@
 import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/global.css';
+import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/sidebar.css';
@@ -28,7 +29,6 @@ import './styles/tool-approval.css';
 import './styles/question-cards.css';
 import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
-import './styles/pending-turn-recovery.css';
 import './styles/orchestrate-plan-selector.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
@@ -54,12 +54,14 @@ import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
-import { getActiveChat, loadSessionsFromStorage } from './state/sessions';
+import {
+  getActiveChat,
+  loadSessionsFromStorage,
+  sessionState,
+} from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
-import { streaming } from './app-state';
-import { flushPendingTurnNow } from './state/pending-turn';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
-import { bootTurnRecoveryForChat } from './chat/turn-recovery';
+import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { autoResize, handleComposerPrimaryAction, handleKey } from './ui/input';
 import {
   applySidebarVisuals,
@@ -231,7 +233,9 @@ export async function initApp(): Promise<void> {
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
-  void bootTurnRecoveryForChat(getActiveChat());
+  if (sessionState) {
+    void bootGenerationResumeForChats(sessionState.chats);
+  }
   renderStatsForChat(getActiveChat());
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
@@ -253,17 +257,6 @@ export async function initApp(): Promise<void> {
     if (e.key === 'Escape') {
       closeComposerToolsPopover();
       dismissOpenLayers();
-    }
-  });
-
-  const flushOnExit = (): void => {
-    if (streaming) flushPendingTurnNow();
-  };
-  window.addEventListener('pagehide', flushOnExit);
-  window.addEventListener('beforeunload', flushOnExit);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && streaming) {
-      flushPendingTurnNow();
     }
   });
 

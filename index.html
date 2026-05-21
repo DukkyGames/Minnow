@@ -38,10 +38,10 @@
     height: 100%;
     height: 100dvh;
     overflow: hidden;
-    background: #fefefe;
+    background: oklch(100% 0.00011 271.152);
   }
   html[data-theme="dark"], html[data-theme="dark"] body {
-    background: #121218;
+    background: oklch(11% 0.012 271);
   }
   html:not(.app-ready) body > :not(#app-loader) {
     visibility: hidden;
@@ -56,13 +56,13 @@
     justify-content: center;
     gap: 14px;
     padding: max(16px, env(safe-area-inset-top)) 24px max(16px, env(safe-area-inset-bottom));
-    background: #fefefe;
+    background: oklch(100% 0.00011 271.152);
     color: oklch(31.714% 0.00004 271.152);
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
   html[data-theme="dark"] .app-loader {
-    background: #121218;
+    background: oklch(11% 0.012 271);
     color: oklch(72% 0.02 271);
   }
   html.app-ready .app-loader {
@@ -73,16 +73,16 @@
     width: 56px;
     height: 56px;
     border-radius: 10px;
-    background: #000;
-    color: #fefefe;
+    background: oklch(0% 0 0);
+    color: oklch(100% 0.00011 271.152);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
   }
   html[data-theme="dark"] .app-loader__mark {
-    background: #f2f2f5;
-    color: #121218;
+    background: oklch(96% 0.008 271);
+    color: oklch(11% 0.012 271);
   }
   .app-loader__mark svg {
     width: 32px;
@@ -98,7 +98,7 @@
   .app-loader__status {
     margin: 0;
     font-size: 12px;
-    color: oklch(62% 0.025 250);
+    color: oklch(52% 0.028 250);
     letter-spacing: 0.02em;
   }
   html[data-theme="dark"] .app-loader__status {
@@ -108,13 +108,13 @@
     width: 20px;
     height: 20px;
     border: 2px solid oklch(90% 0.01 250);
-    border-top-color: #000;
+    border-top-color: oklch(0% 0 0);
     border-radius: 50%;
     animation: app-loader-spin 0.75s linear infinite;
   }
   html[data-theme="dark"] .app-loader__spinner {
     border-color: oklch(32% 0.02 250);
-    border-top-color: #f2f2f5;
+    border-top-color: oklch(96% 0.008 271);
   }
   @keyframes app-loader-spin {
     to { transform: rotate(360deg); }
@@ -143,37 +143,17 @@
   </div>
   <div class="topbar-sep" aria-hidden="true"></div>
 
-  <div class="topbar-actions">
-    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
-    <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-label="Choose workspace folder" title="Choose workspace folder">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-    </button>
-    <button class="icon-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" onclick="fetchModels()">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M20 4v4h-4"/>
-        <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
-        <path d="M4 20v-4h4"/>
-        <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
-      </svg>
-    </button>
-    <button class="icon-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
-    </button>
-    <button class="icon-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
-    </button>
-    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </button>
-  </div>
-
-  <div class="topbar-spacer" aria-hidden="true"></div>
-
   <div class="topbar-end">
     <div class="model-wrap" data-model-state="unknown">
       <label class="visually-hidden" id="modelSelectLabel" for="modelSelectTrigger">Model</label>
+      <button class="icon-btn model-refresh-btn" type="button" id="btnRefreshModels" aria-label="Refresh models" title="Refresh model list" onclick="fetchModels()">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 4v4h-4"/>
+          <path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/>
+          <path d="M4 20v-4h4"/>
+          <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
+        </svg>
+      </button>
       <div class="model-select-inner" id="modelSelectRoot">
         <span class="model-state-dot model-load-dot" id="modelStateDot" aria-hidden="true"></span>
         <select id="modelSelect" class="model-select-native" tabindex="-1" aria-hidden="true" onchange="onModelSelectChange()"></select>
@@ -183,11 +163,28 @@
         <ul class="model-select-menu hidden" id="modelSelectMenu" role="listbox" aria-labelledby="modelSelectLabel"></ul>
       </div>
       <button type="button" id="btnModelLoadUnload" class="model-action-btn" hidden aria-label="Load model" title="Load selected model into VRAM" onclick="toggleSelectedModelLoad()">Load</button>
+      <div class="status-pill" role="status" aria-live="polite">
+        <div class="s-dot" id="sDot" aria-hidden="true"></div>
+        <span id="sText">Loading models…</span>
+      </div>
     </div>
-    <div class="status-pill" role="status" aria-live="polite">
-      <div class="s-dot" id="sDot" aria-hidden="true"></div>
-      <span id="sText">Loading models…</span>
+  </div>
+
+  <div class="topbar-spacer" aria-hidden="true"></div>
+
+  <div class="topbar-actions">
+    <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div class="workspace-control">
+      <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
+      <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </button>
     </div>
+    <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
   </div>
 </header>
 
@@ -518,22 +515,32 @@
     <button type="button" class="chat-new-wide" onclick="createChat()">+ New chat</button>
     <button type="button" class="chat-new-compact" aria-label="New chat" onclick="createChat()">+</button>
     <div class="chat-list" id="chatList" role="list"></div>
+    <div class="chat-sidebar-footer">
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
+      </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
+      </button>
+    </div>
   </aside>
 
   <div id="workspaceSplit" class="workspace-split">
   <div class="main-column" id="mainColumn">
-    <!-- Chat messages -->
-    <main class="chat-area" id="chatArea">
-      <div class="empty-state" id="emptyState">
-        <div class="empty-icon" aria-hidden="true">
-          <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+    <!-- Chat messages + jump chip anchored to bottom of scroll viewport -->
+    <div class="chat-viewport">
+      <main class="chat-area" id="chatArea">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon" aria-hidden="true">
+            <svg class="minnow-glyph icon-svg" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z"/><path fill="currentColor" d="M 69 50 L 84 40 L 81 50 L 84 60 Z"/></svg>
+          </div>
+          <p class="empty-title">No messages yet</p>
+          <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
         </div>
-        <p class="empty-title">No messages yet</p>
-        <p class="empty-hint">Pick a model above, then type below. LM Studio must be running at the server URL in Settings.</p>
-      </div>
-    </main>
+      </main>
 
-    <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
+      <button type="button" id="chatJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
+    </div>
 
     <!-- Tool approval: mounted here by showToolApprovalModal (above composer, not a full-screen popup) -->
     <div id="toolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
@@ -596,7 +603,7 @@
         </div>
       </div>
       <div class="input-bar-send-stack">
-        <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode)" disabled hidden>
+        <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
           <svg class="icon-svg view-mode-toggle-btn__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="8" rx="1"/><rect x="14" y="13" width="7" height="8" rx="1"/></svg>
         </button>
         <button class="send-btn" id="sendBtn" type="button" onclick="handleComposerPrimaryAction()" aria-label="Send message" data-mode="send">

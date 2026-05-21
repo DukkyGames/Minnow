@@ -27,6 +27,7 @@
   font-size: 14px;
   line-height: 1.5;
   outline: none;
+  animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
 }
 
 .tool-approval-panel__header {

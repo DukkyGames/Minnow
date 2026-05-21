@@ -8,7 +8,7 @@ colors:
   border: "oklch(28.094% 0.00003 271.152)"
   border-strong: "oklch(0.34 0.028 250)"
   text: "oklch(31.714% 0.00004 271.152)"
-  text-muted: "oklch(0.62 0.025 250)"
+  text-muted: "oklch(0.52 0.028 250)"
   text-hover: "oklch(100% 0.00011 271.152)"
   accent: "oklch(0% 0 0)"
   accent-subtle: "oklch(27.685% 0.00003 271.152)"
@@ -111,7 +111,7 @@ A restrained light palette: cool near-white grounds, graphite text, black accent
 
 - **Sheet White** (`oklch(100% 0.00011 271.152)`): `--bg`, `--surface`, top bar, sidebar, input bar, stats strip, drawer.
 - **Graphite** (`oklch(31.714% 0.00004 271.152)`): Primary body text.
-- **Ash Label** (`oklch(0.62 0.025 250)`): Muted labels, placeholders, stat names, sidebar section title.
+- **Ash Label** (`oklch(0.52 0.028 250)`): Muted labels, placeholders, stat names, sidebar section title (tuned for WCAG AA on sheet white).
 - **Hairline** (`oklch(28.094% 0.00003 271.152)` / `oklch(0.34 0.028 250)`): `--border` and `--border-strong` dividers, assistant bubble outline, table cells.
 - **Hover Veil** (`oklch(0% 0 0 / 0.84)`): `--surface-elevated` for sidebar row hover and stats expand hover (dark wash on light UI).
 - **Scrim** (`oklch(0.12 0.02 250 / 0.65)`): Settings drawer and mobile sidebar backdrop.
