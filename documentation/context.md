@@ -384,7 +384,7 @@ When `Chat.modeId === 'reef'`, assistant markdown with complete ` ```reef-widget
 
 **Tests:** `test/chat/reef/*.test.mts` (21 tests, happy-dom).
 
-**Widget library (snippets):** Six composable `snippet-*.md` files â€” `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; theme tokens only; snippets omit title chrome.
+**Widget library (snippets):** Six composable `snippet-*.md` files â€” `snippet-chart-line`, `snippet-chart-bar` (Recharts), `snippet-table`, `snippet-stat-card`, `snippet-input-row`, `snippet-sparkline` (SVG, embed in stat card `.rw-spark`). Full templates (15) cover end-to-end UIs including `qa-callllm` (`callLLM` + `onChunk` streaming). Conventions: description + bullets above one ` ```reef-widget ` fence; **no hex colors** (use `var(--*)` and `color-mix` with forwarded tokens for charts/heatmaps); snippets omit title chrome.
 
 ### Expert system (Step 06)
 
