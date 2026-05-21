@@ -158,8 +158,8 @@ export function updateStrip(
   const p = u.prompt_tokens ?? 0;
   const c = u.completion_tokens ?? 0;
   const t = p + c || 1;
-  document.getElementById('barPrompt')!.style.width = `${((p / t) * 100).toFixed(1)}%`;
-  document.getElementById('barCompletion')!.style.width = `${((c / t) * 100).toFixed(1)}%`;
+  document.getElementById('barPrompt')!.style.setProperty('--fill-scale', String(p / t || 0));
+  document.getElementById('barCompletion')!.style.setProperty('--fill-scale', String(c / t || 0));
   document.getElementById('cntPrompt')!.textContent = p ? String(p) : '—';
   document.getElementById('cntCompletion')!.textContent = c ? String(c) : '—';
 

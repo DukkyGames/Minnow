@@ -47,9 +47,11 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   const streamingThisChat =
     ctx.streaming && ctx.streamingChatId != null && ctx.streamingChatId === chat.id;
   const inThinkingStream = streamingThisChat && ctx.streamPhase === 'thinking';
-  const pendingThinkingReload =
-    chat.id === ctx.activeChatId && chat.pendingTurn?.phase === 'thinking';
-  if (inThinkingStream || pendingThinkingReload) {
+  const generationThinkingReload =
+    chat.id === ctx.activeChatId &&
+    Boolean(chat.currentGenerationId?.trim()) &&
+    ctx.streamPhase === 'thinking';
+  if (inThinkingStream || generationThinkingReload) {
     return 'thinking';
   }
   if (chat.id !== ctx.activeChatId && chat.unread === true) {
@@ -58,9 +60,14 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   return 'idle';
 }
 
-/** Updates data-dot-state and inserts/removes the inner spinner for the thinking state. */
-export function applyChatItemDotClasses(dotEl: HTMLElement, state: ChatItemDotState): void {
+/** Updates data-dot-state on the dot and optional row (for collapsed rail badge styling). */
+export function applyChatItemDotClasses(
+  dotEl: HTMLElement,
+  state: ChatItemDotState,
+  rowEl?: HTMLElement | null,
+): void {
   dotEl.dataset.dotState = state;
+  if (rowEl) rowEl.dataset.dotState = state;
   const existing = dotEl.querySelector('.chat-item-dot__spinner');
   if (state === 'thinking') {
     if (!existing) {
@@ -88,7 +95,7 @@ export function syncChatItemDotsInDom(): void {
     if (!chat) continue;
     const dot = row.querySelector('.chat-item-dot');
     if (!(dot instanceof HTMLElement)) continue;
-    applyChatItemDotClasses(dot, resolveChatItemDotState(chat, ctx));
+    applyChatItemDotClasses(dot, resolveChatItemDotState(chat, ctx), row);
   }
 }
 

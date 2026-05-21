@@ -80,6 +80,8 @@ function setupDom() {
 
   boardBtn.hidden = true;
 
+  boardBtn.classList.add('hidden');
+
   document.body.appendChild(boardBtn);
 
 
@@ -188,6 +190,8 @@ describe('view-mode toggle', { concurrency: false }, () => {
 
     assert.equal(btn.hidden, true);
 
+    assert.ok(btn.classList.contains('hidden'));
+
   });
 
 
@@ -211,6 +215,8 @@ describe('view-mode toggle', { concurrency: false }, () => {
     assert.equal(btn.disabled, false);
 
     assert.equal(btn.hidden, false);
+
+    assert.ok(!btn.classList.contains('hidden'));
 
     assert.equal(btn.title, 'Board view (select a plan in chat view for full board)');
 

@@ -119,3 +119,10 @@
   background: var(--thought-segment-bg);
   border: 1px dashed var(--border2);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .thought-bubble,
+  .thought-bubble.thought-fade-out {
+    animation: none;
+  }
+}

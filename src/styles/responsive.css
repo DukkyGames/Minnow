@@ -41,6 +41,10 @@
     min-width: 0;
   }
 
+  .workspace-control {
+    max-width: min(12rem, 32vw);
+  }
+
   .model-wrap {
     max-width: none;
     min-width: 0;
@@ -49,12 +53,6 @@
   .status-pill {
     font-size: 11px;
     gap: 6px;
-  }
-
-  .status-pill #sText {
-    max-width: 5.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .chat-area {
@@ -95,6 +93,15 @@
   .stats-strip.is-expanded .stat-cell.yellow {
     display: block;
   }
+
+  .drawer {
+    width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  .model-action-btn {
+    display: none;
+  }
 }
 
 @media (min-width: 900px) {
@@ -104,17 +111,6 @@
 /* Desktop: sidebar collapse lives in the rail; hamburger is mobile-only */
 @media (min-width: 641px) {
   .topbar-sidebar-toggle {
-    display: none;
-  }
-}
-
-/* Narrow phones: trim top-bar chrome */
-@media (max-width: 380px) {
-  .status-pill #sText {
-    max-width: 4rem;
-  }
-
-  #btnRefreshModels {
     display: none;
   }
 }
@@ -162,5 +158,15 @@
 
   .drawer-clear-btn {
     min-height: var(--touch-min);
+  }
+
+  .topbar .icon-btn {
+    width: var(--touch-min);
+    height: var(--touch-min);
+  }
+
+  .chat-sidebar-footer-btn {
+    width: var(--touch-min);
+    height: var(--touch-min);
   }
 }

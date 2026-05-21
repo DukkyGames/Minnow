@@ -3,7 +3,6 @@
  */
 
 export type ApiKind = 'lm-studio-v0' | 'openai-v1';
-export type ConnectionMode = 'direct' | 'proxy';
 export type AuthStyle = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderId = string;
 
@@ -14,7 +13,6 @@ export interface ProviderPublic {
   baseUrl: string;
   apiKind: ApiKind;
   enabled: boolean;
-  connectionMode: ConnectionMode;
   authStyle?: AuthStyle;
   modelsPath?: string;
   chatCompletionsPath?: string;
@@ -34,12 +32,10 @@ export interface ProviderListResponse {
   activeProviderId: string;
 }
 
-/** Resolved URLs for models + chat for one provider. */
+/** Resolved URLs for models (and load/unload) via Minnow server proxy. */
 export interface ProviderEndpoints {
   provider: ProviderPublic;
-  mode: ConnectionMode;
   modelsUrl: string;
-  chatUrl: string;
   modelsLoadUrl?: string;
   modelsUnloadUrl?: string;
 }

@@ -66,6 +66,18 @@
 
 
 
+/* .icon-btn sets display:flex; override so [hidden] / .hidden hide outside Orchestrate */
+
+#btnViewModeToggleBoard[hidden],
+
+#btnViewModeToggleBoard.hidden {
+
+  display: none !important;
+
+}
+
+
+
 /* Board header: chat toggle inline with Open plan / Resume / Stop */
 
 .board-header__controls .board-header__view-toggle {

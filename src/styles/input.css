@@ -142,9 +142,11 @@
   flex-shrink: 0;
 }
 
-.attach-chip-remove:hover {
-  background: var(--surface);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .attach-chip-remove:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
 }
 
 .attach-chip-remove:focus-visible {
@@ -171,7 +173,8 @@
   display: block;
 }
 
-#msgInput:focus {
+#msgInput:focus,
+#msgInput:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
@@ -211,13 +214,19 @@
   border-radius: var(--radius-md);
   color: var(--send-btn-fg);
   cursor: pointer;
-  transition: opacity 0.2s var(--ease-out), transform 0.15s var(--ease-out);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
   flex-shrink: 0;
 }
 
-.send-btn:hover:not(:disabled) {
-  background: var(--bg);
-  border: 1px solid var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .send-btn:hover:not(:disabled) {
+    background: var(--bg);
+    border: 1px solid var(--accent);
+  }
 }
 
 .send-btn:active:not(:disabled) {
@@ -235,10 +244,12 @@
   color: var(--text);
 }
 
-.send-btn.send-btn--stop:hover:not(:disabled) {
-  background: var(--banner-danger-hover-bg);
-  border-color: var(--banner-danger-hover-border);
-  color: var(--banner-danger-hover-text);
+@media (hover: hover) and (pointer: fine) {
+  .send-btn.send-btn--stop:hover:not(:disabled) {
+    background: var(--banner-danger-hover-bg);
+    border-color: var(--banner-danger-hover-border);
+    color: var(--banner-danger-hover-text);
+  }
 }
 
 .send-btn.send-btn--stop .icon-svg {
@@ -253,10 +264,12 @@
   width: 20px;
   height: 20px;
 }
-.send-btn:hover:not(:disabled) .icon-svg {
-  stroke: var(--text);
-  width: 27px;
-  height: 27px;
+@media (hover: hover) and (pointer: fine) {
+  .send-btn:hover:not(:disabled) .icon-svg {
+    stroke: var(--text);
+    width: 27px;
+    height: 27px;
+  }
 }
 
 .spinner {

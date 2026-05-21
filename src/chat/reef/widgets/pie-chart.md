@@ -19,7 +19,7 @@ import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
-const SLICE_COLORS = ['var(--accent)', 'var(--accent-dim)', 'var(--text-muted)', 'var(--accent)'];
+const SLICE_COLORS = ['#4f8ef7', '#f97316', '#22c55e', '#a855f7'];
 const LABELS = ['Alpha', 'Beta', 'Gamma', 'Delta'];
 
 function App() {

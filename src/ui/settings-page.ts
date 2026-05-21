@@ -150,7 +150,7 @@ function bindStaticSections(): void {
       const ok = await clearMemory(true);
       setStatus(
         ok ? 'ok' : 'err',
-        ok ? 'Memory cleared (archived)' : 'Clear failed — use npm start',
+        ok ? 'Memory cleared (archived)' : 'Clear failed. Use npm start.',
       );
       if (ok) void refreshSettingsSection('memory');
     });
@@ -161,7 +161,7 @@ function bindStaticSections(): void {
       const id = await backupMemory();
       setStatus(
         id ? 'ok' : 'err',
-        id ? `Memory backup: ${id}` : 'Backup failed — use npm start',
+        id ? `Memory backup: ${id}` : 'Backup failed. Use npm start.',
       );
     });
 
