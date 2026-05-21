@@ -37,7 +37,7 @@ function App() {
             <XAxis dataKey="x" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
             <YAxis stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
             <Tooltip contentStyle={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-            <Line type="monotone" dataKey="y" stroke="#4f8ef7" strokeWidth={2} dot={{ fill: '#4f8ef7', r: 3 }} />
+            <Line type="monotone" dataKey="y" stroke="var(--accent)" strokeWidth={2} dot={{ fill: 'var(--accent)', r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

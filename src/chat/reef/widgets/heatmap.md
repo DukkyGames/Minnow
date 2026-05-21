@@ -14,10 +14,10 @@ GitHub-style contribution calendar (7 day rows × 14 week columns) with hover co
   width: 12px; height: 12px; border-radius: 2px; border: 0.5px solid var(--border);
   background: var(--surface); cursor: default;
 }
-.rw-cell[data-l="1"] { background: #93c5fd; }
-.rw-cell[data-l="2"] { background: #60a5fa; }
-.rw-cell[data-l="3"] { background: #3b82f6; }
-.rw-cell[data-l="4"] { background: #1d4ed8; border-color: #1e40af; }
+.rw-cell[data-l="1"] { background: color-mix(in oklch, var(--accent) 25%, var(--surface)); }
+.rw-cell[data-l="2"] { background: color-mix(in oklch, var(--accent) 50%, var(--surface)); }
+.rw-cell[data-l="3"] { background: color-mix(in oklch, var(--accent) 75%, var(--surface)); }
+.rw-cell[data-l="4"] { background: var(--accent); border-color: color-mix(in oklch, var(--accent) 70%, var(--border-strong)); }
 .rw-legend-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); }
 .rw-legend-row .rw-heat { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: repeat(5, 12px); gap: 3px; }
 </style>
