@@ -70,6 +70,7 @@ const SCAFFOLD_DIRS = [
   'logs/terminal',
   'screenshots',
   'reef/widgets',
+  'reef/modules',
 ];
 
 const DEFAULT_META = {
@@ -93,7 +94,7 @@ const DEFAULT_META = {
   terminal: {
     open: false,
     heightPx: 240,
-    autoOpenOnAgentRun: true,
+    autoOpenOnAgentRun: false,
   },
   browser: {
     enabled: true,
@@ -200,6 +201,7 @@ function defaultSessionStateJson() {
         lastStats: null,
         modelInfo: {},
         updatedAt: 0,
+        lastMessageAt: 0,
       },
     ],
   };

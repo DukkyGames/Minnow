@@ -62,7 +62,7 @@ export function finalizeStoppedTurn(ctx: StoppedTurnContext): void {
   if (text && wrapConnected) {
     wrap.classList.remove('msg--awaiting-prose');
     bubble.classList.remove('msg-bubble--awaiting');
-    setAssistantBubbleContent(bubble, text, { streaming: false });
+    setAssistantBubbleContent(bubble, text, { streaming: false, modeId: chat.modeId });
     markMessageStopped(wrap);
   } else if (wrapConnected && wrap.classList.contains('msg--awaiting-prose')) {
     wrap.remove();

@@ -22,7 +22,7 @@ export interface TerminalMeta {
 const DEFAULT_TERMINAL_META: TerminalMeta = {
   open: false,
   heightPx: 240,
-  autoOpenOnAgentRun: true,
+  autoOpenOnAgentRun: false,
   tabs: [],
   activeTabId: null,
   defaultShellProfileId: undefined,
@@ -64,7 +64,7 @@ function normalizeTerminalMeta(raw: unknown): TerminalMeta {
       typeof row.heightPx === 'number' && Number.isFinite(row.heightPx)
         ? Math.min(800, Math.max(120, Math.round(row.heightPx)))
         : DEFAULT_TERMINAL_META.heightPx,
-    autoOpenOnAgentRun: row.autoOpenOnAgentRun !== false,
+    autoOpenOnAgentRun: row.autoOpenOnAgentRun === true,
     tabs,
     activeTabId:
       typeof row.activeTabId === 'string' || row.activeTabId === null

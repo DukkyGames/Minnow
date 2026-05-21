@@ -1,5 +1,8 @@
 import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
+import { refreshActiveBoardIfMounted } from './orchestrate-board';
+import { syncBackgroundStreamHint } from './composer-stream-hint';
 
 export type ComposerStreamingMode = 'idle' | 'streaming';
 
@@ -10,12 +13,13 @@ export function setComposerRecoveryBlocked(blocked: boolean): void {
   recoveryBlocked = blocked;
   const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (sendBtn && !streaming) {
+  if (sendBtn && !isActiveChatStreaming()) {
     sendBtn.disabled = blocked;
   }
   if (input) {
     input.disabled = blocked;
   }
+  void import('./view-mode-toggle').then((m) => m.refreshViewModeToggleDisabled());
 }
 
 export function isComposerRecoveryBlocked(): boolean {
@@ -54,9 +58,16 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   }
 }
 
-/** Send when idle; abort the active stream when a reply is in progress. */
+/** Align send/stop button and background-stream hint with active vs streaming chat. */
+export function syncComposerFromStreamingState(): void {
+  setComposerStreamingMode(isActiveChatStreaming() ? 'streaming' : 'idle');
+  syncBackgroundStreamHint();
+  refreshActiveBoardIfMounted();
+}
+
+/** Send when idle; abort only when the active chat is streaming. */
 export function handleComposerPrimaryAction(): void {
-  if (streaming) {
+  if (isActiveChatStreaming()) {
     stopGeneration();
     return;
   }

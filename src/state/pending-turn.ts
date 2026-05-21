@@ -3,6 +3,7 @@
  */
 
 import { streaming } from '../app-state';
+import { getStreamingChatId } from '../chat/streaming-state';
 import type { Chat, PendingTurn } from '../types';
 import {
   buildPendingSnapshot,
@@ -10,6 +11,7 @@ import {
   clearStalePendingTurnsOnLoad,
   CONTINUE_INTERRUPTED_INSTRUCTION,
   ensurePendingTurn,
+  isPendingTurnObsolete,
   isUserStoppedPendingCheckpoint,
   shouldOfferRecovery,
 } from './pending-turn-shape';
@@ -28,6 +30,7 @@ export {
   clearStalePendingTurnsOnLoad,
   CONTINUE_INTERRUPTED_INSTRUCTION,
   ensurePendingTurn,
+  isPendingTurnObsolete,
   isUserStoppedPendingCheckpoint,
   shouldOfferRecovery,
 };
@@ -91,8 +94,10 @@ export function schedulePendingCheckpoint(chat: Chat, snapshot: PendingTurn): vo
 export function flushPendingTurnNow(): void {
   if (streaming && liveCapture) {
     const snap = liveCapture();
-    if (snap) {
-      syncPendingTurn(getActiveChat(), snap, { immediate: true });
+    const streamChatId = getStreamingChatId();
+    const streamChat = streamChatId ? findChatById(streamChatId) : undefined;
+    if (snap && streamChat) {
+      syncPendingTurn(streamChat, snap, { immediate: true });
       return;
     }
   }

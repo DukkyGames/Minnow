@@ -334,6 +334,9 @@ export interface Chat {
   history: Message[];
   lastStats: LastStats | null;
   modelInfo: ModelInfo;
+  /** Epoch ms of last committed user/assistant/tool history entry (sidebar sort). */
+  lastMessageAt?: number;
+  /** Epoch ms of last session metadata touch (prune, legacy fallback for sort). */
   updatedAt: number;
 }
 

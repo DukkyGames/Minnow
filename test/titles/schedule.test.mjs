@@ -149,6 +149,16 @@ describe('scheduleChatTitleGeneration', () => {
     assert.equal(getChat().name, 'Context title');
   });
 
+  test('falls back to truncated user seed when generation returns null', async () => {
+    setGenerateChatTitleForTests(async () => null);
+
+    scheduleChatTitleGeneration(CHAT_ID, 'How do I tune Redis cache eviction?');
+    await waitMicrotasks();
+    await waitMicrotasks();
+
+    assert.equal(getChat().name, 'How do I tune Redis cache eviction?');
+  });
+
   test('disabled config skips generation', async () => {
     let calls = 0;
     setGenerateChatTitleForTests(async () => {

@@ -20,12 +20,194 @@
   background: var(--surface);
 }
 
+.board-header__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.board-header__leading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .board-header__title {
   margin: 0;
   font-family: var(--font-ui);
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Orchestration status: compact instrumentation chip (stat-chip family). */
+.board-header__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.board-header__badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.board-header__badge--ready {
+  color: var(--ink-muted);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.board-header__badge--running,
+.board-header__badge--active,
+.board-header__badge--paused {
+  color: var(--warning);
+  border-color: var(--settings-warn-banner-border);
+  background: var(--settings-warn-banner-bg);
+}
+
+.board-header__badge--complete {
+  color: var(--success);
+  border-color: var(--tool-call-status-ok-border);
+  background: var(--tool-call-status-ok-bg);
+}
+
+.board-header__badge--failed,
+.board-header__badge--blocked,
+.board-header__badge--stopped {
+  color: var(--danger);
+  border-color: var(--tool-call-status-fail-border);
+  background: var(--tool-call-status-fail-bg);
+}
+
+.board-header__badge--running .board-header__badge-dot,
+.board-header__badge--active .board-header__badge-dot {
+  animation: board-badge-pulse 1.4s var(--ease-out) infinite;
+}
+
+@keyframes board-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-header__badge--running .board-header__badge-dot,
+  .board-header__badge--active .board-header__badge-dot {
+    animation: none;
+  }
+}
+
+button.board-header__activity {
+  margin: 0;
+  line-height: inherit;
+  color: inherit;
+  appearance: none;
+}
+
+.board-header__activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  max-width: min(42rem, 62vw);
+  min-width: 0;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.65rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+.board-header__activity:hover {
+  border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+}
+
+.board-header__activity:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.board-header__activity-kind {
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.board-header__activity-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.board-header__activity--tool {
+  border-color: var(--settings-warn-banner-border);
+  background: var(--settings-warn-banner-bg);
+}
+
+.board-header__activity--tool .board-header__activity-kind {
+  color: var(--warning);
+}
+
+.board-header__activity--message {
+  border-color: color-mix(in oklch, var(--accent) 25%, var(--border));
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
+}
+
+.board-header__activity--thinking,
+.board-header__activity--waiting {
+  border-color: var(--settings-warn-banner-border);
+  background: var(--settings-warn-banner-bg);
+}
+
+.board-header__activity--thinking .board-header__activity-kind,
+.board-header__activity--waiting .board-header__activity-kind {
+  color: var(--warning);
+}
+
+.board-header__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
 }
 
 .board-header__stats {
@@ -50,8 +232,11 @@
 
 .board-header__controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  margin-left: auto;
 }
 
 .board-btn {
@@ -64,6 +249,10 @@
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
 }
 
 .board-btn:disabled {
@@ -71,21 +260,47 @@
   cursor: not-allowed;
 }
 
+.board-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.board-btn--primary {
+  border-color: color-mix(in oklch, var(--accent) 40%, var(--border));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  color: var(--text);
+}
+
 .board-btn--danger {
-  border-color: var(--red);
-  color: var(--red);
+  border-color: var(--tool-call-status-fail-border);
+  background: var(--tool-call-status-fail-bg);
+  color: var(--danger);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-btn:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-elevated);
+    color: var(--elevated-fg);
+  }
+
+  .board-btn--primary:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .board-btn--danger:hover:not(:disabled) {
+    border-color: var(--banner-danger-hover-border);
+    background: var(--banner-danger-hover-bg);
+    color: var(--banner-danger-hover-text);
+  }
 }
 
 .board-main {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-}
-
-@media (min-width: 900px) {
-  .board-main {
-    grid-template-columns: 1fr 220px;
-  }
 }
 
 .kanban-grid {
@@ -132,9 +347,76 @@
   border-color: var(--red);
 }
 
+.board-task-card--clickable {
+  cursor: pointer;
+}
+
+.board-task-card--clickable:hover,
+.board-task-card--clickable:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.board-task-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .board-task-card__id {
   font-weight: 700;
   color: var(--accent);
+}
+
+.board-task-card__agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.board-task-card__agent-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.board-task-card__agent--active {
+  color: var(--warning);
+  border-color: var(--settings-warn-banner-border);
+  background: var(--settings-warn-banner-bg);
+}
+
+.board-task-card__agent--complete {
+  color: var(--success);
+  border-color: var(--tool-call-status-ok-border);
+  background: var(--tool-call-status-ok-bg);
+}
+
+.board-task-card__agent--failed {
+  color: var(--danger);
+  border-color: var(--tool-call-status-fail-border);
+  background: var(--tool-call-status-fail-bg);
+}
+
+.board-task-card__agent--active .board-task-card__agent-dot {
+  animation: board-badge-pulse 1.4s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-task-card__agent--active .board-task-card__agent-dot {
+    animation: none;
+  }
 }
 
 .board-task-card__title {
@@ -155,70 +437,42 @@
 .bt--test { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); }
 .bt--research { background: color-mix(in srgb, var(--ink-muted) 20%, transparent); color: var(--text); }
 
-.board-agents h3 {
-  margin: 0 0 8px;
-  font-size: 0.75rem;
-  color: var(--ink-muted);
-}
-
-.board-agent-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.board-agent-card {
-  padding: 8px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.board-agent-card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.board-agent-card__stop {
-  border: none;
-  background: transparent;
-  color: var(--red);
-  font-size: 1.1rem;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.board-composer {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-}
-
-.board-composer__input {
-  flex: 1;
-  font-family: var(--font-ui);
-  font-size: 0.8rem;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  resize: vertical;
-}
-
 .board-empty {
   padding: 24px;
   text-align: center;
   color: var(--ink-muted);
 }
 
-.board-plan-panel {
-  font-size: 0.75rem;
-  max-height: 240px;
-  overflow: auto;
+/* Board view: stretch within #chatArea (keeps .chat-area padding). */
+.main-column.main-column--board-view .chat-area > .board-root {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.board-plan-panel__body {
-  padding: 8px 0;
+.main-column.main-column--board-view .chat-area > .board-root .board-header {
+  flex-shrink: 0;
 }
+
+.main-column.main-column--board-view .chat-area > .board-root .board-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-column.main-column--board-view .chat-area > .board-root .kanban-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.main-column.main-column--board-view .chat-area > .board-root .kanban-column {
+  min-height: 0;
+}
+
+.main-column.main-column--board-view .chat-area > .board-root .kanban-column__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+

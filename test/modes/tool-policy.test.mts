@@ -19,6 +19,11 @@ describe('filterToolsByMode', () => {
     assert.ok(!filtered.some((t) => t.id === 'execute_command'));
   });
 
+  test('plan includes save_file for plan document writes', () => {
+    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'plan');
+    assert.ok(filtered.some((t) => t.id === 'save_file'));
+  });
+
   test('build includes execute_command when in catalog list', () => {
     const filtered = filterToolsByMode([findTool('execute_command')], 'build');
     assert.equal(filtered.length, 1);

@@ -89,6 +89,10 @@ import {
   renderEntityEditorList,
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
+import {
+  loadTerminalMeta,
+  saveTerminalMeta,
+} from '../config/terminal-meta';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -167,6 +171,21 @@ function appendAppearanceControls(mount: HTMLElement): void {
   mount.appendChild(block);
 }
 
+/** Terminal panel note (agent runs do not auto-open the dock). */
+async function appendTerminalControls(mount: HTMLElement): Promise<void> {
+  void (await loadTerminalMeta());
+  const block = el('div', 'settings-terminal-block');
+  block.appendChild(el('p', 'settings-field-label', 'Terminal'));
+  block.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Agent and sub-agent shell commands run in the background. The terminal panel stays closed unless you open it; the Terminal button pulses while a command is running.',
+    ),
+  );
+  mount.appendChild(block);
+}
+
 async function renderGeneralSection(): Promise<void> {
   const mount = clearMount('settingsGeneralBody');
   if (!mount) return;
@@ -181,6 +200,7 @@ async function renderGeneralSection(): Promise<void> {
   }
 
   appendAppearanceControls(mount);
+  await appendTerminalControls(mount);
 
   const { providers, activeProviderId } = await listProviders();
   const active = providers.find((p) => p.id === activeProviderId) ?? providers[0];
@@ -718,23 +738,55 @@ async function renderSubAgentsSection(): Promise<void> {
   const config = await loadSubAgentConfig();
   if (isAsyncSectionRenderStale('sub-agents', generation)) return;
 
-  const summary = el('dl', 'settings-kv');
-  const addRow = (term: string, value: string) => {
-    summary.appendChild(el('dt', 'settings-kv__term', term));
-    summary.appendChild(el('dd', 'settings-kv__value', value));
+  const persistGlobal = async (
+    patch: Partial<Pick<typeof config, 'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs'>>,
+  ): Promise<void> => {
+    const fresh = await loadSubAgentConfig();
+    const ok = await saveSubAgentConfigToServer({ ...fresh, ...patch });
+    setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
   };
-  addRow('Enabled', config.enabled !== false ? 'Yes' : 'No');
-  addRow('Max concurrent', String(config.globalMaxConcurrent));
-  addRow('Default timeout', `${config.defaultTimeoutMs} ms`);
-  mount.appendChild(summary);
 
-  const enableWrap = el('label', 'settings-toggle-row');
-  const enableCb = document.createElement('input');
-  enableCb.type = 'checkbox';
-  enableCb.checked = config.enabled !== false;
-  enableWrap.appendChild(enableCb);
-  enableWrap.appendChild(el('span', '', 'Enable sub-agents'));
-  mount.appendChild(enableWrap);
+  const summary = el('dl', 'settings-kv');
+  const addTerm = (term: string): HTMLElement => {
+    const dt = el('dt', 'settings-kv__term', term);
+    summary.appendChild(dt);
+    const dd = el('dd', 'settings-kv__value');
+    summary.appendChild(dd);
+    return dd;
+  };
+
+  const enabledDd = addTerm('Enabled');
+  const enabledCb = document.createElement('input');
+  enabledCb.type = 'checkbox';
+  enabledCb.checked = config.enabled !== false;
+  enabledCb.setAttribute('aria-label', 'Enable sub-agents');
+  enabledDd.appendChild(enabledCb);
+
+  const maxDd = addTerm('Max concurrent');
+  const maxInput = document.createElement('input');
+  maxInput.type = 'number';
+  maxInput.className = 'settings-select settings-kv-input';
+  maxInput.min = '1';
+  maxInput.max = '16';
+  maxInput.step = '1';
+  maxInput.value = String(config.globalMaxConcurrent);
+  maxInput.setAttribute('aria-label', 'Max concurrent sub-agents');
+  maxDd.appendChild(maxInput);
+
+  const timeoutDd = addTerm('Default timeout');
+  const timeoutWrap = el('span', 'settings-kv-input-wrap');
+  const timeoutInput = document.createElement('input');
+  timeoutInput.type = 'number';
+  timeoutInput.className = 'settings-select settings-kv-input';
+  timeoutInput.min = '1000';
+  timeoutInput.step = '1000';
+  timeoutInput.value = String(config.defaultTimeoutMs);
+  timeoutInput.setAttribute('aria-label', 'Default sub-agent timeout in milliseconds');
+  timeoutWrap.appendChild(timeoutInput);
+  timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  timeoutDd.appendChild(timeoutWrap);
+
+  mount.appendChild(summary);
 
   mount.appendChild(
     el(
@@ -779,15 +831,20 @@ async function renderSubAgentsSection(): Promise<void> {
     },
   );
 
-  enableCb.addEventListener('change', () => {
-    void (async () => {
-      const fresh = await loadSubAgentConfig();
-      const ok = await saveSubAgentConfigToServer({
-        ...fresh,
-        enabled: enableCb.checked,
-      });
-      setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agents updated' : 'Save failed — use npm start');
-    })();
+  enabledCb.addEventListener('change', () => {
+    void persistGlobal({ enabled: enabledCb.checked });
+  });
+
+  maxInput.addEventListener('change', () => {
+    const value = Math.min(16, Math.max(1, Math.floor(Number(maxInput.value) || 1)));
+    maxInput.value = String(value);
+    void persistGlobal({ globalMaxConcurrent: value });
+  });
+
+  timeoutInput.addEventListener('change', () => {
+    const value = Math.max(1000, Math.floor(Number(timeoutInput.value) || 1000));
+    timeoutInput.value = String(value);
+    void persistGlobal({ defaultTimeoutMs: value });
   });
 }
 

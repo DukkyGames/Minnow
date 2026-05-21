@@ -68,6 +68,41 @@
       "allowedTools": null,
       "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
       "systemPromptPath": null
+    },
+    "reef-widget": {
+      "label": "Reef widget",
+      "enabled": true,
+      "providerId": "lm-studio-local",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 300000,
+      "workAgentId": null,
+      "allowedTools": [
+        "read_file",
+        "read_file_range",
+        "find_files",
+        "search_in_file",
+        "get_file_metadata",
+        "list_directory",
+        "web_search",
+        "wikipedia_search",
+        "fetch_web_content"
+      ],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "execute_command",
+        "save_file",
+        "append_file",
+        "insert_at_line",
+        "replace_text_in_file",
+        "delete_path",
+        "move_file",
+        "git_commit",
+        "git_add",
+        "git_push"
+      ],
+      "systemPromptPath": null
     }
   }
 }

@@ -2,7 +2,7 @@
  * Operating mode segmented control (Build / Plan / Orchestrate / Research).
  */
 
-import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
@@ -63,7 +63,7 @@ export function syncModeSelectorFromActiveChat(): void {
 export function refreshModeSelectorDisabled(): void {
   const root = getModeSelectorEl();
   if (!root) return;
-  const disabled = streaming || isComposerRecoveryBlocked();
+  const disabled = isActiveChatStreaming() || isComposerRecoveryBlocked();
   root.querySelectorAll<HTMLButtonElement>('[data-mode-id]').forEach((btn) => {
     btn.disabled = disabled;
   });
@@ -78,18 +78,29 @@ function showModeStatusPill(label: string): void {
   }, MODE_STATUS_MS);
 }
 
-function selectMode(modeId: ModeId): void {
-  if (streaming) {
-    setStatus('spin', 'Finish the current reply first');
-    return;
+export interface SetChatModeResult {
+  ok: boolean;
+  modeId?: ModeId;
+  label?: string;
+  error?: string;
+}
+
+/** Apply operating mode to the active chat (tool / programmatic handoff). */
+export function setChatMode(modeId: ModeId): SetChatModeResult {
+  if (isActiveChatStreaming()) {
+    return { ok: false, error: 'Finish the current reply first' };
   }
 
   const chat = getActiveChat();
-  if (chat.modeId === modeId) return;
+  const normalized = modeId;
+  if (chat.modeId === normalized) {
+    const mode = listModes().find((m) => m.id === normalized);
+    return { ok: true, modeId: normalized, label: mode?.label };
+  }
 
-  chat.modeId = modeId;
+  chat.modeId = normalized;
   if (chat.workAgentAuto !== false) {
-    const agent = getDefaultWorkAgentForMode(modeId);
+    const agent = getDefaultWorkAgentForMode(normalized);
     chat.workAgentId = agent?.id ?? null;
   }
   touchChat(chat);
@@ -102,13 +113,18 @@ function selectMode(modeId: ModeId): void {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
 
-  const mode = listModes().find((m) => m.id === modeId);
+  const mode = listModes().find((m) => m.id === normalized);
   if (mode) showModeStatusPill(mode.label);
+  return { ok: true, modeId: normalized, label: mode?.label };
+}
+
+function selectMode(modeId: ModeId): void {
+  setChatMode(modeId);
 }
 
 function onSegmentKeydown(event: KeyboardEvent, modeId: ModeId): void {
   const root = getModeSelectorEl();
-  if (!root || streaming) return;
+  if (!root || isActiveChatStreaming()) return;
 
   const modes = listModes();
   const currentIndex = modes.findIndex((m) => m.id === modeId);

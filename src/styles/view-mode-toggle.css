@@ -1,34 +1,103 @@
-/**
- * Orchestrate Chat / Board icon toggle (top bar).
- */
-
-.view-mode-toggle-btn {
-  position: relative;
-}
-
-.view-mode-toggle-btn__icon {
-  width: 18px;
-  height: 18px;
-}
-
-.view-mode-toggle-btn__icon--chat {
-  display: none;
-}
-
-.view-mode-toggle-btn[aria-pressed='true'] .view-mode-toggle-btn__icon--board {
-  display: none;
-}
-
-.view-mode-toggle-btn[aria-pressed='true'] .view-mode-toggle-btn__icon--chat {
-  display: block;
-}
-
-.view-mode-toggle-btn[aria-pressed='true']:not(:disabled) {
-  color: var(--accent);
-}
-
-/* Board view: hide the main chat composer (board has its own composer) */
-.main-column.main-column--board-view .input-bar {
-  display: none !important;
-}
-
+/**
+
+ * Orchestrate Chat / Board view toggles (composer + board header).
+
+ */
+
+
+
+.view-mode-toggle-btn__icon {
+
+  width: 18px;
+
+  height: 18px;
+
+}
+
+
+
+.view-mode-toggle-btn--accent:not(:disabled) {
+
+  color: var(--accent);
+
+}
+
+
+
+@media (hover: hover) and (pointer: fine) {
+
+  .icon-btn.view-mode-toggle-btn--accent:not(:disabled):hover {
+
+    color: var(--text-hover);
+
+  }
+
+}
+
+
+
+/* Composer: board toggle stacked above send */
+
+.input-bar-send-stack {
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  gap: 6px;
+
+  flex-shrink: 0;
+
+}
+
+
+
+.input-bar-send-stack .view-mode-toggle-btn--to-board {
+
+  width: 44px;
+
+  height: 36px;
+
+  flex-shrink: 0;
+
+}
+
+
+
+/* Board header: chat toggle inline with Open plan / Resume / Stop */
+
+.board-header__controls .board-header__view-toggle {
+
+  width: 32px;
+
+  height: 29px;
+
+  padding: 0;
+
+  flex-shrink: 0;
+
+}
+
+
+
+/* Board view: hide chat composer (kanban + header controls only) */
+
+.main-column.main-column--board-view .input-bar {
+
+  display: none !important;
+
+}
+
+
+
+/* Board view: jump chip is for chat scroll only */
+
+.main-column.main-column--board-view .chat-jump-latest {
+
+  display: none !important;
+
+}
+
+

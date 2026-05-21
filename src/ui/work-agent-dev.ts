@@ -2,7 +2,7 @@
  * Minimal Work Agent selector (dev / ?dev=1 until Step 20).
  */
 
-import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import {
   getActiveChat,
@@ -59,7 +59,7 @@ export function initWorkAgentDevUi(): void {
   if (!select.dataset.bound) {
     select.dataset.bound = '1';
     select.addEventListener('change', () => {
-      if (streaming) return;
+      if (isActiveChatStreaming()) return;
       const chat = getActiveChat();
       const value = select.value.trim();
       chat.workAgentId = value || null;
@@ -70,7 +70,7 @@ export function initWorkAgentDevUi(): void {
     });
 
     autoBox.addEventListener('change', () => {
-      if (streaming) return;
+      if (isActiveChatStreaming()) return;
       const chat = getActiveChat();
       chat.workAgentAuto = autoBox.checked;
       touchChat(chat);
@@ -92,7 +92,7 @@ export function syncWorkAgentDevFromActiveChat(): void {
 
   const chat = getActiveChat();
   autoBox.checked = chat.workAgentAuto !== false;
-  select.disabled = autoBox.checked || streaming;
+  select.disabled = autoBox.checked || isActiveChatStreaming();
 
   const id = chat.workAgentId;
   if (!id || id === 'default') {

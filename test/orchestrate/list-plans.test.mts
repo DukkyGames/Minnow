@@ -8,7 +8,10 @@ import {
   isExecutableOrchestratePlan,
   normalizeOrchestratePlanPath,
 } from '../../src/chat/orchestrate/plan-path.ts';
-import { parseFindFilesOutputPaths } from '../../src/chat/orchestrate/list-plans.ts';
+import {
+  normalizePlanDiscoverError,
+  parseFindFilesOutputPaths,
+} from '../../src/chat/orchestrate/list-plans.ts';
 
 describe('orchestrate plan-path', () => {
   test('accepts markdown under documentation/plans root', () => {
@@ -56,6 +59,24 @@ describe('orchestrate plan-path', () => {
   test('rejects paths outside documentation/plans', () => {
     assert.equal(isExecutableOrchestratePlan('src/main.ts'), false);
     assert.equal(isExecutableOrchestratePlan('plans/foo.md'), false);
+  });
+});
+
+describe('normalizePlanDiscoverError', () => {
+  test('maps ENOENT to no_plans_dir', () => {
+    assert.equal(
+      normalizePlanDiscoverError(
+        "ENOENT: no such file or directory, scandir 'C:\\workspace\\documentation\\plans'",
+      ),
+      'no_plans_dir',
+    );
+  });
+
+  test('passes through other messages', () => {
+    assert.equal(
+      normalizePlanDiscoverError('pattern is required'),
+      'pattern is required',
+    );
   });
 });
 

@@ -4,7 +4,7 @@
  */
 
 import { streaming, streamingChatId } from '../app-state';
-import { getActiveChat, sessionState, touchChat } from '../state/sessions';
+import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
 
 /** Ephemeral "last time user viewed this chat" for unread detection (not persisted). */
@@ -138,7 +138,6 @@ export function maybeMarkChatUnreadAfterLeave(chat: Chat): void {
   const lastAsst = chat.lastAssistantAt;
   if (lastAsst != null && Number.isFinite(lastAsst) && lastAsst > openedAt) {
     chat.unread = true;
-    touchChat(chat);
   }
 }
 

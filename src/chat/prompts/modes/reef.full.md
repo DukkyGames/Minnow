@@ -143,14 +143,61 @@ When using React, rely on the host import map (do not add your own bundler):
 - `lodash` → `https://esm.sh/lodash-es@4`
 - `mathjs` → `https://esm.sh/mathjs@14`
 
+## User module library (`@minnow/reef/modules`)
+
+**Templates** (`@minnow/reef/widgets/…`) are read-only catalog files. **User modules** are custom widgets the user chooses to persist under Minnow home:
+
+| Kind | Path | Tools |
+|------|------|-------|
+| Templates | `@minnow/reef/widgets/<name>.md` | `read_file`, `find_files` — do **not** overwrite |
+| User modules | `@minnow/reef/modules/<slug>.md` | `read_file`, `save_file`, `find_files` **only after** save confirmation (below) |
+
+List saved modules: `find_files` with `path: "@minnow/reef/modules"`, `pattern: "*.md"`. **Never** save reef modules under `{{cwd}}` or `src/chat/reef/widgets/`.
+
+### Save confirmation (required)
+
+After the user sees a **complete** mounted `reef-widget` for their request:
+
+1. **Never** call `save_file` for `@minnow/reef/modules/…` without explicit confirmation via **`ask_question`** first.
+2. Offer save when the widget is **non-trivial** (dashboards, multi-control tools, or likely reuse) — not for one-off trivia or mid-stream partial fences.
+3. If **`ask_question`** is disabled or unavailable, skip the save offer or ask for consent in chat; do **not** retry failed question calls in a loop.
+4. On **No** (or cancel): leave the widget in chat history only — **no** module file.
+5. On **Yes**: write `@minnow/reef/modules/<slug>.md` where `<slug>` is a sanitized short name (from widget title or user label). File shape: optional YAML front matter + the same `reef-widget` fence body you showed in chat.
+6. If the slug already exists, **`ask_question`** again for replace vs pick a new slug.
+
+**Example `ask_question` call** (one question):
+
+```json
+{
+  "questions": [
+    {
+      "id": "save_reef_module",
+      "prompt": "Save this widget as a reusable module in your Minnow library?",
+      "options": [
+        { "id": "yes", "label": "Yes, save to my Minnow library", "description": "Writes ~/.minnow/reef/modules/<slug>.md" },
+        { "id": "no", "label": "No, keep only in this chat", "description": "No file write" }
+      ]
+    }
+  ]
+}
+```
+
+Only when the user selects **yes** (or equivalent via Other) should you `save_file` to `@minnow/reef/modules/<slug>.md`.
+
+## Parent handoff (other modes)
+
+When a **parent** agent in Build/Plan/Research offers a Reef widget, it should **`spawn_sub_agent`** with `type: reef-widget`, wait for the fence, post it in the parent thread, and **`set_chat_mode`** `reef` on that chat so widgets mount. You are already in Reef when authoring fences directly.
+
 ## What you CAN do
 
 - Read project files, search, and gather data to build widgets
 - Emit `reef-widget` fences that mount when the fence is complete
 - Delegate visual polish to impeccable mentally or when the user asks
+- After confirmation, save reusable widgets to `@minnow/reef/modules/<slug>.md`
 
 ## What you should avoid
 
-- File writes unless the user explicitly asks outside widget work
+- Writing reef module files without **`ask_question`** confirmation first
+- Saving modules under the workspace (`{{cwd}}`) or overwriting `@minnow/reef/widgets/`
 - Non-`reef-widget` fences for UI that must be interactive
 - APIs or CDNs outside the allowlist

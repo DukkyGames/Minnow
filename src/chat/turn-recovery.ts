@@ -3,14 +3,17 @@
  * retry when the last history row is a lone user message (checkpoint lost).
  */
 
-import { streaming } from '../app-state';
+import { isChatStreaming } from './streaming-state';
 import { hasPostToolTail } from '../tools/turn-continuation';
 import { indexOfLastUserMessage } from './history-truncate-core';
 import { requestContinueFromPendingTurn } from '../state/pending-turn';
+import { clearPendingTurn } from '../state/pending-turn';
 import {
+  isPendingTurnObsolete,
   isUserStoppedPendingCheckpoint,
   shouldOfferRecovery,
 } from '../state/pending-turn-shape';
+import { logTurnDebug } from '../tools/turn-continuation';
 import type { Chat } from '../types';
 import { setStatus } from '../ui/status';
 
@@ -77,11 +80,21 @@ export async function resumePendingTurn(_chat: Chat): Promise<void> {
  * tail user message has no reply, show the orphan retry banner.
  */
 export async function bootTurnRecoveryForChat(chat: Chat): Promise<void> {
-  if (streaming) {
+  if (isChatStreaming(chat.id)) {
     return;
   }
 
   const { dismissPendingTurnRecovery } = await import('../ui/pending-turn-recovery');
+
+  if (isPendingTurnObsolete(chat)) {
+    clearPendingTurn(chat);
+    logTurnDebug({
+      event: 'cleared_obsolete_pending_turn',
+      chatId: chat.id,
+    });
+    dismissPendingTurnRecovery();
+    return;
+  }
 
   // User explicitly stopped: keep partial visible but never auto-resume after reload.
   if (isUserStoppedPendingCheckpoint(chat)) {

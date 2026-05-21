@@ -8,6 +8,14 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
+/** Sidebar / prune ordering: last committed message, else legacy `updatedAt`. */
+export function getChatLastMessageAt(chat: Chat): number {
+  const last = chat.lastMessageAt;
+  if (typeof last === 'number' && Number.isFinite(last) && last > 0) return last;
+  const updated = chat.updatedAt;
+  return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
+}
+
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
 export type RawSessionJson = {
   version?: number;
@@ -56,14 +64,14 @@ export function getChatsForWorkspace(workspacePath: string, state: SessionState)
   if (!key) return [];
   return [...state.chats]
     .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === key)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
 export function getUnassignedChats(state: SessionState): Chat[] {
   return [...state.chats]
     .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === '')
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
 /**
@@ -93,7 +101,9 @@ export function resolveActiveChatIdForWorkspace(
 
   const fresh = createScopedEmptyChat(fallbackModelId, key);
   state.chats.unshift(fresh);
-  fresh.updatedAt = Date.now();
+  const now = Date.now();
+  fresh.updatedAt = now;
+  fresh.lastMessageAt = now;
   return fresh.id;
 }
 
@@ -129,5 +139,11 @@ export function coerceChatWorkspaceFields(raw: unknown): Chat {
     lastStats: null,
     modelInfo: {},
     updatedAt: typeof row.updatedAt === 'number' ? row.updatedAt : Date.now(),
+    lastMessageAt:
+      typeof row.lastMessageAt === 'number'
+        ? row.lastMessageAt
+        : typeof row.updatedAt === 'number'
+          ? row.updatedAt
+          : Date.now(),
   };
 }

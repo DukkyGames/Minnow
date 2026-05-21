@@ -1,6 +1,6 @@
 /**
  * Resolve reef widget template paths against Minnow install / ~/.minnow,
- * not the user's workspace root.
+ * not the user's workspace root. User modules live under ~/.minnow/reef/modules.
  */
 
 import fs from 'node:fs';
@@ -10,6 +10,7 @@ import { getAppRoot } from '../workspace/root.js';
 
 const REEF_WIDGETS_REL = path.join('src', 'chat', 'reef', 'widgets');
 const HOME_REEF_WIDGETS_REL = path.join('reef', 'widgets');
+const HOME_REEF_MODULES_REL = path.join('reef', 'modules');
 
 /** Built-in widget templates shipped in the repo. */
 export function getBuiltinReefWidgetsDir() {
@@ -19,6 +20,21 @@ export function getBuiltinReefWidgetsDir() {
 /** User-visible copy under ~/.minnow (synced from built-ins). */
 export function getHomeReefWidgetsDir() {
   return path.join(getMinnowHome(), HOME_REEF_WIDGETS_REL);
+}
+
+/** User-authored Reef modules (read/write) under ~/.minnow. */
+export function getHomeReefModulesDir() {
+  return path.join(getMinnowHome(), HOME_REEF_MODULES_REL);
+}
+
+/**
+ * True when absolute path is under ~/.minnow/reef/modules only.
+ * @param {string} absPath
+ */
+export function isAllowedReefModulePath(absPath) {
+  const resolved = path.resolve(absPath);
+  const rootNorm = path.resolve(getHomeReefModulesDir());
+  return resolved === rootNorm || resolved.startsWith(`${rootNorm}${path.sep}`);
 }
 
 /**
@@ -46,6 +62,21 @@ export function isAllowedReefWidgetReadPath(absPath) {
       return true;
     }
   }
+  return false;
+}
+
+/**
+ * True when a user-supplied path alias refers to reef widget templates (read-only for writes).
+ * @param {string} userPath
+ */
+export function isReefWidgetPathAlias(userPath) {
+  if (!userPath || typeof userPath !== 'string') return false;
+  const norm = userPath.trim().replace(/\\/g, '/');
+  if (norm.startsWith('@minnow/reef/widgets')) return true;
+  if (norm.startsWith('reef/widgets/') || norm === 'reef/widgets') return true;
+  const builtinMarker = 'src/chat/reef/widgets/';
+  if (norm.startsWith(builtinMarker) || norm.includes(`/${builtinMarker}`)) return true;
+  if (norm.includes('.minnow/reef/widgets/')) return true;
   return false;
 }
 
@@ -115,6 +146,47 @@ export function tryResolveReefWidgetReadPath(userPath) {
 }
 
 /**
+ * Map tool paths for user reef modules (home only, read/write).
+ * Returns absolute path when recognized, otherwise null.
+ *
+ * Supported forms:
+ * - @minnow/reef/modules/<slug>.md
+ * - reef/modules/<file> (~/.minnow relative)
+ * @param {string} userPath
+ * @returns {string | null}
+ */
+export function tryResolveReefModulePath(userPath) {
+  if (!userPath || typeof userPath !== 'string') return null;
+
+  const trimmed = userPath.trim();
+  const norm = trimmed.replace(/\\/g, '/');
+
+  if (norm.startsWith('@minnow/reef/modules')) {
+    const sub = norm.slice('@minnow/reef/modules'.length).replace(/^\//, '');
+    const candidate = sub
+      ? path.join(getHomeReefModulesDir(), sub)
+      : getHomeReefModulesDir();
+    if (isAllowedReefModulePath(candidate)) return path.resolve(candidate);
+    return null;
+  }
+
+  if (norm.startsWith('reef/modules/') || norm === 'reef/modules') {
+    const candidate = path.join(getMinnowHome(), norm);
+    if (isAllowedReefModulePath(candidate)) return path.resolve(candidate);
+  }
+
+  const homePrefix = '.minnow/reef/modules/';
+  if (norm.includes(homePrefix)) {
+    const idx = norm.indexOf(homePrefix);
+    const rel = norm.slice(idx + '.minnow/'.length);
+    const candidate = path.join(getMinnowHome(), rel);
+    if (isAllowedReefModulePath(candidate)) return path.resolve(candidate);
+  }
+
+  return null;
+}
+
+/**
  * When find_files/grep search for reef templates under ".", redirect to install dir.
  * @param {string} pattern
  * @param {string} [searchPath]
@@ -143,4 +215,42 @@ export function tryResolveReefWidgetsFindRoot(pattern, searchPath = '.') {
 
   const dir = resolveReefWidgetsSearchDir();
   return dir ?? null;
+}
+
+/**
+ * When find_files/grep search targets user reef modules, redirect to home modules dir.
+ * @param {string} pattern
+ * @param {string} [searchPath]
+ * @returns {string | null} absolute directory to search
+ */
+export function tryResolveReefModulesFindRoot(pattern, searchPath = '.') {
+  const normPattern = String(pattern ?? '').replace(/\\/g, '/');
+  const normPath = String(searchPath ?? '.').replace(/\\/g, '/').trim();
+
+  const looksLikeReefModuleSearch =
+    normPattern.includes('reef/modules') ||
+    normPath.startsWith('@minnow/reef/modules') ||
+    normPath.startsWith('reef/modules') ||
+    normPath === 'reef/modules';
+
+  if (!looksLikeReefModuleSearch) return null;
+
+  if (normPath.startsWith('@minnow/')) {
+    const resolved = tryResolveReefModulePath(normPath);
+    if (resolved) {
+      const modulesRoot = path.resolve(getHomeReefModulesDir());
+      const resolvedNorm = path.resolve(resolved);
+      if (resolvedNorm === modulesRoot) {
+        return modulesRoot;
+      }
+      const stat = fs.existsSync(resolved) ? fs.statSync(resolved) : null;
+      return stat?.isDirectory() ? resolvedNorm : path.dirname(resolvedNorm);
+    }
+  }
+
+  const dir = getHomeReefModulesDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
 }

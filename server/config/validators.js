@@ -268,13 +268,28 @@ function ensureChatShape(raw) {
     lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
     modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},
     updatedAt: typeof row.updatedAt === 'number' ? row.updatedAt : Date.now(),
+    lastMessageAt:
+      typeof row.lastMessageAt === 'number'
+        ? row.lastMessageAt
+        : typeof row.updatedAt === 'number'
+          ? row.updatedAt
+          : Date.now(),
   };
+}
+
+function getChatLastMessageAt(chat) {
+  const last = chat.lastMessageAt;
+  if (typeof last === 'number' && Number.isFinite(last) && last > 0) return last;
+  const updated = chat.updatedAt;
+  return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
 }
 
 function trimChatsIfNeeded(state) {
   if (!state.chats || state.chats.length <= MAX_CHATS) return;
   const activeId = state.activeId;
-  const sortedOldestFirst = [...state.chats].sort((a, b) => a.updatedAt - b.updatedAt);
+  const sortedOldestFirst = [...state.chats].sort(
+    (a, b) => getChatLastMessageAt(a) - getChatLastMessageAt(b),
+  );
   let toDrop = state.chats.length - MAX_CHATS;
   for (const c of sortedOldestFirst) {
     if (toDrop <= 0) break;
@@ -552,7 +567,7 @@ export function mergeConfigMeta(existing, patch) {
         : {
             open: false,
             heightPx: 240,
-            autoOpenOnAgentRun: true,
+            autoOpenOnAgentRun: false,
           };
     const t = /** @type {Record<string, unknown>} */ (p.terminal);
     if (typeof t.open === 'boolean') existingTerminal.open = t.open;

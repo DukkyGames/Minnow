@@ -36,6 +36,11 @@ import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/worksp
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
 import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
 import {
+  getHomeReefModulesDir,
+  isAllowedReefModulePath,
+  isReefWidgetPathAlias,
+  tryResolveReefModulePath,
+  tryResolveReefModulesFindRoot,
   tryResolveReefWidgetReadPath,
   tryResolveReefWidgetsFindRoot,
 } from './server/reef/widget-paths.js';
@@ -62,10 +67,23 @@ function normalizePath(p) {
  * Resolve a user-supplied path under the workspace root unless full access is allowed
  * (TOOLS_ALLOW_ALL_PATHS=1 or persisted toolSecurity.filesystemAccess === 'full').
  * Returns absolute path string, or throws with a message suitable for tool results.
+ * @param {string} userPath
+ * @param {{ write?: boolean }} [options]
  */
-function resolveSafePath(userPath) {
+function resolveSafePath(userPath, options = {}) {
   if (!userPath || typeof userPath !== 'string') {
     throw new Error('Path is required');
+  }
+
+  const reefModule = tryResolveReefModulePath(userPath);
+  if (reefModule) {
+    return reefModule;
+  }
+
+  if (options.write && isReefWidgetPathAlias(userPath)) {
+    throw new Error(
+      'Reef widget templates under @minnow/reef/widgets are read-only. Save custom Reef modules to @minnow/reef/modules/<slug>.md.',
+    );
   }
 
   const reefRead = tryResolveReefWidgetReadPath(userPath);
@@ -99,6 +117,10 @@ function resolveSafePath(userPath) {
 
 /** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
+  if (isAllowedReefModulePath(absPath)) {
+    const rel = path.relative(getHomeReefModulesDir(), absPath).replace(/\\/g, '/');
+    return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
+  }
   const rel = path.relative(getWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
@@ -234,7 +256,7 @@ async function toolReadFileRange(args) {
 }
 
 async function toolSaveFile(args) {
-  const filePath = resolveSafePath(args?.path);
+  const filePath = resolveSafePath(args?.path, { write: true });
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
@@ -244,7 +266,7 @@ async function toolSaveFile(args) {
 }
 
 async function toolAppendFile(args) {
-  const filePath = resolveSafePath(args?.path);
+  const filePath = resolveSafePath(args?.path, { write: true });
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
@@ -254,7 +276,7 @@ async function toolAppendFile(args) {
 }
 
 async function toolInsertAtLine(args) {
-  const filePath = resolveSafePath(args?.path);
+  const filePath = resolveSafePath(args?.path, { write: true });
   const lineNumber = Number(args?.line_number);
   if (!Number.isInteger(lineNumber) || lineNumber < 1) {
     return 'Error: line_number must be a positive integer (1-based)';
@@ -272,7 +294,7 @@ async function toolInsertAtLine(args) {
 }
 
 async function toolReplaceTextInFile(args) {
-  const filePath = resolveSafePath(args?.path);
+  const filePath = resolveSafePath(args?.path, { write: true });
   const search = args?.search;
   const replace = args?.replace ?? '';
   if (search === undefined) {
@@ -313,14 +335,14 @@ async function toolSearchInFile(args) {
 }
 
 async function toolMakeDirectory(args) {
-  const dirPath = resolveSafePath(args?.path);
+  const dirPath = resolveSafePath(args?.path, { write: true });
   await fs.mkdir(dirPath, { recursive: true });
   return `Created directory ${toRelativePath(dirPath)}`;
 }
 
 async function toolMoveFile(args) {
   const source = resolveSafePath(args?.source);
-  const destination = resolveSafePath(args?.destination);
+  const destination = resolveSafePath(args?.destination, { write: true });
   await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.rename(source, destination);
   return `Moved ${toRelativePath(source)} -> ${toRelativePath(destination)}`;
@@ -328,7 +350,7 @@ async function toolMoveFile(args) {
 
 async function toolCopyFile(args) {
   const source = resolveSafePath(args?.source);
-  const destination = resolveSafePath(args?.destination);
+  const destination = resolveSafePath(args?.destination, { write: true });
   const stat = await fs.stat(source);
   if (!stat.isFile()) {
     return `Error: source "${args.source}" is not a file (use move for directories)`;
@@ -339,7 +361,7 @@ async function toolCopyFile(args) {
 }
 
 async function toolDeletePath(args) {
-  const target = resolveSafePath(args?.path);
+  const target = resolveSafePath(args?.path, { write: true });
   const stat = await fs.stat(target);
   if (stat.isDirectory()) {
     await fs.rm(target, { recursive: true, force: true });
@@ -354,22 +376,35 @@ async function toolFindFiles(args) {
   if (!pattern || typeof pattern !== 'string') {
     return 'Error: pattern is required';
   }
-  const reefRoot = tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
+  const reefModulesRoot = tryResolveReefModulesFindRoot(pattern, args?.path ?? '.');
+  const reefWidgetsRoot = reefModulesRoot
+    ? null
+    : tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
+  const reefRoot = reefModulesRoot ?? reefWidgetsRoot;
   const root = reefRoot ?? resolveSafePath(args?.path ?? '.');
   const patternNorm = pattern.replace(/\\/g, '/');
   const matcher = globToRegExp(
-    reefRoot && patternNorm.includes('reef/widgets')
-      ? patternNorm.replace(/^.*reef\/widgets\//, '')
-      : patternNorm,
+    reefModulesRoot && patternNorm.includes('reef/modules')
+      ? patternNorm.replace(/^.*reef\/modules\//, '')
+      : reefWidgetsRoot && patternNorm.includes('reef/widgets')
+        ? patternNorm.replace(/^.*reef\/widgets\//, '')
+        : patternNorm,
   );
   const matches = [];
-  const displayRoot = reefRoot ? '@minnow/reef/widgets' : toRelativePath(root);
+  const displayRoot = reefModulesRoot
+    ? '@minnow/reef/modules'
+    : reefWidgetsRoot
+      ? '@minnow/reef/widgets'
+      : toRelativePath(root);
 
   function formatMatch(absPath) {
     if (!reefRoot) {
       return toRelativePath(absPath).replace(/\\/g, '/');
     }
     const rel = path.relative(reefRoot, absPath).replace(/\\/g, '/');
+    if (reefModulesRoot) {
+      return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
+    }
     return rel ? `@minnow/reef/widgets/${rel}` : '@minnow/reef/widgets';
   }
 

@@ -2,7 +2,7 @@
  * Expert dropdown (Auto + manual) in the composer control strip.
  */
 
-import { streaming } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { listExperts } from '../chat/experts/registry';
 /** Hint payload after auto-routing on send. */
@@ -171,19 +171,20 @@ export async function refreshExpertControlsVisibility(): Promise<void> {
   }
 
   strip.classList.remove('hidden');
-  if (sel) sel.disabled = streaming;
+  if (sel) sel.disabled = isActiveChatStreaming();
 }
 
 export function refreshExpertSelectDisabled(): void {
   const sel = getExpertSelect();
   if (!sel) return;
   void loadExpertsConfig().then((config) => {
-    sel.disabled = streaming || isComposerRecoveryBlocked() || !config.enabled;
+    sel.disabled =
+      isActiveChatStreaming() || isComposerRecoveryBlocked() || !config.enabled;
   });
 }
 
 export function onExpertSelectChange(): void {
-  if (streaming) return;
+  if (isActiveChatStreaming()) return;
   applySelectionFromSelect();
 }
 

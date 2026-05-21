@@ -1,34 +1,12 @@
 /**
- * Orchestrate plan strip: sits between composer controls and attachment preview.
+ * Orchestrate plan picker: inline in #composerControls next to mode segments.
  */
 
-.orchestrate-plan-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 2px 2px;
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-
-.orchestrate-plan-strip.hidden {
+.orchestrate-plan-control.hidden {
   display: none;
 }
 
-.orchestrate-plan-strip__label {
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--ink-muted);
-  white-space: nowrap;
-}
-
 #orchestratePlanSelect {
-  flex: 1;
-  min-width: 8rem;
-  max-width: 24rem;
   font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 500;
@@ -37,20 +15,31 @@
   min-height: 28px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
   color: var(--text);
+  min-width: 9rem;
+  max-width: 16rem;
   cursor: pointer;
   outline: none;
+  transition:
+    border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
 }
 
-#orchestratePlanSelect:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+@media (hover: hover) and (pointer: fine) {
+  #orchestratePlanSelect:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
 }
 
 #orchestratePlanSelect:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+#orchestratePlanSelect:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .orchestrate-plan-refresh {
@@ -61,13 +50,17 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: transparent;
   color: var(--text-muted);
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
 }
 
 .orchestrate-plan-refresh:disabled {
@@ -79,16 +72,42 @@
   .orchestrate-plan-refresh:hover:not(:disabled) {
     border-color: var(--border-strong);
     color: var(--text);
+    background: var(--bg);
   }
 }
 
+.orchestrate-plan-refresh:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .orchestrate-plan-hint {
-  flex-basis: 100%;
   font-size: 0.72rem;
   color: var(--ink-muted);
-  margin: 0;
+  white-space: nowrap;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .orchestrate-plan-hint.hidden {
   display: none;
+}
+
+@media (max-width: 600px) {
+  .orchestrate-plan-control {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  #orchestratePlanSelect {
+    flex: 1 1 8rem;
+    max-width: none;
+  }
+
+  .orchestrate-plan-hint {
+    flex: 1 1 auto;
+    max-width: none;
+    white-space: normal;
+  }
 }
