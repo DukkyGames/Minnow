@@ -11,7 +11,8 @@ Minnow is a Vite + TypeScript SPA chat client for LM Studio. See `README.md` for
 - **`npm start`** is the recommended dev command — starts Vite + the Node tool server on port 5173 (or next free port). Set `BROWSER=none` to suppress auto-open.
 - **`npm run dev`** starts Vite only (no tool server) — useful for pure UI work but most tool-dependent features won't function.
 - The tool server exposes `/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, and other endpoints. Verify health with `curl http://localhost:5173/api/tools/ping`.
-- LM Studio is **not available** in Cloud Agent VMs, so the model dropdown will be empty and LLM chat will not function. All UI, tool server APIs, and tests work without it.
+- **LM Studio headless daemon** (`llmster`) can be installed via `curl -fsSL https://lmstudio.ai/install.sh | bash`. Start with `lms daemon up && lms server start`. Download a model with `lms get <model-name> -y` and load it with `lms load <model-name> -y`. The CLI is at `~/.lmstudio/bin/lms` (add to PATH: `export PATH="$HOME/.lmstudio/bin:$PATH"`).
+- **Known streaming issue**: The `llmster` headless daemon has a streaming SSE incompatibility with Minnow's browser-side parser — chat messages fail with a `ReadableStreamDefaultController` JSON parsing error. The server-side generation proxy works correctly (verified via curl). This does not affect the tool server APIs, tests, or builds — only live LLM chat in the browser UI.
 
 ### Testing
 
