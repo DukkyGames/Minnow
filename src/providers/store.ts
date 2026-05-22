@@ -19,6 +19,19 @@ export interface CreateProviderPayload {
   apiKind?: ApiKind;
   authStyle?: AuthStyle;
   enabled?: boolean;
+  modelsPath?: string;
+  chatCompletionsPath?: string;
+}
+
+/** Body for PUT /api/providers/:id (id is not mutable). */
+export interface UpdateProviderPayload {
+  label?: string;
+  baseUrl?: string;
+  apiKind?: ApiKind;
+  authStyle?: AuthStyle;
+  enabled?: boolean;
+  modelsPath?: string;
+  chatCompletionsPath?: string;
 }
 
 const PROVIDERS_TIMEOUT_MS = 800;
@@ -108,6 +121,33 @@ export async function setActiveProvider(id: string): Promise<void> {
     throw new Error(`Failed to set active provider: HTTP ${res.status}`);
   }
   cachedList = null;
+}
+
+/** PUT /api/providers/:id — update profile fields (not secrets). */
+export async function updateProvider(
+  id: string,
+  payload: UpdateProviderPayload,
+): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
+  if (!isServerStorageMode()) {
+    return { ok: false, error: 'Provider registry requires npm start' };
+  }
+  try {
+    const res = await fetch(`/api/providers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    const body = (await res.json()) as ProviderPublic & { error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? `Failed to update provider (HTTP ${res.status})` };
+    }
+    invalidateProviderCache();
+    providersAvailable = true;
+    return { ok: true, provider: body };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
 }
 
 /** POST /api/providers — register a new LLM backend. */
