@@ -9,7 +9,7 @@ import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync'
 import { getActiveChat } from '../state/sessions';
 import type { Chat, PersistedSubAgentRun } from '../types';
 import { scrollBottom } from './input';
-import { openSubAgentDrawer } from './sub-agent-drawer';
+import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
 
 /** Maps run id to the card element for the current chat render. */
 const cards = new Map<string, HTMLElement>();
@@ -165,6 +165,7 @@ export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
  */
 export function initSubAgentUi(): void {
   initSubAgentSessionPersistence();
+  initSubAgentDrawerLiveUpdates();
   if (liveSubscriptionBound) return;
   liveSubscriptionBound = true;
   subscribeSubAgentRuns((run) => {

@@ -21,6 +21,14 @@ import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
 export const MAX_SUB_AGENT_TOOL_TURNS = 12;
 
+/** Throttle live transcript pushes so the drawer can keep up while streaming. */
+const LIVE_TRANSCRIPT_EMIT_MS = 80;
+
+/** Deep-clone messages for orchestrator state + UI subscribers. */
+export function cloneSubAgentMessages(messages: ApiMessage[]): ApiMessage[] {
+  return JSON.parse(JSON.stringify(messages)) as ApiMessage[];
+}
+
 interface SubAgentCompletionBody {
   model?: string;
   messages: ApiMessage[];
@@ -50,6 +58,7 @@ async function streamSubAgentTurn(
   providerId: string,
   body: SubAgentCompletionBody,
   signal: AbortSignal,
+  onDelta?: (delta: string) => void,
 ): Promise<{
   fullText: string;
   finishReason: string | undefined;
@@ -75,7 +84,10 @@ async function streamSubAgentTurn(
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
     const delta = extractStreamDelta(chunk);
-    if (delta) fullText += delta;
+    if (delta) {
+      fullText += delta;
+      onDelta?.(delta);
+    }
   }
 
   while (true) {
@@ -112,6 +124,21 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     const temperature = 0.4;
     const maxTokens = 2048;
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
+    let lastProgressEmit = 0;
+
+    const emitProgress = (partialAssistant?: string, force = false): void => {
+      if (!input.onMessagesChange) return;
+      const now = Date.now();
+      if (!force && now - lastProgressEmit < LIVE_TRANSCRIPT_EMIT_MS) return;
+      lastProgressEmit = now;
+      const snapshot = cloneSubAgentMessages(messages);
+      if (partialAssistant) {
+        snapshot.push({ role: 'assistant', content: partialAssistant });
+      }
+      input.onMessagesChange(snapshot);
+    };
+
+    emitProgress(undefined, true);
 
     for (let turn = 0; turn < maxToolTurns; turn++) {
       const body: SubAgentCompletionBody = {
@@ -127,10 +154,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         body.tool_choice = 'auto';
       }
 
+      let streamingAssistant = '';
       const turnResult = await streamSubAgentTurn(
         input.providerId,
         body,
         input.signal,
+        (delta) => {
+          streamingAssistant += delta;
+          emitProgress(streamingAssistant);
+        },
       );
 
       if (
@@ -143,6 +175,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           content: turnResult.fullText || null,
           tool_calls: turnResult.toolCalls,
         });
+        emitProgress(undefined, true);
 
         for (const tc of turnResult.toolCalls) {
           const args = parseToolArguments(tc.function.arguments);
@@ -158,6 +191,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
               ? { attachments: toolOut.attachments }
               : {}),
           });
+          emitProgress(undefined, true);
         }
         continue;
       }
@@ -178,9 +212,11 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       }
 
       messages.push({ role: 'assistant', content: summary });
+      emitProgress(undefined, true);
       return { summary, toolTurns, messages };
     }
 
+    emitProgress(undefined, true);
     return {
       summary: `Sub-agent reached maximum tool turns (${maxToolTurns}).`,
       toolTurns,

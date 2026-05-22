@@ -9,7 +9,10 @@ import {
   buildContextUsageBreakdown,
   computeContextUsagePercent,
   estimateAttachmentTokens,
+  resolveContextLimit,
 } from '../../src/chat/context-usage.ts';
+import { contextLengthFromModelRow } from '../../src/lib/context-length.ts';
+import type { Chat } from '../../src/types.ts';
 import { computeOutboundPromptEstimateFromParts } from '../../src/chat/prompts/token-estimate-core.ts';
 import type { Attachment, Message } from '../../src/types.ts';
 
@@ -66,6 +69,71 @@ describe('computeContextUsagePercent', () => {
 
   test('returns null when limit unknown', () => {
     assert.equal(computeContextUsagePercent(100, null), null);
+  });
+});
+
+describe('contextLengthFromModelRow', () => {
+  test('uses loaded_context_length when model is loaded', () => {
+    assert.equal(
+      contextLengthFromModelRow({
+        state: 'loaded',
+        max_context_length: 262_144,
+        loaded_context_length: 62_000,
+      }),
+      62_000,
+    );
+  });
+
+  test('ignores loaded_context_length when model is not loaded', () => {
+    assert.equal(
+      contextLengthFromModelRow({
+        state: 'not-loaded',
+        max_context_length: 131_072,
+        loaded_context_length: 62_000,
+      }),
+      131_072,
+    );
+  });
+});
+
+describe('resolveContextLimit', () => {
+  test('prefers configured loaded_context_length over catalog max', async () => {
+    const { modelCache } = await import('../../src/app-state.ts');
+    modelCache.set('vendor/model', {
+      id: 'vendor/model',
+      state: 'loaded',
+      max_context_length: 262_144,
+      loaded_context_length: 62_000,
+    });
+    const chat = { modelInfo: {} } as Chat;
+    assert.equal(resolveContextLimit('vendor/model', chat), 62_000);
+    modelCache.delete('vendor/model');
+  });
+
+  test('uses last-turn model_info context_length when present', async () => {
+    const { modelCache } = await import('../../src/app-state.ts');
+    modelCache.set('vendor/model', {
+      id: 'vendor/model',
+      state: 'loaded',
+      max_context_length: 262_144,
+      loaded_context_length: 62_000,
+    });
+    const chat = { modelInfo: { context_length: 48_000 } } as Chat;
+    assert.equal(resolveContextLimit('vendor/model', chat), 48_000);
+    modelCache.delete('vendor/model');
+  });
+
+  test('falls back to max when model is not loaded', async () => {
+    const { modelCache } = await import('../../src/app-state.ts');
+    modelCache.set('vendor/model', {
+      id: 'vendor/model',
+      state: 'not-loaded',
+      max_context_length: 131_072,
+      loaded_context_length: 62_000,
+    });
+    const chat = { modelInfo: {} } as Chat;
+    assert.equal(resolveContextLimit('vendor/model', chat), 131_072);
+    modelCache.delete('vendor/model');
   });
 });
 

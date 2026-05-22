@@ -14,10 +14,11 @@ import {
   isMaxToolTurnFailure,
   SUB_AGENT_MAX_TOOL_TURNS_ERROR,
 } from './sub-agent-outcome';
-import { getSubAgentRunner } from './sub-agent-runner';
+import { cloneSubAgentMessages, getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
 import { clearSubAgentRunListeners, emitSubAgentRunUpdated } from './sub-agent-events';
+import type { ApiMessage } from '../types';
 import type {
   AggregateResult,
   CancelSubAgentResult,
@@ -58,6 +59,8 @@ interface RunInternals {
   timeoutId: ReturnType<typeof setTimeout> | null;
   toolCallLog: Array<{ name: string; args: string }>;
   queued: boolean;
+  /** True after this run consumed a global/type concurrency slot (see acquireConcurrencySlot). */
+  holdsConcurrencySlot: boolean;
 }
 
 const runs = new Map<string, RunInternals>();
@@ -86,6 +89,20 @@ function decActive(type: string): void {
 function incActive(type: string): void {
   activeGlobal += 1;
   activeByType.set(type, (activeByType.get(type) ?? 0) + 1);
+}
+
+/** Reserve a concurrency slot before starting upstream work. */
+function acquireConcurrencySlot(internals: RunInternals, type: string): void {
+  if (internals.holdsConcurrencySlot) return;
+  incActive(type);
+  internals.holdsConcurrencySlot = true;
+}
+
+/** Release a slot when a run reaches a terminal state. */
+function releaseConcurrencySlot(internals: RunInternals): void {
+  if (!internals.holdsConcurrencySlot) return;
+  internals.holdsConcurrencySlot = false;
+  decActive(internals.run.type);
 }
 
 function canStart(type: string, globalMax: number, typeMax: number): boolean {
@@ -159,9 +176,7 @@ function settleRun(
   run.endedAt = nowIso();
   run.liveNestedToolCalls = undefined;
   clearTimeoutFor(internals);
-  if (!internals.queued) {
-    decActive(run.type);
-  }
+  releaseConcurrencySlot(internals);
   internals.queued = false;
   drainQueue();
   emitSubAgentRunUpdated(run);
@@ -213,52 +228,99 @@ function syncBoardTaskOnSettle(
   }
 }
 
+/** Prefer per-type config, then the parent chat's active model/provider. */
+function resolveSubAgentModelBinding(
+  typeConfig: { providerId: string; modelId: string },
+  parentChatId: string | null,
+): { providerId: string; modelId: string } {
+  const parentChat = parentChatId ? findChatById(parentChatId) : undefined;
+  const modelId =
+    typeConfig.modelId?.trim() || parentChat?.modelId?.trim() || '';
+  const providerId =
+    typeConfig.providerId?.trim() ||
+    parentChat?.providerId?.trim() ||
+    typeConfig.providerId;
+  return { providerId, modelId };
+}
+
+/** Push a transcript snapshot to the run row and notify UI subscribers. */
+function publishRunMessages(run: SubAgentRun, messages: ApiMessage[]): void {
+  run.messages = cloneSubAgentMessages(messages);
+  emitSubAgentRunUpdated(run);
+}
+
+function launchExecuteRun(internals: RunInternals, modeId: string): void {
+  void executeRun(internals, modeId).catch((err) => {
+    const { run } = internals;
+    if (
+      run.status === 'completed' ||
+      run.status === 'failed' ||
+      run.status === 'cancelled'
+    ) {
+      return;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    settleRun(internals, 'failed', '', message);
+  });
+}
+
 async function executeRun(internals: RunInternals, modeId: string): Promise<void> {
   const { run, abort } = internals;
-  const config = await loadSubAgentConfig();
-  const typeConfig = config.types[run.type];
-  if (!typeConfig) {
-    settleRun(internals, 'failed', '', `Unknown sub-agent type: ${run.type}`);
-    return;
-  }
-
-  setStatus(run, 'running');
-  if (!run.startedAt) run.startedAt = nowIso();
-  emitSubAgentRunUpdated(run);
-
-  const parentTools = getEnabledToolDefinitionsForMode(modeId);
-  const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
-  const systemPrompt = await buildSubAgentSystemPrompt(run.type, run.task, typeConfig);
-  const allowedNames = new Set(tools.map((t) => t.function.name));
-
-  const filteredExecute = async (
-    name: string,
-    args: Record<string, unknown>,
-    ctx?: import('../tools/client').ExecuteToolContext,
-  ) => {
-    if (!allowedNames.has(name)) {
-      return {
-        content: `Error: tool "${name}" is not allowed for sub-agent type ${run.type}`,
-      };
-    }
-    recordToolCallForRun(run.runId, name, args);
-    return executeTool(name, args, {
-      ...ctx,
-      chatId: run.parentChatId ?? undefined,
-      modeId,
-      subAgentType: run.type,
-    });
-  };
 
   try {
+    const config = await loadSubAgentConfig();
+    const typeConfig = config.types[run.type];
+    if (!typeConfig) {
+      settleRun(internals, 'failed', '', `Unknown sub-agent type: ${run.type}`);
+      return;
+    }
+
+    setStatus(run, 'running');
+    if (!run.startedAt) run.startedAt = nowIso();
+    emitSubAgentRunUpdated(run);
+
+    const { providerId, modelId } = resolveSubAgentModelBinding(
+      typeConfig,
+      run.parentChatId,
+    );
+
+    const parentTools = getEnabledToolDefinitionsForMode(modeId);
+    const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
+    const systemPrompt = await buildSubAgentSystemPrompt(run.type, run.task, typeConfig);
+    const allowedNames = new Set(tools.map((t) => t.function.name));
+
+    const filteredExecute = async (
+      name: string,
+      args: Record<string, unknown>,
+      ctx?: import('../tools/client').ExecuteToolContext,
+    ) => {
+      if (!allowedNames.has(name)) {
+        return {
+          content: `Error: tool "${name}" is not allowed for sub-agent type ${run.type}`,
+        };
+      }
+      recordToolCallForRun(run.runId, name, args);
+      return executeTool(name, args, {
+        ...ctx,
+        chatId: run.parentChatId ?? undefined,
+        modeId,
+        subAgentType: run.type,
+      });
+    };
+
+    publishRunMessages(run, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: run.task },
+    ]);
+
     const output = await getSubAgentRunner().run({
       runId: run.runId,
       type: run.type,
       task: run.task,
       systemPrompt,
       tools,
-      providerId: typeConfig.providerId,
-      modelId: typeConfig.modelId,
+      providerId,
+      modelId,
       maxToolTurns: run.maxToolTurns,
       signal: abort.signal,
       toolExecuteContext: {
@@ -266,6 +328,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
         subAgentType: run.type,
       },
       executeTool: filteredExecute,
+      onMessagesChange: (messages) => publishRunMessages(run, messages),
     });
 
     if (run.status === 'cancelled') return;
@@ -295,21 +358,6 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
   }
 }
 
-function tryStartRun(internals: RunInternals, modeId: string): boolean {
-  const { run } = internals;
-  void loadSubAgentConfig().then((config) => {
-    const typeCfg = config.types[run.type];
-    if (!typeCfg) return;
-    const typeMax = typeCfg.maxConcurrent ?? 1;
-    if (!canStart(run.type, config.globalMaxConcurrent, typeMax)) return;
-
-    internals.queued = false;
-    incActive(run.type);
-    void executeRun(internals, modeId);
-  });
-  return true;
-}
-
 function drainQueue(): void {
   void loadSubAgentConfig().then((config) => {
     while (globalQueue.length > 0) {
@@ -334,8 +382,8 @@ function drainQueue(): void {
 
       globalQueue.shift();
       internals.queued = false;
-      incActive(internals.run.type);
-      void executeRun(internals, item.modeId);
+      acquireConcurrencySlot(internals, internals.run.type);
+      launchExecuteRun(internals, item.modeId);
     }
   });
 }
@@ -400,6 +448,7 @@ async function spawnSubAgentInternal(
     timeoutId: null,
     toolCallLog: [],
     queued: true,
+    holdsConcurrencySlot: false,
   };
 
   runs.set(runId, internals);
@@ -413,16 +462,17 @@ async function spawnSubAgentInternal(
   const typeMax = typeConfig.maxConcurrent ?? 1;
   if (canStart(input.type, config.globalMaxConcurrent, typeMax)) {
     internals.queued = false;
-    incActive(input.type);
+    acquireConcurrencySlot(internals, input.type);
     setStatus(run, 'running');
     run.startedAt = nowIso();
-    void executeRun(internals, modeId);
+    launchExecuteRun(internals, modeId);
     emitSubAgentRunUpdated(run);
     return { runId, status: 'running' };
   }
 
   globalQueue.push({ runId, modeId });
   emitSubAgentRunUpdated(run);
+  drainQueue();
   return { runId, status: 'queued' };
 }
 

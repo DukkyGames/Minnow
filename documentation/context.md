@@ -2,7 +2,7 @@
 
 User-facing setup and quick start: [`README.md`](../README.md).
 
-Implementation plan and sub-agent breakdown: [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md).
+**Feature gap audit (2026):** [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) — shipped vs partial vs missing across agents, Reef, trace/replay, and settings. **Sub-agent orchestration** is documented below under **Sub-agent orchestration (Step 09)**; verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
 **To-fix roadmap:** Backlog in [`documentation/plans/to-fix.md`](plans/to-fix.md). **Implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) â€” `switch-chats-while-waiting`, `reef-files-minnow-home`, `reef-optional-save-prompt`, `no-auto-open-terminal`, `no-restart-finished-chat`, `llm-mode-switch-suggestions`, `fix-chat-titles-thinking-leak`, `files-sidebar-close-arrow` (line numbers in each plan link to `to-fix.md`). Product backlog plans remain `feature-01` â€¦ `feature-30` in the same folder. **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` â€” single session blob, not per-chat files. **Tests (Step 02+):** `npm test` â†’ `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
 
@@ -42,16 +42,17 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 
 ## What it is
 
-Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** (local OpenAI-compatible API). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
+Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** and other **OpenAI-compatible local providers** (multi-provider routing via `~/.minnow/providers/`). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **45** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts) (includes Orchestrate `board_*` trio); **32** execute on the Node side via **`npm start`** (`server.js` â†’ `POST /api/tools`, including **7** CDP `browser_*` tools). **10** run in the browser. File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **55** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts) (Orchestrate `board_*` trio, sub-agent spawn/status, mode handoff, memory, LSP, Impeccable, etc.); **35** are `serverRequired` and execute on the Node side via **`npm start`** (`server.js` â†’ `POST /api/tools`, including **7** CDP `browser_*` tools). **20** are browser-routed (`serverRequired: false`), including web/utility tools, `ask_question`, mode handoff, and sub-agent/board orchestration tools (spawn/status via [`src/tools/sub-agent-executor.ts`](../src/tools/sub-agent-executor.ts) / [`src/tools/board-tools.ts`](../src/tools/board-tools.ts), not raw `POST /api/tools`). File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
 ```
 Minnow/
 â”œâ”€â”€ index.html              # Vite shell: inline `#app-loader` until `html.app-ready` (set when `main.ts` module runs)
-â”œâ”€â”€ server.js               # Dev server: Vite + /api/tools (npm start)
+â”œâ”€â”€ server.js               # Dev server: Vite + /api/* (npm start)
+â”œâ”€â”€ server/                 # Config, tools, providers, generations, MCP, memory, …
 â”œâ”€â”€ package.json
 â”œâ”€â”€ tsconfig.json
 â”œâ”€â”€ vite.config.ts          # base: './', outDir: dist
@@ -65,7 +66,10 @@ Minnow/
 â”‚   â”œâ”€â”€ constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY, THEME_STORAGE_KEY
 â”‚   â”œâ”€â”€ app-state.ts        # streaming flags, modelCache, abort controllers
 â”‚   â”œâ”€â”€ chat/streaming-state.ts # per-chat streaming helpers (active vs background)
-â”‚   â”œâ”€â”€ state/sessions.ts   # localStorage chat sessions
+â”‚   â”œâ”€â”€ chat/context-usage.ts # MIN-13 context budget + breakdown sections
+â”‚   â”œâ”€â”€ agents/             # Sub-agent orchestrator, runner, work agents, UI Designer
+â”‚   â”œâ”€â”€ providers/          # Multi-provider store, fetch-models, resolve
+â”‚   â”œâ”€â”€ state/sessions.ts   # Sessions API + ~/.minnow mirror
 â”‚   â”œâ”€â”€ api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
 â”‚   â”œâ”€â”€ api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 â”‚   â”œâ”€â”€ api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
@@ -82,12 +86,13 @@ Minnow/
 â”‚   â”œâ”€â”€ state/file-panel.ts # file sidebar + viewer prefs
 â”‚   â”œâ”€â”€ lib/
 â”‚   â”‚   â”œâ”€â”€ format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
+â”‚   â”‚   â”œâ”€â”€ context-length.ts      # loaded vs max context from model rows
 â”‚   â”‚   â””â”€â”€ list-directory-parse.ts
 â”‚   â”œâ”€â”€ skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 â”‚   â”œâ”€â”€ tools/
-â”‚   â”‚   â”œâ”€â”€ definitions.ts      # 42-tool catalog (OpenAI function schemas)
+â”‚   â”‚   â”œâ”€â”€ definitions.ts      # 55-tool catalog (OpenAI function schemas)
 â”‚   â”‚   â”œâ”€â”€ config.ts           # tools.json sync, permissions, enabled defs
-â”‚   â”‚   â”œâ”€â”€ browser-executor.ts # 9 browser-native handlers (not CDP; ask_question runs via client + UI)
+â”‚   â”‚   â”œâ”€â”€ browser-executor.ts # Web/utility browser handlers (ask_question via client + UI; sub-agent/board via dedicated executors)
 â”‚   â”‚   â”œâ”€â”€ client.ts           # ping, executeTool router, approval gate, ask_question â†’ UI queue
 â”‚   â”‚   â”œâ”€â”€ permission-gate.ts  # modal + path policy before tool runs
 â”‚   â”‚   â”œâ”€â”€ approval-queue.ts   # serialized approval requests
@@ -291,7 +296,7 @@ Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui
 
 **Prompt token estimate (Feature 25 / F4):** While settings is open, `#settingsPromptTokenEstimate` in `.settings-page-header` shows **~N tokens (estimate)** for the next main-chat send (active session). **Prompting** adds `#settingsPromptTokenBreakdown` (System Â· History Â· Tools Â· Rules). Heuristic: `chars Ã· 4` (`estimateTokensFromText` in `src/chat/prompts/token-estimate-core.ts`). `resolveOutboundPromptEstimate()` in `src/chat/prompts/token-estimate.ts` mirrors send via `resolveOutboundSystemMessages()`, full `chat.history`, and mode-filtered tool JSON (work-agent allowlist + UI Designer filter). UI: `src/ui/settings-prompt-estimate.ts`. Refreshes on settings open, section change, and profile/part toggles (300 ms debounce). Not provider `usage.prompt_tokens`. Verification: [`documentation/plans/verification/feature-25.md`](plans/verification/feature-25.md).
 
-**Context window usage (MIN-13):** In-chat **context fill** indicator distinct from the bottom metrics strip (tok/s, TTFT). `#contextUsageRing` in `.input-bar-send-stack` (left of Send): SVG ring fill = estimated used ÷ `max_context_length` from `modelCache` / `resolveModelInfo`; warning styling at ≥85% (`--warning`). Hover tooltip: model name, limit, used/remaining (approx.). Click opens `#contextUsageBreakdown` popover with per-section token rows and bars (System, Rules, Tools, History, optional Composer/Attachments). Data: `getContextBudget()` / `assembleContextBudget()` in [`src/chat/context-usage.ts`](../src/chat/context-usage.ts) merges `resolveOutboundPromptEstimate()` + pending `#msgInput` + `getPendingAttachments()`. Shows **last turn API** `prompt_tokens` when `chat.lastStats` has them; section sizes stay heuristic. UI: [`src/ui/context-usage-ring.ts`](../src/ui/context-usage-ring.ts), [`src/ui/context-usage-breakdown.ts`](../src/ui/context-usage-breakdown.ts), [`src/styles/context-usage.css`](../src/styles/context-usage.css). Refreshes on history paint, stats update, model change, composer input, attachments, tool permission changes. Tests: [`test/chat/context-usage.test.mts`](../test/chat/context-usage.test.mts).
+**Context window usage (MIN-13):** In-chat **context fill** indicator distinct from the bottom metrics strip (tok/s, TTFT). `#contextUsageRing` in `.input-bar-send-stack` (left of Send): compact 24px SVG ring (no button chrome); light grey track, ink `--accent` stroke fill for used share; warning fill at ≥85% (`--warning`). Hover tooltip: model name, limit, used/remaining (approx.). Click opens `#contextUsageBreakdown` popover with per-section token rows and bars (System, Rules, Tools, History, optional Composer/Attachments). Data: `getContextBudget()` / `assembleContextBudget()` in [`src/chat/context-usage.ts`](../src/chat/context-usage.ts) merges `resolveOutboundPromptEstimate()` + pending `#msgInput` + `getPendingAttachments()`. **Context limit** uses the effective window, not catalog max: `resolveContextLimit()` prefers `chat.modelInfo.context_length` from the last LM Studio completion, then `loaded_context_length` on a loaded row from `GET /api/v0/models`, then `max_context_length` (same precedence as `contextLengthFromModelRow()` in [`src/lib/context-length.ts`](../src/lib/context-length.ts)). Shows **last turn API** `prompt_tokens` when `chat.lastStats` has them; section sizes stay heuristic. UI: [`src/ui/context-usage-ring.ts`](../src/ui/context-usage-ring.ts), [`src/ui/context-usage-breakdown.ts`](../src/ui/context-usage-breakdown.ts), [`src/styles/context-usage.css`](../src/styles/context-usage.css). Refreshes on history paint, stats update, model change, composer input, attachments, tool permission changes. Tests: [`test/chat/context-usage.test.mts`](../test/chat/context-usage.test.mts).
 
 **Editable agents (modes, experts, work agents, sub-agents):** Expand each row in `#/settings/modes`, `#/settings/experts`, `#/settings/work-agents`, or `#/settings/sub-agents` to edit **Full/Lite** prompt bodies and **provider + model** bindings. UI: `src/ui/settings-entity-editor.ts`. APIs: `GET/PUT/DELETE /api/prompts/{modes|experts|sub-agents}/:id/prompt?profile=full|lite` (overrides under `~/.minnow/prompts/`); work agents also use `GET/PUT/DELETE /api/work-agents/:id/prompt` and `PUT /api/work-agents/:id` for `providerId` / `modelId` / `disabled` in `work-agents.json`. **Sub-agents** (`#/settings/sub-agents`): top **settings-kv** row uses inline controls â€” **Enabled** (checkbox), **Max concurrent** (1â€“16), **Default timeout** (ms, min 1000) â€” each saves on change via `PUT /api/config/sub-agents`; per-type rows still expand for prompt + model overrides.
 
@@ -455,7 +460,7 @@ The **workspace** is the directory where file/git/terminal tools and the file tr
 | Top bar UI | `src/ui/workspace-button.ts` (`applyWorkspaceSwitch`, `#workspacePathLabel` full path left of `#btnWorkspace`), `src/ui/workspace-recent-menu.ts`, `src/styles/workspace-menu.css` (current workspace: `--accent-dim` + ink border; hover: light `--code-inline-bg`, not `--accent-subtle`) |
 | Prompt `{{cwd}}` | `src/chat/prompts/compose-context.ts` â†’ `resolveComposeCwd()` uses workspace path when set |
 
-**Menu UX:** Click `#btnWorkspace` â†’ popover lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspaceâ€¦** opens the centered folder browser (current folder pinned at top with **This folder**, indented subfolders with â€º chevrons, **Folders** section label, Up, double-click to drill down, **Open folder** / Cancel, Escape / overlay dismiss). Starts at the current workspace when set; browse roots show Home (+ drive letters on Windows). Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
+**Menu UX:** Click `#btnWorkspace` â†’ popover (right-aligned to the button, opens left) lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspaceâ€¦** opens the centered folder browser (current folder pinned at top with **This folder**, indented subfolders with â€º chevrons, **Folders** section label, Up, double-click to drill down, **Open folder** / Cancel, Escape / overlay dismiss). Starts at the current workspace when set; browse roots show Home (+ drive letters on Windows). Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
 
 **Server wiring:** `server.js` `resolveSafePath`, git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
 
@@ -494,7 +499,7 @@ Project file explorer (right) and editable CodeMirror viewer in a horizontal spl
 
 Parent tool loop can spawn **isolated sub-agents** (separate messages, model, tool subset). Results return as JSON aggregate tool results; child transcripts are **not** appended to parent `chat.history`.
 
-**Visibility (feature 30):** Each spawn shows a **sub-agent card** in the parent chat (`src/ui/sub-agent-cards.ts`) with live status; clicking opens a **slide-over drawer** with a read-only transcript (`src/ui/sub-agent-drawer.ts`, `src/styles/sub-agent-drawer.css`). The orchestrator can **check in** without blocking via **`list_sub_agents`** and **`get_sub_agent_status`** (same executor as spawn/cancel). Terminal runs are copied into `chat.subAgentRuns` (`PersistedSubAgentRun[]` in `src/types.ts`) via `src/state/sub-agent-session-sync.ts` so the drawer works after reload. Live updates use `src/agents/sub-agent-events.ts` (subscribe/emit from `src/agents/orchestrator.ts`). Spawn rows anchor after the parent tool bubble using `data-tool-call-id` on `.tool-call-msg` (`src/tools/loop.ts`).
+**Visibility (feature 30):** Each spawn shows a **sub-agent card** in the parent chat (`src/ui/sub-agent-cards.ts`) with live status; clicking opens a **slide-over drawer** with a read-only transcript (`src/ui/sub-agent-drawer.ts`, `src/styles/sub-agent-drawer.css`). While a run is active, `src/agents/sub-agent-runner.ts` pushes transcript snapshots through `onMessagesChange` (system/user seed, streaming assistant deltas, tool rounds); `src/agents/orchestrator.ts` copies them onto `run.messages` and emits `sub-agent-events`; the open drawer re-renders on each emit. The orchestrator can **check in** without blocking via **`list_sub_agents`** and **`get_sub_agent_status`** (same executor as spawn/cancel). Terminal runs are copied into `chat.subAgentRuns` (`PersistedSubAgentRun[]` in `src/types.ts`) via `src/state/sub-agent-session-sync.ts` so the drawer works after reload. Spawn rows anchor after the parent tool bubble using `data-tool-call-id` on `.tool-call-msg` (`src/tools/loop.ts`).
 
 | Concern | Location |
 |---------|----------|
@@ -515,7 +520,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the cap sets run status **`failed`** (not `completed`), `get_sub_agent_status` exposes **`success: false`**, and linked board tasks **`failed`** — never **`complete`** (`src/agents/sub-agent-outcome.ts`, `syncBoardTaskOnSettle`, `board_update_task` guard when `assignedRunId` run did not succeed) (MIN-15 / MIN-10).
 
-**Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue).
+**Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue). Slots are tracked with `holdsConcurrencySlot` so cancelled queued runs do not corrupt the cap; `executeRun` wraps prompt setup + runner in one `try/catch` so a failed start always releases the slot and calls `drainQueue()`. Empty per-type `modelId` falls back to the parent chat's `modelId` before `POST /api/generations`.
 
 **Step 19 hooks (exported, not wired):** `restartSubAgent`, `recordToolCallForRun`, `getRunToolCallFingerprint`.
 
@@ -831,9 +836,9 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
-## Built-in tools (39)
+## Built-in tools (55)
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) â€” **9** `serverRequired: false` (utility/web in tab), **30** `serverRequired: true` (Node, including **7** CDP `browser_*`). Function `name` in each schema matches `executeBrowserTool` / `executeServerTool`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **20** `serverRequired: false` (browser-routed: web, utility, `ask_question`, mode handoff, sub-agent/board orchestration), **35** `serverRequired: true` (Node, including **7** CDP `browser_*`, memory, LSP, Impeccable). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, or `executeServerTool`.
 
 ### Browser CDP (7 server, Step 12)
 
@@ -868,6 +873,39 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 | `read_clipboard` / `write_clipboard` | Browser |
 | `get_system_info` | Browser (`navigator`, `screen`, timezone JSON) |
 
+### Chat UI and mode handoff (4 browser-routed)
+
+| id | Runs on |
+|----|---------|
+| `ask_question` | Browser — structured cards via [`ask-question-queue.ts`](../src/tools/ask-question-queue.ts) |
+| `propose_mode_switch` | Browser — `ask_question` presets for mode suggestions |
+| `set_chat_mode` | Browser — [`mode-selector.ts`](../src/ui/mode-selector.ts) |
+| `create_chat_with_mode` | Browser — [`sidebar.ts`](../src/ui/sidebar.ts) (optional `orchestratePlanPath`) |
+
+### Sub-agents and Orchestrate board (6 browser-routed)
+
+| id | Runs on |
+|----|---------|
+| `spawn_sub_agent` | Browser — [`sub-agent-executor.ts`](../src/tools/sub-agent-executor.ts) → [`orchestrator.ts`](../src/agents/orchestrator.ts) |
+| `cancel_sub_agent` | Browser |
+| `list_sub_agents` / `get_sub_agent_status` | Browser |
+| `board_init` / `board_update_task` / `board_get_state` | Browser — [`board-tools.ts`](../src/tools/board-tools.ts) |
+
+### Memory and LSP (3 server)
+
+| id | Purpose |
+|----|---------|
+| `save_memory` | Persist memory entries under `~/.minnow/memory/` |
+| `get_lsp_diagnostics` | Diagnostics for a workspace file |
+| `list_lsp_servers` | Configured LSP servers |
+
+### Impeccable (2 server)
+
+| id | Purpose |
+|----|---------|
+| `load_impeccable_context` | Load design context for `/impeccable` |
+| `run_impeccable` | Run Impeccable detect/command scripts |
+
 ### Files (14 server)
 
 `list_directory`, `read_file`, `read_file_range`, `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `search_in_file`, `make_directory`, `move_file`, `copy_file`, `delete_path`, `find_files`, `get_file_metadata`
@@ -891,7 +929,7 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 
 ### Browser executor summary
 
-[`executeBrowserTool`](../src/tools/browser-executor.ts) implements all nine browser tools; returns strings, `Error: â€¦` on failure.
+[`executeBrowserTool`](../src/tools/browser-executor.ts) implements web/utility browser tools. [`executeTool`](../src/tools/client.ts) routes `ask_question`, mode handoff, sub-agent, and board tools to dedicated handlers. Returns strings or structured JSON; `Error: …` on failure.
 
 ## File attachments
 
@@ -1103,7 +1141,7 @@ Order in `initApp()`:
 | [`index.html`](../index.html) | HTML shell, drawer, composer, attach UI |
 | [`src/main.ts`](../src/main.ts) | Bootstrap, window handlers, SW register |
 | [`src/types.ts`](../src/types.ts) | `Message`, `ToolCall`, `ApiMessage`, `ContentPart` |
-| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 42-tool catalog |
+| [`src/tools/definitions.ts`](../src/tools/definitions.ts) | 55-tool catalog |
 | [`src/tools/config.ts`](../src/tools/config.ts) | `minnow.tools` |
 | [`src/tools/client.ts`](../src/tools/client.ts) | Router + server detection |
 | [`src/tools/loop.ts`](../src/tools/loop.ts) | Tool loop + `buildApiMessages` + composed system prompt |
@@ -1119,5 +1157,5 @@ Order in `initApp()`:
 | [`src/attachments/reader.ts`](../src/attachments/reader.ts) | File processing + PDF POST |
 | [`public/sw.js`](../public/sw.js) | PWA service worker |
 | [`documentation/context.md`](context.md) | This document |
-| [`documentation/plans/tool-usage-subagent-steps.md`](plans/tool-usage-subagent-steps.md) | Sub-agent implementation plan |
+| [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) | Shipped vs gap audit (agents, Reef, headless, evals) |
 

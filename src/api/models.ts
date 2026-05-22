@@ -10,8 +10,11 @@ import {
   touchChat,
 } from '../state/sessions';
 import { buildModelOptionHtml } from '../lib/format-model-label';
+import { contextLengthFromModelRow } from '../lib/context-length';
 import { isModelLoaded } from './model-loaded-state';
 import type { ModelInfo } from '../types';
+
+export { contextLengthFromModelRow } from '../lib/context-length';
 import { updateModelStateDot } from '../ui/model-state-dot';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
@@ -34,7 +37,7 @@ export function resolveModelInfo(
     ? {
         arch: cached.arch,
         quant: cached.quantization,
-        context_length: cached.max_context_length,
+        context_length: contextLengthFromModelRow(cached),
       }
     : {};
   return { ...fromCache, ...(fromResponse || {}) };

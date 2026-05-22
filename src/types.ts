@@ -354,7 +354,10 @@ export interface LmModelRecord {
   state?: string;
   quantization?: string;
   arch?: string;
+  /** Catalog / architecture maximum. */
   max_context_length?: number;
+  /** Allocated context for a loaded model (LM Studio UI setting). */
+  loaded_context_length?: number;
 }
 
 export interface LmModelsListResponse {
