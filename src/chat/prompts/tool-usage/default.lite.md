@@ -14,4 +14,4 @@ Tools: {{enabled_tools}}.
 - Independent calls in parallel; dependent calls sequential.
 - No `rm -rf`, no force-push, no `--no-verify` without explicit approval.
 - One-line summary after a tool sequence, not a transcript.
-- For scope or priority decisions, use `ask_question` (preset options + Other) instead of long prose.
+- For scope or priority decisions, use `ask_question`: `{ questions: [{ id, prompt, options: [{ id, label }, ...] }] }` (not `question`/`choices`/string options).

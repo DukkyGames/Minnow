@@ -38,6 +38,11 @@
   overflow: hidden;
 }
 
+/* Narrow rail: fixed-width controls default to cross-start; center chrome, keep list full width */
+.chat-sidebar.collapsed:not(.mobile-open) {
+  align-items: center;
+}
+
 /* Collapsed rail: center controls; 40px icon-btn + 20px padding overflows 48px width */
 .chat-sidebar.collapsed .chat-sidebar-header {
   padding: 8px 4px;
@@ -150,9 +155,9 @@
 
 .chat-sidebar.collapsed .chat-sidebar-footer {
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
-  padding: 8px 6px;
+  padding: 8px 4px;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -334,9 +339,35 @@
   line-height: 1.35;
 }
 
+/* Collapsed rail: rows span full list width; status glyph centered in the hit target */
 .chat-sidebar.collapsed .chat-item-row {
+  box-sizing: border-box;
+  width: 100%;
+  align-self: stretch;
   padding: 8px 4px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-list {
+  align-self: stretch;
+  width: 100%;
+  /* No stable gutter in 48px rail — it reserves inline-end space and shifts glyphs left */
+  padding: 6px 4px;
+  scrollbar-gutter: auto;
+  align-items: center;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-head {
+  width: 100%;
+  justify-content: center;
+}
+
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-title-row {
+  flex: 0 0 auto;
+  width: 100%;
   justify-content: center;
 }
 
@@ -409,8 +440,16 @@
 }
 
 .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row:has(.chat-item-agent-badge) .chat-item-agent-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   margin-left: 0;
-  min-width: 1.75rem;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  line-height: 1.2;
   text-align: center;
   border: 1px solid transparent;
 }
