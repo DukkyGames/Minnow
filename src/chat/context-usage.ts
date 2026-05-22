@@ -1,0 +1,214 @@
+/**
+ * Live chat context window budget (MIN-13): estimate used tokens vs model limit.
+ */
+
+import { modelCache } from '../app-state';
+import { resolveModelInfo } from '../api/models';
+import { formatModelLabel } from '../lib/format-model-label';
+import { getActiveChat } from '../state/sessions';
+import type { Attachment } from '../attachments/types';
+import type { Chat } from '../types';
+import {
+  estimateTokensFromText,
+  type OutboundPromptEstimate,
+} from './prompts/token-estimate-core';
+import { resolveOutboundPromptEstimate } from './prompts/token-estimate';
+
+export type ContextUsageSectionKey =
+  | 'system'
+  | 'rules'
+  | 'tools'
+  | 'history'
+  | 'composer'
+  | 'attachments';
+
+export interface ContextUsageSection {
+  key: ContextUsageSectionKey;
+  label: string;
+  tokens: number;
+}
+
+export interface ContextBudget {
+  modelId: string;
+  modelDisplayName: string;
+  /** Model max context length when known. */
+  limit: number | null;
+  /** Estimated tokens for the next send (includes pending composer + attachments). */
+  used: number;
+  /** limit - used when limit is known. */
+  remaining: number | null;
+  /** 0–100 for the ring; capped at 100; null when limit unknown. */
+  percent: number | null;
+  /** False when the last turn reported provider prompt_tokens. */
+  isEstimate: boolean;
+  /** Provider prompt_tokens from the last completed turn, if any. */
+  lastTurnPromptTokens: number | null;
+  breakdown: ContextUsageSection[];
+}
+
+export interface GetContextBudgetOptions {
+  chat?: Chat;
+  modelId?: string;
+  /** Pending composer textarea (chars ÷ 4 estimate). */
+  pendingComposerText?: string;
+  /** Precomputed attachment token estimate. */
+  pendingAttachmentTokens?: number;
+}
+
+/** Rough token count for queued attachment payloads. */
+export function estimateAttachmentTokens(attachments: Attachment[]): number {
+  let total = 0;
+  for (const attachment of attachments) {
+    if (attachment.kind === 'error') continue;
+    if (attachment.text) {
+      total += estimateTokensFromText(attachment.text);
+      continue;
+    }
+    if (attachment.dataUrl) {
+      total += estimateTokensFromText(attachment.dataUrl);
+      continue;
+    }
+    if (attachment.workspacePath) {
+      total += estimateTokensFromText(attachment.workspacePath) + 256;
+      continue;
+    }
+    total += estimateTokensFromText(attachment.name);
+  }
+  return total;
+}
+
+/** Section rows for the breakdown panel from estimate buckets + pending input. */
+export function buildContextUsageBreakdown(
+  estimate: OutboundPromptEstimate,
+  composerTokens: number,
+  attachmentTokens: number,
+): ContextUsageSection[] {
+  const rows: ContextUsageSection[] = [
+    {
+      key: 'system',
+      label: estimate.legacyFallback ? 'System (legacy drawer)' : 'System',
+      tokens: estimate.composedSystem,
+    },
+    { key: 'rules', label: 'Rules', tokens: estimate.userRules },
+    { key: 'tools', label: 'Tools', tokens: estimate.tools },
+    { key: 'history', label: 'History', tokens: estimate.history },
+  ];
+  if (composerTokens > 0) {
+    rows.push({ key: 'composer', label: 'Composer (pending)', tokens: composerTokens });
+  }
+  if (attachmentTokens > 0) {
+    rows.push({ key: 'attachments', label: 'Attachments (pending)', tokens: attachmentTokens });
+  }
+  return rows;
+}
+
+function sumBreakdownTokens(sections: ContextUsageSection[]): number {
+  let total = 0;
+  for (const section of sections) {
+    total += section.tokens;
+  }
+  return total;
+}
+
+function resolveModelDisplayName(modelId: string): string {
+  const cached = modelCache.get(modelId);
+  if (cached) {
+    return formatModelLabel({
+      id: cached.id,
+      quantization: cached.quantization,
+      state: cached.state,
+    }).primary;
+  }
+  return formatModelLabel({ id: modelId }).primary;
+}
+
+function resolveContextLimit(modelId: string, chat: Chat): number | null {
+  const info = resolveModelInfo(modelId, chat.modelInfo);
+  const fromInfo = info.context_length;
+  if (typeof fromInfo === 'number' && Number.isFinite(fromInfo) && fromInfo > 0) {
+    return fromInfo;
+  }
+  const cached = modelCache.get(modelId);
+  const fromCache = cached?.max_context_length;
+  if (typeof fromCache === 'number' && Number.isFinite(fromCache) && fromCache > 0) {
+    return fromCache;
+  }
+  return null;
+}
+
+/** Ring fill percent (0–100); null when limit unknown. */
+export function computeContextUsagePercent(used: number, limit: number | null): number | null {
+  if (limit == null || limit <= 0) return null;
+  const raw = (used / limit) * 100;
+  if (!Number.isFinite(raw)) return null;
+  return Math.min(100, Math.max(0, Math.round(raw)));
+}
+
+/** Pure merge of estimate buckets + pending input into a budget snapshot. */
+export function assembleContextBudget(params: {
+  modelId: string;
+  modelDisplayName: string;
+  limit: number | null;
+  estimate: OutboundPromptEstimate;
+  composerTokens: number;
+  attachmentTokens: number;
+  lastTurnPromptTokens: number | null;
+}): ContextBudget {
+  const breakdown = buildContextUsageBreakdown(
+    params.estimate,
+    params.composerTokens,
+    params.attachmentTokens,
+  );
+  const used = sumBreakdownTokens(breakdown);
+  const limit = params.limit;
+  const remaining = limit != null ? Math.max(0, limit - used) : null;
+  const percent = computeContextUsagePercent(used, limit);
+
+  return {
+    modelId: params.modelId,
+    modelDisplayName: params.modelDisplayName,
+    limit,
+    used,
+    remaining,
+    percent,
+    isEstimate: params.lastTurnPromptTokens == null,
+    lastTurnPromptTokens: params.lastTurnPromptTokens,
+    breakdown,
+  };
+}
+
+/**
+ * Approximate context fill for the active (or given) chat and model.
+ * Merges outbound prompt estimate with pending composer and attachments.
+ */
+export async function getContextBudget(
+  options?: GetContextBudgetOptions,
+): Promise<ContextBudget> {
+  const chat = options?.chat ?? getActiveChat();
+  const modelId =
+    options?.modelId?.trim() ||
+    chat.modelId ||
+    (typeof document !== 'undefined'
+      ? (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value
+      : '') ||
+    '';
+
+  const estimate = await resolveOutboundPromptEstimate({ chat });
+  const composerTokens = estimateTokensFromText(options?.pendingComposerText?.trim() ?? '');
+  const attachmentTokens = options?.pendingAttachmentTokens ?? 0;
+
+  const lastTurnPromptTokens =
+    chat.lastStats?.prompt_tokens != null && Number.isFinite(chat.lastStats.prompt_tokens)
+      ? chat.lastStats.prompt_tokens
+      : null;
+
+  return assembleContextBudget({
+    modelId,
+    modelDisplayName: modelId ? resolveModelDisplayName(modelId) : 'No model',
+    limit: modelId ? resolveContextLimit(modelId, chat) : null,
+    estimate,
+    composerTokens,
+    attachmentTokens,
+    lastTurnPromptTokens,
+  });
+}
