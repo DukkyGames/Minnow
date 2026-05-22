@@ -78,6 +78,7 @@ import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   refreshActiveBoardIfMounted,
+  refreshBoardOnboardingIfMounted,
   renderBoardView,
 } from '../ui/orchestrate-board';
 import {
@@ -647,6 +648,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     refreshModeSelectorDisabled();
     refreshExpertSelectDisabled();
     refreshOrchestratePlanSelectorDisabled();
+    refreshBoardOnboardingIfMounted();
     refreshViewModeToggleDisabled();
     if (isStreamDomVisible(chat.id)) {
       setComposerStreamingMode('streaming');
@@ -1181,6 +1183,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       refreshModeSelectorDisabled();
       refreshExpertSelectDisabled();
       refreshOrchestratePlanSelectorDisabled();
+      refreshBoardOnboardingIfMounted();
       syncViewModeToggleFromActiveChat();
       refreshViewModeToggleDisabled();
       syncComposerFromStreamingState();
