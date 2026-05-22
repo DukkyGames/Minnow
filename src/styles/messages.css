@@ -19,10 +19,6 @@
   scroll-behavior: smooth;
 }
 
-.chat-area::-webkit-scrollbar { width: 4px; }
-.chat-area::-webkit-scrollbar-track { background: transparent; }
-.chat-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
 /* Jump to latest when user scrolls up during a stream */
 .chat-jump-latest {
   position: absolute;

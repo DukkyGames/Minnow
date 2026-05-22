@@ -47,6 +47,59 @@ body {
   outline-offset: 2px;
 }
 
+/* Thin theme scrollbars — bench instrument hairlines (DESIGN.md) */
+:root {
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: var(--border2);
+  --scrollbar-track: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-size);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Reserve gutter so thumbs do not cover rounded panel chrome */
+.chat-area,
+.chat-list,
+.board-main,
+.skill-picker,
+.model-select-menu,
+.settings-nav,
+.settings-content,
+.file-tree-host,
+.file-viewer-body,
+.file-viewer-markdown-preview,
+.terminal-history,
+.terminal-agent-output,
+.sub-agent-drawer__scroll,
+.tool-approval-host,
+.question-host,
+.composer-tools-popover .tools-list--composer,
+.kanban-column__list {
+  scrollbar-gutter: stable;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

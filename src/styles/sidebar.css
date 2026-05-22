@@ -198,17 +198,6 @@
   display: none;
 }
 
-.chat-list::-webkit-scrollbar {
-  width: 4px;
-}
-.chat-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.chat-list::-webkit-scrollbar-thumb {
-  background: var(--border2);
-  border-radius: 2px;
-}
-
 /* Session row: div shell + action buttons (no nested interactive controls) */
 .chat-item-row {
   text-align: left;

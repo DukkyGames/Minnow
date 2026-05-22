@@ -62,7 +62,12 @@ import {
 import { initChatScroll } from './ui/chat-scroll';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
-import { autoResize, handleComposerPrimaryAction, handleKey } from './ui/input';
+import {
+  autoResize,
+  handleComposerPrimaryAction,
+  handleKey,
+  initComposerInput,
+} from './ui/input';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
@@ -211,7 +216,10 @@ export async function initApp(): Promise<void> {
   initModelSelectPicker();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (msgInput) mountSlashPicker(msgInput);
+  if (msgInput) {
+    initComposerInput(msgInput);
+    mountSlashPicker(msgInput);
+  }
   initComposerDrop();
   await initFilePanel();
   onFilePanelServerAvailabilityChanged();
