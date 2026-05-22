@@ -3,7 +3,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
-import { updateTask } from '../state/orchestrate-board-store';
+import { appendTaskRunHistory, updateTask } from '../state/orchestrate-board-store';
 import { findChatById } from '../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../tools/client';
 import { loadSubAgentConfig } from './sub-agent-config';
@@ -184,11 +184,16 @@ function syncBoardTaskOnSettle(
   const maxTurnFailure =
     status === 'completed' && isMaxToolTurnFailure(run.summary, error);
 
+  const settlePatch = {
+    lastRunId: run.runId,
+    assignedRunId: null as string | null,
+  };
+
   if (status === 'completed' && !maxTurnFailure) {
     updateTask(chat, taskId, {
       status: 'complete',
       endedAt,
-      assignedRunId: null,
+      ...settlePatch,
     });
     return;
   }
@@ -203,7 +208,7 @@ function syncBoardTaskOnSettle(
           : status === 'cancelled'
             ? 'cancelled'
             : 'failed'),
-      assignedRunId: null,
+      ...settlePatch,
     });
   }
 }
@@ -384,6 +389,7 @@ async function spawnSubAgentInternal(
         assignedRunId: runId,
         startedAt: Date.now(),
       });
+      appendTaskRunHistory(parentChat, input.boardTaskId, runId);
     }
   }
 

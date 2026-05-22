@@ -23,6 +23,7 @@ const {
   deriveBoardHeaderStatus,
   canOpenBoardTaskSubAgent,
   deriveTaskAgentBadge,
+  getBoardTaskPrimaryRunId,
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
 const { setViewModeToggleRenderHandlerForTests } = await import(
@@ -276,6 +277,45 @@ describe('orchestrate board live updates', () => {
       }),
       true,
     );
+    assert.deepEqual(
+      deriveTaskAgentBadge(
+        {
+          id: 'W1-A',
+          title: 'A',
+          wave: 'W1',
+          category: 'build',
+          status: 'complete',
+          lastRunId: FIXED_RUN_ID,
+          runHistory: [FIXED_RUN_ID],
+        },
+        'completed',
+      ),
+      { variant: 'complete', label: 'Complete' },
+    );
+    assert.equal(
+      canOpenBoardTaskSubAgent({
+        id: 'W1-A',
+        title: 'A',
+        wave: 'W1',
+        category: 'build',
+        status: 'complete',
+        lastRunId: FIXED_RUN_ID,
+        runHistory: [FIXED_RUN_ID],
+      }),
+      true,
+    );
+    assert.equal(getBoardTaskPrimaryRunId({ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', status: 'planned', assignedRunId: 'active-run' }), 'active-run');
+    assert.equal(
+      getBoardTaskPrimaryRunId({
+        id: 'W1-A',
+        title: 'A',
+        wave: 'W1',
+        category: 'build',
+        status: 'complete',
+        lastRunId: FIXED_RUN_ID,
+      }),
+      FIXED_RUN_ID,
+    );
   });
 
   test('clicking in-progress or complete kanban card opens sub-agent drawer', () => {
@@ -297,7 +337,9 @@ describe('orchestrate board live updates', () => {
     });
     updateTask(chat, 'W1-B', {
       status: 'complete',
-      assignedRunId: FIXED_RUN_ID,
+      lastRunId: FIXED_RUN_ID,
+      runHistory: [FIXED_RUN_ID],
+      assignedRunId: null,
     });
     setSessionStateForTests({
       version: 2,
@@ -325,6 +367,51 @@ describe('orchestrate board live updates', () => {
     completeBadge.closest('.board-task-card--clickable')?.click();
     assert.ok(document.querySelector('.sub-agent-drawer-panel'));
     assert.equal(document.querySelectorAll('.board-agents').length, 0);
+  });
+
+  test('settled task with lastRunId opens drawer after assignedRunId cleared', () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    chat.subAgentRuns = [
+      {
+        ...persistedRun(),
+        status: 'failed',
+        summary: 'maximum tool turns reached',
+        error: 'maximum tool turns',
+        endedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ];
+    initBoard(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Failed task', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(chat, 'W1-A', {
+      status: 'failed',
+      lastRunId: FIXED_RUN_ID,
+      runHistory: [FIXED_RUN_ID],
+      assignedRunId: null,
+      endedAt: 1_700_000_100_000,
+      error: 'maximum tool turns',
+    });
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderBoardView(chat);
+
+    const failedBadge = document.querySelector('.board-task-card__agent--failed');
+    assert.ok(failedBadge, 'settled failed task shows Failed agent badge');
+    failedBadge.closest('.board-task-card--clickable')?.click();
+    assert.ok(document.querySelector('.sub-agent-drawer-panel'));
+    assert.equal(
+      document.querySelector('.sub-agent-drawer__status')?.textContent,
+      'Failed',
+    );
   });
 
   test('board header places Start and Stop controls on the right', () => {
