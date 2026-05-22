@@ -4,6 +4,7 @@
  */
 
 import { processFile } from './reader';
+import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import type { Attachment } from './types';
 
 /** Files queued for the next user message. */
@@ -129,6 +130,7 @@ export function renderAttachPreview(): void {
   for (const attachment of pendingAttachments) {
     container.appendChild(createAttachChip(attachment));
   }
+  scheduleContextUsageRefresh();
 }
 
 /** Handles change on the hidden #fileInput (also exposed on window for inline HTML). */

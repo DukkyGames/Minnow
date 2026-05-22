@@ -603,6 +603,29 @@
         </div>
       </div>
       <div class="input-bar-send-stack">
+        <div class="context-usage-anchor">
+          <button
+            type="button"
+            class="context-usage-ring"
+            id="contextUsageRing"
+            aria-label="Context usage"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+            aria-controls="contextUsageBreakdown"
+            title="Context window usage"
+          >
+            <svg class="context-usage-ring__svg" viewBox="0 0 40 40" aria-hidden="true">
+              <circle class="context-usage-ring__track" cx="20" cy="20" r="18"></circle>
+              <circle class="context-usage-ring__fill" cx="20" cy="20" r="18"></circle>
+            </svg>
+          </button>
+          <div
+            id="contextUsageBreakdown"
+            class="context-usage-breakdown hidden"
+            role="dialog"
+            aria-label="Context usage breakdown"
+          ></div>
+        </div>
         <button class="icon-btn view-mode-toggle-btn view-mode-toggle-btn--to-board hidden" type="button" id="btnViewModeToggleBoard" aria-label="Board view" title="Board view (Orchestrate mode only)" disabled hidden>
           <svg class="icon-svg view-mode-toggle-btn__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="8" rx="1"/><rect x="14" y="13" width="7" height="8" rx="1"/></svg>
         </button>

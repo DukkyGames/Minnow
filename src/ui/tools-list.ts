@@ -85,6 +85,7 @@ function handleToolsListChange(event: Event, list: HTMLElement): void {
     const mode = target.value;
     if (!isToolPermissionMode(mode)) return;
     setToolPermission(id, mode, list);
+    void import('./context-usage-ring').then((m) => m.scheduleContextUsageRefresh());
     return;
   }
 
