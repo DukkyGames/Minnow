@@ -70,7 +70,14 @@ export function getBoardState(chat: Chat): OrchestrateBoardState | null {
 export function findTaskByRunId(chat: Chat, runId: string): BoardTask | null {
   const board = chat.orchestrateBoard;
   if (!board || !runId) return null;
-  return board.tasks.find((t) => t.assignedRunId === runId) ?? null;
+  return (
+    board.tasks.find(
+      (t) =>
+        t.assignedRunId === runId ||
+        t.lastRunId === runId ||
+        t.runHistory?.includes(runId),
+    ) ?? null
+  );
 }
 
 export type InitBoardInput = {
@@ -118,6 +125,8 @@ export type UpdateTaskPatch = Partial<
     BoardTask,
     | 'status'
     | 'assignedRunId'
+    | 'lastRunId'
+    | 'runHistory'
     | 'startedAt'
     | 'endedAt'
     | 'filesChanged'
@@ -126,6 +135,23 @@ export type UpdateTaskPatch = Partial<
     | 'retryCount'
   >
 >;
+
+/** Append a sub-agent run id to a task's history (deduped, newest last). */
+export function appendTaskRunHistory(
+  chat: Chat,
+  taskId: string,
+  runId: string,
+): BoardTask {
+  const board = chat.orchestrateBoard;
+  if (!board) throw new Error('Error: orchestrate board is not initialized');
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task) throw new Error(`Error: unknown board task "${taskId}"`);
+  const trimmed = runId.trim();
+  if (!trimmed) return task;
+  const prev = task.runHistory ?? [];
+  const runHistory = prev.includes(trimmed) ? prev : [...prev, trimmed];
+  return updateTask(chat, taskId, { runHistory });
+}
 
 /** Merge task patch, rollup waves, persist, emit. */
 export function updateTask(

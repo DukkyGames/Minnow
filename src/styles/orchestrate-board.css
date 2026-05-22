@@ -439,6 +439,28 @@ button.board-header__activity {
   }
 }
 
+.board-task-card__run-picker {
+  margin-top: 6px;
+}
+
+.board-task-card__run-picker-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.board-task-card__run-picker-select {
+  width: 100%;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
 .board-task-card__title {
   margin: 4px 0;
   color: var(--text);

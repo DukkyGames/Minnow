@@ -279,6 +279,19 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.assignedRunId === 'string' && r.assignedRunId.trim()
       ? r.assignedRunId.trim()
       : undefined;
+  const lastRunId =
+    typeof r.lastRunId === 'string' && r.lastRunId.trim()
+      ? r.lastRunId.trim()
+      : undefined;
+  const runHistory: string[] = [];
+  if (Array.isArray(r.runHistory)) {
+    for (const item of r.runHistory) {
+      if (typeof item === 'string' && item.trim()) {
+        const id = item.trim();
+        if (!runHistory.includes(id)) runHistory.push(id);
+      }
+    }
+  }
   const filesChanged =
     typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)
       ? r.filesChanged
@@ -290,6 +303,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     category,
     status,
     ...(assignedRunId ? { assignedRunId } : {}),
+    ...(lastRunId ? { lastRunId } : {}),
+    ...(runHistory.length ? { runHistory } : {}),
     ...(typeof r.startedAt === 'number' ? { startedAt: r.startedAt } : {}),
     ...(typeof r.endedAt === 'number' ? { endedAt: r.endedAt } : {}),
     ...(filesChanged !== undefined ? { filesChanged } : {}),

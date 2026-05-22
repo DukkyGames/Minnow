@@ -121,6 +121,10 @@
   color: var(--text-muted);
 }
 
+.sub-agent-drawer__ended {
+  font-size: 11px;
+}
+
 .sub-agent-drawer__status {
   text-transform: capitalize;
   font-weight: 600;

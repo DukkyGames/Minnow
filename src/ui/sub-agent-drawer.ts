@@ -10,6 +10,27 @@ import { renderToolCall, renderToolResult } from './tool-messages';
 
 let openLayer: { backdrop: HTMLElement; onKey: (e: KeyboardEvent) => void } | null = null;
 
+/** Human-readable terminal status for drawer header. */
+function formatDrawerStatusLabel(status: string): string {
+  if (status === 'completed') return 'Complete';
+  if (status === 'failed') return 'Failed';
+  if (status === 'cancelled') return 'Cancelled';
+  if (status === 'running') return 'Running';
+  if (status === 'queued') return 'Queued';
+  return status;
+}
+
+/** Format ISO or epoch ended time for display. */
+function formatEndedAt(endedAt: string | number | null | undefined): string | null {
+  if (endedAt == null || endedAt === '') return null;
+  const ms =
+    typeof endedAt === 'number'
+      ? endedAt
+      : Date.parse(String(endedAt));
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toLocaleString();
+}
+
 /** Parse stored tool `arguments` JSON for display (mirrors messages.ts). */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
@@ -163,12 +184,19 @@ export function openSubAgentDrawer(runId: string, chatId: string): void {
   meta.className = 'sub-agent-drawer__meta';
   const status = document.createElement('span');
   status.className = 'sub-agent-drawer__status';
-  status.textContent = run.status;
+  status.textContent = formatDrawerStatusLabel(run.status);
   const idSpan = document.createElement('span');
   idSpan.className = 'sub-agent-drawer__run-id';
   idSpan.textContent = run.runId;
   meta.appendChild(status);
   meta.appendChild(idSpan);
+  const endedLabel = formatEndedAt(run.endedAt);
+  if (endedLabel) {
+    const ended = document.createElement('span');
+    ended.className = 'sub-agent-drawer__ended';
+    ended.textContent = `Ended ${endedLabel}`;
+    meta.appendChild(ended);
+  }
 
   const headerActions = document.createElement('div');
   headerActions.className = 'sub-agent-drawer__header-actions';

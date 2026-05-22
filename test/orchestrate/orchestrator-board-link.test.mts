@@ -76,5 +76,6 @@ describe('orchestrator board link', () => {
     const task = chat?.orchestrateBoard?.tasks.find((t) => t.id === TASK_ID);
     assert.equal(task?.status, 'in_progress');
     assert.equal(task?.assignedRunId, FIXED_RUN_ID);
+    assert.deepEqual(task?.runHistory, [FIXED_RUN_ID]);
   });
 });
