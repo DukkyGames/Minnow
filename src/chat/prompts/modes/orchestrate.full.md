@@ -129,9 +129,11 @@ Every **`spawn_sub_agent`** must include **`category`** and **`board_task_id`** 
 
 - **`spawn_sub_agent`** with **`wait: false`** returns immediately with a `runId` while the sub-agent keeps working.
 - **`list_sub_agents`** — all runs for this **parent user-message turn** (queued / running / finished) with short `taskPreview` rows.
-- **`get_sub_agent_status`** with **`run_id`** — live `status`, `summary` when complete, `lastMessagePreview`, and `error` when failed.
+- **`get_sub_agent_status`** with **`run_id`** — live `status`, `success` (false when max tool turns or failed), `summary`, `lastMessagePreview`, and `error` when failed.
 
 **Parallel wave pattern:** spawn up to the concurrency cap with `wait: false`, record `runId`s, then call `list_sub_agents` until every run in that batch is terminal (`completed` / `failed` / `cancelled`). Use `get_sub_agent_status` on any non-success run before updating the board.
+
+**Max tool turns:** If `get_sub_agent_status` shows `success: false`, `status: failed`, or a summary containing **maximum tool turns**, the sub-agent did **not** finish the task. Do **not** call `board_update_task` with `complete`. Mark the task `failed` (or leave `in_progress` and restart via `restart_sub_agent` / a new spawn). `board_update_task` with `complete` is rejected server-side when the linked `assignedRunId` run failed or hit the cap.
 
 **Sequential pattern (simpler):** use `spawn_sub_agent` with default **`wait: true`** (or explicit `wait: true`) to block until the aggregate JSON returns — no polling needed.
 
@@ -148,7 +150,7 @@ For each task in the current wave (parallelized up to the concurrency limit):
    - Pass the task's full Build spec as the prompt
    - wait: true OR wait: false + list_sub_agents / get_sub_agent_status
 
-3. On Builder DONE:
+3. On Builder DONE (`success: true`, not max tool turns):
    - board_update_task — status testing (before verifier)
    - Spawn a Verifier sub-agent
    - spawn_sub_agent: category test, board_task_id <task id>

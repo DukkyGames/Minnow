@@ -2,6 +2,11 @@
  * Orchestrate board tools: board_init, board_update_task, board_get_state.
  */
 
+import { getSubAgentRun } from '../agents/orchestrator.ts';
+import {
+  isMaxToolTurnSummary,
+  isSubAgentRunSuccessful,
+} from '../agents/sub-agent-outcome.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import {
   getBoardState,
@@ -209,6 +214,29 @@ export async function executeBoardTool(
       return 'Error: orchestrate board is not initialized';
     }
     try {
+      if (validated.args.status === 'complete') {
+        const task = chat.orchestrateBoard.tasks.find(
+          (t) => t.id === validated.args.task_id,
+        );
+        if (task?.error && isMaxToolTurnSummary(task.error)) {
+          return (
+            'Error: cannot mark task complete — task failed with max tool turns. ' +
+            'Restart or spawn a new sub-agent.'
+          );
+        }
+        const linkedRunId =
+          validated.args.run_id?.trim() || task?.assignedRunId?.trim() || '';
+        if (linkedRunId) {
+          const run = getSubAgentRun(linkedRunId);
+          if (run && !isSubAgentRunSuccessful(run)) {
+            return (
+              'Error: cannot mark task complete — linked sub-agent run did not succeed ' +
+              '(failed, cancelled, or hit max tool turns). Restart or spawn a new sub-agent.'
+            );
+          }
+        }
+      }
+
       const patch: Parameters<typeof updateTask>[2] = { status: validated.args.status };
       if (validated.args.run_id) patch.assignedRunId = validated.args.run_id;
       if (validated.args.files_changed !== undefined) {
