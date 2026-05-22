@@ -18,8 +18,8 @@ import type { ApiMessage, ChatCompletionChunk, ToolCallAccumulator } from '../ty
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
-/** Max tool rounds inside one sub-agent run. */
-export const MAX_SUB_AGENT_TOOL_TURNS = 6;
+/** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
+export const MAX_SUB_AGENT_TOOL_TURNS = 12;
 
 interface SubAgentCompletionBody {
   model?: string;
@@ -111,8 +111,9 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     let toolTurns = 0;
     const temperature = 0.4;
     const maxTokens = 2048;
+    const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
 
-    for (let turn = 0; turn < MAX_SUB_AGENT_TOOL_TURNS; turn++) {
+    for (let turn = 0; turn < maxToolTurns; turn++) {
       const body: SubAgentCompletionBody = {
         model: input.modelId || undefined,
         messages,
@@ -181,9 +182,10 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     }
 
     return {
-      summary: 'Sub-agent reached maximum tool turns.',
+      summary: `Sub-agent reached maximum tool turns (${maxToolTurns}).`,
       toolTurns,
       messages,
+      toolTurnLimitExhausted: true,
     };
   },
 };

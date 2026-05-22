@@ -16,6 +16,8 @@ export interface SubAgentTypeConfig {
   modelId: string;
   maxConcurrent: number;
   timeoutMs: number;
+  /** Max LLM↔tool rounds before the run fails (configurable in ~/.minnow/sub-agents.json). */
+  maxToolTurns: number;
   workAgentId: string | null;
   allowedTools: string[] | null;
   deniedTools: string[];
@@ -28,6 +30,8 @@ export interface SubAgentsFile {
   enabled: boolean;
   globalMaxConcurrent: number;
   defaultTimeoutMs: number;
+  /** Fallback max tool rounds when a type omits `maxToolTurns`. */
+  defaultMaxToolTurns?: number;
   types: Record<string, SubAgentTypeConfig>;
 }
 
@@ -47,6 +51,8 @@ export interface SubAgentRun {
   startedAt: string | null;
   endedAt: string | null;
   toolTurns: number;
+  /** Configured cap for this run (from type config at spawn). */
+  maxToolTurns: number;
   cancelled: boolean;
   messages: ApiMessage[];
   /**
@@ -119,6 +125,8 @@ export interface SubAgentRunnerOutput {
   summary: string;
   toolTurns: number;
   messages: ApiMessage[];
+  /** True when the tool loop hit {@link SubAgentRunner.run maxToolTurns} without a final answer. */
+  toolTurnLimitExhausted?: boolean;
 }
 
 /** Injectable runner for tests (deterministic mock). */
@@ -131,6 +139,7 @@ export interface SubAgentRunner {
     tools: OpenAIFunctionDefinition[];
     providerId: string;
     modelId: string;
+    maxToolTurns: number;
     signal: AbortSignal;
     /** Passed into each nested tool call (chat id, sub-agent label). */
     toolExecuteContext?: {

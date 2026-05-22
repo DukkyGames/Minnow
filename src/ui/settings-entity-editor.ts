@@ -383,13 +383,18 @@ export function mountSubAgentTypeEditor(
   container: HTMLElement,
   typeId: string,
   label: string,
-  initial: ModelBindingState & { enabled: boolean; maxConcurrent: number },
+  initial: ModelBindingState & {
+    enabled: boolean;
+    maxConcurrent: number;
+    maxToolTurns: number;
+  },
   onSaveConfig: (
     patch: Partial<{
       providerId: string;
       modelId: string;
       enabled: boolean;
       maxConcurrent: number;
+      maxToolTurns: number;
     }>,
   ) => Promise<boolean>,
 ): void {
@@ -412,6 +417,13 @@ export function mountSubAgentTypeEditor(
   maxInput.max = '8';
   maxInput.value = String(initial.maxConcurrent);
 
+  const toolTurnsInput = document.createElement('input');
+  toolTurnsInput.type = 'number';
+  toolTurnsInput.className = 'settings-select';
+  toolTurnsInput.min = '1';
+  toolTurnsInput.max = '64';
+  toolTurnsInput.value = String(initial.maxToolTurns);
+
   const modelBlock = el('div','settings-model-row');
   modelBlock.appendChild(el('label', 'settings-field-label', 'Provider'));
   modelBlock.appendChild(providerSel);
@@ -426,9 +438,14 @@ export function mountSubAgentTypeEditor(
   maxRow.appendChild(el('span', '', 'Max concurrent'));
   maxRow.appendChild(maxInput);
 
+  const toolTurnsRow = el('label', 'settings-toggle-row');
+  toolTurnsRow.appendChild(el('span', '', 'Max tool turns'));
+  toolTurnsRow.appendChild(toolTurnsInput);
+
   extra.appendChild(modelBlock);
   extra.appendChild(enabledRow);
   extra.appendChild(maxRow);
+  extra.appendChild(toolTurnsRow);
 
   const saveCfgBtn = el('button', 'settings-action-btn', 'Save type settings');
   saveCfgBtn.type = 'button';
@@ -439,6 +456,7 @@ export function mountSubAgentTypeEditor(
         modelId: modelSel.value,
         enabled: enabledCb.checked,
         maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
+        maxToolTurns: Math.min(64, Math.max(1, Number(toolTurnsInput.value) || 1)),
       });
       setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
     })();

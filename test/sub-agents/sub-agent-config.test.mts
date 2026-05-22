@@ -32,6 +32,21 @@ describe('sub-agent config', () => {
     assert.equal(config.enabled, false);
   });
 
+  test('types include per-type maxToolTurns defaults', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    assert.equal(merged.types.generalPurpose.maxToolTurns, 16);
+    assert.equal(merged.types.explore.maxToolTurns, 12);
+    assert.equal(merged.defaultMaxToolTurns, 12);
+  });
+
+  test('user override can raise maxToolTurns for a type', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: { explore: { maxToolTurns: 24 } },
+    });
+    assert.equal(merged.types.explore.maxToolTurns, 24);
+    assert.equal(merged.types.generalPurpose.maxToolTurns, 16);
+  });
+
   test('reef-widget type is registered with read-only allow list', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, null);
     const reef = merged.types['reef-widget'];

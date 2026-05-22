@@ -9,6 +9,7 @@ import { executeTool, getEnabledToolDefinitionsForMode } from '../tools/client';
 import { loadSubAgentConfig } from './sub-agent-config';
 import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
 import { createSubAgentRunId } from './sub-agent-run-id';
+import { DEFAULT_SUB_AGENT_MAX_TOOL_TURNS } from './sub-agent-config';
 import { getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
@@ -220,6 +221,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       tools,
       providerId: typeConfig.providerId,
       modelId: typeConfig.modelId,
+      maxToolTurns: run.maxToolTurns,
       signal: abort.signal,
       toolExecuteContext: {
         chatId: run.parentChatId ?? undefined,
@@ -232,6 +234,17 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 
     run.messages = output.messages;
     run.toolTurns = output.toolTurns;
+
+    if (output.toolTurnLimitExhausted) {
+      settleRun(
+        internals,
+        'failed',
+        output.summary,
+        'maximum tool turns reached',
+      );
+      return;
+    }
+
     settleRun(internals, 'completed', output.summary, null);
   } catch (err) {
     if (run.status === 'cancelled') return;
@@ -318,6 +331,12 @@ async function spawnSubAgentInternal(
     startedAt: null,
     endedAt: null,
     toolTurns: 0,
+    maxToolTurns: Math.max(
+      1,
+      typeConfig.maxToolTurns ??
+        config.defaultMaxToolTurns ??
+        DEFAULT_SUB_AGENT_MAX_TOOL_TURNS,
+    ),
     cancelled: false,
     messages: [],
     ...(input.category ? { category: input.category } : {}),
@@ -593,6 +612,7 @@ export function formatSubAgentListToolResult(parentTurnId: string | null | undef
     taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
     startedAt: r.startedAt,
     toolTurns: r.toolTurns,
+    maxToolTurns: r.maxToolTurns,
     liveNestedToolCalls: r.liveNestedToolCalls,
   }));
   return JSON.stringify({ runs: rows }, null, 2);
@@ -608,6 +628,7 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,
+    maxToolTurns: run.maxToolTurns,
     cancelled: run.cancelled,
     lastMessagePreview: lastNonSystemPreview(run.messages),
   };
