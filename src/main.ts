@@ -57,6 +57,7 @@ import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
+import { loadChatMeta } from './config/chat-meta';
 import {
   getActiveChat,
   loadSessionsFromStorage,
@@ -200,8 +201,8 @@ export async function initApp(): Promise<void> {
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
   initSubAgentUi();
-  const { startOrchestrateWatchdog } = await import('./chat/orchestrate/watchdog');
-  startOrchestrateWatchdog();
+  const { startSupervisor } = await import('./agents/supervisor');
+  startSupervisor();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();
@@ -231,6 +232,7 @@ export async function initApp(): Promise<void> {
   onFilePanelServerAvailabilityChanged();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
+  await loadChatMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
   initStatsStrip();

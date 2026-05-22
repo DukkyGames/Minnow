@@ -80,7 +80,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (20 browser-routed, 35 server-required including 7 CDP browser tools).
+ * All built-in tools: browser-routed handlers plus server-required tools (see `serverRequired` flags).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
@@ -832,6 +832,42 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     category: 'agents',
     serverRequired: false,
     definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
+  },
+  {
+    id: 'report_orchestrator_status',
+    label: 'Report orchestrator status',
+    description:
+      'Structured heartbeat for the Orchestrate supervisor: phase, next action, and active/blocked task ids.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'report_orchestrator_status',
+      'Report orchestration progress so the supervisor can detect stalls. Call after board changes and before ending a turn.',
+      {
+        phase: { type: 'string', description: 'Current orchestration phase (e.g. planning, executing)' },
+        next_action: {
+          type: 'string',
+          description: 'The next concrete action the orchestrator will take',
+        },
+        active_tasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Task ids currently in motion',
+        },
+        blocked_tasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Task ids blocked or waiting on input',
+        },
+        current_wave_id: { type: 'string', description: 'Optional active wave id' },
+        note: { type: 'string', description: 'Optional short note for logs' },
+        confidence: {
+          type: 'number',
+          description: 'Optional self-confidence 0–1 for ambiguous-stall escalation',
+        },
+      },
+      ['phase', 'next_action', 'active_tasks', 'blocked_tasks'],
+    ),
   },
   {
     id: 'cancel_sub_agent',

@@ -28,7 +28,6 @@ const SETTINGS_SECTION_IDS = [
 /** Sections populated by refreshSettingsSection via clearMount(). */
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
-  'settingsProvidersBody',
   'settingsModesBody',
   'settingsExpertsBody',
   'settingsWorkAgentsBody',
@@ -49,6 +48,13 @@ describe('settings page HTML', () => {
       assert.match(html, new RegExp(`id="${id}"`));
     });
   }
+
+  test('providers add form exists in index.html', () => {
+    assert.match(html, /id="settingsProvidersAddForm"/);
+    assert.match(html, /id="settingsProvidersAddId"/);
+    assert.match(html, /id="settingsProvidersAddBaseUrl"/);
+    assert.match(html, /id="settingsProvidersList"/);
+  });
 
   test('MCP add-server form exists in index.html', () => {
     assert.match(html, /id="settingsMcpAddForm"/);

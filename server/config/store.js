@@ -124,6 +124,9 @@ export async function readResource(resource) {
     if (!data?.titles) {
       patch.titles = DEFAULT_META.titles;
     }
+    if (!data?.chat) {
+      patch.chat = DEFAULT_META.chat;
+    }
     if (Object.keys(patch).length > 0) {
       return mergeConfigMeta(data ?? {}, patch);
     }

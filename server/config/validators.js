@@ -452,6 +452,114 @@ export function validateUserRulesSettings(raw) {
   return { version, enabled, text };
 }
 
+const SUPERVISOR_DEFAULTS = {
+  enabled: true,
+  autoResume: true,
+  repetitionDetection: true,
+  llmEscalation: true,
+  askUserOnBudgetExhausted: true,
+  stallMs: 30_000,
+  maxRetriesPerTask: 3,
+  orchestratorHeartbeatMs: 90_000,
+  inProgressNoRunMs: 45_000,
+  spawnStuckMs: 30_000,
+  parentSilenceAfterToolMs: 20_000,
+  subAgentToolSilenceMs: 60_000,
+  runRestartCap: 2,
+  spawnCapPerTask: 3,
+  llmEscalationsPerSession: 10,
+  llmEscalationTimeoutMs: 8_000,
+  tickIntervalMs: 5_000,
+  repetition: {
+    duplicateToolCallThreshold: 3,
+    sameErrorThreshold: 3,
+    maxRestartsPerRun: 2,
+  },
+  escalationProviderId: '',
+  escalationModelId: '',
+};
+
+/**
+ * Deep-merge `supervisor` config with clamps (server + tests).
+ * @param {Record<string, unknown>} patch
+ * @param {Record<string, unknown>} base
+ * @returns {object}
+ */
+export function mergeSupervisorConfig(patch, base) {
+  const out = {
+    ...SUPERVISOR_DEFAULTS,
+    ...(base && typeof base === 'object' ? base : {}),
+    repetition: {
+      ...SUPERVISOR_DEFAULTS.repetition,
+      ...(base?.repetition && typeof base.repetition === 'object' ? base.repetition : {}),
+    },
+  };
+  if (!patch || typeof patch !== 'object') return out;
+  const p = /** @type {Record<string, unknown>} */ (patch);
+
+  if (typeof p.enabled === 'boolean') out.enabled = p.enabled;
+  if (typeof p.autoResume === 'boolean') out.autoResume = p.autoResume;
+  if (typeof p.repetitionDetection === 'boolean') out.repetitionDetection = p.repetitionDetection;
+  if (typeof p.llmEscalation === 'boolean') out.llmEscalation = p.llmEscalation;
+  if (typeof p.askUserOnBudgetExhausted === 'boolean') {
+    out.askUserOnBudgetExhausted = p.askUserOnBudgetExhausted;
+  }
+  if (typeof p.stallMs === 'number' && Number.isFinite(p.stallMs)) {
+    out.stallMs = Math.min(600_000, Math.max(5_000, Math.round(p.stallMs)));
+  }
+  if (typeof p.maxRetriesPerTask === 'number' && Number.isFinite(p.maxRetriesPerTask)) {
+    out.maxRetriesPerTask = Math.min(10, Math.max(0, Math.round(p.maxRetriesPerTask)));
+  }
+  if (typeof p.orchestratorHeartbeatMs === 'number' && Number.isFinite(p.orchestratorHeartbeatMs)) {
+    out.orchestratorHeartbeatMs = Math.min(600_000, Math.max(10_000, Math.round(p.orchestratorHeartbeatMs)));
+  }
+  if (typeof p.inProgressNoRunMs === 'number' && Number.isFinite(p.inProgressNoRunMs)) {
+    out.inProgressNoRunMs = Math.min(300_000, Math.max(10_000, Math.round(p.inProgressNoRunMs)));
+  }
+  if (typeof p.spawnStuckMs === 'number' && Number.isFinite(p.spawnStuckMs)) {
+    out.spawnStuckMs = Math.min(120_000, Math.max(5_000, Math.round(p.spawnStuckMs)));
+  }
+  if (typeof p.parentSilenceAfterToolMs === 'number' && Number.isFinite(p.parentSilenceAfterToolMs)) {
+    out.parentSilenceAfterToolMs = Math.min(120_000, Math.max(5_000, Math.round(p.parentSilenceAfterToolMs)));
+  }
+  if (typeof p.subAgentToolSilenceMs === 'number' && Number.isFinite(p.subAgentToolSilenceMs)) {
+    out.subAgentToolSilenceMs = Math.min(300_000, Math.max(10_000, Math.round(p.subAgentToolSilenceMs)));
+  }
+  if (typeof p.runRestartCap === 'number' && Number.isFinite(p.runRestartCap)) {
+    out.runRestartCap = Math.min(20, Math.max(0, Math.round(p.runRestartCap)));
+  }
+  if (typeof p.spawnCapPerTask === 'number' && Number.isFinite(p.spawnCapPerTask)) {
+    out.spawnCapPerTask = Math.min(20, Math.max(0, Math.round(p.spawnCapPerTask)));
+  }
+  if (typeof p.llmEscalationsPerSession === 'number' && Number.isFinite(p.llmEscalationsPerSession)) {
+    out.llmEscalationsPerSession = Math.min(50, Math.max(0, Math.round(p.llmEscalationsPerSession)));
+  }
+  if (typeof p.llmEscalationTimeoutMs === 'number' && Number.isFinite(p.llmEscalationTimeoutMs)) {
+    out.llmEscalationTimeoutMs = Math.min(60_000, Math.max(1_000, Math.round(p.llmEscalationTimeoutMs)));
+  }
+  if (typeof p.tickIntervalMs === 'number' && Number.isFinite(p.tickIntervalMs)) {
+    out.tickIntervalMs = Math.min(60_000, Math.max(1_000, Math.round(p.tickIntervalMs)));
+  }
+  if (typeof p.escalationProviderId === 'string') out.escalationProviderId = p.escalationProviderId.trim();
+  if (typeof p.escalationModelId === 'string') out.escalationModelId = p.escalationModelId.trim();
+
+  const rep = p.repetition;
+  if (rep && typeof rep === 'object') {
+    const r = /** @type {Record<string, unknown>} */ (rep);
+    if (typeof r.duplicateToolCallThreshold === 'number' && Number.isFinite(r.duplicateToolCallThreshold)) {
+      out.repetition.duplicateToolCallThreshold = Math.min(10, Math.max(2, Math.round(r.duplicateToolCallThreshold)));
+    }
+    if (typeof r.sameErrorThreshold === 'number' && Number.isFinite(r.sameErrorThreshold)) {
+      out.repetition.sameErrorThreshold = Math.min(10, Math.max(2, Math.round(r.sameErrorThreshold)));
+    }
+    if (typeof r.maxRestartsPerRun === 'number' && Number.isFinite(r.maxRestartsPerRun)) {
+      out.repetition.maxRestartsPerRun = Math.min(10, Math.max(0, Math.round(r.maxRestartsPerRun)));
+    }
+  }
+
+  return out;
+}
+
 /**
  * Merge allowed fields into config.json meta.
  * @param {object} existing
@@ -535,6 +643,23 @@ export function mergeConfigMeta(existing, patch) {
       existingTerminal.autoOpenOnAgentRun = t.autoOpenOnAgentRun;
     }
     base.terminal = existingTerminal;
+  }
+
+  if (p.chat && typeof p.chat === 'object') {
+    const existingChat =
+      base.chat && typeof base.chat === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.chat) }
+        : { maxToolTurns: 8 };
+    let maxToolTurns =
+      typeof existingChat.maxToolTurns === 'number' && Number.isFinite(existingChat.maxToolTurns)
+        ? Math.round(existingChat.maxToolTurns)
+        : 8;
+    maxToolTurns = Math.min(64, Math.max(1, maxToolTurns));
+    const c = /** @type {Record<string, unknown>} */ (p.chat);
+    if (typeof c.maxToolTurns === 'number' && Number.isFinite(c.maxToolTurns)) {
+      maxToolTurns = Math.min(64, Math.max(1, Math.round(c.maxToolTurns)));
+    }
+    base.chat = { maxToolTurns };
   }
 
   if (p.workspace && typeof p.workspace === 'object') {
@@ -630,6 +755,15 @@ export function mergeConfigMeta(existing, patch) {
       existingPlanning.granularity = pl.granularity;
     }
     base.planning = existingPlanning;
+  }
+
+  if (p.supervisor && typeof p.supervisor === 'object') {
+    base.supervisor = mergeSupervisorConfig(
+      /** @type {Record<string, unknown>} */ (p.supervisor),
+      base.supervisor && typeof base.supervisor === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.supervisor)
+        : {},
+    );
   }
 
   return base;

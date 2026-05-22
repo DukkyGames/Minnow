@@ -8,6 +8,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function setupDom() {
   const window = new Window();
+  // positionMenu uses window.innerWidth; bind the happy-dom window for layout math.
+  globalThis.window = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;

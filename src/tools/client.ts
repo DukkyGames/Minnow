@@ -32,9 +32,28 @@ import {
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
+import { executeReportOrchestratorStatus } from '../agents/supervisor/report-tool.ts';
+import { recordParentToolResult } from '../agents/supervisor/progress.ts';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
+
+/** Stamp supervisor parent-tool timestamps for orchestrate-mode tools (R4). */
+function maybeRecordOrchestrateParentTool(name: string, context: ExecuteToolContext): void {
+  if (normalizeModeId(context.modeId) !== 'orchestrate' || !context.chatId?.trim()) return;
+  const tracked = new Set([
+    'report_orchestrator_status',
+    'board_init',
+    'board_update_task',
+    'board_get_state',
+    'spawn_sub_agent',
+    'cancel_sub_agent',
+    'list_sub_agents',
+    'get_sub_agent_status',
+  ]);
+  if (!tracked.has(name)) return;
+  recordParentToolResult(context.chatId.trim());
+}
 
 /** Cached MCP tool definitions from GET /api/mcp/tools. */
 let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
@@ -202,6 +221,15 @@ async function executeToolInner(
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
     const text = await executeSubAgentTool(name, args);
+    maybeRecordOrchestrateParentTool(name, context);
+    return { content: text };
+  }
+
+  if (name === 'report_orchestrator_status') {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeReportOrchestratorStatus(args, context.chatId);
+    maybeRecordOrchestrateParentTool(name, context);
     return { content: text };
   }
 
@@ -213,6 +241,7 @@ async function executeToolInner(
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
     const text = await executeBoardTool(name, args);
+    maybeRecordOrchestrateParentTool(name, context);
     return { content: text };
   }
 

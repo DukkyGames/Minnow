@@ -342,7 +342,61 @@
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
-        <div id="settingsProvidersBody" class="settings-section-body"></div>
+        <p class="field-hint">LLM backends stored under <code>~/.minnow/providers/</code>. Active provider drives the top-bar model picker and chat routing.</p>
+        <p id="settingsProvidersOffline" class="field-hint settings-providers-offline hidden">Start with <code>npm start</code> to add and manage providers.</p>
+        <div id="settingsProvidersList" class="settings-providers-list" role="list" aria-label="Configured LLM providers"></div>
+        <details id="settingsProvidersAddPanel" class="settings-providers-add-panel hidden">
+          <summary class="settings-providers-add-summary">Add provider</summary>
+          <form id="settingsProvidersAddForm" class="settings-providers-form" novalidate>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsProvidersAddId">Provider id</label>
+                <input type="text" id="settingsProvidersAddId" name="id" required pattern="[a-z0-9][a-z0-9_-]*" autocomplete="off" spellcheck="false" placeholder="ollama-local">
+                <p class="field-hint">Lowercase letters, numbers, hyphens, underscores.</p>
+              </div>
+              <div class="field">
+                <label for="settingsProvidersAddLabel">Display name</label>
+                <input type="text" id="settingsProvidersAddLabel" name="label" required autocomplete="off" placeholder="Ollama (local)">
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsProvidersAddBaseUrl">Base URL</label>
+              <input type="url" id="settingsProvidersAddBaseUrl" name="baseUrl" required autocomplete="off" spellcheck="false" placeholder="http://localhost:11434">
+              <p class="field-hint">Origin only (no trailing path). Example: LM Studio <code>http://localhost:1234</code>, OpenAI-compatible <code>https://api.openai.com</code>.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsProvidersAddApiKind">API style</label>
+                <select id="settingsProvidersAddApiKind" name="apiKind">
+                  <option value="lm-studio-v0" selected>LM Studio v0 (<code>/api/v0/...</code>)</option>
+                  <option value="openai-v1">OpenAI v1 (<code>/v1/...</code>)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="settingsProvidersAddAuthStyle">Auth header</label>
+                <select id="settingsProvidersAddAuthStyle" name="authStyle">
+                  <option value="bearer" selected>Bearer token</option>
+                  <option value="api-key">Authorization: Api-Key</option>
+                  <option value="x-api-key">X-Api-Key</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="settingsProvidersAddApiKey">API key (optional)</label>
+              <input type="password" id="settingsProvidersAddApiKey" name="apiKey" autocomplete="off" spellcheck="false" placeholder="Leave empty if the server needs no key">
+              <p class="field-hint">Stored in <code>secrets.json</code> on the server only; never returned to the browser.</p>
+            </div>
+            <label class="settings-toggle-row">
+              <input type="checkbox" id="settingsProvidersAddEnabled" name="enabled" checked>
+              <span>Enabled after adding</span>
+            </label>
+            <p id="settingsProvidersAddError" class="settings-providers-form-error hidden" role="alert"></p>
+            <div class="settings-providers-form-actions">
+              <button type="submit" class="settings-action-btn">Add provider</button>
+              <button type="button" id="settingsProvidersAddReset" class="settings-inline-btn">Clear form</button>
+            </div>
+          </form>
+        </details>
       </section>
       <section id="settingsSection-modes" class="settings-section">
         <h2>Modes</h2>
@@ -409,18 +463,10 @@
       </section>
       <section id="settingsSection-features" class="settings-section">
         <h2>Features</h2>
-        <label class="settings-toggle-row">
-          <span id="settingsSelfHealingLabel">Self-healing (sub-agents)</span>
-          <input
-            type="checkbox"
-            id="settingsSelfHealingEnabled"
-            aria-labelledby="settingsSelfHealingLabel"
-            aria-describedby="settingsSelfHealingHint"
-          >
-        </label>
-        <p id="settingsSelfHealingHint" class="settings-section-note">
-          When enabled, the parent orchestrator restarts a sub-agent after repeated identical tool calls (tier 1). Off by default; stored in <code>config.json</code> as <code>selfHealing.enabled</code>.
+        <p class="settings-section-note">
+          The <strong>Orchestrate supervisor</strong> replaces the old stall watchdog and self-healing toggles: one panel below for heartbeat, resumes, repetition detection, and optional LLM escalation. Legacy <code>selfHealing.*</code> in config is still read for migration until you save here.
         </p>
+        <div id="settingsSupervisorBody" class="settings-section-body"></div>
         <label class="settings-toggle-row">
           <span>Memory injection (feature flag)</span>
           <input type="checkbox" id="settingsFeatureMemoryInjection" checked>

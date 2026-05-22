@@ -158,9 +158,13 @@ import {
   resolveFinalAssistantContent,
   resolveTurnContinuation,
 } from './turn-continuation';
+import {
+  DEFAULT_CHAT_MAX_TOOL_TURNS,
+  getChatMetaSync,
+} from '../config/chat-meta';
 
-/** Maximum assistant?tool rounds before aborting with an error. */
-export const MAX_TOOL_TURNS = 8;
+/** Default max assistant↔tool rounds (see Settings → General and `chat.maxToolTurns` in config). */
+export const MAX_TOOL_TURNS = DEFAULT_CHAT_MAX_TOOL_TURNS;
 
 /** Options for {@link buildApiMessages} when the composer has pending files. */
 export interface BuildApiMessagesOptions {
@@ -751,8 +755,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const activeModeId = normalizeModeId(chat.modeId);
     let emptyPostToolRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
+    const maxToolTurns = getChatMetaSync().maxToolTurns;
 
-    for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
@@ -921,7 +926,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           refreshActiveBoardIfMounted();
         }
 
-        if (turn + 1 >= MAX_TOOL_TURNS) {
+        if (turn + 1 >= maxToolTurns) {
           setStatus('err', 'Maximum tool turns reached');
           break;
         }
@@ -1206,7 +1211,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 }
 
-/** Send the composer text with tool calling (SSE loop, max {@link MAX_TOOL_TURNS} rounds). */
+/** Send the composer text with tool calling (SSE loop; max rounds from Settings → General / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
 export async function sendMessageWithTools(): Promise<void> {
   if (isActiveChatStreaming()) return;
   if (isChatTurnSetupPending(getActiveChat().id)) return;

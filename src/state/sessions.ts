@@ -593,8 +593,14 @@ export async function loadSessionsFromStorage(): Promise<void> {
   }
 }
 
+/**
+ * Resolve a chat by id when session state is available.
+ * Returns undefined when sessions are not loaded yet (e.g. tests, early boot) so callers
+ * can fall back instead of throwing from requireSessionState().
+ */
 export function findChatById(chatId: string): Chat | undefined {
-  return requireSessionState().chats.find((c) => c.id === chatId);
+  if (!sessionState) return undefined;
+  return sessionState.chats.find((c) => c.id === chatId);
 }
 
 /** Chats ordered newest-first for sidebar display (by last committed message). */
