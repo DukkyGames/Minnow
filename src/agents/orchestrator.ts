@@ -10,6 +10,10 @@ import { loadSubAgentConfig } from './sub-agent-config';
 import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
 import { createSubAgentRunId } from './sub-agent-run-id';
 import { DEFAULT_SUB_AGENT_MAX_TOOL_TURNS } from './sub-agent-config';
+import {
+  isMaxToolTurnFailure,
+  SUB_AGENT_MAX_TOOL_TURNS_ERROR,
+} from './sub-agent-outcome';
 import { getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
@@ -157,7 +161,10 @@ function syncBoardTaskOnSettle(
   if (!chat?.orchestrateBoard) return;
 
   const endedAt = Date.now();
-  if (status === 'completed') {
+  const maxTurnFailure =
+    status === 'completed' && isMaxToolTurnFailure(run.summary, error);
+
+  if (status === 'completed' && !maxTurnFailure) {
     updateTask(chat, taskId, {
       status: 'complete',
       endedAt,
@@ -165,11 +172,17 @@ function syncBoardTaskOnSettle(
     });
     return;
   }
-  if (status === 'failed' || status === 'cancelled') {
+  if (status === 'failed' || status === 'cancelled' || maxTurnFailure) {
     updateTask(chat, taskId, {
       status: 'failed',
       endedAt,
-      error: error || (status === 'cancelled' ? 'cancelled' : 'failed'),
+      error:
+        error ||
+        (maxTurnFailure
+          ? SUB_AGENT_MAX_TOOL_TURNS_ERROR
+          : status === 'cancelled'
+            ? 'cancelled'
+            : 'failed'),
       assignedRunId: null,
     });
   }
@@ -240,7 +253,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
         internals,
         'failed',
         output.summary,
-        'maximum tool turns reached',
+        SUB_AGENT_MAX_TOOL_TURNS_ERROR,
       );
       return;
     }
@@ -620,10 +633,13 @@ export function formatSubAgentListToolResult(parentTurnId: string | null | undef
 
 /** Serializable snapshot for `get_sub_agent_status`. */
 export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unknown> {
+  const success =
+    run.status === 'completed' && !isMaxToolTurnFailure(run.summary, run.error);
   const payload: Record<string, unknown> = {
     runId: run.runId,
     type: run.type,
     status: run.status,
+    success,
     summary: run.summary,
     startedAt: run.startedAt,
     endedAt: run.endedAt,

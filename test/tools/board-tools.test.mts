@@ -4,6 +4,17 @@
 
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
+import { spawnSubAgent, resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
+import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
+import {
+  resetSubAgentRunIdFactory,
+  setSubAgentRunIdFactory,
+} from '../../src/agents/sub-agent-run-id.ts';
+import {
+  resetSubAgentRunnerFactory,
+  setSubAgentRunnerFactory,
+} from '../../src/agents/sub-agent-runner.ts';
+import type { SubAgentRunner } from '../../src/agents/types.ts';
 import { setBoardNowForTests } from '../../src/state/orchestrate-board-store.ts';
 import {
   setSessionStateForTests,
@@ -254,5 +265,61 @@ describe('executeBoardTool', () => {
     withBoardContext();
     const out = await executeBoardTool('board_get_state', {});
     assert.equal(out, 'Error: orchestrate board is not initialized');
+  });
+
+  test('board_update_task rejects complete when linked run hit max tool turns', async () => {
+    const FIXED_RUN_ID = '11111111-1111-1111-1111-111111111111';
+    const exhaustingRunner: SubAgentRunner = {
+      async run(input) {
+        return {
+          summary: `Sub-agent reached maximum tool turns (${input.maxToolTurns}).`,
+          toolTurns: input.maxToolTurns,
+          messages: [],
+          toolTurnLimitExhausted: true,
+        };
+      },
+    };
+
+    resetSubAgentOrchestrator();
+    resetSubAgentConfigCache();
+    resetSubAgentRunnerFactory();
+    resetSubAgentRunIdFactory();
+    setSubAgentRunnerFactory(() => exhaustingRunner);
+    setSubAgentRunIdFactory(() => FIXED_RUN_ID);
+
+    seedOrchestrateChat();
+    withBoardContext();
+
+    await executeBoardTool('board_init', {
+      plan_path: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'Implement board store', wave: 'W1', category: 'build' },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'long work',
+      wait: true,
+      parentChatId: CHAT_ID,
+      parentTurnId: 'turn-board-guard',
+      modeId: 'orchestrate',
+      boardTaskId: 'W1-A',
+    });
+
+    const denied = await executeBoardTool('board_update_task', {
+      task_id: 'W1-A',
+      status: 'complete',
+    });
+    assert.match(
+      denied,
+      /cannot mark task complete.*max tool turns/i,
+    );
+
+    resetSubAgentOrchestrator();
+    resetSubAgentConfigCache();
+    resetSubAgentRunnerFactory();
+    resetSubAgentRunIdFactory();
   });
 });

@@ -510,7 +510,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Built-in types:** `generalPurpose`, `explore`, `shell`, `explorer` (Step 19 self-heal stub, `maxConcurrent: 1`).
 
-**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the cap sets run status **`failed`** (not `completed`) and linked board tasks **`failed`** (MIN-15 / MIN-10).
+**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the cap sets run status **`failed`** (not `completed`), `get_sub_agent_status` exposes **`success: false`**, and linked board tasks **`failed`** — never **`complete`** (`src/agents/sub-agent-outcome.ts`, `syncBoardTaskOnSettle`, `board_update_task` guard when `assignedRunId` run did not succeed) (MIN-15 / MIN-10).
 
 **Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue).
 
