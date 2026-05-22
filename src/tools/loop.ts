@@ -89,6 +89,8 @@ import {
   appendBubble,
   appendStats,
   appendStreamingAssistantRow,
+  assistantProseHasVisibleContent,
+  removeOrphanStreamingRow,
   revealAssistantProseBubble,
   setAssistantErrorBubble,
 } from '../ui/messages';
@@ -819,16 +821,17 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
-        if (turnResult.fullText && isStreamDomVisible(chat.id)) {
+        const toolProse = turnResult.fullText.trim();
+        if (toolProse && isStreamDomVisible(chat.id)) {
           revealProse();
-          setAssistantBubbleContent(bubble, turnResult.fullText, { streaming: false, modeId: chat.modeId });
-        } else if (!turnResult.fullText && isStreamDomVisible(chat.id)) {
-          wrap.remove();
+          setAssistantBubbleContent(bubble, toolProse, { streaming: false, modeId: chat.modeId });
+        } else if (!toolProse && isStreamDomVisible(chat.id)) {
+          removeOrphanStreamingRow(wrap, streamStatus);
         }
 
         const assistantToolMsg: AssistantToolCallMessage = {
           role: 'assistant',
-          content: turnResult.fullText || null,
+          content: toolProse || null,
           tool_calls: turnResult.toolCalls,
         };
         chat.history.push(assistantToolMsg);
@@ -944,7 +947,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       let streamMeta = turnResult.streamMeta;
 
       if (!fullText.trim()) {
-        revealProse();
         const fallbackBody: ChatCompletionBody = {
           model: sendModelId || undefined,
           messages,
@@ -985,7 +987,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           turn,
           emptyPostToolRetries,
         });
-        wrap.remove();
+        removeOrphanStreamingRow(wrap, streamStatus);
         streamRow = appendStreamingAssistantRow(chat.id);
         ({ wrap, bubble, cursor, streamStatus } = streamRow);
         streamCtx.wrap = wrap;
@@ -1004,13 +1006,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       const thinkingNorm = thoughtController?.getSegmentsNormalized() ?? [];
+      const hasMeaningfulProse = assistantProseHasVisibleContent(
+        fullText,
+        thinkingNorm.length > 0,
+      );
       const { content: finalContent, usedThinkingAsContent } =
         resolveFinalAssistantContent(fullText, thinkingNorm);
-
-      if (isStreamDomVisible(chat.id)) {
-        revealProse();
-        setAssistantBubbleContent(bubble, finalContent, { streaming: false, modeId: chat.modeId });
-      }
 
       if (!fullText.trim()) {
         logTurnDebug({
@@ -1018,6 +1019,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           turn,
           finalContentLen: finalContent.length,
           usedThinkingAsContent,
+          persisted: hasMeaningfulProse,
         });
       }
 
@@ -1029,32 +1031,46 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       );
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
-      const assistantMsg: AssistantMessage = {
-        role: 'assistant',
-        content: finalContent,
-        stats: meta.stats,
-        usage: meta.usage,
-      };
-      if (thinkingNorm.length > 0) {
-        assistantMsg.thinking = thinkingNorm;
-        if (thinkingDurationMs > 0) {
-          assistantMsg.thinkingDurationMs = thinkingDurationMs;
-        }
-      }
-      chat.history.push(assistantMsg);
-      recordAssistantReplyOnChat(chat);
       chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
       chat.modelInfo = { ...modelInfo };
       chat.modelId =
         (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
-      recordChatMessage(chat);
-      if (isStreamDomVisible(chat.id)) {
-        appendStats(lastWrap, meta.stats, meta.usage);
-        if (thinkingNorm.length > 0) {
-          renderThoughtsToggle(lastWrap, thinkingNorm, {
-            durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+
+      if (hasMeaningfulProse) {
+        if (isStreamDomVisible(chat.id)) {
+          revealProse();
+          setAssistantBubbleContent(bubble, finalContent, {
+            streaming: false,
+            modeId: chat.modeId,
           });
         }
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: finalContent,
+          stats: meta.stats,
+          usage: meta.usage,
+        };
+        if (thinkingNorm.length > 0) {
+          assistantMsg.thinking = thinkingNorm;
+          if (thinkingDurationMs > 0) {
+            assistantMsg.thinkingDurationMs = thinkingDurationMs;
+          }
+        }
+        chat.history.push(assistantMsg);
+        recordAssistantReplyOnChat(chat);
+        recordChatMessage(chat);
+        if (isStreamDomVisible(chat.id)) {
+          appendStats(lastWrap, meta.stats, meta.usage);
+          if (thinkingNorm.length > 0) {
+            renderThoughtsToggle(lastWrap, thinkingNorm, {
+              durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
+            });
+          }
+          updateStrip(meta.stats, meta.usage, modelInfo);
+          setStatus('ok', 'Ready');
+        }
+      } else if (isStreamDomVisible(chat.id)) {
+        removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
         updateStrip(meta.stats, meta.usage, modelInfo);
         setStatus('ok', 'Ready');
       }
@@ -1093,7 +1109,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         setAssistantBubbleContent(bubble, text, { streaming: false, modeId: chat.modeId });
         markMessageStopped(streamCtx.wrap);
       } else if (wrapConnected && streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
-        streamCtx.wrap.remove();
+        removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
       }
 
       if (text || thinkingNorm.length > 0) {
@@ -1174,6 +1190,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     if (isStreamDomVisible(chat.id)) {
       scrollChatIfPinned();
+    }
+    if (
+      streamCtx.wrap.isConnected &&
+      streamCtx.wrap.classList.contains('msg--awaiting-prose')
+    ) {
+      removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
     }
   }
   } finally {
