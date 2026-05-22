@@ -61,6 +61,7 @@
   right: 0;
   top: calc(100% + 4px);
   z-index: 60;
+  min-width: max(100%, 20rem);
   max-height: min(16rem, 50vh);
   overflow-y: auto;
   margin: 0;
@@ -89,11 +90,15 @@
 
 .model-select-option--selected {
   font-weight: 600;
+  background: var(--accent-subtle);
+  color: var(--elevated-fg);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .model-select-option:hover {
+  .model-select-option:hover,
+  .model-select-option--selected:hover {
     background: var(--accent-subtle);
+    color: var(--elevated-fg);
   }
 }
 
