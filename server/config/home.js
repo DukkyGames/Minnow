@@ -128,6 +128,32 @@ const DEFAULT_META = {
       requireScriptApproval: true,
     },
   },
+  supervisor: {
+    enabled: true,
+    autoResume: true,
+    repetitionDetection: true,
+    llmEscalation: true,
+    askUserOnBudgetExhausted: true,
+    stallMs: 30_000,
+    maxRetriesPerTask: 3,
+    orchestratorHeartbeatMs: 90_000,
+    inProgressNoRunMs: 45_000,
+    spawnStuckMs: 30_000,
+    parentSilenceAfterToolMs: 20_000,
+    subAgentToolSilenceMs: 60_000,
+    runRestartCap: 2,
+    spawnCapPerTask: 3,
+    llmEscalationsPerSession: 10,
+    llmEscalationTimeoutMs: 8_000,
+    tickIntervalMs: 5_000,
+    repetition: {
+      duplicateToolCallThreshold: 3,
+      sameErrorThreshold: 3,
+      maxRestartsPerRun: 2,
+    },
+    escalationProviderId: '',
+    escalationModelId: '',
+  },
   memory: {
     enabled: true,
     maxEntries: 500,
@@ -138,6 +164,9 @@ const DEFAULT_META = {
   },
   planning: {
     granularity: 'medium',
+  },
+  chat: {
+    maxToolTurns: 8,
   },
 };
 

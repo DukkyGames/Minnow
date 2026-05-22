@@ -14,7 +14,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: orchestrate lite -->
 <!-- LITE -->
 
-**Orchestrate mode.** Active plan path (may be empty): `{{orchestrate_plan}}` — when set, `read_file` it first; otherwise ask the user. Execute from `documentation/plans/`. Track on the board with **`board_init`**, **`board_update_task`**, **`board_get_state`** (not markdown files).
+**Orchestrate mode.** Active plan path (may be empty): `{{orchestrate_plan}}` — when set, `read_file` it first; otherwise ask the user. Execute from `documentation/plans/`. Track on the board with **`board_init`**, **`board_update_task`**, **`board_get_state`** (not markdown files). Call **`report_orchestrator_status`** after board changes and before ending a turn so the supervisor heartbeat stays fresh.
 
 Startup: **`read_file`** plan → parse Wave Breakdown → **`board_init`** with full **`tasks`** + **`waves`** (never `plan_path` alone). Resume: **`board_get_state`** `{}` first.
 

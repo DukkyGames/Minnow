@@ -25,7 +25,8 @@ const EXPECTED_SHAPE = `{
   "startedAt": null,
   "endedAt": null,
   "toolTurns": 0,
-  "cancelled": false
+  "cancelled": false,
+  "terminalReason": "success"
 }`;
 
 describe('orchestrator aggregate', () => {

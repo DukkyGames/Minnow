@@ -34,11 +34,8 @@ import {
 } from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import type { ThemePreference } from '../constants';
-import {
-  isProvidersApiAvailable,
-  listProviders,
-  setActiveProvider,
-} from '../providers/store';
+import { listProviders } from '../providers/store';
+import { renderProvidersSettingsSection } from './settings-providers';
 import {
   createMemoryEntry,
   deleteMemoryEntry,
@@ -48,6 +45,7 @@ import {
 import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
 import { renderSkillsSettingsSection } from './settings-skills';
+import { renderSupervisorSettingsSection } from './settings-supervisor';
 import {
   fillToolsSection,
   loadProviderSelect,
@@ -93,6 +91,12 @@ import {
   loadTerminalMeta,
   saveTerminalMeta,
 } from '../config/terminal-meta';
+import {
+  clampMaxToolTurns,
+  getChatMetaSync,
+  loadChatMeta,
+  saveChatMeta,
+} from '../config/chat-meta';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -186,6 +190,48 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
   mount.appendChild(block);
 }
 
+/** Main composer tool-loop cap (persisted in config.json `chat`). */
+async function appendMainChatControls(mount: HTMLElement): Promise<void> {
+  await loadChatMeta();
+  const block = el('div', 'settings-main-chat-block');
+  block.appendChild(el('p', 'settings-field-label', 'Main chat'));
+  block.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Maximum assistant → tool → assistant rounds per composer send. Higher values allow longer agentic runs but use more time and tokens. Sub-agent limits are configured under Sub-agents.',
+    ),
+  );
+
+  const row = el('label', 'settings-toggle-row');
+  row.appendChild(el('span', '', 'Max tool turns'));
+  const maxTurnsInput = document.createElement('input');
+  maxTurnsInput.type = 'number';
+  maxTurnsInput.className = 'settings-select';
+  maxTurnsInput.min = '1';
+  maxTurnsInput.max = '64';
+  maxTurnsInput.step = '1';
+  maxTurnsInput.value = String(getChatMetaSync().maxToolTurns);
+  maxTurnsInput.setAttribute('aria-label', 'Main chat maximum tool turns per send');
+  row.appendChild(maxTurnsInput);
+  block.appendChild(row);
+
+  maxTurnsInput.addEventListener('change', () => {
+    void (async () => {
+      const value = clampMaxToolTurns(Number(maxTurnsInput.value));
+      maxTurnsInput.value = String(value);
+      try {
+        await saveChatMeta({ maxToolTurns: value });
+        setStatus('ok', 'Main chat settings updated');
+      } catch {
+        setStatus('err', 'Could not save main chat settings');
+      }
+    })();
+  });
+
+  mount.appendChild(block);
+}
+
 async function renderGeneralSection(): Promise<void> {
   const mount = clearMount('settingsGeneralBody');
   if (!mount) return;
@@ -201,6 +247,7 @@ async function renderGeneralSection(): Promise<void> {
 
   appendAppearanceControls(mount);
   await appendTerminalControls(mount);
+  await appendMainChatControls(mount);
 
   const { providers, activeProviderId } = await listProviders();
   const active = providers.find((p) => p.id === activeProviderId) ?? providers[0];
@@ -225,58 +272,6 @@ async function renderGeneralSection(): Promise<void> {
     'Temperature and max tokens stay in the quick settings drawer until migrated here.',
   );
   mount.appendChild(hint);
-}
-
-async function renderProvidersSection(): Promise<void> {
-  const mount = clearMount('settingsProvidersBody');
-  if (!mount) return;
-  const generation = beginAsyncSectionRender('providers');
-
-  if (!isServerStorageMode() || !isProvidersApiAvailable()) {
-    mount.appendChild(
-      serverBanner('Provider registry requires <code>npm start</code>.'),
-    );
-    return;
-  }
-
-  const { providers, activeProviderId } = await listProviders();
-  if (isAsyncSectionRenderStale('providers', generation)) return;
-  const list = el('ul', 'settings-entity-list');
-
-  for (const p of providers) {
-    const item = el('li', 'settings-entity-list__item');
-    const head = el('span', 'settings-entity-list__head');
-    head.textContent = `${p.label} (${p.id})`;
-    item.appendChild(head);
-
-    const meta = el('p', 'settings-field-hint', p.baseUrl);
-    item.appendChild(meta);
-
-    if (p.id === activeProviderId) {
-      const badge = el('span', 'settings-badge', 'Active');
-      item.appendChild(badge);
-    } else if (p.enabled !== false) {
-      const btn = el('button', 'settings-inline-btn', 'Set active');
-      btn.type = 'button';
-      btn.addEventListener('click', () => {
-        void (async () => {
-          try {
-            await setActiveProvider(p.id);
-            await loadProviderSelect();
-            setStatus('ok', `Active provider: ${p.label}`);
-            await renderProvidersSection();
-          } catch {
-            setStatus('err', 'Could not switch provider');
-          }
-        })();
-      });
-      item.appendChild(btn);
-    }
-
-    list.appendChild(item);
-  }
-
-  mount.appendChild(list);
 }
 
 function defaultCustomConfig(id: string, label: string): PromptConfig {
@@ -1671,6 +1666,7 @@ async function renderFeaturesSection(): Promise<void> {
   } catch {
     /* offline */
   }
+  await renderSupervisorSettingsSection();
 }
 
 /** Load or refresh one settings section from live APIs. */
@@ -1683,7 +1679,8 @@ export async function refreshSettingsSection(
       break;
     case 'providers':
       refreshProvidersBanner();
-      await renderProvidersSection();
+      await listProviders();
+      await renderProvidersSettingsSection();
       break;
     case 'prompting':
       await renderPromptingSection();

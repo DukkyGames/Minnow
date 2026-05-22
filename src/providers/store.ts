@@ -4,7 +4,22 @@
 
 import { isServerStorageMode } from '../config/storage-mode';
 import { parseServerBaseUrl, serverUrl } from '../ui/status';
-import type { ProviderListResponse, ProviderPublic } from './types';
+import type {
+  ApiKind,
+  AuthStyle,
+  ProviderListResponse,
+  ProviderPublic,
+} from './types';
+
+/** Body for POST /api/providers. */
+export interface CreateProviderPayload {
+  id: string;
+  label: string;
+  baseUrl: string;
+  apiKind?: ApiKind;
+  authStyle?: AuthStyle;
+  enabled?: boolean;
+}
 
 const PROVIDERS_TIMEOUT_MS = 800;
 
@@ -93,6 +108,84 @@ export async function setActiveProvider(id: string): Promise<void> {
     throw new Error(`Failed to set active provider: HTTP ${res.status}`);
   }
   cachedList = null;
+}
+
+/** POST /api/providers — register a new LLM backend. */
+export async function createProvider(
+  payload: CreateProviderPayload,
+): Promise<{ ok: true; provider: ProviderPublic } | { ok: false; error: string }> {
+  if (!isServerStorageMode()) {
+    return { ok: false, error: 'Provider registry requires npm start' };
+  }
+  try {
+    const res = await fetch('/api/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    const body = (await res.json()) as ProviderPublic & { error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? `Failed to add provider (HTTP ${res.status})` };
+    }
+    invalidateProviderCache();
+    providersAvailable = true;
+    return { ok: true, provider: body };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
+}
+
+/** DELETE /api/providers/:id (409 when last provider). */
+export async function deleteProvider(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isServerStorageMode() || !providersAvailable) {
+    return { ok: false, error: 'Provider registry requires npm start' };
+  }
+  try {
+    const res = await fetch(`/api/providers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      cache: 'no-store',
+    });
+    if (res.status === 204) {
+      invalidateProviderCache();
+      return { ok: true };
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return {
+      ok: false,
+      error: body.error ?? `Failed to remove provider (HTTP ${res.status})`,
+    };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
+}
+
+/** PUT /api/providers/:id/secrets — API key / bearer (never echoed on GET). */
+export async function updateProviderSecrets(
+  id: string,
+  secrets: { apiKey?: string; bearerToken?: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isServerStorageMode() || !providersAvailable) {
+    return { ok: false, error: 'Provider registry requires npm start' };
+  }
+  try {
+    const res = await fetch(`/api/providers/${encodeURIComponent(id)}/secrets`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(secrets),
+      cache: 'no-store',
+    });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? `Failed to save secrets (HTTP ${res.status})` };
+    }
+    invalidateProviderCache();
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Network error — use npm start' };
+  }
 }
 
 /** Clear cached list after external changes. */

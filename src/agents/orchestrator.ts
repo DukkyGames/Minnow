@@ -631,6 +631,7 @@ export function recordToolCallForRun(
     runId,
     internals.run.type,
     internals.toolCallLog.map((e) => ({ name: e.name, argsJson: e.args })),
+    internals.run.parentChatId,
   );
   internals.run.liveNestedToolCalls = (internals.run.liveNestedToolCalls ?? 0) + 1;
   emitSubAgentRunUpdated(internals.run);

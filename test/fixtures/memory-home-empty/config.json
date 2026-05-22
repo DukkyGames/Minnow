@@ -57,5 +57,8 @@
     "maxInjectCharsLite": 800,
     "retrieveLimit": 20,
     "defaultTags": []
+  },
+  "chat": {
+    "maxToolTurns": 8
   }
 }

@@ -183,32 +183,6 @@ function bindStaticSections(): void {
     });
   });
 
-  const selfHeal = document.getElementById(
-    'settingsSelfHealingEnabled',
-  ) as HTMLInputElement | null;
-  selfHeal?.addEventListener('change', async () => {
-    try {
-      const res = await fetch('/api/config/file?key=config.json');
-      if (!res.ok) return;
-      const config = await res.json();
-      config.selfHealing = {
-        ...(config.selfHealing ?? {}),
-        enabled: selfHeal.checked,
-      };
-      await fetch('/api/config/file?key=config.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      setStatus(
-        'ok',
-        selfHeal.checked ? 'Self-healing enabled' : 'Self-healing disabled',
-      );
-    } catch {
-      setStatus('err', 'Self-healing settings require npm start');
-    }
-  });
-
   const memoryInj = document.getElementById(
     'settingsFeatureMemoryInjection',
   ) as HTMLInputElement | null;
@@ -233,21 +207,6 @@ async function hydrateStaticFields(): Promise<void> {
       el.dataset.profileTab === meta.activePromptProfile,
     );
   });
-
-  const selfHeal = document.getElementById(
-    'settingsSelfHealingEnabled',
-  ) as HTMLInputElement | null;
-  if (selfHeal) {
-    try {
-      const res = await fetch('/api/config/file?key=config.json');
-      if (res.ok) {
-        const config = await res.json();
-        selfHeal.checked = config.selfHealing?.enabled === true;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
 }
 
 /** Open full settings page (hash route). */
