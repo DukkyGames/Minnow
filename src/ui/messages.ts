@@ -427,6 +427,29 @@ export function revealAssistantProseBubble(
   streamStatus?.setPhase('prose');
 }
 
+/** True when assistant prose should be painted (non-whitespace or persisted thoughts). */
+export function assistantProseHasVisibleContent(
+  content: string | null | undefined,
+  hasThinking = false,
+): boolean {
+  const trimmed = content != null ? String(content).trim() : '';
+  return trimmed.length > 0 || hasThinking;
+}
+
+/**
+ * Remove a live streaming assistant shell that would show an empty bubble
+ * (tool-only turns, cancelled streams, or turn end with no prose).
+ */
+export function removeOrphanStreamingRow(
+  wrap: HTMLElement,
+  streamStatus?: StreamingStatusHandle,
+): void {
+  streamStatus?.dispose();
+  if (wrap.isConnected) {
+    wrap.remove();
+  }
+}
+
 /** Add per-turn metric chips under an assistant bubble. */
 export function appendStats(
   wrap: HTMLElement,
