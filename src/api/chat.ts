@@ -23,6 +23,7 @@ import {
   scheduleSaveSessions,
   recordChatMessage,
 } from '../state/sessions';
+import { autoResize } from '../ui/input';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type {
   ApiMessage,
@@ -298,7 +299,7 @@ export async function sendMessage(): Promise<void> {
   appendBubble('user', text);
 
   input.value = '';
-  input.style.height = 'auto';
+  autoResize(input);
 
   const outbound = await resolveOutboundSystemMessages(chat, legacySysPrompt, {
     userMessagePreview: text,

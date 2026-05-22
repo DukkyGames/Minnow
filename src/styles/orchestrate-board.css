@@ -533,7 +533,10 @@ button.board-header__activity {
     overscroll-behavior-x: contain;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
+    /* Inline padding keeps lane card shadows visible inside snap scroll */
+    padding-inline: 4px;
+    padding-bottom: 10px;
+    scrollbar-gutter: stable;
   }
 
   .kanban-column {

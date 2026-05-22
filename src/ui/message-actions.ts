@@ -11,6 +11,7 @@ import {
 import { resendFromIndex } from '../chat/resend-from-index';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { getActiveChat } from '../state/sessions';
+import { autoResize } from './input';
 import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { renderSidebar } from './sidebar';
 import { setStatus } from './status';
@@ -142,6 +143,7 @@ export function attachMessageActions(
           renderChatFromHistory(getActiveChat());
           const input = document.getElementById('msgInput') as HTMLTextAreaElement;
           input.value = stripSkillTagFromHistory(row.content);
+          autoResize(input);
           input.focus();
           pendingEdit = {
             chatId: target.chatId,

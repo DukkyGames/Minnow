@@ -167,10 +167,15 @@
   resize: none;
   line-height: 1.55;
   min-height: 44px;
-  max-height: 160px;
-  overflow-y: auto;
+  max-height: 40vh;
+  overflow-y: hidden;
+  scrollbar-width: none;
   transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
   display: block;
+}
+
+#msgInput::-webkit-scrollbar {
+  display: none;
 }
 
 #msgInput:focus,
