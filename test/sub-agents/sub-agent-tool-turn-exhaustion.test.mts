@@ -15,7 +15,12 @@ import {
   setSubAgentRunnerFactory,
 } from '../../src/agents/sub-agent-runner.ts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
+import { buildSubAgentStatusPayload } from '../../src/agents/orchestrator.ts';
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
+import {
+  executeSubAgentTool,
+  setSubAgentExecutorContext,
+} from '../../src/tools/sub-agent-executor.ts';
 import {
   createEmptyChatObject,
   findChatById,
@@ -88,5 +93,56 @@ describe('sub-agent tool turn exhaustion', () => {
     const task = chat?.orchestrateBoard?.tasks.find((t) => t.id === TASK_ID);
     assert.equal(task?.status, 'failed');
     assert.notEqual(task?.status, 'complete');
+  });
+
+  test('get_sub_agent_status reports success false after max turns', async () => {
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scaffold many files',
+      wait: true,
+      parentChatId: FIXED_CHAT_ID,
+      parentTurnId: 'turn-status',
+      modeId: 'orchestrate',
+      boardTaskId: TASK_ID,
+    });
+
+    setSubAgentExecutorContext({
+      parentTurnId: 'turn-status',
+      modeId: 'orchestrate',
+      parentChatId: FIXED_CHAT_ID,
+    });
+
+    const statusOut = await executeSubAgentTool('get_sub_agent_status', {
+      run_id: FIXED_RUN_ID,
+    });
+    const body = JSON.parse(statusOut) as {
+      status: string;
+      success: boolean;
+      error?: string;
+      summary: string;
+    };
+    assert.equal(body.status, 'failed');
+    assert.equal(body.success, false);
+    assert.match(body.summary, /maximum tool turns/i);
+    if (body.error) {
+      assert.match(body.error, /maximum tool turns/i);
+    }
+  });
+
+  test('buildSubAgentStatusPayload never marks max-turn summary as success', async () => {
+    const { getSubAgentRun } = await import('../../src/agents/orchestrator.ts');
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scaffold',
+      wait: true,
+      parentChatId: FIXED_CHAT_ID,
+      parentTurnId: 'turn-payload',
+      modeId: 'orchestrate',
+    });
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.ok(run);
+    const payload = buildSubAgentStatusPayload(run);
+    assert.equal(payload.success, false);
+    assert.equal(payload.status, 'failed');
   });
 });

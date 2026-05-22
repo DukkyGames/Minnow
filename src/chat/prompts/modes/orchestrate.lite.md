@@ -34,7 +34,7 @@ Loop per task (parallel within a wave, sequential between waves, max `globalMaxC
 4. PASS → **`board_update_task`** `complete` (+ `files_changed` / `notes`), next task.
 5. FAIL → **`board_update_task`** `failed` or `blocked`, surface error, ask user retry/skip/abort.
 
-**Check-in tools:** `list_sub_agents`; `get_sub_agent_status({ run_id })`.
+**Check-in tools:** `list_sub_agents`; `get_sub_agent_status({ run_id })` — if `success: false` or summary mentions **maximum tool turns**, do not mark the task `complete`; use `failed` or restart the sub-agent.
 
 Rules:
 - You write no application code. Only **`board_*`** tools + sub-agent spawns.
