@@ -439,6 +439,28 @@ button.board-header__activity {
   }
 }
 
+.board-task-card__run-picker {
+  margin-top: 6px;
+}
+
+.board-task-card__run-picker-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.board-task-card__run-picker-select {
+  width: 100%;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
 .board-task-card__title {
   margin: 4px 0;
   color: var(--text);
@@ -457,10 +479,122 @@ button.board-header__activity {
 .bt--test { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); }
 .bt--research { background: color-mix(in srgb, var(--ink-muted) 20%, transparent); color: var(--text); }
 
-.board-empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--ink-muted);
+.board-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 24px 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.board-onboarding__panel {
+  width: 100%;
+  max-width: min(42rem, 100%);
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.board-onboarding__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.board-onboarding__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 42ch;
+}
+
+.board-onboarding__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-onboarding__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.board-onboarding__plan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-onboarding__plan-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--touch-min, 44px);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.board-onboarding__plan-row select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.board-onboarding__refresh {
+  flex-shrink: 0;
+  min-height: var(--touch-min, 44px);
+}
+
+.board-onboarding__hint,
+.board-onboarding__start-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.board-onboarding__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.board-onboarding__chat-link {
+  padding: 8px 4px;
+  min-height: var(--touch-min, 44px);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-onboarding__chat-link:hover {
+    color: var(--accent);
+  }
+}
+
+/* Board view: onboarding fills the chat column above the composer rail. */
+.main-column.main-column--board-view .chat-area > .board-root > .board-onboarding {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Board view: stretch within #chatArea (keeps .chat-area padding). */

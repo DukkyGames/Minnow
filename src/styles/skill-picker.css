@@ -33,7 +33,7 @@
   align-items: baseline;
 }
 
-/* Keyboard highlight always uses elevated fill + light text (matches row hover). */
+/* Keyboard highlight: elevated fill + readable nested text (not only on <li>). */
 .skill-picker__item--active {
   background: var(--surface-elevated);
   color: var(--elevated-fg);
@@ -64,10 +64,41 @@
   }
 }
 
+.skill-picker__item--active .skill-picker__label {
+  color: var(--elevated-fg);
+}
+
+.skill-picker__item--active .skill-picker__id,
+.skill-picker__item--active .skill-picker__desc {
+  color: var(--elevated-fg);
+  opacity: 0.85;
+}
+
+.skill-picker__item--active .skill-picker__badge {
+  color: var(--elevated-fg);
+  border-color: color-mix(in oklch, var(--elevated-fg) 35%, transparent);
+}
+
+/* Fine-pointer hover: same nested colors as --active (chat sidebar / file tree pattern). */
 @media (hover: hover) and (pointer: fine) {
   .skill-picker__item:hover {
     background: var(--surface-elevated);
     color: var(--elevated-fg);
+  }
+
+  .skill-picker__item:hover .skill-picker__label {
+    color: var(--elevated-fg);
+  }
+
+  .skill-picker__item:hover .skill-picker__id,
+  .skill-picker__item:hover .skill-picker__desc {
+    color: var(--elevated-fg);
+    opacity: 0.85;
+  }
+
+  .skill-picker__item:hover .skill-picker__badge {
+    color: var(--elevated-fg);
+    border-color: color-mix(in oklch, var(--elevated-fg) 35%, transparent);
   }
 }
 

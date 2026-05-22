@@ -257,6 +257,7 @@ export async function fetchModels(): Promise<void> {
     showCachedModelInfo();
     renderSidebar();
     scheduleSaveSessions();
+    void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
   } catch (err) {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;

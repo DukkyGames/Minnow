@@ -26,6 +26,7 @@ import {
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
+import { refreshContextUsageRing } from './context-usage-ring';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
@@ -116,6 +117,7 @@ export function renderStatsForChat(chat: Chat): void {
   } else {
     updateStrip({}, {}, resolveModelInfo(mid, chat.modelInfo || {}));
   }
+  refreshContextUsageRing();
 }
 
 export function renderChatFromHistory(chat: Chat): void {
@@ -137,6 +139,7 @@ export function renderChatFromHistory(chat: Chat): void {
     area.appendChild(empty);
     renderPersistedSubAgentCardsForChat(chat);
     scrollChatToBottom();
+    refreshContextUsageRing();
     return;
   }
   const toolResultMap = new Map<
@@ -248,6 +251,7 @@ export function renderChatFromHistory(chat: Chat): void {
   }
   renderPersistedSubAgentCardsForChat(chat);
   scrollChatToBottom();
+  refreshContextUsageRing();
 }
 
 /** Optional history index for message action menus. */

@@ -244,6 +244,10 @@ export interface BoardTask {
   category: BoardCategory;
   status: BoardTaskStatus;
   assignedRunId?: string;
+  /** Latest settled sub-agent run (kept after assignedRunId is cleared). */
+  lastRunId?: string;
+  /** All sub-agent run ids spawned for this task (newest last). */
+  runHistory?: string[];
   startedAt?: number;
   endedAt?: number;
   filesChanged?: number;

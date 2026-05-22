@@ -13,6 +13,7 @@ import './styles/messages.css';
 import './styles/message-actions.css';
 import './styles/thoughts.css';
 import './styles/input.css';
+import './styles/context-usage.css';
 import './styles/settings.css';
 import './styles/stats.css';
 import './styles/responsive.css';
@@ -38,6 +39,8 @@ import 'highlight.js/styles/github.min.css';
 import { initTheme } from './ui/theme';
 import { initAttachments, onFileSelected } from './attachments/store';
 import { initComposerDrop } from './ui/composer-drop';
+import { initContextUsageRing, refreshContextUsageRing } from './ui/context-usage-ring';
+import { closeContextUsageBreakdown } from './ui/context-usage-breakdown';
 import {
   fetchModels,
   toggleSelectedModelLoad,
@@ -206,6 +209,7 @@ export async function initApp(): Promise<void> {
   registerToolHandlers();
   initComposerToolsPopover();
   initAttachments();
+  initContextUsageRing();
   initModeSelector();
   initOrchestratePlanSelector();
   initViewModeToggle();
@@ -247,6 +251,7 @@ export async function initApp(): Promise<void> {
     void bootGenerationResumeForChats(sessionState.chats);
   }
   renderStatsForChat(getActiveChat());
+  refreshContextUsageRing();
   syncModeSelectorFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
@@ -266,6 +271,7 @@ export async function initApp(): Promise<void> {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeComposerToolsPopover();
+      closeContextUsageBreakdown();
       dismissOpenLayers();
     }
   });
