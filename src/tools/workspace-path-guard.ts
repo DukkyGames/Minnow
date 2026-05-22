@@ -1,6 +1,10 @@
 /**
  * Client-side path normalization consistent with server resolveSafePath prefix rules.
  * Used only for approval UX; the server remains authoritative.
+ *
+ * The server also canonicalizes paths with fs.realpath before prefix checks so
+ * symlinks inside the workspace cannot escape the sandbox. The browser cannot
+ * replicate that here, so approval may prompt for paths the server later rejects.
  */
 
 /** Normalize a path for stable prefix comparison (slashes, drive letter casing on Windows). */
