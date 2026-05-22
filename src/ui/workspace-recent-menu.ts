@@ -59,11 +59,17 @@ function ensureMenu(): HTMLUListElement {
   return menuEl;
 }
 
-/** Position the menu under the anchor button (fixed fallback for all browsers). */
+/** Position the menu below the anchor, right-aligned so it opens left (top-right control). */
 function positionMenu(btn: HTMLButtonElement, menu: HTMLElement): void {
   const rect = btn.getBoundingClientRect();
+  const margin = 8;
   menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.right = 'auto';
+
+  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
+  let left = rect.right - menuWidth;
+  left = Math.max(margin, Math.min(left, window.innerWidth - menuWidth - margin));
+  menu.style.left = `${left}px`;
 }
 
 function setAnchorExpanded(expanded: boolean): void {
@@ -240,8 +246,8 @@ export async function toggleWorkspaceMenu(btn: HTMLButtonElement): Promise<void>
   anchorBtn = btn;
   const menu = ensureMenu();
   await renderMenuList();
-  positionMenu(btn, menu);
   menu.classList.remove('hidden');
+  positionMenu(btn, menu);
   menuOpen = true;
   setAnchorExpanded(true);
   attachGlobalListeners();

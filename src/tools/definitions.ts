@@ -75,7 +75,7 @@ function toolSchema(
 }
 
 /**
- * All built-in tools (13 browser-native, 31 server-required including 7 CDP browser tools).
+ * All built-in tools (20 browser-routed, 35 server-required including 7 CDP browser tools).
  * Function `name` in each schema matches execution routing (browser or server).
  */
 export const BUILT_IN_TOOLS: ToolDefinition[] = [

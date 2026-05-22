@@ -1,14 +1,33 @@
 /**
  * Slide-over panel showing a sub-agent transcript (read-only) with optional cancel.
+ * Subscribes to orchestrator events while open so the transcript updates live.
  */
 
-import { buildSubAgentStatusPayload, cancelSubAgent, getSubAgentRun } from '../agents/orchestrator';
+import {
+  buildSubAgentStatusPayload,
+  cancelSubAgent,
+  getSubAgentRun,
+} from '../agents/orchestrator';
+import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { findChatById } from '../state/sessions';
 import type { PersistedSubAgentRun, ToolImageAttachment } from '../types';
 import { renderToolCall, renderToolResult } from './tool-messages';
 
-let openLayer: { backdrop: HTMLElement; onKey: (e: KeyboardEvent) => void } | null = null;
+/** DOM refs for the open drawer so live run updates can refresh in place. */
+interface OpenDrawerState {
+  runId: string;
+  chatId: string;
+  scroll: HTMLElement;
+  summaryBox: HTMLElement;
+  statusEl: HTMLElement;
+  body: HTMLElement;
+}
+
+let openLayer: { backdrop: HTMLElement; onKey: (e: KeyboardEvent) => void } | null =
+  null;
+let openDrawer: OpenDrawerState | null = null;
+let drawerSubscriptionBound = false;
 
 /** Human-readable terminal status for drawer header. */
 function formatDrawerStatusLabel(status: string): string {
@@ -63,11 +82,63 @@ function resolveRunSnapshot(
   return null;
 }
 
+/** Summary strip above the transcript (live preview or final summary). */
+function resolveDrawerSummaryText(
+  run: SubAgentRun | PersistedSubAgentRun,
+  live: boolean,
+): string {
+  if (live) {
+    const snap = buildSubAgentStatusPayload(run as SubAgentRun);
+    if (typeof snap.summary === 'string' && snap.summary.trim()) {
+      return String(snap.summary);
+    }
+    const preview =
+      typeof snap.lastMessagePreview === 'string'
+        ? snap.lastMessagePreview.trim()
+        : '';
+    if (preview) return preview;
+    if (run.status === 'queued') {
+      return 'Queued — waiting for a concurrency slot…';
+    }
+    if (run.status === 'running') {
+      return 'Generating…';
+    }
+    return '';
+  }
+  return typeof run.summary === 'string' && run.summary.trim() ? run.summary : '';
+}
+
+function bindDrawerLiveSubscription(): void {
+  if (drawerSubscriptionBound) return;
+  drawerSubscriptionBound = true;
+  subscribeSubAgentRuns((run) => {
+    if (!openDrawer || openDrawer.runId !== run.runId) return;
+    if (run.parentChatId !== openDrawer.chatId) return;
+    refreshOpenSubAgentDrawer(run);
+  });
+}
+
+/** Wire drawer refresh to orchestrator pub/sub (called from initSubAgentUi). */
+export function initSubAgentDrawerLiveUpdates(): void {
+  bindDrawerLiveSubscription();
+}
+
+/** Re-render header summary + transcript for the open drawer. */
+function refreshOpenSubAgentDrawer(run: SubAgentRun): void {
+  if (!openDrawer || openDrawer.runId !== run.runId) return;
+
+  openDrawer.statusEl.textContent = formatDrawerStatusLabel(run.status);
+  openDrawer.summaryBox.textContent = resolveDrawerSummaryText(run, true);
+  renderTranscript(openDrawer.body, run.messages as unknown[]);
+  openDrawer.scroll.scrollTop = openDrawer.scroll.scrollHeight;
+}
+
 export function closeSubAgentDrawer(): void {
   if (!openLayer) return;
   document.removeEventListener('keydown', openLayer.onKey);
   openLayer.backdrop.remove();
   openLayer = null;
+  openDrawer = null;
 }
 
 function renderTranscript(body: HTMLElement, messages: unknown[]): void {
@@ -98,8 +169,12 @@ function renderTranscript(body: HTMLElement, messages: unknown[]): void {
     if (role === 'system') {
       const row = document.createElement('div');
       row.className = 'sub-agent-drawer__system';
-      row.textContent =
+      const full =
         typeof msg.content === 'string' ? msg.content : '[system prompt omitted]';
+      row.textContent =
+        full.length > 800
+          ? `${full.slice(0, 800)}… (${full.length} characters total)`
+          : full;
       body.appendChild(row);
       continue;
     }
@@ -155,6 +230,7 @@ function renderTranscript(body: HTMLElement, messages: unknown[]): void {
  * Opens the drawer for one sub-agent run (live or persisted on the given chat).
  */
 export function openSubAgentDrawer(runId: string, chatId: string): void {
+  bindDrawerLiveSubscription();
   closeSubAgentDrawer();
   const resolved = resolveRunSnapshot(runId, chatId);
   if (!resolved) return;
@@ -230,19 +306,7 @@ export function openSubAgentDrawer(runId: string, chatId: string): void {
 
   const summaryBox = document.createElement('div');
   summaryBox.className = 'sub-agent-drawer__summary';
-  const summaryText = live
-    ? (() => {
-        const snap = buildSubAgentStatusPayload(run as SubAgentRun);
-        return typeof snap.summary === 'string' && snap.summary.trim()
-          ? String(snap.summary)
-          : run.status === 'running' || run.status === 'queued'
-            ? 'Run in progress…'
-            : '';
-      })()
-    : typeof run.summary === 'string' && run.summary.trim()
-      ? run.summary
-      : '';
-  summaryBox.textContent = summaryText;
+  summaryBox.textContent = resolveDrawerSummaryText(run, live);
 
   const body = document.createElement('div');
   body.className = 'sub-agent-drawer__body';
@@ -265,6 +329,20 @@ export function openSubAgentDrawer(runId: string, chatId: string): void {
   };
   document.addEventListener('keydown', onKey);
   openLayer = { backdrop, onKey };
+
+  openDrawer = {
+    runId,
+    chatId,
+    scroll,
+    summaryBox,
+    statusEl: status,
+    body,
+  };
+
+  if (live) {
+    const liveRun = getSubAgentRun(runId);
+    if (liveRun) refreshOpenSubAgentDrawer(liveRun);
+  }
 
   backdrop.addEventListener('click', (ev) => {
     if (ev.target === backdrop) closeSubAgentDrawer();

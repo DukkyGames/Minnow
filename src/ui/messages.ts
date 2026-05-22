@@ -1,5 +1,6 @@
 import { EMPTY_STATE_HTML } from '../constants';
 import { normalizeModeId } from '../chat/modes/types';
+import { contextLengthFromModelRow } from '../lib/context-length';
 import { modelCache } from '../app-state';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -78,7 +79,7 @@ export function resolveModelInfo(
     ? {
         arch: cached.arch,
         quant: cached.quantization,
-        context_length: cached.max_context_length,
+        context_length: contextLengthFromModelRow(cached),
       }
     : {};
   return { ...fromCache, ...(fromResponse || {}) };

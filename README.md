@@ -1,20 +1,45 @@
 # Minnow
 
-A fast, lightweight browser client for **[LM Studio](https://lmstudio.ai/)** — local OpenAI-compatible chat with streaming replies, multi-session history, inference metrics, and built-in **agent tools** (file ops, git, web search, code execution, and more).
+A fast, lightweight browser client for **[LM Studio](https://lmstudio.ai/)** and other OpenAI-compatible local providers — streaming chat, multi-session history, inference metrics, programmatic system prompts, and **55 built-in agent tools** (files, git, shell, browser CDP, sub-agents, orchestration board, memory, LSP, and more).
 
-Built with **Vite + TypeScript**. The UI is a single-page app; a small **Node tool server** (`server.js`) runs alongside Vite during development so the model can call tools that need the filesystem or shell.
+Built with **Vite + TypeScript**. The UI is a single-page app; a **Node dev server** (`server.js`) runs alongside Vite during development for filesystem tools, config persistence under `~/.minnow`, and provider proxying.
 
 ## Features
 
-- **LM Studio integration** — `v0` models and chat completions API (default server: `http://localhost:1234`)
-- **Streaming chat** — live assistant replies with markdown, syntax highlighting, and sanitization
-- **Multi-session sidebar** — multiple chats persisted in `localStorage`
-- **32 built-in tools** — OpenAI-style function calling; **9** run in the browser, **23** on the Node tool server
-- **File attachments** — images (VLM models), text/code, and PDF (with tool server + optional `pdf-parse`)
-- **Settings drawer** — server URL, temperature, max tokens, system prompt presets, per-tool toggles
-- **PWA** — installable via `manifest.json` and service worker (static assets in `public/`)
+### Chat and models
 
-For architecture and file layout, see [`documentation/context.md`](documentation/context.md).
+- **LM Studio (default)** and **multi-provider** routing — `v0` models API, load/unload, friendly model labels, context-length-aware picker
+- **Streaming chat** — live assistant replies with markdown, syntax highlighting, reasoning/thought bubbles, and sanitization
+- **Backend-owned generations** — attach, detach, cancel, and resume streams across reloads (`/api/generations`)
+- **Multi-session sidebar** — workspace-scoped chats; history in `~/.minnow/sessions/state.json` when `npm start` is running (browser `localStorage` fallback in Vite-only mode)
+- **Inference metrics strip** — tok/s, TTFT, and related stats per turn
+- **Context usage ring (MIN-13)** — fill indicator beside Send with per-section breakdown (system, rules, tools, history, composer, attachments)
+
+### Agent capabilities
+
+- **55 built-in tools** — OpenAI-style function calling; **20** routed in the browser (web, utilities, mode handoff, sub-agent/board orchestration UI), **35** on the Node tool server (files, git, code, CDP browser, memory, LSP, Impeccable)
+- **Operating modes** — **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (sandboxed inline widgets via `reef-widget` fences)
+- **Orchestrate board** — kanban view tied to plans under `documentation/plans/`; `board_*` tools + sub-agent cards and drawer
+- **Sub-agents** — `spawn_sub_agent`, concurrency limits, live cards, transcript drawer, persisted runs on the chat
+- **Work agents** — composer-selectable agents with per-agent provider/model bindings
+- **Skills** — `/` slash picker for built-in and user `SKILL.md` packs (includes **Impeccable** and **UI Designer**)
+- **Tool permissions** — per-tool `full` / `ask` / `off`, path policy, and approval modal
+- **Ask-user cards** — structured `ask_question` UI in chat (Feature 31)
+
+### Workspace and IDE-like surfaces
+
+- **File panel** — tree, viewer (CodeMirror), CRUD, search, drag-to-composer workspace references
+- **Integrated terminal** — xterm.js PTY tabs (requires `npm start`)
+- **LSP** — diagnostics and server listing tools + settings
+- **MCP** — Context7 built-in; add custom MCP servers in Settings
+- **Memory** — `save_memory` tool and memory settings section
+
+### Attachments and PWA
+
+- **File attachments** — images (VLM models), text/code, and PDF (tool server + optional `pdf-parse`)
+- **PWA** — installable via `manifest.json` and service worker (`public/`)
+
+For architecture, APIs, and file layout, see [`documentation/context.md`](documentation/context.md). For product tone and visual principles, see [`PRODUCT.md`](PRODUCT.md) and [`DESIGN.md`](DESIGN.md).
 
 ---
 
@@ -38,11 +63,11 @@ Clone or download this repo, then from the project root:
 npm install
 ```
 
-**Impeccable (UI design skill):** `postinstall` vendors the [Impeccable](https://impeccable.style) skill into `src/skills/impeccable/` (reference docs + scripts). With `npm start`, use **`/impeccable`** in the composer for design critique, polish, and related commands — context comes from [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md), and [`.impeccable/design.json`](.impeccable/design.json). Docs: https://impeccable.style/docs — optional Chrome extension for Live Mode. Before UI-heavy PRs: `npm run impeccable:detect` (exit code `2` = issues found). Re-sync: `npm run impeccable:sync`; update upstream: `npm run impeccable:update`.
+**Impeccable (UI design skill):** `postinstall` vendors the [Impeccable](https://impeccable.style) skill into `src/skills/impeccable/`. With `npm start`, use **`/impeccable`** in the composer for design critique, polish, and related commands — context comes from [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md), and [`.impeccable/design.json`](.impeccable/design.json). Docs: https://impeccable.style/docs. Before UI-heavy PRs: `npm run impeccable:detect` (exit code `2` = issues found). Re-sync: `npm run impeccable:sync`; update upstream: `npm run impeccable:update`.
 
-**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** Work Agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional dedicated binding in `~/.minnow/config.json` under `uiDesigner`.
+**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** work agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional binding in `~/.minnow/config.json` under `uiDesigner`.
 
-Optional: PDF text extraction uses `pdf-parse` (listed under `optionalDependencies`). A normal `npm install` should pull it in; if PDF attachments fail, run:
+Optional: PDF text extraction uses `pdf-parse` (`optionalDependencies`). If PDF attachments fail:
 
 ```bash
 npm install pdf-parse
@@ -54,9 +79,9 @@ npm install pdf-parse
 2. Start the **local server** (Developer / Server tab — typically `http://localhost:1234`).
 3. Confirm models appear in LM Studio’s server UI.
 
-### 3. Run the tool server (recommended)
+### 3. Run the dev server (recommended)
 
-For the **full** experience (file/git tools, PDF attachments, server-side search fallbacks), use:
+For the **full** experience (tools, `~/.minnow` persistence, PDF attachments, terminal, providers API):
 
 ```bash
 npm start
@@ -66,10 +91,11 @@ This runs `node server.js`, which:
 
 - Starts **Vite** on port **5173** (or the next free port — check the terminal)
 - Serves the Minnow UI
-- Exposes **`GET /api/tools/ping`** and **`POST /api/tools`** for server-side tool execution
+- Exposes **`GET /api/tools/ping`**, **`POST /api/tools`**, **`/api/config/*`**, **`/api/generations`**, providers, skills, MCP, memory, and related APIs
+- Logs **`Minnow data: <path>`** for your `~/.minnow` (or `%USERPROFILE%\.minnow` on Windows)
 - Opens your default browser to the app URL
 
-> **Important:** Use `npm start`, not `npm run dev`, when you want tools that touch the project directory, git, or PDFs. `npm run dev` is Vite-only and does **not** include the tools API.
+> **Important:** Use `npm start`, not `npm run dev`, when you want file/git tools, session persistence, PDFs, terminal PTY, or server-side tool execution. `npm run dev` is Vite-only.
 
 Custom port:
 
@@ -86,15 +112,19 @@ $env:PORT=3000; npm start
 ### 4. Use the app
 
 1. Open the URL printed in the terminal (usually **http://localhost:5173**).
-2. Open **Settings** (gear icon) and verify **LM Studio server URL** (default `http://localhost:1234`).
-3. Pick a **model** from the top bar dropdown; use the refresh button if the list is empty.
-4. Type a message and press **Send** (or Enter).
+2. Open **Settings** (gear icon) — full-page sections at `#/settings/<section>` (providers, modes, tools, skills, memory, MCP, LSP, sub-agents, work agents, rules, …).
+3. Verify the active **provider** and **LM Studio server URL** (default `http://localhost:1234`).
+4. Pick a **model** from the top bar; use refresh if the list is empty.
+5. Choose a **mode** in the composer (Build / Plan / Orchestrate / Research / Reef).
+6. Type a message and press **Send** (or Enter). Use the **context ring** beside Send to inspect token fill before sending.
 
-**Tools:** In Settings → **Tools**, enable the capabilities you want. Defaults include `get_datetime`, `calculate`, `web_search`, and `wikipedia_search`. Server tools (files, git, `execute_command`, etc.) only work when `npm start` is running and the app has detected the server (status banner clears when ping succeeds).
+**Tools:** Enable capabilities under Settings → **Tools**. Server tools need `npm start` and a successful tools ping (status banner clears when healthy).
 
-**Attachments:** Use the **paperclip** above the composer. Images work best with a **vision (VLM)** model selected. PDFs require `npm start`.
+**Attachments:** Paperclip above the composer. Images work best with a **vision (VLM)** model. PDFs require `npm start`.
 
-**Chats:** Use the sidebar to create, switch, and rename sessions. History is stored in the browser (`localStorage`).
+**Orchestrate:** Select **Orchestrate**, pick a plan under `documentation/plans/`, use **Board** view for the kanban, or stay in **Chat** view for the parent orchestrator thread.
+
+**Chats:** Sidebar for create/switch/rename. With `npm start`, sessions persist under `~/.minnow/sessions/state.json`.
 
 ---
 
@@ -102,34 +132,48 @@ $env:PORT=3000; npm start
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | **Recommended dev mode** — Vite + `/api/tools` tool server |
-| `npm run dev` | Vite only (UI/HMR; no server tools) |
-| `npm run build` | Typecheck + production build → `dist/` |
-| `npm run preview` | Preview the production build (no tool API) |
-| `npm run impeccable:sync` | Re-vendor Impeccable `reference/` + `scripts/` into `src/skills/impeccable/` |
-| `npm run impeccable:update` | Update upstream Impeccable skill + re-sync |
+| `npm start` | **Recommended** — Vite + tool server + `~/.minnow` APIs |
+| `npm run dev` | Vite only (UI/HMR; most server features unavailable) |
+| `npm run build` | Typecheck + production build → `dist/` (`prebuild` refreshes skills manifest) |
+| `npm run preview` | Preview production build (no tool API) |
+| `npm test` | Full test suite (`node --test` + `tsx`; see `package.json` for scope) |
+| `npm run test:memory` | Memory API tests |
+| `npm run test:lsp` | LSP tests |
+| `npm run test:mcp` | MCP tests |
+| `npm run test:browser` | CDP / browser tool tests |
+| `npm run test:skills` | Skills loader tests |
+| `npm run test:attachments` | Workspace reference tests |
+| `npm run test:ui-designer` | UI Designer agent smoke |
+| `npm run impeccable:sync` | Re-vendor Impeccable into `src/skills/impeccable/` |
+| `npm run impeccable:update` | Update upstream Impeccable + re-sync |
 | `npm run impeccable:detect` | Anti-pattern scan on `src/` and `index.html` |
-| `npm run test:skills-impeccable` | Step 14 tests for `/impeccable` built-in |
+| `npm run test:skills-impeccable` | `/impeccable` built-in tests |
 
-Production output in `dist/` is a **static** SPA. Host it on any static file server. The tool API is **not** included in `dist/` unless you deploy `server.js` separately or run `npm start` against a built app.
+Typecheck only: `npx tsc --noEmit`.
+
+Production output in `dist/` is a **static** SPA. Host it on any static file server. Tool and config APIs are **not** in `dist/` unless you deploy `server.js` separately or run `npm start` against a built app.
 
 ---
 
 ## Tool server details
 
-When you run `npm start`, the browser talks to the same origin for tools:
+When you run `npm start`, the browser uses the same origin for tools and config:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/tools/ping` | GET | Health check (`{ "ok": true }`) |
-| `/api/tools` | POST | Execute a tool — body: `{ "name": "...", "args": { ... } }` → `{ "result": "..." }` (optional `attachments` for screenshots) |
-| `/api/browser/screenshot/:id` | GET | PNG from `~/.minnow/screenshots/` (Step 12) |
+| `/api/tools` | POST | Execute a tool — `{ "name", "args" }` → `{ "result" }` (optional `attachments`) |
+| `/api/config/ping` | GET | Config server health + `~/.minnow` path |
+| `/api/generations` | POST | Start buffered chat generation |
+| `/api/generations/:id/stream` | GET | SSE stream (replay + live) |
+| `/api/generations/:id/cancel` | POST | Cancel generation |
+| `/api/browser/screenshot/:id` | GET | PNG from `~/.minnow/screenshots/` |
 
-- **Path safety:** File/git tools resolve paths under the **project root** unless you set `TOOLS_ALLOW_ALL_PATHS=1`.
-- **Brave Search:** Optional API key in Settings → Tools for `web_search`; without it, the client may use a DuckDuckGo fallback when the server is up.
+- **Path safety:** File/git tools resolve under the **workspace root** unless `TOOLS_ALLOW_ALL_PATHS=1`.
+- **Brave Search:** Optional API key in Settings → Tools for `web_search`; without it, DuckDuckGo fallback when the server is up.
 - **Timeouts:** `execute_command`, `run_javascript`, and `run_python` time out after **30 seconds**.
 
-Browser-only tools (`get_datetime`, `calculate`, clipboard, etc.) run in the page and do not need the Node server.
+Browser-routed tools (`get_datetime`, `calculate`, `ask_question`, sub-agent spawn/status, board tools, mode handoff, etc.) run in the page. Calling pure browser tools via `POST /api/tools` returns "Not implemented".
 
 ### Browser automation (CDP, optional)
 
@@ -149,15 +193,31 @@ Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts
 
 ---
 
-## Configuration (browser)
+## Configuration
 
-| Setting | Where | Notes |
-|---------|--------|--------|
-| LM Studio URL | Settings | Default `http://localhost:1234` |
-| Temperature / max tokens | Settings | Per-session behavior via active chat |
-| System prompt | Settings | Presets + custom text (`localStorage`) |
-| Tool toggles & Brave key | Settings → Tools | Stored as `minnow.tools` |
-| Chat sessions | Sidebar | Stored as `minnow-sessions-v1` |
+### Browser (`localStorage` when Vite-only)
+
+| Setting | Storage key / notes |
+|---------|---------------------|
+| Tool toggles & Brave key | `minnow.tools` |
+| Legacy sessions (dev-only) | `minnow-sessions-v1` |
+| User rules mirror | `minnow.userRules` |
+
+### `~/.minnow` (when `npm start` is running)
+
+| Path | Purpose |
+|------|---------|
+| `config.json` | Active provider, workspace, feature flags |
+| `sessions/state.json` | All chats and history |
+| `tools.json` | Tool permissions |
+| `providers/` | Provider profiles and secrets |
+| `sub-agents.json` | Sub-agent types, concurrency, models |
+| `work-agents.json` | Work agent bindings |
+| `skills/` + `skills.json` | User skills and enable flags |
+| `rules.json` | Global user rules |
+| `memory/`, `mcp/`, `lsp/`, `reef/` | Feature scaffolds |
+
+Override home for tests: `MINNOW_HOME=<temp-dir>`.
 
 ---
 
@@ -165,13 +225,15 @@ Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts
 
 | Problem | What to try |
 |---------|-------------|
-| No models in dropdown | LM Studio server running? URL correct in Settings? Click refresh. |
+| No models in dropdown | LM Studio server running? Correct provider URL in Settings? Click refresh. |
 | “Server tools need npm start” | Stop `npm run dev`; run `npm start` instead. |
 | Tool can’t read a file outside the repo | Expected unless `TOOLS_ALLOW_ALL_PATHS=1`. |
 | PDF attachment fails | Run `npm start`; install `pdf-parse` if prompted. |
-| CORS / fetch errors on web tools | Some sites block browser `fetch`; use CDP `browser_navigate` + `browser_snapshot`, or server file tools. |
-| CDP browser tools fail | Chrome running with `--remote-debugging-port=9222`? `npm start`? Tools enabled in Settings? |
-| Port already in use | Set `PORT` to another value and open the printed URL. |
+| CORS / fetch errors on web tools | Use CDP `browser_navigate` + `browser_snapshot`, or server file tools. |
+| CDP browser tools fail | Chrome with `--remote-debugging-port=9222`? `npm start`? Tools enabled? |
+| Context ring shows no limit | Model may not report `context_length`; check loaded model in LM Studio. |
+| Port already in use | Set `PORT` and open the printed URL. |
+| `[providers] fetch failed` on startup | Normal without LM Studio; add a provider when the server is up. |
 
 Smoke test (with `npm start` running):
 
@@ -181,38 +243,41 @@ npx tsx scripts/sa16-smoke.mjs http://localhost:5173
 
 Use the port shown in your terminal if it is not 5173.
 
-Terminal stream API (with `npm start` running):
+Terminal stream API:
 
 ```bash
 node test/terminal-stream.test.mjs http://localhost:5173
 ```
 
+**Known:** The `llmster` headless daemon can have SSE streaming incompatibilities with the browser parser; the server-side generations proxy works (see [`AGENTS.md`](AGENTS.md)).
+
 ---
-
-Read lints on edited ts files
-
-
-ReadLints
 
 ## Project layout (short)
 
 ```
 Minnow/
-├── index.html          # App shell
-├── server.js           # Dev server: Vite + /api/tools
-├── src/                # TypeScript app (chat, tools, UI, attachments)
-├── public/             # PWA manifest, service worker, icons
-├── dist/               # Production build output (after npm run build)
-└── documentation/      # context.md, plans, verification checklists
+├── index.html              # App shell
+├── server.js               # Dev server: Vite + APIs
+├── server/                 # Config, tools, providers, generations, MCP, …
+├── src/                    # TypeScript SPA (chat, agents, tools, ui, …)
+├── public/                 # PWA manifest, service worker, icons
+├── test/                   # node --test + tsx suites
+├── scripts/                # smoke and maintenance scripts
+├── dist/                   # Production build (after npm run build)
+└── documentation/        # context.md, plans, verification checklists
 ```
 
 ---
 
 ## Related docs
 
-- [`documentation/context.md`](documentation/context.md) — detailed architecture, tools catalog, storage keys
+- [`documentation/context.md`](documentation/context.md) — architecture, tools catalog, APIs, storage
+- [`documentation/plans/feature-audit-roadmap.md`](documentation/plans/feature-audit-roadmap.md) — shipped vs gap audit (22 wishlist items)
+- [`documentation/plans/to-fix.md`](documentation/plans/to-fix.md) — active fix backlog
 - [`PRODUCT.md`](PRODUCT.md) — product goals and tone
 - [`DESIGN.md`](DESIGN.md) — visual design notes
+- [`AGENTS.md`](AGENTS.md) — agent/CI notes for Cursor Cloud
 
 ## License
 

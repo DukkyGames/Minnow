@@ -833,7 +833,7 @@ export async function mountBoardOnboardingPanel(
 
   const title = document.createElement('h2');
   title.className = 'board-onboarding__title';
-  title.textContent = 'Run a plan on the board';
+  title.textContent = 'Orchestrate a plan';
 
   const desc = document.createElement('p');
   desc.className = 'board-onboarding__desc';

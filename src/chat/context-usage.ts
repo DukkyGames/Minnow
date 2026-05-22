@@ -3,7 +3,7 @@
  */
 
 import { modelCache } from '../app-state';
-import { resolveModelInfo } from '../api/models';
+import { contextLengthFromModelRow } from '../lib/context-length';
 import { formatModelLabel } from '../lib/format-model-label';
 import { getActiveChat } from '../state/sessions';
 import type { Attachment } from '../attachments/types';
@@ -122,17 +122,22 @@ function resolveModelDisplayName(modelId: string): string {
   return formatModelLabel({ id: modelId }).primary;
 }
 
-function resolveContextLimit(modelId: string, chat: Chat): number | null {
-  const info = resolveModelInfo(modelId, chat.modelInfo);
-  const fromInfo = info.context_length;
-  if (typeof fromInfo === 'number' && Number.isFinite(fromInfo) && fromInfo > 0) {
-    return fromInfo;
+/**
+ * Effective context limit for usage UI: configured window when known, not catalog max.
+ * Priority: last-turn model_info → loaded_context_length (loaded) → max_context_length.
+ */
+export function resolveContextLimit(modelId: string, chat: Chat): number | null {
+  const fromChat = chat.modelInfo?.context_length;
+  if (typeof fromChat === 'number' && Number.isFinite(fromChat) && fromChat > 0) {
+    return fromChat;
   }
+
   const cached = modelCache.get(modelId);
-  const fromCache = cached?.max_context_length;
-  if (typeof fromCache === 'number' && Number.isFinite(fromCache) && fromCache > 0) {
-    return fromCache;
+  if (cached) {
+    const fromRow = contextLengthFromModelRow(cached);
+    if (fromRow != null) return fromRow;
   }
+
   return null;
 }
 

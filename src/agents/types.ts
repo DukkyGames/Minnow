@@ -159,5 +159,7 @@ export interface SubAgentRunner {
       args: Record<string, unknown>,
       toolContext?: import('../tools/client').ExecuteToolContext,
     ) => Promise<import('../types').ToolExecutionResult>;
+    /** Called whenever the in-flight transcript changes (streaming + tools). */
+    onMessagesChange?: (messages: ApiMessage[]) => void;
   }): Promise<SubAgentRunnerOutput>;
 }

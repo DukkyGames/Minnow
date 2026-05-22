@@ -67,7 +67,7 @@ function paintRing(budget: ContextBudget): void {
   const track = svg.querySelector('.context-usage-ring__track') as SVGCircleElement | null;
   const fill = svg.querySelector('.context-usage-ring__fill') as SVGCircleElement | null;
   if (track && fill) {
-    const radius = 18;
+    const radius = 10;
     const circumference = 2 * Math.PI * radius;
     const offset = circumference * (1 - Math.min(1, percent / 100));
     fill.style.strokeDasharray = `${circumference}`;
