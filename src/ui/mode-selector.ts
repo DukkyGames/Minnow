@@ -8,7 +8,7 @@ import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat } from './work-agent-dev';
 import { listModes } from '../chat/modes/registry';
-import type { ModeId } from '../chat/modes/types';
+import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   getActiveChat,
   scheduleSaveSessions,
@@ -99,6 +99,9 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   }
 
   chat.modeId = normalized;
+  if (normalizeModeId(normalized) === 'orchestrate' && !chat.orchestrateBoard) {
+    chat.viewMode = 'board';
+  }
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(normalized);
     chat.workAgentId = agent?.id ?? null;

@@ -20,6 +20,7 @@ import type { SubAgentStatus } from '../agents/types';
 import { getBoardProgressPercent } from '../state/orchestrate-board-store';
 import { subscribeBoardChanges } from '../state/orchestrate-board-events';
 import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
+import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import type {
   BoardTask,
   BoardTaskStatus,
@@ -27,6 +28,12 @@ import type {
   PersistedSubAgentStatus,
 } from '../types';
 import { openSubAgentDrawer } from './sub-agent-drawer';
+import {
+  populateOrchestratePlanSelect,
+  persistOrchestratePlanPathFromSelectValue,
+} from './orchestrate-plan-picker';
+import type { DiscoverOrchestratePlansResult } from '../chat/orchestrate/list-plans';
+import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import {
   ensureBoardChatViewToggle,
   isOrchestrateBoardViewActive,
@@ -668,6 +675,220 @@ function sendBoardMessage(text: string): void {
   void import('../chat/messaging').then((m) => m.sendMessage());
 }
 
+/** First user turn from Board onboarding before the model runs board_init (MIN-5). */
+export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
+  'Initialize the board for the selected plan and begin execution.';
+
+export interface MountBoardOnboardingPanelOptions {
+  /** Test-only: inject fake plan discovery instead of hitting the local tool server. */
+  discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
+}
+
+/** Keeps Start / Open plan / refresh aligned with streaming and executable plan paths. */
+function syncBoardOnboardingControls(
+  sel: HTMLSelectElement,
+  startBtn: HTMLButtonElement,
+  openPlanBtn: HTMLButtonElement,
+  refreshBtn: HTMLButtonElement,
+  pickPlanHint: HTMLElement,
+  plansCount: number,
+): void {
+  const streaming = isActiveChatStreaming();
+  const path = sel.value.trim();
+  const executable = isExecutableOrchestratePlan(path);
+  sel.disabled = streaming;
+  refreshBtn.disabled = streaming;
+  startBtn.disabled = streaming || !executable;
+  openPlanBtn.disabled = !executable;
+  if (!streaming && !executable && plansCount > 0) {
+    pickPlanHint.textContent = 'Select a plan first.';
+    pickPlanHint.classList.remove('hidden');
+  } else {
+    pickPlanHint.classList.add('hidden');
+  }
+}
+
+/**
+ * Called from the send loop when streaming toggles so onboarding controls stay disabled in-flight.
+ */
+export function refreshBoardOnboardingIfMounted(): void {
+  const sel = document.getElementById(
+    'boardOnboardingPlanSelect',
+  ) as HTMLSelectElement | null;
+  if (!sel) return;
+  const wrap = sel.closest('.board-onboarding') as HTMLElement | null;
+  if (!wrap) return;
+  const startBtn = wrap.querySelector(
+    '[data-board-onboarding-start]',
+  ) as HTMLButtonElement | null;
+  const openPlanBtn = wrap.querySelector(
+    '[data-board-onboarding-open-plan]',
+  ) as HTMLButtonElement | null;
+  const refreshBtn = wrap.querySelector(
+    '[data-board-onboarding-refresh]',
+  ) as HTMLButtonElement | null;
+  const pickPlanHint = wrap.querySelector(
+    '[data-board-onboarding-start-hint]',
+  ) as HTMLElement | null;
+  if (!startBtn || !openPlanBtn || !refreshBtn || !pickPlanHint) return;
+  const plansCount = Number(wrap.dataset.boardOnboardingPlansCount ?? '0');
+  syncBoardOnboardingControls(
+    sel,
+    startBtn,
+    openPlanBtn,
+    refreshBtn,
+    pickPlanHint,
+    plansCount,
+  );
+}
+
+/**
+ * Builds the guided Orchestrate empty board: plan list, Start kickoff, and escape to chat view.
+ */
+export async function mountBoardOnboardingPanel(
+  container: HTMLElement,
+  chat: Chat,
+  options: MountBoardOnboardingPanelOptions = {},
+): Promise<void> {
+  container.replaceChildren();
+
+  const panel = document.createElement('div');
+  panel.className = 'board-onboarding__panel';
+  container.appendChild(panel);
+
+  const title = document.createElement('h2');
+  title.className = 'board-onboarding__title';
+  title.textContent = 'Run a plan on the board';
+
+  const desc = document.createElement('p');
+  desc.className = 'board-onboarding__desc';
+  desc.textContent =
+    'Pick a plan file. Minnow initializes the Kanban from its waves and tasks, then runs the orchestrator.';
+
+  const field = document.createElement('div');
+  field.className = 'board-onboarding__field';
+
+  const label = document.createElement('label');
+  label.className = 'board-onboarding__label';
+  label.htmlFor = 'boardOnboardingPlanSelect';
+  label.textContent = 'Plan';
+
+  const planRow = document.createElement('div');
+  planRow.className = 'board-onboarding__plan-row';
+
+  const sel = document.createElement('select');
+  sel.id = 'boardOnboardingPlanSelect';
+  sel.dataset.testid = 'boardOnboardingPlanSelect';
+  sel.setAttribute('aria-label', 'Orchestrate plan file');
+
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'board-btn board-onboarding__refresh';
+  refreshBtn.dataset.boardOnboardingRefresh = '';
+  refreshBtn.textContent = 'Refresh';
+  refreshBtn.title = 'Reload plan list from workspace';
+
+  planRow.appendChild(sel);
+  planRow.appendChild(refreshBtn);
+
+  field.appendChild(label);
+  field.appendChild(planRow);
+
+  const hint = document.createElement('p');
+  hint.className = 'board-onboarding__hint hidden';
+  hint.setAttribute('aria-live', 'polite');
+
+  const pickPlanHint = document.createElement('p');
+  pickPlanHint.className = 'board-onboarding__start-hint hidden';
+  pickPlanHint.dataset.boardOnboardingStartHint = '';
+
+  const actions = document.createElement('div');
+  actions.className = 'board-onboarding__actions';
+
+  const startBtn = document.createElement('button');
+  startBtn.type = 'button';
+  startBtn.className = 'board-btn board-btn--primary';
+  startBtn.dataset.boardOnboardingStart = '';
+  startBtn.textContent = 'Start';
+
+  const openPlanBtn = document.createElement('button');
+  openPlanBtn.type = 'button';
+  openPlanBtn.className = 'board-btn';
+  openPlanBtn.dataset.boardOnboardingOpenPlan = '';
+  openPlanBtn.textContent = 'Open plan in editor';
+
+  const chatBtn = document.createElement('button');
+  chatBtn.type = 'button';
+  chatBtn.className = 'board-onboarding__chat-link';
+  chatBtn.textContent = 'Chat view';
+
+  actions.appendChild(startBtn);
+  actions.appendChild(openPlanBtn);
+  actions.appendChild(chatBtn);
+
+  panel.appendChild(title);
+  panel.appendChild(desc);
+  panel.appendChild(field);
+  panel.appendChild(hint);
+  panel.appendChild(pickPlanHint);
+  panel.appendChild(actions);
+
+  let latestPlanCount = 0;
+
+  const applySync = () => {
+    syncBoardOnboardingControls(
+      sel,
+      startBtn,
+      openPlanBtn,
+      refreshBtn,
+      pickPlanHint,
+      latestPlanCount,
+    );
+  };
+
+  const loadPlans = async () => {
+    const { plans } = await populateOrchestratePlanSelect(sel, hint, chat, {
+      autoSelectSingle: true,
+      discoverPlans: options.discoverPlans,
+    });
+    latestPlanCount = plans.length;
+    container.dataset.boardOnboardingPlansCount = String(plans.length);
+    syncViewModeToggleFromActiveChat();
+    void syncOrchestratePlanStripFromActiveChat();
+    applySync();
+  };
+
+  sel.addEventListener('change', () => {
+    if (isActiveChatStreaming()) return;
+    persistOrchestratePlanPathFromSelectValue(chat, sel.value);
+    syncViewModeToggleFromActiveChat();
+    void syncOrchestratePlanStripFromActiveChat();
+    applySync();
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    void loadPlans();
+  });
+
+  startBtn.addEventListener('click', () => {
+    if (startBtn.disabled) return;
+    persistOrchestratePlanPathFromSelectValue(chat, sel.value);
+    sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+  });
+
+  openPlanBtn.addEventListener('click', () => {
+    const path = sel.value.trim();
+    if (!isExecutableOrchestratePlan(path)) return;
+    void import('./file-viewer').then((m) => m.openFileInViewer(path));
+  });
+
+  chatBtn.addEventListener('click', () => {
+    setOrchestrateViewMode('chat');
+  });
+
+  await loadPlans();
+}
+
 /**
  * Update the mounted board shell from session state (kanban, timer, controls).
  * Falls back to a full render when the DOM is missing or still empty.
@@ -724,18 +945,14 @@ export function renderBoardView(chat: Chat): void {
   const planPath = chatForRender.orchestratePlanPath ?? board?.planPath ?? '';
 
   if (!board) {
-    const empty = document.createElement('div');
-    empty.className = 'board-empty';
-    empty.innerHTML =
-      '<p>Run the orchestrator to initialize the board (<code>board_init</code>).</p>' +
-      '<button type="button" class="board-empty__chat">Switch to Chat</button>';
-    empty.querySelector('button')?.addEventListener('click', () => {
-      setOrchestrateViewMode('chat');
-    });
-    root.appendChild(empty);
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    root.appendChild(wrap);
     area.appendChild(root);
     ensureBoardSession(chatForRender.id);
     syncViewModeToggleFromActiveChat();
+    void syncOrchestratePlanStripFromActiveChat();
+    void mountBoardOnboardingPanel(wrap, chatForRender);
     return;
   }
 
@@ -775,6 +992,7 @@ export function renderBoardView(chat: Chat): void {
 
   ensureBoardSession(chatForRender.id);
   syncViewModeToggleFromActiveChat();
+  void syncOrchestratePlanStripFromActiveChat();
 }
 
 /** Tear down board listeners (test teardown). */

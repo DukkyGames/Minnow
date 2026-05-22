@@ -2,16 +2,10 @@
  * Orchestrate mode: plan dropdown inline in composer controls (per-chat persisted path).
  */
 
-const PLAN_LIST_HINTS: Record<string, string> = {
-  server_off: 'Start npm start to list plans.',
-  no_plans_dir: 'No documentation/plans folder in this workspace.',
-};
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
-import { discoverOrchestratePlans } from '../chat/orchestrate/list-plans';
 import {
-  isExecutableOrchestratePlan,
   normalizeOrchestratePlanPath,
+  isExecutableOrchestratePlan,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import {
@@ -21,6 +15,11 @@ import {
 } from '../state/sessions';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import {
+  populateOrchestratePlanSelect,
+  persistOrchestratePlanPathFromSelectValue,
+  shouldHideComposerPlanStripForOrchestrateBoardOnboarding,
+} from './orchestrate-plan-picker';
 
 let planStripEl: HTMLElement | null = null;
 let planSelectEl: HTMLSelectElement | null = null;
@@ -69,10 +68,6 @@ export function refreshOrchestratePlanSelectorDisabled(): void {
   }
 }
 
-function shortPlanLabel(fullPath: string): string {
-  return fullPath.replace(/^documentation\/plans\//, '');
-}
-
 /**
  * Shows or hides the strip, loads plan options, restores selection, and sets hints.
  */
@@ -93,48 +88,20 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
     return;
   }
 
+  if (shouldHideComposerPlanStripForOrchestrateBoardOnboarding(chat)) {
+    strip.classList.add('hidden');
+    sel.disabled = true;
+    hint.classList.add('hidden');
+    hint.textContent = '';
+    refreshOrchestratePlanSelectorDisabled();
+    return;
+  }
+
   strip.classList.remove('hidden');
 
-  const { plans, error } = await discoverOrchestratePlans();
-
-  sel.replaceChildren();
-  const emptyOpt = document.createElement('option');
-  emptyOpt.value = '';
-  emptyOpt.textContent = 'Select plan…';
-  sel.appendChild(emptyOpt);
-
-  for (const p of plans) {
-    const opt = document.createElement('option');
-    opt.value = p;
-    opt.textContent = shortPlanLabel(p);
-    sel.appendChild(opt);
-  }
-
-  const savedRaw = chat.orchestratePlanPath?.trim();
-  const saved = savedRaw ? normalizeOrchestratePlanPath(savedRaw) : undefined;
-  if (saved && !plans.includes(saved)) {
-    const opt = document.createElement('option');
-    opt.value = saved;
-    opt.textContent = shortPlanLabel(saved);
-    sel.appendChild(opt);
-  }
-
-  if (saved) {
-    sel.value = saved;
-  } else {
-    sel.value = '';
-  }
-
-  hint.textContent = '';
-  hint.classList.add('hidden');
-  if (error) {
-    hint.textContent =
-      PLAN_LIST_HINTS[error] ?? 'Could not load plans.';
-    hint.classList.remove('hidden');
-  } else if (plans.length === 0) {
-    hint.textContent = 'No plans yet. Use Plan mode or add documentation/plans/.';
-    hint.classList.remove('hidden');
-  }
+  await populateOrchestratePlanSelect(sel, hint, chat, {
+    autoSelectSingle: false,
+  });
 
   refreshOrchestratePlanSelectorDisabled();
 }
@@ -144,19 +111,7 @@ function onPlanSelectChange(): void {
   const sel = getPlanSelect();
   const chat = getActiveChat();
   if (!sel) return;
-  const v = sel.value.trim();
-  if (!v) {
-    delete chat.orchestratePlanPath;
-  } else {
-    const norm = normalizeOrchestratePlanPath(v);
-    if (norm) {
-      chat.orchestratePlanPath = norm;
-    } else {
-      delete chat.orchestratePlanPath;
-    }
-  }
-  touchChat(chat);
-  scheduleSaveSessions();
+  persistOrchestratePlanPathFromSelectValue(chat, sel.value);
   syncViewModeToggleFromActiveChat();
 }
 
