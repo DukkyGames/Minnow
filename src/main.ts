@@ -197,6 +197,8 @@ export async function initApp(): Promise<void> {
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
   initSubAgentUi();
+  const { startOrchestrateWatchdog } = await import('./chat/orchestrate/watchdog');
+  startOrchestrateWatchdog();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();

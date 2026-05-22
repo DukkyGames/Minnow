@@ -123,6 +123,7 @@ export type UpdateTaskPatch = Partial<
     | 'filesChanged'
     | 'notes'
     | 'error'
+    | 'retryCount'
   >
 >;
 

@@ -6,6 +6,8 @@ import {
   deriveOrchestratorLastActivity,
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
+import { isOrchestrateWatchdogStalled } from '../chat/orchestrate/watchdog';
+import { ORCHESTRATE_RESUME_MESSAGE } from '../chat/orchestrate/resume-message';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
@@ -95,9 +97,6 @@ export function canOpenBoardTaskSubAgent(
   return deriveTaskAgentBadge(task, runStatus) !== null;
 }
 
-const RESUME_MESSAGE =
-  "Resume the plan. Call board_get_state and continue from the first task whose status is not 'complete'.";
-
 interface BoardSession {
   chatId: string;
   unsubBoard: () => void;
@@ -168,7 +167,8 @@ export type BoardHeaderStatusVariant =
   | 'complete'
   | 'failed'
   | 'blocked'
-  | 'stopped';
+  | 'stopped'
+  | 'stalled';
 
 export interface BoardHeaderStatus {
   variant: BoardHeaderStatusVariant;
@@ -181,7 +181,12 @@ export function deriveBoardHeaderStatus(
   isStreaming: boolean,
   activeRunCount: number,
   userStopped = false,
+  watchdogStalled = false,
 ): BoardHeaderStatus {
+  if (watchdogStalled && !isStreaming) {
+    return { variant: 'stalled', label: 'Stalled — Resume' };
+  }
+
   const tasks = board.tasks;
   const total = tasks.length;
   const completeCount = tasks.filter((t) => t.status === 'complete').length;
@@ -338,7 +343,7 @@ function wireBoardHeaderControls(
   resume.textContent = resumeButtonLabel(headerStatus);
   resume.disabled = isStreaming;
   resume.addEventListener('click', () => {
-    sendBoardMessage(RESUME_MESSAGE);
+    sendBoardMessage(ORCHESTRATE_RESUME_MESSAGE);
     refreshActiveBoardIfMounted();
   });
 
@@ -587,6 +592,7 @@ function refreshBoardDom(
     isStreaming,
     activeRuns.length,
     userStopped,
+    isOrchestrateWatchdogStalled(chat.id),
   );
   const activity = deriveOrchestratorLastActivity(chat, isStreaming);
 
@@ -745,6 +751,7 @@ export function renderBoardView(chat: Chat): void {
     isStreaming,
     activeRuns.length,
     isUserStoppedChat(chatForRender),
+    isOrchestrateWatchdogStalled(chatForRender.id),
   );
   const activity = deriveOrchestratorLastActivity(chatForRender, isStreaming);
   const metrics = boardHeaderMetrics(board, activeRuns.length);

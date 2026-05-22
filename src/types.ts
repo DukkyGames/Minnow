@@ -249,6 +249,8 @@ export interface BoardTask {
   filesChanged?: number;
   notes?: string;
   error?: string;
+  /** Auto-resume attempts by the orchestrate watchdog for this task. */
+  retryCount?: number;
 }
 
 /** Wave rollup row (status derived from tasks). */

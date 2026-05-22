@@ -8,6 +8,13 @@ import type { OpenAIFunctionDefinition } from '../tools/definitions';
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
+/** Why a sub-agent run reached a terminal status (parent status tools). */
+export type SubAgentTerminalReason =
+  | 'success'
+  | 'max_tool_turns'
+  | 'failed'
+  | 'cancelled';
+
 /** Per-type configuration merged from defaults and ~/.minnow/sub-agents.json. */
 export interface SubAgentTypeConfig {
   label?: string;
@@ -108,6 +115,7 @@ export interface AggregateResult {
   toolTurns: number;
   cancelled: boolean;
   error?: string;
+  terminalReason?: SubAgentTerminalReason;
 }
 
 /** Context passed from the parent tool loop into spawn/cancel executors. */
