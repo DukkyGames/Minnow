@@ -51,6 +51,38 @@ export interface TaskAgentBadge {
 
 type RunStatusHint = SubAgentStatus | PersistedSubAgentStatus | null | undefined;
 
+/** Primary sub-agent run for a board task (active, or latest settled). */
+export function getBoardTaskPrimaryRunId(task: BoardTask): string | null {
+  const assigned = task.assignedRunId?.trim();
+  if (assigned) return assigned;
+  const last = task.lastRunId?.trim();
+  if (last) return last;
+  const history = task.runHistory;
+  if (history?.length) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const id = history[i]?.trim();
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+/** All inspectable run ids for a task (history order, deduped). */
+export function getBoardTaskRunIds(task: BoardTask): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const push = (raw?: string): void => {
+    const id = raw?.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const id of task.runHistory ?? []) push(id);
+  push(task.lastRunId);
+  push(task.assignedRunId);
+  return ids;
+}
+
 /** True when the user stopped the latest assistant message in this chat. */
 function isUserStoppedChat(chat: Chat): boolean {
   for (let i = chat.history.length - 1; i >= 0; i--) {
@@ -65,14 +97,17 @@ function isUserStoppedChat(chat: Chat): boolean {
   return false;
 }
 
-/** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete). */
+/** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete / Cancelled). */
 export function deriveTaskAgentBadge(
   task: BoardTask,
   runStatus?: RunStatusHint,
 ): TaskAgentBadge | null {
-  if (!task.assignedRunId?.trim()) return null;
+  if (!getBoardTaskPrimaryRunId(task)) return null;
 
-  if (task.status === 'failed' || runStatus === 'failed' || runStatus === 'cancelled') {
+  if (runStatus === 'cancelled') {
+    return { variant: 'failed', label: 'Cancelled' };
+  }
+  if (task.status === 'failed' || runStatus === 'failed') {
     return { variant: 'failed', label: 'Failed' };
   }
   if (
@@ -484,18 +519,21 @@ function buildTaskAgentBadge(badge: TaskAgentBadge): HTMLElement {
 }
 
 function buildTaskCard(task: BoardTask, chat: Chat): HTMLElement {
-  const runStatus = task.assignedRunId
-    ? resolveRunStatusForTask(chat, task.assignedRunId)
+  const primaryRunId = getBoardTaskPrimaryRunId(task);
+  const runStatus = primaryRunId
+    ? resolveRunStatusForTask(chat, primaryRunId)
     : null;
   const agentBadge = deriveTaskAgentBadge(task, runStatus);
   const openable = canOpenBoardTaskSubAgent(task, runStatus);
+  const runIds = getBoardTaskRunIds(task);
+  let selectedRunId = primaryRunId ?? runIds[runIds.length - 1] ?? null;
 
   const card = document.createElement('article');
   card.className = 'board-task-card';
   if (task.status === 'failed' || task.status === 'blocked') {
     card.classList.add('board-task-card--alert');
   }
-  if (openable) {
+  if (openable && selectedRunId) {
     card.classList.add('board-task-card--clickable');
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
@@ -504,9 +542,18 @@ function buildTaskCard(task: BoardTask, chat: Chat): HTMLElement {
       `Open sub-agent for ${task.id}: ${task.title}${agentBadge ? `, ${agentBadge.label}` : ''}`,
     );
     const open = (): void => {
-      openSubAgentDrawer(task.assignedRunId!, chat.id);
+      const runId = selectedRunId ?? getBoardTaskPrimaryRunId(task);
+      if (runId) openSubAgentDrawer(runId, chat.id);
     };
-    card.addEventListener('click', open);
+    card.addEventListener('click', (ev) => {
+      if (
+        ev.target instanceof HTMLElement &&
+        ev.target.closest('.board-task-card__run-picker')
+      ) {
+        return;
+      }
+      open();
+    });
     card.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
@@ -525,6 +572,34 @@ function buildTaskCard(task: BoardTask, chat: Chat): HTMLElement {
     head.appendChild(buildTaskAgentBadge(agentBadge));
   }
   card.appendChild(head);
+
+  if (openable && runIds.length > 1) {
+    const pickerWrap = document.createElement('div');
+    pickerWrap.className = 'board-task-card__run-picker';
+    const pickerLabel = document.createElement('label');
+    pickerLabel.className = 'board-task-card__run-picker-label';
+    pickerLabel.textContent = 'Run';
+    const picker = document.createElement('select');
+    picker.className = 'board-task-card__run-picker-select';
+    picker.setAttribute('aria-label', `Sub-agent runs for ${task.id}`);
+    for (let i = 0; i < runIds.length; i++) {
+      const runId = runIds[i];
+      const opt = document.createElement('option');
+      opt.value = runId;
+      const status = resolveRunStatusForTask(chat, runId);
+      const shortId = runId.length > 8 ? `${runId.slice(0, 8)}…` : runId;
+      opt.textContent = `Run ${i + 1} · ${status ?? 'unknown'} · ${shortId}`;
+      if (runId === selectedRunId) opt.selected = true;
+      picker.appendChild(opt);
+    }
+    picker.addEventListener('click', (ev) => ev.stopPropagation());
+    picker.addEventListener('change', () => {
+      selectedRunId = picker.value;
+    });
+    pickerLabel.appendChild(picker);
+    pickerWrap.appendChild(pickerLabel);
+    card.appendChild(pickerWrap);
+  }
 
   const title = document.createElement('p');
   title.className = 'board-task-card__title';
