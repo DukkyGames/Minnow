@@ -31,6 +31,7 @@ import {
 } from './mode-handoff-tools';
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
+import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -114,6 +115,14 @@ export async function refreshMcpToolCache(): Promise<void> {
 }
 
 export async function executeTool(
+  name: string,
+  args: Record<string, unknown> = {},
+  context: ExecuteToolContext = {},
+): Promise<ToolExecutionResult> {
+  return runWithFileTreeAutoRefresh(name, () => executeToolInner(name, args, context));
+}
+
+async function executeToolInner(
   name: string,
   args: Record<string, unknown> = {},
   context: ExecuteToolContext = {},
