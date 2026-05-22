@@ -774,8 +774,16 @@ button.board-header__activity {
   .board-header__controls {
     flex: 1 1 100%;
     margin-left: 0;
-    justify-content: stretch;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .board-header__controls .board-header__view-toggle,
+  .board-header__controls .board-header__icon-btn {
+    width: 44px;
+    height: 44px;
+    min-height: var(--touch-min);
   }
 
   .board-btn {

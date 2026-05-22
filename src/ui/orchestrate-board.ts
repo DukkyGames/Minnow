@@ -351,9 +351,118 @@ function syncBoardHeaderActivity(
   if (textEl) textEl.textContent = activity.text;
 }
 
-function resumeButtonLabel(status: BoardHeaderStatus): string {
+/** Start vs Resume copy for the board header play control (idle state). */
+function playPauseIdleLabel(status: BoardHeaderStatus): string {
   if (status.variant === 'stopped' || status.variant === 'ready') return 'Start';
   return 'Resume';
+}
+
+/** Build an inline SVG icon for board header icon buttons. */
+function createBoardHeaderIconSvg(pathD: string): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon-svg board-header__icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathD);
+  svg.appendChild(path);
+  return svg;
+}
+
+/** Icon-only board header control (Plan, play/pause) matching top-bar icon buttons. */
+function createBoardHeaderIconButton(
+  action: string,
+  iconPath: string,
+  labels: { ariaLabel: string; title: string },
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'icon-btn board-header__icon-btn';
+  btn.dataset.boardAction = action;
+  btn.setAttribute('aria-label', labels.ariaLabel);
+  btn.title = labels.title;
+  btn.appendChild(createBoardHeaderIconSvg(iconPath));
+  return btn;
+}
+
+const BOARD_ICON_PLAN =
+  'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
+const BOARD_ICON_PLAY = 'M8 5v14l11-7z';
+const BOARD_ICON_PAUSE = 'M6 4h4v16H6z M14 4h4v16h-4z';
+
+function isBoardPlayPauseRunning(
+  isStreaming: boolean,
+  board: NonNullable<Chat['orchestrateBoard']>,
+): boolean {
+  return isStreaming && Boolean(board.activeParentTurnId);
+}
+
+/** Sync play/pause icon, labels, pressed state, and disabled state on live board refresh. */
+function syncBoardPlayPauseButton(
+  btn: HTMLButtonElement,
+  board: NonNullable<Chat['orchestrateBoard']>,
+  isStreaming: boolean,
+  headerStatus: BoardHeaderStatus,
+): void {
+  const running = isBoardPlayPauseRunning(isStreaming, board);
+  const playIcon = btn.querySelector('[data-board-icon="play"]');
+  const pauseIcon = btn.querySelector('[data-board-icon="pause"]');
+  playIcon?.classList.toggle('hidden', running);
+  pauseIcon?.classList.toggle('hidden', !running);
+
+  if (running) {
+    btn.setAttribute('aria-label', 'Stop orchestrator');
+    btn.title = 'Stop orchestrator';
+    btn.setAttribute('aria-pressed', 'true');
+    btn.disabled = false;
+    btn.classList.add('board-header__icon-btn--danger');
+  } else {
+    const idleLabel = playPauseIdleLabel(headerStatus);
+    btn.setAttribute('aria-label', idleLabel);
+    btn.title = idleLabel;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.disabled = isStreaming;
+    btn.classList.remove('board-header__icon-btn--danger');
+  }
+}
+
+function createBoardPlayPauseButton(
+  board: NonNullable<Chat['orchestrateBoard']>,
+  isStreaming: boolean,
+  headerStatus: BoardHeaderStatus,
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'icon-btn board-header__icon-btn';
+  btn.dataset.boardAction = 'play-pause';
+
+  const playSvg = createBoardHeaderIconSvg(BOARD_ICON_PLAY);
+  playSvg.dataset.boardIcon = 'play';
+  const pauseSvg = createBoardHeaderIconSvg(BOARD_ICON_PAUSE);
+  pauseSvg.dataset.boardIcon = 'pause';
+  pauseSvg.classList.add('hidden');
+  btn.appendChild(playSvg);
+  btn.appendChild(pauseSvg);
+
+  syncBoardPlayPauseButton(btn, board, isStreaming, headerStatus);
+
+  btn.addEventListener('click', () => {
+    const activeChat = getActiveChat();
+    const activeBoard = activeChat.orchestrateBoard;
+    if (!activeBoard) return;
+    if (isBoardPlayPauseRunning(isActiveChatStreaming(), activeBoard)) {
+      stopGeneration();
+      if (activeBoard.activeParentTurnId) {
+        cancelAllForParentTurn(activeBoard.activeParentTurnId);
+      }
+      refreshActiveBoardIfMounted();
+      return;
+    }
+    sendBoardMessage(ORCHESTRATE_RESUME_MESSAGE);
+    refreshActiveBoardIfMounted();
+  });
+
+  return btn;
 }
 
 function wireBoardHeaderControls(
@@ -366,48 +475,23 @@ function wireBoardHeaderControls(
 ): void {
   controls.replaceChildren();
 
-  const openPlan = document.createElement('button');
-  openPlan.type = 'button';
-  openPlan.className = 'board-btn';
-  openPlan.dataset.boardAction = 'open-plan';
-  openPlan.textContent = 'Open plan';
+  const openPlan = createBoardHeaderIconButton(
+    'open-plan',
+    BOARD_ICON_PLAN,
+    {
+      ariaLabel: 'Open plan',
+      title: planPath ? `Open ${planPath} in file viewer` : 'No plan path set',
+    },
+  );
   openPlan.disabled = !planPath;
-  openPlan.title = planPath ? `Open ${planPath} in file viewer` : 'No plan path set';
   openPlan.addEventListener('click', () => {
     if (!planPath) return;
     void import('./file-viewer').then((m) => m.openFileInViewer(planPath));
   });
 
-  const resume = document.createElement('button');
-  resume.type = 'button';
-  resume.className = 'board-btn board-btn--primary';
-  resume.dataset.boardAction = 'resume';
-  resume.textContent = resumeButtonLabel(headerStatus);
-  resume.disabled = isStreaming;
-  resume.addEventListener('click', () => {
-    sendBoardMessage(ORCHESTRATE_RESUME_MESSAGE);
-    refreshActiveBoardIfMounted();
-  });
-
-  const stopOrch = document.createElement('button');
-  stopOrch.type = 'button';
-  stopOrch.className = 'board-btn board-btn--danger';
-  stopOrch.dataset.boardAction = 'stop-orchestrator';
-  stopOrch.textContent = 'Stop';
-  stopOrch.disabled = !isStreaming || !board.activeParentTurnId;
-  stopOrch.addEventListener('click', () => {
-    stopGeneration();
-    if (board.activeParentTurnId) {
-      cancelAllForParentTurn(board.activeParentTurnId);
-    }
-    refreshActiveBoardIfMounted();
-  });
-
   controls.appendChild(openPlan);
-  controls.appendChild(resume);
-  controls.appendChild(stopOrch);
-
   ensureBoardChatViewToggle(controls);
+  controls.appendChild(createBoardPlayPauseButton(board, isStreaming, headerStatus));
 }
 
 interface BoardHeaderMetrics {
@@ -700,19 +784,23 @@ function refreshBoardDom(
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
 
-  const stopOrch = root.querySelector(
-    '[data-board-action="stop-orchestrator"]',
+  const playPause = root.querySelector(
+    '[data-board-action="play-pause"]',
   ) as HTMLButtonElement | null;
-  if (stopOrch) {
-    stopOrch.disabled = !isStreaming || !board.activeParentTurnId;
+  if (playPause) {
+    syncBoardPlayPauseButton(playPause, board, isStreaming, headerStatus);
   }
 
-  const resume = root.querySelector(
-    '[data-board-action="resume"]',
+  const openPlanBtn = root.querySelector(
+    '[data-board-action="open-plan"]',
   ) as HTMLButtonElement | null;
-  if (resume) {
-    resume.disabled = isStreaming;
-    resume.textContent = resumeButtonLabel(headerStatus);
+  if (openPlanBtn) {
+    openPlanBtn.disabled = !planPath;
+    const planTitle = planPath
+      ? `Open ${planPath} in file viewer`
+      : 'No plan path set';
+    openPlanBtn.setAttribute('aria-label', 'Open plan');
+    openPlanBtn.title = planTitle;
   }
 
   const send = root.querySelector(
