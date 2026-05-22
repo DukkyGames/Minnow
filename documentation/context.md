@@ -175,7 +175,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Enable/disable + persistence | `src/skills/config.ts`, `~/.minnow/skills.json`, `GET/PUT /api/config/skills` |
 | Settings UI (toggles, editor, add custom) | `src/ui/settings-skills.ts`, `src/skills/skill-settings-api.ts` |
 | Custom skill template | `src/skills/_template/SKILL.md` (copied on `POST /api/skills`) |
-| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` |
+| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` (row hover/`--active`: `--surface-elevated` + nested `--elevated-fg` on label, id, desc, badge — same pattern as chat sidebar rows) |
 | Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js`, `server/skills/user-skills.js` |
 
 **API** (same CORS as `/api/tools`; requires `npm start` for user skills):
