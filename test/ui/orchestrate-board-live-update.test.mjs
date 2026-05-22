@@ -92,7 +92,7 @@ describe('orchestrate board live updates', () => {
     });
 
     renderBoardView(chat);
-    assert.ok(document.querySelector('.board-empty'));
+    assert.ok(document.querySelector('.board-onboarding'));
 
     initBoard(chat, {
       planPath: PLAN_PATH,

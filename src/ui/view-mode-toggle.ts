@@ -188,6 +188,9 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   scheduleSaveSessions();
   syncViewModeToggleFromActiveChat();
   renderChat(chat);
+  void import('./orchestrate-plan-selector').then((m) =>
+    m.syncOrchestratePlanStripFromActiveChat(),
+  );
 }
 
 function wireViewToggleButton(
