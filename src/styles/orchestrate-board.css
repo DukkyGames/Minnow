@@ -95,10 +95,15 @@
 
 .board-header__badge--failed,
 .board-header__badge--blocked,
-.board-header__badge--stopped {
+.board-header__badge--stopped,
+.board-header__badge--stalled {
   color: var(--danger);
   border-color: var(--tool-call-status-fail-border);
   background: var(--tool-call-status-fail-bg);
+}
+
+.board-header__badge--stalled .board-header__badge-dot {
+  animation: board-badge-pulse 1.4s var(--ease-out) infinite;
 }
 
 .board-header__badge--running .board-header__badge-dot,
@@ -547,6 +552,38 @@ button.board-header__activity {
 
   .kanban-column__list {
     overflow-y: auto;
+  }
+}
+
+.orchestrate-watchdog-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  z-index: 100010;
+  max-width: min(92vw, 28rem);
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tool-call-status-fail-border);
+  background: var(--tool-call-status-fail-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+  transition:
+    opacity 0.2s var(--ease-out),
+    transform 0.2s var(--ease-out);
+  pointer-events: none;
+}
+
+.orchestrate-watchdog-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orchestrate-watchdog-toast {
+    transition: none;
   }
 }
 
