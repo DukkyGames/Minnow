@@ -15,12 +15,16 @@ const { shouldHideComposerPlanStripForOrchestrateBoardOnboarding } = await impor
 const {
   mountBoardOnboardingPanel,
   disposeBoardViewForTests,
+  resolveBoardOnboardingBusyPhase,
+  syncBoardOnboardingBusyUI,
 } = await import('../../src/ui/orchestrate-board.ts');
+const { setStreaming } = await import('../../src/app-state.ts');
 
 describe('orchestrate board onboarding (MIN-5)', () => {
   afterEach(() => {
     disposeBoardViewForTests();
     setSessionStateForTests(null);
+    setStreaming(false);
   });
 
   test('shouldHideComposerPlanStripForOrchestrateBoardOnboarding is true only for board shell without store', () => {
@@ -72,6 +76,91 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     assert.ok(sel && sel.nodeName === 'SELECT');
     assert.ok(sel.options.length >= 2);
     assert.equal(chat.orchestratePlanPath, planPath);
+  });
+
+  test('resolveBoardOnboardingBusyPhase prefers plan load over stream', () => {
+    assert.equal(resolveBoardOnboardingBusyPhase(true), 'plans');
+    assert.equal(resolveBoardOnboardingBusyPhase(false), 'idle');
+  });
+
+  test('mountBoardOnboardingPanel shows plan-loading status during slow discovery', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const chat = createEmptyChatObject('');
+    chat.id = '55555555-5555-5555-5555-555555555555';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    document.body.appendChild(wrap);
+
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    const mountPromise = mountBoardOnboardingPanel(wrap, chat, {
+      discoverPlans: async () => {
+        await gate;
+        return { plans: ['documentation/plans/slow.md'] };
+      },
+    });
+
+    await new Promise((r) => setImmediate(r));
+    assert.equal(wrap.dataset.boardOnboardingBusy, 'plans');
+    const status = wrap.querySelector('[data-board-onboarding-status]');
+    assert.ok(status && !status.classList.contains('hidden'));
+    assert.match(
+      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
+      /Loading plans/i,
+    );
+
+    release();
+    await mountPromise;
+    assert.equal(wrap.dataset.boardOnboardingBusy, '');
+  });
+
+  test('syncBoardOnboardingBusyUI shows init preview when streaming', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const chat = createEmptyChatObject('');
+    chat.id = '66666666-6666-6666-6666-666666666666';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    setStreaming(true, chat.id);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    wrap.innerHTML = `
+      <div class="board-onboarding__panel">
+        <div class="board-onboarding__status hidden" data-board-onboarding-status role="status">
+          <span class="board-onboarding__status-dots"><span class="board-onboarding__status-dot"></span></span>
+          <span class="board-onboarding__status-label" data-board-onboarding-status-label></span>
+        </div>
+        <div class="board-onboarding__preview hidden" data-board-onboarding-preview aria-hidden="true"></div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    syncBoardOnboardingBusyUI(wrap, 'init');
+    assert.equal(wrap.dataset.boardOnboardingBusy, 'init');
+    const preview = wrap.querySelector('[data-board-onboarding-preview]');
+    assert.ok(preview && !preview.classList.contains('hidden'));
+    assert.match(
+      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
+      /Initializing board/i,
+    );
   });
 
   test('setChatMode orchestrate defaults viewMode to board when no board store', async () => {

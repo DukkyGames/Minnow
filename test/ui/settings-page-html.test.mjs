@@ -53,6 +53,8 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsProvidersAddForm"/);
     assert.match(html, /id="settingsProvidersAddId"/);
     assert.match(html, /id="settingsProvidersAddBaseUrl"/);
+    assert.match(html, /id="settingsProvidersAddModelsPath"/);
+    assert.match(html, /id="settingsProvidersAddChatPath"/);
     assert.match(html, /id="settingsProvidersList"/);
   });
 

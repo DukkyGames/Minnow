@@ -754,6 +754,98 @@ function sendBoardMessage(text: string): void {
 export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
   'Initialize the board for the selected plan and begin execution.';
 
+/** Busy phases shown in the onboarding status strip (plan fetch vs board_init stream). */
+export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'init';
+
+const BOARD_ONBOARDING_BUSY_LABEL: Record<Exclude<BoardOnboardingBusyPhase, 'idle'>, string> =
+  {
+    plans: 'Loading plans',
+    init: 'Initializing board',
+  };
+
+/** Resolve which loading affordance the onboarding shell should show. */
+export function resolveBoardOnboardingBusyPhase(
+  plansLoading: boolean,
+): BoardOnboardingBusyPhase {
+  if (plansLoading) return 'plans';
+  if (isActiveChatStreaming()) return 'init';
+  return 'idle';
+}
+
+/** Three ink dots (matches stream-status) for plan discovery; one dot for board init. */
+function buildBoardOnboardingStatusDots(phase: Exclude<BoardOnboardingBusyPhase, 'idle'>): HTMLElement {
+  const wrap = document.createElement('span');
+  wrap.className = 'board-onboarding__status-dots';
+  wrap.setAttribute('aria-hidden', 'true');
+  const count = phase === 'plans' ? 3 : 1;
+  for (let i = 0; i < count; i += 1) {
+    const dot = document.createElement('span');
+    dot.className = 'board-onboarding__status-dot';
+    wrap.appendChild(dot);
+  }
+  return wrap;
+}
+
+/** Lightweight Kanban column silhouettes while board_init runs. */
+function buildBoardOnboardingPreview(): HTMLElement {
+  const preview = document.createElement('div');
+  preview.className = 'board-onboarding__preview';
+  preview.setAttribute('aria-hidden', 'true');
+  preview.dataset.boardOnboardingPreview = '';
+  const labels = ['Planned', 'In progress', 'Testing', 'Complete'];
+  for (const label of labels) {
+    const col = document.createElement('div');
+    col.className = 'board-onboarding__preview-col';
+    const cap = document.createElement('span');
+    cap.className = 'board-onboarding__preview-cap';
+    cap.textContent = label;
+    const body = document.createElement('div');
+    body.className = 'board-onboarding__preview-body';
+    col.appendChild(cap);
+    col.appendChild(body);
+    preview.appendChild(col);
+  }
+  return preview;
+}
+
+/** Sync status label, dots, preview, and panel busy class from the resolved phase. */
+export function syncBoardOnboardingBusyUI(
+  wrap: HTMLElement,
+  phase: BoardOnboardingBusyPhase,
+): void {
+  const panel = wrap.querySelector('.board-onboarding__panel');
+  const status = wrap.querySelector('[data-board-onboarding-status]') as HTMLElement | null;
+  const label = wrap.querySelector('[data-board-onboarding-status-label]') as HTMLElement | null;
+  const dotsHost = wrap.querySelector('.board-onboarding__status-dots');
+  const preview = wrap.querySelector('[data-board-onboarding-preview]');
+
+  wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
+  if (panel instanceof HTMLElement) {
+    panel.classList.toggle('board-onboarding__panel--busy', phase === 'init');
+  }
+
+  if (!status || !label) return;
+
+  if (phase === 'idle') {
+    status.classList.add('hidden');
+    status.hidden = true;
+    if (preview) preview.classList.add('hidden');
+    return;
+  }
+
+  status.classList.remove('hidden');
+  status.hidden = false;
+  label.textContent = BOARD_ONBOARDING_BUSY_LABEL[phase];
+
+  if (dotsHost) {
+    dotsHost.replaceWith(buildBoardOnboardingStatusDots(phase));
+  }
+
+  if (preview) {
+    preview.classList.toggle('hidden', phase !== 'init');
+  }
+}
+
 export interface MountBoardOnboardingPanelOptions {
   /** Test-only: inject fake plan discovery instead of hitting the local tool server. */
   discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
@@ -767,15 +859,19 @@ function syncBoardOnboardingControls(
   refreshBtn: HTMLButtonElement,
   pickPlanHint: HTMLElement,
   plansCount: number,
+  plansLoading: boolean,
 ): void {
   const streaming = isActiveChatStreaming();
   const path = sel.value.trim();
   const executable = isExecutableOrchestratePlan(path);
-  sel.disabled = streaming;
-  refreshBtn.disabled = streaming;
-  startBtn.disabled = streaming || !executable;
-  openPlanBtn.disabled = !executable;
-  if (!streaming && !executable && plansCount > 0) {
+  const busy = plansLoading || streaming;
+  sel.disabled = busy;
+  sel.setAttribute('aria-busy', plansLoading ? 'true' : 'false');
+  refreshBtn.disabled = busy;
+  refreshBtn.setAttribute('aria-busy', plansLoading ? 'true' : 'false');
+  startBtn.disabled = busy || !executable;
+  openPlanBtn.disabled = busy || !executable;
+  if (!streaming && !executable && plansCount > 0 && !plansLoading) {
     pickPlanHint.textContent = 'Select a plan first.';
     pickPlanHint.classList.remove('hidden');
   } else {
@@ -807,6 +903,7 @@ export function refreshBoardOnboardingIfMounted(): void {
   ) as HTMLElement | null;
   if (!startBtn || !openPlanBtn || !refreshBtn || !pickPlanHint) return;
   const plansCount = Number(wrap.dataset.boardOnboardingPlansCount ?? '0');
+  const plansLoading = wrap.dataset.boardOnboardingPlansLoading === 'true';
   syncBoardOnboardingControls(
     sel,
     startBtn,
@@ -814,6 +911,11 @@ export function refreshBoardOnboardingIfMounted(): void {
     refreshBtn,
     pickPlanHint,
     plansCount,
+    plansLoading,
+  );
+  syncBoardOnboardingBusyUI(
+    wrap,
+    resolveBoardOnboardingBusyPhase(plansLoading),
   );
 }
 
@@ -839,6 +941,21 @@ export async function mountBoardOnboardingPanel(
   desc.className = 'board-onboarding__desc';
   desc.textContent =
     'Pick a plan file. Minnow initializes the Kanban from its waves and tasks, then runs the orchestrator.';
+
+  const status = document.createElement('div');
+  status.className = 'board-onboarding__status hidden';
+  status.dataset.boardOnboardingStatus = '';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  const statusDots = buildBoardOnboardingStatusDots('plans');
+  const statusLabel = document.createElement('span');
+  statusLabel.className = 'board-onboarding__status-label';
+  statusLabel.dataset.boardOnboardingStatusLabel = '';
+  status.appendChild(statusDots);
+  status.appendChild(statusLabel);
+
+  const preview = buildBoardOnboardingPreview();
+  preview.classList.add('hidden');
 
   const field = document.createElement('div');
   field.className = 'board-onboarding__field';
@@ -903,12 +1020,16 @@ export async function mountBoardOnboardingPanel(
 
   panel.appendChild(title);
   panel.appendChild(desc);
+  panel.appendChild(status);
+  panel.appendChild(preview);
   panel.appendChild(field);
   panel.appendChild(hint);
   panel.appendChild(pickPlanHint);
   panel.appendChild(actions);
 
+  container.className = 'board-onboarding';
   let latestPlanCount = 0;
+  let plansLoading = false;
 
   const applySync = () => {
     syncBoardOnboardingControls(
@@ -918,19 +1039,32 @@ export async function mountBoardOnboardingPanel(
       refreshBtn,
       pickPlanHint,
       latestPlanCount,
+      plansLoading,
+    );
+    syncBoardOnboardingBusyUI(
+      container,
+      resolveBoardOnboardingBusyPhase(plansLoading),
     );
   };
 
   const loadPlans = async () => {
-    const { plans } = await populateOrchestratePlanSelect(sel, hint, chat, {
-      autoSelectSingle: true,
-      discoverPlans: options.discoverPlans,
-    });
-    latestPlanCount = plans.length;
-    container.dataset.boardOnboardingPlansCount = String(plans.length);
-    syncViewModeToggleFromActiveChat();
-    void syncOrchestratePlanStripFromActiveChat();
+    plansLoading = true;
+    container.dataset.boardOnboardingPlansLoading = 'true';
     applySync();
+    try {
+      const { plans } = await populateOrchestratePlanSelect(sel, hint, chat, {
+        autoSelectSingle: true,
+        discoverPlans: options.discoverPlans,
+      });
+      latestPlanCount = plans.length;
+      container.dataset.boardOnboardingPlansCount = String(plans.length);
+      syncViewModeToggleFromActiveChat();
+      void syncOrchestratePlanStripFromActiveChat();
+    } finally {
+      plansLoading = false;
+      delete container.dataset.boardOnboardingPlansLoading;
+      applySync();
+    }
   };
 
   sel.addEventListener('change', () => {

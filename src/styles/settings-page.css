@@ -880,6 +880,23 @@
   margin-top: 6px;
 }
 
+.settings-providers-edit-panel {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.settings-providers-edit-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+}
+
+.settings-badge--muted {
+  opacity: 0.75;
+}
+
 .settings-providers-add-panel {
   margin-top: 8px;
 }

@@ -381,6 +381,17 @@
                 </select>
               </div>
             </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsProvidersAddModelsPath">Models path</label>
+                <input type="text" id="settingsProvidersAddModelsPath" name="modelsPath" required autocomplete="off" spellcheck="false" placeholder="/api/v0/models">
+              </div>
+              <div class="field">
+                <label for="settingsProvidersAddChatPath">Chat completions path</label>
+                <input type="text" id="settingsProvidersAddChatPath" name="chatCompletionsPath" required autocomplete="off" spellcheck="false" placeholder="/api/v0/chat/completions">
+              </div>
+            </div>
+            <p class="field-hint">Appended to base URL. Changing API style resets these when they still match the previous defaults. OpenCode Go: <code>/zen/go/v1/models</code> and <code>/zen/go/v1/chat/completions</code>.</p>
             <div class="field">
               <label for="settingsProvidersAddApiKey">API key (optional)</label>
               <input type="password" id="settingsProvidersAddApiKey" name="apiKey" autocomplete="off" spellcheck="false" placeholder="Leave empty if the server needs no key">
