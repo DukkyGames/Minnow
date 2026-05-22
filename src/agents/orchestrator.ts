@@ -25,7 +25,25 @@ import type {
   SpawnSubAgentResult,
   SubAgentRun,
   SubAgentStatus,
+  SubAgentTerminalReason,
 } from './types';
+
+/** Classify terminal run outcome for parent orchestration tools. */
+export function deriveSubAgentTerminalReason(
+  run: SubAgentRun,
+): SubAgentTerminalReason | undefined {
+  if (
+    run.status !== 'completed' &&
+    run.status !== 'failed' &&
+    run.status !== 'cancelled'
+  ) {
+    return undefined;
+  }
+  if (run.status === 'cancelled') return 'cancelled';
+  if (isMaxToolTurnFailure(run.summary, run.error)) return 'max_tool_turns';
+  if (run.status === 'failed') return 'failed';
+  return 'success';
+}
 
 const AGGREGATE_MAX_BYTES = 32 * 1024;
 
@@ -123,6 +141,8 @@ export function buildAggregateResult(run: SubAgentRun): AggregateResult {
     cancelled: run.cancelled,
   };
   if (run.error) out.error = run.error;
+  const terminalReason = deriveSubAgentTerminalReason(run);
+  if (terminalReason) out.terminalReason = terminalReason;
   return out;
 }
 
@@ -650,6 +670,8 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   };
   if (run.error) payload.error = run.error;
   if (run.liveNestedToolCalls != null) payload.liveNestedToolCalls = run.liveNestedToolCalls;
+  const terminalReason = deriveSubAgentTerminalReason(run);
+  if (terminalReason) payload.terminalReason = terminalReason;
   return payload;
 }
 

@@ -133,7 +133,7 @@ Every **`spawn_sub_agent`** must include **`category`** and **`board_task_id`** 
 
 **Parallel wave pattern:** spawn up to the concurrency cap with `wait: false`, record `runId`s, then call `list_sub_agents` until every run in that batch is terminal (`completed` / `failed` / `cancelled`). Use `get_sub_agent_status` on any non-success run before updating the board.
 
-**Max tool turns:** If `get_sub_agent_status` shows `success: false`, `status: failed`, or a summary containing **maximum tool turns**, the sub-agent did **not** finish the task. Do **not** call `board_update_task` with `complete`. Mark the task `failed` (or leave `in_progress` and restart via `restart_sub_agent` / a new spawn). `board_update_task` with `complete` is rejected server-side when the linked `assignedRunId` run failed or hit the cap.
+**Max tool turns:** If `get_sub_agent_status` shows `success: false`, `terminalReason: "max_tool_turns"`, `status: failed`, or a summary containing **maximum tool turns**, the sub-agent did **not** finish the task. Do **not** call `board_update_task` with `complete`. Either **`spawn_sub_agent`** again for the same `board_task_id` (retry build/verify), mark the task `failed`, or restart via `restart_sub_agent` / a new spawn. `board_update_task` with `complete` is rejected server-side when the linked `assignedRunId` run failed or hit the cap.
 
 **Sequential pattern (simpler):** use `spawn_sub_agent` with default **`wait: true`** (or explicit `wait: true`) to block until the aggregate JSON returns — no polling needed.
 
@@ -160,10 +160,11 @@ For each task in the current wave (parallelized up to the concurrency limit):
    - board_update_task — status complete, files_changed, notes
    - Next task in the wave (or next wave if last)
 
-5. On Verifier FAIL or Builder ERROR:
-   - board_update_task — status failed or blocked, error text
-   - Surface failure to the user; ask retry / skip / abort
-   - Wait for user decision before continuing this branch
+5. On Verifier FAIL, Builder ERROR, or **`terminalReason: "max_tool_turns"`**:
+   - board_update_task — status `failed` or `blocked`, error text (unless you immediately respawn)
+   - Prefer **`spawn_sub_agent`** retry for the same `board_task_id` when the failure looks recoverable
+   - Surface failure to the user when retries are exhausted; ask retry / skip / abort
+   - Wait for user decision before continuing this branch when you cannot auto-retry
 ```
 
 ## Wave handling
