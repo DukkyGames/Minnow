@@ -3,6 +3,7 @@
   "enabled": true,
   "globalMaxConcurrent": 3,
   "defaultTimeoutMs": 300000,
+  "defaultMaxToolTurns": 12,
   "types": {
     "generalPurpose": {
       "label": "General purpose",
@@ -11,6 +12,7 @@
       "modelId": "",
       "maxConcurrent": 2,
       "timeoutMs": 300000,
+      "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
       "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
@@ -23,6 +25,7 @@
       "modelId": "",
       "maxConcurrent": 2,
       "timeoutMs": 300000,
+      "maxToolTurns": 12,
       "workAgentId": null,
       "allowedTools": [
         "list_directory",
@@ -47,6 +50,7 @@
       "modelId": "",
       "maxConcurrent": 1,
       "timeoutMs": 300000,
+      "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": [
         "execute_command",
@@ -64,6 +68,7 @@
       "modelId": "",
       "maxConcurrent": 1,
       "timeoutMs": 300000,
+      "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
       "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
@@ -76,6 +81,7 @@
       "modelId": "",
       "maxConcurrent": 1,
       "timeoutMs": 300000,
+      "maxToolTurns": 12,
       "workAgentId": null,
       "allowedTools": [
         "read_file",
