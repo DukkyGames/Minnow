@@ -62,6 +62,11 @@ export function syncModelSelectPicker(): void {
   triggerText.textContent =
     selectedOpt?.text?.trim() || selectedOpt?.label?.trim() || 'Select model';
 
+  const triggerTitle =
+    selectedOpt?.title?.trim() || selectedValue.trim() || '';
+  if (triggerTitle) triggerText.title = triggerTitle;
+  else triggerText.removeAttribute('title');
+
   const hasSelectable =
     [...sel.options].some((o) => o.value.trim() !== '') && !sel.disabled;
   trigger.disabled = !hasSelectable;
@@ -84,7 +89,9 @@ export function syncModelSelectPicker(): void {
     }
     li.setAttribute('role', 'option');
     li.dataset.value = id;
-    if (opt.title) li.title = opt.title;
+
+    const optionTitle = opt.title?.trim() || id;
+    li.title = optionTitle;
 
     const dot = document.createElement('span');
     dot.className = 'model-load-dot';
@@ -94,6 +101,7 @@ export function syncModelSelectPicker(): void {
     const label = document.createElement('span');
     label.className = 'model-select-option-label';
     label.textContent = opt.text;
+    label.title = optionTitle;
 
     li.appendChild(dot);
     li.appendChild(label);
