@@ -3,6 +3,11 @@
  * Browser-native tools run in TS; server-required tools proxy to /api/tools.
  */
 
+import {
+  ASK_QUESTION_TOOL_DESCRIPTION,
+  askQuestionItemSchema,
+} from './ask-question-schema';
+
 /** Tool grouping for settings UI and documentation. */
 export type ToolCategory =
   | 'web'
@@ -225,7 +230,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'ask_question',
-      'Ask the user structured multiple-choice questions. Each question needs at least two preset options (ids and labels). The client adds an "Other" row with free text. Use when you need mutually exclusive choices, priorities, or scope before continuing. Do not use for facts you can read from the workspace.',
+      ASK_QUESTION_TOOL_DESCRIPTION,
       {
         title: {
           type: 'string',
@@ -233,41 +238,11 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         questions: {
           type: 'array',
-          description: 'Questions to show one per card (max 10).',
+          description:
+            'Required. One object per card (1–10). Each object must have id, prompt, and options (not "question", "choices", or string options).',
           minItems: 1,
           maxItems: 10,
-          items: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'string',
-                description: 'Stable id for this question (returned in answers).',
-              },
-              prompt: { type: 'string', description: 'The question text shown to the user.' },
-              allow_multiple: {
-                type: 'boolean',
-                description: 'If true, user may pick several preset options (not combined with Other in one answer).',
-              },
-              options: {
-                type: 'array',
-                description: 'At least two preset choices. Do not use id "__other__" (reserved for UI).',
-                minItems: 2,
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', description: 'Stable option id returned in answers.' },
-                    label: { type: 'string', description: 'Short title for the choice.' },
-                    description: {
-                      type: 'string',
-                      description: 'Optional longer explanation under the label.',
-                    },
-                  },
-                  required: ['id', 'label'],
-                },
-              },
-            },
-            required: ['id', 'prompt', 'options'],
-          },
+          items: askQuestionItemSchema,
         },
       },
       ['questions'],

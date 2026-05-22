@@ -246,7 +246,8 @@
 .send-btn.send-btn--stop {
   background: var(--surface-elevated);
   border: 1px solid var(--border-strong);
-  color: var(--text);
+  /* --elevated-fg: white on dark veil (light theme), light text on light veil (dark theme) */
+  color: var(--elevated-fg);
 }
 
 @media (hover: hover) and (pointer: fine) {

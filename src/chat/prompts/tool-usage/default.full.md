@@ -41,10 +41,31 @@ When the active operating mode does not match the next step (plan done → Orche
 
 When you need **mutually exclusive choices**, **priorities**, or **scope** from the user, call **`ask_question`** instead of long prose lists. The client shows a bottom card UI with preset options plus an **Other** text field.
 
-- Use **2–5 preset options** per question with stable `id` values, short `label`, and optional `description`.
-- Batch related questions in **one** call (up to **10**); use `allow_multiple` only when several non-exclusive answers are valid.
-- Do **not** use preset option id `__other__` (reserved for the UI).
+**Required JSON shape** (wrong field names fail validation):
+
+```json
+{
+  "title": "optional context",
+  "questions": [
+    {
+      "id": "scope",
+      "prompt": "What should we build first?",
+      "options": [
+        { "id": "mvp", "label": "MVP only" },
+        { "id": "full", "label": "Full scope" }
+      ]
+    }
+  ]
+}
+```
+
+- Top level: **`questions`** array (required). Optional **`title`**.
+- Per question: **`id`**, **`prompt`** (not `question` / `text`), **`options`** (not `choices`).
+- Per option: **`id`**, **`label`** (objects, not strings; not `text` / `name`).
+- At least **two** preset options per question; the UI adds **Other** — do not use option id `__other__`.
+- Use **2–5** presets when possible; batch up to **10** questions per call; `allow_multiple` only when several answers can apply.
 - After **`cancelled`**, do not invent answers: ask briefly in chat or state labeled assumptions.
+- For standard mode switches, prefer **`propose_mode_switch`** instead of hand-rolling `ask_question`.
 
 **Reef mode — save custom widgets:** In Reef, do **not** `write_file` to `@minnow/reef/modules/<slug>.md` until the user confirms via **`ask_question`** (Yes / No). Templates live under `@minnow/reef/widgets/` (read-only). See `modes/reef.full.md` § User module library.
 

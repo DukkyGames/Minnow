@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   ASK_QUESTION_OTHER_ID,
+  diagnoseAskQuestionItem,
   validateAskQuestionArgs,
 } from '../../src/tools/ask-question-types.ts';
 
@@ -94,5 +95,37 @@ describe('validateAskQuestionArgs', () => {
       ],
     });
     assert.equal(r.ok, false);
+  });
+
+  test('diagnose hints when prompt is named question', () => {
+    const hint = diagnoseAskQuestionItem({
+      id: 'q1',
+      question: 'Pick one',
+      options: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    });
+    assert.ok(hint?.includes('prompt'));
+  });
+
+  test('diagnose hints when options are strings', () => {
+    const hint = diagnoseAskQuestionItem({
+      id: 'q1',
+      prompt: 'Pick one',
+      options: ['Yes', 'No'],
+    });
+    assert.ok(hint?.includes('objects'));
+  });
+
+  test('validation error mentions required shape', () => {
+    const r = validateAskQuestionArgs({
+      questions: [{ id: 'q1', question: 'x', choices: ['a', 'b'] }],
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.ok(r.error.includes('questions[0]'));
+      assert.ok(r.error.includes('prompt'));
+    }
   });
 });

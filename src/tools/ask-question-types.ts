@@ -50,16 +50,71 @@ function isAskQuestionOption(raw: unknown): raw is AskQuestionOption {
 }
 
 function isAskQuestionItem(raw: unknown): raw is AskQuestionItem {
-  if (!raw || typeof raw !== 'object') return false;
-  const o = raw as Record<string, unknown>;
-  if (!isNonEmptyString(o.id) || !isNonEmptyString(o.prompt)) return false;
-  if (!Array.isArray(o.options)) return false;
-  if (o.options.length < MIN_OPTIONS) return false;
-  if (!o.options.every(isAskQuestionOption)) return false;
-  if (typeof o.allow_multiple !== 'undefined' && typeof o.allow_multiple !== 'boolean') {
-    return false;
+  return diagnoseAskQuestionItem(raw) === null;
+}
+
+/**
+ * Returns a specific validation hint for one question object, or null if valid.
+ */
+export function diagnoseAskQuestionItem(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') {
+    return 'must be an object with id, prompt, and options';
   }
-  return true;
+  const o = raw as Record<string, unknown>;
+
+  if (!isNonEmptyString(o.id)) {
+    if (isNonEmptyString(o.questionId)) {
+      return 'use "id" (not "questionId") for the question id';
+    }
+    return 'missing non-empty "id"';
+  }
+  if (!isNonEmptyString(o.prompt)) {
+    if (isNonEmptyString(o.question)) {
+      return 'use "prompt" (not "question") for the question text';
+    }
+    if (isNonEmptyString(o.text)) {
+      return 'use "prompt" (not "text") for the question text';
+    }
+    return 'missing non-empty "prompt" (the question text shown to the user)';
+  }
+  if (!Array.isArray(o.options)) {
+    if (Array.isArray(o.choices)) {
+      return 'use "options" (not "choices") for the preset answers array';
+    }
+    return 'missing "options" array (at least 2 {id, label} objects)';
+  }
+  if (o.options.length < MIN_OPTIONS) {
+    return `options must have at least ${MIN_OPTIONS} entries (got ${o.options.length})`;
+  }
+  for (let j = 0; j < o.options.length; j++) {
+    const opt = o.options[j];
+    if (typeof opt === 'string') {
+      return `options[${j}] must be {"id":"...","label":"..."} objects, not plain strings`;
+    }
+    if (!opt || typeof opt !== 'object') {
+      return `options[${j}] must be an object with id and label`;
+    }
+    const oo = opt as Record<string, unknown>;
+    if (!isNonEmptyString(oo.id)) {
+      if (isNonEmptyString(oo.value)) {
+        return `options[${j}]: use "id" (not "value") for the option id`;
+      }
+      return `options[${j}] missing non-empty "id"`;
+    }
+    if (!isNonEmptyString(oo.label)) {
+      if (isNonEmptyString(oo.text)) {
+        return `options[${j}]: use "label" (not "text") for the option title`;
+      }
+      if (isNonEmptyString(oo.name)) {
+        return `options[${j}]: use "label" (not "name") for the option title`;
+      }
+      return `options[${j}] missing non-empty "label"`;
+    }
+  }
+  if (typeof o.allow_multiple !== 'undefined' && typeof o.allow_multiple !== 'boolean') {
+    return 'allow_multiple must be a boolean when provided';
+  }
+  return null;
 }
 
 /**
@@ -88,10 +143,11 @@ export function validateAskQuestionArgs(
   const questionIds = new Set<string>();
   for (let i = 0; i < o.questions.length; i++) {
     const q = o.questions[i];
-    if (!isAskQuestionItem(q)) {
+    const itemError = diagnoseAskQuestionItem(q);
+    if (itemError) {
       return {
         ok: false,
-        error: `questions[${i}] must have id, prompt, and at least ${MIN_OPTIONS} options with id and label`,
+        error: `questions[${i}]: ${itemError}. Required shape: { "id": "...", "prompt": "...", "options": [{ "id": "...", "label": "..." }, ...] }`,
       };
     }
     if (questionIds.has(q.id)) {
