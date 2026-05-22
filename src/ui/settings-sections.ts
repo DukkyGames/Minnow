@@ -825,6 +825,7 @@ async function renderSubAgentsSection(): Promise<void> {
           modelId: type.modelId ?? '',
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
+          maxToolTurns: type.maxToolTurns,
         },
         (patch) => saveTypePatch(id, patch),
       );

@@ -499,7 +499,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 | Config merge | `src/agents/sub-agent-config.ts`, `src/agents/defaults/sub-agents.json` |
 | Orchestrator | `src/agents/orchestrator.ts` â€” spawn, cancel, queue, `restartSubAgent`, `cancelAllForParentTurn`, list/status helpers |
 | Events | `src/agents/sub-agent-events.ts` |
-| Runner | `src/agents/sub-agent-runner.ts` â€” headless tool loop (`MAX_SUB_AGENT_TOOL_TURNS = 6`) |
+| Runner | `src/agents/sub-agent-runner.ts` â€” headless tool loop; per-type `maxToolTurns` (defaults: `generalPurpose` 16, `explore` 12; overridable in `sub-agents.json`) |
 | Tool subset | `src/agents/sub-agent-tools.ts` |
 | Prompts | `src/agents/shipped-sub-agent-prompts.ts`, `src/agents/prompts/sub-agents/*.md` |
 | Parent tools | `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` in `src/tools/definitions.ts` |
@@ -510,7 +510,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Built-in types:** `generalPurpose`, `explore`, `shell`, `explorer` (Step 19 self-heal stub, `maxConcurrent: 1`).
 
-**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`.
+**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the cap sets run status **`failed`** (not `completed`) and linked board tasks **`failed`** (MIN-15 / MIN-10).
 
 **Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue).
 

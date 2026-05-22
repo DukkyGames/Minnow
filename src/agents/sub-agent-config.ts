@@ -8,6 +8,9 @@ import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
+/** Fallback when a type has no `maxToolTurns` in defaults or user config. */
+export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 12;
+
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
 
@@ -29,11 +32,17 @@ export function mergeSubAgentConfig(
     baseTypes[id] = cloneTypeConfig(cfg);
   }
 
+  const defaultMaxToolTurns =
+    user?.defaultMaxToolTurns ??
+    defaults.defaultMaxToolTurns ??
+    DEFAULT_SUB_AGENT_MAX_TOOL_TURNS;
+
   const merged: SubAgentsFile = {
     version: user?.version ?? defaults.version,
     enabled: user?.enabled ?? defaults.enabled,
     globalMaxConcurrent: user?.globalMaxConcurrent ?? defaults.globalMaxConcurrent,
     defaultTimeoutMs: user?.defaultTimeoutMs ?? defaults.defaultTimeoutMs,
+    defaultMaxToolTurns,
     types: baseTypes,
   };
 
@@ -45,6 +54,7 @@ export function mergeSubAgentConfig(
         modelId: '',
         maxConcurrent: 1,
         timeoutMs: merged.defaultTimeoutMs,
+        maxToolTurns: defaultMaxToolTurns,
         workAgentId: null,
         allowedTools: null,
         deniedTools: ['spawn_sub_agent', 'cancel_sub_agent'],
@@ -53,6 +63,7 @@ export function mergeSubAgentConfig(
       merged.types[id] = {
         ...existing,
         ...patch,
+        maxToolTurns: patch.maxToolTurns ?? existing.maxToolTurns ?? defaultMaxToolTurns,
         allowedTools:
           patch.allowedTools !== undefined
             ? patch.allowedTools
@@ -63,6 +74,12 @@ export function mergeSubAgentConfig(
           ? [...patch.deniedTools]
           : [...existing.deniedTools],
       };
+    }
+  }
+
+  for (const cfg of Object.values(merged.types)) {
+    if (!Number.isFinite(cfg.maxToolTurns) || cfg.maxToolTurns < 1) {
+      cfg.maxToolTurns = defaultMaxToolTurns;
     }
   }
 
