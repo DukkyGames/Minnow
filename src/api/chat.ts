@@ -35,6 +35,8 @@ import type {
   ToolCallAccumulator,
   Usage,
 } from '../types';
+import { markChatStalledForUi } from '../agents/supervisor/state.ts';
+import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
@@ -546,6 +548,10 @@ export async function sendMessage(): Promise<void> {
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         scheduleSaveSessions();
+      }
+
+      if (normalizeModeId(chat.modeId) === 'orchestrate') {
+        markChatStalledForUi(chat.id, false);
       }
 
       streamStatus.dispose();

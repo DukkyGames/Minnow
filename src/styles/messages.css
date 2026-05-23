@@ -245,6 +245,69 @@
   border-bottom-right-radius: var(--radius-sm);
 }
 
+.msg-bubble.msg-bubble--user-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-msg-text {
+  white-space: pre-wrap;
+}
+
+.user-msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.msg-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid color-mix(in oklch, var(--text) 12%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.msg-attach-chip--image {
+  padding-left: 4px;
+}
+
+.msg-attach-chip-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.msg-attach-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .msg-attach-chip:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+}
+
+.msg-attach-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .msg.assistant .msg-bubble {
   background: var(--asst-bg);
   border: 1px solid var(--border);

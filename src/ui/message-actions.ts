@@ -51,7 +51,9 @@ function guardStreaming(): boolean {
 }
 
 function getCopyText(wrap: HTMLElement): string {
-  const bubble = wrap.querySelector('.msg-bubble');
+  const bubble = wrap.querySelector('.msg-bubble') as HTMLElement | null;
+  const stored = bubble?.dataset.historyContent;
+  if (stored) return stored.trim();
   if (bubble) return (bubble.textContent ?? '').trim();
   return (wrap.textContent ?? '').trim();
 }
