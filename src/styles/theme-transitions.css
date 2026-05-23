@@ -1,0 +1,18 @@
+/* Smooth theme switches after boot (initTheme removes .theme-no-transition). */
+
+html.theme-ready:not(.theme-no-transition) body,
+html.theme-ready:not(.theme-no-transition) body * {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    fill 160ms ease,
+    stroke 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-ready:not(.theme-no-transition) body,
+  html.theme-ready:not(.theme-no-transition) body * {
+    transition: none;
+  }
+}
