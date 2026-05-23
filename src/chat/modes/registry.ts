@@ -84,14 +84,6 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     promptId: 'reef',
     toolPolicy: { default: 'allow' },
   },
-  {
-    id: 'debug',
-    label: 'Bugs',
-    description:
-      'Track bugs on a Kanban board; investigate, plan fixes, and orchestrate repairs.',
-    promptId: 'debug',
-    toolPolicy: { default: 'allow' },
-  },
 ];
 
 /** Fixed five modes in display order. */

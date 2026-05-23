@@ -23,6 +23,7 @@ import { createGenerationsMiddleware } from './server/generations/routes.js';
 import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
+import { createBenchmarksMiddleware } from './server/benchmarks/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
@@ -797,6 +798,7 @@ async function main() {
             attachPtyWebSocketServer(server.httpServer);
           }
           server.middlewares.use(createConfigMiddleware());
+          server.middlewares.use(createBenchmarksMiddleware());
           server.middlewares.use(createWorkspaceMiddleware());
           server.middlewares.use(createMemoryMiddleware());
           server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));

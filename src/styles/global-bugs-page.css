@@ -174,38 +174,22 @@
   border: 1px solid color-mix(in oklch, var(--danger, #dc2626) 40%, var(--border));
 }
 
-/* Sidebar entry */
-.chat-all-bugs-wide {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  margin: 0 0 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.chat-all-bugs-wide:hover {
-  border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
-}
-
+/* Sidebar footer entry (matches agent-activity badge) */
 .chat-all-bugs-count {
-  min-width: 1.25rem;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--bg);
-  font-size: 0.68rem;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 14px;
+  text-align: center;
+  color: var(--surface);
+  background: var(--accent);
+  border-radius: 7px;
+  pointer-events: none;
 }
 
 .chat-all-bugs-count[hidden] {

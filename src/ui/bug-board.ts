@@ -1,5 +1,5 @@
 /**
- * Bug tracker Board View: five-column Kanban (MIN-16).
+ * Bug tracker Kanban — rendered only on the global All bugs page (MIN-16).
  */
 
 import {
@@ -7,20 +7,25 @@ import {
   runBugPlanFix,
   runBugStartFix,
 } from '../chat/bug-board/pipeline.ts';
-import { normalizeModeId } from '../chat/modes/types.ts';
+import {
+  collectGlobalBugs,
+  type CollectGlobalBugsOptions,
+  type GlobalBugEntry,
+} from '../state/global-bugs.ts';
 import { subscribeBugBoardChanges } from '../state/bug-board-events.ts';
 import {
   addBug,
-  countBugsByColumn,
   isBugSeverity,
   type AddBugInput,
 } from '../state/bug-board-store.ts';
-import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions.ts';
-import type { BugCard, BugColumn, Chat } from '../types.ts';
 import {
-  appendBoardChatViewToggle,
-  syncViewModeToggleFromActiveChat,
-} from './view-mode-toggle.ts';
+  findChatById,
+  getActiveChat,
+  getChatsForWorkspace,
+  sessionState,
+} from '../state/sessions.ts';
+import { getWorkspacePath } from '../state/workspace.ts';
+import type { BugCard, BugColumn } from '../types.ts';
 
 const COLUMNS: Array<{ id: BugColumn; label: string }> = [
   { id: 'reported', label: 'Reported' },
@@ -30,8 +35,13 @@ const COLUMNS: Array<{ id: BugColumn; label: string }> = [
   { id: 'complete', label: 'Complete' },
 ];
 
-let currentChatId: string | null = null;
-let unsubBugBoard: (() => void) | null = null;
+let kanbanMount: HTMLElement | null = null;
+let collectOptions: CollectGlobalBugsOptions = {};
+const bugChangeUnsubs = new Map<string, () => void>();
+
+function isGlobalBugsPageOpen(): boolean {
+  return document.getElementById('globalBugsView')?.classList.contains('is-open') ?? false;
+}
 
 function sendBoardMessage(text: string): void {
   const input = document.getElementById('messageInput') as HTMLTextAreaElement | null;
@@ -42,41 +52,53 @@ function sendBoardMessage(text: string): void {
   void import('../chat/messaging').then((m) => m.sendMessage());
 }
 
-function disposeBugBoardSession(): void {
-  unsubBugBoard?.();
-  unsubBugBoard = null;
-  currentChatId = null;
+function disposeBugSubscriptions(): void {
+  for (const fn of bugChangeUnsubs.values()) fn();
+  bugChangeUnsubs.clear();
 }
 
-function ensureBugBoardSession(chatId: string): void {
-  if (currentChatId === chatId) return;
-  disposeBugBoardSession();
-  currentChatId = chatId;
-  unsubBugBoard = subscribeBugBoardChanges(chatId, () => {
-    if (!isDebugBoardViewActive()) return;
-    if (getActiveChat().id !== chatId) return;
-    refreshActiveBugBoardIfMounted();
+function ensureBugSubscriptions(): void {
+  if (!sessionState) return;
+  const needed = new Set<string>();
+  for (const chat of sessionState.chats) {
+    if (!chat.bugBoard?.bugs.length) continue;
+    needed.add(chat.id);
+    if (!bugChangeUnsubs.has(chat.id)) {
+      const unsub = subscribeBugBoardChanges(chat.id, () => {
+        if (isGlobalBugsPageOpen()) refreshGlobalBugKanban();
+      });
+      bugChangeUnsubs.set(chat.id, unsub);
+    }
+  }
+  for (const [chatId, unsub] of bugChangeUnsubs) {
+    if (!needed.has(chatId)) {
+      unsub();
+      bugChangeUnsubs.delete(chatId);
+    }
+  }
+}
+
+function setBugBoardStatus(message: string, kind: 'ok' | 'err' | 'idle'): void {
+  void import('./status').then((m) => {
+    if (kind === 'idle') m.setStatus('idle', '');
+    else m.setStatus(kind === 'ok' ? 'ok' : 'err', message);
   });
 }
 
-/** True when debug mode should show the bug Kanban. */
-export function isDebugBoardViewActive(): boolean {
-  const chat = getActiveChat();
-  return normalizeModeId(chat.modeId) === 'debug' && chat.viewMode === 'board';
-}
-
-function columnActions(bug: BugCard): Array<{ label: string; action: () => void }> {
-  const chat = getActiveChat();
+function columnActions(
+  chatId: string,
+  bug: BugCard,
+): Array<{ label: string; action: () => void }> {
   const actions: Array<{ label: string; action: () => void }> = [];
 
   if (bug.column === 'reported' || bug.column === 'investigating') {
     actions.push({
       label: 'Investigate',
       action: () => {
-        void runBugInvestigate(chat.id, bug.id).then((r) => {
+        void runBugInvestigate(chatId, bug.id).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Investigate failed', 'err');
           else setBugBoardStatus('Investigation complete', 'ok');
-          refreshActiveBugBoardIfMounted();
+          refreshGlobalBugKanban();
         });
       },
     });
@@ -85,10 +107,10 @@ function columnActions(bug: BugCard): Array<{ label: string; action: () => void 
     actions.push({
       label: 'Plan fix',
       action: () => {
-        void runBugPlanFix(chat.id, bug.id).then((r) => {
+        void runBugPlanFix(chatId, bug.id).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Plan failed', 'err');
           else setBugBoardStatus(`Plan: ${r.planPath}`, 'ok');
-          refreshActiveBugBoardIfMounted();
+          refreshGlobalBugKanban();
         });
       },
     });
@@ -97,10 +119,10 @@ function columnActions(bug: BugCard): Array<{ label: string; action: () => void 
     actions.push({
       label: 'Start fix',
       action: () => {
-        void runBugStartFix(chat.id, bug.id, sendBoardMessage).then((r) => {
+        void import('./global-bugs-page').then((m) => m.closeGlobalBugs());
+        void runBugStartFix(chatId, bug.id, sendBoardMessage).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Start fix failed', 'err');
           else setBugBoardStatus('Orchestrator started', 'ok');
-          refreshActiveBugBoardIfMounted();
         });
       },
     });
@@ -116,17 +138,12 @@ function columnActions(bug: BugCard): Array<{ label: string; action: () => void 
   return actions;
 }
 
-function setBugBoardStatus(message: string, kind: 'ok' | 'err' | 'idle'): void {
-  void import('./status').then((m) => {
-    if (kind === 'idle') m.setStatus('idle', '');
-    else m.setStatus(kind === 'ok' ? 'ok' : 'err', message);
-  });
-}
-
-function renderBugCard(bug: BugCard, chat: Chat): HTMLElement {
+function renderBugCard(entry: GlobalBugEntry): HTMLElement {
+  const { bug, chatId, chatName } = entry;
   const card = document.createElement('article');
   card.className = 'board-task-card bug-task-card';
   card.dataset.bugId = bug.id;
+  card.dataset.chatId = chatId;
 
   const title = document.createElement('h4');
   title.className = 'board-task-card__title';
@@ -134,7 +151,7 @@ function renderBugCard(bug: BugCard, chat: Chat): HTMLElement {
 
   const meta = document.createElement('div');
   meta.className = 'board-task-card__meta';
-  meta.textContent = `${bug.severity} · ${bug.id}`;
+  meta.textContent = `${bug.severity} · ${chatName}`;
 
   card.appendChild(title);
   card.appendChild(meta);
@@ -159,7 +176,7 @@ function renderBugCard(bug: BugCard, chat: Chat): HTMLElement {
 
   const actionsRow = document.createElement('div');
   actionsRow.className = 'bug-task-card__actions';
-  for (const { label, action } of columnActions(bug)) {
+  for (const { label, action } of columnActions(chatId, bug)) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'board-btn board-btn--sm';
@@ -176,10 +193,32 @@ function renderBugCard(bug: BugCard, chat: Chat): HTMLElement {
   return card;
 }
 
-function renderAddBugForm(chat: Chat, container: HTMLElement): void {
+function chatsForAddBugForm(): Chat[] {
+  if (!sessionState) return [];
+  const workspace = getWorkspacePath();
+  const scoped = getChatsForWorkspace(workspace, sessionState);
+  return scoped.length ? scoped : sessionState.chats.slice(0, 20);
+}
+
+function renderAddBugForm(container: HTMLElement): void {
+  container.innerHTML = '';
   const form = document.createElement('form');
   form.className = 'bug-add-form';
   form.setAttribute('aria-label', 'Add bug');
+
+  const chatSelect = document.createElement('select');
+  chatSelect.name = 'chat';
+  chatSelect.className = 'bug-add-form__input';
+  chatSelect.setAttribute('aria-label', 'Target chat');
+  const chats = chatsForAddBugForm();
+  const activeId = getActiveChat().id;
+  for (const chat of chats) {
+    const opt = document.createElement('option');
+    opt.value = chat.id;
+    opt.textContent = chat.name;
+    if (chat.id === activeId) opt.selected = true;
+    chatSelect.appendChild(opt);
+  }
 
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -210,35 +249,48 @@ function renderAddBugForm(chat: Chat, container: HTMLElement): void {
   submit.className = 'board-btn';
   submit.textContent = 'Add bug';
 
-  form.append(titleInput, descInput, severitySelect, submit);
+  form.append(chatSelect, titleInput, descInput, severitySelect, submit);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    const chat = findChatById(chatSelect.value);
+    if (!chat) return;
     const title = titleInput.value.trim();
     const description = descInput.value.trim();
     const severityRaw = severitySelect.value;
-    if (!title) return;
-    if (!isBugSeverity(severityRaw)) return;
+    if (!title || !isBugSeverity(severityRaw)) return;
 
     const input: AddBugInput = { title, description, severity: severityRaw };
     const bugId = `bug-${Date.now().toString(36)}`;
     addBug(chat, input, bugId);
     titleInput.value = '';
     descInput.value = '';
-    refreshActiveBugBoardIfMounted();
+    refreshGlobalBugKanban();
+    void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
   });
 
   container.appendChild(form);
 }
 
-function refreshBugBoardDom(root: HTMLElement, chat: Chat): void {
-  const board = chat.bugBoard;
-  if (!board) return;
+function countEntriesByColumn(entries: GlobalBugEntry[]): Record<BugColumn, number> {
+  const counts: Record<BugColumn, number> = {
+    reported: 0,
+    investigating: 0,
+    planned: 0,
+    fixing: 0,
+    complete: 0,
+  };
+  for (const entry of entries) {
+    counts[entry.bug.column] += 1;
+  }
+  return counts;
+}
 
-  const counts = countBugsByColumn(board);
+function refreshKanbanDom(root: HTMLElement, entries: GlobalBugEntry[]): void {
+  const counts = countEntriesByColumn(entries);
   const titleEl = root.querySelector('.board-header__title');
   if (titleEl) {
-    titleEl.textContent = `Bug tracker · ${board.bugs.length} open`;
+    titleEl.textContent = `Bug tracker · ${entries.length} shown`;
   }
 
   const kanban = root.querySelector('.board-kanban');
@@ -258,8 +310,8 @@ function refreshBugBoardDom(root: HTMLElement, chat: Chat): void {
     const list = document.createElement('div');
     list.className = 'board-column__tasks';
 
-    for (const bug of board.bugs.filter((b) => b.column === col.id)) {
-      list.appendChild(renderBugCard(bug, chat));
+    for (const entry of entries.filter((e) => e.bug.column === col.id)) {
+      list.appendChild(renderBugCard(entry));
     }
 
     columnEl.appendChild(list);
@@ -267,77 +319,70 @@ function refreshBugBoardDom(root: HTMLElement, chat: Chat): void {
   }
 }
 
-/** Re-render kanban in place when session is stable. */
-export function refreshActiveBugBoardIfMounted(): void {
-  const area = document.getElementById('chatArea');
-  const root = area?.querySelector(':scope > .board-root.bug-board-root') as HTMLElement | null;
-  if (!root) return;
-  const chat = getActiveChat();
-  refreshBugBoardDom(root, chat);
+/** Update filter options used for the global kanban. */
+export function setGlobalBugKanbanOptions(options: CollectGlobalBugsOptions): void {
+  collectOptions = { ...options };
 }
 
-/** Mount or refresh bug board in #chatArea. */
-export function renderBugBoardView(chat: Chat): void {
-  const area = document.getElementById('chatArea');
-  if (!area) return;
+/** Re-render global kanban when filters or bugs change. */
+export function refreshGlobalBugKanban(): void {
+  if (!kanbanMount || !sessionState) return;
+  ensureBugSubscriptions();
+  const entries = collectGlobalBugs(sessionState.chats, collectOptions);
+  const root = kanbanMount.querySelector('.board-root.bug-board-root');
+  if (!root) return;
+  refreshKanbanDom(root as HTMLElement, entries);
 
-  const active = getActiveChat();
-  const chatForRender = active.id === chat.id ? active : chat;
-  const existingRoot = area.querySelector(
-    ':scope > .board-root.bug-board-root',
-  ) as HTMLElement | null;
-
-  if (existingRoot && currentChatId === chatForRender.id) {
-    refreshBugBoardDom(existingRoot, chatForRender);
-    ensureBugBoardSession(chatForRender.id);
-    syncViewModeToggleFromActiveChat();
-    return;
+  const empty = kanbanMount.querySelector('.global-bugs-empty');
+  if (empty) {
+    empty.classList.toggle('hidden', entries.length > 0);
   }
+}
 
-  disposeBugBoardSession();
-  area.innerHTML = '';
+/** Mount aggregated bug Kanban into the global bugs page. */
+export function mountGlobalBugKanban(mount: HTMLElement): void {
+  kanbanMount = mount;
+  mount.innerHTML = '';
 
   const root = document.createElement('section');
   root.className = 'board-root bug-board-root';
 
   const header = document.createElement('header');
   header.className = 'board-header';
-
   const toolbar = document.createElement('div');
   toolbar.className = 'board-header__toolbar';
-
   const leading = document.createElement('div');
   leading.className = 'board-header__leading';
   const title = document.createElement('h2');
   title.className = 'board-header__title';
   title.textContent = 'Bug tracker';
   leading.appendChild(title);
-
-  const controls = document.createElement('div');
-  controls.className = 'board-header__controls';
-  appendBoardChatViewToggle(controls);
-
-  toolbar.append(leading, controls);
+  toolbar.appendChild(leading);
   header.appendChild(toolbar);
   root.appendChild(header);
 
   const addSection = document.createElement('div');
   addSection.className = 'bug-add-section';
-  renderAddBugForm(chatForRender, addSection);
+  renderAddBugForm(addSection);
   root.appendChild(addSection);
+
+  const empty = document.createElement('p');
+  empty.className = 'global-bugs-empty';
+  empty.textContent =
+    'No bugs match these filters. Add one above or widen the workspace filter.';
 
   const kanban = document.createElement('div');
   kanban.className = 'board-kanban bug-board-kanban';
   root.appendChild(kanban);
 
-  area.appendChild(root);
+  mount.appendChild(empty);
+  mount.appendChild(root);
 
-  if (!chatForRender.bugBoard) {
-    touchChat(chatForRender);
-    scheduleSaveSessions();
-  }
+  refreshGlobalBugKanban();
+}
 
-  refreshBugBoardDom(root, chatForRender);
-  ensureBugBoardSession(chatForRender.id);
-  syncViewModeToggleFromActiveChat();
+/** Tear down global kanban listeners. */
+export function unmountGlobalBugKanban(): void {
+  disposeBugSubscriptions();
+  kanbanMount = null;
 }

@@ -1,8 +1,7 @@
 /**
- * Bug tracker tools: bug_add, bug_update, bug_get_state (debug mode).
+ * Bug tracker tools: bug_add, bug_update, bug_get_state (global #/bugs screen only).
  */
 
-import { normalizeModeId } from '../chat/modes/types.ts';
 import {
   addBug,
   getBugBoardSnapshot,
@@ -11,6 +10,7 @@ import {
   updateBug,
 } from '../state/bug-board-store.ts';
 import { findChatById } from '../state/sessions.ts';
+import { isGlobalBugsPageOpen } from '../ui/global-bugs-page.ts';
 import type { BugCard, Chat } from '../types.ts';
 
 export interface BugBoardExecutorContext {
@@ -24,12 +24,11 @@ export function setBugBoardExecutorContext(ctx: BugBoardExecutorContext | null):
   executorContext = ctx;
 }
 
-function resolveDebugChat(): Chat | null {
+function resolveBugToolChat(): Chat | null {
+  if (!isGlobalBugsPageOpen()) return null;
   const chatId = executorContext?.chatId?.trim();
   if (!chatId) return null;
-  const chat = findChatById(chatId);
-  if (!chat || normalizeModeId(chat.modeId) !== 'debug') return null;
-  return chat;
+  return findChatById(chatId);
 }
 
 function newBugId(): string {
@@ -109,9 +108,9 @@ export async function executeBugBoardTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  const chat = resolveDebugChat();
+  const chat = resolveBugToolChat();
   if (!chat) {
-    return 'Error: bug board tools require debug mode on the active chat';
+    return 'Error: bug board tools are only available on the All bugs screen (#/bugs)';
   }
 
   if (name === 'bug_add') {

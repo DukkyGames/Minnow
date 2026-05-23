@@ -176,6 +176,9 @@
     <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
+    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
+    </button>
     <div class="workspace-control">
       <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
       <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
@@ -598,6 +601,40 @@
   </div>
 </main>
 
+<main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
+  <header class="benchmark-page-header">
+    <button class="icon-btn" type="button" id="btnBenchmarkPageBack" aria-label="Back to chat">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h1>Benchmark</h1>
+  </header>
+  <div class="benchmark-page-body">
+    <div class="benchmark-run-bar">
+      <button type="button" class="is-primary" id="btnBenchmarkQuick">Quick</button>
+      <button type="button" id="btnBenchmarkFull">Full</button>
+      <button type="button" id="btnBenchmarkCustom">Custom suites</button>
+      <button type="button" id="btnBenchmarkStop" disabled>Stop</button>
+      <div id="benchmarkCustomSuites" class="benchmark-suite-checkboxes" hidden>
+        <label><input type="checkbox" value="capability" checked /> Capability</label>
+        <label><input type="checkbox" value="speed" checked /> Speed</label>
+        <label><input type="checkbox" value="tools" /> Tools</label>
+        <label><input type="checkbox" value="skills" /> Skills</label>
+        <label><input type="checkbox" value="modes" checked /> Modes</label>
+        <label><input type="checkbox" value="coding" /> Coding</label>
+      </div>
+    </div>
+    <div id="benchmarkSummary" class="benchmark-summary">
+      <p class="benchmark-empty">Run Quick or Full to score the active model.</p>
+    </div>
+    <div class="benchmark-history-row">
+      <label for="benchmarkHistorySelect">History</label>
+      <select id="benchmarkHistorySelect" aria-label="Previous benchmark run"></select>
+      <label><input type="checkbox" id="benchmarkCompareToggle" /> Compare</label>
+    </div>
+    <div id="benchmarkSuites"></div>
+  </div>
+</main>
+
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
     <div class="chat-sidebar-header">
@@ -607,13 +644,13 @@
       </button>
     </div>
     <button type="button" class="chat-new-wide" onclick="createChat()">+ New chat</button>
-    <button type="button" class="chat-all-bugs-wide" id="btnAllBugs">
-      All bugs
-      <span class="chat-all-bugs-count" id="btnAllBugsCount" hidden aria-hidden="true"></span>
-    </button>
     <button type="button" class="chat-new-compact" aria-label="New chat" onclick="createChat()">+</button>
     <div class="chat-list" id="chatList" role="list"></div>
     <div class="chat-sidebar-footer">
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="All bugs" title="All bugs">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>
+        <span class="chat-all-bugs-count" id="btnAllBugsCount" hidden aria-hidden="true"></span>
+      </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
       </button>

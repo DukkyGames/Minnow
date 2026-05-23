@@ -1,0 +1,227 @@
+/**
+ * Benchmark full-page view — bench-instrument layout (mirrors settings-page).
+ */
+
+.benchmark-page {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.benchmark-page.is-open {
+  display: flex;
+}
+
+.benchmark-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.benchmark-page-header h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.benchmark-page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  max-width: 960px;
+}
+
+.benchmark-run-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.benchmark-run-bar button {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.benchmark-run-bar button:hover {
+  background: var(--accent-subtle);
+}
+
+.benchmark-run-bar button.is-primary {
+  background: var(--accent);
+  color: var(--text-hover);
+  border-color: var(--accent);
+}
+
+.benchmark-run-bar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.benchmark-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.benchmark-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.benchmark-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.benchmark-metric-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.benchmark-metric-value.is-good {
+  color: var(--success);
+}
+
+.benchmark-metric-value.is-warn {
+  color: var(--warning);
+}
+
+.benchmark-metric-value.is-bad {
+  color: var(--danger);
+}
+
+.benchmark-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.benchmark-history-row label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.benchmark-history-row select {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.benchmark-suite {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.benchmark-suite-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.benchmark-suite-header:hover {
+  background: var(--surface-elevated);
+}
+
+.benchmark-suite-body {
+  display: none;
+  border-top: 1px solid var(--border);
+}
+
+.benchmark-suite.is-expanded .benchmark-suite-body {
+  display: block;
+}
+
+.benchmark-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.benchmark-results-table th,
+.benchmark-results-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.benchmark-results-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.benchmark-results-table tr.is-regression td {
+  background: oklch(0.62 0.18 15 / 0.08);
+}
+
+.benchmark-results-table tr[data-judged='true'] td:first-child::after {
+  content: ' · judged';
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.benchmark-status {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.benchmark-empty {
+  margin: 24px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.benchmark-suite-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.benchmark-suite-checkboxes label {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

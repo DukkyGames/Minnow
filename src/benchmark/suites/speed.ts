@@ -1,0 +1,119 @@
+/**
+ * Speed suite: median TTFT and tok/s from fixed prompts.
+ */
+
+import { runOneShot } from '../llm-driver.ts';
+import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
+
+const SHORT_PROMPT =
+  'Write exactly three short sentences about local LLM inference. No preamble.';
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
+  suite: SuiteResult;
+  headlineTtftMs: number;
+  headlineTokPerSec: number;
+}> {
+  const tests: TestResult[] = [];
+  const ttftSamples: number[] = [];
+  const tpsSamples: number[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    try {
+      const out = await runOneShot({
+        providerId: ctx.providerId,
+        modelId: ctx.modelId,
+        signal: ctx.signal,
+        messages: [{ role: 'user', content: SHORT_PROMPT }],
+        maxTokens: 200,
+      });
+      const durationMs = performance.now() - t0;
+      if (out.timing.ttftMs != null) ttftSamples.push(out.timing.ttftMs);
+      if (out.timing.tokPerSec != null) tpsSamples.push(out.timing.tokPerSec);
+      tests.push({
+        testId: `speed-short-${i + 1}`,
+        suite: 'speed',
+        label: `Short run ${i + 1}`,
+        passed: true,
+        skipped: false,
+        durationMs,
+        ttftMs: out.timing.ttftMs ?? undefined,
+        tokPerSec: out.timing.tokPerSec ?? undefined,
+        score: 1,
+        details: `${out.text.length} chars`,
+      });
+    } catch (err) {
+      tests.push({
+        testId: `speed-short-${i + 1}`,
+        suite: 'speed',
+        label: `Short run ${i + 1}`,
+        passed: false,
+        skipped: false,
+        durationMs: performance.now() - t0,
+        score: 0,
+        details: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const tLong = performance.now();
+  try {
+    const out = await runOneShot({
+      providerId: ctx.providerId,
+      modelId: ctx.modelId,
+      signal: ctx.signal,
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Explain how transformer attention works in about 400 words. Use clear paragraphs.',
+        },
+      ],
+      maxTokens: 600,
+    });
+    const durationMs = performance.now() - tLong;
+    if (out.timing.tokPerSec != null) tpsSamples.push(out.timing.tokPerSec);
+    tests.push({
+      testId: 'speed-long-1',
+      suite: 'speed',
+      label: 'Sustained throughput',
+      passed: true,
+      skipped: false,
+      durationMs,
+      tokPerSec: out.timing.tokPerSec ?? undefined,
+      score: 1,
+    });
+  } catch (err) {
+    tests.push({
+      testId: 'speed-long-1',
+      suite: 'speed',
+      label: 'Sustained throughput',
+      passed: false,
+      skipped: false,
+      durationMs: performance.now() - tLong,
+      score: 0,
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return {
+    suite: {
+      id: 'speed',
+      label: 'Speed',
+      passed: tests.filter((t) => t.passed).length,
+      failed: tests.filter((t) => !t.passed).length,
+      skipped: 0,
+      score: 1,
+      tests,
+    },
+    headlineTtftMs: median(ttftSamples),
+    headlineTokPerSec: median(tpsSamples),
+  };
+}
