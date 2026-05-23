@@ -35,6 +35,7 @@ import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
 import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
 import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
 import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
+import { isResolvedPathUnderRoot } from './server/workspace/safe-path.js';
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
 import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
 import {
@@ -59,11 +60,6 @@ const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 /** Per-request flag: allow paths outside workspace when config grants full filesystem access. */
 const pathAccessStore = new AsyncLocalStorage();
-
-/** Normalize slashes for consistent prefix checks on Windows. */
-function normalizePath(p) {
-  return path.normalize(p).replace(/\\/g, '/');
-}
 
 /**
  * Resolve a user-supplied path under the workspace root unless full access is allowed
@@ -105,10 +101,7 @@ function resolveSafePath(userPath, options = {}) {
     return resolved;
   }
 
-  const rootNorm = normalizePath(workspaceRoot);
-  const resolvedNorm = normalizePath(resolved);
-
-  if (resolvedNorm === rootNorm || resolvedNorm.startsWith(`${rootNorm}/`)) {
+  if (isResolvedPathUnderRoot(resolved, workspaceRoot)) {
     return resolved;
   }
 

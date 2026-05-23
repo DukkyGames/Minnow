@@ -464,9 +464,9 @@ The **workspace** is the directory where file/git/terminal tools and the file tr
 
 **Menu UX:** Click `#btnWorkspace` â†’ popover (right-aligned to the button, opens left) lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspaceâ€¦** opens the centered folder browser (current folder pinned at top with **This folder**, indented subfolders with â€º chevrons, **Folders** section label, Up, double-click to drill down, **Open folder** / Cancel, Escape / overlay dismiss). Starts at the current workspace when set; browse roots show Home (+ drive letters on Windows). Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
 
-**Server wiring:** `server.js` `resolveSafePath`, git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
+**Server wiring:** `server.js` `resolveSafePath` (canonical boundary via [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `fs.realpathSync`), git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
 
-**Tests:** `test/workspace/workspace-api.test.js`, `test/ui/workspace-recent-menu.test.mjs`. Verification: [`documentation/plans/verification/feature-04.md`](plans/verification/feature-04.md).
+**Tests:** `test/workspace/workspace-api.test.js`, `test/workspace/safe-path.test.js`, `test/ui/workspace-recent-menu.test.mjs`. Verification: [`documentation/plans/verification/feature-04.md`](plans/verification/feature-04.md).
 
 ### File panel (Step 11)
 
@@ -658,7 +658,7 @@ Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/clie
 
 ### Path policy (server)
 
-- **Workspace-only (default):** [`server.js`](../server.js) `resolveSafePath()` keeps paths under `getWorkspaceRoot()` unless **`toolSecurity.filesystemAccess`** in `config.json` is **`full`** or **`TOOLS_ALLOW_ALL_PATHS=1`** (automation escape hatch). Read from disk per tool request via [`server/config/tool-security.js`](../server/config/tool-security.js) and `AsyncLocalStorage` so nested calls stay scoped.
+- **Workspace-only (default):** [`server.js`](../server.js) `resolveSafePath()` keeps paths under `getWorkspaceRoot()` using `path.resolve` plus [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `realpath` prefix checks (blocks symlink escapes). Full access when **`toolSecurity.filesystemAccess`** in `config.json` is **`full`** or **`TOOLS_ALLOW_ALL_PATHS=1`** (automation escape hatch). Read from disk per tool request via [`server/config/tool-security.js`](../server/config/tool-security.js) and `AsyncLocalStorage` so nested calls stay scoped.
 
 ## Persisted message types (`chat.history`)
 
@@ -798,7 +798,7 @@ Browser (same origin :5173)
 | `/api/terminal/cancel/:runId` | POST | `{ ok: true }` (SIGTERM when supported) |
 
 - **CORS:** `*` for local dev; **OPTIONS** â†’ 204.
-- **Path guard:** `resolveSafePath()` â€” paths under the workspace root unless `toolSecurity.filesystemAccess` is `full` in `config.json` or `TOOLS_ALLOW_ALL_PATHS=1`.
+- **Path guard:** `resolveSafePath()` â€” paths under the workspace root after `realpath` canonicalization (`server/workspace/safe-path.js`) unless `toolSecurity.filesystemAccess` is `full` in `config.json` or `TOOLS_ALLOW_ALL_PATHS=1`. Client approval UX uses string prefix rules in `src/tools/workspace-path-guard.ts` (server remains authoritative).
 - **Errors:** Handlers return **strings**; failures use `Error: â€¦` prefix (not thrown to the client).
 - **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected â€” the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
 - **Timeouts:** `execute_command`, `run_javascript`, `run_python` â€” **30s**.
