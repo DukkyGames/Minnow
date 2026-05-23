@@ -385,7 +385,7 @@ Closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes
 
 | Concern | Location |
 |---------|----------|
-| Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-pending-ui.ts`, `widget-iframe.ts`, `widget-error-ui.ts`, `widget-validation.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
+| Mount pipeline | `src/chat/reef/` (`widget-block-detector.ts`, `widget-fence-body.ts`, `widget-pending-ui.ts`, `widget-iframe.ts`, `widget-error-ui.ts`, `widget-validation.ts`, `theme-forward.ts`, `widget-prelude.ts`, `widget-bridge.ts`, `run-widget-completion.ts`) |
 | Renderer hook | `mountReefWidgets(bubble, { bubbleStreaming, modeId })` at end of `setAssistantBubbleContent` in `src/markdown/renderer.ts`; history render passes `chat.modeId` via `appendBubble` meta |
 | Bridge init | `initReefBridge()` in `src/main.ts` |
 | Styles | `src/styles/reef-widgets.css` |
@@ -401,7 +401,7 @@ Closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes
 
 **JSX guard:** Before Babel, the iframe runner auto-quotes `color: var(--text)` → `color: 'var(--text)'` in widget scripts (`widget-jsx-guard.ts`); prompts tell models to quote tokens in `style={{ }}` (bare `var()` is valid only in `<style>` CSS).
 
-**Iframe sizing:** Host owns iframe width (100% of bubble) and height (from prelude `resize` messages). Widgets must not set outer iframe dimensions or `100vh`. Prelude posts resize on load plus delayed passes (0 / 100 / 400 ms), then `validateResult` (~500 ms) so the host can reveal or show errors before the user sees a broken iframe.
+**Iframe sizing / validation:** Host owns iframe width (100% of bubble) and height (from prelude `resize` messages). Widgets must not set outer iframe dimensions or `100vh`. Before mount, `prepareReefWidgetHtml` (`widget-fence-body.ts`) rejects empty bodies, nested `` ```reef-widget `` markers, stray backtick fences, and unclosed `<style>` / `<script>` tags (common when the model re-opens a fence mid-stream); shows an error panel instead of a blank iframe. `setSrcdoc` runs only after the host is in the document. Validation timeout starts after iframe `load` (5s). Prelude posts resize on load plus delayed passes (0 / 100 / 400 ms; extra passes for JSX), then `validateResult` after the first resize (600 ms HTML, ~2.8s JSX). Host accepts `postMessage` when `origin` is `null` or `''` and `source` is `null`. If the probe never reports in, the host still reveals at default height unless runtime errors were recorded.
 
 **Tests:** `test/chat/reef/*.test.mts`, `test/chat/reef/*.test.mjs` (template/snippet conventions, `reef-prompts-catalog.test.mjs`, `reef-save-prompt.test.mjs`). Plan: [`documentation/plans/feature-reef-mode-widgets.md`](plans/feature-reef-mode-widgets.md), expansion: [`documentation/plans/reef-widget-library-expansion.md`](plans/reef-widget-library-expansion.md). Verification: [`documentation/plans/verification/feature-reef.md`](plans/verification/feature-reef.md).
 

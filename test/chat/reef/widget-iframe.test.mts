@@ -34,7 +34,8 @@ describe('widget-iframe', () => {
     assert.match(srcdoc, /ensureChartParentsSized/);
     assert.match(srcdoc, /scheduleDelayedResizePasses/);
     assert.match(srcdoc, /setTimeout\(scheduleResizePost, 400\)/);
-    assert.match(srcdoc, /emitValidateResult/);
+    assert.match(srcdoc, /tryEmitValidateAfterResize/);
+    assert.match(srcdoc, /emitValidateResultOnce/);
     assert.match(srcdoc, /validateResult/);
     assert.match(srcdoc, /captureWidgetError/);
   });

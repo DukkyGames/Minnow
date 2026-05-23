@@ -88,18 +88,45 @@ export const PRELUDE_SCRIPT = `(function () {
     });
   }
 
+  var validateEmitted = false;
+
+  function emitValidateResultOnce() {
+    if (validateEmitted) return;
+    validateEmitted = true;
+    emitValidateResult();
+  }
+
+  function tryEmitValidateAfterResize() {
+    if (validateEmitted) return;
+    postResizeToHost();
+    if (lastPostedHeight >= 24) {
+      emitValidateResultOnce();
+      return;
+    }
+    setTimeout(function () {
+      postResizeToHost();
+      emitValidateResultOnce();
+    }, 80);
+  }
+
   /** Catch dynamic DOM (sync scripts, ESM, charts) that mount after the first measure. */
   function scheduleDelayedResizePasses() {
-    /* Direct call first: rAF can be throttled when the host hides the iframe with
-       visibility:hidden during validation, causing resize to arrive after validateResult.
-       postResizeToHost() deduplicates via lastPostedHeight so this is safe to call often. */
+    var hasJsx = document.querySelector('script[type="text/jsx"]') != null;
+    var validateDelayMs = hasJsx ? 2800 : 600;
+
+    /* Sync measure first: rAF can lag while the host probes with a hidden iframe. */
     postResizeToHost();
     scheduleResizePost();
     setTimeout(scheduleResizePost, 0);
     setTimeout(postResizeToHost, 0);
     setTimeout(scheduleResizePost, 100);
     setTimeout(scheduleResizePost, 400);
-    setTimeout(emitValidateResult, 500);
+    if (hasJsx) {
+      setTimeout(scheduleResizePost, 1200);
+      setTimeout(scheduleResizePost, 2200);
+    }
+    setTimeout(tryEmitValidateAfterResize, validateDelayMs);
+    setTimeout(emitValidateResultOnce, hasJsx ? 4200 : 1800);
   }
 
   window.addEventListener("message", function (ev) {
