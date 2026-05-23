@@ -9,9 +9,10 @@ import {
   countOpenGlobalBugs,
   type GlobalBugScope,
 } from '../state/global-bugs.ts';
-import { sessionState } from '../state/sessions.ts';
+import { findChatById, sessionState } from '../state/sessions.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
 import type { BugColumn } from '../types.ts';
+import { switchChat } from './sidebar.ts';
 import {
   mountGlobalBugKanban,
   refreshGlobalBugKanban,
@@ -53,7 +54,7 @@ function applyCollectOptions(): void {
 
 /** Rebuild kanban + summary from current filters. */
 export function renderGlobalBugsList(): void {
-  const mount = document.getElementById('globalBugsKanbanMount');
+  const mount = document.getElementById('globalBugsList');
   const summaryEl = document.getElementById('globalBugsSummary');
   if (!mount || !sessionState) return;
 
@@ -64,13 +65,13 @@ export function renderGlobalBugsList(): void {
     refreshGlobalBugKanban();
   }
 
-  const entries = collectGlobalBugs(sessionState.chats, {
+  const entries = collectGlobalBugs({
     scope: filters.scope,
     workspacePath: getWorkspacePath(),
     hideComplete: filters.hideComplete,
     column: filters.column,
   });
-  const openAll = countOpenGlobalBugs(sessionState.chats, {
+  const openAll = countOpenGlobalBugs({
     scope: 'all',
     workspacePath: getWorkspacePath(),
   });
@@ -102,6 +103,15 @@ export function isGlobalBugsPageOpen(): boolean {
   return getGlobalBugsRoot()?.classList.contains('is-open') ?? false;
 }
 
+/** Open linked investigation chat, or do nothing if the bug has no chat yet. */
+export function openGlobalBugInChat(chatId: string): void {
+  if (!chatId || !findChatById(chatId)) return;
+  closeGlobalBugs();
+  if (sessionState?.activeId !== chatId) {
+    switchChat(chatId);
+  }
+}
+
 /** Close global bugs and return to chat shell. */
 export function closeGlobalBugs(): void {
   const root = getGlobalBugsRoot();
@@ -111,7 +121,7 @@ export function closeGlobalBugs(): void {
   shell.classList.remove('hidden');
   document.querySelector('header.topbar')?.classList.remove('hidden');
   unmountGlobalBugKanban();
-  const mount = document.getElementById('globalBugsKanbanMount');
+  const mount = document.getElementById('globalBugsList');
   if (mount) mount.innerHTML = '';
   if (window.location.hash.startsWith('#/bugs')) {
     window.location.hash = '#/';
@@ -198,10 +208,10 @@ export function initGlobalBugsPage(): void {
 
 /** Refresh sidebar badge count (call after bug board changes). */
 export function refreshGlobalBugsSidebarBadge(): void {
-  if (!sessionState) return;
+  if (typeof document === 'undefined' || !sessionState) return;
   const badge = document.getElementById('btnAllBugsCount');
   if (!badge) return;
-  const openCurrent = countOpenGlobalBugs(sessionState.chats, {
+  const openCurrent = countOpenGlobalBugs({
     scope: 'current_workspace',
     workspacePath: getWorkspacePath(),
   });

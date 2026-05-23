@@ -12,7 +12,7 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: debug lite -->
 <!-- LITE -->
 
-**Bug tracker mode.** Use the board (Bugs view) to file and track bugs.
+**Bug tracker (legacy prompt).** Use sidebar **All bugs** (`#/bugs`) to file and track bugs — not a composer mode.
 
 Workflow columns: **Reported** → **Investigating** → **Planned** → **Fixing** → **Complete**.
 

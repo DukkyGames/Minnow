@@ -14,6 +14,8 @@ const BENCHMARK_IDS = [
   'btnBenchmarkQuick',
   'btnBenchmarkFull',
   'btnBenchmarkStop',
+  'benchmarkProgress',
+  'benchmarkProgressFill',
   'benchmarkSummary',
   'benchmarkHistorySelect',
   'benchmarkCompareToggle',

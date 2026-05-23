@@ -191,6 +191,14 @@ function ensureBugCard(raw) {
   if (typeof r.fixRunId === 'string' && r.fixRunId.trim()) {
     out.fixRunId = r.fixRunId.trim();
   }
+  if (typeof r.workspacePath === 'string') {
+    out.workspacePath = normalizeWorkspacePath(r.workspacePath);
+  } else {
+    out.workspacePath = '';
+  }
+  if (typeof r.chatId === 'string' && r.chatId.trim()) {
+    out.chatId = r.chatId.trim();
+  }
   return out;
 }
 
@@ -206,6 +214,23 @@ function ensureBugBoard(raw) {
   const startedAt = typeof r.startedAt === 'number' ? r.startedAt : Date.now();
   const lastUpdatedAt = typeof r.lastUpdatedAt === 'number' ? r.lastUpdatedAt : startedAt;
   return { bugs, startedAt, lastUpdatedAt };
+}
+
+/** Validate ~/.minnow/bugs/state.json */
+export function validateBugsState(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { version: 1, bugs: [] };
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  if (row.version !== 1 || !Array.isArray(row.bugs)) {
+    return { version: 1, bugs: [] };
+  }
+  const bugs = [];
+  for (const item of row.bugs) {
+    const card = ensureBugCard(item);
+    if (card) bugs.push(card);
+  }
+  return { version: 1, bugs };
 }
 
 function ensureViewMode(raw) {
@@ -257,7 +282,6 @@ function ensureChatShape(raw) {
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
-  const bugBoard = ensureBugBoard(row.bugBoard);
   const viewMode = ensureViewMode(row.viewMode);
 
   return {
@@ -276,7 +300,6 @@ function ensureChatShape(raw) {
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
-    ...(bugBoard ? { bugBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),

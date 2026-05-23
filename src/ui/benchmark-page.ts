@@ -4,25 +4,38 @@
 
 import '../styles/benchmark-page.css';
 
-import { runBenchmark } from '../benchmark/runner.ts';
+import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
 import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
-import type { BenchmarkRun, SuiteId, TestResult } from '../benchmark/types.ts';
+import type {
+  BenchmarkPreset,
+  BenchmarkRun,
+  BenchmarkProgressEvent,
+  SuiteId,
+  TestResult,
+} from '../benchmark/types.ts';
 import { getActiveModelIdFromDom } from '../benchmark/resolve-binding.ts';
 import { setStatus } from './status';
 
-const ALL_SUITES: SuiteId[] = [
-  'capability',
-  'speed',
-  'tools',
-  'skills',
-  'modes',
-  'coding',
-];
+const SUITE_LABELS: Record<SuiteId, string> = {
+  capability: 'Capability',
+  speed: 'Speed',
+  tools: 'Tools',
+  skills: 'Skills',
+  modes: 'Modes',
+  coding: 'Coding',
+};
 
 let abortController: AbortController | null = null;
 let lastRun: BenchmarkRun | null = null;
 let compareRun: BenchmarkRun | null = null;
 let historySummaries: BenchmarkRunSummary[] = [];
+
+/** Tracks in-flight UI while a run is active. */
+let liveRunActive = false;
+let liveSuiteIds: SuiteId[] = [];
+let liveTestsDone = 0;
+let liveSuiteIndex = 0;
+let liveTestsInSuite = 0;
 
 function getBenchmarkRoot(): HTMLElement | null {
   return document.getElementById('benchmarkView');
@@ -39,6 +52,249 @@ function formatScore(n: number): string {
 function formatMetric(n: number, suffix = ''): string {
   if (!Number.isFinite(n) || n <= 0) return '—';
   return `${Math.round(n)}${suffix}`;
+}
+
+function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function statusText(result: TestResult, regression: boolean): string {
+  if (result.skipped) return result.skipReason ?? 'Skipped';
+  if (regression) return 'Regression';
+  if (result.passed) return 'Pass';
+  return 'Fail';
+}
+
+function iconSvg(kind: 'pass' | 'fail' | 'skip' | 'running' | 'pending'): string {
+  if (kind === 'pass') {
+    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  if (kind === 'fail') {
+    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  }
+  if (kind === 'skip') {
+    return `<svg class="benchmark-test-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  }
+  if (kind === 'running') {
+    return `<svg class="benchmark-test-icon benchmark-test-icon--spin" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="14 42" stroke-linecap="round"/></svg>`;
+  }
+  return `<span class="benchmark-test-icon benchmark-test-icon--dot" aria-hidden="true"></span>`;
+}
+
+function cardState(result: TestResult, regression: boolean): string {
+  if (result.skipped) return 'is-skip';
+  if (regression) return 'is-regression';
+  if (result.passed) return 'is-pass';
+  return 'is-fail';
+}
+
+function cardIconKind(result: TestResult, regression: boolean): 'pass' | 'fail' | 'skip' {
+  if (result.skipped) return 'skip';
+  if (regression || !result.passed) return 'fail';
+  return 'pass';
+}
+
+function renderTestCard(result: TestResult, regression: boolean, animate = false): string {
+  const state = cardState(result, regression);
+  const icon = cardIconKind(result, regression);
+  const judged = result.judged ? ' · judged' : '';
+  const details = result.details?.trim();
+  const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result, regression)}${judged}`;
+
+  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}">
+    <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg(icon)}</div>
+    <div class="benchmark-test-card-body">
+      <h3 class="benchmark-test-card-title">${escapeHtml(result.label)}</h3>
+      <p class="benchmark-test-card-meta">${escapeHtml(meta)}</p>
+      ${details ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>` : ''}
+    </div>
+  </article>`;
+}
+
+function compareMapFromRun(compare: BenchmarkRun | null): Map<string, TestResult> {
+  const map = new Map<string, TestResult>();
+  if (!compare) return map;
+  for (const suite of compare.suites) {
+    for (const t of suite.tests) {
+      map.set(t.testId, t);
+    }
+  }
+  return map;
+}
+
+function setProgressVisible(visible: boolean): void {
+  const el = document.getElementById('benchmarkProgress');
+  if (el instanceof HTMLElement) {
+    el.hidden = !visible;
+  }
+}
+
+function updateProgressBar(pct: number, label: string): void {
+  const track = document.getElementById('benchmarkProgress');
+  const fill = document.getElementById('benchmarkProgressFill');
+  const labelEl = document.getElementById('benchmarkProgressLabel');
+  const pctEl = document.getElementById('benchmarkProgressPct');
+  const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+
+  if (track) {
+    track.setAttribute('aria-valuenow', String(clamped));
+    track.setAttribute('aria-valuetext', label);
+  }
+  if (fill instanceof HTMLElement) {
+    fill.style.width = `${clamped}%`;
+  }
+  if (labelEl) labelEl.textContent = label;
+  if (pctEl) pctEl.textContent = `${clamped}%`;
+}
+
+function ensureSuiteSection(suiteId: SuiteId, running = false): HTMLElement | null {
+  const mount = document.getElementById('benchmarkSuites');
+  if (!mount) return null;
+
+  let section = mount.querySelector<HTMLElement>(`[data-suite="${suiteId}"]`);
+  if (!section) {
+    section = document.createElement('section');
+    section.className = `benchmark-suite-block${running ? ' is-active' : ''}`;
+    section.dataset.suite = suiteId;
+    section.innerHTML = `
+      <header class="benchmark-suite-block-header">
+        <h2>${escapeHtml(SUITE_LABELS[suiteId])}</h2>
+        <span class="benchmark-suite-block-score" data-suite-score>—</span>
+      </header>
+      <div class="benchmark-test-grid" data-suite-tests></div>
+    `;
+    mount.appendChild(section);
+  } else if (running) {
+    section.classList.add('is-active');
+  }
+
+  return section.querySelector<HTMLElement>('[data-suite-tests]');
+}
+
+function updateSuiteScore(suiteId: SuiteId, passed: number, total: number, score: number): void {
+  const mount = document.getElementById('benchmarkSuites');
+  const scoreEl = mount?.querySelector(
+    `[data-suite="${suiteId}"] [data-suite-score]`,
+  );
+  if (scoreEl) {
+    scoreEl.textContent = `${passed}/${total} · ${formatScore(score)}`;
+  }
+}
+
+function upsertLiveTestCard(result: TestResult, compareMap: Map<string, TestResult>): void {
+  const grid = ensureSuiteSection(result.suite, true);
+  if (!grid) return;
+
+  const prev = compareMap.get(result.testId);
+  const regression = Boolean(prev?.passed && !result.skipped && !result.passed);
+  const existing = grid.querySelector(`[data-test-id="${CSS.escape(result.testId)}"]`);
+  const html = renderTestCard(result, regression, true);
+
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    grid.insertAdjacentHTML('beforeend', html);
+  }
+
+  const card = grid.querySelector<HTMLElement>(`[data-test-id="${CSS.escape(result.testId)}"]`);
+  if (card) {
+    requestAnimationFrame(() => card.classList.remove('is-entering'));
+  }
+}
+
+function initLiveRunUI(preset: BenchmarkPreset, suiteIds: SuiteId[]): void {
+  liveRunActive = true;
+  liveSuiteIds = suiteIds;
+  liveTestsDone = 0;
+  liveSuiteIndex = 0;
+  liveTestsInSuite = 0;
+
+  const mount = document.getElementById('benchmarkSuites');
+  if (mount) {
+    mount.innerHTML = '';
+    mount.classList.add('is-live');
+  }
+
+  const summary = document.getElementById('benchmarkSummary');
+  if (summary) {
+    summary.innerHTML =
+      '<p class="benchmark-empty benchmark-empty--live">Scoring the active model…</p>';
+  }
+
+  setProgressVisible(true);
+  updateProgressBar(0, preset === 'quick' ? 'Quick run starting' : 'Full run starting');
+}
+
+function finishLiveRunUI(): void {
+  liveRunActive = false;
+  setProgressVisible(false);
+  document.getElementById('benchmarkSuites')?.classList.remove('is-live');
+
+  for (const section of document.querySelectorAll('.benchmark-suite-block.is-active')) {
+    section.classList.remove('is-active');
+  }
+}
+
+function liveProgressPercent(): number {
+  const suiteCount = Math.max(liveSuiteIds.length, 1);
+  const suiteBase = (liveSuiteIndex / suiteCount) * 100;
+  const suiteSlice = 100 / suiteCount;
+  const within =
+    liveTestsInSuite > 0
+      ? Math.min(suiteSlice * 0.92, (liveTestsInSuite / (liveTestsInSuite + 1)) * suiteSlice)
+      : suiteSlice * 0.08;
+  return Math.min(98, suiteBase + within);
+}
+
+function onBenchmarkProgress(
+  event: BenchmarkProgressEvent,
+  compareMap: Map<string, TestResult>,
+): void {
+  if (!liveRunActive) return;
+
+  if (event.type === 'suite-start') {
+    liveSuiteIndex = liveSuiteIds.indexOf(event.suiteId);
+    liveTestsInSuite = 0;
+    ensureSuiteSection(event.suiteId, true);
+    updateProgressBar(liveProgressPercent(), `${event.label} suite`);
+    return;
+  }
+
+  if (event.type === 'test-done') {
+    liveTestsDone += 1;
+    liveTestsInSuite += 1;
+    upsertLiveTestCard(event.result, compareMap);
+    updateProgressBar(
+      liveProgressPercent(),
+      `${SUITE_LABELS[event.result.suite]} · ${event.result.label}`,
+    );
+    return;
+  }
+
+  if (event.type === 'run-done') {
+    updateProgressBar(100, 'Complete');
+    for (const suite of event.run.suites) {
+      updateSuiteScore(
+        suite.id,
+        suite.passed,
+        suite.passed + suite.failed + suite.skipped,
+        suite.score,
+      );
+      const section = document.querySelector(`[data-suite="${suite.id}"]`);
+      section?.classList.remove('is-active');
+    }
+    finishLiveRunUI();
+  }
 }
 
 function renderSummary(run: BenchmarkRun | null): void {
@@ -71,71 +327,32 @@ function renderSummary(run: BenchmarkRun | null): void {
   `;
 }
 
-function statusLabel(result: TestResult, regression: boolean): string {
-  if (result.skipped) return `skip: ${result.skipReason ?? 'skipped'}`;
-  if (regression) return 'REGRESSION';
-  if (result.passed) return 'pass';
-  return 'fail';
-}
-
 function renderSuites(run: BenchmarkRun, compare: BenchmarkRun | null): void {
   const mount = document.getElementById('benchmarkSuites');
   if (!mount) return;
 
-  const compareMap = new Map<string, TestResult>();
-  if (compare) {
-    for (const suite of compare.suites) {
-      for (const t of suite.tests) {
-        compareMap.set(t.testId, t);
-      }
-    }
-  }
+  const compareMap = compareMapFromRun(compare);
 
+  mount.classList.remove('is-live');
   mount.innerHTML = run.suites
     .map((suite) => {
-      const rows = suite.tests
+      const cards = suite.tests
         .map((t) => {
           const prev = compareMap.get(t.testId);
           const regression = Boolean(prev?.passed && !t.skipped && !t.passed);
-          const judged = t.judged ? 'true' : 'false';
-          return `<tr class="${regression ? 'is-regression' : ''}" data-judged="${judged}">
-            <td>${escapeHtml(t.label)}</td>
-            <td class="benchmark-status">${escapeHtml(statusLabel(t, regression))}</td>
-            <td>${t.durationMs} ms</td>
-            <td>${escapeHtml(t.details?.slice(0, 80) ?? '')}</td>
-          </tr>`;
+          return renderTestCard(t, regression, false);
         })
         .join('');
-      return `<section class="benchmark-suite is-expanded" data-suite="${suite.id}">
-        <div class="benchmark-suite-header" role="button" tabindex="0" aria-expanded="true">
-          <span>${escapeHtml(suite.label)}</span>
-          <span>${suite.passed}/${suite.passed + suite.failed} · ${formatScore(suite.score)}</span>
-        </div>
-        <div class="benchmark-suite-body">
-          <table class="benchmark-results-table">
-            <thead><tr><th>Test</th><th>Status</th><th>Time</th><th>Details</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
+      const total = suite.passed + suite.failed + suite.skipped;
+      return `<section class="benchmark-suite-block" data-suite="${suite.id}">
+        <header class="benchmark-suite-block-header">
+          <h2>${escapeHtml(suite.label)}</h2>
+          <span class="benchmark-suite-block-score">${suite.passed}/${total} · ${formatScore(suite.score)}</span>
+        </header>
+        <div class="benchmark-test-grid">${cards}</div>
       </section>`;
     })
     .join('');
-
-  mount.querySelectorAll('.benchmark-suite-header').forEach((header) => {
-    header.addEventListener('click', () => {
-      header.parentElement?.classList.toggle('is-expanded');
-      const expanded = header.parentElement?.classList.contains('is-expanded');
-      header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    });
-  });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function getSelectedSuites(): SuiteId[] | undefined {
@@ -150,9 +367,11 @@ function setRunning(running: boolean): void {
   const quick = document.getElementById('btnBenchmarkQuick');
   const full = document.getElementById('btnBenchmarkFull');
   const stop = document.getElementById('btnBenchmarkStop');
+  const root = getBenchmarkRoot();
   quick?.toggleAttribute('disabled', running);
   full?.toggleAttribute('disabled', running);
   stop?.toggleAttribute('disabled', !running);
+  root?.classList.toggle('is-running', running);
 }
 
 async function refreshHistorySelect(): Promise<void> {
@@ -181,8 +400,9 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
   setRunning(true);
   setStatus('ok', preset === 'quick' ? 'Benchmark Quick running…' : 'Benchmark Full running…');
 
-  const suitesMount = document.getElementById('benchmarkSuites');
-  if (suitesMount) suitesMount.innerHTML = '<p class="benchmark-empty">Running…</p>';
+  const suiteIds = resolveBenchmarkSuites(preset, getSelectedSuites());
+  const compareMap = compareMapFromRun(compareRun);
+  initLiveRunUI(preset, suiteIds);
 
   try {
     const run = await runBenchmark({
@@ -190,9 +410,7 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
       suites: getSelectedSuites(),
       signal: abortController.signal,
       onProgress: (event) => {
-        if (event.type === 'test-done' && lastRun) {
-          /* incremental DOM update deferred — full render on run-done */
-        }
+        onBenchmarkProgress(event, compareMap);
         if (event.type === 'run-done') {
           lastRun = event.run;
           renderSummary(lastRun);
@@ -207,10 +425,25 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
     await refreshHistorySelect();
     setStatus('ok', `Benchmark done · ${formatScore(run.totalScore)}`);
   } catch (err) {
+    finishLiveRunUI();
     if (abortController.signal.aborted) {
       setStatus('ok', 'Benchmark cancelled.');
+      if (lastRun) {
+        renderSummary(lastRun);
+        renderSuites(lastRun, compareRun);
+      } else {
+        const mount = document.getElementById('benchmarkSuites');
+        if (mount) {
+          mount.innerHTML = '<p class="benchmark-empty">Run cancelled.</p>';
+        }
+        renderSummary(null);
+      }
     } else {
       setStatus('err', err instanceof Error ? err.message : String(err));
+      const mount = document.getElementById('benchmarkSuites');
+      if (mount) {
+        mount.innerHTML = `<p class="benchmark-empty benchmark-empty--err">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`;
+      }
     }
   } finally {
     setRunning(false);

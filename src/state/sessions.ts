@@ -429,7 +429,10 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : '';
   const orchestratePlanPath = normalizeOrchestratePlanPath(raw.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(raw.orchestrateBoard);
-  const viewMode = ensureViewMode(raw.viewMode);
+  let viewMode = ensureViewMode(raw.viewMode);
+  if (raw.modeId === 'debug' && viewMode === 'board') {
+    viewMode = 'chat';
+  }
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:

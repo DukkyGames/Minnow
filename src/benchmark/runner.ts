@@ -35,6 +35,14 @@ function suitesForPreset(preset: BenchmarkPreset, override?: SuiteId[]): SuiteId
   return preset === 'full' ? FULL_SUITES : QUICK_SUITES;
 }
 
+/** Suite order for a preset (used by benchmark UI before a run starts). */
+export function resolveBenchmarkSuites(
+  preset: BenchmarkPreset,
+  override?: SuiteId[],
+): SuiteId[] {
+  return suitesForPreset(preset, override);
+}
+
 function newRunId(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }

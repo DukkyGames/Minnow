@@ -6,7 +6,7 @@ MVP shipped on branch `cursor/bug-tracker-min-16-e60d`.
 
 ## Scope delivered
 
-- **Mode:** `debug` (UI label **Bugs**)
+- **Entry:** Sidebar **All bugs** + `#/bugs` (not a composer mode; legacy `debug` mode migrates to Build)
 - **Board:** `Chat.bugBoard` with five columns
 - **Tools:** `bug_add`, `bug_update`, `bug_get_state`
 - **Agents:** `debugger`, `bug-planner` sub-agent types
@@ -26,8 +26,8 @@ MVP shipped on branch `cursor/bug-tracker-min-16-e60d`.
 
 ## Todos
 
-- [x] Mode + persistence schema
-- [x] Kanban UI + Add bug form
+- [x] Persistence in `bugs/state.json` (migrates legacy `chat.bugBoard`)
+- [x] Global Kanban UI + Add bug form
 - [x] Debugger + planner pipeline
 - [x] Start fix → Orchestrate
 - [x] Unit tests for store + tools

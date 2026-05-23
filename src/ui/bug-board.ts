@@ -1,5 +1,5 @@
 /**
- * Bug tracker Kanban — rendered only on the global All bugs page (MIN-16).
+ * Bug tracker Kanban — global All bugs page only (MIN-16).
  */
 
 import {
@@ -9,21 +9,16 @@ import {
 } from '../chat/bug-board/pipeline.ts';
 import {
   collectGlobalBugs,
+  formatGlobalBugWorkspaceLabel,
   type CollectGlobalBugsOptions,
   type GlobalBugEntry,
 } from '../state/global-bugs.ts';
-import { subscribeBugBoardChanges } from '../state/bug-board-events.ts';
+import { subscribeBugsChanges } from '../state/bug-board-events.ts';
 import {
   addBug,
   isBugSeverity,
   type AddBugInput,
 } from '../state/bug-board-store.ts';
-import {
-  findChatById,
-  getActiveChat,
-  getChatsForWorkspace,
-  sessionState,
-} from '../state/sessions.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
 import type { BugCard, BugColumn } from '../types.ts';
 
@@ -37,7 +32,7 @@ const COLUMNS: Array<{ id: BugColumn; label: string }> = [
 
 let kanbanMount: HTMLElement | null = null;
 let collectOptions: CollectGlobalBugsOptions = {};
-const bugChangeUnsubs = new Map<string, () => void>();
+let bugsChangeUnsub: (() => void) | null = null;
 
 function isGlobalBugsPageOpen(): boolean {
   return document.getElementById('globalBugsView')?.classList.contains('is-open') ?? false;
@@ -53,29 +48,15 @@ function sendBoardMessage(text: string): void {
 }
 
 function disposeBugSubscriptions(): void {
-  for (const fn of bugChangeUnsubs.values()) fn();
-  bugChangeUnsubs.clear();
+  bugsChangeUnsub?.();
+  bugsChangeUnsub = null;
 }
 
 function ensureBugSubscriptions(): void {
-  if (!sessionState) return;
-  const needed = new Set<string>();
-  for (const chat of sessionState.chats) {
-    if (!chat.bugBoard?.bugs.length) continue;
-    needed.add(chat.id);
-    if (!bugChangeUnsubs.has(chat.id)) {
-      const unsub = subscribeBugBoardChanges(chat.id, () => {
-        if (isGlobalBugsPageOpen()) refreshGlobalBugKanban();
-      });
-      bugChangeUnsubs.set(chat.id, unsub);
-    }
-  }
-  for (const [chatId, unsub] of bugChangeUnsubs) {
-    if (!needed.has(chatId)) {
-      unsub();
-      bugChangeUnsubs.delete(chatId);
-    }
-  }
+  if (bugsChangeUnsub) return;
+  bugsChangeUnsub = subscribeBugsChanges(() => {
+    if (isGlobalBugsPageOpen()) refreshGlobalBugKanban();
+  });
 }
 
 function setBugBoardStatus(message: string, kind: 'ok' | 'err' | 'idle'): void {
@@ -85,19 +66,21 @@ function setBugBoardStatus(message: string, kind: 'ok' | 'err' | 'idle'): void {
   });
 }
 
-function columnActions(
-  chatId: string,
-  bug: BugCard,
-): Array<{ label: string; action: () => void }> {
+function columnActions(bug: BugCard): Array<{ label: string; action: () => void }> {
   const actions: Array<{ label: string; action: () => void }> = [];
 
   if (bug.column === 'reported' || bug.column === 'investigating') {
     actions.push({
       label: 'Investigate',
       action: () => {
-        void runBugInvestigate(chatId, bug.id).then((r) => {
+        void runBugInvestigate(bug.id).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Investigate failed', 'err');
-          else setBugBoardStatus('Investigation complete', 'ok');
+          else {
+            setBugBoardStatus('Investigation chat opened', 'ok');
+            if (r.chatId) {
+              void import('./global-bugs-page').then((m) => m.openGlobalBugInChat(r.chatId!));
+            }
+          }
           refreshGlobalBugKanban();
         });
       },
@@ -107,7 +90,7 @@ function columnActions(
     actions.push({
       label: 'Plan fix',
       action: () => {
-        void runBugPlanFix(chatId, bug.id).then((r) => {
+        void runBugPlanFix(bug.id).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Plan failed', 'err');
           else setBugBoardStatus(`Plan: ${r.planPath}`, 'ok');
           refreshGlobalBugKanban();
@@ -120,7 +103,7 @@ function columnActions(
       label: 'Start fix',
       action: () => {
         void import('./global-bugs-page').then((m) => m.closeGlobalBugs());
-        void runBugStartFix(chatId, bug.id, sendBoardMessage).then((r) => {
+        void runBugStartFix(bug.id, sendBoardMessage).then((r) => {
           if (!r.ok) setBugBoardStatus(r.error ?? 'Start fix failed', 'err');
           else setBugBoardStatus('Orchestrator started', 'ok');
         });
@@ -139,11 +122,24 @@ function columnActions(
 }
 
 function renderBugCard(entry: GlobalBugEntry): HTMLElement {
-  const { bug, chatId, chatName } = entry;
+  const { bug, chatName } = entry;
   const card = document.createElement('article');
   card.className = 'board-task-card bug-task-card';
-  card.dataset.bugId = bug.id;
-  card.dataset.chatId = chatId;
+  if (bug.chatId) {
+    card.classList.add('board-task-card--clickable');
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.title = `Open chat: ${chatName}`;
+    card.addEventListener('click', () => {
+      void import('./global-bugs-page').then((m) => m.openGlobalBugInChat(bug.chatId!));
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        void import('./global-bugs-page').then((m) => m.openGlobalBugInChat(bug.chatId!));
+      }
+    });
+  }
 
   const title = document.createElement('h4');
   title.className = 'board-task-card__title';
@@ -151,7 +147,8 @@ function renderBugCard(entry: GlobalBugEntry): HTMLElement {
 
   const meta = document.createElement('div');
   meta.className = 'board-task-card__meta';
-  meta.textContent = `${bug.severity} · ${chatName}`;
+  const ws = formatGlobalBugWorkspaceLabel(bug);
+  meta.textContent = `${bug.severity} · ${ws}${bug.chatId ? ` · ${chatName}` : ''}`;
 
   card.appendChild(title);
   card.appendChild(meta);
@@ -176,7 +173,7 @@ function renderBugCard(entry: GlobalBugEntry): HTMLElement {
 
   const actionsRow = document.createElement('div');
   actionsRow.className = 'bug-task-card__actions';
-  for (const { label, action } of columnActions(chatId, bug)) {
+  for (const { label, action } of columnActions(bug)) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'board-btn board-btn--sm';
@@ -193,32 +190,11 @@ function renderBugCard(entry: GlobalBugEntry): HTMLElement {
   return card;
 }
 
-function chatsForAddBugForm(): Chat[] {
-  if (!sessionState) return [];
-  const workspace = getWorkspacePath();
-  const scoped = getChatsForWorkspace(workspace, sessionState);
-  return scoped.length ? scoped : sessionState.chats.slice(0, 20);
-}
-
 function renderAddBugForm(container: HTMLElement): void {
   container.innerHTML = '';
   const form = document.createElement('form');
   form.className = 'bug-add-form';
   form.setAttribute('aria-label', 'Add bug');
-
-  const chatSelect = document.createElement('select');
-  chatSelect.name = 'chat';
-  chatSelect.className = 'bug-add-form__input';
-  chatSelect.setAttribute('aria-label', 'Target chat');
-  const chats = chatsForAddBugForm();
-  const activeId = getActiveChat().id;
-  for (const chat of chats) {
-    const opt = document.createElement('option');
-    opt.value = chat.id;
-    opt.textContent = chat.name;
-    if (chat.id === activeId) opt.selected = true;
-    chatSelect.appendChild(opt);
-  }
 
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -236,6 +212,7 @@ function renderAddBugForm(container: HTMLElement): void {
   const severitySelect = document.createElement('select');
   severitySelect.name = 'severity';
   severitySelect.className = 'bug-add-form__input';
+  severitySelect.setAttribute('aria-label', 'Severity');
   for (const sev of ['low', 'medium', 'high', 'critical'] as const) {
     const opt = document.createElement('option');
     opt.value = sev;
@@ -249,20 +226,23 @@ function renderAddBugForm(container: HTMLElement): void {
   submit.className = 'board-btn';
   submit.textContent = 'Add bug';
 
-  form.append(chatSelect, titleInput, descInput, severitySelect, submit);
+  form.append(titleInput, descInput, severitySelect, submit);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const chat = findChatById(chatSelect.value);
-    if (!chat) return;
     const title = titleInput.value.trim();
     const description = descInput.value.trim();
     const severityRaw = severitySelect.value;
     if (!title || !isBugSeverity(severityRaw)) return;
 
-    const input: AddBugInput = { title, description, severity: severityRaw };
+    const input: AddBugInput = {
+      title,
+      description,
+      severity: severityRaw,
+      workspacePath: getWorkspacePath(),
+    };
     const bugId = `bug-${Date.now().toString(36)}`;
-    addBug(chat, input, bugId);
+    addBug(input, bugId);
     titleInput.value = '';
     descInput.value = '';
     refreshGlobalBugKanban();
@@ -293,22 +273,21 @@ function refreshKanbanDom(root: HTMLElement, entries: GlobalBugEntry[]): void {
     titleEl.textContent = `Bug tracker · ${entries.length} shown`;
   }
 
-  const kanban = root.querySelector('.board-kanban');
+  const kanban = root.querySelector('.kanban-grid');
   if (!kanban) return;
   kanban.innerHTML = '';
 
   for (const col of COLUMNS) {
-    const columnEl = document.createElement('div');
-    columnEl.className = 'board-column';
+    const columnEl = document.createElement('section');
+    columnEl.className = 'kanban-column';
     columnEl.dataset.column = col.id;
 
-    const head = document.createElement('div');
-    head.className = 'board-column__header';
-    head.innerHTML = `<span class="board-column__title">${col.label}</span><span class="board-column__count">${counts[col.id]}</span>`;
+    const head = document.createElement('h3');
+    head.textContent = `${col.label} (${counts[col.id]})`;
     columnEl.appendChild(head);
 
     const list = document.createElement('div');
-    list.className = 'board-column__tasks';
+    list.className = 'kanban-column__list';
 
     for (const entry of entries.filter((e) => e.bug.column === col.id)) {
       list.appendChild(renderBugCard(entry));
@@ -326,9 +305,9 @@ export function setGlobalBugKanbanOptions(options: CollectGlobalBugsOptions): vo
 
 /** Re-render global kanban when filters or bugs change. */
 export function refreshGlobalBugKanban(): void {
-  if (!kanbanMount || !sessionState) return;
+  if (!kanbanMount) return;
   ensureBugSubscriptions();
-  const entries = collectGlobalBugs(sessionState.chats, collectOptions);
+  const entries = collectGlobalBugs(collectOptions);
   const root = kanbanMount.querySelector('.board-root.bug-board-root');
   if (!root) return;
   refreshKanbanDom(root as HTMLElement, entries);
@@ -371,9 +350,12 @@ export function mountGlobalBugKanban(mount: HTMLElement): void {
   empty.textContent =
     'No bugs match these filters. Add one above or widen the workspace filter.';
 
+  const main = document.createElement('div');
+  main.className = 'board-main';
   const kanban = document.createElement('div');
-  kanban.className = 'board-kanban bug-board-kanban';
-  root.appendChild(kanban);
+  kanban.className = 'kanban-grid bug-board-kanban';
+  main.appendChild(kanban);
+  root.appendChild(main);
 
   mount.appendChild(empty);
   mount.appendChild(root);

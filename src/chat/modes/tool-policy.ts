@@ -6,8 +6,7 @@ import type { ToolDefinition } from '../../tools/definitions';
 import { getMode } from './registry';
 import type { ModeId, ToolPolicyAction } from './types';
 
-/** Bug tracker tools are UI-only on the global #/bugs screen, not in chat. */
-const GLOBAL_BUG_TOOL_IDS = new Set(['bug_add', 'bug_update', 'bug_get_state']);
+const BUG_BOARD_TOOL_IDS = new Set(['bug_add', 'bug_update', 'bug_get_state']);
 
 /**
  * Resolve effective policy for a tool name (function name === tool id).
@@ -17,7 +16,7 @@ function effectiveAction(
   modeId: ModeId,
   toolName: string,
 ): ToolPolicyAction {
-  if (GLOBAL_BUG_TOOL_IDS.has(toolName)) return 'deny';
+  if (BUG_BOARD_TOOL_IDS.has(toolName)) return 'allow';
   const policy = getMode(modeId).toolPolicy;
   const explicit = policy.tools?.[toolName];
   const action = explicit ?? policy.default;

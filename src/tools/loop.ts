@@ -965,13 +965,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isOrchestrateBoardViewActive() && getActiveChat().id === chat.id) {
           refreshActiveBoardIfMounted();
         }
-        if (
-          normalizeModeId(chat.modeId) === 'debug' &&
-          chat.viewMode === 'board' &&
-          getActiveChat().id === chat.id
-        ) {
-          void import('../ui/bug-board').then((m) => m.refreshActiveBugBoardIfMounted());
-        }
 
         if (turn + 1 >= maxToolTurns) {
           setStatus('err', 'Maximum tool turns reached');

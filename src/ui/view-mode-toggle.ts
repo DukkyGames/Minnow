@@ -36,7 +36,7 @@ export function resetViewModeToggleForTests(): void {
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
 }
 
-/** True when Orchestrate kanban is active (not bug tracker). */
+/** True when Orchestrate kanban is active. */
 export function isOrchestrateBoardViewActive(): boolean {
   const chat = getActiveChat();
   return (
@@ -44,12 +44,9 @@ export function isOrchestrateBoardViewActive(): boolean {
   );
 }
 
-/** True when any board view (Orchestrate or Bugs) replaces chat bubbles. */
+/** True when Orchestrate board view replaces chat bubbles. */
 export function isBoardViewActive(): boolean {
-  const chat = getActiveChat();
-  if (chat.viewMode !== 'board') return false;
-  const mode = normalizeModeId(chat.modeId);
-  return mode === 'orchestrate' || mode === 'debug';
+  return isOrchestrateBoardViewActive();
 }
 
 /** Toggle main-column layout class: hides chat composer in board view. */
@@ -73,27 +70,20 @@ function getChatToggleButton(): HTMLButtonElement | null {
 
 /** Whether view toggles can switch chat/board for this chat. */
 function isViewModeToggleEnabled(chat: Chat): boolean {
-  const mode = normalizeModeId(chat.modeId);
-  return mode === 'orchestrate' || mode === 'debug';
+  return normalizeModeId(chat.modeId) === 'orchestrate';
 }
 
 function boardToggleLabels(
   chat: Chat,
   boardActive: boolean,
 ): { ariaLabel: string; title: string } {
-  const mode = normalizeModeId(chat.modeId);
   const hasPlan = Boolean(chat.orchestratePlanPath?.trim());
 
-  if (mode !== 'orchestrate' && mode !== 'debug') {
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
     return {
       ariaLabel: 'Board view',
-      title: 'Board view (Orchestrate or Bugs mode only)',
+      title: 'Board view (Orchestrate mode only)',
     };
-  }
-  if (mode === 'debug') {
-    return boardActive
-      ? { ariaLabel: 'Bug board view', title: 'Bug board view' }
-      : { ariaLabel: 'Switch to bug board', title: 'Bug board view' };
   }
   if (!hasPlan) {
     return {
@@ -111,19 +101,13 @@ function chatToggleLabels(
   chat: Chat,
   boardActive: boolean,
 ): { ariaLabel: string; title: string } {
-  const mode = normalizeModeId(chat.modeId);
   const hasPlan = Boolean(chat.orchestratePlanPath?.trim());
 
-  if (mode !== 'orchestrate' && mode !== 'debug') {
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
     return {
       ariaLabel: 'Chat view',
-      title: 'Chat view (Orchestrate or Bugs mode only)',
+      title: 'Chat view (Orchestrate mode only)',
     };
-  }
-  if (mode === 'debug') {
-    return boardActive
-      ? { ariaLabel: 'Switch to chat view', title: 'Chat view' }
-      : { ariaLabel: 'Chat view', title: 'Chat view' };
   }
   if (boardActive && !hasPlan) {
     return {
@@ -193,7 +177,7 @@ export function syncViewModeToggleFromActiveChat(): void {
   syncBoardViewChrome();
 }
 
-/** Switch Orchestrate / debug chat between board and chat views (no-op if already there). */
+/** Switch Orchestrate chat between board and chat views (no-op if already there). */
 export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   const chat = getActiveChat();
   if (!isViewModeToggleEnabled(chat)) return;
@@ -203,14 +187,6 @@ export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   touchChat(chat);
   scheduleSaveSessions();
   syncViewModeToggleFromActiveChat();
-  if (normalizeModeId(chat.modeId) === 'debug') {
-    if (next === 'board') {
-      void import('./bug-board').then((m) => m.renderBugBoardView(chat));
-    } else {
-      renderChat(chat);
-    }
-    return;
-  }
   renderChat(chat);
   void import('./orchestrate-plan-selector').then((m) =>
     m.syncOrchestratePlanStripFromActiveChat(),

@@ -291,15 +291,19 @@ export type BugColumn =
 /** Bug severity for triage. */
 export type BugSeverity = 'low' | 'medium' | 'high' | 'critical';
 
-/** One bug card on the debug-mode Kanban board. */
+/** One bug card on the global bug tracker Kanban. */
 export interface BugCard {
   id: string;
   title: string;
   description: string;
   severity: BugSeverity;
   column: BugColumn;
+  /** Workspace folder this bug belongs to. */
+  workspacePath: string;
   createdAt: number;
   updatedAt: number;
+  /** Investigation / fix chat (created on Investigate). */
+  chatId?: string;
   /** Debugger or planner summary notes shown on the card. */
   notes?: string;
   /** Workspace-relative fix plan (documentation/plans/bugs/<id>.md). */
@@ -310,7 +314,7 @@ export interface BugCard {
   fixRunId?: string;
 }
 
-/** Bug tracker board persisted on chat in debug mode. */
+/** @deprecated Legacy per-chat board; migrated to bugs/state.json. */
 export interface BugBoardState {
   bugs: BugCard[];
   startedAt: number;
@@ -349,9 +353,9 @@ export interface Chat {
   subAgentRuns?: PersistedSubAgentRun[];
   /** Orchestrate board state (Kanban + waves); Orchestrate mode only. */
   orchestrateBoard?: OrchestrateBoardState;
-  /** Bug tracker board (debug mode). */
+  /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
-  /** Chat vs Board rendering for Orchestrate / debug (default implicit chat). */
+  /** Chat vs Board rendering for Orchestrate (default implicit chat). */
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;

@@ -9,12 +9,14 @@ const ORCHESTRATE_BOARD_KICKOFF_MESSAGE =
   'Initialize the board for the selected plan and begin execution.';
 import {
   defaultBugPlanPath,
+  findBugById,
   updateBug,
 } from '../../state/bug-board-store.ts';
 import {
+  createEmptyChatObject,
   findChatById,
-  getActiveChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../../state/sessions.ts';
 import type { BugCard, Chat } from '../../types.ts';
@@ -72,16 +74,46 @@ async function waitForSubAgent(runId: string): Promise<{ summary: string; ok: bo
   return { summary: 'Timed out waiting for sub-agent', ok: false };
 }
 
-/** Run debugger sub-agent and move bug to Investigating. */
-export async function runBugInvestigate(
-  chatId: string,
-  bugId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const chat = findChatById(chatId);
-  const bug = chat?.bugBoard?.bugs.find((b) => b.id === bugId);
-  if (!chat || !bug) return { ok: false, error: 'Bug not found' };
+/** Create or reuse the investigation chat for a bug. */
+function ensureInvestigationChat(bug: BugCard): Chat | null {
+  if (bug.chatId) {
+    const existing = findChatById(bug.chatId);
+    if (existing) return existing;
+  }
+  if (!sessionState) return null;
 
-  updateBug(chat, bugId, { column: 'investigating' });
+  const modelSelect = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  const modelId = modelSelect?.value?.trim() || '';
+  const chat = createEmptyChatObject(modelId, bug.workspacePath);
+  chat.name = `Bug: ${bug.title.slice(0, 48)}`;
+  chat.modeId = 'build';
+
+  sessionState.chats.unshift(chat);
+  sessionState.activeId = chat.id;
+  touchChat(chat);
+  updateBug(bug.id, { chatId: chat.id, column: 'investigating' });
+  scheduleSaveSessions();
+
+  void import('../../ui/sidebar.ts').then((m) => {
+    m.renderSidebar();
+    m.syncModelSelectForActiveChat();
+  });
+  void import('../../ui/messages.ts').then((m) => m.renderChatFromHistory(chat));
+
+  return chat;
+}
+
+/** Run debugger sub-agent in a new investigation chat. */
+export async function runBugInvestigate(
+  bugId: string,
+): Promise<{ ok: boolean; error?: string; chatId?: string }> {
+  const bug = findBugById(bugId);
+  if (!bug) return { ok: false, error: 'Bug not found' };
+
+  const chat = ensureInvestigationChat(bug);
+  if (!chat) return { ok: false, error: 'Could not create investigation chat' };
+
+  updateBug(bugId, { column: 'investigating', chatId: chat.id });
 
   try {
     const result = await spawnSubAgent({
@@ -97,29 +129,36 @@ export async function runBugInvestigate(
       'runId' in result && typeof result.runId === 'string' ? result.runId : null;
     if (!runId) return { ok: false, error: 'Failed to spawn debugger' };
 
-    updateBug(chat, bugId, { investigateRunId: runId });
+    updateBug(bugId, { investigateRunId: runId });
 
     const settled = await waitForSubAgent(runId);
-    updateBug(chat, bugId, {
+    updateBug(bugId, {
       notes: settled.summary.slice(0, 4000),
-      column: settled.ok ? 'investigating' : 'investigating',
+      column: 'investigating',
     });
 
-    return { ok: settled.ok, error: settled.ok ? undefined : settled.summary };
+    return {
+      ok: settled.ok,
+      error: settled.ok ? undefined : settled.summary,
+      chatId: chat.id,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
 }
 
-/** Run planner sub-agent and move bug to Planned when plan is written. */
+/** Run planner sub-agent in the investigation chat. */
 export async function runBugPlanFix(
-  chatId: string,
   bugId: string,
 ): Promise<{ ok: boolean; planPath?: string; error?: string }> {
-  const chat = findChatById(chatId);
-  const bug = chat?.bugBoard?.bugs.find((b) => b.id === bugId);
-  if (!chat || !bug) return { ok: false, error: 'Bug not found' };
+  const bug = findBugById(bugId);
+  if (!bug) return { ok: false, error: 'Bug not found' };
+
+  const chat = bug.chatId ? findChatById(bug.chatId) : null;
+  if (!chat) {
+    return { ok: false, error: 'Run Investigate first to create an investigation chat' };
+  }
 
   const planPath = bug.planPath?.trim() || defaultBugPlanPath(bugId);
 
@@ -137,16 +176,17 @@ export async function runBugPlanFix(
       'runId' in result && typeof result.runId === 'string' ? result.runId : null;
     if (!runId) return { ok: false, error: 'Failed to spawn planner' };
 
-    updateBug(chat, bugId, { planRunId: runId, planPath });
+    updateBug(bugId, { planRunId: runId, planPath });
 
     const settled = await waitForSubAgent(runId);
     if (settled.ok) {
-      updateBug(chat, bugId, {
+      const notes = bug.notes
+        ? `${bug.notes}\n\n---\nPlan: ${planPath}`
+        : `Plan ready: ${planPath}`;
+      updateBug(bugId, {
         column: 'planned',
         planPath,
-        notes: bug.notes
-          ? `${bug.notes}\n\n---\nPlan: ${planPath}`
-          : `Plan ready: ${planPath}`,
+        notes,
       });
       return { ok: true, planPath };
     }
@@ -159,19 +199,25 @@ export async function runBugPlanFix(
 
 /** Hand off to Orchestrate with the bug fix plan; moves bug to Fixing. */
 export async function runBugStartFix(
-  chatId: string,
   bugId: string,
   sendKickoff: (message: string) => void | Promise<void>,
 ): Promise<{ ok: boolean; error?: string }> {
-  const chat = findChatById(chatId);
-  const bug = chat?.bugBoard?.bugs.find((b) => b.id === bugId);
-  if (!chat || !bug) return { ok: false, error: 'Bug not found' };
+  const bug = findBugById(bugId);
+  if (!bug) return { ok: false, error: 'Bug not found' };
   const planPath = bug.planPath?.trim();
   if (!planPath) return { ok: false, error: 'No plan path — run Plan fix first' };
 
-  updateBug(chat, bugId, { column: 'fixing' });
+  const chat = bug.chatId ? findChatById(bug.chatId) : null;
+  if (!chat) {
+    return { ok: false, error: 'Run Investigate first to create an investigation chat' };
+  }
+
+  updateBug(bugId, { column: 'fixing' });
   chat.orchestratePlanPath = planPath;
   touchChat(chat);
+  scheduleSaveSessions();
+
+  if (sessionState) sessionState.activeId = chat.id;
   scheduleSaveSessions();
 
   const modeResult = setChatMode('orchestrate');
@@ -179,9 +225,9 @@ export async function runBugStartFix(
     return { ok: false, error: modeResult.error ?? 'Could not switch to Orchestrate mode' };
   }
 
-  const active = getActiveChat();
-  if (active.id !== chatId) {
-    return { ok: false, error: 'Active chat mismatch after mode switch' };
+  const active = findChatById(chat.id);
+  if (!active) {
+    return { ok: false, error: 'Investigation chat not found' };
   }
 
   active.viewMode = 'board';
@@ -191,7 +237,7 @@ export async function runBugStartFix(
 
   try {
     await sendKickoff(ORCHESTRATE_BOARD_KICKOFF_MESSAGE);
-    updateBug(active, bugId, { column: 'fixing' });
+    updateBug(bugId, { column: 'fixing' });
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -200,8 +246,6 @@ export async function runBugStartFix(
 }
 
 /** Mark bug complete (e.g. after orchestrator finishes). */
-export function markBugComplete(chatId: string, bugId: string): void {
-  const chat = findChatById(chatId);
-  if (!chat) return;
-  updateBug(chat, bugId, { column: 'complete' });
+export function markBugComplete(bugId: string): void {
+  updateBug(bugId, { column: 'complete' });
 }
