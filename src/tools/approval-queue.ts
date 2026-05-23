@@ -15,6 +15,7 @@ export interface ToolApprovalContext {
   chatId?: string;
   toolCallId?: string;
   subAgentType?: string;
+  workAgentId?: string | null;
 }
 
 interface Queued {

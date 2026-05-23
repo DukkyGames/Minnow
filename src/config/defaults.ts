@@ -4,7 +4,11 @@
 
 import { SYSTEM_PROMPT_PRESETS } from '../constants';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
-import type { ToolConfig, ToolPermissionMode } from '../tools/tool-settings-types';
+import {
+  createEmptyToolPermissionsConfig,
+  type ToolConfig,
+  type ToolPermissionMode,
+} from '../tools/tool-settings-types';
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
 import type { SkillConfig } from '../skills/config';
@@ -38,11 +42,11 @@ export const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set([
 /** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
   const enabled: Record<string, boolean> = {};
-  const permissions: Record<string, ToolPermissionMode> = {};
+  const permissions = createEmptyToolPermissionsConfig();
   for (const tool of BUILT_IN_TOOLS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
     enabled[tool.id] = on;
-    permissions[tool.id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id)
+    permissions.default[tool.id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id)
       ? 'full'
       : on
         ? 'ask'
