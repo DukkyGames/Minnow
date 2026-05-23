@@ -15,7 +15,14 @@ import {
   toggleFileSidebarLayout,
 } from './file-layout';
 import { initFileTreeDnD } from './file-tree-dnd';
-import { initFileTreeCrud, initFileTreeIfNeeded, refreshFileTree, renderFileTree } from './file-tree';
+import {
+  initFileTreeCrud,
+  initFileTreeIfNeeded,
+  invalidateFileTreeCache,
+  refreshFileTree,
+  renderFileTree,
+} from './file-tree';
+import { registerFileTreeRefreshBridge } from './file-tree-refresh-bridge';
 import { setFileTreeServerAvailable } from './file-tree-server';
 import {
   initFileTreeSearch,
@@ -115,6 +122,12 @@ export function onFilePanelServerAvailabilityChanged(): void {
 
 /** Initialize file panel after detectLocalServer(). */
 export async function initFilePanel(): Promise<void> {
+  registerFileTreeRefreshBridge({
+    refresh: refreshFileTree,
+    render: renderFileTree,
+    invalidateCache: invalidateFileTreeCache,
+  });
+
   await loadFilePanelPrefs();
   setFileTreeServerAvailable(getLocalServerAvailable());
   if (getLocalServerAvailable()) {

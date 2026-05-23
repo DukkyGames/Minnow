@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const html = readFileSync(join(root, 'index.html'), 'utf8');
 
-/** Nav section ids must match panels in index.html (settings-page.ts SECTIONS). */
+/** Nav section ids must match panels in index.html (settings-page-types SETTINGS_SECTIONS). */
 const SETTINGS_SECTION_IDS = [
   'general',
   'prompting',

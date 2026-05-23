@@ -13,7 +13,14 @@ import {
   hideViewerSplit,
   showViewerSplit,
 } from './file-layout';
-import { refreshFileTree, renderFileTree } from './file-tree';
+import { isMarkdownFilePath } from './file-markdown-path';
+import {
+  showFilePanelContextMenu,
+} from './file-tree-context-menu';
+import {
+  refreshFileTreeViaBridge,
+  renderFileTreeViaBridge,
+} from './file-tree-refresh-bridge';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
@@ -58,11 +65,7 @@ export function hasLargeFileExcerptFooter(content: string): boolean {
   return LARGE_FILE_EXCERPT_FOOTER_RE.test(content);
 }
 
-/** True when the path is a markdown document (`.md` / `.markdown`). */
-export function isMarkdownFilePath(path: string): boolean {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
-  return ext === 'md' || ext === 'markdown';
-}
+export { isMarkdownFilePath } from './file-markdown-path';
 
 /** Whether to show GFM preview instead of the CodeMirror editor for this open request. */
 export function shouldUseMarkdownPreview(path: string, asCode?: boolean): boolean {
@@ -377,7 +380,7 @@ export async function saveCurrentFile(): Promise<boolean> {
     if (lspSyncedPath === currentPath) {
       void notifyLspDocument(currentPath, 'change', content);
     }
-    await refreshFileTree();
+    await refreshFileTreeViaBridge();
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -437,9 +440,7 @@ export function bindFileViewerContextMenu(): void {
     const items = isMarkdownPreviewActive()
       ? [{ label: 'Open as code', action: () => switchMarkdownViewerToCode() }]
       : [{ label: 'Open as preview', action: () => switchMarkdownViewerToPreview() }];
-    void import('./file-tree-context-menu').then((m) =>
-      m.showFilePanelContextMenu(items, e.clientX, e.clientY),
-    );
+    showFilePanelContextMenu(items, e.clientX, e.clientY);
   });
 }
 
@@ -549,7 +550,7 @@ export async function openFileInViewer(
   patchFilePanelState({ selectedPath: relativePath });
   showViewerSplit();
   setViewerLoading(relativePath);
-  renderFileTree();
+  renderFileTreeViaBridge();
 
   try {
     const loaded = await loadFileContent(relativePath);
@@ -585,7 +586,7 @@ function resetViewerPane(): void {
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   hideViewerSplit();
-  renderFileTree();
+  renderFileTreeViaBridge();
 }
 
 /** Close viewer pane and clear selection. */
@@ -608,7 +609,7 @@ export function retargetOpenViewerPath(newPath: string): void {
   currentPath = newPath;
   patchFilePanelState({ selectedPath: newPath });
   updateViewerChrome();
-  renderFileTree();
+  renderFileTreeViaBridge();
 }
 
 export function getOpenViewerPath(): string | null {

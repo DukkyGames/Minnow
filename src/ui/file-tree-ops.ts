@@ -11,6 +11,7 @@ import {
   setFileTreeClipboard,
 } from './file-tree-clipboard';
 import { parseToolResult } from './file-tree-parse-result';
+import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
 import {
   basename,
   dirname,
@@ -140,9 +141,7 @@ async function finishMutation(
 ): Promise<void> {
   applyPathChangeToFilePanelState(oldPath, newPath);
   syncViewerAfterPathChange(oldPath, newPath, operation);
-  const tree = await import('./file-tree');
-  tree.invalidateFileTreeCache();
-  await tree.refreshFileTree();
+  await refreshFileTreeViaBridge();
 }
 
 async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boolean> {

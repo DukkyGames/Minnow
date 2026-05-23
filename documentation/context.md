@@ -44,7 +44,7 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 
 Minnow is a **Vite + TypeScript** single-page web client for **LM Studio** and other **OpenAI-compatible local providers** (multi-provider routing via `~/.minnow/providers/`). UI markup lives in [`index.html`](../index.html); styles and logic are modular under [`src/`](../src/). Production output is emitted to [`dist/`](../dist/) via `npm run build`.
 
-**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **56** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts) (Orchestrate `board_*` trio, `report_orchestrator_status`, sub-agent spawn/status, mode handoff, memory, LSP, Impeccable, etc.); **35** are `serverRequired` and execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **21** are browser-routed (`serverRequired: false`), including web/utility tools, `ask_question`, mode handoff, and sub-agent/board orchestration tools (spawn/status via [`src/tools/sub-agent-executor.ts`](../src/tools/sub-agent-executor.ts) / [`src/tools/board-tools.ts`](../src/tools/board-tools.ts), not raw `POST /api/tools`). File **attachments** (images, text/code, PDF) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
+**LM Studio tools + attachments:** The default send path runs an OpenAI-style **tool loop** (`sendMessageWithTools` in [`src/tools/loop.ts`](../src/tools/loop.ts)). **56** built-in tools are defined in [`src/tools/definitions.ts`](../src/tools/definitions.ts) (Orchestrate `board_*` trio, `report_orchestrator_status`, sub-agent spawn/status, mode handoff, memory, LSP, Impeccable, etc.); **35** are `serverRequired` and execute on the Node side via **`npm start`** (`server.js` → `POST /api/tools`, including **7** CDP `browser_*` tools). **21** are browser-routed (`serverRequired: false`), including web/utility tools, `ask_question`, mode handoff, and sub-agent/board orchestration tools (spawn/status via [`src/tools/sub-agent-executor.ts`](../src/tools/sub-agent-executor.ts) / [`src/tools/board-tools.ts`](../src/tools/board-tools.ts), not raw `POST /api/tools`). File **attachments** (images, text/code, PDF, office documents) use the composer paperclip and multimodal API payloads when a **VLM** model is selected. **`browser_screenshot`** returns inline PNG bubbles via `ToolResultMessage.attachments` and `GET /api/browser/screenshot/:id`.
 
 ## Repository layout (Vite)
 
@@ -106,7 +106,7 @@ Minnow/
 │   ├── attachments/
 │   │   ├── types.ts
 │   │   ├── store.ts        # pending list, preview chips, initAttachments()
-│   │   └── reader.ts       # processFile — image, text, PDF
+│   │   └── reader.ts       # processFile — image, text, PDF, office
 │   ├── markdown/renderer.ts
 │   └── styles/
 │       ├── fonts.css tokens.css global.css topbar.css sidebar.css
@@ -846,12 +846,14 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 |------|---------|
 | `web_search_ddg` | DuckDuckGo HTML snippets when Brave key missing (`web_search` routes here via [`client.ts`](../src/tools/client.ts)) |
 | `send_notification` | OS notification / dialog |
-| `read_document` | PDF attachment extraction (base64 in `args.content`, max **10MB** decoded) |
+| `read_document` | PDF + office attachment text extraction (base64 in `args.content`, max **10MB** decoded) |
 
-### PDF attachments (`read_document` + `pdf-parse`)
+### Document attachments (`read_document` + optional parsers)
 
-- Invoked by [`src/attachments/reader.ts`](../src/attachments/reader.ts) when user picks a `.pdf` and `npm start` is up.
+- Invoked by [`src/attachments/reader.ts`](../src/attachments/reader.ts) when the user picks a **PDF** or **office** file (Excel `.xlsx`/`.xls`, Word `.docx`, PowerPoint `.pptx`, OpenDocument, RTF, etc.) and `npm start` is up.
+- Server: [`server/tools/read-document.js`](../server/tools/read-document.js) — PDF via `pdf-parse`, spreadsheets via `xlsx`, `.docx` via `mammoth`, other legacy/presentation formats via `officeparser` (all optionalDependencies).
 - POST `{ name: 'read_document', args: { filename, content } }` where `content` is base64 file bytes.
+- Extracted office content is stored as `kind: 'text'` attachments; PDF stays `kind: 'pdf'`.
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
@@ -960,6 +962,7 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 | **Images** | `dataUrl` in memory; API: `image_url` parts when model type is **vlm** (`modelCache`) |
 | **Text/code** | Many extensions in `reader.ts`; soft warn if **> 32 KB** (`largeTextWarning` chip) |
 | **PDF** | Server `read_document` when `npm start`; else error chip |
+| **Office** | Excel, Word, PowerPoint, OpenDocument, RTF — same `read_document` path; optional `xlsx`, `mammoth`, `officeparser` on the server |
 | **Other binary** | Unsupported error chip |
 | **After send** | `clearAttachments()` only when the send completes **normally** (`completedNormally` in [`sendMessageWithTools`](../src/tools/loop.ts)); abort, errors, and max-tool-turn exits **keep** preview chips so the user can retry |
 | **History** | User `content` string with `[image: …]` and/or `<file name="…">` blocks |
@@ -1102,6 +1105,8 @@ Cursor-style **⋮ menu** on each history-backed user/assistant row (not on in-f
 | **`npm run dev`** | `vite` only | No | UI/HMR without Node tool handlers; server tools stay disabled in Settings |
 | **`npm run build`** | `tsc` + `vite build` → `dist/` | N/A (static deploy; no `server.js` in production unless you host it separately) |
 | **`npm run preview`** | `vite preview` | No | Smoke-test production bundle |
+
+**Production code-split (MIN-20):** [`main.ts`](../src/main.ts) lazy-loads [`settings-page.ts`](../src/ui/settings-page.ts) (CSS co-located) and [`init-file-panel.ts`](../src/ui/init-file-panel.ts) (file tree + CodeMirror viewer). Shared types live in [`settings-page-types.ts`](../src/ui/settings-page-types.ts); tree refresh from main/workspace uses [`file-tree-refresh-bridge.ts`](../src/ui/file-tree-refresh-bridge.ts) registered at file-panel init. Typical `npm run build` main JS chunk ~1.83 MB (gzip ~573 KB); lazy chunks include `settings-page` (~73 KB), `file-viewer` (~319 KB), `init-file-panel` (~17 KB).
 
 ### Testing
 

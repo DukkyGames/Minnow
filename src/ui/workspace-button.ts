@@ -10,8 +10,8 @@ import {
   setWorkspaceFromServer,
 } from '../state/workspace';
 import { getLocalServerAvailable } from '../tools/client';
+import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
 import { setStatus } from './status';
-import { invalidateFileTreeCache, refreshFileTree } from './file-tree';
 import { applyWorkspaceScopedSession } from './sidebar';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import {
@@ -67,8 +67,7 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
     expandedDirs: [],
     selectedPath: null,
   });
-  invalidateFileTreeCache();
-  await refreshFileTree();
+  await refreshFileTreeViaBridge();
 
   setStatus('ok', `Workspace: ${info.label}`);
 }

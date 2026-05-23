@@ -5,7 +5,8 @@
 import { isFileTreeServerAvailable } from './file-tree-server';
 import { getFileTreeClipboard } from './file-tree-clipboard';
 import { pasteTargetDirForPath } from './file-tree-path';
-import { isMarkdownFilePath } from './file-viewer';
+import { isMarkdownFilePath } from './file-markdown-path';
+import * as fileTreeOps from './file-tree-ops';
 type FileTreeEntryKind = 'file' | 'dir';
 
 export interface FileTreeMenuContext {
@@ -95,10 +96,6 @@ function positionMenu(clientX: number, clientY: number): void {
   menu.style.top = `${top}px`;
 }
 
-async function loadOps() {
-  return import('./file-tree-ops');
-}
-
 function serverCrudEnabled(): boolean {
   return isFileTreeServerAvailable();
 }
@@ -141,28 +138,28 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     {
       label: 'Cut',
       disabled,
-      action: () => void loadOps().then((m) => m.cutPathToClipboard(ctx.path)),
+      action: () => void fileTreeOps.cutPathToClipboard(ctx.path),
     },
     {
       label: 'Copy',
       disabled,
-      action: () => void loadOps().then((m) => m.copyPathToClipboard(ctx.path)),
+      action: () => void fileTreeOps.copyPathToClipboard(ctx.path),
     },
     {
       label: 'Paste',
       disabled: pasteDisabled,
       title: pasteDisabled && !hasClipboard ? 'Copy or cut a file first' : undefined,
-      action: () => void loadOps().then((m) => m.pasteInto(ctx.targetDir)),
+      action: () => void fileTreeOps.pasteInto(ctx.targetDir),
     },
     {
       label: 'Rename…',
       disabled,
-      action: () => void loadOps().then((m) => m.renamePath(ctx.path, ctx.kind)),
+      action: () => void fileTreeOps.renamePath(ctx.path, ctx.kind),
     },
     {
       label: 'Delete',
       disabled,
-      action: () => void loadOps().then((m) => m.deletePath(ctx.path, ctx.kind)),
+      action: () => void fileTreeOps.deletePath(ctx.path, ctx.kind),
     },
   ];
 }
@@ -177,17 +174,17 @@ function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     {
       label: 'New File…',
       disabled,
-      action: () => void loadOps().then((m) => m.createFileInDir(ctx.targetDir)),
+      action: () => void fileTreeOps.createFileInDir(ctx.targetDir),
     },
     {
       label: 'New Folder…',
       disabled,
-      action: () => void loadOps().then((m) => m.createFolderInDir(ctx.targetDir)),
+      action: () => void fileTreeOps.createFolderInDir(ctx.targetDir),
     },
     {
       label: 'Cut',
       disabled,
-      action: () => void loadOps().then((m) => m.cutPathToClipboard(ctx.path)),
+      action: () => void fileTreeOps.cutPathToClipboard(ctx.path),
     },
     {
       label: 'Copy',
@@ -198,17 +195,17 @@ function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
       label: 'Paste',
       disabled: pasteDisabled,
       title: pasteDisabled && !hasClipboard ? 'Copy or cut a file first' : undefined,
-      action: () => void loadOps().then((m) => m.pasteInto(ctx.targetDir)),
+      action: () => void fileTreeOps.pasteInto(ctx.targetDir),
     },
     {
       label: 'Rename…',
       disabled,
-      action: () => void loadOps().then((m) => m.renamePath(ctx.path, ctx.kind)),
+      action: () => void fileTreeOps.renamePath(ctx.path, ctx.kind),
     },
     {
       label: 'Delete',
       disabled,
-      action: () => void loadOps().then((m) => m.deletePath(ctx.path, ctx.kind)),
+      action: () => void fileTreeOps.deletePath(ctx.path, ctx.kind),
     },
   ];
 }
@@ -219,12 +216,12 @@ function buildBackgroundMenuItems(targetDir: string): MenuItemDef[] {
     {
       label: 'New File…',
       disabled: offline,
-      action: () => void loadOps().then((m) => m.createFileInDir(targetDir)),
+      action: () => void fileTreeOps.createFileInDir(targetDir),
     },
     {
       label: 'New Folder…',
       disabled: offline,
-      action: () => void loadOps().then((m) => m.createFolderInDir(targetDir)),
+      action: () => void fileTreeOps.createFolderInDir(targetDir),
     },
   ];
 }

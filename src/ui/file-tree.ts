@@ -30,6 +30,7 @@ import {
   fileRowPaddingLeftPx,
 } from './file-tree-indent';
 import { isFileViewerEditorFocused } from './file-viewer-focus';
+import * as fileTreeOps from './file-tree-ops';
 
 export {
   FILE_TREE_DEPTH_INDENT_PX,
@@ -482,37 +483,33 @@ function handleTreeKeydown(e: KeyboardEvent): void {
   const ctrl = e.ctrlKey;
   const mod = meta || ctrl;
 
-  void (async () => {
-    const ops = await import('./file-tree-ops');
+  if (mod && (e.key === 'c' || e.key === 'C')) {
+    e.preventDefault();
+    if (focusedTreeKind === 'file') fileTreeOps.copyPathToClipboard(focusedTreePath);
+    return;
+  }
+  if (mod && (e.key === 'x' || e.key === 'X')) {
+    e.preventDefault();
+    fileTreeOps.cutPathToClipboard(focusedTreePath);
+    return;
+  }
+  if (mod && (e.key === 'v' || e.key === 'V')) {
+    e.preventDefault();
+    const target = pasteTargetDirForPath(focusedTreePath, focusedTreeKind);
+    void fileTreeOps.pasteInto(target);
+    return;
+  }
 
-    if (mod && (e.key === 'c' || e.key === 'C')) {
-      e.preventDefault();
-      if (focusedTreeKind === 'file') ops.copyPathToClipboard(focusedTreePath);
-      return;
-    }
-    if (mod && (e.key === 'x' || e.key === 'X')) {
-      e.preventDefault();
-      ops.cutPathToClipboard(focusedTreePath);
-      return;
-    }
-    if (mod && (e.key === 'v' || e.key === 'V')) {
-      e.preventDefault();
-      const target = pasteTargetDirForPath(focusedTreePath, focusedTreeKind);
-      void ops.pasteInto(target);
-      return;
-    }
+  if (e.key === 'F2') {
+    e.preventDefault();
+    void fileTreeOps.renamePath(focusedTreePath, focusedTreeKind);
+    return;
+  }
 
-    if (e.key === 'F2') {
-      e.preventDefault();
-      void ops.renamePath(focusedTreePath, focusedTreeKind);
-      return;
-    }
-
-    if (e.key === 'Delete') {
-      e.preventDefault();
-      void ops.deletePath(focusedTreePath, focusedTreeKind);
-    }
-  })();
+  if (e.key === 'Delete') {
+    e.preventDefault();
+    void fileTreeOps.deletePath(focusedTreePath, focusedTreeKind);
+  }
 }
 
 /** Bind tree host shortcuts and background context menu (once). */
