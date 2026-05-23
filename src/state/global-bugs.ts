@@ -1,27 +1,25 @@
 /**
- * Aggregate bug cards across all chats in the session (MIN-16 global list).
+ * Aggregate bugs from ~/.minnow/bugs/state.json (MIN-16 global list).
  */
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
-import type { BugCard, BugColumn, Chat } from '../types.ts';
+import { findBugById, listBugs } from './bug-board-store.ts';
+import { findChatById } from './sessions.ts';
+import type { BugCard, BugColumn } from '../types.ts';
 
-/** One bug row in the global list with owning chat metadata. */
+/** One bug row in the global list. */
 export interface GlobalBugEntry {
-  chatId: string;
-  chatName: string;
-  workspacePath: string;
   bug: BugCard;
+  /** Linked investigation/fix chat when set. */
+  chatName: string;
 }
 
 export type GlobalBugScope = 'all' | 'current_workspace';
 
 export type CollectGlobalBugsOptions = {
-  /** When set, only bugs from chats in this workspace (normalized). */
   workspacePath?: string;
   scope?: GlobalBugScope;
-  /** Omit bugs in the complete column. */
   hideComplete?: boolean;
-  /** When set, only bugs in this column. */
   column?: BugColumn | 'all';
 };
 
@@ -32,16 +30,22 @@ function workspaceLabel(path: string): string {
   return parts[parts.length - 1] || trimmed;
 }
 
-/** Short label for UI (chat name + workspace). */
-export function formatGlobalBugWorkspaceLabel(entry: GlobalBugEntry): string {
-  const ws = workspaceLabel(entry.workspacePath);
-  if (!entry.workspacePath.trim()) return ws;
-  return ws;
+/** Short label for UI (workspace folder name). */
+export function formatGlobalBugWorkspaceLabel(bug: BugCard): string {
+  return workspaceLabel(bug.workspacePath);
 }
 
-/** Collect bugs from chats, newest activity first. */
+function chatLabelForBug(bug: BugCard): string {
+  if (bug.chatId) {
+    const chat = findChatById(bug.chatId);
+    if (chat?.name?.trim()) return chat.name.trim();
+    return 'Investigation chat';
+  }
+  return '—';
+}
+
+/** Collect bugs, newest activity first. */
 export function collectGlobalBugs(
-  chats: Chat[],
   options: CollectGlobalBugsOptions = {},
 ): GlobalBugEntry[] {
   const scope = options.scope ?? 'current_workspace';
@@ -54,23 +58,15 @@ export function collectGlobalBugs(
 
   const entries: GlobalBugEntry[] = [];
 
-  for (const chat of chats) {
-    const bugs = chat.bugBoard?.bugs;
-    if (!bugs?.length) continue;
-
-    const chatWorkspace = normalizeWorkspacePath(chat.workspacePath ?? '');
-    if (workspaceKey !== null && chatWorkspace !== workspaceKey) continue;
-
-    for (const bug of bugs) {
-      if (hideComplete && bug.column === 'complete') continue;
-      if (columnFilter !== 'all' && bug.column !== columnFilter) continue;
-      entries.push({
-        chatId: chat.id,
-        chatName: chat.name?.trim() || 'Chat',
-        workspacePath: chat.workspacePath ?? '',
-        bug,
-      });
-    }
+  for (const bug of listBugs()) {
+    const bugWorkspace = normalizeWorkspacePath(bug.workspacePath ?? '');
+    if (workspaceKey !== null && bugWorkspace !== workspaceKey) continue;
+    if (hideComplete && bug.column === 'complete') continue;
+    if (columnFilter !== 'all' && bug.column !== columnFilter) continue;
+    entries.push({
+      bug,
+      chatName: chatLabelForBug(bug),
+    });
   }
 
   entries.sort((a, b) => b.bug.updatedAt - a.bug.updatedAt);
@@ -79,9 +75,14 @@ export function collectGlobalBugs(
 
 /** Count open (non-complete) bugs for a scope. */
 export function countOpenGlobalBugs(
-  chats: Chat[],
   options: Omit<CollectGlobalBugsOptions, 'hideComplete' | 'column'> = {},
 ): number {
-  return collectGlobalBugs(chats, { ...options, hideComplete: true, column: 'all' })
-    .length;
+  return collectGlobalBugs({ ...options, hideComplete: true, column: 'all' }).length;
+}
+
+/** Resolve entry by bug id (for pipeline / navigation). */
+export function findGlobalBugEntry(bugId: string): GlobalBugEntry | undefined {
+  const bug = findBugById(bugId);
+  if (!bug) return undefined;
+  return { bug, chatName: chatLabelForBug(bug) };
 }

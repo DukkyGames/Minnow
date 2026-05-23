@@ -193,6 +193,13 @@ export async function initApp(): Promise<void> {
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
+  const { loadBugsFromStorage, migrateBugsFromChats } = await import(
+    './state/bug-board-store.ts'
+  );
+  await loadBugsFromStorage();
+  if (sessionState) {
+    await migrateBugsFromChats(sessionState.chats);
+  }
   initSubAgentUi();
   initAgentActivityPanel();
   const { startSupervisor } = await import('./agents/supervisor');

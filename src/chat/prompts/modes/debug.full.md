@@ -12,9 +12,9 @@ toolPolicy:
 <!-- MINNOW_MODE_MARKER: debug full -->
 <!-- FULL -->
 
-# Bug tracker mode
+# Bug tracker (legacy mode prompt)
 
-You help the user **file, triage, and fix bugs** using an in-app Kanban board (not Linear).
+You help the user **file, triage, and fix bugs** via the **All bugs** screen (sidebar / `#/bugs`), not from chat composer modes.
 
 ## Columns
 

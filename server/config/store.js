@@ -14,6 +14,7 @@ import {
   validateSessionState,
   validateSystemPromptSettings,
   validateUserRulesSettings,
+  validateBugsState,
 } from './validators.js';
 import {
   DEFAULT_META,
@@ -136,6 +137,10 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? { version: 1, enabled: true, globalMaxConcurrent: 3, defaultTimeoutMs: 300000, types: {} };
   }
+  if (resource === 'bugs') {
+    const data = await readConfigJson(key);
+    return data ?? { version: 1, bugs: [] };
+  }
 
   return readConfigJson(key);
 }
@@ -183,6 +188,11 @@ export async function writeResource(resource, body) {
     const { config } = normalizeSubAgentsConfig(body);
     await writeConfigJson(key, config);
     return config;
+  }
+  if (resource === 'bugs') {
+    const validated = validateBugsState(body);
+    await writeConfigJson(key, validated);
+    return validated;
   }
 
   await writeConfigJson(key, body);

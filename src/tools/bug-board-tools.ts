@@ -1,17 +1,30 @@
 /**
- * Bug tracker tools: bug_add, bug_update, bug_get_state (global #/bugs screen only).
+ * Bug tracker tools: bug_add, bug_update, bug_get_state (All bugs screen).
  */
 
 import {
   addBug,
-  getBugBoardSnapshot,
+  getBugsSnapshot,
   isBugColumn,
   isBugSeverity,
   updateBug,
 } from '../state/bug-board-store.ts';
-import { findChatById } from '../state/sessions.ts';
+import { getWorkspacePath } from '../state/workspace.ts';
 import { isGlobalBugsPageOpen } from '../ui/global-bugs-page.ts';
-import type { BugCard, Chat } from '../types.ts';
+import type { BugCard } from '../types.ts';
+
+/** Test override for global bugs page visibility (no DOM in node tests). */
+let globalBugsPageOpenOverride: boolean | null = null;
+
+/** Force All bugs screen open/closed in unit tests. */
+export function setGlobalBugsPageOpenForTests(value: boolean | null): void {
+  globalBugsPageOpenOverride = value;
+}
+
+function isBugToolScreenActive(): boolean {
+  if (globalBugsPageOpenOverride !== null) return globalBugsPageOpenOverride;
+  return isGlobalBugsPageOpen();
+}
 
 export interface BugBoardExecutorContext {
   chatId: string;
@@ -19,16 +32,9 @@ export interface BugBoardExecutorContext {
 
 let executorContext: BugBoardExecutorContext | null = null;
 
-/** Set parent chat context for bug_* tools (from tool loop). */
+/** Set parent chat context for bug_* tools (from tool loop; used for linked chat only). */
 export function setBugBoardExecutorContext(ctx: BugBoardExecutorContext | null): void {
   executorContext = ctx;
-}
-
-function resolveBugToolChat(): Chat | null {
-  if (!isGlobalBugsPageOpen()) return null;
-  const chatId = executorContext?.chatId?.trim();
-  if (!chatId) return null;
-  return findChatById(chatId);
 }
 
 function newBugId(): string {
@@ -55,7 +61,7 @@ export function validateBugAddArgs(args: Record<string, unknown>): ValidateBugAd
 }
 
 export type ValidateBugUpdateResult =
-  | { ok: true; bugId: string; patch: Parameters<typeof updateBug>[2] }
+  | { ok: true; bugId: string; patch: Parameters<typeof updateBug>[1] }
   | { ok: false; error: string };
 
 /** Validate bug_update arguments (exported for tests). */
@@ -68,7 +74,7 @@ export function validateBugUpdateArgs(args: Record<string, unknown>): ValidateBu
         : '';
   if (!bugId) return { ok: false, error: 'Error: bug_update requires "bug_id"' };
 
-  const patch: Parameters<typeof updateBug>[2] = {};
+  const patch: Parameters<typeof updateBug>[1] = {};
   const columnRaw = typeof args.column === 'string' ? args.column.trim() : '';
   if (columnRaw) {
     if (!isBugColumn(columnRaw)) {
@@ -108,9 +114,8 @@ export async function executeBugBoardTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  const chat = resolveBugToolChat();
-  if (!chat) {
-    return 'Error: bug board tools are only available on the All bugs screen (#/bugs)';
+  if (!isBugToolScreenActive()) {
+    return 'Error: bug board tools require the All bugs screen (#/bugs)';
   }
 
   if (name === 'bug_add') {
@@ -120,24 +125,26 @@ export async function executeBugBoardTool(
       typeof args.bug_id === 'string' && args.bug_id.trim()
         ? args.bug_id.trim()
         : newBugId();
-    const card = addBug(chat, validated, bugId);
+    const card = addBug(
+      {
+        ...validated,
+        workspacePath: getWorkspacePath(),
+      },
+      bugId,
+    );
     return JSON.stringify(card, null, 2);
   }
 
   if (name === 'bug_update') {
     const validated = validateBugUpdateArgs(args);
     if (validated.ok === false) return validated.error;
-    const updated = updateBug(chat, validated.bugId, validated.patch);
+    const updated = updateBug(validated.bugId, validated.patch);
     if (!updated) return `Error: unknown bug_id "${validated.bugId}"`;
     return JSON.stringify(updated, null, 2);
   }
 
   if (name === 'bug_get_state') {
-    const snapshot = getBugBoardSnapshot(chat);
-    if (!snapshot) {
-      return JSON.stringify({ bugs: [], startedAt: null, lastUpdatedAt: null }, null, 2);
-    }
-    return JSON.stringify(snapshot, null, 2);
+    return JSON.stringify(getBugsSnapshot(), null, 2);
   }
 
   return `Error: unknown bug board tool "${name}"`;

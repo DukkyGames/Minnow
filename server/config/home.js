@@ -58,6 +58,7 @@ export const resetSpeedChatHomeCache = resetMinnowHomeCache;
 
 const SCAFFOLD_DIRS = [
   'sessions',
+  'bugs',
   'memory',
   'providers',
   'mcp',
@@ -273,6 +274,7 @@ export async function ensureMinnowLayout() {
     { rel: 'skills.json', data: defaultSkillsJson() },
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
     { rel: 'rules.json', data: DEFAULT_RULES },
+    { rel: 'bugs/state.json', data: { version: 1, bugs: [] } },
   ];
 
   for (const { rel, data } of defaults) {

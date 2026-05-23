@@ -19,7 +19,6 @@ const HANDOFF_MODES = new Set<ModeId>([
   'research',
   'orchestrate',
   'reef',
-  'debug',
 ]);
 
 type HandoffSituation =

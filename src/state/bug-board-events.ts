@@ -1,42 +1,44 @@
 /**
- * Pub/sub for bug board UI updates (decoupled from DOM).
+ * Pub/sub for global bug tracker UI updates.
  */
 
-type BugBoardChangeListener = (chatId: string) => void;
+type BugsChangeListener = () => void;
 
-const listenersByChatId = new Map<string, Set<BugBoardChangeListener>>();
+const listeners = new Set<BugsChangeListener>();
 
-/** Register a listener for one chat; returns unsubscribe. */
-export function subscribeBugBoardChanges(
-  chatId: string,
-  listener: BugBoardChangeListener,
-): () => void {
-  let set = listenersByChatId.get(chatId);
-  if (!set) {
-    set = new Set();
-    listenersByChatId.set(chatId, set);
-  }
-  set.add(listener);
+/** Register a global bugs listener; returns unsubscribe. */
+export function subscribeBugsChanges(listener: BugsChangeListener): () => void {
+  listeners.add(listener);
   return () => {
-    set?.delete(listener);
-    if (set && set.size === 0) listenersByChatId.delete(chatId);
+    listeners.delete(listener);
   };
 }
 
-/** Notify subscribers that bug board state changed for a chat. */
-export function emitBugBoardChange(chatId: string): void {
-  const set = listenersByChatId.get(chatId);
-  if (!set) return;
-  for (const fn of set) {
+/** @deprecated Use subscribeBugsChanges — chatId is ignored. */
+export function subscribeBugBoardChanges(
+  _chatId: string,
+  listener: BugsChangeListener,
+): () => void {
+  return subscribeBugsChanges(listener);
+}
+
+/** Notify subscribers that bug data changed. */
+export function emitBugsChange(): void {
+  for (const fn of listeners) {
     try {
-      fn(chatId);
+      fn();
     } catch {
       /* ignore subscriber errors */
     }
   }
 }
 
+/** @deprecated Use emitBugsChange. */
+export function emitBugBoardChange(_chatId: string): void {
+  emitBugsChange();
+}
+
 /** Clear all listeners (test teardown). */
 export function clearBugBoardListenersForTests(): void {
-  listenersByChatId.clear();
+  listeners.clear();
 }

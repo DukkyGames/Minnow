@@ -36,7 +36,7 @@ export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
   const mode = normalizeModeId(active.modeId);
-  if ((mode === 'orchestrate' || mode === 'debug') && active.viewMode === 'board') {
+  if (mode === 'orchestrate' && active.viewMode === 'board') {
     return false;
   }
   return true;

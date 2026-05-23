@@ -5,9 +5,11 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import { setBugsStateForTests } from '../../src/state/bug-board-store.ts';
 import {
   executeBugBoardTool,
   setBugBoardExecutorContext,
+  setGlobalBugsPageOpenForTests,
   validateBugAddArgs,
   validateBugUpdateArgs,
 } from '../../src/tools/bug-board-tools.ts';
@@ -21,7 +23,7 @@ function makeChat(): Chat {
     name: 'Debug',
     workspacePath: '/workspace',
     modelId: 'test',
-    modeId: 'debug',
+    modeId: 'build',
     history: [],
     lastStats: null,
     modelInfo: {},
@@ -31,6 +33,7 @@ function makeChat(): Chat {
 
 describe('bug-board-tools', () => {
   beforeEach(() => {
+    setBugsStateForTests({ version: 1, bugs: [] });
     setSessionStateForTests({
       version: 2,
       activeId: CHAT_ID,
@@ -38,6 +41,7 @@ describe('bug-board-tools', () => {
       chats: [makeChat()],
     });
     setBugBoardExecutorContext({ chatId: CHAT_ID });
+    setGlobalBugsPageOpenForTests(true);
   });
 
   test('validateBugAddArgs rejects empty title', () => {
@@ -71,17 +75,12 @@ describe('bug-board-tools', () => {
     assert.match(updateResult, /"column": "planned"/);
   });
 
-  test('executeBugBoardTool fails outside debug mode', async () => {
-    setSessionStateForTests({
-      version: 2,
-      activeId: CHAT_ID,
-      sidebarCollapsed: false,
-      chats: [{ ...makeChat(), modeId: 'build' }],
-    });
+  test('executeBugBoardTool fails when All bugs screen is closed', async () => {
+    setGlobalBugsPageOpenForTests(false);
     const out = await executeBugBoardTool('bug_add', {
       title: 'x',
       severity: 'low',
     });
-    assert.match(out, /debug mode/);
+    assert.match(out, /All bugs screen/i);
   });
 });

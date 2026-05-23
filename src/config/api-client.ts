@@ -2,6 +2,7 @@
  * HTTP client for ~/.minnow config API (npm start only).
  */
 
+import type { BugsState } from '../state/bug-board-store.ts';
 import type { SessionState, SystemPromptSettings } from '../types';
 import type { SkillConfig } from '../skills/config';
 import type { ToolConfig } from '../tools/tool-settings-types';
@@ -62,6 +63,22 @@ export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
 export async function getSessions(): Promise<SessionState> {
   const res = await fetch('/api/config/sessions', { cache: 'no-store' });
   return parseJsonResponse<SessionState>(res);
+}
+
+/** GET /api/config/bugs */
+export async function getBugs(): Promise<BugsState> {
+  const res = await fetch('/api/config/bugs', { cache: 'no-store' });
+  return parseJsonResponse<BugsState>(res);
+}
+
+/** PUT /api/config/bugs */
+export async function putBugs(state: BugsState): Promise<void> {
+  const res = await fetch('/api/config/bugs', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(state),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
 }
 
 /** PUT /api/config/sessions */

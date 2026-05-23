@@ -2,8 +2,23 @@
  * Bug tracker board — extends orchestrate board layout.
  */
 
-.bug-board-kanban {
-  grid-template-columns: repeat(5, minmax(10rem, 1fr));
+/* Five workflow columns (orchestrate board uses four). */
+.kanban-grid.bug-board-kanban {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 899px) {
+  .kanban-grid.bug-board-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.global-bugs-list-mount .board-root {
+  min-height: 0;
+}
+
+.global-bugs-list-mount .board-main {
+  min-height: 12rem;
 }
 
 .bug-add-section {
@@ -52,6 +67,7 @@
   gap: 6px;
   margin-top: 8px;
 }
+
 
 .board-btn--sm {
   font-size: 0.72rem;

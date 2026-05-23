@@ -228,12 +228,16 @@
   height: 18px;
 }
 
-/* Raster topbar icons (e.g. Benchmark speed gauge) */
+/* Raster topbar icons (e.g. Benchmark speed gauge) — match SVG currentColor behavior */
 .icon-btn .icon-img {
   width: 18px;
   height: 18px;
   display: block;
   object-fit: contain;
+  /* Default: light silhouette (same as stroke icons using var(--text)) */
+  filter: brightness(0) invert(1);
+  opacity: 0.88;
+  transition: filter 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
 }
 
 /* Hover affordances only when the device supports hover (not touch-primary) */
@@ -244,8 +248,10 @@
     background: var(--accent);
   }
 
+  /* Hover: dark silhouette on accent fill (same as .icon-svg stroke: currentColor) */
   .icon-btn:hover .icon-img {
-    filter: brightness(0) invert(1);
+    filter: brightness(0);
+    opacity: 1;
   }
 }
 

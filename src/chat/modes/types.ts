@@ -29,7 +29,7 @@ export function isModeId(value: string): value is ModeId {
 
 /** Normalize persisted or unknown values to a valid ModeId. */
 export function normalizeModeId(value: string | null | undefined): ModeId {
-  // Legacy bug-tracker mode — bugs live on the global #/bugs screen only.
+  // Legacy bug-tracker mode — bugs use the global All bugs screen only.
   if (value === 'debug') return DEFAULT_MODE_ID;
   if (value && isModeId(value)) return value;
   return DEFAULT_MODE_ID;

@@ -8,12 +8,12 @@ Aggregate bug cards from every chat in `sessions/state.json` into one searchable
 
 | Item | Decision |
 | --- | --- |
-| Data source | All chats in session (`chat.bugBoard.bugs`) |
+| Data source | `~/.minnow/bugs/state.json` |
 | Workspace filter | **All** sessions vs **current workspace** (default: current) |
 | Column filter | All columns or one workflow column |
 | Hide complete | Toggle (default: on) |
 | Entry point | Sidebar **All bugs** button + `#/bugs` route |
-| Row action | Switch chat → **Bugs** mode → board view |
+| Row action | Switch to owning chat (`openGlobalBugInChat`) |
 
 ## Todos
 

@@ -836,7 +836,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'bug_add',
     label: 'Bug add',
-    description: 'Add a bug card to the Reported column (debug mode).',
+    description: 'Add a bug card to the Reported column (All bugs screen).',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
@@ -858,7 +858,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'bug_update',
     label: 'Bug update',
-    description: 'Update bug column, notes, or plan path (debug mode).',
+    description: 'Update bug column, notes, or plan path (All bugs screen).',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
@@ -881,10 +881,10 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'bug_get_state',
     label: 'Bug get state',
-    description: 'Return full bug board JSON (debug mode).',
+    description: 'Return full bug board JSON (All bugs screen).',
     category: 'agents',
     serverRequired: false,
-    definition: toolSchema('bug_get_state', 'Read bugBoard snapshot.', {}, []),
+    definition: toolSchema('bug_get_state', 'Read all bugs from ~/.minnow/bugs/state.json.', {}, []),
   },
   {
     id: 'report_orchestrator_status',
