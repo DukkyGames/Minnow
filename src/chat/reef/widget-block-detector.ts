@@ -4,7 +4,11 @@
 
 import { createReefWidgetIframe } from './widget-iframe.ts';
 import { registerReefWidgetHost } from './widget-bridge.ts';
-import { createReefWidgetValidatingStatus } from './widget-error-ui.ts';
+import {
+  createReefWidgetErrorPanel,
+  createReefWidgetValidatingStatus,
+} from './widget-error-ui.ts';
+import { prepareReefWidgetHtml } from './widget-fence-body.ts';
 import {
   applyReefWidgetPendingUi,
   inferReefWidgetBuildPhase,
@@ -31,6 +35,16 @@ function isClosedReefFence(code: HTMLElement): boolean {
   if (!parentPre) return false;
   if (parentPre.querySelector('.stream-cursor')) return false;
   return true;
+}
+
+/** Mount an error panel instead of a broken iframe when fence HTML is invalid. */
+function mountReefWidgetFenceError(pre: HTMLPreElement, errors: string[]): void {
+  pre.dataset.reefMounted = 'true';
+  const host = document.createElement('div');
+  host.className = 'reef-widget-host reef-widget-host--error';
+  host.dataset.reefMounted = 'true';
+  host.appendChild(createReefWidgetErrorPanel(errors));
+  pre.replaceWith(host);
 }
 
 /**
@@ -64,7 +78,14 @@ export function mountReefWidgetBlocks(
     const code = pre.querySelector('code');
     if (!code || !isClosedReefFence(code)) return;
 
-    const widgetHtml = code.textContent ?? '';
+    const rawFenceBody = code.textContent ?? '';
+    const prepared = prepareReefWidgetHtml(rawFenceBody);
+    if (!prepared.ok) {
+      mountReefWidgetFenceError(pre, prepared.errors);
+      return;
+    }
+
+    const widgetHtml = prepared.value.html;
     pre.dataset.reefMounted = 'true';
 
     const host = document.createElement('div');
@@ -74,10 +95,12 @@ export function mountReefWidgetBlocks(
     const { iframe, widgetId, setSrcdoc } = createReefWidgetIframe({ widgetHtml });
     host.dataset.widgetId = widgetId;
     host.appendChild(createReefWidgetValidatingStatus());
-    iframe.style.visibility = 'hidden';
+    /* Probe iframe stays off-screen via .reef-widget-host--validating CSS (opacity:0). */
     host.appendChild(iframe);
 
-    registerReefWidgetHost(widgetId, host, iframe, setSrcdoc, widgetHtml);
     pre.replaceWith(host);
+    registerReefWidgetHost(widgetId, host, iframe, setSrcdoc, widgetHtml);
+    /* srcdoc scripts only run reliably once the iframe is in the live document. */
+    setSrcdoc(widgetHtml);
   });
 }

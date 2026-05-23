@@ -179,6 +179,37 @@ describe('widget-block-detector', { concurrency: false }, () => {
     assert.ok(host?.querySelector('iframe.reef-widget-iframe'));
   });
 
+  test('shows error panel when fence body contains nested reef-widget markers', async () => {
+    setupDom();
+    const chat = createEmptyChatObject('model-a');
+    chat.modeId = 'reef';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const bubble = document.createElement('div');
+    const pre = document.createElement('pre');
+    pre.setAttribute('data-lang', 'reef-widget');
+    const code = document.createElement('code');
+    code.textContent = `text-align: right\`\`\`reef-widget
+<style>
+.calc { font-size: 1rem;
+`;
+    pre.appendChild(code);
+    bubble.appendChild(pre);
+
+    mountReefWidgetBlocks(bubble);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    const host = bubble.querySelector('.reef-widget-host--error');
+    assert.ok(host);
+    assert.equal(bubble.querySelector('iframe'), null);
+    assert.match(host?.textContent ?? '', /style/i);
+  });
+
   test('does not remount when pre already marked', () => {
     setupDom();
     const chat = createEmptyChatObject('model-a');

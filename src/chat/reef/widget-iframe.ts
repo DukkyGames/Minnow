@@ -199,7 +199,7 @@ export function createReefWidgetIframe(
     });
   };
 
-  setSrcdoc(options.widgetHtml);
+  /* Caller must invoke setSrcdoc after the iframe is connected in the document tree. */
   return { iframe, widgetId, setSrcdoc };
 }
 

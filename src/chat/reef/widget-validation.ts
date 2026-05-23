@@ -2,8 +2,11 @@
  * Reef widget iframe validation timing and test hooks (host preflight before reveal).
  */
 
-/** Milliseconds to wait after mount before failing closed when no validateResult arrives. */
-export const REEF_WIDGET_VALIDATION_TIMEOUT_MS = 1200;
+/** Milliseconds after iframe load before failing closed when no validateResult arrives. */
+export const REEF_WIDGET_VALIDATION_TIMEOUT_MS = 5000;
+
+/** Brief grace after validateResult when resize is still in flight (hidden probe iframe). */
+export const REEF_WIDGET_VALIDATION_RESIZE_GRACE_MS = 300;
 
 /** Minimum measured content height (px) to treat a widget as rendered. */
 export const REEF_WIDGET_MIN_CONTENT_HEIGHT_PX = 24;
