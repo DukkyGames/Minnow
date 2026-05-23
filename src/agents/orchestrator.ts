@@ -206,8 +206,9 @@ function syncBoardTaskOnSettle(
   };
 
   if (status === 'completed' && !maxTurnFailure) {
+    // Don't auto-complete: orchestrator controls task status via board_update_task.
+    // Only clear the assignment and record end time so the UI reflects the run ended.
     updateTask(chat, taskId, {
-      status: 'complete',
       endedAt,
       ...settlePatch,
     });
