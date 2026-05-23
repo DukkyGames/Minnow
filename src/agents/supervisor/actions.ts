@@ -17,7 +17,14 @@ import { enqueueAskQuestion } from '../../tools/ask-question-queue.ts';
 import { getSupervisorConfigSnapshot } from './config.ts';
 import { runLlmEscalationJudgement } from './escalation.ts';
 import type { SupervisorDecision } from './rules.ts';
-import { getRunHealth, getSupervisorChatState, markChatStalledForUi } from './state.ts';
+import {
+  beginOrchestrateStallEpisode,
+  getRunHealth,
+  getSupervisorChatState,
+  markChatStalledForUi,
+  markOrchestrateWatchdogToastShown,
+  shouldShowOrchestrateWatchdogToast,
+} from './state.ts';
 
 let resumeInFlight = false;
 
@@ -50,6 +57,13 @@ function showWatchdogToast(message: string): void {
   }, 5000);
 }
 
+/** Show stall resume toast at most once until the stall flag clears. */
+function showWatchdogToastOncePerStallEpisode(chatId: string, message: string): void {
+  if (!shouldShowOrchestrateWatchdogToast(chatId)) return;
+  markOrchestrateWatchdogToastShown(chatId);
+  showWatchdogToast(message);
+}
+
 /**
  * Apply one supervisor decision produced by `pickSupervisorDecision`.
  */
@@ -67,6 +81,7 @@ export async function executeSupervisorDecision(
     case 'none':
       return;
     case 'budget_stall': {
+      beginOrchestrateStallEpisode(chatId);
       markChatStalledForUi(chatId, true);
       emitBoardChange(chatId);
       return;
@@ -80,6 +95,7 @@ export async function executeSupervisorDecision(
           : null;
       const retriesExhausted = decision.payload?.retriesExhausted === true;
       if (decision.rule === 'R8' && retriesExhausted) {
+        beginOrchestrateStallEpisode(chatId);
         markChatStalledForUi(chatId, true);
         emitBoardChange(chatId);
         return;
@@ -91,7 +107,10 @@ export async function executeSupervisorDecision(
         });
       }
       markChatStalledForUi(chatId, false);
-      showWatchdogToast('Orchestrator stalled — resuming plan…');
+      showWatchdogToastOncePerStallEpisode(
+        chatId,
+        'Orchestrator stalled — resuming plan…',
+      );
       emitBoardChange(chatId);
       await injectResumeMessage(chatId);
       return;
@@ -130,6 +149,7 @@ export async function executeSupervisorDecision(
         if (!taskId) return;
         const count = (sup.spawnCountByTaskId.get(taskId) ?? 0) + 1;
         if (count > cfg.spawnCapPerTask) {
+          beginOrchestrateStallEpisode(chatId);
           markChatStalledForUi(chatId, true);
           emitBoardChange(chatId);
           return;
