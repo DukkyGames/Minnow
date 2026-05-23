@@ -96,10 +96,8 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Scope:** Add `pricing` block to provider profile; `chat.tokenLedger`; new `#/settings/usage` panel.
 - **Plan:** [`Build out/feature-14-cost-token-observability.md`](Build%20out/feature-14-cost-token-observability.md)
 
-### 15. Agent activity view — Partial
-- **Today:** Sub-agent cards + drawer ([src/ui/sub-agent-cards.ts](../../src/ui/sub-agent-cards.ts), [src/ui/sub-agent-drawer.ts](../../src/ui/sub-agent-drawer.ts)); Orchestrate board; status pill. No consolidated "all agents right now" pane.
-- **Gap:** Single global panel — every running agent (main turn, sub-agents, title job, Reef widget LLM) with model, current tool, context fill, elapsed.
-- **Scope:** New `src/ui/agent-activity-panel.ts`; reads from existing event buses ([src/agents/sub-agent-events.ts](../../src/agents/sub-agent-events.ts), generations store, title schedule).
+### 15. Agent activity view — Built
+- **Shipped:** Global panel ([`src/ui/agent-activity-panel.ts`](../src/ui/agent-activity-panel.ts), [`src/state/agent-activity-registry.ts`](../src/state/agent-activity-registry.ts)) lists main turns, sub-agents, title jobs, and Reef widget LLM across all chats. Toggle **`#btnAgentActivity`** in the chat sidebar footer (`minnow.agentActivityOpen` in `localStorage`). Event buses: [`main-turn-activity.ts`](../src/chat/main-turn-activity.ts), [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts), [`titles/activity-events.ts`](../src/chat/titles/activity-events.ts), [`reef/activity-events.ts`](../src/chat/reef/activity-events.ts). Sub-agent rows expose `liveCurrentToolName` on [`SubAgentRun`](../src/agents/types.ts). Tests: `test/state/agent-activity-registry.test.mts`, `test/ui/agent-activity-panel.test.mts`, `test/agents/orchestrator-live-tool.test.mts`. Plan: [`feature-15-agent-activity-view.md`](Build%20out/feature-15-agent-activity-view.md).
 
 ---
 

@@ -4,6 +4,10 @@
 
 import { tryNonStreamingFallback } from '../../api/chat.ts';
 import { getActiveChat } from '../../state/sessions.ts';
+import {
+  emitReefWidgetLlmEnded,
+  emitReefWidgetLlmStarted,
+} from './activity-events.ts';
 import type { ApiMessage } from '../../types.ts';
 import { resolveWidgetLlmBinding, runWidgetCompletion } from './run-widget-completion.ts';
 import { subscribeThemeChanges } from './theme-forward.ts';
@@ -289,6 +293,7 @@ async function runWidgetCompletionForBridge(
   } finally {
     activeLlmCount = Math.max(0, activeLlmCount - 1);
     abortByRequestId.delete(requestId);
+    emitReefWidgetLlmEnded(requestId);
   }
 }
 
@@ -309,6 +314,18 @@ function handleCallLLM(data: ReefPostMessage): void {
   }
 
   activeLlmCount += 1;
+  const chat = getActiveChat();
+  void resolveWidgetLlmBinding(chat).then((binding) => {
+    const modelId = data.model?.trim() || binding.modelId;
+    emitReefWidgetLlmStarted({
+      requestId,
+      widgetId,
+      chatId: chat.id,
+      modelId,
+      startedAtMs: Date.now(),
+    });
+  });
+
   const messages = Array.isArray(data.messages) ? data.messages : [];
   void runWidgetCompletionForBridge(widgetId, requestId, messages, data.model);
 }

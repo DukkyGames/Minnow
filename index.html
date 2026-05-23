@@ -576,6 +576,9 @@
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnStats" aria-label="Inference metrics" aria-expanded="false" aria-controls="statsStrip" title="Inference metrics">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-6"/></svg>
       </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAgentActivity" aria-label="Agent activity" aria-expanded="false" aria-controls="agentActivityPanel" title="Agent activity">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 20v-1a6 6 0 0 1 12 0v1"/><circle cx="18" cy="6" r="2" opacity="0.7"/></svg>
+      </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
       </button>
@@ -738,6 +741,29 @@
       </div>
       </div>
     </div>
+
+    <section
+      class="agent-activity-panel"
+      id="agentActivityPanel"
+      role="region"
+      aria-label="Agent activity"
+      hidden
+    >
+      <header class="agent-activity-panel__header">
+        <h2 class="agent-activity-panel__title">Agent activity</h2>
+        <button
+          type="button"
+          class="icon-btn agent-activity-panel__close"
+          id="btnAgentActivityClose"
+          aria-label="Close agent activity"
+        >
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="agent-activity-panel__body">
+        <ul id="agentActivityList" class="agent-activity-list"></ul>
+      </div>
+    </section>
 
     <section class="terminal-panel hidden" id="terminalPanel" aria-label="Terminal">
       <div class="terminal-resize-handle" id="terminalResize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
