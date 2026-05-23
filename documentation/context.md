@@ -1136,7 +1136,7 @@ Use the port printed by `server.js` (default **5173**; another port if busy).
 
 ### App bootstrap (`initApp`)
 
-[`src/main.ts`](../src/main.ts) calls `markAppReady()` as soon as the module evaluates (Vite CSS is injected), then runs `initApp()` on `DOMContentLoaded` or immediately if the document is already parsed — **not** on `window.load` (that event often fires before deferred modules run, which left the loader stuck).
+[`src/main.ts`](../src/main.ts) calls `scheduleMarkAppReady()` from [`src/boot/app-ready.ts`](../src/boot/app-ready.ts) as soon as the module evaluates: it waits for production `<link rel="stylesheet">` tags to load (dev uses Vite-injected `<style>` tags from CSS imports, so there is nothing to wait for), then adds `html.app-ready` to hide `#app-loader`. A 12s safety timeout still dismisses the loader if CSS never arrives. `initApp()` runs on `DOMContentLoaded` or immediately if the document is already parsed — **not** on `window.load` (that event often fires before deferred modules run, which left the loader stuck).
 
 Order in `initApp()`:
 

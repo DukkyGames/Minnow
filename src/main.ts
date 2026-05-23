@@ -139,6 +139,7 @@ import {
   refreshTerminalHistoryForActiveChat,
   registerTerminalKeyboardShortcut,
 } from './ui/terminal-panel';
+import { scheduleMarkAppReady } from './boot/app-ready';
 
 /** Expose inline HTML event handlers on `window` for the static markup. */
 function registerWindowHandlers(): void {
@@ -174,16 +175,6 @@ function registerServiceWorker(): void {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-}
-
-/** Dismiss the inline loading shell (see index.html #app-loader). */
-function markAppReady(): void {
-  const loader = document.getElementById('app-loader');
-  if (loader) {
-    loader.setAttribute('aria-busy', 'false');
-    loader.setAttribute('aria-hidden', 'true');
-  }
-  document.documentElement.classList.add('app-ready');
 }
 
 /** Boot app: sessions, settings, sidebar, models, first paint. */
@@ -296,8 +287,8 @@ registerServiceWorker();
 
 initTheme();
 
-// Vite has injected CSS by now; hide the inline loader before async boot work.
-markAppReady();
+// Keep the inline loader until bundled CSS is applied (avoids unstyled shell FOUC).
+scheduleMarkAppReady();
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startApp, { once: true });
