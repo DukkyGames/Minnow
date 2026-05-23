@@ -162,7 +162,7 @@ When you run `npm start`, the browser uses the same origin for tools and config:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/tools/ping` | GET | Health check (`{ "ok": true }`) |
-| `/api/tools` | POST | Execute a tool — `{ "name", "args" }` → `{ "result" }` (optional `attachments`) |
+| `/api/tools` | POST | Execute a tool — `{ "name", "args", "modeId"? }` → `{ "result" }` (optional `attachments`; Plan mode write guard when `modeId` is `plan`) |
 | `/api/config/ping` | GET | Config server health + `~/.minnow` path |
 | `/api/generations` | POST | Start buffered chat generation |
 | `/api/generations/:id/stream` | GET | SSE stream (replay + live) |
