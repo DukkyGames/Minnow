@@ -25,7 +25,6 @@ import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
 import './styles/workspace-menu.css';
 import './styles/workspace-folder-picker.css';
-import './styles/settings-page.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
 import './styles/reef-widgets.css';
@@ -92,10 +91,6 @@ import {
   registerToolHandlers,
   toggleDrawer,
 } from './ui/settings';
-import {
-  initSettingsPage,
-  openSettingsFromTopbar,
-} from './ui/settings-page';
 import { loadToolConfigIntoDrawer } from './tools/config';
 import {
   initModelSelectPicker,
@@ -133,12 +128,10 @@ import {
 } from './ui/composer-tools-popover';
 import { dismissOpenLayers } from './ui/status';
 import {
-  initFilePanel,
-  onFilePanelServerAvailabilityChanged,
   closeMobileFileSidebar,
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
-} from './ui/init-file-panel';
+} from './ui/file-layout';
 import { initWorkspaceButton } from './ui/workspace-button';
 import {
   initTerminalPanel,
@@ -154,7 +147,9 @@ function registerWindowHandlers(): void {
   window.fetchModels = fetchModels;
   window.toggleSelectedModelLoad = toggleSelectedModelLoad;
   window.toggleDrawer = toggleDrawer;
-  window.openSettingsFromTopbar = openSettingsFromTopbar;
+  window.openSettingsFromTopbar = () => {
+    void import('./ui/settings-page').then((m) => m.openSettingsFromTopbar());
+  };
   window.closeDrawer = closeDrawer;
   window.onDrawerKeydown = onDrawerKeydown;
   window.clearChat = clearChat;
@@ -229,8 +224,9 @@ export async function initApp(): Promise<void> {
     mountSlashPicker(msgInput);
   }
   initComposerDrop();
-  await initFilePanel();
-  onFilePanelServerAvailabilityChanged();
+  const filePanel = await import('./ui/init-file-panel');
+  await filePanel.initFilePanel();
+  filePanel.onFilePanelServerAvailabilityChanged();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
   await loadChatMeta().catch(() => undefined);
@@ -246,7 +242,8 @@ export async function initApp(): Promise<void> {
   await refreshTerminalHistoryForActiveChat();
   await loadProviderSelect();
   registerProviderHandlers();
-  initSettingsPage();
+  const settingsPage = await import('./ui/settings-page');
+  settingsPage.initSettingsPage();
   await fetchModels();
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();

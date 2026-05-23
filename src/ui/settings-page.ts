@@ -2,6 +2,8 @@
  * Full settings page with hash routing (Step 20).
  */
 
+import '../styles/settings-page.css';
+
 import { loadPromptMetaSettings, savePromptMetaSettings } from '../config/prompt-meta';
 import {
   backupMemory,
@@ -17,39 +19,14 @@ import {
 } from './settings-prompt-estimate';
 import { setStatus } from './status';
 import type { PromptProfile } from '../chat/prompts/types';
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSectionId,
+} from './settings-page-types';
 
-export type SettingsSectionId =
-  | 'general'
-  | 'prompting'
-  | 'rules'
-  | 'providers'
-  | 'modes'
-  | 'experts'
-  | 'work-agents'
-  | 'sub-agents'
-  | 'memory'
-  | 'features'
-  | 'tools'
-  | 'mcp'
-  | 'lsp'
-  | 'skills';
+export type { SettingsSectionId } from './settings-page-types';
 
-const SECTIONS: SettingsSectionId[] = [
-  'general',
-  'prompting',
-  'rules',
-  'providers',
-  'modes',
-  'experts',
-  'work-agents',
-  'sub-agents',
-  'memory',
-  'features',
-  'tools',
-  'mcp',
-  'lsp',
-  'skills',
-];
+const SECTIONS = SETTINGS_SECTIONS;
 
 let activeSection: SettingsSectionId = 'general';
 let staticBindingsDone = false;

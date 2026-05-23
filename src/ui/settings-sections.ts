@@ -78,7 +78,7 @@ import {
 } from '../config/tool-security-meta';
 import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
-import type { SettingsSectionId } from './settings-page';
+import type { SettingsSectionId } from './settings-page-types';
 import { getThemePreference, setThemePreference } from './theme';
 import {
   mountPromptFileEditor,

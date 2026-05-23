@@ -21,9 +21,10 @@ export const FILE_TREE_MUTATING_TOOLS = new Set<string>([
 /** Debounce window so rapid multi-file agent edits coalesce into one tree reload. */
 export const FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS = 300;
 
+import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
+
 const defaultRefreshRunner = async (): Promise<void> => {
-  const tree = await import('./file-tree');
-  await tree.refreshFileTree();
+  await refreshFileTreeViaBridge();
 };
 
 /** Swappable runner for unit tests (counts invocations without loading file-tree). */
