@@ -38,6 +38,10 @@ export interface SupervisorChatState {
   spawnCountByTaskId: Map<string, number>;
   /** R5: one respawn attempt per task per stuck episode. */
   spawnRetryIssuedForTaskId: Set<string>;
+  /** Set when every board task reaches `complete` (suppresses auto-resume). */
+  planCompletedAt?: number;
+  /** Completion summary was appended to chat history (once per chat). */
+  completionMessageShown?: boolean;
 }
 
 const chatStates = new Map<string, SupervisorChatState>();
