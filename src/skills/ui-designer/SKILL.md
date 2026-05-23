@@ -23,10 +23,10 @@ Reply with **`plan`** (default) or **`implement`** after `/ui-designer`:
 
 ## Workflow
 
-1. **Preflight** — `load_impeccable_context` (PRODUCT.md, DESIGN.md, `.impeccable/design.json` from the active workspace). Fail fast if PRODUCT.md is placeholder; suggest `npx impeccable teach`.
+1. **Preflight** — `load_impeccable_context` (PRODUCT.md, DESIGN.md, `.impeccable/design.json` from the active workspace). Fail fast if PRODUCT.md is placeholder; suggest `/impeccable teach` (harness).
 2. **Observe** — `browser_navigate` → `http://127.0.0.1:<PORT>` (Minnow dev server); `browser_screenshot` for visual evidence (vision model required).
-3. **Audit** — `run_impeccable` with `command: audit` on `#app` or target CSS/HTML.
-4. **Shape** — `run_impeccable` with `command: shape`; confirm brief with user.
+3. **Audit** — `/impeccable audit` (harness): load `reference/audit.md` after `load_impeccable_context`; apply to `#app` or target CSS/HTML. Do not use `run_impeccable` for audit.
+4. **Shape** — `/impeccable shape` (harness): load `reference/shape.md`; confirm brief with user. Do not use `run_impeccable` for shape.
 5. **Plan or implement** — Plan: output under `documentation/plans/` only. Implement: edit `index.html`, `src/styles/**`, `src/ui/**`.
 6. **Verify** — Re-screenshot; summarize visual delta in chat.
 
@@ -45,7 +45,7 @@ IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=pas
 
 - Browser: `browser_list`, `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_fill` (implement mode)
 - Files: `read_file`, `read_file_range`, `search_in_file`, `replace_text_in_file`, `save_file`, `list_directory`
-- Impeccable: `run_impeccable`
+- Impeccable: `load_impeccable_context`, harness `/impeccable` (audit, shape, craft, polish); `run_impeccable` only for `detect` or `live` if needed
 
 Excluded: git, `execute_command`, `web_search`, sub-agents.
 

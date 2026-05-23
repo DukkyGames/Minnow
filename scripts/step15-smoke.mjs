@@ -59,11 +59,27 @@ async function testI1MetaHttp() {
   }
 }
 
-async function testI2RunImpeccable() {
-  const out = await toolRunImpeccable({ command: 'detect', target: 'index.html' }, PROJECT_ROOT);
+async function testI2RunImpeccableDetect() {
+  const out = await toolRunImpeccable(
+    { command: 'detect', target: 'index.html' },
+    PROJECT_ROOT,
+    PROJECT_ROOT,
+  );
   const text = String(out.result ?? '');
   const pass = !text.startsWith('Error: failed to spawn');
   record('I2', pass, pass ? 'run_impeccable detect' : text.slice(0, 120));
+}
+
+async function testI2bTeachHarnessGuidance() {
+  const out = await toolRunImpeccable({ command: 'teach' }, PROJECT_ROOT, PROJECT_ROOT);
+  const text = String(out.result ?? '');
+  const pass =
+    /harness/i.test(text) && !/failed to spawn npx impeccable/i.test(text);
+  record(
+    'I2b',
+    pass,
+    pass ? 'teach returns harness guidance (no npx spawn)' : text.slice(0, 120),
+  );
 }
 
 async function testI3ScreenshotMock() {
@@ -84,7 +100,8 @@ async function testI3ScreenshotMock() {
 async function main() {
   await testI1MetaLocal();
   await testI1MetaHttp();
-  await testI2RunImpeccable();
+  await testI2RunImpeccableDetect();
+  await testI2bTeachHarnessGuidance();
   await testI3ScreenshotMock();
 
   let failed = 0;

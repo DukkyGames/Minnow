@@ -1,55 +1,130 @@
 /**
- * Spawn `npx impeccable <command>` for UI Designer (Step 15).
+ * Run Impeccable CLI (detect) or bundled scripts (live) in the active workspace.
+ * Harness commands (teach, audit, shape, …) return guidance — they are not npm CLI sub-commands.
  */
 
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
+import {
+  harnessCommandGuidance,
+  isCliCommand,
+  isHarnessCommand,
+  isScriptCommand,
+  listAcceptedRunImpeccableCommands,
+  SCRIPT_COMMANDS,
+} from './command-routing.js';
 
 const IMPECCABLE_TIMEOUT_MS = 60_000;
 const MAX_STDOUT_CHARS = 32_000;
 
-const ALLOWED_COMMANDS = new Set([
-  'audit',
-  'critique',
-  'shape',
-  'craft',
-  'polish',
-  'teach',
-  'document',
-  'extract',
-  'detect',
-  'live',
-]);
-
 /**
- * Run an Impeccable CLI sub-command in the project root.
  * @param {object} args
  * @param {string} args.command
  * @param {string} [args.target]
- * @param {string} projectRoot
+ * @param {string} appRoot Minnow install root (bundled scripts)
+ * @param {string} projectRoot Active workspace
  */
-export function toolRunImpeccable(args, projectRoot) {
+export function toolRunImpeccable(args, appRoot, projectRoot) {
   const command = typeof args?.command === 'string' ? args.command.trim() : '';
-  if (!command || !ALLOWED_COMMANDS.has(command)) {
+  const accepted = listAcceptedRunImpeccableCommands();
+
+  if (!command || !accepted.includes(command)) {
     return Promise.resolve({
-      result: `Error: run_impeccable command must be one of: ${[...ALLOWED_COMMANDS].join(', ')}`,
+      result: `Error: run_impeccable command must be one of: ${accepted.join(', ')}`,
     });
   }
 
+  if (isHarnessCommand(command) && !isScriptCommand(command)) {
+    return Promise.resolve({ result: harnessCommandGuidance(command) });
+  }
+
   const target = typeof args?.target === 'string' ? args.target.trim() : '';
+
+  if (isCliCommand(command)) {
+    return runNpxImpeccable(command, target, projectRoot);
+  }
+
+  if (isScriptCommand(command)) {
+    return runBundledScript(command, target, appRoot, projectRoot);
+  }
+
+  return Promise.resolve({
+    result: `Error: unsupported run_impeccable command: ${command}`,
+  });
+}
+
+/**
+ * @param {string} command
+ * @param {string} target
+ * @param {string} projectRoot
+ */
+function runNpxImpeccable(command, target, projectRoot) {
   const cliArgs = [command];
   if (target) cliArgs.push(target);
 
+  return spawnWithCapture(
+    process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    ['impeccable', ...cliArgs],
+    {
+      cwd: projectRoot,
+      env: { ...process.env, IMPECCABLE_CONTEXT_DIR: projectRoot },
+      shell: process.platform === 'win32',
+    },
+    command,
+    projectRoot,
+    `npx impeccable`,
+  );
+}
+
+/**
+ * @param {string} command
+ * @param {string} target
+ * @param {string} appRoot
+ * @param {string} projectRoot
+ */
+function runBundledScript(command, target, appRoot, projectRoot) {
+  const relScript = SCRIPT_COMMANDS.get(command);
+  if (!relScript) {
+    return Promise.resolve({
+      result: `Error: no bundled script for command: ${command}`,
+    });
+  }
+
+  const scriptPath = path.join(appRoot, 'src', 'skills', 'impeccable', relScript);
+  if (!fs.existsSync(scriptPath)) {
+    return Promise.resolve({
+      result: `Error: missing Impeccable script at ${scriptPath}. Re-run npm install in the Minnow app directory.`,
+    });
+  }
+
+  const nodeArgs = [scriptPath];
+  if (target) nodeArgs.push(target);
+
+  return spawnWithCapture(
+    process.execPath,
+    nodeArgs,
+    {
+      cwd: projectRoot,
+      env: { ...process.env, IMPECCABLE_CONTEXT_DIR: projectRoot },
+    },
+    command,
+    projectRoot,
+    path.basename(scriptPath),
+  );
+}
+
+/**
+ * @param {string} cmd
+ * @param {string[]} args
+ * @param {import('node:child_process').SpawnOptions} options
+ * @param {string} commandLabel
+ * @param {string} projectRoot
+ * @param {string} spawnLabel
+ */
+function spawnWithCapture(cmd, args, options, commandLabel, projectRoot, spawnLabel) {
   return new Promise((resolve) => {
-    const child = spawn(
-      process.platform === 'win32' ? 'npx.cmd' : 'npx',
-      ['impeccable', ...cliArgs],
-      {
-        cwd: projectRoot,
-        env: { ...process.env, IMPECCABLE_CONTEXT_DIR: projectRoot },
-        shell: process.platform === 'win32',
-      },
-    );
+    const child = spawn(cmd, args, options);
 
     let stdout = '';
     let stderr = '';
@@ -80,7 +155,8 @@ export function toolRunImpeccable(args, projectRoot) {
         return;
       }
       const combined = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-      const prefix = code === 0 ? '' : `Error: impeccable ${command} exited ${code}\n`;
+      const prefix =
+        code === 0 ? '' : `Error: impeccable ${commandLabel} exited ${code}\n`;
       resolve({
         result: prefix + (combined || `(no output; cwd ${relRoot})`),
       });
@@ -89,7 +165,7 @@ export function toolRunImpeccable(args, projectRoot) {
     child.on('error', (err) => {
       clearTimeout(timer);
       resolve({
-        result: `Error: failed to spawn npx impeccable: ${err.message}`,
+        result: `Error: failed to spawn ${spawnLabel}: ${err.message}`,
       });
     });
   });
