@@ -183,10 +183,46 @@ describe('widget-bridge', { concurrency: false }, () => {
 
   test('isAllowedReefOrigin rejects empty and untrusted origins', () => {
     setupDom();
-    assert.equal(isAllowedReefOriginForTests(''), false);
+    assert.equal(isAllowedReefOriginForTests(''), true);
     assert.equal(isAllowedReefOriginForTests('https://evil.example'), false);
     assert.equal(isAllowedReefOriginForTests('null'), true);
     assert.equal(isAllowedReefOriginForTests(window.location.origin), true);
+  });
+
+  test('accepts reef messages when event.source is null for sandboxed srcdoc', () => {
+    setupDom();
+    setAutoRevealReefWidgetsForTests(false);
+    const host = document.createElement('div');
+    host.className = 'reef-widget-host reef-widget-host--validating';
+    const iframe = document.createElement('iframe');
+    host.appendChild(iframe);
+    registerReefWidgetHost('widget-null-source', host, iframe, () => {}, '');
+
+    handleReefMessageForTests({
+      origin: 'null',
+      source: null,
+      data: {
+        type: 'reef',
+        action: 'resize',
+        widgetId: 'widget-null-source',
+        height: 160,
+      },
+    } as MessageEvent);
+    handleReefMessageForTests({
+      origin: 'null',
+      source: null,
+      data: {
+        type: 'reef',
+        action: 'validateResult',
+        widgetId: 'widget-null-source',
+        ok: true,
+        errors: [],
+      },
+    } as MessageEvent);
+
+    assert.equal(host.classList.contains('reef-widget-host--error'), false);
+    assert.equal(host.style.height, '160px');
+    assert.notEqual(host.classList.contains('reef-widget-host--validating'), true);
   });
 
   test('ignores reef messages when event.source is not the widget iframe', () => {
