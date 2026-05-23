@@ -13,6 +13,7 @@ const SETTINGS_SECTION_IDS = [
   'prompting',
   'rules',
   'providers',
+  'model-routing',
   'modes',
   'experts',
   'work-agents',
@@ -28,6 +29,7 @@ const SETTINGS_SECTION_IDS = [
 /** Sections populated by refreshSettingsSection via clearMount(). */
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
+  'settingsModelRoutingBody',
   'settingsModesBody',
   'settingsExpertsBody',
   'settingsWorkAgentsBody',

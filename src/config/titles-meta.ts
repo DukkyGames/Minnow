@@ -95,3 +95,26 @@ export function resetTitlesConfigCache(): void {
 export function setTitlesConfigForTests(config: TitlesConfig): void {
   cachedTitles = config;
 }
+
+/** Persist partial titles config via PUT /api/config/meta and mirror to localStorage. */
+export async function saveTitlesConfig(patch: Partial<TitlesConfig>): Promise<void> {
+  const current = await loadTitlesConfig();
+  const next: TitlesConfig = {
+    enabled: patch.enabled !== undefined ? patch.enabled : current.enabled,
+    modelId: patch.modelId !== undefined ? patch.modelId : current.modelId,
+    providerId: patch.providerId !== undefined ? patch.providerId : current.providerId,
+    maxTokens:
+      patch.maxTokens !== undefined ? clampMaxTokens(patch.maxTokens) : current.maxTokens,
+    temperature:
+      patch.temperature !== undefined
+        ? clampTemperature(patch.temperature)
+        : current.temperature,
+  };
+  cachedTitles = next;
+  writeLocalTitlesConfig(next);
+  await fetch('/api/config/meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ titles: next }),
+  });
+}

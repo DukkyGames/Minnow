@@ -16,8 +16,8 @@ import {
   type PromptFileFamily,
   type PromptFileProfile,
 } from '../chat/prompts/prompt-file-api';
-import { fetchModelsForProvider } from '../providers/fetch-models';
 import { isProvidersApiAvailable, listProviders } from '../providers/store';
+import { fillModelSelect } from './settings-model-binding';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -40,53 +40,6 @@ export interface EntityEditorRow {
 interface ModelBindingState {
   providerId: string;
   modelId: string;
-}
-
-/** Populate model &lt;select&gt; for a provider (empty option = chat default). */
-async function fillModelSelect(
-  select: HTMLSelectElement,
-  providerId: string,
-  selectedModelId: string,
-): Promise<void> {
-  select.replaceChildren();
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = '(use chat default)';
-  select.appendChild(empty);
-
-  if (!providerId || !isProvidersApiAvailable()) {
-    select.disabled = true;
-    return;
-  }
-
-  const { providers } = await listProviders();
-  const provider = providers.find((p) => p.id === providerId);
-  if (!provider) {
-    select.disabled = true;
-    return;
-  }
-
-  select.disabled = true;
-  select.innerHTML = '<option value="">Loading models…</option>';
-  try {
-    const controller = new AbortController();
-    const models = await fetchModelsForProvider(provider, controller.signal);
-    select.replaceChildren();
-    select.appendChild(empty);
-    for (const m of models) {
-      if (m.type !== 'llm' && m.type !== 'vlm') continue;
-      const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = m.id;
-      select.appendChild(opt);
-    }
-    select.value = selectedModelId || '';
-    select.disabled = false;
-  } catch {
-    select.replaceChildren();
-    select.appendChild(empty);
-    select.disabled = false;
-  }
 }
 
 function buildProfileTabs(

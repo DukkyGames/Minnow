@@ -7,6 +7,7 @@ export type SettingsSectionId =
   | 'prompting'
   | 'rules'
   | 'providers'
+  | 'model-routing'
   | 'modes'
   | 'experts'
   | 'work-agents'
@@ -24,6 +25,7 @@ export const SETTINGS_SECTIONS: SettingsSectionId[] = [
   'prompting',
   'rules',
   'providers',
+  'model-routing',
   'modes',
   'experts',
   'work-agents',
