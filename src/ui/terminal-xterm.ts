@@ -80,11 +80,10 @@ function pushSubmittedLine(line: string): void {
 function applyXtermTheme(): void {
   if (!term) return;
   const style = getComputedStyle(document.documentElement);
-  const fg = style.getPropertyValue('--text').trim() || 'oklch(0.32 0 0)';
-  const bg = style.getPropertyValue('--bg').trim() || 'oklch(1 0 0)';
-  const accent = style.getPropertyValue('--accent').trim() || 'oklch(0 0 0)';
-  const sel =
-    style.getPropertyValue('--code-inline-bg').trim() || 'oklch(0.88 0.02 250)';
+  const fg = style.getPropertyValue('--mn-fg').trim() || '#dfe3e8';
+  const bg = style.getPropertyValue('--mn-bg').trim() || '#0f1216';
+  const accent = style.getPropertyValue('--mn-accent').trim() || '#9ec5a7';
+  const sel = style.getPropertyValue('--mn-surface-0').trim() || '#161a20';
   term.options.theme = {
     background: bg,
     foreground: fg,

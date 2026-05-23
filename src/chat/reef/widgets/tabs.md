@@ -2,17 +2,17 @@ Tabbed panel demonstrating Reef streaming order: `<style>` first, markup second,
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
-.rw-tabs { display: flex; gap: 4px; border-bottom: 0.5px solid var(--border); margin-bottom: 12px; }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
+.rw-tabs { display: flex; gap: 4px; border-bottom: 0.5px solid var(--mn-border); margin-bottom: 12px; }
 .rw-tab {
-  padding: 8px 14px; border: none; background: transparent; color: var(--text-muted);
+  padding: 8px 14px; border: none; background: transparent; color: var(--mn-fg-muted);
   font-family: var(--font-ui); font-size: 0.875rem; font-weight: 400; cursor: pointer;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
-.rw-tab[aria-selected="true"] { color: var(--text); background: var(--surface); border: 0.5px solid var(--border); border-bottom-color: var(--surface); margin-bottom: -0.5px; }
-.rw-panel { display: none; padding: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.rw-tab[aria-selected="true"] { color: var(--mn-fg); background: var(--mn-surface-1); border: 0.5px solid var(--mn-border); border-bottom-color: var(--mn-surface-1); margin-bottom: -0.5px; }
+.rw-panel { display: none; padding: 12px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-1); }
 .rw-panel[data-active] { display: block; }
-.rw-panel code { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--text-muted); }
+.rw-panel code { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--mn-fg-muted); }
 </style>
 <div class="rw" id="tabs">
   <div class="rw-tabs" role="tablist">

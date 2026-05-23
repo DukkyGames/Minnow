@@ -33,7 +33,6 @@ import {
   saveUserRules,
 } from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
-import type { ThemePreference } from '../constants';
 import { listProviders } from '../providers/store';
 import { renderProvidersSettingsSection } from './settings-providers';
 import {
@@ -79,7 +78,7 @@ import {
 import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
-import { getThemePreference, setThemePreference } from './theme';
+import { appendThemeControls } from './settings-theme';
 import {
   mountPromptFileEditor,
   mountSubAgentTypeEditor,
@@ -139,41 +138,6 @@ function serverBanner(message: string): HTMLElement {
   return p;
 }
 
-/** Builds Light / Dark / System radios and persists via `setThemePreference`. */
-function appendAppearanceControls(mount: HTMLElement): void {
-  const block = el('div', 'settings-appearance-block');
-  block.appendChild(el('p', 'settings-field-label', 'Appearance'));
-  block.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Light, dark, or match your system color mode.',
-    ),
-  );
-  const group = el('div', 'settings-appearance');
-  const pref = getThemePreference();
-  const opts: { value: ThemePreference; label: string }[] = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' },
-  ];
-  for (const { value, label } of opts) {
-    const lab = el('label', 'settings-appearance__option');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'minnowAppearance';
-    input.value = value;
-    input.checked = pref === value;
-    input.addEventListener('change', () => {
-      if (input.checked) setThemePreference(value);
-    });
-    lab.appendChild(input);
-    lab.appendChild(document.createTextNode(label));
-    group.appendChild(lab);
-  }
-  block.appendChild(group);
-  mount.appendChild(block);
-}
 
 /** Terminal panel note (agent runs do not auto-open the dock). */
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
@@ -245,7 +209,7 @@ async function renderGeneralSection(): Promise<void> {
     );
   }
 
-  appendAppearanceControls(mount);
+  appendThemeControls(mount);
   await appendTerminalControls(mount);
   await appendMainChatControls(mount);
 

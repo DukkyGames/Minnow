@@ -2,17 +2,17 @@ Two-column metrics comparison for side-by-side options. Vanilla HTML and script.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
 .rw-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.rw-col { border: 0.5px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface); }
+.rw-col { border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); padding: 12px; background: var(--mn-surface-1); }
 .rw-col h3 { margin: 0 0 10px; font-size: 0.875rem; font-weight: 500; }
-.rw-metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 0.5px solid var(--border); font-size: 0.8125rem; }
+.rw-metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 0.5px solid var(--mn-border); font-size: 0.8125rem; }
 .rw-metric:last-child { border-bottom: none; }
-.rw-metric span:first-child { color: var(--text-muted); }
+.rw-metric span:first-child { color: var(--mn-fg-muted); }
 .rw-metric strong { font-family: var(--font-mono); font-weight: 500; }
-.rw-metric[data-win] strong { color: var(--accent); }
-.rw-note { margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); }
+.rw-metric[data-win] strong { color: var(--mn-accent); }
+.rw-note { margin-top: 10px; font-size: 0.75rem; color: var(--mn-fg-muted); }
 </style>
 <div class="rw" id="cmp">
   <h2>Plan comparison</h2>

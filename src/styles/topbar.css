@@ -8,8 +8,8 @@
   padding-right: max(14px, env(safe-area-inset-right));
   height: var(--topbar-h);
   min-height: var(--topbar-h);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
   flex-shrink: 0;
   /* Above sidebars (34–36) so topbar dropdowns (model picker, etc.) paint on top */
   z-index: 40;
@@ -47,8 +47,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--bg);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -62,14 +62,14 @@
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: var(--text);
+  color: var(--mn-fg);
   white-space: nowrap;
 }
 
 .topbar-sep {
   width: 1px;
   height: 22px;
-  background: var(--border);
+  background: var(--mn-border);
   margin: 0 2px;
   flex-shrink: 0;
 }
@@ -100,8 +100,8 @@
 }
 
 .model-wrap[data-model-state="loaded"] .model-state-dot {
-  background: var(--success);
-  border-color: var(--success);
+  background: var(--mn-success);
+  border-color: var(--mn-success);
 }
 
 .model-select-inner::after {
@@ -114,7 +114,7 @@
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid var(--text-muted);
+  border-top: 5px solid var(--mn-fg-muted);
   pointer-events: none;
 }
 
@@ -125,10 +125,10 @@
   padding: 10px 14px;
   font-size: 12px;
   font-family: var(--font-ui);
-  color: var(--text);
-  border: 1px solid var(--border);
+  color: var(--mn-fg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--mn-bg);
   cursor: pointer;
   transition:
     border-color 0.2s var(--ease-out),
@@ -142,7 +142,7 @@
 }
 
 .model-action-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
@@ -153,9 +153,9 @@
 
 @media (hover: hover) and (pointer: fine) {
   .model-action-btn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--bg);
+    border-color: var(--mn-accent);
+    background: var(--mn-accent);
+    color: var(--mn-fg-on-accent);
   }
 }
 
@@ -166,15 +166,15 @@
   width: 40px;
   height: 40px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  color: var(--text);
+  color: var(--mn-fg);
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   flex-shrink: 0;
 }
 
-.icon-btn:active { background: var(--bg); }
+.icon-btn:active { background: var(--mn-bg); }
 
 /* Agent shell run while terminal panel is closed (see terminal-panel.ts). */
 .icon-btn.icon-btn--agent-run {
@@ -189,8 +189,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--surface);
+  background: var(--mn-accent);
+  box-shadow: 0 0 0 2px var(--mn-surface-1);
   animation: terminal-agent-run-pulse 1.4s ease-in-out infinite;
 }
 
@@ -216,7 +216,7 @@
 
 .workspace-path-label {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -228,30 +228,36 @@
   height: 18px;
 }
 
-/* Raster topbar icons (e.g. Benchmark speed gauge) — match SVG currentColor behavior */
+/* Raster topbar icons (e.g. Benchmark) — dark glyph on light chrome, inverted on dark */
 .icon-btn .icon-img {
   width: 18px;
   height: 18px;
   display: block;
   object-fit: contain;
-  /* Default: light silhouette (same as stroke icons using var(--text)) */
-  filter: brightness(0) invert(1);
+  filter: brightness(0);
   opacity: 0.88;
   transition: filter 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
+}
+
+html[data-theme$='-dark'] .icon-btn .icon-img {
+  filter: brightness(0) invert(1);
 }
 
 /* Hover affordances only when the device supports hover (not touch-primary) */
 @media (hover: hover) and (pointer: fine) {
   .icon-btn:hover {
-    border-color: var(--border-strong);
-    color: var(--bg);
-    background: var(--accent);
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg-on-accent);
+    background: var(--mn-accent);
   }
 
-  /* Hover: dark silhouette on accent fill (same as .icon-svg stroke: currentColor) */
   .icon-btn:hover .icon-img {
     filter: brightness(0);
     opacity: 1;
+  }
+
+  html[data-theme$='-dark'] .icon-btn:hover .icon-img {
+    filter: brightness(0) invert(1);
   }
 }
 
@@ -260,7 +266,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -269,15 +275,15 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--mn-fg-muted);
   flex-shrink: 0;
   transition: background 0.25s var(--ease-out);
 }
 
-.s-dot.ok { background: var(--success); }
-.s-dot.err { background: var(--danger); }
+.s-dot.ok { background: var(--mn-success); }
+.s-dot.err { background: var(--mn-danger); }
 .s-dot.spin {
-  background: var(--accent);
+  background: var(--mn-accent);
   animation: status-pulse 1s var(--ease-out) infinite;
 }
 

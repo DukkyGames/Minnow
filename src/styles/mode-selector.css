@@ -16,15 +16,15 @@
   gap: 2px;
   padding: 2px;
   border-radius: var(--radius-md);
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
 }
 
 .mode-segment {
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-family: inherit;
   font-size: 0.75rem;
   font-weight: 500;
@@ -40,16 +40,16 @@
 
 @media (hover: hover) and (pointer: fine) {
   .mode-segment:hover:not(:disabled):not([aria-checked='true']) {
-    background: var(--bg);
-    color: var(--text);
-    border-color: var(--border);
+    background: var(--mn-bg);
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
   }
 }
 
 .mode-segment[aria-checked='true'] {
-  background: var(--accent);
-  color: var(--text-hover);
-  border-color: var(--accent);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+  border-color: var(--mn-accent);
 }
 
 .mode-segment:disabled {
@@ -58,7 +58,7 @@
 }
 
 .mode-segment:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 

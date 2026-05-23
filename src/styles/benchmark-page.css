@@ -6,8 +6,8 @@
   display: none;
   flex-direction: column;
   height: 100vh;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
@@ -27,7 +27,7 @@
   gap: 12px;
   min-height: var(--topbar-h);
   padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .benchmark-page-header h1 {
@@ -58,10 +58,10 @@
   font: inherit;
   font-size: 13px;
   padding: 8px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   cursor: pointer;
   transition:
     background 0.2s var(--ease-out),
@@ -70,13 +70,13 @@
 }
 
 .benchmark-run-bar button:hover:not(:disabled) {
-  background: var(--accent-subtle);
+  background: var(--mn-accent-soft);
 }
 
 .benchmark-run-bar button.is-primary {
-  background: var(--accent);
-  color: var(--text-hover);
-  border-color: var(--accent);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+  border-color: var(--mn-accent);
 }
 
 .benchmark-run-bar button:disabled {
@@ -103,7 +103,7 @@
 .benchmark-progress {
   margin-bottom: 20px;
   padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .benchmark-progress-meta {
@@ -116,20 +116,20 @@
 
 .benchmark-progress-label {
   font-size: 13px;
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .benchmark-progress-pct {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .benchmark-progress-track {
   height: 6px;
   border-radius: 999px;
-  background: var(--border);
+  background: var(--mn-border);
   overflow: hidden;
 }
 
@@ -137,12 +137,12 @@
   height: 100%;
   width: 0%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--mn-accent);
   transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .benchmark-page.is-running .benchmark-progress-fill {
-  background: color-mix(in oklch, var(--accent) 88%, var(--success) 12%);
+  background: color-mix(in srgb, var(--mn-accent) 88%, var(--mn-success) 12%);
 }
 
 /* Summary metrics (compact instrumentation) */
@@ -152,7 +152,7 @@
   gap: 16px 20px;
   margin-bottom: 24px;
   padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .benchmark-metric {
@@ -166,7 +166,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .benchmark-metric-value {
@@ -177,15 +177,15 @@
 }
 
 .benchmark-metric-value.is-good {
-  color: var(--success);
+  color: var(--mn-success);
 }
 
 .benchmark-metric-value.is-warn {
-  color: var(--warning);
+  color: var(--mn-warning);
 }
 
 .benchmark-metric-value.is-bad {
-  color: var(--danger);
+  color: var(--mn-danger);
 }
 
 .benchmark-history-row {
@@ -198,16 +198,16 @@
 
 .benchmark-history-row label {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .benchmark-history-row select {
   font: inherit;
   padding: 6px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
 }
 
 /* Suite blocks and test cards */
@@ -222,7 +222,7 @@
   height: 6px;
   margin-left: 8px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--mn-accent);
   vertical-align: middle;
   animation: benchmark-suite-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
@@ -246,7 +246,7 @@
   gap: 12px;
   margin-bottom: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .benchmark-suite-block-header h2 {
@@ -260,7 +260,7 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .benchmark-test-grid {
@@ -277,9 +277,9 @@
   align-items: start;
   min-height: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  background: var(--bg);
+  background: var(--mn-bg);
 }
 
 .benchmark-test-card.is-entering {
@@ -304,8 +304,8 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: color-mix(in oklch, var(--bg) 92%, var(--border) 8%);
+  border: 1px solid var(--mn-border);
+  background: color-mix(in srgb, var(--mn-bg) 92%, var(--mn-border) 8%);
 }
 
 .benchmark-test-icon {
@@ -318,7 +318,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--border-strong);
+  background: var(--mn-border-strong);
 }
 
 .benchmark-test-icon--spin {
@@ -332,9 +332,9 @@
 }
 
 .benchmark-test-card.is-pass .benchmark-test-card-status {
-  border-color: color-mix(in oklch, var(--success) 45%, var(--border));
-  background: color-mix(in oklch, var(--success) 12%, var(--bg));
-  color: var(--success);
+  border-color: color-mix(in srgb, var(--mn-success) 45%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-success) 12%, var(--mn-bg));
+  color: var(--mn-success);
   animation: benchmark-check-pop 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -352,18 +352,18 @@
 
 .benchmark-test-card.is-fail .benchmark-test-card-status,
 .benchmark-test-card.is-regression .benchmark-test-card-status {
-  border-color: color-mix(in oklch, var(--danger) 40%, var(--border));
-  background: color-mix(in oklch, var(--danger) 10%, var(--bg));
-  color: var(--danger);
+  border-color: color-mix(in srgb, var(--mn-danger) 40%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger) 10%, var(--mn-bg));
+  color: var(--mn-danger);
 }
 
 .benchmark-test-card.is-skip .benchmark-test-card-status {
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .benchmark-test-card.is-regression {
-  border-color: color-mix(in oklch, var(--danger) 35%, var(--border));
-  background: color-mix(in oklch, var(--danger) 6%, var(--bg));
+  border-color: color-mix(in srgb, var(--mn-danger) 35%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger) 6%, var(--mn-bg));
 }
 
 .benchmark-test-card-title {
@@ -377,29 +377,29 @@
   margin: 4px 0 0;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .benchmark-test-card-details {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   line-height: 1.4;
 }
 
 .benchmark-empty {
   margin: 8px 0 20px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-size: 13px;
 }
 
 .benchmark-empty--live {
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .benchmark-empty--err {
-  color: var(--danger);
+  color: var(--mn-danger);
 }
 
 #benchmarkSuites.is-live:empty {

@@ -38,7 +38,19 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 | 29 | all-full-permissions | Shipped | `1cf8c45` |
 | 31 | ask-question-cards | Shipped | [`documentation/plans/feature-31-ask-question-cards.md`](plans/feature-31-ask-question-cards.md) |
 
-**Integration QA (2026-05-21):** Reef widget chart templates/snippets use theme tokens only (`var(--accent)`, `color-mix(in oklch, var(--accent) …)` for multi-series/heatmap levels — no hex). `node --test test/chat/reef/*.test.mjs` convention suites pass (24 tests). Full `npm test` may still report unrelated failures (e.g. `messages-stream-row` session init).
+**Integration QA (2026-05-21):** Reef widget chart templates/snippets use theme tokens only (`var(--mn-accent)`, `color-mix(in srgb, var(--mn-accent) …)` for multi-series/heatmap levels — no hex). `node --test test/chat/reef/*.test.mjs` convention suites pass (24 tests). Full `npm test` may still report unrelated failures (e.g. `messages-stream-row` session init).
+
+## Theme system (palette tokens)
+
+Eight composed themes on `<html data-theme="{family}-{mode}">` (families: **sage**, **amber**, **cyan**, **coral**; modes: **dark**, **light**). Palette hex/rgba lives only in [`src/styles/tokens.css`](../src/styles/tokens.css); the rest of the app uses **`--mn-*`** CSS variables (22 core tokens per theme plus extended semantics derived with `color-mix`).
+
+| Key | Purpose |
+|-----|---------|
+| `minnow.theme` | Explicit `ThemeId` (e.g. `sage-dark`) when not following the OS |
+| `minnow.theme.followSystem` | `'1'` when mode tracks `prefers-color-scheme` |
+| `minnow.theme.family` | Active family while follow-system is on (default **sage**) |
+
+**Runtime:** [`src/theme.ts`](../src/theme.ts) (`getStoredTheme`, `applyTheme`, `setThemeFamily`, `setThemeMode`, `setFollowSystem`, legacy `light`/`dark`/`system` migration). [`src/ui/theme.ts`](../src/ui/theme.ts) syncs highlight.js dark stylesheet, CodeMirror, and xterm. **FOUC:** inline script in [`index.html`](../index.html) sets `data-theme` only (no inline `--mn-*`, which would block theme switches); critical CSS uses per-family fallbacks until `tokens.css` loads. `applyTheme()` clears any legacy inline tokens. `initTheme()` adds `theme-ready` and removes `theme-no-transition` after first paint. **Settings → General:** family list with live swatch previews ([`src/ui/settings-theme.ts`](../src/ui/settings-theme.ts)). **Reef iframes:** [`src/chat/reef/theme-forward.ts`](../src/chat/reef/theme-forward.ts) forwards `--mn-bg`, `--mn-fg`, `--mn-accent`, surfaces, borders, radii, fonts. **Tests:** `test/theme.test.mts`, `test/theme-contrast.test.mts`, `test/chat/reef/theme-forward.test.mts`. Plan: [`documentation/plans/token-theme-system.md`](plans/token-theme-system.md). Design source: Color Scheme Exploration (PDF/HTML).
 
 ## What it is
 
@@ -63,7 +75,8 @@ Minnow/
 ├── src/
 │   ├── main.ts             # Entry: CSS imports, initTheme(), window handlers, initApp()
 │   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
-│   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY, THEME_STORAGE_KEY
+│   ├── constants.ts        # STORAGE_KEY, PRESET_STORAGE_KEY; theme keys re-exported from theme.ts
+│   ├── theme.ts            # 8 palette themes (4 families × dark/light), storage, applyTheme, initTheme
 │   ├── app-state.ts        # streaming flags, modelCache, abort controllers
 │   ├── chat/streaming-state.ts # per-chat streaming helpers (active vs background)
 │   ├── chat/context-usage.ts # MIN-13 context budget + breakdown sections
@@ -399,7 +412,7 @@ Closed ` ```reef-widget ` fences in assistant bubbles mount as sandboxed iframes
 
 **Charts (Recharts):** Host srcdoc injects baseline CSS (`.rw-chart` / `.mw-chart` → 220px tall) and the prelude sizes chart wrappers plus parents of `.recharts-responsive-container` when height collapses to ~0 (including after async ESM load via `MutationObserver`). Widgets should use `className="rw-chart"` (or explicit pixel height) and `requestResize()` after layout. **`reef-widget` fences are not passed to highlight.js** — mount runs before hljs so the unknown `reef-widget` language warnings do not spam the console during stream or after mount.
 
-**JSX guard:** Before Babel, the iframe runner auto-quotes `color: var(--text)` → `color: 'var(--text)'` in widget scripts (`widget-jsx-guard.ts`); prompts tell models to quote tokens in `style={{ }}` (bare `var()` is valid only in `<style>` CSS).
+**JSX guard:** Before Babel, the iframe runner auto-quotes `color: var(--mn-fg)` → `color: 'var(--mn-fg)'` in widget scripts (`widget-jsx-guard.ts`); prompts tell models to quote tokens in `style={{ }}` (bare `var()` is valid only in `<style>` CSS).
 
 **Iframe sizing:** Host owns iframe width (100% of bubble) and height (from prelude `resize` messages). Widgets must not set outer iframe dimensions or `100vh`. Prelude posts resize on load plus delayed passes (0 / 100 / 400 ms), then `validateResult` (~500 ms) so the host can reveal or show errors before the user sees a broken iframe.
 

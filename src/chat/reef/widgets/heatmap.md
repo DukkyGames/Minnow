@@ -2,23 +2,23 @@ GitHub-style contribution calendar (7 day rows × 14 week columns) with hover co
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 8px; font-size: 1rem; font-weight: 500; }
-.rw-cap { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px; font-weight: 400; }
+.rw-cap { font-size: 0.75rem; color: var(--mn-fg-muted); margin-bottom: 12px; font-weight: 400; }
 .rw-heat-wrap { overflow-x: auto; padding-bottom: 4px; }
 .rw-heat {
   display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; gap: 3px;
   grid-auto-columns: 12px;
 }
 .rw-cell {
-  width: 12px; height: 12px; border-radius: 2px; border: 0.5px solid var(--border);
-  background: var(--surface); cursor: default;
+  width: 12px; height: 12px; border-radius: 2px; border: 0.5px solid var(--mn-border);
+  background: var(--mn-surface-1); cursor: default;
 }
-.rw-cell[data-l="1"] { background: color-mix(in oklch, var(--accent) 25%, var(--surface)); }
-.rw-cell[data-l="2"] { background: color-mix(in oklch, var(--accent) 50%, var(--surface)); }
-.rw-cell[data-l="3"] { background: color-mix(in oklch, var(--accent) 75%, var(--surface)); }
-.rw-cell[data-l="4"] { background: var(--accent); border-color: color-mix(in oklch, var(--accent) 70%, var(--border-strong)); }
-.rw-legend-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); }
+.rw-cell[data-l="1"] { background: color-mix(in srgb, var(--mn-accent) 25%, var(--mn-surface-1)); }
+.rw-cell[data-l="2"] { background: color-mix(in srgb, var(--mn-accent) 50%, var(--mn-surface-1)); }
+.rw-cell[data-l="3"] { background: color-mix(in srgb, var(--mn-accent) 75%, var(--mn-surface-1)); }
+.rw-cell[data-l="4"] { background: var(--mn-accent); border-color: color-mix(in srgb, var(--mn-accent) 70%, var(--mn-border-strong)); }
+.rw-legend-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.75rem; color: var(--mn-fg-muted); }
 .rw-legend-row .rw-heat { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: repeat(5, 12px); gap: 3px; }
 </style>
 <div class="rw" id="heatmap">

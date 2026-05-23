@@ -6,8 +6,8 @@
   display: none;
   flex-direction: column;
   height: 100vh;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
 }
@@ -22,7 +22,7 @@
   gap: 12px;
   min-height: var(--topbar-h);
   padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .global-bugs-page-header h1 {
@@ -34,7 +34,7 @@
 .global-bugs-summary {
   margin-left: auto;
   font-size: 12px;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
@@ -53,9 +53,9 @@
   gap: 12px 20px;
   align-items: flex-end;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--mn-surface-1);
 }
 
 .global-bugs-filters label {
@@ -66,7 +66,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
 }
 
 .global-bugs-filters select {
@@ -74,9 +74,9 @@
   font-size: 0.85rem;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   min-width: 10rem;
 }
 
@@ -87,7 +87,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   letter-spacing: 0;
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .global-bugs-list-mount {
@@ -98,7 +98,7 @@
 .global-bugs-empty {
   margin: 2rem 0;
   text-align: center;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
 }
 
 .global-bugs-table {
@@ -110,16 +110,16 @@
 .global-bugs-table th {
   text-align: left;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
 }
 
 .global-bugs-table td {
   padding: 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
   vertical-align: top;
 }
 
@@ -129,7 +129,7 @@
 
 .global-bugs-table tbody tr:hover,
 .global-bugs-table tbody tr:focus-visible {
-  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--mn-accent) 8%, transparent);
   outline: none;
 }
 
@@ -140,7 +140,7 @@
 
 .global-bugs-table__workspace,
 .global-bugs-table__updated {
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   font-size: 0.8rem;
   white-space: nowrap;
 }
@@ -155,23 +155,23 @@
 }
 
 .global-bugs-severity--low {
-  color: var(--ink-muted);
-  border: 1px solid var(--border);
+  color: var(--mn-fg-subtle);
+  border: 1px solid var(--mn-border);
 }
 
 .global-bugs-severity--medium {
-  color: var(--text);
-  border: 1px solid var(--border);
+  color: var(--mn-fg);
+  border: 1px solid var(--mn-border);
 }
 
 .global-bugs-severity--high {
-  color: var(--warning, #b45309);
-  border: 1px solid color-mix(in oklch, var(--warning, #b45309) 40%, var(--border));
+  color: var(--mn-warning, #b45309);
+  border: 1px solid color-mix(in srgb, var(--mn-warning, #b45309) 40%, var(--mn-border));
 }
 
 .global-bugs-severity--critical {
-  color: var(--danger, #dc2626);
-  border: 1px solid color-mix(in oklch, var(--danger, #dc2626) 40%, var(--border));
+  color: var(--mn-danger, #dc2626);
+  border: 1px solid color-mix(in srgb, var(--mn-danger, #dc2626) 40%, var(--mn-border));
 }
 
 /* Sidebar footer entry (matches agent-activity badge) */
@@ -186,8 +186,8 @@
   font-weight: 700;
   line-height: 14px;
   text-align: center;
-  color: var(--surface);
-  background: var(--accent);
+  color: var(--mn-surface-1);
+  background: var(--mn-accent);
   border-radius: 7px;
   pointer-events: none;
 }

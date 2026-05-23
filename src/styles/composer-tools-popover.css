@@ -12,10 +12,10 @@
   width: 44px;
   height: 44px;
   flex-shrink: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out),
     background 0.2s var(--ease-out);
@@ -27,13 +27,13 @@
 }
 
 .composer-tools-btn:active {
-  background: var(--surface);
+  background: var(--mn-surface-1);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .composer-tools-btn:hover {
-    border-color: var(--border-strong);
-    color: var(--text);
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
   }
 }
 
@@ -51,8 +51,8 @@
   max-height: min(60vh, 420px);
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover-tall);
 }
@@ -66,7 +66,7 @@
   margin: 0;
   padding: 8px 12px;
   font-size: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .composer-tools-popover .tools-list--composer {
@@ -87,13 +87,13 @@
 .composer-tools-popover__footer {
   flex-shrink: 0;
   padding: 8px 12px 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--mn-border);
 }
 
 .composer-tools-popover__link {
   font-family: var(--font-ui);
   font-size: 13px;
-  color: var(--accent);
+  color: var(--mn-accent);
   background: none;
   border: none;
   padding: 0;
@@ -104,6 +104,6 @@
 
 @media (hover: hover) and (pointer: fine) {
   .composer-tools-popover__link:hover {
-    color: var(--text);
+    color: var(--mn-fg);
   }
 }
