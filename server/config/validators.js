@@ -35,7 +35,7 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['build', 'plan', 'orchestrate', 'research'];
+const MODE_IDS = ['build', 'plan', 'orchestrate', 'research', 'reef', 'debug'];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
@@ -151,6 +151,63 @@ function ensureOrchestrateBoard(raw) {
   return out;
 }
 
+const BUG_COLUMNS = new Set([
+  'reported',
+  'investigating',
+  'planned',
+  'fixing',
+  'complete',
+]);
+const BUG_SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
+
+function ensureBugCard(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const title = typeof r.title === 'string' ? r.title : '';
+  const description = typeof r.description === 'string' ? r.description : '';
+  const severityRaw = typeof r.severity === 'string' ? r.severity : 'medium';
+  const columnRaw = typeof r.column === 'string' ? r.column : 'reported';
+  if (!id || !BUG_SEVERITIES.has(severityRaw) || !BUG_COLUMNS.has(columnRaw)) return null;
+  const createdAt = typeof r.createdAt === 'number' ? r.createdAt : Date.now();
+  const updatedAt = typeof r.updatedAt === 'number' ? r.updatedAt : createdAt;
+  const out = {
+    id,
+    title,
+    description,
+    severity: severityRaw,
+    column: columnRaw,
+    createdAt,
+    updatedAt,
+  };
+  if (typeof r.notes === 'string') out.notes = r.notes;
+  if (typeof r.planPath === 'string' && r.planPath.trim()) out.planPath = r.planPath.trim();
+  if (typeof r.investigateRunId === 'string' && r.investigateRunId.trim()) {
+    out.investigateRunId = r.investigateRunId.trim();
+  }
+  if (typeof r.planRunId === 'string' && r.planRunId.trim()) {
+    out.planRunId = r.planRunId.trim();
+  }
+  if (typeof r.fixRunId === 'string' && r.fixRunId.trim()) {
+    out.fixRunId = r.fixRunId.trim();
+  }
+  return out;
+}
+
+function ensureBugBoard(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  if (!Array.isArray(r.bugs)) return undefined;
+  const bugs = [];
+  for (const item of r.bugs) {
+    const card = ensureBugCard(item);
+    if (card) bugs.push(card);
+  }
+  const startedAt = typeof r.startedAt === 'number' ? r.startedAt : Date.now();
+  const lastUpdatedAt = typeof r.lastUpdatedAt === 'number' ? r.lastUpdatedAt : startedAt;
+  return { bugs, startedAt, lastUpdatedAt };
+}
+
 function ensureViewMode(raw) {
   return raw === 'chat' || raw === 'board' ? raw : undefined;
 }
@@ -200,6 +257,7 @@ function ensureChatShape(raw) {
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
+  const bugBoard = ensureBugBoard(row.bugBoard);
   const viewMode = ensureViewMode(row.viewMode);
 
   return {
@@ -218,6 +276,7 @@ function ensureChatShape(raw) {
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
+    ...(bugBoard ? { bugBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),

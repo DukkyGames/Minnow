@@ -33,6 +33,7 @@ import './styles/sub-agent-drawer.css';
 import './styles/orchestrate-plan-selector.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
+import './styles/bug-board.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -153,6 +154,9 @@ function registerWindowHandlers(): void {
   window.openSettingsFromTopbar = () => {
     void import('./ui/settings-page').then((m) => m.openSettingsFromTopbar());
   };
+  window.openBenchmarkFromTopbar = () => {
+    void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
+  };
   window.closeDrawer = closeDrawer;
   window.onDrawerKeydown = onDrawerKeydown;
   window.clearChat = clearChat;
@@ -238,6 +242,11 @@ export async function initApp(): Promise<void> {
   registerProviderHandlers();
   const settingsPage = await import('./ui/settings-page');
   settingsPage.initSettingsPage();
+  const benchmarkPage = await import('./ui/benchmark-page');
+  benchmarkPage.initBenchmarkPage();
+  const globalBugsPage = await import('./ui/global-bugs-page');
+  globalBugsPage.initGlobalBugsPage();
+  globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();

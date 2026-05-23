@@ -1,0 +1,161 @@
+/**
+ * Benchmark runner: suite orchestration, progress events, aggregation.
+ */
+
+import { detectLocalServer } from '../tools/client';
+import { aggregateRunScore } from './scoring.ts';
+import { resolveBenchmarkBinding } from './resolve-binding.ts';
+import { saveRun } from './persistence.ts';
+import { runCapabilitySuite } from './suites/capability.ts';
+import { runSpeedSuite } from './suites/speed.ts';
+import { runToolsSuite } from './suites/tools.ts';
+import { runSkillsSuite } from './suites/skills.ts';
+import { runModesSuite } from './suites/modes.ts';
+import { runCodingSuite } from './suites/coding.ts';
+import type {
+  BenchmarkPreset,
+  BenchmarkRun,
+  BenchmarkRunContext,
+  RunBenchmarkOptions,
+  SuiteId,
+} from './types.ts';
+
+const QUICK_SUITES: SuiteId[] = ['capability', 'speed', 'modes'];
+const FULL_SUITES: SuiteId[] = [
+  'capability',
+  'speed',
+  'tools',
+  'skills',
+  'modes',
+  'coding',
+];
+
+function suitesForPreset(preset: BenchmarkPreset, override?: SuiteId[]): SuiteId[] {
+  if (override?.length) return override;
+  return preset === 'full' ? FULL_SUITES : QUICK_SUITES;
+}
+
+function newRunId(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<BenchmarkRun> {
+  const preset = options.preset ?? 'quick';
+  const suites = suitesForPreset(preset, options.suites);
+  const signal = options.signal ?? new AbortController().signal;
+  const onProgress = options.onProgress;
+
+  const binding = await resolveBenchmarkBinding();
+  const localServer = await detectLocalServer();
+  const ctx: BenchmarkRunContext = {
+    providerId: binding.providerId,
+    modelId: binding.modelId,
+    localServer,
+    signal,
+  };
+
+  const startedAt = new Date().toISOString();
+  const runT0 = performance.now();
+  const suiteResults = [];
+  let headlineTtftMs = 0;
+  let headlineTokPerSec = 0;
+
+  for (const suiteId of suites) {
+    if (signal.aborted) break;
+
+    const label =
+      suiteId === 'capability'
+        ? 'Capability'
+        : suiteId === 'speed'
+          ? 'Speed'
+          : suiteId === 'tools'
+            ? 'Tools'
+            : suiteId === 'skills'
+              ? 'Skills'
+              : suiteId === 'modes'
+                ? 'Modes'
+                : 'Coding';
+
+    onProgress?.({ type: 'suite-start', suiteId, label });
+
+    if (suiteId === 'capability') {
+      const suite = await runCapabilitySuite(ctx);
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+      }
+      continue;
+    }
+
+    if (suiteId === 'speed') {
+      const { suite, headlineTtftMs: ttft, headlineTokPerSec: tps } = await runSpeedSuite(ctx);
+      headlineTtftMs = ttft;
+      headlineTokPerSec = tps;
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+      }
+      continue;
+    }
+
+    if (suiteId === 'tools') {
+      const suite = await runToolsSuite(ctx);
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+        if (signal.aborted) break;
+      }
+      continue;
+    }
+
+    if (suiteId === 'skills') {
+      const suite = await runSkillsSuite(ctx);
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+      }
+      continue;
+    }
+
+    if (suiteId === 'modes') {
+      const suite = await runModesSuite(ctx);
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+      }
+      continue;
+    }
+
+    if (suiteId === 'coding') {
+      const suite = await runCodingSuite(ctx);
+      suiteResults.push(suite);
+      for (const result of suite.tests) {
+        onProgress?.({ type: 'test-done', result });
+      }
+    }
+  }
+
+  const toolsSuite = suiteResults.find((s) => s.id === 'tools');
+  const skillsSuite = suiteResults.find((s) => s.id === 'skills');
+  const modesSuite = suiteResults.find((s) => s.id === 'modes');
+
+  const run: BenchmarkRun = {
+    id: newRunId(),
+    startedAt,
+    durationMs: Math.round(performance.now() - runT0),
+    preset,
+    provider: { id: binding.provider.id, baseUrl: binding.provider.baseUrl },
+    model: { id: binding.modelId },
+    totalScore: aggregateRunScore(suiteResults),
+    headlineTtftMs,
+    headlineTokPerSec,
+    modeMatrixPassed: modesSuite?.passed ?? 0,
+    toolsPassed: toolsSuite?.passed ?? 0,
+    skillsPassed: skillsSuite?.passed ?? 0,
+    suites: suiteResults,
+  };
+
+  await saveRun(run);
+  onProgress?.({ type: 'run-done', run });
+  return run;
+}

@@ -13,7 +13,14 @@ import {
   type AskQuestionArgs,
 } from './ask-question-types';
 
-const HANDOFF_MODES = new Set<ModeId>(['plan', 'build', 'research', 'orchestrate', 'reef']);
+const HANDOFF_MODES = new Set<ModeId>([
+  'plan',
+  'build',
+  'research',
+  'orchestrate',
+  'reef',
+  'debug',
+]);
 
 type HandoffSituation =
   | 'plan_complete'

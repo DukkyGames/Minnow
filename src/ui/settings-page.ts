@@ -192,6 +192,10 @@ export function openSettings(section?: SettingsSectionId): void {
   const shell = getChatShell();
   if (!root || !shell) return;
 
+  void import('./global-bugs-page').then((m) => {
+    if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
+  });
+
   const wasAlreadyOpen = root.classList.contains('is-open');
 
   root.classList.add('is-open');
@@ -226,7 +230,16 @@ export function closeSettings(): void {
 
 function onHashChange(): void {
   const hash = window.location.hash;
+  if (hash.startsWith('#/bugs')) {
+    if (getSettingsRoot()?.classList.contains('is-open')) {
+      closeSettings();
+    }
+    return;
+  }
   if (hash.startsWith('#/settings')) {
+    void import('./global-bugs-page').then((m) => {
+      if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
+    });
     openSettings(parseHashSection());
     return;
   }

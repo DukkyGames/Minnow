@@ -126,6 +126,13 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
+  if (normalizeModeId(chat.modeId) === 'debug' && chat.viewMode === 'board') {
+    void import('./bug-board').then((m) => {
+      m.renderBugBoardView(chat);
+      m.refreshActiveBugBoardIfMounted();
+    });
+    return;
+  }
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
     void import('./orchestrate-board').then((m) => {
       m.renderBoardView(chat);
@@ -280,7 +287,8 @@ export function appendBubble(
   userOptions?: AppendUserBubbleOptions,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const chat = getActiveChat();
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+  const mode = normalizeModeId(chat.modeId);
+  if ((mode === 'orchestrate' || mode === 'debug') && chat.viewMode === 'board') {
     const stub = document.createElement('div');
     return { wrap: stub, bubble: stub };
   }
@@ -392,7 +400,8 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   if (!isStreamDomVisible(targetId)) {
     return streamingAssistantRowStub();
   }
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+  const streamMode = normalizeModeId(chat.modeId);
+  if ((streamMode === 'orchestrate' || streamMode === 'debug') && chat.viewMode === 'board') {
     const stub = document.createElement('div');
     const bubble = document.createElement('div');
     const cursor = document.createElement('div');

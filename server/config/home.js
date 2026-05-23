@@ -71,6 +71,7 @@ const SCAFFOLD_DIRS = [
   'screenshots',
   'reef/widgets',
   'reef/modules',
+  'benchmarks',
 ];
 
 const DEFAULT_META = {

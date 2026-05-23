@@ -12,6 +12,7 @@ declare global {
     toggleSelectedModelLoad: () => Promise<void>;
     toggleDrawer: () => void;
     openSettingsFromTopbar: () => void;
+    openBenchmarkFromTopbar: () => void;
     closeDrawer: () => void;
     onDrawerKeydown: (e: KeyboardEvent) => void;
     clearChat: () => void;

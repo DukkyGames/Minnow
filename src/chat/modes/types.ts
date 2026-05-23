@@ -3,7 +3,13 @@
  */
 
 /** Stable ids — do not rename without migration. */
-export type ModeId = 'build' | 'plan' | 'orchestrate' | 'research' | 'reef';
+export type ModeId =
+  | 'build'
+  | 'plan'
+  | 'orchestrate'
+  | 'research'
+  | 'reef'
+  | 'debug';
 
 export const DEFAULT_MODE_ID: ModeId = 'build';
 
@@ -13,6 +19,7 @@ export const MODE_IDS: readonly ModeId[] = [
   'orchestrate',
   'research',
   'reef',
+  'debug',
 ] as const;
 
 /** Type guard for persisted mode ids. */
@@ -22,6 +29,8 @@ export function isModeId(value: string): value is ModeId {
 
 /** Normalize persisted or unknown values to a valid ModeId. */
 export function normalizeModeId(value: string | null | undefined): ModeId {
+  // Legacy bug-tracker mode — bugs live on the global #/bugs screen only.
+  if (value === 'debug') return DEFAULT_MODE_ID;
   if (value && isModeId(value)) return value;
   return DEFAULT_MODE_ID;
 }

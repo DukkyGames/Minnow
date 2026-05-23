@@ -102,6 +102,9 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   if (normalizeModeId(normalized) === 'orchestrate' && !chat.orchestrateBoard) {
     chat.viewMode = 'board';
   }
+  if (normalizeModeId(normalized) === 'debug') {
+    chat.viewMode = 'board';
+  }
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(normalized);
     chat.workAgentId = agent?.id ?? null;

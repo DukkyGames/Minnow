@@ -2,8 +2,8 @@
  * Resolve provider + model for benchmark runs (same source as composer send).
  */
 
-import { getActiveProvider } from '../providers/store';
-import type { ProviderPublic } from '../providers/types';
+import { getActiveProvider } from '../providers/store.ts';
+import type { ProviderPublic } from '../providers/types.ts';
 
 export interface BenchmarkBinding {
   providerId: string;
