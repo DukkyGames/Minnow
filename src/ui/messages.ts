@@ -45,6 +45,7 @@ import {
   attachMessageActions,
   type MessageTurnKind,
 } from './message-actions';
+import { attachBranchPicker } from './branch-picker';
 import {
   renderUserMessageBubble,
   type UserBubbleRenderOptions,
@@ -177,6 +178,7 @@ export function renderChatFromHistory(chat: Chat): void {
         historyIndex: i,
         turnKind: 'user',
       });
+      attachBranchPicker(wrap, chat.id, i);
       continue;
     }
 

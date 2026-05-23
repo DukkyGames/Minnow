@@ -8,7 +8,9 @@ import {
   truncateChatHistory,
   updateUserMessageAt,
 } from '../chat/history-truncate';
-import { resendFromIndex } from '../chat/resend-from-index';
+import { forkFromUserIndex } from '../chat/fork-from-run';
+import { openForkModelDialog } from './fork-model-dialog';
+import { getActiveRun } from '../state/runs-store';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { getActiveChat } from '../state/sessions';
 import { autoResize } from './input';
@@ -154,8 +156,25 @@ export function attachMessageActions(
         }),
       );
       items.push(
-        buildMenuButton('Regenerate from here', () => {
-          void resendFromIndex(target.chatId, target.historyIndex);
+        buildMenuButton('Replay', () => {
+          void forkFromUserIndex(target.chatId, target.historyIndex);
+        }),
+      );
+      items.push(
+        buildMenuButton('Fork with different model…', () => {
+          void (async () => {
+            const chat = getActiveChat();
+            const prior = getActiveRun(chat, target.historyIndex);
+            const snap = prior?.snapshot;
+            const picked = await openForkModelDialog({
+              providerId: snap?.providerId ?? chat.providerId,
+              modelId: snap?.modelId ?? chat.modelId,
+              temperature: snap?.temperature,
+              maxTokens: snap?.maxTokens,
+            });
+            if (!picked) return;
+            void forkFromUserIndex(target.chatId, target.historyIndex, picked);
+          })();
         }),
       );
     }
@@ -169,7 +188,7 @@ export function attachMessageActions(
             setStatus('err', 'No user message to resend from');
             return;
           }
-          void resendFromIndex(target.chatId, userIdx);
+          void forkFromUserIndex(target.chatId, userIdx);
         }),
       );
     }
@@ -218,5 +237,5 @@ export async function completePendingMessageEdit(
     return;
   }
   renderChatFromHistory(getActiveChat());
-  await resendFromIndex(chatId, historyIndex);
+  await forkFromUserIndex(chatId, historyIndex);
 }

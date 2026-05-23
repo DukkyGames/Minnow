@@ -11,6 +11,7 @@ import './styles/model-select.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
+import './styles/branch-picker.css';
 import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/context-usage.css';

@@ -1,7 +1,7 @@
 ---
 name: Trace and replay infrastructure
 overview: Introduce a forkable runs layer parallel to chat.history so each user turn can be replayed with captured inputs (system stack, tools, model/provider) and optional model swap at the fork point, with a per-message branch picker. Reuses resendFromIndex and runChatTurn; extends session schema v3.
-status: Partial
+status: Shipped
 todos:
   - id: schema-types
     content: Add TurnRunRecord, TurnSnapshot, ChatBranchState, and Chat.runs / activeBranchId to src/types.ts with JSDoc field semantics
