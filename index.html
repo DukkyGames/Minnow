@@ -123,6 +123,48 @@
     .app-loader__spinner { animation: none; opacity: 0.5; }
     .app-loader { transition-duration: 0.01ms; }
   }
+  /* Critical shell layout (matches tokens/global/topbar until Vite CSS loads). */
+  body {
+    display: flex;
+    flex-direction: column;
+    color: oklch(31.714% 0.00004 271.152);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  html[data-theme="dark"] body {
+    color: oklch(72% 0.02 271);
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    min-height: 52px;
+    padding: 0 14px;
+    border-bottom: 1px solid oklch(28.094% 0.00003 271.152);
+    background: oklch(100% 0.00011 271.152);
+    flex-shrink: 0;
+  }
+  html[data-theme="dark"] .topbar {
+    border-bottom-color: oklch(32% 0.02 271);
+    background: oklch(11% 0.012 271);
+  }
+  .app-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+  .main-column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
 </style>
 </head>
 <body>
