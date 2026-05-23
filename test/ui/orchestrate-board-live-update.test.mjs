@@ -414,7 +414,7 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('board header places Start and Stop controls on the right', () => {
+  test('board header icon controls ordered Plan, Chat, play/pause', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
@@ -434,13 +434,22 @@ describe('orchestrate board live updates', () => {
     const toolbar = document.querySelector('.board-header__toolbar');
     const headerControls = document.querySelector('.board-header__controls');
     assert.ok(toolbar?.contains(headerControls));
-    const stop = document.querySelector('[data-board-action="stop-orchestrator"]');
-    const start = document.querySelector('[data-board-action="resume"]');
-    assert.equal(stop?.textContent, 'Stop');
-    assert.equal(start?.textContent, 'Start');
-    assert.ok(
-      headerControls?.querySelector('[data-board-action="stop-orchestrator"]'),
+
+    const actions = [...headerControls.children].map(
+      (el) =>
+        el.getAttribute('data-board-action') ??
+        (el.id === 'btnViewModeToggleChat' ? 'chat-view' : null),
     );
+    assert.deepEqual(actions, ['open-plan', 'chat-view', 'play-pause']);
+
+    const openPlan = headerControls.querySelector('[data-board-action="open-plan"]');
+    const playPause = headerControls.querySelector('[data-board-action="play-pause"]');
+    assert.ok(openPlan?.classList.contains('board-header__icon-btn'));
+    assert.equal(openPlan?.textContent?.trim(), '');
+    assert.equal(playPause?.getAttribute('aria-label'), 'Start');
+    assert.equal(playPause?.getAttribute('aria-pressed'), 'false');
+    assert.ok(playPause?.querySelector('[data-board-icon="play"]'));
+    assert.ok(playPause?.querySelector('[data-board-icon="pause"].hidden'));
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {
@@ -547,7 +556,7 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('refreshActiveBoardIfMounted enables resume when streaming stops', () => {
+  test('refreshActiveBoardIfMounted syncs play/pause when streaming stops', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
@@ -556,6 +565,7 @@ describe('orchestrate board live updates', () => {
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
+    chat.orchestrateBoard.activeParentTurnId = 'turn-stream-1';
     setSessionStateForTests({
       version: 2,
       activeId: chat.id,
@@ -566,14 +576,20 @@ describe('orchestrate board live updates', () => {
     renderBoardView(chat);
     setStreaming(true, chat.id);
     refreshActiveBoardIfMounted();
-    const resumeBtn = document.querySelector('[data-board-action="resume"]');
-    assert.ok(resumeBtn);
-    assert.equal(resumeBtn.disabled, true);
+    const playPauseBtn = document.querySelector('[data-board-action="play-pause"]');
+    assert.ok(playPauseBtn);
+    assert.equal(playPauseBtn.getAttribute('aria-pressed'), 'true');
+    assert.equal(playPauseBtn.getAttribute('aria-label'), 'Stop orchestrator');
+    assert.ok(playPauseBtn.querySelector('[data-board-icon="pause"]:not(.hidden)'));
 
     setStreaming(false);
     refreshActiveBoardIfMounted();
-    const resumeAfterIdle = document.querySelector('[data-board-action="resume"]');
-    assert.ok(resumeAfterIdle);
-    assert.equal(resumeAfterIdle.disabled, false);
+    const playPauseAfterIdle = document.querySelector(
+      '[data-board-action="play-pause"]',
+    );
+    assert.ok(playPauseAfterIdle);
+    assert.equal(playPauseAfterIdle.disabled, false);
+    assert.equal(playPauseAfterIdle.getAttribute('aria-pressed'), 'false');
+    assert.equal(playPauseAfterIdle.getAttribute('aria-label'), 'Start');
   });
 });
