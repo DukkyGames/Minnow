@@ -335,6 +335,8 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 
     run.messages = output.messages;
     run.toolTurns = output.toolTurns;
+    if (output.usage) run.usage = output.usage;
+    if (output.stats) run.stats = output.stats;
 
     if (output.toolTurnLimitExhausted) {
       settleRun(

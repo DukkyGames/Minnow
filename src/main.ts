@@ -108,6 +108,7 @@ import {
   syncModelSelectForActiveChat,
 } from './ui/sidebar';
 import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
+import { initOrchestrateStatsLiveRefresh } from './chat/orchestrate/stats-live';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import {
   bindExpertsSettingsCheckbox,
@@ -236,6 +237,7 @@ export async function initApp(): Promise<void> {
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
   initStatsStrip();
+  initOrchestrateStatsLiveRefresh();
   initChatScroll();
   registerTerminalKeyboardShortcut();
   loadToolConfigIntoDrawer();
