@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import type { Chat, OrchestrateBoardState } from '../../src/types.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 import { DEFAULT_SUPERVISOR_CONFIG } from '../../src/agents/supervisor/defaults.ts';
@@ -13,10 +13,17 @@ import {
 } from '../../src/agents/supervisor/detector.ts';
 import { pickSupervisorDecision, scanTickDetectors } from '../../src/agents/supervisor/rules.ts';
 import type { DetectorContext } from '../../src/agents/supervisor/detector.ts';
-import { getSupervisorChatState } from '../../src/agents/supervisor/state.ts';
+import {
+  getSupervisorChatState,
+  resetSupervisorStateForTests,
+} from '../../src/agents/supervisor/state.ts';
 
 const CHAT_ID = '22222222-2222-2222-2222-222222222222';
 const NOW = 2_000_000_000_000;
+
+afterEach(() => {
+  resetSupervisorStateForTests();
+});
 
 function ctx(overrides: Partial<DetectorContext> & Pick<DetectorContext, 'board' | 'sup'>): DetectorContext {
   const chat = {
@@ -60,6 +67,49 @@ describe('scanTickDetectors + pickSupervisorDecision', () => {
     assert.equal(hit?.rule, 'R9');
     const decision = pickSupervisorDecision(c, hit);
     assert.equal(decision.action, 'escalate_user');
+  });
+
+  test('scanTickDetectors skips all rules when user stopped the orchestrator', () => {
+    const board: OrchestrateBoardState = {
+      planPath: 'p.md',
+      startedAt: NOW - 600_000,
+      lastUpdatedAt: NOW,
+      waves: [{ id: 'W1', status: 'in_progress' }],
+      tasks: [{ id: 'T1', title: 't', wave: 'W1', category: 'build', status: 'planned' }],
+    };
+    const sup = getSupervisorChatState(CHAT_ID);
+    sup.awaitingUserDecision = false;
+    sup.recoveryInFlight = false;
+    sup.lastTerminalAt = NOW - 120_000;
+    sup.lastOrchestratorProgressAt = NOW - 120_000;
+    const chat = {
+      id: CHAT_ID,
+      modeId: 'orchestrate',
+      orchestrateBoard: board,
+      history: [
+        { role: 'user', content: 'go' },
+        { role: 'assistant', content: 'partial', stopped: true },
+      ],
+    } as Chat;
+    const c = ctx({ board, sup, chat });
+    assert.equal(detectMissedOrchestratorHeartbeat(c)?.rule, 'R7');
+    assert.equal(scanTickDetectors(c), null);
+  });
+
+  test('R7 does not fire on idle board with only startedAt (new chat / reload)', () => {
+    const board: OrchestrateBoardState = {
+      planPath: 'p.md',
+      startedAt: NOW - 600_000,
+      lastUpdatedAt: NOW,
+      waves: [{ id: 'W1', status: 'planned' }],
+      tasks: [{ id: 'T1', title: 't', wave: 'W1', category: 'build', status: 'planned' }],
+    };
+    const sup = getSupervisorChatState(CHAT_ID);
+    sup.awaitingUserDecision = false;
+    sup.recoveryInFlight = false;
+    const c = ctx({ board, sup });
+    assert.equal(detectMissedOrchestratorHeartbeat(c), null);
+    assert.equal(scanTickDetectors(c), null);
   });
 
   test('all-complete board does not tick inject_resume when R7 would match', () => {
