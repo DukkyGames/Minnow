@@ -3,6 +3,22 @@ import { describe, test } from 'node:test';
 import { DEFAULT_META } from '../../server/config/home.js';
 import { mergeConfigMeta } from '../../server/config/validators.js';
 
+/** Mirror of {@link ../../src/config/chat-meta.ts} `clampMaxToolTurns` for contract tests. */
+function clampMaxToolTurns(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return 8;
+  return Math.min(64, Math.max(1, Math.round(n)));
+}
+
+describe('chat.maxToolTurns clamp (client contract)', () => {
+  test('clampMaxToolTurns enforces [1, 64]', () => {
+    assert.equal(clampMaxToolTurns(0), 1);
+    assert.equal(clampMaxToolTurns(200), 64);
+    assert.equal(clampMaxToolTurns(24), 24);
+    assert.equal(clampMaxToolTurns('nope'), 8);
+  });
+});
+
 describe('config.json chat.maxToolTurns merge', () => {
   test('DEFAULT_META seeds chat.maxToolTurns for new homes', () => {
     assert.equal(DEFAULT_META.chat?.maxToolTurns, 8);

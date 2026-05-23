@@ -113,6 +113,7 @@ import {
 } from '../api/generations';
 import { getActiveProvider } from '../providers/store';
 import { setStatus } from '../ui/status';
+import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
@@ -568,11 +569,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     scheduleSaveSessions();
     renderSidebar();
     const userIdx = chat.history.length - 1;
-    const { wrap: userWrap } = appendBubble('user', historyContent, {
-      historyIndex: userIdx,
-      turnKind: 'user',
-      chatId: chat.id,
-    });
+    const { wrap: userWrap } = appendBubble(
+      'user',
+      historyContent,
+      {
+        historyIndex: userIdx,
+        turnKind: 'user',
+        chatId: chat.id,
+      },
+      { liveAttachments: validAttachments },
+    );
     const { attachMessageActions } = await import('../ui/message-actions');
     attachMessageActions(userWrap, {
       chatId: chat.id,
@@ -1036,9 +1042,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         turnResult.tFirst ?? turnResult.tEnd,
         turnResult.tEnd,
       );
-      const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
+      const displayMeta = applyOrchestrateAggregatedStatsToChat(chat, parentTurnId, meta);
+      const modelInfo = resolveModelInfo(streamMeta.model || modelId, displayMeta.model_info);
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
-      chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
+      chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
       chat.modelId =
         (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
@@ -1073,12 +1080,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
             });
           }
-          updateStrip(meta.stats, meta.usage, modelInfo);
+          updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
           setStatus('ok', 'Ready');
         }
       } else if (isStreamDomVisible(chat.id)) {
         removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
-        updateStrip(meta.stats, meta.usage, modelInfo);
+        updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
         setStatus('ok', 'Ready');
       }
       renderSidebar();
