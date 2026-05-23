@@ -3,13 +3,72 @@
 .reef-widget-host {
   display: block;
   width: 100%;
-  max-width: 680px;
+  max-width: 100%;
   margin: 0.75em 0;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface);
   min-height: 120px;
+}
+
+.reef-widget-host--validating {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.reef-widget-host--validating .reef-widget-iframe {
+  position: absolute;
+  width: 100%;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reef-widget-validating-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.reef-widget-host--error {
+  min-height: auto;
+  padding: 0;
+}
+
+.reef-widget-error {
+  padding: 16px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.reef-widget-error__title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.reef-widget-error__list {
+  margin: 0 0 8px;
+  padding-left: 1.25em;
+  color: var(--text-muted);
+}
+
+.reef-widget-error__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .reef-widget-host .reef-widget-iframe {
@@ -38,7 +97,7 @@
   align-items: stretch;
   justify-content: center;
   min-height: 120px;
-  max-width: 680px;
+  max-width: 100%;
   margin: 0.75em 0;
   padding: 16px;
   border: 0.5px solid var(--border);

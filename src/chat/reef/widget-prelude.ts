@@ -8,6 +8,27 @@ export const PRELUDE_SCRIPT = `(function () {
   var pending = Object.create(null);
   var resizeRaf = 0;
   var lastPostedHeight = 0;
+  var collectedErrors = [];
+
+  function captureWidgetError(msg) {
+    var s = String(msg || "Unknown error");
+    if (collectedErrors.indexOf(s) >= 0) return;
+    collectedErrors.push(s);
+    post("widgetError", { error: s });
+  }
+
+  window.addEventListener("error", function (ev) {
+    captureWidgetError(ev.message || (ev.error && ev.error.message) || "Script error");
+  });
+
+  window.addEventListener("unhandledrejection", function (ev) {
+    var r = ev.reason;
+    captureWidgetError((r && r.message) || String(r || "Unhandled rejection"));
+  });
+
+  function emitValidateResult() {
+    post("validateResult", { ok: collectedErrors.length === 0, errors: collectedErrors.slice() });
+  }
 
   function post(action, extra) {
     var payload = { type: "reef", action: action, widgetId: widgetId };
@@ -73,6 +94,7 @@ export const PRELUDE_SCRIPT = `(function () {
     setTimeout(scheduleResizePost, 0);
     setTimeout(scheduleResizePost, 100);
     setTimeout(scheduleResizePost, 400);
+    setTimeout(emitValidateResult, 500);
   }
 
   window.addEventListener("message", function (ev) {
