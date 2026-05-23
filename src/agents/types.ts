@@ -67,6 +67,12 @@ export interface SubAgentRun {
    * Distinct from `toolTurns`, which reflects the runner’s completed tool rounds in the summary.
    */
   liveNestedToolCalls?: number;
+  /** Last nested tool name invoked (activity panel). */
+  liveCurrentToolName?: string | null;
+  /** Resolved provider for this run (set when execution starts). */
+  providerId?: string;
+  /** Resolved model for this run (set when execution starts). */
+  modelId?: string;
   /** Board category chip (Orchestrate board agent grid). */
   category?: BoardCategory;
   /** Linked board task id when spawned from board_init tasks. */

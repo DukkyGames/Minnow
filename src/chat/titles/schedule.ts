@@ -17,6 +17,7 @@ import {
   registerTitleJobInflight,
   releaseTitleJobInflight,
 } from './inflight';
+import { emitTitleJobEnded, emitTitleJobStarted } from './activity-events';
 import { isPlaceholderChatName } from './placeholder';
 import { createTitleProviderPort } from './provider-port';
 import type { TitleGenerationOptions } from './types';
@@ -50,6 +51,11 @@ export function resetTitleScheduleContext(): void {
   scheduleContextByChatId.clear();
 }
 
+/** Read-only model binding captured when the title job was scheduled. */
+export function getTitleScheduleContext(chatId: string): TitleScheduleContext | undefined {
+  return scheduleContextByChatId.get(chatId);
+}
+
 /**
  * Schedule async title generation — returns immediately; never blocks send.
  * Pass `context` when the send path already resolved model/provider bindings.
@@ -74,9 +80,12 @@ export function scheduleChatTitleGeneration(
   const controller = new AbortController();
   if (!registerTitleJobInflight(chatId, controller)) return;
 
+  emitTitleJobStarted(chatId, scheduleContextByChatId.get(chatId) ?? context);
+
   void runTitleJob(chatId, seed, controller.signal).finally(() => {
     scheduleContextByChatId.delete(chatId);
     releaseTitleJobInflight(chatId, controller);
+    emitTitleJobEnded(chatId);
   });
 }
 

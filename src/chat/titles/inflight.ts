@@ -32,6 +32,11 @@ export function releaseTitleJobInflight(chatId: string, controller: AbortControl
   }
 }
 
+/** Chat ids with an active title job. */
+export function listTitleJobInflightChatIds(): string[] {
+  return [...inflight.keys()];
+}
+
 /** Reset all in-flight jobs (tests). */
 export function resetTitleGenerationInflight(): void {
   for (const controller of inflight.values()) {

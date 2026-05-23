@@ -175,6 +175,7 @@ function settleRun(
   run.error = error;
   run.endedAt = nowIso();
   run.liveNestedToolCalls = undefined;
+  run.liveCurrentToolName = undefined;
   clearTimeoutFor(internals);
   releaseConcurrencySlot(internals);
   internals.queued = false;
@@ -283,6 +284,9 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       typeConfig,
       run.parentChatId,
     );
+    run.providerId = providerId;
+    run.modelId = modelId;
+    emitSubAgentRunUpdated(run);
 
     const parentTools = getEnabledToolDefinitionsForMode(modeId);
     const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
@@ -629,6 +633,7 @@ export function recordToolCallForRun(
     name,
     args: JSON.stringify(args),
   });
+  internals.run.liveCurrentToolName = name;
   observeSubAgentToolCall(
     runId,
     internals.run.type,
@@ -729,6 +734,9 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   };
   if (run.error) payload.error = run.error;
   if (run.liveNestedToolCalls != null) payload.liveNestedToolCalls = run.liveNestedToolCalls;
+  if (run.liveCurrentToolName) payload.liveCurrentToolName = run.liveCurrentToolName;
+  if (run.modelId) payload.modelId = run.modelId;
+  if (run.providerId) payload.providerId = run.providerId;
   const terminalReason = deriveSubAgentTerminalReason(run);
   if (terminalReason) payload.terminalReason = terminalReason;
   return payload;

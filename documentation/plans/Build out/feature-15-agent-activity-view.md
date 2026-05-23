@@ -1,7 +1,7 @@
 # Feature #15 — Agent activity view
 
 **Roadmap:** [`feature-audit-roadmap.md`](../feature-audit-roadmap.md) §15 (Partial)  
-**Status:** Planning  
+**Status:** Shipped  
 **Primary deliverable:** Global “all agents right now” panel — not per-chat cards only.
 
 ---

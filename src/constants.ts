@@ -38,6 +38,8 @@ export const AUTO_TITLE_MAX_LEN = 40;
 export const PRESET_STORAGE_KEY = 'minnow.systemPrompt';
 /** Whether the inference metrics strip is visible (`'1'` / `'0'`). */
 export const STATS_STRIP_OPEN_KEY = 'minnow.statsStripOpen';
+/** Whether the agent activity panel is open (`'1'` / `'0'`). */
+export const AGENT_ACTIVITY_OPEN_KEY = 'minnow.agentActivityOpen';
 
 /** UI appearance: light, dark, or follow OS (`localStorage`). */
 export const THEME_STORAGE_KEY = 'minnow.theme';
