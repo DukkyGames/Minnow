@@ -34,7 +34,22 @@ describe('whenAppStylesReady', () => {
     await whenAppStylesReady();
   });
 
-  it('waits for a stylesheet link load event', async () => {
+  it('ignores third-party stylesheet links', async () => {
+    win = new Window();
+    const g = globalThis as typeof globalThis & { document: Document; window: Window };
+    g.document = win.document;
+    g.window = win as unknown as Window & typeof globalThis.window;
+
+    const external = win.document.createElement('link');
+    external.rel = 'stylesheet';
+    external.href = 'https://fonts.googleapis.com/css2?family=Test';
+    Object.defineProperty(external, 'sheet', { configurable: true, get: () => null });
+    win.document.head.appendChild(external);
+
+    await whenAppStylesReady();
+  });
+
+  it('waits for a bundled stylesheet link load event', async () => {
     win = new Window();
     const g = globalThis as typeof globalThis & { document: Document; window: Window };
     g.document = win.document;
@@ -42,7 +57,7 @@ describe('whenAppStylesReady', () => {
 
     const link = win.document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://example.test/pending.css';
+    link.href = 'https://example.test/assets/pending.css';
     Object.defineProperty(link, 'sheet', { configurable: true, get: () => null });
     win.document.head.appendChild(link);
 
