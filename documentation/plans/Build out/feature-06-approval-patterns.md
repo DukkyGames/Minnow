@@ -2,7 +2,7 @@
 
 **Roadmap:** [`feature-audit-roadmap.md`](../feature-audit-roadmap.md) item **#6** (quick win).  
 **Architecture context:** [`documentation/context.md`](../../context.md) — Tool approval (execution gate), `minnow.tools` shape.  
-**Status:** Partial → target **Built** for agent-scoped overrides, argument patterns, and sticky per-agent “always allow”.
+**Status:** Built — agent-scoped overrides, argument patterns, sticky per-agent “always allow”, and Settings UI (MIN-42).
 
 ---
 

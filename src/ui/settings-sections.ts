@@ -51,6 +51,7 @@ import {
   refreshProvidersBanner,
   registerToolHandlers,
 } from './settings';
+import { mountToolApprovalRulesSection } from './tool-approval-settings';
 import {
   createMcpServer,
   deleteMcpServer,
@@ -1018,6 +1019,8 @@ async function renderToolsSection(): Promise<void> {
   toolsPanel.appendChild(list);
   toolsPanel.appendChild(keyRow);
   mount.appendChild(toolsPanel);
+
+  mountToolApprovalRulesSection(mount);
 
   fillToolsSection('settingsToolsList');
 

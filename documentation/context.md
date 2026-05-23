@@ -681,9 +681,24 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
     "read_file": false
   },
   "permissions": {
-    "read_file": "off",
-    "web_search": "ask",
-    "save_file": "full"
+    "default": {
+      "read_file": "off",
+      "web_search": "ask",
+      "save_file": "full"
+    },
+    "perAgent": {
+      "sub-agent:shell": { "execute_command": "full" }
+    },
+    "patterns": [
+      {
+        "id": "pattern-11111111-1111-1111-1111-111111111111",
+        "toolId": "execute_command",
+        "agentScope": "*",
+        "argPath": "command",
+        "match": "startsWith",
+        "value": "git status"
+      }
+    ]
   },
   "keys": {
     "braveApiKey": ""
@@ -691,8 +706,10 @@ Server URL, temperature, and max tokens remain in the settings drawer DOM (not i
 }
 ```
 
-- **`permissions`:** per built-in tool id (and optional `mcp__*` keys), one of **`full`** (no approval modal), **`ask`** (modal before each run), **`off`** (tool hidden from the model). Defaults match legacy **enabled** on first load: previously enabled tools become **`ask`**, disabled become **`off`**.
-- **`enabled`:** mirrored from `permissions` (`true` when not `off`) for backward compatibility and older readers.
+- **`permissions`:** layered policy — **`default`** (global per tool id, plus optional `mcp__*` keys), **`perAgent`** (sparse `agentKey → toolId → mode`), **`patterns`** (auto-approve when args match; `startsWith` / `equals` only, max 64). Each mode is **`full`** (no approval strip), **`ask`** (strip before each run), or **`off`** (hidden from the model). Legacy flat `permissions: { "read_file": "ask" }` loads into **`default`** on read ([`normalizeToolConfig`](../src/tools/config.ts), server [`validators.js`](../server/config/validators.js)).
+- **`enabled`:** mirrored from **`permissions.default`** only (`true` when not `off`) for backward compatibility.
+- **Agent keys:** `main`, `work-agent:<id>` (from chat `workAgentId`), `sub-agent:<type>` (from sub-agent runs). Resolution: [`permission-resolve.ts`](../src/tools/permission-resolve.ts) — pattern match → per-agent → default; global **`off`** is a hard stop.
+- **Settings → Tools:** [`mountToolApprovalRulesSection`](../src/ui/tool-approval-settings.ts) — pattern list CRUD and per-agent override matrix below the global tool table.
 - **Defaults:** `get_datetime`, `calculate`, `web_search`, `wikipedia_search`, `save_memory`, and **`ask_question`** on by default; `ask_question` uses permission **`full`** (no approval strip — the question UI is the gate). Other catalog ids default **off** (`defaultToolConfig()` in [`src/config/defaults.ts`](../src/config/defaults.ts)); merging stored `tools.json` without permissions still preserves **`full`** for `ask_question` when enabled ([`normalizeToolConfig`](../src/tools/config.ts) and server [`validators.js`](../server/config/validators.js)).
 - **UI:** Settings drawer and **Settings → Tools** — `fillToolsSection()` builds grouped rows with a **permission** `<select>` per tool and global/category **Enable all** controls (bulk sets **`ask`** / **`off`**); list `change` delegates to `setToolPermission()` / `setToolsEnabled()` ([`src/tools/config.ts`](../src/tools/config.ts)), `syncToolSelectAllControls()` keeps bulk checkboxes aligned, `loadToolConfigIntoDrawer()` ([`src/ui/settings.ts`](../src/ui/settings.ts)). On the **full settings page**, `renderToolsSection()` ([`src/ui/settings-sections.ts`](../src/ui/settings-sections.ts)) hydrates from in-memory caches (`loadToolConfigForSettingsUi()`, `loadToolSecurityMeta()` — no network on repeat visits; one retry if boot-time `GET /api/config/tools` failed). Generation guard drops stale async renders. Server storage mode does **not** fall back to empty browser `minnow.tools` when `GET /api/config/tools` fails. Adds a server banner, intro copy, **Filesystem access** radios (restrict vs full disk, with confirm when enabling full), then a single **`.settings-tools-panel`** wrapping the tool list and Brave API key row (styles in [`src/styles/settings-page.css`](../src/styles/settings-page.css)); **`.settings-tools-list .tool-group-head`** adds top padding so category headers sit below the list toolbar divider. **Filesystem access** persists as `config.json` → `toolSecurity.filesystemAccess` via [`src/config/tool-security-meta.ts`](../src/config/tool-security-meta.ts). Each time **Settings → Tools** mounts, `clearMount` replaces the Brave key `<input>` — input/change listeners are re-attached on that fresh node so the key still persists when revisiting the section (the one-shot `toolsSectionInitialized` gate only wraps `registerToolHandlers()`).
 - **Server gating:** Rows with `data-server-required` dim/disable when `detectLocalServer()` fails (no `npm start` ping). `getEnabledToolDefinitions()` omits server tools from the LM Studio request when the flag is false.
@@ -705,7 +722,7 @@ Structured Q&A from the model via **`ask_question`**: [`executeTool`](../src/too
 
 ### Tool approval (execution gate)
 
-Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/client.ts) awaits [`ensureToolConfigReady`](../src/tools/config.ts) then calls [`maybeBlockToolForUserApproval`](../src/tools/permission-gate.ts) (**skipped** for `ask_question` — it uses its own strip): **`ask`** always shows the approval strip; **`full`** still shows it when a path argument resolves **outside the workspace** while `toolSecurity.filesystemAccess` is **`workspace`**. The strip mounts in **`#toolApprovalHost`** in [`index.html`](../index.html) (above **`#questionHost`**, between **`#chatArea`** and the composer). While it is open, **`#mainColumn`** gets **`main-column--tool-approval-pending`**, which hides **`.input-bar`** (composer) via CSS; the textarea and send button are also disabled until the user chooses **Allow once**, **Always allow** (writes **`full`** for that tool; **`saveToolConfigAsync`** awaits **`PUT /api/config/tools`** when using `npm start`), or **Cancel** (`Error: User denied tool execution`). Optional digit shortcuts **1 / 2 / 3** apply while the strip is open (not only when a button inside it is focused; the composer is disabled so focus often sits on **`<body>`**). They are suppressed if focus is in another editable control outside the host. **Esc** cancels. Queue: [`src/tools/approval-queue.ts`](../src/tools/approval-queue.ts); payload types: [`src/tools/tool-approval-types.ts`](../src/tools/tool-approval-types.ts); UI: [`src/ui/tool-approval-modal.ts`](../src/ui/tool-approval-modal.ts). Sub-agent tools use the same strip with the parent chat id threaded from [`setSubAgentExecutorContext`](../src/tools/sub-agent-executor.ts) → spawn → orchestrator → [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts).
+Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/client.ts) awaits [`ensureToolConfigReady`](../src/tools/config.ts) then calls [`maybeBlockToolForUserApproval`](../src/tools/permission-gate.ts) (**skipped** for `ask_question` — it uses its own strip). Effective mode comes from [`resolveEffectivePermission`](../src/tools/permission-resolve.ts): matching **patterns** or per-agent **`full`** skip the permission strip even when global mode is **`ask`**; **`full`** still shows the strip when a path argument resolves **outside the workspace** while `toolSecurity.filesystemAccess` is **`workspace`**. The strip mounts in **`#toolApprovalHost`** in [`index.html`](../index.html) (above **`#questionHost`**, between **`#chatArea`** and the composer). While it is open, **`#mainColumn`** gets **`main-column--tool-approval-pending`**, which hides **`.input-bar`** (composer) via CSS; the textarea and send button are also disabled until the user chooses **Allow once**, **Always allow** / **Always allow for this agent** (writes **`permissions.default[toolId] = 'full'`** for `main`, or **`permissions.perAgent[agentKey][toolId] = 'full'`** for work/sub agents; **`saveToolConfigAsync`** awaits **`PUT /api/config/tools`** when using `npm start`), or **Cancel** (`Error: User denied tool execution`). Optional digit shortcuts **1 / 2 / 3** apply while the strip is open (not only when a button inside it is focused; the composer is disabled so focus often sits on **`<body>`**). They are suppressed if focus is in another editable control outside the host. **Esc** cancels. Queue: [`src/tools/approval-queue.ts`](../src/tools/approval-queue.ts); payload types: [`src/tools/tool-approval-types.ts`](../src/tools/tool-approval-types.ts); UI: [`src/ui/tool-approval-modal.ts`](../src/ui/tool-approval-modal.ts). Main-loop tools pass `workAgentId` from the chat; sub-agent tools pass `subAgentType` from [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts) / orchestrator.
 
 ### Path policy (server)
 
