@@ -32,8 +32,11 @@ let currentPath: string | null = null;
 let originalContent = '';
 let isDirty = false;
 let readOnlyExcerpt = false;
+/** Overrides the large-file banner when opening chat attachment snapshots. */
+let readOnlyBannerText: string | null = null;
 let isSaving = false;
 let viewerControlsBound = false;
+let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -55,10 +58,20 @@ export function hasLargeFileExcerptFooter(content: string): boolean {
   return LARGE_FILE_EXCERPT_FOOTER_RE.test(content);
 }
 
-/** True when the path should render as read-only markdown preview (not CodeMirror). */
+/** True when the path is a markdown document (`.md` / `.markdown`). */
 export function isMarkdownFilePath(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() ?? '';
   return ext === 'md' || ext === 'markdown';
+}
+
+/** Whether to show GFM preview instead of the CodeMirror editor for this open request. */
+export function shouldUseMarkdownPreview(path: string, asCode?: boolean): boolean {
+  return isMarkdownFilePath(path) && !asCode;
+}
+
+/** True when the viewer is showing markdown preview (not the code editor). */
+export function isMarkdownPreviewActive(): boolean {
+  return markdownPreviewEl !== null;
 }
 
 function buildLargeFileExcerptFooter(byteLength: number): string {
@@ -174,7 +187,15 @@ function updateViewerChrome(): void {
   const banner = getReadOnlyBanner();
   if (banner) {
     banner.hidden = !readOnlyExcerpt;
+    if (readOnlyExcerpt && readOnlyBannerText) {
+      banner.textContent = readOnlyBannerText;
+    }
   }
+}
+
+function readOnlyBannerMessage(): string {
+  if (readOnlyBannerText) return readOnlyBannerText;
+  return `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
 }
 
 function mountMarkdownPreview(content: string): void {
@@ -187,8 +208,7 @@ function mountMarkdownPreview(content: string): void {
     const banner = document.createElement('p');
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
-    banner.textContent =
-      `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
+    banner.textContent = readOnlyBannerMessage();
     host.appendChild(banner);
   }
 
@@ -210,8 +230,7 @@ function mountEditor(content: string, path: string): void {
     const banner = document.createElement('p');
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
-    banner.textContent =
-      `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
+    banner.textContent = readOnlyBannerMessage();
     host.appendChild(banner);
   }
 
@@ -370,6 +389,27 @@ export async function saveCurrentFile(): Promise<boolean> {
   }
 }
 
+/** Switch the open markdown file from preview to the editable code editor. */
+export function switchMarkdownViewerToCode(): void {
+  if (!currentPath || !isMarkdownFilePath(currentPath) || editorView) return;
+  mountEditor(originalContent, currentPath);
+}
+
+/** Switch the open markdown file from the code editor to GFM preview. */
+export function switchMarkdownViewerToPreview(): void {
+  if (!currentPath || !isMarkdownFilePath(currentPath) || !editorView) return;
+  if (isDirty) {
+    const proceed = window.confirm(
+      'You have unsaved changes. Switch to preview without saving?',
+    );
+    if (!proceed) return;
+  }
+  const content = editorView.state.doc.toString();
+  originalContent = content;
+  isDirty = false;
+  mountMarkdownPreview(content);
+}
+
 /** Wire Save button (call once from init-file-panel). */
 export function bindFileViewerControls(): void {
   if (viewerControlsBound) return;
@@ -383,10 +423,114 @@ export function bindFileViewerControls(): void {
   }
 }
 
+/** Right-click on the viewer: switch markdown between preview and code. */
+export function bindFileViewerContextMenu(): void {
+  if (viewerContextMenuBound) return;
+  const host = getViewerHost();
+  if (!host) return;
+  viewerContextMenuBound = true;
+
+  host.addEventListener('contextmenu', (e) => {
+    const path = currentPath;
+    if (!path || !isMarkdownFilePath(path)) return;
+    e.preventDefault();
+    const items = isMarkdownPreviewActive()
+      ? [{ label: 'Open as code', action: () => switchMarkdownViewerToCode() }]
+      : [{ label: 'Open as preview', action: () => switchMarkdownViewerToPreview() }];
+    void import('./file-tree-context-menu').then((m) =>
+      m.showFilePanelContextMenu(items, e.clientX, e.clientY),
+    );
+  });
+}
+
+export interface OpenFileInViewerOptions {
+  skipUnsavedGuard?: boolean;
+  /** Open `.md` / `.markdown` in CodeMirror instead of read-only GFM preview. */
+  asCode?: boolean;
+}
+
+/** Open inlined chat attachment text in a read-only editor pane. */
+export function openAttachmentSnapshotInViewer(displayName: string, content: string): void {
+  const safeName = displayName.replace(/[/\\]/g, '_') || 'attachment';
+  const path = `.minnow/attachments/${safeName}`;
+
+  if (isDirty && currentPath && currentPath !== path) {
+    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
+    if (!proceed) return;
+  }
+
+  currentPath = path;
+  originalContent = content;
+  isDirty = false;
+  readOnlyExcerpt = true;
+  readOnlyBannerText = 'Chat attachment snapshot (read-only; not saved to the project).';
+  patchFilePanelState({ selectedPath: path });
+  showViewerSplit();
+
+  const label = getPathLabel();
+  if (label) {
+    label.textContent = displayName;
+    label.classList.remove('file-viewer-path--dirty');
+  }
+
+  if (isMarkdownFilePath(path)) {
+    mountMarkdownPreview(content);
+  } else {
+    mountEditor(content, path);
+  }
+  updateViewerChrome();
+}
+
+/** Open an image data URL from a chat attachment in the viewer pane. */
+export function openImageDataUrlInViewer(displayName: string, dataUrl: string): void {
+  const safeName = displayName.replace(/[/\\]/g, '_') || 'image';
+  const path = `.minnow/attachments/${safeName}`;
+
+  if (isDirty && currentPath && currentPath !== path) {
+    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
+    if (!proceed) return;
+  }
+
+  currentPath = path;
+  originalContent = '';
+  isDirty = false;
+  readOnlyExcerpt = true;
+  readOnlyBannerText = 'Chat image attachment (read-only preview).';
+  patchFilePanelState({ selectedPath: path });
+  showViewerSplit();
+  closeLspDocument();
+
+  const label = getPathLabel();
+  if (label) {
+    label.textContent = displayName;
+    label.classList.remove('file-viewer-path--dirty');
+  }
+
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  host.innerHTML = '';
+
+  const banner = document.createElement('p');
+  banner.id = 'fileViewerReadOnlyBanner';
+  banner.className = 'file-viewer-readonly-banner';
+  banner.textContent = readOnlyBannerMessage();
+  host.appendChild(banner);
+
+  const figure = document.createElement('figure');
+  figure.className = 'file-viewer-image-preview';
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  img.alt = displayName;
+  figure.appendChild(img);
+  host.appendChild(figure);
+  updateViewerChrome();
+}
+
 /** Open a project file in the split viewer. */
 export async function openFileInViewer(
   relativePath: string,
-  options?: { skipUnsavedGuard?: boolean },
+  options?: OpenFileInViewerOptions,
 ): Promise<void> {
   if (
     !options?.skipUnsavedGuard &&
@@ -401,6 +545,7 @@ export async function openFileInViewer(
   currentPath = relativePath;
   isDirty = false;
   readOnlyExcerpt = false;
+  readOnlyBannerText = null;
   patchFilePanelState({ selectedPath: relativePath });
   showViewerSplit();
   setViewerLoading(relativePath);
@@ -411,7 +556,7 @@ export async function openFileInViewer(
     originalContent = loaded.content;
     readOnlyExcerpt = loaded.readOnlyExcerpt;
     isDirty = false;
-    if (isMarkdownFilePath(relativePath)) {
+    if (shouldUseMarkdownPreview(relativePath, options?.asCode)) {
       mountMarkdownPreview(loaded.content);
     } else {
       mountEditor(loaded.content, relativePath);
@@ -427,6 +572,7 @@ function resetViewerPane(): void {
   originalContent = '';
   isDirty = false;
   readOnlyExcerpt = false;
+  readOnlyBannerText = null;
   patchFilePanelState({ selectedPath: null });
   destroyEditor();
   const host = getViewerHost();
