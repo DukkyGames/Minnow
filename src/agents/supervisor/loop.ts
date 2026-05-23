@@ -15,6 +15,7 @@ import { loadSupervisorConfig, getSupervisorConfigSnapshot } from './config.ts';
 import { detectEmptyCompletedSummary, type DetectorContext } from './detector.ts';
 import { bumpOrchestratorProgress, recordParentStreamEnded } from './progress.ts';
 import { isOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete.ts';
+import { isUserStoppedChat } from '../../chat/orchestrate/user-stopped.ts';
 import { maybeEmitOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete-ui.ts';
 import { pickSupervisorDecision, scanTickDetectors, boardFingerprint } from './rules.ts';
 import {
@@ -76,7 +77,8 @@ function recordSubAgentTerminal(run: SubAgentRun): void {
   markChatStalledForUi(chatId, false);
   bumpOrchestratorProgress(chatId, now);
   const hit = detectEmptyCompletedSummary(run);
-  if (hit && run.parentChatId) {
+  const parent = run.parentChatId ? findChatById(run.parentChatId) : undefined;
+  if (hit && run.parentChatId && parent && !isUserStoppedChat(parent)) {
     void executeSupervisorDecision(run.parentChatId, {
       action: 'respawn_task',
       rule: 'R2',
