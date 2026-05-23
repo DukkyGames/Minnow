@@ -7,7 +7,11 @@ import {
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
 import { isOrchestrateWatchdogStalled } from '../chat/orchestrate/watchdog';
-import { ORCHESTRATE_RESUME_MESSAGE } from '../chat/orchestrate/resume-message';
+import {
+  ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT,
+  resolveOrchestrateResumeMessage,
+} from '../chat/orchestrate/resume-message';
+import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
@@ -353,6 +357,7 @@ function syncBoardHeaderActivity(
 
 /** Start vs Resume copy for the board header play control (idle state). */
 function playPauseIdleLabel(status: BoardHeaderStatus): string {
+  if (status.variant === 'complete') return 'Plan complete';
   if (status.variant === 'stopped' || status.variant === 'ready') return 'Start';
   return 'Resume';
 }
@@ -417,11 +422,12 @@ function syncBoardPlayPauseButton(
     btn.disabled = false;
     btn.classList.add('board-header__icon-btn--danger');
   } else {
+    const planComplete = isOrchestratePlanComplete(board);
     const idleLabel = playPauseIdleLabel(headerStatus);
     btn.setAttribute('aria-label', idleLabel);
-    btn.title = idleLabel;
+    btn.title = planComplete ? ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT : idleLabel;
     btn.setAttribute('aria-pressed', 'false');
-    btn.disabled = isStreaming;
+    btn.disabled = isStreaming || planComplete;
     btn.classList.remove('board-header__icon-btn--danger');
   }
 }
@@ -458,7 +464,9 @@ function createBoardPlayPauseButton(
       refreshActiveBoardIfMounted();
       return;
     }
-    sendBoardMessage(ORCHESTRATE_RESUME_MESSAGE);
+    const message = resolveOrchestrateResumeMessage(activeBoard);
+    if (!message) return;
+    sendBoardMessage(message);
     refreshActiveBoardIfMounted();
   });
 

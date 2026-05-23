@@ -289,8 +289,12 @@ Unified **Orchestrate supervisor** in [`src/agents/supervisor/`](../src/agents/s
 | `src/agents/supervisor/rules.ts` | Priority chain â†’ `SupervisorDecision` |
 | `src/agents/supervisor/actions.ts` | Resume toast + `sendMessage`, sub-agent restart/respawn, `ask_question` on budget |
 | `src/agents/supervisor/loop.ts` | `startSupervisor` / `stopSupervisor`, board + run listeners |
+| `src/chat/orchestrate/plan-complete.ts` | **MIN-34:** `isOrchestratePlanComplete`, resume gating, completion summary copy |
+| `src/chat/orchestrate/plan-complete-ui.ts` | One-shot assistant completion message + toast when board goes all `complete` |
 
-**Tests:** `test/supervisor/**/*.test.mts`, `test/orchestrate/watchdog.test.mts` (shim). `mergeSupervisorConfig` covered in `test/supervisor/config-merge.test.mts`.
+When every board task is `complete`, supervisor tick skips R4/R6/R7/R8 (`inject_resume`), sets `planCompletedAt`, and does not auto-resume. Board play control is disabled with “Plan complete” hint; manual resume uses `resolveOrchestrateResumeMessage()`.
+
+**Tests:** `test/supervisor/**/*.test.mts`, `test/orchestrate/watchdog.test.mts` (shim), `test/orchestrate/plan-complete.test.mts`. `mergeSupervisorConfig` covered in `test/supervisor/config-merge.test.mts`.
 
 ### Settings page (Step 20)
 

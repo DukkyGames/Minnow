@@ -2,6 +2,7 @@
  * Side effects for supervisor recovery (resume, sub-agents, board, ask_question).
  */
 
+import { canOrchestrateResume } from '../../chat/orchestrate/plan-complete.ts';
 import { ORCHESTRATE_RESUME_MESSAGE } from '../../chat/orchestrate/resume-message.ts';
 import { isActiveChatStreaming } from '../../chat/streaming-state.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
@@ -71,6 +72,7 @@ export async function executeSupervisorDecision(
       return;
     }
     case 'inject_resume': {
+      if (!canOrchestrateResume(board)) return;
       if (isActiveChatStreaming() || resumeInFlight) return;
       const taskId =
         typeof decision.payload?.blockingTaskId === 'string'

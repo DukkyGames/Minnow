@@ -14,6 +14,8 @@ import { executeSupervisorDecision } from './actions.ts';
 import { loadSupervisorConfig, getSupervisorConfigSnapshot } from './config.ts';
 import { detectEmptyCompletedSummary, type DetectorContext } from './detector.ts';
 import { bumpOrchestratorProgress, recordParentStreamEnded } from './progress.ts';
+import { isOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete.ts';
+import { maybeEmitOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete-ui.ts';
 import { pickSupervisorDecision, scanTickDetectors, boardFingerprint } from './rules.ts';
 import {
   deleteRunHealth,
@@ -47,6 +49,9 @@ function ensureBoardListener(chatId: string): void {
       lastBoardFp.set(chatId, fp);
       for (const t of board.tasks) {
         touchInProgressNoRunTracking(chatId, t.id, t.status, t.assignedRunId, now);
+      }
+      if (isOrchestratePlanComplete(board)) {
+        void maybeEmitOrchestratePlanComplete(chatId);
       }
     }
   });
@@ -125,6 +130,10 @@ async function tickSupervisor(): Promise<void> {
         const h = getRunHealth(r.runId);
         h.queuedSinceAt ??= nowMs;
       }
+    }
+
+    if (isOrchestratePlanComplete(board)) {
+      void maybeEmitOrchestratePlanComplete(chat.id);
     }
 
     if (!cfg.enabled) continue;
