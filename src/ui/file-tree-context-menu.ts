@@ -5,6 +5,7 @@
 import { isFileTreeServerAvailable } from './file-tree-server';
 import { getFileTreeClipboard } from './file-tree-clipboard';
 import { pasteTargetDirForPath } from './file-tree-path';
+import { isMarkdownFilePath } from './file-viewer';
 type FileTreeEntryKind = 'file' | 'dir';
 
 export interface FileTreeMenuContext {
@@ -44,12 +45,14 @@ function bindDismissOnce(): void {
   }
 }
 
-interface MenuItemDef {
+export interface FilePanelContextMenuItem {
   label: string;
   action?: () => void;
   disabled?: boolean;
   title?: string;
 }
+
+type MenuItemDef = FilePanelContextMenuItem;
 
 function renderMenuItems(items: MenuItemDef[]): void {
   const menu = ensureMenuElement();
@@ -105,13 +108,36 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   const offline = !serverCrudEnabled();
   const disabled = offline;
   const pasteDisabled = offline || !hasClipboard;
+  const isMarkdown = isMarkdownFilePath(ctx.path);
+
+  const openItems: MenuItemDef[] = isMarkdown
+    ? [
+        {
+          label: 'Open',
+          disabled: offline,
+          action: () =>
+            void import('./file-viewer').then((m) => m.openFileInViewer(ctx.path)),
+        },
+        {
+          label: 'Open as code',
+          disabled: offline,
+          action: () =>
+            void import('./file-viewer').then((m) =>
+              m.openFileInViewer(ctx.path, { asCode: true }),
+            ),
+        },
+      ]
+    : [
+        {
+          label: 'Open',
+          disabled: offline,
+          action: () =>
+            void import('./file-viewer').then((m) => m.openFileInViewer(ctx.path)),
+        },
+      ];
 
   return [
-    {
-      label: 'Open',
-      disabled: offline,
-      action: () => void import('./file-viewer').then((m) => m.openFileInViewer(ctx.path)),
-    },
+    ...openItems,
     {
       label: 'Cut',
       disabled,
@@ -201,6 +227,17 @@ function buildBackgroundMenuItems(targetDir: string): MenuItemDef[] {
       action: () => void loadOps().then((m) => m.createFolderInDir(targetDir)),
     },
   ];
+}
+
+/** Show a file-panel context menu at viewport coordinates (tree or viewer). */
+export function showFilePanelContextMenu(
+  items: FilePanelContextMenuItem[],
+  clientX: number,
+  clientY: number,
+): void {
+  bindDismissOnce();
+  renderMenuItems(items);
+  positionMenu(clientX, clientY);
 }
 
 /** Show context menu for a file or folder row. */

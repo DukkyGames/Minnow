@@ -6,9 +6,11 @@ const {
   formatViewerPathLabel,
   hasLargeFileExcerptFooter,
   isMarkdownFilePath,
+  shouldUseMarkdownPreview,
   LARGE_FILE_BYTES,
   saveCurrentFile,
   bindFileViewerControls,
+  bindFileViewerContextMenu,
 } = await import('../../src/ui/file-viewer.ts');
 
 describe('file viewer save helpers', () => {
@@ -38,11 +40,22 @@ describe('file viewer save helpers', () => {
     assert.equal(isMarkdownFilePath('src/app.ts'), false);
   });
 
+  test('shouldUseMarkdownPreview defaults markdown to preview unless asCode', () => {
+    assert.equal(shouldUseMarkdownPreview('README.md'), true);
+    assert.equal(shouldUseMarkdownPreview('README.md', true), false);
+    assert.equal(shouldUseMarkdownPreview('src/app.ts'), false);
+    assert.equal(shouldUseMarkdownPreview('src/app.ts', true), false);
+  });
+
   test('saveCurrentFile returns false when nothing open', async () => {
     assert.equal(await saveCurrentFile(), false);
   });
 
   test('bindFileViewerControls is exported', () => {
     assert.equal(typeof bindFileViewerControls, 'function');
+  });
+
+  test('bindFileViewerContextMenu is exported', () => {
+    assert.equal(typeof bindFileViewerContextMenu, 'function');
   });
 });

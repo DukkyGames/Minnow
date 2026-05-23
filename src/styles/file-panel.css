@@ -181,6 +181,24 @@
   box-sizing: border-box;
 }
 
+.file-viewer-image-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: auto;
+}
+
+.file-viewer-image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
 /* Chat bubbles cap prose width; file viewer preview uses the full pane */
 .file-viewer-body .file-viewer-markdown-preview.msg-bubble--md {
   max-width: none;
