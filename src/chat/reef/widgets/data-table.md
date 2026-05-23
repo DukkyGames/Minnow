@@ -4,11 +4,11 @@ Sortable table (click column headers). Vanilla HTML and script.
 
 ```reef-widget
 <style>
-.wrap { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.wrap { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 8px; border-bottom: 0.5px solid var(--border); text-align: left; }
-th { font-weight: 500; cursor: pointer; color: var(--text-muted); }
-th.sorted { color: var(--text); }
+th, td { padding: 8px; border-bottom: 0.5px solid var(--mn-border); text-align: left; }
+th { font-weight: 500; cursor: pointer; color: var(--mn-fg-muted); }
+th.sorted { color: var(--mn-fg); }
 </style>
 <div class="wrap">
   <table id="tbl">

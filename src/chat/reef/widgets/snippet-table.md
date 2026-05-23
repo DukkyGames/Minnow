@@ -5,11 +5,11 @@ Sortable table (click headers). Vanilla markup — lighter than `data-table.md`.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.rw th, .rw td { padding: 8px 10px; border-bottom: 0.5px solid var(--border); text-align: left; }
-.rw th { font-weight: 500; cursor: pointer; color: var(--text-muted); user-select: none; }
-.rw th.sorted { color: var(--text); }
+.rw th, .rw td { padding: 8px 10px; border-bottom: 0.5px solid var(--mn-border); text-align: left; }
+.rw th { font-weight: 500; cursor: pointer; color: var(--mn-fg-muted); user-select: none; }
+.rw th.sorted { color: var(--mn-fg); }
 .rw td { font-weight: 400; }
 </style>
 <div class="rw">

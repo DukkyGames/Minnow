@@ -41,11 +41,13 @@ export const STATS_STRIP_OPEN_KEY = 'minnow.statsStripOpen';
 /** Whether the agent activity panel is open (`'1'` / `'0'`). */
 export const AGENT_ACTIVITY_OPEN_KEY = 'minnow.agentActivityOpen';
 
-/** UI appearance: light, dark, or follow OS (`localStorage`). */
-export const THEME_STORAGE_KEY = 'minnow.theme';
-
-/** Valid values for `THEME_STORAGE_KEY`. */
-export type ThemePreference = 'light' | 'dark' | 'system';
+/** @deprecated Import from `src/theme.ts` — re-exported for legacy imports. */
+export {
+  THEME_STORAGE_KEY,
+  THEME_FOLLOW_SYSTEM_KEY,
+  THEME_FAMILY_KEY,
+  type LegacyThemePreference as ThemePreference,
+} from './theme';
 export const ASSISTANT_RENDER_DEBOUNCE_MS = 100;
 
 /** Built-in system prompt presets for the settings drawer. */

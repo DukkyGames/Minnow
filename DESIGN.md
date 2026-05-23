@@ -71,25 +71,25 @@ components:
 
 # Design System: Minnow
 
-## Dark theme
+## Palette themes
 
-`<html data-theme="dark">` (set from Settings → General → Appearance or the inline boot script) overrides [`src/styles/tokens.css`](src/styles/tokens.css): surfaces drop to ~11–12% L (cool 271 hue), text and borders invert L, **accent** becomes near-paper for controls, **surface-elevated** becomes a light wash on dark chrome (hover rows use `--elevated-fg` for readable labels). Semantic **success / warning / danger** stay the same hues for the stats strip. **highlight.js** loads `github-dark` via an injected link when dark; CodeMirror uses `--cm-*` variables tied to the same tokens. `theme-color` meta updates at runtime; PWA manifest colors stay light defaults.
+`<html data-theme="{family}-{mode}">` (e.g. `sage-dark`, `coral-light`) is set from **Settings → General → Theme**, the inline boot script in `index.html`, or `initTheme()` in [`src/theme.ts`](src/theme.ts). Four families from the Color Scheme Exploration (PDF/HTML reference): **Slate · Sage**, **Stone · Amber**, **Midnight · Cyan**, **Graphite · Coral**, each with dark and light variants. Hex and rgba literals exist only in [`src/styles/tokens.css`](src/styles/tokens.css); application CSS uses **`--mn-*`** tokens (22 core variables per theme plus extended semantics via `color-mix`).
+
+Storage: `minnow.theme` (explicit id), `minnow.theme.followSystem`, `minnow.theme.family`. Default theme: **sage-dark**. Legacy `light` / `dark` / `system` values migrate on read. **highlight.js** loads `github-dark` when mode is dark (family hue does not change the hljs stylesheet). CodeMirror uses `--cm-*` aliases derived from `--mn-*`. Runtime `theme-color` meta reads computed `--mn-bg`.
 
 ## Overview
 
-**Creative North Star: "The Bench Instrument"**
+**Creative North Star: "Calm local instrument"**
 
-Minnow reads like a light workbench: white surfaces, ink-black controls, and a thin grid of borders instead of stacked cards. Conversation is the focus; the stats strip and chips are instrumentation layered underneath, not a dashboard selling KPIs. The palette stays restrained: neutrals carry the UI, black handles primary action and selection, and green / amber / red appear only where metrics need semantic color.
-
-The system rejects neon HUD chrome, purple-gradient chat clones, hero metric cards, glassmorphism, and gradient text. Depth comes from borders and subtle gray fills, not drop shadows on every panel.
+Minnow is a long-session chat bench: conversation first, metrics as instrumentation, borders instead of card stacks. Palette families change mood (cool sage, warm amber, cyan midnight, coral graphite) without neon HUD chrome, hero metric templates, glassmorphism, or gradient text.
 
 **Key Characteristics:**
 
-- Light OKLCH neutrals (hue ~271) on `--bg` and `--surface`; no pure `#fff` / `#000` literals in tokens (values are tinted or transparent).
-- Black `--accent` for logo mark, send button, active session border, links, and fine-pointer hover fills on icon buttons.
-- User messages use a soft green wash (`--user-bg`); assistant messages stay flat on `--bg` with a hairline border.
-- JetBrains Mono for stats strip, chips, token bars, and code; system UI stack at 14px elsewhere.
-- Flat elevation: mobile sidebar shadow only; code blocks use `oklch(0.97 0.012 250)` lifts, not floating cards.
+- Off-black / off-white surfaces per family (never pure `#000` / `#fff` in palette blocks).
+- Family accent on send, selection, links, and user bubbles (`--mn-accent-soft`).
+- Semantic success / warning / danger for stats and tool status only.
+- JetBrains Mono for stats, chips, and code; system UI at 14px elsewhere.
+- Flat elevation: shadows use `var(--mn-shadow)`; hover veils use `color-mix` on `--mn-fg`.
 
 ## Colors
 

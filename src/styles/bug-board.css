@@ -32,8 +32,8 @@
   align-items: flex-start;
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
 }
 
 .bug-add-form__input {
@@ -41,9 +41,9 @@
   font-size: 0.85rem;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   min-width: 8rem;
 }
 
@@ -57,7 +57,7 @@
 .bug-task-card__notes {
   margin: 6px 0 0;
   font-size: 0.75rem;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   line-height: 1.35;
 }
 

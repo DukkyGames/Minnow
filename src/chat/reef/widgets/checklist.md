@@ -2,31 +2,31 @@ Interactive checklist with add, toggle, remove, and a live completion footer.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
 .rw-add { display: flex; gap: 8px; margin-bottom: 12px; }
 .rw-add input {
-  flex: 1; min-width: 0; padding: 8px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem;
+  flex: 1; min-width: 0; padding: 8px 10px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: var(--mn-surface-1); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem;
 }
 .rw-add button {
-  padding: 8px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius-md);
-  background: var(--accent); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  padding: 8px 14px; border: 0.5px solid var(--mn-border-strong); border-radius: var(--radius-md);
+  background: var(--mn-accent); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
 }
-.rw-list { list-style: none; margin: 0; padding: 0; border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.rw-list { list-style: none; margin: 0; padding: 0; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-1); }
 .rw-item {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 0.5px solid var(--border);
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 0.5px solid var(--mn-border);
 }
 .rw-item:last-child { border-bottom: none; }
-.rw-item input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
+.rw-item input[type="checkbox"] { accent-color: var(--mn-accent); width: 16px; height: 16px; flex-shrink: 0; }
 .rw-item label { flex: 1; min-width: 0; font-size: 0.875rem; font-weight: 400; cursor: pointer; }
-.rw-item label.done { color: var(--text-muted); text-decoration: line-through; }
+.rw-item label.done { color: var(--mn-fg-muted); text-decoration: line-through; }
 .rw-rm {
-  padding: 4px 8px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 0.75rem; font-weight: 400; cursor: pointer;
+  padding: 4px 8px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--mn-fg-muted); font-family: var(--font-ui); font-size: 0.75rem; font-weight: 400; cursor: pointer;
 }
-.rw-rm:hover { color: var(--text); border-color: var(--border-strong); }
-.rw-foot { margin-top: 10px; font-size: 0.8125rem; color: var(--text-muted); font-weight: 400; }
+.rw-rm:hover { color: var(--mn-fg); border-color: var(--mn-border-strong); }
+.rw-foot { margin-top: 10px; font-size: 0.8125rem; color: var(--mn-fg-muted); font-weight: 400; }
 </style>
 <div class="rw" id="checklist">
   <h2>Checklist</h2>

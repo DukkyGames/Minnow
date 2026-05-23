@@ -10,8 +10,8 @@ html, body {
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
@@ -43,14 +43,14 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-focus-ring);
   outline-offset: 2px;
 }
 
 /* Thin theme scrollbars — bench instrument hairlines (DESIGN.md) */
 :root {
   --scrollbar-size: 8px;
-  --scrollbar-thumb: var(--border2);
+  --scrollbar-thumb: var(--mn-border-strong);
   --scrollbar-track: transparent;
 }
 

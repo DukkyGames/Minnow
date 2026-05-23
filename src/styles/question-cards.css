@@ -8,8 +8,8 @@
 
 .question-host {
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
   max-height: min(48vh, 480px);
   overflow: auto;
 }
@@ -20,7 +20,7 @@
 
 .question-cards-panel {
   padding: 12px 16px 14px;
-  color: var(--text);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
@@ -43,9 +43,9 @@
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--mn-fg);
   text-decoration: underline;
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--mn-accent);
   text-underline-offset: 4px;
 }
 
@@ -60,13 +60,13 @@
   display: inline-block;
   padding: 3px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--mn-border-strong);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  background: var(--bg);
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg);
 }
 
 .question-cards-icon-btn {
@@ -79,7 +79,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
@@ -87,8 +87,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .question-cards-icon-btn:hover {
-    background: var(--bg-elevated);
-    color: var(--text);
+    background: var(--mn-bg-elevated);
+    color: var(--mn-fg);
   }
 }
 
@@ -107,10 +107,10 @@
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   cursor: pointer;
 }
 
@@ -121,14 +121,14 @@
 
 @media (hover: hover) and (pointer: fine) {
   .question-cards-nav-btn:not(:disabled):hover {
-    background: var(--bg-elevated);
+    background: var(--mn-bg-elevated);
   }
 }
 
 .question-cards-nav-indicator {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   min-width: 3.5em;
   text-align: center;
 }
@@ -142,7 +142,7 @@
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: var(--text);
+  color: var(--mn-fg);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -150,7 +150,7 @@
 .question-cards-validation {
   margin: 0 0 8px;
   font-size: 12px;
-  color: var(--danger);
+  color: var(--mn-danger);
 }
 
 .question-cards-validation[hidden] {
@@ -169,20 +169,20 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
   cursor: pointer;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .question-cards-option:hover {
-    border-color: var(--border-strong);
+    border-color: var(--mn-border-strong);
   }
 }
 
 .question-cards-option--selected {
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
+  background: var(--mn-bg-elevated);
+  border-color: var(--mn-border-strong);
 }
 
 .question-cards-option input {
@@ -201,12 +201,12 @@
 
 .question-cards-option-label {
   font-weight: 600;
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .question-cards-option-desc {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   line-height: 1.4;
 }
 
@@ -218,10 +218,10 @@
   width: 100%;
   box-sizing: border-box;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 13px;
   resize: vertical;
@@ -239,8 +239,8 @@
   padding: 10px 14px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-fg, #fff);
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg, #fff);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -258,7 +258,7 @@
 .question-cards-hints {
   margin: 0;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .question-cards-nav-btn .icon-svg {

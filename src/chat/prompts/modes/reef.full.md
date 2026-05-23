@@ -44,17 +44,17 @@ Emit in this order so partial streams show structure early:
 
 Use CSS variables from the host theme — **never** hardcoded hex colors:
 
-- `--bg`, `--surface`, `--surface-elevated`
-- `--text`, `--text-muted`
-- `--border`, `--border-strong`
-- `--accent`, `--accent-dim`
+- `--mn-bg`, `--mn-surface-1`, `--mn-surface-elevated`
+- `--mn-fg`, `--mn-fg-muted`
+- `--mn-border`, `--mn-border-strong`
+- `--mn-accent`, `--mn-accent-soft`
 - `--radius-sm`, `--radius-md`, `--radius-lg`
 - `--font-ui`, `--font-mono`
 
 Typography and layout:
 
 - Sentence case labels; font weights **400** and **500** only
-- Borders: **0.5px** solid using `--border`
+- Borders: **0.5px** solid using `--mn-border`
 - Main widget container: `width: 100%` (host iframe uses full chat bubble width; do **not** set iframe or `100vh` heights — the host auto-sizes to content)
 - No gradients, box-shadows, or backdrop blur
 
@@ -62,10 +62,10 @@ Typography and layout:
 
 The iframe receives the same CSS variables as the Minnow app. Widgets must look native in whichever theme the user has selected.
 
-- **Never invent a separate palette** (no `#000`, `#fff`, `#0d1117`, `rgb(20,20,30)`, navy + random grays). Use only forwarded tokens: `--bg`, `--surface`, `--surface-elevated`, `--text`, `--text-muted`, `--border`, `--accent`, etc.
-- **Readable pairs:** Any panel with `background: var(--surface)` or `var(--surface-elevated)` must set `color: var(--text)` on that panel and on primary values. Use `var(--text-muted)` only for captions or helper lines, never as the only text color on a tinted or dark panel (avoids “dark on dark”).
+- **Never invent a separate palette** (no `#000`, `#fff`, `#0d1117`, `rgb(20,20,30)`, navy + random grays). Use only forwarded tokens: `--mn-bg`, `--mn-surface-1`, `--mn-surface-elevated`, `--mn-fg`, `--mn-fg-muted`, `--mn-border`, `--mn-accent`, etc.
+- **Readable pairs:** Any panel with `background: var(--mn-surface-1)` or `var(--mn-surface-elevated)` must set `color: var(--mn-fg)` on that panel and on primary values. Use `var(--mn-fg-muted)` only for captions or helper lines, never as the only text color on a tinted or dark panel (avoids “dark on dark”).
 - **Forms:** Use `grid-template-columns: repeat(N, minmax(0, 1fr))` (or `minmax(140px, 1fr)`) so labels with parentheses or currency do not wrap one character per line. Short control labels may use `white-space: nowrap` when the string is guaranteed short.
-- **Charts (Recharts):** Wrap `ResponsiveContainer` in a `div` with `className="rw-chart"` (host baseline CSS also applies to `.mw-chart` if you use that alias). Give the wrapper explicit **pixel** `height` when you can; the host injects 220px fallbacks when height collapses. Set axis `stroke` / tick `fill` from `var(--text-muted)` and series `stroke` from `var(--accent)`. Leave enough `margin.left` for Y-axis labels. After layout-affecting React state, call `window.minnow.requestResize()` from `useLayoutEffect` so the host iframe height tracks the chart.
+- **Charts (Recharts):** Wrap `ResponsiveContainer` in a `div` with `className="rw-chart"` (host baseline CSS also applies to `.mw-chart` if you use that alias). Give the wrapper explicit **pixel** `height` when you can; the host injects 220px fallbacks when height collapses. Set axis `stroke` / tick `fill` from `var(--mn-fg-muted)` and series `stroke` from `var(--mn-accent)`. Leave enough `margin.left` for Y-axis labels. After layout-affecting React state, call `window.minnow.requestResize()` from `useLayoutEffect` so the host iframe height tracks the chart.
 - **Sizing:** Do not use `100vh` inside a widget. Avoid `overflow: auto` on the outermost root (the host sizes the iframe to content; inner scrollbars fight that pipeline). The prelude re-measures on load and at 0 / 100 / 400 ms, but call `requestResize()` after you build dynamic DOM or switch tabs.
 
 Visual polish expectations follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md)): restrained tokens, clear hierarchy, no “AI default” dark slabs.
@@ -76,7 +76,7 @@ Visual polish expectations follow `/impeccable` ([`src/skills/impeccable/SKILL.m
 - No `position: fixed`
 - External scripts/styles only from: `cdnjs.cloudflare.com`, `esm.sh`, `cdn.jsdelivr.net`, `unpkg.com`
 - Self-critique layout and **theme contrast** before emitting; for user polish requests follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md))
-- **Before you show a fence to the user:** mentally verify JSX syntax (`style={{ }}` uses quoted `'var(--text)'`), imports use bare specifiers, and charts use `.rw-chart` + `requestResize()`. The host probes each iframe for script errors before reveal; fix issues in the fence instead of shipping a broken widget.
+- **Before you show a fence to the user:** mentally verify JSX syntax (`style={{ }}` uses quoted `'var(--mn-fg)'`), imports use bare specifiers, and charts use `.rw-chart` + `requestResize()`. The host probes each iframe for script errors before reveal; fix issues in the fence instead of shipping a broken widget.
 
 Widget templates ship **with Minnow**, not in the user's workspace. Do **not** search `{{cwd}}` for `src/chat/reef/widgets/`.
 
@@ -148,9 +148,9 @@ Import with **bare specifiers** in the fence, e.g. `import React from 'react'` a
 
 ### JSX `style={{ }}` and CSS variables
 
-- In `<style>` blocks, use normal CSS: `color: var(--text);`
-- In React `style={{ ... }}`, every value must be a JS string or number: `color: 'var(--text)'` — **never** `color: var(--text)` (that is a syntax error; Babel cannot compile it and the iframe stays blank).
-- Prefer theme tokens in CSS classes (`.rw { color: var(--text); }`) over inline styles when possible.
+- In `<style>` blocks, use normal CSS: `color: var(--mn-fg);`
+- In React `style={{ ... }}`, every value must be a JS string or number: `color: 'var(--mn-fg)'` — **never** `color: var(--mn-fg)` (that is a syntax error; Babel cannot compile it and the iframe stays blank).
+- Prefer theme tokens in CSS classes (`.rw { color: var(--mn-fg); }`) over inline styles when possible.
 - The host auto-quotes common `var(--*)` mistakes before Babel, but always emit quoted strings so widgets work without relying on the guard.
 
 ## User module library (`@minnow/reef/modules`)

@@ -157,7 +157,7 @@ export function buildReefWidgetSrcdoc(options: ReefWidgetIframeOptions): string 
 <style>
 ${themeCss}
 ${REEF_WIDGET_BASELINE_CSS}
-html, body { margin: 0; padding: 8px; box-sizing: border-box; min-height: ${minH}px; width: 100%; max-width: 100%; overflow-x: hidden; overflow-y: visible; background: var(--bg, transparent); color: var(--text, inherit); font-family: var(--font-ui, system-ui, sans-serif); }
+html, body { margin: 0; padding: 8px; box-sizing: border-box; min-height: ${minH}px; width: 100%; max-width: 100%; overflow-x: hidden; overflow-y: visible; background: var(--mn-bg, transparent); color: var(--mn-fg, inherit); font-family: var(--font-ui, system-ui, sans-serif); }
 *, *::before, *::after { box-sizing: border-box; }
 </style>
 <script type="importmap">${importMapJson}</script>${jsxHeadScripts}

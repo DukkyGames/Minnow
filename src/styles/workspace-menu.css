@@ -10,11 +10,11 @@
   margin: 0;
   padding: 4px 0;
   list-style: none;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-popover-soft);
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .workspace-menu.hidden {
@@ -32,7 +32,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  color: var(--text);
+  color: var(--mn-fg);
   transition:
     background 0.2s var(--ease-out),
     border-color 0.2s var(--ease-out);
@@ -40,23 +40,23 @@
 
 /* Current workspace: ink border on light sheet (matches .chat-item-row.active) */
 .workspace-menu__item[aria-current='true'] {
-  background: var(--accent-dim);
-  border-color: var(--accent);
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-accent);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-menu__item:not(.workspace-menu__item--disabled):not([aria-current='true']):hover {
-    background: var(--code-inline-bg);
+    background: var(--mn-surface-0);
   }
 
   .workspace-menu__item[aria-current='true']:hover {
-    background: var(--accent-dim);
-    border-color: var(--accent);
+    background: var(--mn-accent-soft);
+    border-color: var(--mn-accent);
   }
 }
 
 .workspace-menu__item--disabled {
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   cursor: default;
 }
 
@@ -65,7 +65,7 @@
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--mn-accent);
   text-align: center;
   line-height: 1;
 }
@@ -76,7 +76,7 @@
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--mn-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,7 +87,7 @@
   grid-row: 2;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -103,7 +103,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -115,16 +115,16 @@
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-menu__remove:hover {
-    color: var(--text);
-    border-color: var(--border);
-    background: var(--bg);
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
+    background: var(--mn-bg);
   }
 }
 
 .workspace-menu__divider {
   height: 1px;
   margin: 4px 10px;
-  background: var(--border);
+  background: var(--mn-border);
   list-style: none;
 }
 
@@ -138,13 +138,13 @@
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  color: var(--text);
+  color: var(--mn-fg);
   cursor: pointer;
   transition: background 0.2s var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-menu__action:hover {
-    background: var(--code-inline-bg);
+    background: var(--mn-surface-0);
   }
 }

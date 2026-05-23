@@ -11,7 +11,7 @@
 .composer-control label.composer-control-label {
   font-size: 0.72rem;
   font-weight: 500;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   white-space: nowrap;
 }
 
@@ -23,9 +23,9 @@
   padding: 4px 10px;
   min-height: 28px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   max-width: 12rem;
   cursor: pointer;
   outline: none;
@@ -36,13 +36,13 @@
 
 @media (hover: hover) and (pointer: fine) {
   #expertSelect:hover:not(:disabled) {
-    border-color: var(--border-strong);
+    border-color: var(--mn-border-strong);
   }
 }
 
 #expertSelect:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
 #expertSelect:disabled {
@@ -52,7 +52,7 @@
 
 .expert-auto-hint {
   font-size: 0.72rem;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   white-space: nowrap;
 }
 
@@ -62,7 +62,7 @@
 
 .composer-background-stream-hint {
   font-size: 0.72rem;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   margin: 0 0 6px;
   padding: 0 2px;
 }
@@ -76,20 +76,20 @@
   background: none;
   padding: 0;
   font: inherit;
-  color: var(--accent);
+  color: var(--mn-accent);
   cursor: pointer;
   text-decoration: underline;
 }
 
 .composer-background-stream-hint__link:hover {
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .experts-id-list {
   margin: 0.25rem 0 0;
   padding-left: 1.25rem;
   font-size: 0.8rem;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
 }
 
 .work-agent-dev.hidden {
@@ -104,9 +104,9 @@
   padding: 4px 10px;
   min-height: 28px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   max-width: 10rem;
   cursor: pointer;
   outline: none;
@@ -117,13 +117,13 @@
 
 @media (hover: hover) and (pointer: fine) {
   .work-agent-dev #workAgentSelect:hover:not(:disabled) {
-    border-color: var(--border-strong);
+    border-color: var(--mn-border-strong);
   }
 }
 
 .work-agent-dev #workAgentSelect:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
 .work-agent-auto-label {
@@ -131,7 +131,7 @@
   align-items: center;
   gap: 4px;
   font-size: 0.72rem;
-  color: var(--ink-muted);
+  color: var(--mn-fg-subtle);
   white-space: nowrap;
 }
 
@@ -141,8 +141,8 @@
   letter-spacing: 0.04em;
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--surface-2);
-  color: var(--ink-muted);
+  background: var(--mn-surface-2);
+  color: var(--mn-fg-subtle);
   margin-left: 6px;
 }
 

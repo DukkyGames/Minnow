@@ -13,7 +13,7 @@
   border: none;
   border-radius: var(--radius-sm, 6px);
   background: transparent;
-  color: var(--muted);
+  color: var(--mn-fg-muted);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -28,9 +28,9 @@
 
 .message-actions__trigger:hover,
 .message-actions__trigger:focus-visible {
-  background: var(--surface-elevated);
-  color: var(--elevated-fg);
-  outline: 2px solid var(--accent);
+  background: var(--mn-surface-elevated);
+  color: var(--mn-fg);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 1px;
 }
 
@@ -41,9 +41,9 @@
   z-index: 20;
   min-width: 168px;
   padding: 4px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md, 8px);
-  background: var(--surface);
+  background: var(--mn-surface-1);
   box-shadow: var(--shadow-lift);
   display: flex;
   flex-direction: column;
@@ -57,7 +57,7 @@
   border: none;
   border-radius: var(--radius-sm, 6px);
   background: transparent;
-  color: var(--text);
+  color: var(--mn-fg);
   font-size: 12px;
   font-family: inherit;
   text-align: left;
@@ -66,8 +66,8 @@
 
 .message-actions__item:hover,
 .message-actions__item:focus-visible {
-  background: var(--surface-elevated);
-  color: var(--elevated-fg);
+  background: var(--mn-surface-elevated);
+  color: var(--mn-fg);
   outline: none;
 }
 

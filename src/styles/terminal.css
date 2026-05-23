@@ -4,8 +4,8 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
   min-height: 0;
   font-family: var(--font-ui);
 }
@@ -27,13 +27,13 @@
   flex-shrink: 0;
   cursor: ns-resize;
   touch-action: none;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: var(--mn-surface-1);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-resize-handle:hover {
-    background: var(--code-inline-bg);
+    background: var(--mn-surface-0);
   }
 }
 
@@ -42,8 +42,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
   user-select: none;
 }
 
@@ -52,10 +52,10 @@
   max-width: 148px;
   min-height: 36px;
   padding: 6px 28px 6px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 13px;
   cursor: pointer;
@@ -63,8 +63,8 @@
 }
 
 .terminal-shell-select:focus-visible {
-  border-color: var(--accent);
-  outline: 2px solid var(--accent);
+  border-color: var(--mn-accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
@@ -97,7 +97,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
@@ -110,20 +110,20 @@
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-tab:hover:not([aria-selected='true']) {
-    background: var(--surface-elevated);
-    border-color: var(--border);
-    color: var(--elevated-fg);
+    background: var(--mn-surface-elevated);
+    border-color: var(--mn-border);
+    color: var(--mn-fg);
   }
 }
 
 .terminal-tab[aria-selected='true'] {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-dim);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  background: var(--mn-accent-soft);
 }
 
 .terminal-tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
@@ -147,10 +147,10 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-muted);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -162,14 +162,14 @@
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-tab-add:hover {
-    border-color: var(--border-strong);
-    color: var(--text);
-    background: var(--code-inline-bg);
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
+    background: var(--mn-surface-0);
   }
 }
 
 .terminal-tab-add:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
@@ -177,11 +177,11 @@
 .terminal-shell-hint {
   margin: 0;
   padding: 7px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--code-inline-bg);
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface-0);
   font-size: 11px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
 }
 
 .terminal-header-actions {
@@ -194,10 +194,10 @@
 .terminal-header-btn {
   min-height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
@@ -211,13 +211,13 @@
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-header-btn:hover {
-    border-color: var(--border-strong);
-    background: var(--code-inline-bg);
+    border-color: var(--mn-border-strong);
+    background: var(--mn-surface-0);
   }
 }
 
 .terminal-header-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
@@ -240,16 +240,16 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--mn-bg);
 }
 
 .terminal-history {
   width: 168px;
   flex-shrink: 0;
   overflow-y: auto;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--mn-border);
   padding: 6px 0;
-  background: var(--surface);
+  background: var(--mn-surface-1);
 }
 
 .terminal-history-empty {
@@ -257,7 +257,7 @@
   padding: 12px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   text-align: center;
 }
 
@@ -270,7 +270,7 @@
   background: transparent;
   padding: 8px 12px;
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-family: var(--font-ui);
   font-size: 12px;
   transition:
@@ -281,16 +281,16 @@
 
 @media (hover: hover) and (pointer: fine) {
   .terminal-history-item:hover:not(.is-active) {
-    background: var(--surface-elevated);
-    color: var(--elevated-fg);
-    border-color: var(--border);
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
   }
 }
 
 .terminal-history-item.is-active {
-  background: var(--accent-dim);
-  color: var(--text);
-  border-color: var(--accent);
+  background: var(--mn-accent-soft);
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
 }
 
 .terminal-history-item .cmd {
@@ -300,7 +300,7 @@
   text-overflow: ellipsis;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .terminal-main {
@@ -316,7 +316,7 @@
   flex: 1;
   min-height: 0;
   padding: 6px 8px;
-  background: var(--bg);
+  background: var(--mn-bg);
 }
 
 .terminal-xterm-host .xterm {
@@ -334,9 +334,9 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text);
-  background: var(--code-bg);
-  border-bottom: 1px solid var(--border);
+  color: var(--mn-fg);
+  background: var(--mn-surface-0);
+  border-bottom: 1px solid var(--mn-border);
 }
 
 .terminal-agent-output.hidden {
@@ -344,7 +344,7 @@
 }
 
 .terminal-output .stderr-line {
-  color: var(--danger);
+  color: var(--mn-danger);
 }
 
 @media (max-width: 768px) {

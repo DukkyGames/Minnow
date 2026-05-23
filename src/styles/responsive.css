@@ -9,12 +9,12 @@
   .token-cell {
     grid-column: 1 / -1;
     border-right: none;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--mn-border);
   }
 
   .minfo-cell {
     grid-column: 1 / -1;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--mn-border);
     flex-direction: row;
     flex-wrap: wrap;
     gap: 12px 20px;
