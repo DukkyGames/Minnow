@@ -942,6 +942,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 chatId: chat.id,
                 toolCallId: tc.id,
                 modeId: toolLoopModeId,
+                workAgentId: chat.workAgentId ?? null,
               });
           renderToolResult(toolWrap, toolOut.content, toolOut.attachments, args);
 

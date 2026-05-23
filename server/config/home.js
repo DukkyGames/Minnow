@@ -197,17 +197,21 @@ const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
 
 function defaultToolsJson() {
   const enabled = {};
-  const permissions = {};
+  const permissionsDefault = {};
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissions[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
+    permissionsDefault[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
       ? 'full'
       : on
         ? 'ask'
         : 'off';
   }
-  return { enabled, permissions, keys: { braveApiKey: '' } };
+  return {
+    enabled,
+    permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
+    keys: { braveApiKey: '' },
+  };
 }
 
 /** Per-skill enable flags; missing ids default to enabled. */
