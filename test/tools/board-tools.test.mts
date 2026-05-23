@@ -50,7 +50,8 @@ const EXPECTED_BOARD_INIT_RESULT = `{
     }
   ],
   "startedAt": 1710000001000,
-  "lastUpdatedAt": 1710000001000
+  "lastUpdatedAt": 1710000001000,
+  "timerAccumulatedMs": 0
 }`;
 
 const EXPECTED_UPDATE_TASK_RESULT = `{
@@ -83,7 +84,8 @@ const EXPECTED_GET_STATE_RESULT = `{
     }
   ],
   "startedAt": 1710000001000,
-  "lastUpdatedAt": 1710000001000
+  "lastUpdatedAt": 1710000001000,
+  "timerAccumulatedMs": 0
 }`;
 
 function seedOrchestrateChat(overrides: Record<string, unknown> = {}) {

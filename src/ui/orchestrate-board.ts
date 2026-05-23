@@ -6,12 +6,15 @@ import {
   deriveOrchestratorLastActivity,
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
-import { isOrchestrateWatchdogStalled } from '../chat/orchestrate/watchdog';
 import {
   ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT,
   resolveOrchestrateResumeMessage,
 } from '../chat/orchestrate/resume-message';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import {
+  hasIncompleteOrchestrateWork,
+  isOrchestratePlanComplete,
+} from '../chat/orchestrate/plan-complete';
+import { shouldShowOrchestrateStallBadge } from '../agents/supervisor/state.ts';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
 import {
@@ -93,12 +96,16 @@ export function getBoardTaskRunIds(task: BoardTask): string[] {
   return ids;
 }
 
-/** True when the user stopped the latest assistant message in this chat. */
-function isUserStoppedChat(chat: Chat): boolean {
+/** True when the user stopped the latest assistant turn and work remains. */
+export function isUserStoppedChat(chat: Chat): boolean {
+  const board = chat.orchestrateBoard;
+  if (!board || !hasIncompleteOrchestrateWork(board)) {
+    return false;
+  }
   for (let i = chat.history.length - 1; i >= 0; i--) {
     const msg = chat.history[i];
-    if (msg.role === 'assistant' && 'stopped' in msg && msg.stopped) {
-      return true;
+    if (msg.role === 'assistant') {
+      return 'stopped' in msg && msg.stopped === true;
     }
     if (msg.role === 'user') {
       return false;
@@ -269,13 +276,10 @@ export function deriveBoardHeaderStatus(
   userStopped = false,
   watchdogStalled = false,
 ): BoardHeaderStatus {
-  if (watchdogStalled && !isStreaming) {
-    return { variant: 'stalled', label: 'Stalled — Resume' };
-  }
-
   const tasks = board.tasks;
   const total = tasks.length;
   const completeCount = tasks.filter((t) => t.status === 'complete').length;
+  const incomplete = total > 0 && completeCount < total;
   const hasFailed = tasks.some((t) => t.status === 'failed');
   const hasBlocked = tasks.some((t) => t.status === 'blocked');
   const hasInFlight = tasks.some(
@@ -285,7 +289,10 @@ export function deriveBoardHeaderStatus(
   if (isStreaming && board.activeParentTurnId) {
     return { variant: 'running', label: 'Running' };
   }
-  if (userStopped && total > 0 && completeCount < total) {
+  if (total > 0 && completeCount === total) {
+    return { variant: 'complete', label: 'Complete' };
+  }
+  if (userStopped && incomplete && !isStreaming && activeRunCount === 0) {
     return { variant: 'stopped', label: 'Stopped' };
   }
   if (hasFailed) {
@@ -294,8 +301,13 @@ export function deriveBoardHeaderStatus(
   if (hasBlocked && activeRunCount === 0 && !hasInFlight) {
     return { variant: 'blocked', label: 'Blocked' };
   }
-  if (total > 0 && completeCount === total) {
-    return { variant: 'complete', label: 'Complete' };
+  if (
+    watchdogStalled &&
+    incomplete &&
+    !isStreaming &&
+    activeRunCount === 0
+  ) {
+    return { variant: 'stalled', label: 'Stalled — Resume' };
   }
   if (activeRunCount > 0 || hasInFlight) {
     return { variant: 'active', label: 'Active' };
@@ -808,7 +820,10 @@ function refreshBoardDom(
     isStreaming,
     activeRuns.length,
     userStopped,
-    isOrchestrateWatchdogStalled(chat.id),
+    shouldShowOrchestrateStallBadge(chat.id, board, {
+      isStreaming,
+      activeRunCount: activeRuns.length,
+    }),
   );
   const activity = deriveOrchestratorLastActivity(chat, isStreaming);
 
@@ -1315,7 +1330,10 @@ export function renderBoardView(chat: Chat): void {
     isStreaming,
     activeRuns.length,
     isUserStoppedChat(chatForRender),
-    isOrchestrateWatchdogStalled(chatForRender.id),
+    shouldShowOrchestrateStallBadge(chatForRender.id, board, {
+      isStreaming,
+      activeRunCount: activeRuns.length,
+    }),
   );
   const activity = deriveOrchestratorLastActivity(chatForRender, isStreaming);
   const metrics = boardHeaderMetrics(chatForRender, board, activeRuns.length);

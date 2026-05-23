@@ -22,6 +22,7 @@ import {
   getRunHealth,
   getSupervisorChatState,
   markChatStalledForUi,
+  pruneStaleStallUiFlag,
   resetSupervisorStateForTests,
   touchInProgressNoRunTracking,
 } from './state.ts';
@@ -62,6 +63,7 @@ function removeBoardListener(chatId: string): void {
   boardUnsubs.get(chatId)?.();
   boardUnsubs.delete(chatId);
   lastBoardFp.delete(chatId);
+  markChatStalledForUi(chatId, false);
 }
 
 function recordSubAgentTerminal(run: SubAgentRun): void {
@@ -111,8 +113,15 @@ async function tickSupervisor(): Promise<void> {
     const board = chat.orchestrateBoard;
     const sup = getSupervisorChatState(chat.id);
     const streaming = isChatStreaming(chat.id);
+    const activeRunCount = listActiveSubAgentRuns().filter(
+      (r) =>
+        r.parentChatId === chat.id &&
+        (r.status === 'queued' || r.status === 'running'),
+    ).length;
+    pruneStaleStallUiFlag(chat.id, board, { isStreaming: streaming, activeRunCount });
     if (streaming) {
       bumpOrchestratorProgress(chat.id, nowMs);
+      markChatStalledForUi(chat.id, false);
     }
     const was = sup.wasStreaming === true;
     sup.wasStreaming = streaming;
