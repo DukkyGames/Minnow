@@ -44,6 +44,24 @@ describe('normalizeTitle', () => {
       null,
     );
     assert.equal(normalizeTitle('Let me analyze this step by step'), null);
+    assert.equal(normalizeTitle('I will consider the user request carefully'), null);
+    assert.equal(normalizeTitle('The user is asking about Redis cache tuning'), null);
+    assert.equal(normalizeTitle('Okay, so let me break this down'), null);
+    assert.equal(normalizeTitle('Step 1: understand the question'), null);
+    assert.equal(normalizeTitle('Reasoning: need a short sidebar label'), null);
+    assert.equal(normalizeTitle('My analysis of the attachment name'), null);
+  });
+
+  test('rejects thinking markers anywhere in title', () => {
+    const thinkOpen = '<' + 'think>';
+    assert.equal(normalizeTitle('Sidebar: chain-of-thought dump'), null);
+    assert.equal(normalizeTitle(`Title with ${thinkOpen} tags`), null);
+    assert.equal(normalizeTitle('prefix redacted_thinking suffix'), null);
+  });
+
+  test('accepts legitimate short titles near thinking words', () => {
+    assert.equal(normalizeTitle('Redis cache tuning'), 'Redis cache tuning');
+    assert.equal(normalizeTitle('First Redis setup'), 'First Redis setup');
   });
 
   test('UNTITLED maps to null', () => {
