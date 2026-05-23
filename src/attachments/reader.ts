@@ -1,9 +1,12 @@
 /**
- * Reads user-selected files into Attachment records (images, text, PDF).
+ * Reads user-selected files into Attachment records (images, text, PDF, office docs).
  */
 
 import { getLocalServerAvailable } from '../tools/client';
+import { isOfficeExtension, OFFICE_EXTENSIONS } from './document-extensions.mjs';
 import type { Attachment } from './types';
+
+export { OFFICE_EXTENSIONS };
 
 /** Hard max file size (matches server read_document limit). */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -80,6 +83,14 @@ const TEXT_EXTENSIONS = new Set([
   'editorconfig',
 ]);
 
+const OFFICE_MIME_PREFIXES = [
+  'application/vnd.openxmlformats-officedocument.',
+  'application/vnd.ms-',
+  'application/vnd.oasis.opendocument.',
+  'application/msword',
+  'application/rtf',
+];
+
 /** Creates a unique attachment id for the pending list. */
 function newAttachmentId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -104,6 +115,17 @@ function isImageFile(file: File): boolean {
 function isPdfFile(file: File): boolean {
   if (file.type === 'application/pdf') return true;
   return fileExtension(file.name) === 'pdf';
+}
+
+function isOfficeFile(file: File): boolean {
+  if (isOfficeExtension(file.name)) return true;
+  const mime = file.type.toLowerCase();
+  return OFFICE_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix));
+}
+
+/** PDF and office documents share the read_document server tool. */
+function isDocumentFile(file: File): boolean {
+  return isPdfFile(file) || isOfficeFile(file);
 }
 
 function isTextFile(file: File): boolean {
@@ -155,7 +177,7 @@ async function readFileAsBase64(file: File): Promise<string> {
 }
 
 /** POST read_document to the local tools server (npm start). */
-async function extractPdfText(
+async function extractDocumentText(
   filename: string,
   base64Content: string,
 ): Promise<string> {
@@ -204,7 +226,7 @@ function errorAttachment(file: File, message: string): Attachment {
 }
 
 /**
- * Turns one File into an Attachment (image data URL, text, PDF text, or error chip).
+ * Turns one File into an Attachment (image, text, PDF/office text, or error chip).
  */
 export async function processFile(file: File): Promise<Attachment> {
   const base = {
@@ -233,17 +255,18 @@ export async function processFile(file: File): Promise<Attachment> {
       return { ...base, kind: 'text', text, largeTextWarning };
     }
 
-    if (isPdfFile(file)) {
+    if (isDocumentFile(file)) {
       if (!getLocalServerAvailable()) {
         return errorAttachment(
           file,
-          'PDF requires the local tool server. Run npm start.',
+          'PDF and office documents require the local tool server. Run npm start.',
         );
       }
       const content = await readFileAsBase64(file);
-      const text = await extractPdfText(file.name, content);
+      const text = await extractDocumentText(file.name, content);
       const largeTextWarning = text.length > LARGE_TEXT_WARN_BYTES;
-      return { ...base, kind: 'pdf', text, largeTextWarning };
+      const kind = isPdfFile(file) ? 'pdf' : 'text';
+      return { ...base, kind, text, largeTextWarning };
     }
 
     return errorAttachment(file, 'Unsupported file type');

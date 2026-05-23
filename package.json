@@ -12,7 +12,7 @@
     "impeccable:update": "npx impeccable skills update && node scripts/sync-impeccable-skill.mjs",
     "impeccable:detect": "npx impeccable detect src/ index.html",
     "test:skills": "tsx --test test/skills-loader.test.ts",
-    "test:attachments": "tsx --test test/workspace-ref.test.ts",
+    "test:attachments": "node --test test/attachments/*.test.mjs test/server/read-document.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/workspace-ref.test.ts test/attachments/reader-routing.test.mts",
     "test:skills-impeccable": "node --test test/skills-impeccable.test.mjs",
     "preview": "vite preview",
     "start": "node server.js",
@@ -58,6 +58,9 @@
     "vite": "^5.4.10"
   },
   "optionalDependencies": {
-    "pdf-parse": "^1.1.4"
+    "mammoth": "^1.9.0",
+    "officeparser": "^5.1.1",
+    "pdf-parse": "^1.1.4",
+    "xlsx": "^0.18.5"
   }
 }

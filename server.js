@@ -1,7 +1,7 @@
 /**
  * Minnow dev server: Vite + /api/tools middleware for LM Studio tool execution.
  * SA-4: full executeServerTool handlers (files, git, code, web, notifications).
- * SA-14: read_document (PDF text extraction via optional pdf-parse).
+ * SA-14 / MIN-32: read_document (PDF + office attachment text extraction).
  */
 
 import { createServer } from 'vite';
@@ -33,6 +33,7 @@ import {
   resolveModeIdFromToolsBody,
 } from './server/tools/plan-write-guard.js';
 import { toolSaveMemory } from './server/tools/memory-tools.js';
+import { toolReadDocument } from './server/tools/read-document.js';
 import { createMemoryMiddleware } from './server/memory/middleware.js';
 import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
@@ -59,9 +60,6 @@ const APP_ROOT = getAppRoot();
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
 const FIND_FILES_MAX = 500;
 const DDG_MAX_SNIPPETS = 8;
-/** Max decoded PDF size for read_document (aligns with attachment limit). */
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
-
 /** Per-request flag: allow paths outside workspace when config grants full filesystem access. */
 const pathAccessStore = new AsyncLocalStorage();
 
@@ -598,71 +596,6 @@ async function toolSendNotification(args) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return `Error sending notification: ${msg}`;
-  }
-}
-
-/**
- * Extract plain text from a PDF sent as base64 (attachment pipeline).
- * Uses optional pdf-parse when installed; otherwise returns an install hint.
- */
-async function toolReadDocument(args) {
-  const contentB64 = args?.content;
-  if (!contentB64 || typeof contentB64 !== 'string') {
-    return 'Error: content (base64 file bytes) is required';
-  }
-
-  const filename =
-    typeof args?.filename === 'string' && args.filename.trim()
-      ? args.filename.trim()
-      : 'document.pdf';
-
-  let buffer;
-  try {
-    buffer = Buffer.from(contentB64, 'base64');
-  } catch {
-    return 'Error: content is not valid base64';
-  }
-
-  if (buffer.length === 0) {
-    return 'Error: empty document';
-  }
-
-  if (buffer.length > MAX_DOCUMENT_BYTES) {
-    return `Error: document exceeds ${MAX_DOCUMENT_BYTES / (1024 * 1024)}MB limit`;
-  }
-
-  const looksLikePdf =
-    filename.toLowerCase().endsWith('.pdf') ||
-    buffer.subarray(0, 5).toString('ascii') === '%PDF-';
-
-  if (!looksLikePdf) {
-    return `Error: read_document only supports PDF files (got "${filename}")`;
-  }
-
-  let pdfParse;
-  try {
-    const mod = await import('pdf-parse');
-    pdfParse = mod.default ?? mod;
-  } catch {
-    return (
-      'Error: PDF text extraction requires the optional "pdf-parse" package. ' +
-      'Install with: npm install (optionalDependencies) or npm install pdf-parse'
-    );
-  }
-
-  try {
-    const parsed = await pdfParse(buffer);
-    const text = String(parsed?.text ?? '').trim();
-    const pages = parsed?.numpages ?? '?';
-
-    if (!text) {
-      return `PDF "${filename}" parsed but contained no extractable text (${pages} page(s)).`;
-    }
-
-    return `--- ${filename} (${pages} page(s)) ---\n${text}`;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error: failed to parse PDF "${filename}": ${message}`;
   }
 }
 
