@@ -70,7 +70,9 @@
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 6px);
-  background: var(--surface-elevated, var(--code-inline-bg));
+  /* Nested cards on --surface: use --surface-2, not --surface-elevated (dark veil in light theme). */
+  background: var(--surface-2);
+  color: var(--text);
   cursor: pointer;
 }
 

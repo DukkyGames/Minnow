@@ -40,6 +40,16 @@ Set `IMPECCABLE_CONTEXT_DIR` to the workspace root or a monorepo sub-app path wh
 
 When implementing or critiquing components, read **`.impeccable/design.json`** for machine-readable roles and bindings.
 
+## Harness vs CLI
+
+| Path | Use for | How in Minnow |
+|------|---------|----------------|
+| **Harness** | `teach`, `audit`, `shape`, `craft`, `polish`, `critique`, `document`, `extract`, … | `/impeccable <cmd>` — loads `reference/<cmd>.md` (auto-injected in chat) |
+| **CLI** | `detect` | `npm run impeccable:detect` or `run_impeccable` with `command: detect` |
+| **Scripts** | `live` | `run_impeccable` with `command: live` |
+
+Do **not** use `npx impeccable teach` (or other harness commands via CLI). Do **not** use `run_impeccable` for `teach`, `audit`, `shape`, `craft`, `polish`, etc. — use the harness row above.
+
 ## Command routing
 
 User may append a sub-command after `/impeccable` (e.g. `/impeccable polish sidebar`). **Load the matching reference** under `src/skills/impeccable/reference/` before acting:

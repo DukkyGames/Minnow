@@ -161,20 +161,20 @@ Every **`spawn_sub_agent`** must include **`category`** and **`board_task_id`** 
 For each task in the current wave (parallelized up to the concurrency limit):
 
 ```
-1. board_update_task — mark in_progress (optional if spawn hook sets it)
+1. board_update_task — mark in_progress (the spawn hook also sets this when board_task_id is passed)
 2. Spawn a Builder sub-agent
    - spawn_sub_agent: category build, board_task_id <task id>
    - Pass the task's full Build spec as the prompt
    - wait: true OR wait: false + list_sub_agents / get_sub_agent_status
 
 3. On Builder DONE (`success: true`, not max tool turns):
-   - board_update_task — status testing (before verifier)
+   - board_update_task — status testing (before verifier; sub-agents do NOT auto-complete tasks)
    - Spawn a Verifier sub-agent
    - spawn_sub_agent: category test, board_task_id <task id>
    - Pass the task's full Test spec + the Builder's reported file list
 
 4. On Verifier PASS:
-   - board_update_task — status complete, files_changed, notes
+   - board_update_task — status complete, files_changed, notes  ← YOU MUST call this; no auto-complete
    - Next task in the wave (or next wave if last)
 
 5. On Verifier FAIL, Builder ERROR, or **`terminalReason: "max_tool_turns"`**:

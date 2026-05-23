@@ -2,7 +2,7 @@
 
 User-facing setup and quick start: [`README.md`](../README.md).
 
-**Feature gap audit (2026):** [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) — shipped vs partial vs missing across agents, Reef, trace/replay, and settings. **Local eval harness (audit #21, planned):** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](plans/Build%20out/feature-21-local-eval-harness.md). **#03 Context budgets per agent (plan):** [`documentation/plans/Build out/feature-03-context-budgets.md`](plans/Build%20out/feature-03-context-budgets.md). **#09 Sampler presets per agent (plan):** [`documentation/plans/Build out/feature-09-sampler-presets.md`](plans/Build%20out/feature-09-sampler-presets.md). **#12 Prompt diffing (plan):** [`documentation/plans/Build out/feature-12-prompt-diffing.md`](plans/Build%20out/feature-12-prompt-diffing.md). **#13 Prompt profiles (plan):** [`documentation/plans/Build out/feature-13-prompt-profiles.md`](plans/Build%20out/feature-13-prompt-profiles.md). **#20 Multi-model conversation (plan):** [`documentation/plans/Build out/feature-20-multi-model-conversation.md`](plans/Build%20out/feature-20-multi-model-conversation.md). **Sub-agent orchestration** is documented below under **Sub-agent orchestration (Step 09)**; verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
+**Feature gap audit (2026):** [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) — shipped vs partial vs missing across agents, Reef, trace/replay, and settings. **Local eval harness (audit #21, planned):** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](plans/Build%20out/feature-21-local-eval-harness.md). **In-app LLM Benchmark screen (Bench, planned):** [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md) — active-model integration battery + run history (complements Feature 21). **#03 Context budgets per agent (plan):** [`documentation/plans/Build out/feature-03-context-budgets.md`](plans/Build%20out/feature-03-context-budgets.md). **#09 Sampler presets per agent (plan):** [`documentation/plans/Build out/feature-09-sampler-presets.md`](plans/Build%20out/feature-09-sampler-presets.md). **#12 Prompt diffing (plan):** [`documentation/plans/Build out/feature-12-prompt-diffing.md`](plans/Build%20out/feature-12-prompt-diffing.md). **#13 Prompt profiles (plan):** [`documentation/plans/Build out/feature-13-prompt-profiles.md`](plans/Build%20out/feature-13-prompt-profiles.md). **#20 Multi-model conversation (plan):** [`documentation/plans/Build out/feature-20-multi-model-conversation.md`](plans/Build%20out/feature-20-multi-model-conversation.md). **Sub-agent orchestration** is documented below under **Sub-agent orchestration (Step 09)**; verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
 **To-fix roadmap:** Backlog in [`documentation/plans/to-fix.md`](plans/to-fix.md). **Implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) — `switch-chats-while-waiting`, `reef-files-minnow-home`, `reef-optional-save-prompt`, `no-auto-open-terminal`, `no-restart-finished-chat`, `llm-mode-switch-suggestions`, `fix-chat-titles-thinking-leak`, `files-sidebar-close-arrow` (line numbers in each plan link to `to-fix.md`). Product backlog plans remain `feature-01` … `feature-30` in the same folder. **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
 
@@ -187,7 +187,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Built-in | `src/skills/<id>/SKILL.md` | Shipped in repo |
 | User | `~/.minnow/skills/<id>/SKILL.md` | Same `name` replaces built-in |
 
-**Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `skillBody` in `composeSystemPrompt()` (`skill` part). History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
+**Merge:** user wins on duplicate `name`; dirs starting with `_` are excluded from the picker (`_example` is author docs only). **Send path:** `parseSlashCommand()` → `resolveActiveSkill()` → `skillBody` in `composeSystemPrompt()` (`skill` part). For `/impeccable <command>`, `augmentImpeccableSkillBody()` in `src/skills/impeccable-client.ts` appends the matching `reference/<command>.md` from `GET /api/skills/impeccable/reference/:command` before UI Designer augmentation (`src/tools/loop.ts`). History stores user text without the raw slash line; footer `[skill: <id>]` when a skill was used.
 
 | Concern | Location |
 |---------|----------|
@@ -206,6 +206,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `GET /api/skills/ping` | `{ ok: true }` |
 | `GET /api/skills` | `{ skills: SkillListItem[] }` (no body) |
 | `GET /api/skills/:id` | `{ skill: SkillDetail }` or 404 (`raw` = full SKILL.md) |
+| `GET /api/skills/impeccable/reference/:command` | `{ content }` — vendored `reference/<command>.md` for client auto-injection |
 | `POST /api/skills` | Create user skill from `_template/SKILL.md` (`{ id, label? }`) |
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
 | `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean> }` |
@@ -219,14 +220,19 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Built-in skill | `src/skills/impeccable/SKILL.md` (`name: impeccable` → `/impeccable`) |
 | Upstream snapshot | `src/skills/impeccable/SKILL.upstream.md` (auto-synced; do not edit) |
 | Command references | `src/skills/impeccable/reference/*.md` |
+| Harness routing | `server/impeccable/command-routing.js` (`HARNESS_COMMANDS`, `parseImpeccableSubcommand`, …) |
+| Reference API | `GET /api/skills/impeccable/reference/:command` → `server/impeccable/reference-handler.js` (64k cap) |
+| Client augment (slash) | `src/skills/impeccable-client.ts` — fetches reference into skill body in `loop.ts` |
 | Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `minnow-context.mjs`, …) |
 | Postinstall / sync | `scripts/sync-impeccable-skill.mjs` (vendors from `.agents/skills/impeccable` after `npx impeccable skills install -y`) |
 | npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
 | Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, `.impeccable/design.json` |
 
+**Harness vs CLI:** Sub-commands such as `teach`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` injects `reference/<cmd>.md` (see `## Active Impeccable command` in the augmented skill body). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable teach`. **`run_impeccable`** is limited to **`detect`** (CLI) and **`live`** (bundled script); other commands return harness guidance without spawning `npx`.
+
 `npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Override built-in: `~/.minnow/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
 
-**Tests:** `npm run test:skills-impeccable`. Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
+**Tests:** `npm run test:skills-impeccable`, `npm run test:impeccable`. Plan: [`documentation/plans/fix-impeccable-harness-routing.md`](plans/fix-impeccable-harness-routing.md). Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
 
 ### UI Designer (Step 15)
 
@@ -242,7 +248,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 | Tool allowlist | `src/agents/ui-designer/tools.ts` — plan mode blocks writes |
 | Send wiring | `src/tools/loop.ts` — binding, tool filter, one-turn `workAgentId` pin |
 | Impeccable context tool | `load_impeccable_context` → `server/impeccable/load-impeccable-context.js` (script from app root, reads `PRODUCT.md` / `DESIGN.md` / `.impeccable/design.json` from workspace) |
-| Impeccable CLI tool | `run_impeccable` → `server/impeccable/run-impeccable.js` |
+| Impeccable CLI/scripts tool | `run_impeccable` → `server/impeccable/run-impeccable.js` (`detect`, `live` only; harness commands use `/impeccable`) |
 
 **Modes:** `plan` (default, no file mutations) or `implement` (UI paths only). Composer hint after picking `/ui-designer`.
 
@@ -774,7 +780,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 - **Session row hover:** fine-pointer hover on non-active rows uses `--surface-elevated` fill; title and rename/delete use `--text-hover` (direct button hover: green/red). **Active** row keeps accent styling on hover (`sidebar.css`).
 - **Mobile (┤640px):** sidebar overlay + backdrop; safe-area padding.
 - **Stats strip:** `#statsStrip` inference metrics above the terminal; **collapsed by default** (`.is-collapsed`). Toggle **`#btnStats`** in the chat sidebar footer (`initStatsStrip()` in [`stats.ts`](../src/ui/stats.ts), preference `minnow.statsStripOpen` in `localStorage`).
-- **Agent activity panel (MIN-51 / feature #15):** `#agentActivityPanel` lists every in-flight worker across chats (main turn, sub-agents, title job, Reef widget LLM). Toggle **`#btnAgentActivity`** in the chat sidebar footer (`initAgentActivityPanel()` in [`agent-activity-panel.ts`](../src/ui/agent-activity-panel.ts), preference `minnow.agentActivityOpen`). Snapshot builder: [`agent-activity-registry.ts`](../src/state/agent-activity-registry.ts); buses: [`main-turn-activity.ts`](../src/chat/main-turn-activity.ts), [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts), [`titles/activity-events.ts`](../src/chat/titles/activity-events.ts), [`reef/activity-events.ts`](../src/chat/reef/activity-events.ts). Sub-agent rows use `liveCurrentToolName` on [`SubAgentRun`](../src/agents/types.ts). Verification: [`documentation/plans/verification/feature-15-agent-activity.md`](plans/verification/feature-15-agent-activity.md). Inside an open strip, **`#statsExpandBtn`** still expands the detailed panel on mobile (┤600px) and when the file editor split is open (feature 26). **Orchestrate (MIN-36):** `chat.lastStats` and the strip sum **parent + sub-agent** token counts for the active parent turn; tok/s / TTFT / generation time are averaged (TPS weighted by completion tokens). Rollup: [`stats-math.ts`](../src/chat/orchestrate/stats-math.ts), [`stats-aggregate.ts`](../src/chat/orchestrate/stats-aggregate.ts); sub-agent SSE usage in [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts); live refresh via [`stats-live.ts`](../src/chat/orchestrate/stats-live.ts) when background sub-agents settle.
+- **Agent activity panel (MIN-51 / feature #15):** `#agentActivityPanel` lists every in-flight worker across chats (main turn, sub-agents, title job, Reef widget LLM). Toggle **`#btnAgentActivity`** in the chat sidebar footer (`initAgentActivityPanel()` in [`agent-activity-panel.ts`](../src/ui/agent-activity-panel.ts), preference `minnow.agentActivityOpen`). Row cards use `--surface-2` (not `--surface-elevated`) so light theme keeps dark text on a light fill ([`agent-activity-panel.css`](../src/styles/agent-activity-panel.css)). Snapshot builder: [`agent-activity-registry.ts`](../src/state/agent-activity-registry.ts); buses: [`main-turn-activity.ts`](../src/chat/main-turn-activity.ts), [`sub-agent-events.ts`](../src/agents/sub-agent-events.ts), [`titles/activity-events.ts`](../src/chat/titles/activity-events.ts), [`reef/activity-events.ts`](../src/chat/reef/activity-events.ts). Sub-agent rows use `liveCurrentToolName` on [`SubAgentRun`](../src/agents/types.ts). Verification: [`documentation/plans/verification/feature-15-agent-activity.md`](plans/verification/feature-15-agent-activity.md). Inside an open strip, **`#statsExpandBtn`** still expands the detailed panel on mobile (┤600px) and when the file editor split is open (feature 26). **Orchestrate (MIN-36):** `chat.lastStats` and the strip sum **parent + sub-agent** token counts for the active parent turn; tok/s / TTFT / generation time are averaged (TPS weighted by completion tokens). Rollup: [`stats-math.ts`](../src/chat/orchestrate/stats-math.ts), [`stats-aggregate.ts`](../src/chat/orchestrate/stats-aggregate.ts); sub-agent SSE usage in [`sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts); live refresh via [`stats-live.ts`](../src/chat/orchestrate/stats-live.ts) when background sub-agents settle.
 - **Compact (┤600px):** 16px input (iOS zoom); stats panel grid collapses behind the expand row when the strip is open; settings drawer is full-width with safe-area insets; top-bar **Load/Unload** (`#btnModelLoadUnload`) hidden to preserve model picker space (load dots remain in the picker).
 - **Tablet (641–899px):** session sidebar **200px**; stats grid **2×2**; Orchestrate kanban **2 columns**.
 - **Phone Orchestrate board (┤600px):** header toolbar wraps; lane controls use **44px** touch height; kanban lanes scroll horizontally with snap (one lane per swipe) instead of four squeezed columns.
@@ -944,7 +950,7 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 | id | Purpose |
 |----|---------|
 | `load_impeccable_context` | Load design context for `/impeccable` |
-| `run_impeccable` | Run Impeccable detect/command scripts |
+| `run_impeccable` | CLI/scripts only: `detect`, `live` (not teach/audit/shape — use `/impeccable` harness) |
 
 ### Files (14 server)
 

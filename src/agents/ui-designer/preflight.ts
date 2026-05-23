@@ -44,5 +44,6 @@ export const UI_DESIGNER_PREFLIGHT_INSTRUCTION = [
   'Load design context first:',
   'load_impeccable_context (server tool — works when workspace is not the Minnow repo)',
   '',
-  'Delegate Impeccable sub-commands via run_impeccable (audit, shape, craft, polish) or documented /impeccable flow.',
+  'Harness flow: /impeccable <cmd> (e.g. teach, audit, shape, craft, polish) — load matching reference/*.md after load_impeccable_context.',
+  'CLI/scripts only: run_impeccable with command detect or live (anti-pattern scan, live HMR). Do not use run_impeccable or npx impeccable for teach, audit, shape, etc.',
 ].join('\n');

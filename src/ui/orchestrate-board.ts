@@ -395,6 +395,7 @@ function syncBoardHeaderActivity(
 /** Start vs Resume copy for the board header play control (idle state). */
 function playPauseIdleLabel(status: BoardHeaderStatus): string {
   if (status.variant === 'complete') return 'Plan complete';
+  if (status.variant === 'active') return 'Active';
   if (status.variant === 'stopped' || status.variant === 'ready') return 'Start';
   return 'Resume';
 }
@@ -460,11 +461,12 @@ function syncBoardPlayPauseButton(
     btn.classList.add('board-header__icon-btn--danger');
   } else {
     const planComplete = isOrchestratePlanComplete(board);
+    const agentsActive = headerStatus.variant === 'active';
     const idleLabel = playPauseIdleLabel(headerStatus);
     btn.setAttribute('aria-label', idleLabel);
     btn.title = planComplete ? ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT : idleLabel;
     btn.setAttribute('aria-pressed', 'false');
-    btn.disabled = isStreaming || planComplete;
+    btn.disabled = isStreaming || planComplete || agentsActive;
     btn.classList.remove('board-header__icon-btn--danger');
   }
 }

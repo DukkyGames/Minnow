@@ -628,7 +628,7 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
-  run_impeccable: (args) => toolRunImpeccable(args, getWorkspaceRoot()),
+  run_impeccable: (args) => toolRunImpeccable(args, APP_ROOT, getWorkspaceRoot()),
   load_impeccable_context: () =>
     toolLoadImpeccableContext(APP_ROOT, getWorkspaceRoot()),
   get_lsp_diagnostics: async (args) => {

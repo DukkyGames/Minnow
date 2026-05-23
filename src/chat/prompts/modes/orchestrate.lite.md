@@ -31,7 +31,7 @@ Loop per task (parallel within a wave, sequential between waves, max `globalMaxC
 1. **`board_update_task`** — `{ "task_id": "W1-A", "status": "in_progress" }` when starting build.
 2. Spawn **Builder** — **`spawn_sub_agent`** with **`category`** `build` and **`board_task_id`**; task Build spec; `wait: true` or `wait: false` + **`list_sub_agents`** / **`get_sub_agent_status`**.
 3. **`board_update_task`** — `testing`; spawn **Verifier** with **`category`** `test` and **`board_task_id`**; same wait/poll pattern.
-4. PASS → **`board_update_task`** `complete` (+ `files_changed` / `notes`), next task.
+4. PASS → **`board_update_task`** `complete` (+ `files_changed` / `notes`), next task. (**Required** — tasks are not auto-completed.)
 5. FAIL → **`board_update_task`** `failed` or `blocked`, surface error, ask user retry/skip/abort.
 
 **Check-in tools:** `list_sub_agents`; `get_sub_agent_status({ run_id })` — includes `success` and `terminalReason` when terminal; if `success: false` or `terminalReason: "max_tool_turns"`, retry **`spawn_sub_agent`** or mark `failed`; never `complete`.

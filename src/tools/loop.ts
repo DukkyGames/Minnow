@@ -155,7 +155,9 @@ import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
+  augmentImpeccableSkillBody,
   formatHistoryWithSkillTag,
+  IMPECCABLE_SKILL_ID,
   parseSlashCommand,
   resolveActiveSkill,
 } from '../skills';
@@ -765,6 +767,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       skillBody = skill.body;
     }
   }
+  if (skillBody && skillId === IMPECCABLE_SKILL_ID && !presetSkillBody) {
+    skillBody = await augmentImpeccableSkillBody(skillBody, userText);
+  }
   if (skillBody && uiDesignerCtx.active) {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
   }
@@ -1337,6 +1342,9 @@ export async function sendMessageWithTools(): Promise<void> {
       return;
     }
     skillBody = skill.body;
+    if (skillId === IMPECCABLE_SKILL_ID) {
+      skillBody = await augmentImpeccableSkillBody(skillBody, userText);
+    }
   }
 
   const uiDesignerCtx = prepareUiDesignerTurn(chat, {
