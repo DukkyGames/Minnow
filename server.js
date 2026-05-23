@@ -28,6 +28,10 @@ import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
 import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from './server/impeccable/load-impeccable-context.js';
+import {
+  blockPlanModeWrite,
+  resolveModeIdFromToolsBody,
+} from './server/tools/plan-write-guard.js';
 import { toolSaveMemory } from './server/tools/memory-tools.js';
 import { createMemoryMiddleware } from './server/memory/middleware.js';
 import { initMemoryApi } from './server/memory/routes.js';
@@ -794,6 +798,13 @@ function createToolsMiddleware() {
         if (!name || typeof name !== 'string') {
           res.statusCode = 400;
           res.end(JSON.stringify({ error: 'Missing or invalid "name"' }));
+          return;
+        }
+        const modeId = resolveModeIdFromToolsBody(body);
+        const planWriteBlock = blockPlanModeWrite(modeId, name, args);
+        if (planWriteBlock) {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ result: planWriteBlock }));
           return;
         }
         const out = await executeServerTool(name, args);

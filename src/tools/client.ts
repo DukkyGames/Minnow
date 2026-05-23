@@ -209,7 +209,7 @@ async function executeToolInner(
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    return executeServerTool(name, args);
+    return executeServerTool(name, args, context.modeId);
   }
 
   if (
@@ -299,7 +299,7 @@ async function executeToolInner(
         content: await executeStreamingCodeTool(name, enrichedArgs, context),
       };
     }
-    return executeServerTool(name, enrichedArgs);
+    return executeServerTool(name, enrichedArgs, context.modeId);
   }
 
   return { content: await executeBrowserTool(name, enrichedArgs) };
@@ -407,30 +407,39 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** POST { name, args } to the Node tools middleware. */
+/** POST { name, args, modeId? } to the Node tools middleware. */
 async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
+  modeId?: ModeId | string,
 ): Promise<ToolExecutionResult> {
   let response: Response;
+  const payload: {
+    name: string;
+    args: Record<string, unknown>;
+    modeId?: string;
+  } = { name, args };
+  if (modeId != null && String(modeId).trim()) {
+    payload.modeId = String(modeId).trim();
+  }
   try {
     response = await fetch('/api/tools', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, args }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { content: `Error: failed to reach tool server (${message})` };
   }
 
-  let payload: {
+  let responsePayload: {
     result?: string;
     error?: string;
     attachments?: ToolExecutionResult['attachments'];
   };
   try {
-    payload = (await response.json()) as typeof payload;
+    responsePayload = (await response.json()) as typeof responsePayload;
   } catch {
     return {
       content: `Error: invalid JSON from tool server (HTTP ${response.status})`,
@@ -439,13 +448,13 @@ async function executeServerTool(
 
   if (!response.ok) {
     return {
-      content: `Error: ${payload.error ?? `tool server HTTP ${response.status}`}`,
+      content: `Error: ${responsePayload.error ?? `tool server HTTP ${response.status}`}`,
     };
   }
 
-  const content = String(payload.result ?? '');
-  const attachments = Array.isArray(payload.attachments)
-    ? payload.attachments.filter(
+  const content = String(responsePayload.result ?? '');
+  const attachments = Array.isArray(responsePayload.attachments)
+    ? responsePayload.attachments.filter(
         (a): a is NonNullable<ToolExecutionResult['attachments']>[number] =>
           a != null &&
           a.type === 'image' &&
