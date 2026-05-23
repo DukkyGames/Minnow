@@ -1,45 +1,47 @@
 /**
- * Appearance: Light / Dark / System. Resolves to effective light|dark on <html data-theme>.
- * Syncs theme-color meta, optional hljs dark stylesheet, CodeMirror token vars, and xterm.
+ * Appearance: applies palette themes, hljs, CodeMirror, and xterm sync.
  */
 
 import hljs from 'highlight.js';
 import hljsDarkStylesheetUrl from 'highlight.js/styles/github-dark.min.css?url';
-import type { ThemePreference } from '../constants';
-import { THEME_STORAGE_KEY } from '../constants';
-import { getThemePreference, resolveTheme } from './theme-resolve';
+import {
+  applyTheme as applyThemeId,
+  getFollowSystem,
+  getMode,
+  getStoredTheme,
+  getThemePreference,
+  initTheme as initThemeCore,
+  resolveTheme,
+  setFollowSystem,
+  setThemeFamily,
+  setThemeMode,
+  setThemePreference as persistThemePreference,
+  syncThemeListeners,
+  type LegacyThemePreference,
+  type ThemeFamily,
+  type ThemeId,
+  type ThemeMode,
+} from '../theme';
 import { refreshXtermTheme } from './terminal-xterm';
 
-export { getThemePreference, resolveTheme } from './theme-resolve';
-
-/** Light theme-color for browser chrome (matches light --bg). */
-const THEME_COLOR_LIGHT = '#fefefe';
-/** Dark theme-color (matches dark --bg). */
-const THEME_COLOR_DARK = '#121218';
-
-let systemListener: MediaQueryList | null = null;
-let onSystemChange: (() => void) | null = null;
-
-/** Persist preference and apply effective theme. */
-export function setThemePreference(pref: ThemePreference): void {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, pref);
-  } catch {
-    /* ignore */
-  }
-  syncThemeListeners(pref);
-  applyThemeFromPreference(pref);
-}
-
-function updateThemeColorMeta(effective: 'light' | 'dark'): void {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  meta.setAttribute('content', effective === 'dark' ? THEME_COLOR_DARK : THEME_COLOR_LIGHT);
-}
+export {
+  getFollowSystem,
+  getStoredTheme,
+  getThemePreference,
+  resolveTheme,
+  setFollowSystem,
+  setThemeFamily,
+  setThemeMode,
+  syncThemeListeners,
+  type LegacyThemePreference as ThemePreference,
+  type ThemeFamily,
+  type ThemeId,
+  type ThemeMode,
+};
 
 const HLJS_DARK_LINK_ID = 'minnow-hljs-github-dark';
 
-function syncHljsDarkStylesheet(effective: 'light' | 'dark'): void {
+function syncHljsDarkStylesheet(effective: ThemeMode): void {
   const existing = document.getElementById(HLJS_DARK_LINK_ID) as HTMLLinkElement | null;
   if (effective === 'dark') {
     if (existing) return;
@@ -53,9 +55,7 @@ function syncHljsDarkStylesheet(effective: 'light' | 'dark'): void {
   }
 }
 
-/**
- * Re-run highlight.js on fenced blocks so class-based colors match the active stylesheet.
- */
+/** Re-run highlight.js on fenced blocks so class-based colors match the active stylesheet. */
 export function refreshHljsInDocument(): void {
   document.querySelectorAll('pre code.hljs').forEach((block) => {
     const el = block as HTMLElement;
@@ -71,52 +71,29 @@ export function refreshHljsInDocument(): void {
   });
 }
 
-/** Apply effective light|dark to the document root and dependent surfaces. */
-export function applyResolvedTheme(effective: 'light' | 'dark'): void {
-  document.documentElement.dataset.theme = effective;
-  document.documentElement.style.colorScheme = effective;
-  updateThemeColorMeta(effective);
-  syncHljsDarkStylesheet(effective);
+/** Apply effective theme to DOM and dependent surfaces. */
+export function applyResolvedTheme(id: ThemeId): void {
+  applyThemeId(id, { persist: false });
+  syncHljsDarkStylesheet(getMode(id));
   refreshHljsInDocument();
   refreshXtermTheme();
 }
 
-/** Apply from a preference value (resolves system). */
-export function applyThemeFromPreference(pref: ThemePreference): void {
-  applyResolvedTheme(resolveTheme(pref));
+/** @deprecated Use applyResolvedTheme(getStoredTheme()). */
+export function applyThemeFromPreference(_pref?: LegacyThemePreference): void {
+  applyResolvedTheme(getStoredTheme());
 }
 
-function detachSystemListener(): void {
-  if (systemListener && onSystemChange) {
-    systemListener.removeEventListener('change', onSystemChange);
-  }
-  systemListener = null;
-  onSystemChange = null;
-}
-
-function attachSystemListener(): void {
-  detachSystemListener();
-  if (typeof globalThis.matchMedia === 'function') return;
-  systemListener = globalThis.matchMedia('(prefers-color-scheme: dark)');
-  onSystemChange = () => {
-    if (getThemePreference() !== 'system') return;
-    applyResolvedTheme(resolveTheme('system'));
-  };
-  systemListener.addEventListener('change', onSystemChange!);
-}
-
-/**
- * Call once at startup after DOM exists. Re-reads storage and wires system listener.
- * Inline script in index.html already set data-theme for first paint; this syncs the rest.
- */
+/** Call once at startup after DOM exists. */
 export function initTheme(): void {
-  const pref = getThemePreference();
-  syncThemeListeners(pref);
-  applyResolvedTheme(resolveTheme(pref));
+  initThemeCore();
+  syncThemeListeners();
+  applyResolvedTheme(getStoredTheme());
 }
 
-/** When preference becomes system vs fixed, update media listener. */
-export function syncThemeListeners(pref: ThemePreference): void {
-  if (pref === 'system') attachSystemListener();
-  else detachSystemListener();
+/** Persist preference and refresh hljs/xterm. */
+export function setThemePreference(pref: LegacyThemePreference): void {
+  persistThemePreference(pref);
+  syncThemeListeners();
+  applyResolvedTheme(getStoredTheme());
 }

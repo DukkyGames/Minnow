@@ -2,22 +2,22 @@ Tip and bill-split calculator with a live bar chart (Subtotal, Tax, Tip, Total).
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; min-width: 0; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; min-width: 0; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
 .rw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--text-muted); min-width: 0; }
+.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--mn-fg-muted); min-width: 0; }
 .rw input {
-  padding: 8px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
+  padding: 8px 10px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: var(--mn-surface-1); color: var(--mn-fg); font-family: var(--font-mono); font-size: 0.875rem;
 }
 .rw-out {
-  margin-top: 12px; padding: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface-elevated); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
+  margin-top: 12px; padding: 12px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md);
+  background: var(--mn-surface-elevated); color: var(--mn-fg); font-family: var(--font-mono); font-size: 0.875rem;
 }
-.rw-out strong { color: var(--accent); font-weight: 500; }
+.rw-out strong { color: var(--mn-accent); font-weight: 500; }
 .rw-chart {
   margin-top: 12px; height: 220px; min-height: 220px; min-width: 0; width: 100%;
-  border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-1);
 }
 </style>
 <div id="root"></div>
@@ -41,10 +41,10 @@ function App() {
   }, [bill, tipPct, taxPct, split]);
 
   const barColors = [
-    'var(--accent)',
-    'color-mix(in oklch, var(--accent) 65%, var(--text-muted))',
-    'color-mix(in oklch, var(--accent) 40%, var(--surface-elevated))',
-    'var(--text-muted)',
+    'var(--mn-accent)',
+    'color-mix(in srgb, var(--mn-accent) 65%, var(--mn-fg-muted))',
+    'color-mix(in srgb, var(--mn-accent) 40%, var(--mn-surface-elevated))',
+    'var(--mn-fg-muted)',
   ];
 
   const data = useMemo(
@@ -119,14 +119,14 @@ function App() {
       <div className="rw-chart">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 12, right: 12, bottom: 8, left: 32 }}>
-            <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-            <YAxis stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+            <XAxis dataKey="name" stroke="var(--mn-fg-muted)" tick={{ fill: 'var(--mn-fg-muted)', fontSize: 11 }} />
+            <YAxis stroke="var(--mn-fg-muted)" tick={{ fill: 'var(--mn-fg-muted)', fontSize: 11 }} />
             <Tooltip
               contentStyle={{
-                background: 'var(--surface)',
-                border: '0.5px solid var(--border)',
+                background: 'var(--mn-surface-1)',
+                border: '0.5px solid var(--mn-border)',
                 borderRadius: 'var(--radius-sm)',
-                color: 'var(--text)',
+                color: 'var(--mn-fg)',
               }}
               formatter={(v) => fmt(Number(v))}
             />

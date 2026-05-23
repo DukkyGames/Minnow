@@ -4,8 +4,12 @@
  */
 export {};
 
+import type { ThemeId } from './theme';
+
 declare global {
   interface Window {
+    /** Dev-only: `initTheme` assigns `applyTheme` when `import.meta.env.DEV`. */
+    __setTheme?: (id: ThemeId) => void;
     toggleSidebarLayout: () => void;
     createChat: () => void;
     fetchModels: () => Promise<void>;

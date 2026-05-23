@@ -1,7 +1,7 @@
 /* ─── INPUT BAR ─── */
 .input-bar {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
   padding: 12px 16px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -42,10 +42,10 @@
   width: 44px;
   height: 44px;
   flex-shrink: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   cursor: pointer;
   transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out), background 0.2s var(--ease-out);
 }
@@ -56,13 +56,13 @@
 }
 
 .attach-btn:active {
-  background: var(--surface);
+  background: var(--mn-surface-1);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .attach-btn:hover {
-    border-color: var(--border-strong);
-    color: var(--text);
+    border-color: var(--mn-border-strong);
+    color: var(--mn-fg);
   }
 }
 
@@ -91,12 +91,12 @@
   gap: 6px;
   max-width: 100%;
   padding: 4px 6px 4px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   font-size: 12px;
   line-height: 1.3;
-  color: var(--text);
+  color: var(--mn-fg);
 }
 
 .attach-chip--image {
@@ -104,9 +104,9 @@
 }
 
 .attach-chip--error {
-  border-color: var(--red);
-  color: var(--red);
-  background: var(--banner-danger-bg);
+  border-color: var(--mn-danger);
+  color: var(--mn-danger);
+  background: var(--mn-danger-soft);
 }
 
 .attach-chip-thumb {
@@ -135,7 +135,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--mn-fg-muted);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -144,22 +144,22 @@
 
 @media (hover: hover) and (pointer: fine) {
   .attach-chip-remove:hover {
-    background: var(--surface);
-    color: var(--text);
+    background: var(--mn-surface-1);
+    color: var(--mn-fg);
   }
 }
 
 .attach-chip-remove:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mn-accent);
   outline-offset: 1px;
 }
 
 #msgInput {
   width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
-  color: var(--text);
+  color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   padding: 11px 14px;
@@ -180,11 +180,11 @@
 
 #msgInput:focus,
 #msgInput:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
-#msgInput::placeholder { color: var(--text-muted); }
+#msgInput::placeholder { color: var(--mn-fg-muted); }
 
 #msgInput:disabled {
   opacity: 0.55;
@@ -195,13 +195,13 @@
 .input-bar.composer-drop-active,
 .input-bar-composer.composer-drop-active,
 #msgInput.composer-drop-active {
-  outline: 2px dashed var(--accent);
+  outline: 2px dashed var(--mn-accent);
   outline-offset: 2px;
 }
 
 .input-bar.composer-drop-active #msgInput {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
 .attach-chip--workspace {
@@ -214,10 +214,10 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  background: var(--accent);
+  background: var(--mn-accent);
   border: none;
   border-radius: var(--radius-md);
-  color: var(--send-btn-fg);
+  color: var(--mn-fg-on-accent);
   cursor: pointer;
   transition:
     opacity var(--duration-fast) var(--ease-out),
@@ -229,8 +229,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .send-btn:hover:not(:disabled) {
-    background: var(--bg);
-    border: 1px solid var(--accent);
+    background: var(--mn-bg);
+    border: 1px solid var(--mn-accent);
   }
 }
 
@@ -244,17 +244,17 @@
 }
 
 .send-btn.send-btn--stop {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-strong);
-  /* --elevated-fg: white on dark veil (light theme), light text on light veil (dark theme) */
-  color: var(--elevated-fg);
+  background: var(--mn-surface-elevated);
+  border: 1px solid var(--mn-border-strong);
+  /* --mn-fg: white on dark veil (light theme), light text on light veil (dark theme) */
+  color: var(--mn-fg);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .send-btn.send-btn--stop:hover:not(:disabled) {
-    background: var(--banner-danger-hover-bg);
-    border-color: var(--banner-danger-hover-border);
-    color: var(--banner-danger-hover-text);
+    background: var(--mn-danger-soft);
+    border-color: var(--mn-danger-border);
+    color: var(--mn-danger-ink);
   }
 }
 
@@ -266,13 +266,13 @@
 }
 
 .send-btn .icon-svg {
-  stroke: var(--send-btn-icon-stroke);
+  stroke: var(--mn-fg-on-accent);
   width: 20px;
   height: 20px;
 }
 @media (hover: hover) and (pointer: fine) {
   .send-btn:hover:not(:disabled) .icon-svg {
-    stroke: var(--text);
+    stroke: var(--mn-fg);
     width: 27px;
     height: 27px;
   }
@@ -280,8 +280,8 @@
 
 .spinner {
   width: 14px; height: 14px;
-  border: 2px solid var(--border2);
-  border-top-color: var(--cyan);
+  border: 2px solid var(--mn-border-strong);
+  border-top-color: var(--mn-accent);
   border-radius: 50%;
   animation: spin .6s linear infinite;
 }

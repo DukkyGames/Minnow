@@ -1,4 +1,4 @@
-Pure SVG sparkline (~80×24px, `stroke: var(--accent)`). No chart library.
+Pure SVG sparkline (~80×24px, `stroke: var(--mn-accent)`). No chart library.
 
 **Embed in a stat card:** copy the `<svg class="rw-sparkline">` into the `.rw-spark` slot on `snippet-stat-card.md` (replace the placeholder). Keep the card’s `.rw-spark { margin-top: 8px; height: 36px; … }` wrapper so the line centers in the reserved band.
 
@@ -7,9 +7,9 @@ Pure SVG sparkline (~80×24px, `stroke: var(--accent)`). No chart library.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw-sparkline { display: block; width: 80px; height: 24px; }
-.rw-sparkline polyline { stroke: var(--accent); }
+.rw-sparkline polyline { stroke: var(--mn-accent); }
 </style>
 <div class="rw">
   <svg class="rw-sparkline" viewBox="0 0 80 24" width="80" height="24" aria-hidden="true">

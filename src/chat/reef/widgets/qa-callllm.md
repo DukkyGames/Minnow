@@ -2,31 +2,31 @@ Ask a question via callLLM with streaming output; Send to chat fills the compose
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
-.rw label { display: block; font-size: 0.8125rem; font-weight: 400; color: var(--text-muted); margin-bottom: 6px; }
+.rw label { display: block; font-size: 0.8125rem; font-weight: 400; color: var(--mn-fg-muted); margin-bottom: 6px; }
 .rw textarea {
   width: 100%; min-height: 72px; box-sizing: border-box; padding: 8px 10px;
-  border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem; resize: vertical;
+  border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: var(--mn-surface-1); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem; resize: vertical;
 }
 .rw-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .rw-actions button {
-  padding: 8px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius-md);
-  background: var(--accent); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  padding: 8px 14px; border: 0.5px solid var(--mn-border-strong); border-radius: var(--radius-md);
+  background: var(--mn-accent); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
 }
 .rw-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .rw-actions button.secondary {
-  background: var(--surface); border-color: var(--border); color: var(--text-muted);
+  background: var(--mn-surface-1); border-color: var(--mn-border); color: var(--mn-fg-muted);
 }
 .rw-out {
   margin-top: 12px; padding: 12px; min-height: 80px;
-  border: 0.5px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface-elevated); color: var(--text); font-size: 0.875rem; font-weight: 400;
+  border: 0.5px solid var(--mn-border); border-radius: var(--radius-md);
+  background: var(--mn-surface-elevated); color: var(--mn-fg); font-size: 0.875rem; font-weight: 400;
   white-space: pre-wrap; word-break: break-word;
 }
-.rw-out.empty { color: var(--text-muted); }
-.rw-err { margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); min-height: 1em; }
+.rw-out.empty { color: var(--mn-fg-muted); }
+.rw-err { margin-top: 8px; font-size: 0.75rem; color: var(--mn-fg-muted); min-height: 1em; }
 </style>
 <div class="rw" id="qa">
   <h2>Widget Q&amp;A</h2>

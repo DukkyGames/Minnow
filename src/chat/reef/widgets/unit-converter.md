@@ -2,29 +2,29 @@ Live unit converter with category tabs (length, weight, temperature), amount, an
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; }
-.rw-cats { display: flex; gap: 4px; border-bottom: 0.5px solid var(--border); margin-bottom: 12px; }
+.rw-cats { display: flex; gap: 4px; border-bottom: 0.5px solid var(--mn-border); margin-bottom: 12px; }
 .rw-cat {
-  padding: 8px 14px; border: none; background: transparent; color: var(--text-muted);
+  padding: 8px 14px; border: none; background: transparent; color: var(--mn-fg-muted);
   font-family: var(--font-ui); font-size: 0.875rem; font-weight: 400; cursor: pointer;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 .rw-cat[aria-selected="true"] {
-  color: var(--text); background: var(--surface); border: 0.5px solid var(--border);
-  border-bottom-color: var(--surface); margin-bottom: -0.5px;
+  color: var(--mn-fg); background: var(--mn-surface-1); border: 0.5px solid var(--mn-border);
+  border-bottom-color: var(--mn-surface-1); margin-bottom: -0.5px;
 }
 .rw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--text-muted); min-width: 0; }
+.rw label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; font-weight: 400; color: var(--mn-fg-muted); min-width: 0; }
 .rw input, .rw select {
-  padding: 8px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
+  padding: 8px 10px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: var(--mn-surface-1); color: var(--mn-fg); font-family: var(--font-mono); font-size: 0.875rem;
 }
 .rw-out {
-  margin-top: 12px; padding: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface-elevated); color: var(--text); font-family: var(--font-mono); font-size: 0.875rem;
+  margin-top: 12px; padding: 12px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md);
+  background: var(--mn-surface-elevated); color: var(--mn-fg); font-family: var(--font-mono); font-size: 0.875rem;
 }
-.rw-out strong { color: var(--accent); font-weight: 500; }
+.rw-out strong { color: var(--mn-accent); font-weight: 500; }
 </style>
 <div class="rw" id="converter">
   <h2>Unit converter</h2>
@@ -127,7 +127,7 @@ Live unit converter with category tabs (length, weight, temperature), amount, an
     var fmt = category === 'temperature' ? result.toFixed(2) : result.toPrecision(6).replace(/\.?0+$/, '');
     outEl.innerHTML =
       '<strong>' + fmt + '</strong> ' + (t.labels[to] || to) +
-      ' <span style="color:var(--text-muted)">(' + amount + ' ' + (t.labels[from] || from) + ')</span>';
+      ' <span style="color:var(--mn-fg-muted)">(' + amount + ' ' + (t.labels[from] || from) + ')</span>';
   }
 
   [amtEl, fromEl, toEl].forEach(function (el) {

@@ -8,15 +8,15 @@ import { tags } from '@lezer/highlight';
 
 /** GitHub light palette — mirrors highlight.js/styles/github.min.css */
 const gh = {
-  text: 'var(--text)',
-  comment: 'var(--text-muted)',
+  text: 'var(--mn-fg)',
+  comment: 'var(--mn-fg-muted)',
   keyword: 'var(--cm-keyword)',
   title: 'var(--cm-title)',
   attr: 'var(--cm-attr)',
   string: 'var(--cm-string)',
-  builtin: 'var(--warning)',
-  tag: 'var(--success)',
-  invalid: 'var(--danger)',
+  builtin: 'var(--mn-warning)',
+  tag: 'var(--mn-success)',
+  invalid: 'var(--mn-danger)',
 } as const;
 
 const minnowHighlightStyle = HighlightStyle.define([

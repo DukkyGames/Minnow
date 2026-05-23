@@ -5,8 +5,8 @@ Minimal line chart inside `.rw-chart`. Recharts from the host import map.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; min-width: 0; font-family: var(--font-ui); color: var(--text); }
-.rw-chart { height: 220px; min-height: 220px; min-width: 0; width: 100%; border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.rw { max-width: 680px; min-width: 0; font-family: var(--font-ui); color: var(--mn-fg); }
+.rw-chart { height: 220px; min-height: 220px; min-width: 0; width: 100%; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-1); }
 </style>
 <div id="root"></div>
 <script type="module">
@@ -36,10 +36,10 @@ function App() {
       <div className="rw-chart">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 12, right: 12, bottom: 8, left: 32 }}>
-            <XAxis dataKey="x" stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-            <YAxis stroke="var(--text-muted)" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-            <Tooltip contentStyle={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-            <Line type="monotone" dataKey="y" stroke="var(--accent)" strokeWidth={2} dot={{ fill: 'var(--accent)', r: 3 }} />
+            <XAxis dataKey="x" stroke="var(--mn-fg-muted)" tick={{ fill: 'var(--mn-fg-muted)', fontSize: 11 }} />
+            <YAxis stroke="var(--mn-fg-muted)" tick={{ fill: 'var(--mn-fg-muted)', fontSize: 11 }} />
+            <Tooltip contentStyle={{ background: 'var(--mn-surface-1)', border: '0.5px solid var(--mn-border)', borderRadius: 'var(--radius-sm)', color: 'var(--mn-fg)' }} />
+            <Line type="monotone" dataKey="y" stroke="var(--mn-accent)" strokeWidth={2} dot={{ fill: 'var(--mn-accent)', r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

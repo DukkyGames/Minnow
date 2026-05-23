@@ -21,7 +21,7 @@ function setupDom(): void {
   globalThis.MutationObserver = window.MutationObserver;
   globalThis.getComputedStyle = window.getComputedStyle.bind(window);
   const root = document.documentElement;
-  root.setAttribute('data-theme', 'light');
+  root.setAttribute('data-theme', 'sage-dark');
   for (const name of REEF_THEME_TOKEN_NAMES) {
     root.style.setProperty(name, `test-${name}`);
   }
@@ -36,14 +36,14 @@ describe('theme-forward', () => {
   test('readThemeVarsFromElement returns non-empty token map', () => {
     setupDom();
     const vars = readThemeVarsFromElement(document.documentElement);
-    assert.equal(vars['--bg'], 'test---bg');
-    assert.ok(vars['--text']);
+    assert.equal(vars['--mn-bg'], 'test---mn-bg');
+    assert.ok(vars['--mn-fg']);
   });
 
   test('buildThemeCssBlock emits :root rules', () => {
-    const css = buildThemeCssBlock({ '--text': 'oklch(50% 0 0)' });
+    const css = buildThemeCssBlock({ '--mn-fg': '#1c2127' });
     assert.match(css, /:root/);
-    assert.match(css, /--text:\s*oklch\(50% 0 0\)/);
+    assert.match(css, /--mn-fg:\s*#1c2127/);
   });
 
   test('subscribeThemeChanges fires when data-theme changes', () => {
@@ -53,8 +53,8 @@ describe('theme-forward', () => {
       calls += 1;
     });
     assert.equal(calls, 1);
-    document.documentElement.setAttribute('data-theme', 'dark');
-    assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
+    document.documentElement.setAttribute('data-theme', 'sage-light');
+    assert.equal(document.documentElement.getAttribute('data-theme'), 'sage-light');
     themeUnsub();
     themeUnsub = null;
   });

@@ -16,9 +16,9 @@
 
 
 
-.view-mode-toggle-btn--accent:not(:disabled) {
+.view-mode-toggle-btn--mn-accent:not(:disabled) {
 
-  color: var(--accent);
+  color: var(--mn-accent);
 
 }
 
@@ -26,9 +26,9 @@
 
 @media (hover: hover) and (pointer: fine) {
 
-  .icon-btn.view-mode-toggle-btn--accent:not(:disabled):hover {
+  .icon-btn.view-mode-toggle-btn--mn-accent:not(:disabled):hover {
 
-    color: var(--text-hover);
+    color: var(--mn-fg-on-accent);
 
   }
 
@@ -93,16 +93,16 @@
   height: 18px;
 }
 
-.board-header__icon-btn--danger:not(:disabled) {
-  border-color: var(--tool-call-status-fail-border);
-  color: var(--danger);
+.board-header__icon-btn--mn-danger:not(:disabled) {
+  border-color: var(--mn-danger-border);
+  color: var(--mn-danger);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .icon-btn.board-header__icon-btn--danger:not(:disabled):hover {
-    border-color: var(--banner-danger-hover-border);
-    background: var(--banner-danger-hover-bg);
-    color: var(--banner-danger-hover-text);
+  .icon-btn.board-header__icon-btn--mn-danger:not(:disabled):hover {
+    border-color: var(--mn-danger-border);
+    background: var(--mn-danger-soft);
+    color: var(--mn-danger-ink);
   }
 }
 

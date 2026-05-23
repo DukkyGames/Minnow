@@ -2,28 +2,28 @@ Multiple-choice quiz, one question at a time, with score and optional restart.
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw h2 { margin: 0 0 8px; font-size: 1rem; font-weight: 500; }
-.rw-progress { font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 12px; font-weight: 400; }
-.rw-q { font-size: 0.9375rem; font-weight: 500; margin-bottom: 12px; color: var(--text); }
+.rw-progress { font-size: 0.8125rem; color: var(--mn-fg-muted); margin-bottom: 12px; font-weight: 400; }
+.rw-q { font-size: 0.9375rem; font-weight: 500; margin-bottom: 12px; color: var(--mn-fg); }
 .rw-opts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .rw-opt {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-  border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer;
+  border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-1); cursor: pointer;
 }
-.rw-opt:has(input:checked) { border-color: var(--border-strong); background: var(--surface-elevated); }
-.rw-opt input { accent-color: var(--accent); }
-.rw-opt span { font-size: 0.875rem; font-weight: 400; color: var(--text); }
+.rw-opt:has(input:checked) { border-color: var(--mn-border-strong); background: var(--mn-surface-elevated); }
+.rw-opt input { accent-color: var(--mn-accent); }
+.rw-opt span { font-size: 0.875rem; font-weight: 400; color: var(--mn-fg); }
 .rw-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .rw-actions button {
-  padding: 8px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius-md);
-  background: var(--accent); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  padding: 8px 14px; border: 0.5px solid var(--mn-border-strong); border-radius: var(--radius-md);
+  background: var(--mn-accent); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem; font-weight: 500; cursor: pointer;
 }
 .rw-actions button.secondary {
-  background: var(--surface); border-color: var(--border); color: var(--text-muted);
+  background: var(--mn-surface-1); border-color: var(--mn-border); color: var(--mn-fg-muted);
 }
-.rw-result { padding: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-elevated); color: var(--text); }
-.rw-result strong { color: var(--accent); font-weight: 500; }
+.rw-result { padding: 12px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-md); background: var(--mn-surface-elevated); color: var(--mn-fg); }
+.rw-result strong { color: var(--mn-accent); font-weight: 500; }
 </style>
 <div class="rw" id="quiz">
   <h2>Quick quiz</h2>

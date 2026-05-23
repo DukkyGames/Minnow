@@ -5,14 +5,14 @@ One labeled field with inline `.err` hint. Validation skeleton from `form.md` â€
 
 ```reef-widget
 <style>
-.rw { max-width: 680px; font-family: var(--font-ui); color: var(--text); }
+.rw { max-width: 680px; font-family: var(--font-ui); color: var(--mn-fg); }
 .rw label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 0.875rem; }
 .rw input {
-  width: 100%; padding: 8px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 0.875rem;
+  width: 100%; padding: 8px 10px; border: 0.5px solid var(--mn-border); border-radius: var(--radius-sm);
+  background: var(--mn-surface-1); color: var(--mn-fg); font-family: var(--font-ui); font-size: 0.875rem;
   box-sizing: border-box;
 }
-.rw .err { margin-top: 4px; color: var(--danger, var(--text)); font-size: 0.75rem; min-height: 1rem; }
+.rw .err { margin-top: 4px; color: var(--mn-danger, var(--mn-fg)); font-size: 0.75rem; min-height: 1rem; }
 </style>
 <div class="rw">
   <label for="email">Email</label>
