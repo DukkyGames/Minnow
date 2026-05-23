@@ -16,6 +16,7 @@ import './styles/input.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
 import './styles/stats.css';
+import './styles/agent-activity-panel.css';
 import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/composer-controls.css';
@@ -122,6 +123,7 @@ import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-sele
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
+import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
   initComposerToolsPopover,
@@ -197,6 +199,7 @@ export async function initApp(): Promise<void> {
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
   initSubAgentUi();
+  initAgentActivityPanel();
   const { startSupervisor } = await import('./agents/supervisor');
   startSupervisor();
   fillSystemPromptPresetSelect();

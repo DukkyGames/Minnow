@@ -49,6 +49,11 @@ import {
   scheduleChatTitleGeneration,
 } from '../chat/titles/schedule';
 import {
+  clearMainTurnActivity,
+  emitMainTurnActivity,
+  patchMainTurnActivity,
+} from '../chat/main-turn-activity';
+import {
   getActiveChat,
   scheduleSaveSessions,
   touchChat,
@@ -647,6 +652,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     });
   }
 
+  const mainTurnLabel = uiDesignerCtx.active
+    ? 'UI Designer'
+    : activeWorkAgent?.label?.trim() || 'Main turn';
+  const turnStartedAtMs = Date.now();
+  emitMainTurnActivity({
+    chatId: chat.id,
+    phase: 'generating',
+    currentTool: null,
+    workAgentLabel: mainTurnLabel,
+    modelId: sendModelId,
+    providerId: sendProviderId,
+    startedAtMs: turnStartedAtMs,
+  });
+
   const agentStatusSuffix = uiDesignerCtx.active
     ? ' (UI Designer)'
     : activeWorkAgent?.label
@@ -713,6 +732,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   const thoughtPhaseCallbacks = {
     onThinkingStart: (): void => {
+      patchMainTurnActivity(chat.id, { phase: 'thinking', currentTool: null });
       if (isStreamDomVisible(chat.id)) {
         streamCtx.streamStatus.setPhase('thinking');
       }
@@ -854,6 +874,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isStreamDomVisible(chat.id)) {
           setStatus('spin', 'Running tools…');
         }
+        patchMainTurnActivity(chat.id, { phase: 'tools' });
 
         const area = document.getElementById('chatArea')!;
         const paintToolCallsInChat =
@@ -883,6 +904,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
           const tc = turnResult.toolCalls[ti]!;
           const args = parseToolArguments(tc.function.arguments);
+          patchMainTurnActivity(chat.id, {
+            phase: 'tools',
+            currentTool: tc.function.name,
+          });
           const toolWrap = renderToolCall(tc.function.name, args);
           toolWrap.dataset.toolCallId = tc.id;
           if (paintToolCallsInChat) {
@@ -952,6 +977,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isStreamDomVisible(chat.id)) {
           setStatus('spin', 'Generating reply…');
         }
+        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
         ephemeralPostToolInstruction = undefined;
         continue;
       }
@@ -1015,6 +1041,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         if (isStreamDomVisible(chat.id)) {
           setStatus('spin', 'Generating reply…');
         }
+        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
         continue;
       }
 
@@ -1188,6 +1215,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (completedNormally) {
       clearAttachments();
     }
+    clearMainTurnActivity(chat.id);
     if (ownsGlobalStreaming) {
       setStreaming(false);
       setSidebarStreamPhase(null);
