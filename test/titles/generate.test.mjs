@@ -65,6 +65,82 @@ describe('generateChatTitle', () => {
     assert.equal(result, null);
   });
 
+  test('ignores reasoning even when it looks like a valid title', async () => {
+    const port = {
+      async complete() {
+        return {
+          choices: [
+            {
+              message: {
+                content: '',
+                reasoning: 'Redis cache tuning',
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    const result = await generateChatTitle(
+      'How do I tune Redis?',
+      { modelId: 'test-model', maxTokens: 24, temperature: 0.3 },
+      port,
+    );
+
+    assert.equal(result, null);
+  });
+
+  test('rejects content duplicated from reasoning channel', async () => {
+    const leak = "Here's a thinking process for your request";
+    const port = {
+      async complete() {
+        return {
+          choices: [
+            {
+              message: {
+                content: leak,
+                reasoning: leak,
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    const result = await generateChatTitle(
+      'How do I tune Redis?',
+      { modelId: 'test-model', maxTokens: 24, temperature: 0.3 },
+      port,
+    );
+
+    assert.equal(result, null);
+  });
+
+  test('rejects thinking leaked into content', async () => {
+    const port = {
+      async complete() {
+        return {
+          choices: [
+            {
+              message: {
+                content: 'The user is asking about Redis cache tuning',
+                reasoning: 'separate reasoning channel text',
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    const result = await generateChatTitle(
+      'How do I tune Redis?',
+      { modelId: 'test-model', maxTokens: 24, temperature: 0.3 },
+      port,
+    );
+
+    assert.equal(result, null);
+  });
+
   test('HTTP failure returns null', async () => {
     const port = {
       async complete() {
