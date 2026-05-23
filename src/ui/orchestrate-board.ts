@@ -13,7 +13,7 @@ import {
 } from '../chat/orchestrate/resume-message';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { stopGeneration } from '../chat/stop-generation';
-import { isActiveChatStreaming } from '../chat/streaming-state';
+import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
 import {
   cancelAllForParentTurn,
   getSubAgentRun,
@@ -21,9 +21,15 @@ import {
 } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus } from '../agents/types';
-import { getBoardProgressPercent } from '../state/orchestrate-board-store';
+import {
+  getBoardProgressPercent,
+  getOrchestrateBoardElapsedMs,
+  syncOrchestrateBoardTimer,
+  type OrchestrateBoardTimerContext,
+} from '../state/orchestrate-board-store';
+import { normalizeModeId } from '../chat/modes/types';
 import { subscribeBoardChanges } from '../state/orchestrate-board-events';
-import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
+import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import type {
   BoardTask,
@@ -160,14 +166,48 @@ function stopBoardLiveTick(): void {
   boardLiveTickTimer = null;
 }
 
+/** Build timer sync context for a chat (uses per-chat streaming, not active-chat only). */
+function boardTimerContextForChat(
+  chat: Chat,
+  activeRunCount: number,
+): OrchestrateBoardTimerContext {
+  return {
+    isStreaming: isChatStreaming(chat.id),
+    activeRunCount,
+    userStopped: isUserStoppedChat(chat),
+  };
+}
+
+function tickOrchestrateBoardSession(): void {
+  const session = currentSession;
+  if (!session) {
+    stopBoardLiveTick();
+    return;
+  }
+  const chat = findChatById(session.chatId);
+  if (!chat?.orchestrateBoard) {
+    stopBoardLiveTick();
+    return;
+  }
+  const activeRuns = listActiveSubAgentRuns().filter(
+    (r) =>
+      r.parentChatId === chat.id &&
+      (r.status === 'queued' || r.status === 'running'),
+  );
+  syncOrchestrateBoardTimer(chat, boardTimerContextForChat(chat, activeRuns.length));
+  if (
+    isOrchestrateBoardViewActive() &&
+    normalizeModeId(getActiveChat().modeId) === 'orchestrate' &&
+    getActiveChat().id === chat.id
+  ) {
+    refreshActiveBoardIfMounted();
+  }
+}
+
 function startBoardLiveTick(): void {
   stopBoardLiveTick();
   boardLiveTickTimer = setInterval(() => {
-    if (!isOrchestrateBoardViewActive()) {
-      stopBoardLiveTick();
-      return;
-    }
-    refreshActiveBoardIfMounted();
+    tickOrchestrateBoardSession();
   }, BOARD_LIVE_TICK_MS);
 }
 
@@ -572,9 +612,11 @@ function buildBoardHeader(
 }
 
 function boardHeaderMetrics(
+  chat: Chat,
   board: NonNullable<Chat['orchestrateBoard']>,
   activeRunCount: number,
 ): BoardHeaderMetrics {
+  syncOrchestrateBoardTimer(chat, boardTimerContextForChat(chat, activeRunCount));
   const progress = getBoardProgressPercent(board);
   const wavesComplete = board.waves.filter((w) => w.status === 'complete').length;
   const done = board.tasks.filter((t) => t.status === 'complete').length;
@@ -585,7 +627,7 @@ function boardHeaderMetrics(
     wavesComplete,
     totalWaves: board.waves.length,
     activeRuns: activeRunCount,
-    elapsed: formatElapsed(Date.now() - board.startedAt),
+    elapsed: formatElapsed(getOrchestrateBoardElapsedMs(board)),
   };
 }
 
@@ -759,7 +801,7 @@ function refreshBoardDom(
       (r.status === 'queued' || r.status === 'running'),
   );
   const isStreaming = isActiveChatStreaming();
-  const metrics = boardHeaderMetrics(board, activeRuns.length);
+  const metrics = boardHeaderMetrics(chat, board, activeRuns.length);
   const userStopped = isUserStoppedChat(chat);
   const headerStatus = deriveBoardHeaderStatus(
     board,
@@ -1276,7 +1318,7 @@ export function renderBoardView(chat: Chat): void {
     isOrchestrateWatchdogStalled(chatForRender.id),
   );
   const activity = deriveOrchestratorLastActivity(chatForRender, isStreaming);
-  const metrics = boardHeaderMetrics(board, activeRuns.length);
+  const metrics = boardHeaderMetrics(chatForRender, board, activeRuns.length);
   const header = buildBoardHeader(
     chatForRender,
     board,

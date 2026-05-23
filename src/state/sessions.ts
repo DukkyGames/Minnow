@@ -348,6 +348,10 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     typeof r.activeParentTurnId === 'string' && r.activeParentTurnId.trim()
       ? r.activeParentTurnId.trim()
       : undefined;
+  const timerAccumulatedMs =
+    typeof r.timerAccumulatedMs === 'number' ? r.timerAccumulatedMs : undefined;
+  const timerSegmentStartedAt =
+    typeof r.timerSegmentStartedAt === 'number' ? r.timerSegmentStartedAt : undefined;
   return {
     planPath,
     tasks,
@@ -355,6 +359,8 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     startedAt,
     lastUpdatedAt,
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
+    ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
+    ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
   };
 }
 

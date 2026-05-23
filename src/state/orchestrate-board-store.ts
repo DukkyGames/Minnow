@@ -27,6 +27,77 @@ export function setBoardNowForTests(fn: (() => number) | null): void {
   boardNowMs = fn ?? (() => Date.now());
 }
 
+export type OrchestrateBoardTimerContext = {
+  isStreaming: boolean;
+  activeRunCount: number;
+  userStopped: boolean;
+};
+
+/** Ensure timer fields exist on boards saved before pause-aware elapsed was added. */
+function ensureBoardTimerFields(board: OrchestrateBoardState, nowMs: number): void {
+  if (typeof board.timerAccumulatedMs !== 'number') {
+    board.timerAccumulatedMs = Math.max(0, nowMs - board.startedAt);
+  }
+}
+
+/** True while the parent orchestrator streams, sub-agents run, or tasks are in flight. */
+export function shouldOrchestrateBoardTimerRun(
+  board: OrchestrateBoardState,
+  ctx: OrchestrateBoardTimerContext,
+): boolean {
+  if (ctx.userStopped) return false;
+  const total = board.tasks.length;
+  const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
+  if (total > 0 && completeCount === total) return false;
+  if (ctx.isStreaming && board.activeParentTurnId) return true;
+  if (ctx.activeRunCount > 0) return true;
+  return board.tasks.some(
+    (t) => t.status === 'in_progress' || t.status === 'testing',
+  );
+}
+
+/** Elapsed active orchestration time (open segment + accumulated paused total). */
+export function getOrchestrateBoardElapsedMs(
+  board: OrchestrateBoardState,
+  nowMs = boardNowMs(),
+): number {
+  ensureBoardTimerFields(board, nowMs);
+  let ms = board.timerAccumulatedMs ?? 0;
+  if (typeof board.timerSegmentStartedAt === 'number') {
+    ms += Math.max(0, nowMs - board.timerSegmentStartedAt);
+  }
+  return ms;
+}
+
+/** Open/close timer segments when orchestration transitions between active and idle. */
+export function syncOrchestrateBoardTimer(
+  chat: Chat,
+  ctx: OrchestrateBoardTimerContext,
+): void {
+  const board = chat.orchestrateBoard;
+  if (!board) return;
+  const nowMs = boardNowMs();
+  ensureBoardTimerFields(board, nowMs);
+  const shouldRun = shouldOrchestrateBoardTimerRun(board, ctx);
+  const segmentStart = board.timerSegmentStartedAt;
+  let changed = false;
+
+  if (shouldRun && segmentStart == null) {
+    board.timerSegmentStartedAt = nowMs;
+    changed = true;
+  } else if (!shouldRun && typeof segmentStart === 'number') {
+    board.timerAccumulatedMs =
+      (board.timerAccumulatedMs ?? 0) + Math.max(0, nowMs - segmentStart);
+    delete board.timerSegmentStartedAt;
+    changed = true;
+  }
+
+  if (!changed) return;
+  board.lastUpdatedAt = nowMs;
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
 const ACTIVE_WAVE_STATUSES = new Set<BoardTaskStatus>([
   'in_progress',
   'testing',
@@ -111,6 +182,7 @@ export function initBoard(chat: Chat, input: InitBoardInput): OrchestrateBoardSt
     waves,
     startedAt: now,
     lastUpdatedAt: now,
+    timerAccumulatedMs: 0,
   };
   recomputeWaveRollup(board);
   chat.orchestrateBoard = board;
