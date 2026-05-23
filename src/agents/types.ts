@@ -2,7 +2,7 @@
  * Sub-agent orchestration types (Step 09).
  */
 
-import type { ApiMessage, BoardCategory } from '../types';
+import type { ApiMessage, BoardCategory, Stats, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 
 /** Lifecycle status for a sub-agent run. */
@@ -71,6 +71,10 @@ export interface SubAgentRun {
   category?: BoardCategory;
   /** Linked board task id when spawned from board_init tasks. */
   boardTaskId?: string | null;
+  /** Token usage accumulated across sub-agent LLM turns (Orchestrate stats rollup). */
+  usage?: Usage;
+  /** Timing stats per turn, averaged when rolled into parent lastStats. */
+  stats?: Stats;
 }
 
 /** Input to spawn a sub-agent. */
@@ -135,6 +139,8 @@ export interface SubAgentRunnerOutput {
   messages: ApiMessage[];
   /** True when the tool loop hit {@link SubAgentRunner.run maxToolTurns} without a final answer. */
   toolTurnLimitExhausted?: boolean;
+  usage?: Usage;
+  stats?: Stats;
 }
 
 /** Injectable runner for tests (deterministic mock). */

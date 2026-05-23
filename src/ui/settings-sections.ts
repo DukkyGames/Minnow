@@ -734,7 +734,12 @@ async function renderSubAgentsSection(): Promise<void> {
   if (isAsyncSectionRenderStale('sub-agents', generation)) return;
 
   const persistGlobal = async (
-    patch: Partial<Pick<typeof config, 'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs'>>,
+    patch: Partial<
+      Pick<
+        typeof config,
+        'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs' | 'defaultMaxToolTurns'
+      >
+    >,
   ): Promise<void> => {
     const fresh = await loadSubAgentConfig();
     const ok = await saveSubAgentConfigToServer({ ...fresh, ...patch });
@@ -780,6 +785,22 @@ async function renderSubAgentsSection(): Promise<void> {
   timeoutWrap.appendChild(timeoutInput);
   timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
   timeoutDd.appendChild(timeoutWrap);
+
+  const defaultTurnsDd = addTerm('Default max tool turns');
+  const defaultTurnsInput = document.createElement('input');
+  defaultTurnsInput.type = 'number';
+  defaultTurnsInput.className = 'settings-select settings-kv-input';
+  defaultTurnsInput.min = '1';
+  defaultTurnsInput.max = '64';
+  defaultTurnsInput.step = '1';
+  defaultTurnsInput.value = String(
+    config.defaultMaxToolTurns ?? 12,
+  );
+  defaultTurnsInput.setAttribute(
+    'aria-label',
+    'Default sub-agent maximum tool turns when a type has no override',
+  );
+  defaultTurnsDd.appendChild(defaultTurnsInput);
 
   mount.appendChild(summary);
 
@@ -841,6 +862,12 @@ async function renderSubAgentsSection(): Promise<void> {
     const value = Math.max(1000, Math.floor(Number(timeoutInput.value) || 1000));
     timeoutInput.value = String(value);
     void persistGlobal({ defaultTimeoutMs: value });
+  });
+
+  defaultTurnsInput.addEventListener('change', () => {
+    const value = Math.min(64, Math.max(1, Math.floor(Number(defaultTurnsInput.value) || 1)));
+    defaultTurnsInput.value = String(value);
+    void persistGlobal({ defaultMaxToolTurns: value });
   });
 }
 

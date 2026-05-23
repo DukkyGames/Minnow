@@ -14,7 +14,8 @@ import {
 } from '../api/chat';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
-import type { ApiMessage, ChatCompletionChunk, ToolCallAccumulator } from '../types';
+import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
+import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
@@ -63,6 +64,7 @@ async function streamSubAgentTurn(
   fullText: string;
   finishReason: string | undefined;
   toolCalls: ReturnType<typeof finalizeToolCalls>;
+  streamMeta: StreamMetaAccumulator;
 }> {
   const provider = await getActiveProvider(providerId);
   const res = await postChatCompletions(provider, body, signal);
@@ -109,6 +111,7 @@ async function streamSubAgentTurn(
     fullText,
     finishReason,
     toolCalls: finalizeToolCalls(toolAcc),
+    streamMeta,
   };
 }
 
@@ -125,6 +128,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     const maxTokens = 2048;
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
     let lastProgressEmit = 0;
+    const usageSegments: Usage[] = [];
+    const statsSegments: Array<{ stats: Stats; usage: Usage }> = [];
 
     const emitProgress = (partialAssistant?: string, force = false): void => {
       if (!input.onMessagesChange) return;
@@ -164,6 +169,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           emitProgress(streamingAssistant);
         },
       );
+
+      const turnUsage = turnResult.streamMeta.usage ?? {};
+      const turnStats = turnResult.streamMeta.stats ?? {};
+      if (Object.keys(turnUsage).length > 0) {
+        usageSegments.push(turnUsage);
+      }
+      if (Object.keys(turnStats).length > 0 || Object.keys(turnUsage).length > 0) {
+        statsSegments.push({ stats: turnStats, usage: turnUsage });
+      }
 
       if (
         turnResult.finishReason === 'tool_calls' &&
@@ -213,7 +227,13 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       messages.push({ role: 'assistant', content: summary });
       emitProgress(undefined, true);
-      return { summary, toolTurns, messages };
+      return {
+        summary,
+        toolTurns,
+        messages,
+        usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+        stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+      };
     }
 
     emitProgress(undefined, true);
@@ -222,6 +242,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       toolTurns,
       messages,
       toolTurnLimitExhausted: true,
+      usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+      stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
     };
   },
 };
