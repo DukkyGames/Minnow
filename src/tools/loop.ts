@@ -87,10 +87,12 @@ import {
   renderBoardView,
 } from '../ui/orchestrate-board';
 import {
+  isBoardViewActive,
   isOrchestrateBoardViewActive,
   refreshViewModeToggleDisabled,
   syncViewModeToggleFromActiveChat,
 } from '../ui/view-mode-toggle';
+import { setBugBoardExecutorContext } from './bug-board-tools';
 import {
   appendBubble,
   appendStats,
@@ -559,6 +561,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     parentChatId: chat.id,
   });
   setBoardExecutorContext({ chatId: chat.id });
+  setBugBoardExecutorContext({ chatId: chat.id });
 
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.orchestrateBoard) {
     chat.orchestrateBoard.activeParentTurnId = parentTurnId;
@@ -878,7 +881,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
         const area = document.getElementById('chatArea')!;
         const paintToolCallsInChat =
-          !isOrchestrateBoardViewActive() && isStreamDomVisible(chat.id);
+          !isBoardViewActive() && isStreamDomVisible(chat.id);
         const STOPPED_TOOL_MSG = 'Stopped by user.';
         for (let ti = 0; ti < turnResult.toolCalls.length; ti++) {
           if (chatSignal.aborted) {
@@ -923,6 +926,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             parentToolCallId: tc.id,
           });
           setBoardExecutorContext({ chatId: chat.id });
+          setBugBoardExecutorContext({ chatId: chat.id });
 
           const planBlock = uiDesignerCtx.active
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
@@ -955,6 +959,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
         if (isOrchestrateBoardViewActive() && getActiveChat().id === chat.id) {
           refreshActiveBoardIfMounted();
+        }
+        if (
+          normalizeModeId(chat.modeId) === 'debug' &&
+          chat.viewMode === 'board' &&
+          getActiveChat().id === chat.id
+        ) {
+          void import('../ui/bug-board').then((m) => m.refreshActiveBugBoardIfMounted());
         }
 
         if (turn + 1 >= maxToolTurns) {
@@ -1202,6 +1213,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     setSubAgentExecutorContext(null);
     setBoardExecutorContext(null);
+    setBugBoardExecutorContext(null);
     if (
       normalizeModeId(chat.modeId) === 'orchestrate' &&
       chat.orchestrateBoard?.activeParentTurnId

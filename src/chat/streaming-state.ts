@@ -35,7 +35,8 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
-  if (normalizeModeId(active.modeId) === 'orchestrate' && active.viewMode === 'board') {
+  const mode = normalizeModeId(active.modeId);
+  if ((mode === 'orchestrate' || mode === 'debug') && active.viewMode === 'board') {
     return false;
   }
   return true;

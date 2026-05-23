@@ -33,6 +33,7 @@ import './styles/sub-agent-drawer.css';
 import './styles/orchestrate-plan-selector.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
+import './styles/bug-board.css';
 
 import 'highlight.js/styles/github.min.css';
 

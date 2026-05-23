@@ -1,0 +1,59 @@
+/**
+ * Bug tracker board — extends orchestrate board layout.
+ */
+
+.bug-board-kanban {
+  grid-template-columns: repeat(5, minmax(10rem, 1fr));
+}
+
+.bug-add-section {
+  padding: 0 4px;
+}
+
+.bug-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.bug-add-form__input {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  min-width: 8rem;
+}
+
+.bug-add-form textarea.bug-add-form__input {
+  flex: 1 1 12rem;
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.bug-task-card__description,
+.bug-task-card__notes {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+
+.bug-task-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.board-btn--sm {
+  font-size: 0.72rem;
+  padding: 4px 8px;
+}

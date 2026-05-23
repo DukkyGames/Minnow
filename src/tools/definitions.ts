@@ -261,7 +261,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['build', 'plan', 'orchestrate', 'research', 'reef'],
+          enum: ['build', 'plan', 'orchestrate', 'research', 'reef', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -281,7 +281,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['build', 'plan', 'orchestrate', 'research', 'reef'],
+          enum: ['build', 'plan', 'orchestrate', 'research', 'reef', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {
@@ -832,6 +832,59 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     category: 'agents',
     serverRequired: false,
     definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
+  },
+  {
+    id: 'bug_add',
+    label: 'Bug add',
+    description: 'Add a bug card to the Reported column (debug mode).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'bug_add',
+      'File a new bug on the bug tracker board.',
+      {
+        title: { type: 'string', description: 'Short bug title' },
+        description: { type: 'string', description: 'Reproduction steps and context' },
+        severity: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          description: 'Triage severity',
+        },
+        bug_id: { type: 'string', description: 'Optional stable id (auto-generated if omitted)' },
+      },
+      ['title'],
+    ),
+  },
+  {
+    id: 'bug_update',
+    label: 'Bug update',
+    description: 'Update bug column, notes, or plan path (debug mode).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'bug_update',
+      'Patch one bug card by bug_id.',
+      {
+        bug_id: { type: 'string', description: 'Bug card id' },
+        column: {
+          type: 'string',
+          enum: ['reported', 'investigating', 'planned', 'fixing', 'complete'],
+        },
+        notes: { type: 'string' },
+        plan_path: { type: 'string', description: 'Workspace-relative fix plan path' },
+        investigate_run_id: { type: 'string' },
+        plan_run_id: { type: 'string' },
+      },
+      ['bug_id'],
+    ),
+  },
+  {
+    id: 'bug_get_state',
+    label: 'Bug get state',
+    description: 'Return full bug board JSON (debug mode).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema('bug_get_state', 'Read bugBoard snapshot.', {}, []),
   },
   {
     id: 'report_orchestrator_status',

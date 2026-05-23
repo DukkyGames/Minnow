@@ -3,7 +3,13 @@
  */
 
 /** Stable ids — do not rename without migration. */
-export type ModeId = 'build' | 'plan' | 'orchestrate' | 'research' | 'reef';
+export type ModeId =
+  | 'build'
+  | 'plan'
+  | 'orchestrate'
+  | 'research'
+  | 'reef'
+  | 'debug';
 
 export const DEFAULT_MODE_ID: ModeId = 'build';
 
@@ -13,6 +19,7 @@ export const MODE_IDS: readonly ModeId[] = [
   'orchestrate',
   'research',
   'reef',
+  'debug',
 ] as const;
 
 /** Type guard for persisted mode ids. */
