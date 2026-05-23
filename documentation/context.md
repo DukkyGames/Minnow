@@ -90,7 +90,7 @@ Minnow/
 │   │   └── list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
 │   ├── tools/
-    │   │   ├── definitions.ts      # 56-tool catalog (OpenAI function schemas)
+    │   │   ├── definitions.ts      # 59-tool catalog (OpenAI function schemas)
 │   │   ├── config.ts           # tools.json sync, permissions, enabled defs
 │   │   ├── browser-executor.ts # Web/utility browser handlers (ask_question via client + UI; sub-agent/board via dedicated executors)
 │   │   ├── client.ts           # ping, executeTool router, approval gate, ask_question → UI queue
