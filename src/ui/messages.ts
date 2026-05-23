@@ -45,6 +45,10 @@ import {
   attachMessageActions,
   type MessageTurnKind,
 } from './message-actions';
+import {
+  renderUserMessageBubble,
+  type UserBubbleRenderOptions,
+} from './user-message-bubble';
 
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
@@ -167,7 +171,7 @@ export function renderChatFromHistory(chat: Chat): void {
         turnKind: 'user',
         chatId: chat.id,
         modeId: chat.modeId,
-      });
+      }, { renderFromHistory: true });
       attachMessageActions(wrap, {
         chatId: chat.id,
         historyIndex: i,
@@ -260,14 +264,20 @@ export interface BubbleRenderMeta {
   historyIndex: number;
   turnKind: MessageTurnKind;
   chatId: string;
-  /** Mode of the chat being rendered (reef widget mount guard). */
+  /** Mode of the chat when the bubble was rendered (passed to markdown renderer). */
   modeId?: string;
+}
+
+export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
+  /** When true, paint chips from persisted history content (default for user rows). */
+  renderFromHistory?: boolean;
 }
 
 export function appendBubble(
   role: 'user' | 'assistant',
   content: string,
   meta?: BubbleRenderMeta,
+  userOptions?: AppendUserBubbleOptions,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const chat = getActiveChat();
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
@@ -296,6 +306,9 @@ export function appendBubble(
       streaming: false,
       modeId: meta?.modeId ?? chat.modeId,
     });
+  } else if (userOptions?.renderFromHistory !== false) {
+    renderUserMessageBubble(bubble, content, userOptions);
+    bubble.dataset.historyContent = content;
   } else {
     bubble.textContent = content;
   }
