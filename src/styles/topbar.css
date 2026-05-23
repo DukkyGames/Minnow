@@ -228,12 +228,24 @@
   height: 18px;
 }
 
+/* Raster topbar icons (e.g. Benchmark speed gauge) */
+.icon-btn .icon-img {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+}
+
 /* Hover affordances only when the device supports hover (not touch-primary) */
 @media (hover: hover) and (pointer: fine) {
   .icon-btn:hover {
     border-color: var(--border-strong);
     color: var(--bg);
     background: var(--accent);
+  }
+
+  .icon-btn:hover .icon-img {
+    filter: brightness(0) invert(1);
   }
 }
 

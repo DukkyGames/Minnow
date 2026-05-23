@@ -16,7 +16,7 @@ export function repoPath(...segments: string[]): string {
 /** Load shipped mode prompt files into a Vite-style glob map for registerPromptFilesFromRaw. */
 export async function loadBuiltinModePromptMap(): Promise<Record<string, string>> {
   const modesDir = repoPath('src/chat/prompts/modes');
-  const ids = ['build', 'plan', 'orchestrate', 'research', 'reef'] as const;
+  const ids = ['build', 'plan', 'orchestrate', 'research', 'reef', 'debug'] as const;
   const map: Record<string, string> = {};
   for (const id of ids) {
     for (const profile of ['full', 'lite'] as const) {

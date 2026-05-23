@@ -2,7 +2,7 @@
  * Bench run types: deterministic battery against the active model.
  */
 
-import type { Stats, Usage } from '../types';
+import type { Stats, Usage } from '../types.ts';
 
 /** Suite identifiers for the benchmark runner. */
 export type SuiteId =

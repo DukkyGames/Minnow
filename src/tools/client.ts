@@ -5,6 +5,7 @@
 
 import { executeBrowserTool } from './browser-executor';
 import { executeBoardTool } from './board-tools';
+import { executeBugBoardTool } from './bug-board-tools';
 import { executeSubAgentTool } from './sub-agent-executor';
 import { runCommandWithTerminalStream } from '../ui/terminal-panel';
 import {
@@ -242,6 +243,13 @@ async function executeToolInner(
     if (blocked) return blocked;
     const text = await executeBoardTool(name, args);
     maybeRecordOrchestrateParentTool(name, context);
+    return { content: text };
+  }
+
+  if (name === 'bug_add' || name === 'bug_update' || name === 'bug_get_state') {
+    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
+    if (blocked) return blocked;
+    const text = await executeBugBoardTool(name, args);
     return { content: text };
   }
 

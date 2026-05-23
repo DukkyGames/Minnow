@@ -37,6 +37,7 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'research',
   'orchestrate',
   'reef',
+  'debug',
 ]);
 
 /** Lite truncation caps when no lite template exists. */

@@ -18,7 +18,7 @@ import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } f
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
-import type { LlmTurnTiming } from './types';
+import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const DEFAULT_TEMPERATURE = 0.2;

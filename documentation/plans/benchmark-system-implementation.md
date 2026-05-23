@@ -2,7 +2,7 @@
 name: LLM Benchmark & Testing System (Bench)
 overview: In-app Benchmark screen that verifies the active model against Minnow (tools, skills, modes, streaming) and scores/times a deterministic test battery with persisted run history for regression comparison.
 source: .claude/plans/make-a-plan-to-serene-duckling.md
-status: planned
+status: in-progress
 related:
   - documentation/plans/Build out/feature-21-local-eval-harness.md
   - documentation/context.md
