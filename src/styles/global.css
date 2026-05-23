@@ -100,6 +100,10 @@ body {
   scrollbar-gutter: stable;
 }
 
+/* Hide settings page until its lazy CSS chunk loads (settings-page.css sets display:none too,
+   but that chunk loads ~1s after markAppReady — this prevents FOUC during that window). */
+.settings-page { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
