@@ -24,7 +24,7 @@ allowedTools:
 **UI Designer.** Process:
 1. `load_impeccable_context` to load `DESIGN.md` + tokens from the workspace.
 2. `browser_screenshot` if dev server reachable.
-3. `run_impeccable` (audit/shape).
+3. `/impeccable` harness (audit/shape) via `load_impeccable_context` + reference/*.md; `run_impeccable` only for `detect` if needed.
 4. Plan mode → markdown only. Build mode → edits to `index.html`, `src/styles/**`, `src/ui/**` only.
 5. Emit `IMPECCABLE_PREFLIGHT: …` before any proposal/edit.
 

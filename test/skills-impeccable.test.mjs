@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { getSkillById, listMergedSkills } from '../server/skills/scan.js';
+import { readImpeccableReference } from '../server/impeccable/reference-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -106,6 +107,17 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const payload = JSON.parse(result.stdout);
     assert.equal(path.resolve(payload.workspaceRoot), PROJECT_ROOT);
+  });
+
+  it('reference API serves teach.md', () => {
+    const payload = readImpeccableReference(PROJECT_ROOT, 'teach');
+    assert.ok(payload);
+    assert.equal(payload.command, 'teach');
+    assert.match(payload.content, /PRODUCT\.md/);
+  });
+
+  it('reference API rejects unknown command', () => {
+    assert.equal(readImpeccableReference(PROJECT_ROOT, 'not-a-real-command'), null);
   });
 
   it('sync script is idempotent', () => {

@@ -1033,17 +1033,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'run_impeccable',
     label: 'Run Impeccable',
-    description: 'Run an Impeccable CLI sub-command (audit, shape, craft, polish, …).',
+    description:
+      'Run Impeccable CLI/script runner only (detect, live) — not harness commands (teach, audit, shape, …).',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'run_impeccable',
-      'Spawn npx impeccable <command> in the project root (60s timeout).',
+      'Spawn npx impeccable <command> or the live script in the project root (60s timeout). Use /impeccable <cmd> for teach, audit, shape, craft, polish, and other harness commands.',
       {
         command: {
           type: 'string',
-          description:
-            'Impeccable sub-command: audit, critique, shape, craft, polish, teach, document, extract, detect, live',
+          description: 'CLI/script sub-command only: detect or live',
         },
         target: {
           type: 'string',

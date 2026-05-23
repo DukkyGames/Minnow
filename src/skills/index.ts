@@ -12,3 +12,10 @@ export {
   refreshSkillCatalog,
   resolveActiveSkill,
 } from './client';
+export {
+  IMPECCABLE_SKILL_ID,
+  parseImpeccableSubcommand,
+  fetchImpeccableReference,
+  augmentImpeccableSkillBody,
+  type ParsedImpeccableSubcommand,
+} from './impeccable-client';
