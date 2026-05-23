@@ -188,7 +188,7 @@ export function createReefWidgetIframe(
   iframe.style.minHeight = `${options.minHeightPx ?? 120}px`;
   iframe.style.border = 'none';
   iframe.style.display = 'block';
-  /* Host sets exact height from resize messages; hide inner scrollbars. */
+  /* Host auto-sizes height from content; widgets must not set outer iframe dimensions. */
   iframe.style.overflow = 'hidden';
 
   const setSrcdoc = (widgetHtml: string): void => {

@@ -7,15 +7,30 @@ import { getActiveChat } from '../../state/sessions.ts';
 import type { ApiMessage } from '../../types.ts';
 import { resolveWidgetLlmBinding, runWidgetCompletion } from './run-widget-completion.ts';
 import { subscribeThemeChanges } from './theme-forward.ts';
+import { createReefWidgetErrorPanel } from './widget-error-ui.ts';
+import {
+  REEF_WIDGET_MIN_CONTENT_HEIGHT_PX,
+  REEF_WIDGET_VALIDATION_TIMEOUT_MS,
+  shouldAutoRevealReefWidgetsForTests,
+  shouldRunReefWidgetValidationTimeout,
+} from './widget-validation.ts';
 
 const MAX_CONCURRENT_LLM = 2;
 const DEFAULT_WIDGET_HEIGHT_PX = 120;
+
+export interface ReefWidgetValidationResult {
+  ok: boolean;
+  errors: string[];
+}
 
 interface ReefWidgetHostRecord {
   host: HTMLElement;
   iframe: HTMLIFrameElement;
   setSrcdoc: (html: string) => void;
   widgetHtml: string;
+  validationDone: boolean;
+  validationErrors: string[];
+  lastContentHeightPx: number;
 }
 
 interface ReefPostMessage {
@@ -30,13 +45,51 @@ interface ReefPostMessage {
   model?: string;
   delta?: string;
   error?: string;
+  ok?: boolean;
+  errors?: string[];
 }
 
 const hostsByWidgetId = new Map<string, ReefWidgetHostRecord>();
 const abortByRequestId = new Map<string, AbortController>();
+const validationTimeoutByWidgetId = new Map<string, ReturnType<typeof setTimeout>>();
 let activeLlmCount = 0;
 let bridgeInitialized = false;
 let themeUnsubscribe: (() => void) | null = null;
+
+function clearReefWidgetValidationTimer(widgetId: string): void {
+  const timer = validationTimeoutByWidgetId.get(widgetId);
+  if (timer) {
+    clearTimeout(timer);
+    validationTimeoutByWidgetId.delete(widgetId);
+  }
+}
+
+function scheduleReefWidgetValidation(widgetId: string): void {
+  if (shouldAutoRevealReefWidgetsForTests()) {
+    queueMicrotask(() => {
+      const record = hostsByWidgetId.get(widgetId);
+      if (!record || record.validationDone) return;
+      record.lastContentHeightPx = DEFAULT_WIDGET_HEIGHT_PX;
+      applyWidgetHeight(widgetId, DEFAULT_WIDGET_HEIGHT_PX);
+      completeReefWidgetValidation(widgetId, { ok: true, errors: [] });
+    });
+    return;
+  }
+
+  if (!shouldRunReefWidgetValidationTimeout()) {
+    return;
+  }
+
+  clearReefWidgetValidationTimer(widgetId);
+  const timer = setTimeout(() => {
+    validationTimeoutByWidgetId.delete(widgetId);
+    completeReefWidgetValidation(widgetId, {
+      ok: false,
+      errors: ['Widget validation timed out before the iframe reported ready.'],
+    });
+  }, REEF_WIDGET_VALIDATION_TIMEOUT_MS);
+  validationTimeoutByWidgetId.set(widgetId, timer);
+}
 
 /** Track mounted host for resize / theme refresh / LLM replies. */
 export function registerReefWidgetHost(
@@ -46,26 +99,107 @@ export function registerReefWidgetHost(
   setSrcdoc: (html: string) => void,
   widgetHtml = '',
 ): void {
-  hostsByWidgetId.set(widgetId, { host, iframe, setSrcdoc, widgetHtml });
+  hostsByWidgetId.set(widgetId, {
+    host,
+    iframe,
+    setSrcdoc,
+    widgetHtml,
+    validationDone: false,
+    validationErrors: [],
+    lastContentHeightPx: 0,
+  });
+  scheduleReefWidgetValidation(widgetId);
 }
 
+function revealValidatedWidget(record: ReefWidgetHostRecord): void {
+  record.host.classList.remove('reef-widget-host--validating');
+  record.host.querySelector('.reef-widget-validating-status')?.remove();
+  record.iframe.style.visibility = '';
+}
+
+function showWidgetValidationFailure(record: ReefWidgetHostRecord, errors: string[]): void {
+  record.host.classList.remove('reef-widget-host--validating');
+  record.host.classList.add('reef-widget-host--error');
+  record.host.querySelector('.reef-widget-validating-status')?.remove();
+  record.iframe.remove();
+  record.host.appendChild(createReefWidgetErrorPanel(errors));
+}
+
+/** Apply iframe probe result and reveal or show an error panel. */
+export function completeReefWidgetValidation(
+  widgetId: string,
+  result: ReefWidgetValidationResult,
+): void {
+  const record = hostsByWidgetId.get(widgetId);
+  if (!record || record.validationDone) return;
+
+  record.validationDone = true;
+  clearReefWidgetValidationTimer(widgetId);
+
+  const mergedErrors = [
+    ...record.validationErrors,
+    ...(Array.isArray(result.errors) ? result.errors : []),
+  ].map((e) => e.trim()).filter(Boolean);
+
+  const heightOk = record.lastContentHeightPx >= REEF_WIDGET_MIN_CONTENT_HEIGHT_PX;
+  const ok = result.ok === true && mergedErrors.length === 0 && heightOk;
+
+  if (!ok) {
+    const errors = mergedErrors.length > 0 ? mergedErrors : [];
+    if (!heightOk) {
+      errors.push('Widget did not produce visible content (height too small).');
+    }
+    showWidgetValidationFailure(record, errors);
+    return;
+  }
+
+  revealValidatedWidget(record);
+}
+
+/** Opaque serialized origin for sandboxed srcdoc reef iframes. */
+const REEF_WIDGET_OPAQUE_ORIGIN = 'null';
+
 function isAllowedReefOrigin(origin: string): boolean {
-  if (!origin || origin === 'null') return true;
-  return origin === window.location.origin;
+  if (origin === REEF_WIDGET_OPAQUE_ORIGIN) return true;
+  const hostOrigin = window.location?.origin ?? '';
+  return hostOrigin.length > 0 && origin === hostOrigin;
+}
+
+/** Reject confused-deputy posts: source must be the registered iframe for widgetId. */
+function isReefMessageFromWidget(widgetId: string, source: MessageEventSource | null): boolean {
+  if (!source) return false;
+  const record = hostsByWidgetId.get(widgetId);
+  const expected = record?.iframe.contentWindow;
+  return expected != null && source === expected;
+}
+
+function reefWidgetPostMessageTarget(): string {
+  return REEF_WIDGET_OPAQUE_ORIGIN;
 }
 
 function postToWidget(widgetId: string, payload: ReefPostMessage): void {
   const record = hostsByWidgetId.get(widgetId);
   if (!record?.iframe.contentWindow) return;
-  record.iframe.contentWindow.postMessage(payload, '*');
+  record.iframe.contentWindow.postMessage(payload, reefWidgetPostMessageTarget());
 }
 
 function applyWidgetHeight(widgetId: string, heightPx: number): void {
   const record = hostsByWidgetId.get(widgetId);
   if (!record) return;
   const h = Math.max(DEFAULT_WIDGET_HEIGHT_PX, Math.ceil(heightPx));
+  record.lastContentHeightPx = h;
   record.host.style.height = `${h}px`;
   record.iframe.style.height = `${h}px`;
+}
+
+function recordWidgetRuntimeError(widgetId: string, message: string): void {
+  const record = hostsByWidgetId.get(widgetId);
+  if (!record) return;
+  const trimmed = message.trim();
+  if (!trimmed) return;
+  if (!record.validationErrors.includes(trimmed)) {
+    record.validationErrors.push(trimmed);
+  }
 }
 
 function handleSendPrompt(text: string): void {
@@ -185,6 +319,7 @@ function onReefMessage(event: MessageEvent): void {
   const data = event.data as ReefPostMessage | null;
   if (!data || data.type !== 'reef' || !data.action || !data.widgetId) return;
   if (!hostsByWidgetId.has(data.widgetId)) return;
+  if (!isReefMessageFromWidget(data.widgetId, event.source)) return;
 
   switch (data.action) {
     case 'sendPrompt':
@@ -196,6 +331,19 @@ function onReefMessage(event: MessageEvent): void {
     case 'resize':
       if (typeof data.height === 'number') applyWidgetHeight(data.widgetId, data.height);
       break;
+    case 'widgetError':
+      if (typeof data.error === 'string') recordWidgetRuntimeError(data.widgetId, data.error);
+      break;
+    case 'validateResult': {
+      const errors = Array.isArray(data.errors)
+        ? data.errors.filter((e): e is string => typeof e === 'string')
+        : [];
+      completeReefWidgetValidation(data.widgetId, {
+        ok: data.ok === true,
+        errors,
+      });
+      break;
+    }
     case 'openLink':
       handleOpenLink(typeof data.url === 'string' ? data.url : '');
       break;
@@ -243,6 +391,10 @@ export function unmountReefWidgetsInChat(): void {
 /** Test-only reset. */
 export function resetReefBridgeForTests(): void {
   unmountReefWidgetsInChat();
+  for (const timer of validationTimeoutByWidgetId.values()) {
+    clearTimeout(timer);
+  }
+  validationTimeoutByWidgetId.clear();
   if (themeUnsubscribe) {
     themeUnsubscribe();
     themeUnsubscribe = null;
@@ -263,4 +415,9 @@ export function getActiveReefLlmCountForTests(): number {
 /** Test hook: seed in-flight count for concurrency gate. */
 export function setActiveReefLlmCountForTests(count: number): void {
   activeLlmCount = count;
+}
+
+/** Test hook: origin allowlist for reef postMessage. */
+export function isAllowedReefOriginForTests(origin: string): boolean {
+  return isAllowedReefOrigin(origin);
 }

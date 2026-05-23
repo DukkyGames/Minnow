@@ -57,7 +57,7 @@ Keep the report short — the diff itself is the detail.
 ## Mode handoff
 
 - If the user wants a **plan document** instead of code, use **`propose_mode_switch`** (`plan_in_build`) or **`ask_question`**, then **`set_chat_mode`** (`plan`) when they agree.
-- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget`, then paste the fence and **`set_chat_mode`** `reef`.
+- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget`, then paste the fence in chat (mounts in any mode; switch to Reef only if the user wants to keep editing widgets).
 
 ## When you're stuck
 

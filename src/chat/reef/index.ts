@@ -8,8 +8,14 @@ import {
 } from './widget-block-detector.ts';
 import { initReefBridge, unmountReefWidgetsInChat } from './widget-bridge.ts';
 
-export { initReefBridge, unmountReefWidgetsInChat };
+export {
+  initReefBridge,
+  unmountReefWidgetsInChat,
+  completeReefWidgetValidation,
+  type ReefWidgetValidationResult,
+} from './widget-bridge.ts';
 export type { MountReefWidgetBlocksOptions };
+export { setSkipReefWidgetValidationForTests } from './widget-validation.ts';
 
 /** Scan one assistant bubble for reef-widget fences and mount iframes. */
 export function mountReefWidgets(

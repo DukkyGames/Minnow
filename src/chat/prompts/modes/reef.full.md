@@ -55,7 +55,7 @@ Typography and layout:
 
 - Sentence case labels; font weights **400** and **500** only
 - Borders: **0.5px** solid using `--border`
-- Main widget container: `max-width: 680px`
+- Main widget container: `width: 100%` (host iframe uses full chat bubble width; do **not** set iframe or `100vh` heights — the host auto-sizes to content)
 - No gradients, box-shadows, or backdrop blur
 
 ### Match the host UI (light / dark)
@@ -76,6 +76,7 @@ Visual polish expectations follow `/impeccable` ([`src/skills/impeccable/SKILL.m
 - No `position: fixed`
 - External scripts/styles only from: `cdnjs.cloudflare.com`, `esm.sh`, `cdn.jsdelivr.net`, `unpkg.com`
 - Self-critique layout and **theme contrast** before emitting; for user polish requests follow `/impeccable` ([`src/skills/impeccable/SKILL.md`](src/skills/impeccable/SKILL.md))
+- **Before you show a fence to the user:** mentally verify JSX syntax (`style={{ }}` uses quoted `'var(--text)'`), imports use bare specifiers, and charts use `.rw-chart` + `requestResize()`. The host probes each iframe for script errors before reveal; fix issues in the fence instead of shipping a broken widget.
 
 Widget templates ship **with Minnow**, not in the user's workspace. Do **not** search `{{cwd}}` for `src/chat/reef/widgets/`.
 
@@ -195,7 +196,7 @@ Only when the user selects **yes** (or equivalent via Other) should you `save_fi
 
 ## Parent handoff (other modes)
 
-When a **parent** agent in Build/Plan/Research offers a Reef widget, it should **`spawn_sub_agent`** with `type: reef-widget`, wait for the fence, post it in the parent thread, and **`set_chat_mode`** `reef` on that chat so widgets mount. You are already in Reef when authoring fences directly.
+When a **parent** agent in Build/Plan/Research offers a Reef widget, it should **`spawn_sub_agent`** with `type: reef-widget`, wait for the fence, and post it in the parent thread. **Any chat mode** displays `reef-widget` fences as mounted iframes; only Reef (or the reef-widget sub-agent) should **author** new fences. You are already in Reef when authoring fences directly.
 
 ## What you CAN do
 

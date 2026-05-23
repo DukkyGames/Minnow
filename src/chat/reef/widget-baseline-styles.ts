@@ -3,7 +3,7 @@
  * Models often omit chart wrapper heights; Recharts ResponsiveContainer needs a sized parent.
  */
 export const REEF_WIDGET_BASELINE_CSS = `
-.rw { max-width: 680px; min-width: 0; }
+.rw { width: 100%; max-width: 100%; min-width: 0; }
 .rw-chart,
 .mw-chart {
   height: 220px;

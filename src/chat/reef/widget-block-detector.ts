@@ -2,9 +2,9 @@
  * Scan assistant bubbles for ```reef-widget fences and mount sandboxed iframes.
  */
 
-import { getActiveChat } from '../../state/sessions.ts';
 import { createReefWidgetIframe } from './widget-iframe.ts';
 import { registerReefWidgetHost } from './widget-bridge.ts';
+import { createReefWidgetValidatingStatus } from './widget-error-ui.ts';
 import {
   applyReefWidgetPendingUi,
   inferReefWidgetBuildPhase,
@@ -16,7 +16,10 @@ const REEF_WIDGET_LANG = 'reef-widget';
 export interface MountReefWidgetBlocksOptions {
   /** True while this bubble's markdown is still streaming (debounced updates). */
   bubbleStreaming?: boolean;
-  /** Chat mode for this bubble; avoids re-reading global session during history render. */
+  /**
+   * Chat mode when the bubble was rendered (history). Mounting is mode-agnostic;
+   * only Reef mode (or reef-widget sub-agent) should author new fences.
+   */
   modeId?: string;
 }
 
@@ -32,16 +35,13 @@ function isClosedReefFence(code: HTMLElement): boolean {
 
 /**
  * Replace matching `<pre data-lang="reef-widget">` nodes with iframe hosts.
- * Skips when not in reef mode or already mounted. When `bubbleStreaming`, shows
- * pending UI instead of code and defers iframe mount until the final render.
+ * All chat modes display mounted widgets; only Reef (or reef-widget sub-agent) creates fences.
+ * When `bubbleStreaming`, shows pending UI instead of code and defers iframe mount until final.
  */
 export function mountReefWidgetBlocks(
   bubble: HTMLElement,
   opts: MountReefWidgetBlocksOptions = {},
 ): void {
-  const effectiveModeId = opts.modeId ?? getActiveChat().modeId;
-  if (effectiveModeId !== 'reef') return;
-
   const pres = bubble.querySelectorAll<HTMLPreElement>(
     `pre[data-lang="${REEF_WIDGET_LANG}"]`,
   );
@@ -68,11 +68,13 @@ export function mountReefWidgetBlocks(
     pre.dataset.reefMounted = 'true';
 
     const host = document.createElement('div');
-    host.className = 'reef-widget-host';
+    host.className = 'reef-widget-host reef-widget-host--validating';
     host.dataset.reefMounted = 'true';
 
     const { iframe, widgetId, setSrcdoc } = createReefWidgetIframe({ widgetHtml });
     host.dataset.widgetId = widgetId;
+    host.appendChild(createReefWidgetValidatingStatus());
+    iframe.style.visibility = 'hidden';
     host.appendChild(iframe);
 
     registerReefWidgetHost(widgetId, host, iframe, setSrcdoc, widgetHtml);

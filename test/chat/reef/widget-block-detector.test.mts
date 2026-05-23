@@ -8,12 +8,14 @@ import { Window } from 'happy-dom';
 import { setStreaming } from '../../../src/app-state.ts';
 import { mountReefWidgetBlocks } from '../../../src/chat/reef/widget-block-detector.ts';
 import { resetReefBridgeForTests } from '../../../src/chat/reef/widget-bridge.ts';
+import { setSkipReefWidgetValidationForTests } from '../../../src/chat/reef/widget-validation.ts';
 import {
   createEmptyChatObject,
   setSessionStateForTests,
 } from '../../../src/state/sessions.ts';
 
 function setupDom(): void {
+  setSkipReefWidgetValidationForTests(true);
   const window = new Window();
   globalThis.window = window as unknown as Window & typeof globalThis;
   globalThis.document = window.document;
@@ -45,7 +47,7 @@ describe('widget-block-detector', { concurrency: false }, () => {
     resetReefBridgeForTests();
   });
 
-  test('mounts iframe host when mode is reef and not streaming', () => {
+  test('mounts iframe host when mode is reef and not streaming', async () => {
     setupDom();
     const chat = createEmptyChatObject('model-a');
     chat.modeId = 'reef';
@@ -58,32 +60,17 @@ describe('widget-block-detector', { concurrency: false }, () => {
 
     const bubble = reefBubbleWithFence();
     mountReefWidgetBlocks(bubble);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
 
     const host = bubble.querySelector('.reef-widget-host');
     assert.ok(host);
     assert.equal(host?.dataset.reefMounted, 'true');
     assert.ok(host?.querySelector('iframe.reef-widget-iframe'));
+    assert.equal(host?.classList.contains('reef-widget-host--validating'), false);
     assert.equal(bubble.querySelector('pre[data-lang="reef-widget"]'), null);
   });
 
-  test('mounts when opts.modeId is reef even if global session is build', () => {
-    setupDom();
-    const chat = createEmptyChatObject('model-a');
-    chat.modeId = 'build';
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
-
-    const bubble = reefBubbleWithFence();
-    mountReefWidgetBlocks(bubble, { modeId: 'reef' });
-
-    assert.ok(bubble.querySelector('.reef-widget-host'));
-  });
-
-  test('skips mount when mode is not reef', () => {
+  test('mounts in build mode when fence is present', async () => {
     setupDom();
     const chat = createEmptyChatObject('model-a');
     chat.modeId = 'build';
@@ -96,8 +83,10 @@ describe('widget-block-detector', { concurrency: false }, () => {
 
     const bubble = reefBubbleWithFence();
     mountReefWidgetBlocks(bubble);
-    assert.equal(bubble.querySelector('.reef-widget-host'), null);
-    assert.ok(bubble.querySelector('pre[data-lang="reef-widget"]'));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    assert.ok(bubble.querySelector('.reef-widget-host'));
+    assert.equal(bubble.querySelector('pre[data-lang="reef-widget"]'), null);
   });
 
   test('skips iframe mount while bubble is streaming; shows pending UI', () => {

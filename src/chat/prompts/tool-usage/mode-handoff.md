@@ -22,7 +22,7 @@ Use **`ask_question`** (or **`propose_mode_switch`** for standard presets) when 
 
 - **New Orchestrate chat:** call **`create_chat_with_mode`** with `modeId: orchestrate` and `planPath` set to the plan file you wrote. Optionally set `initialUserMessage` to `Execute plan at <path>`.
 - **Switch to Build / Plan / Reef on this chat:** call **`set_chat_mode`** with the target mode id.
-- **Reef widget (outside Reef mode):** call **`spawn_sub_agent`** with `type: reef-widget` and a focused task (topic, data, interaction). When the sub-agent finishes, post an assistant message containing the complete `reef-widget` fence from its summary. Call **`set_chat_mode`** with `reef` so the widget mounts (detector requires active chat Reef mode).
+- **Reef widget (outside Reef mode):** call **`spawn_sub_agent`** with `type: reef-widget` and a focused task (topic, data, interaction). When the sub-agent finishes, post an assistant message containing the complete `reef-widget` fence from its summary. Fences mount in **any** active chat mode; do not switch to Reef unless the user wants to keep editing widgets there.
 - **Orchestrate board** is separate from chat handoff — use board tools only in Orchestrate mode with a loaded plan.
 
 ### Rules
