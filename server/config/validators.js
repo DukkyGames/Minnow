@@ -7,7 +7,7 @@ import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
-const SESSION_SCHEMA_VERSION = 2;
+const SESSION_SCHEMA_VERSION = 3;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
 function normalizeWorkspacePath(fsPath) {
@@ -284,6 +284,14 @@ function ensureChatShape(raw) {
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
   const viewMode = ensureViewMode(row.viewMode);
 
+  const runs = Array.isArray(row.runs)
+    ? row.runs.filter((r) => r && typeof r === 'object')
+    : undefined;
+  const activeBranchByFork =
+    row.activeBranchByFork && typeof row.activeBranchByFork === 'object'
+      ? row.activeBranchByFork
+      : undefined;
+
   return {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
     name:
@@ -301,6 +309,8 @@ function ensureChatShape(raw) {
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
+    ...(runs?.length ? { runs } : {}),
+    ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(row.unread === true ? { unread: true } : {}),
@@ -355,7 +365,7 @@ export function validateSessionState(raw) {
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
   const version = parsed.version;
-  if (version !== 1 && version !== 2) {
+  if (version !== 1 && version !== 2 && version !== 3) {
     throw new Error('Invalid session version');
   }
 

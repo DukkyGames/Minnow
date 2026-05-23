@@ -1,0 +1,119 @@
+/* Branch picker on user messages (trace / replay) */
+
+.msg--has-branch-picker {
+  position: relative;
+}
+
+.branch-picker__trigger {
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle, oklch(70% 0 0 / 0.25));
+  background: var(--surface-elevated, oklch(96% 0 0));
+  color: var(--text-muted, oklch(45% 0 0));
+  cursor: pointer;
+}
+
+.branch-picker__trigger:hover,
+.branch-picker__trigger:focus-visible {
+  border-color: var(--accent, oklch(55% 0.15 250));
+  color: var(--text, oklch(20% 0 0));
+}
+
+.branch-picker__menu {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  margin-top: 0.25rem;
+  min-width: 14rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle, oklch(70% 0 0 / 0.25));
+  background: var(--surface-elevated, oklch(98% 0 0));
+  box-shadow: 0 8px 24px oklch(0% 0 0 / 0.12);
+}
+
+.branch-picker__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--text, oklch(20% 0 0));
+  cursor: pointer;
+}
+
+.branch-picker__item:hover,
+.branch-picker__item:focus-visible {
+  background: var(--accent-subtle, oklch(92% 0.02 250));
+}
+
+.branch-picker__item--active {
+  font-weight: 600;
+}
+
+.fork-model-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(0% 0 0 / 0.45);
+}
+
+.fork-model-dialog {
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem 1.1rem;
+  border-radius: 0.65rem;
+  background: var(--surface-elevated, oklch(98% 0 0));
+  border: 1px solid var(--border-subtle, oklch(70% 0 0 / 0.2));
+}
+
+.fork-model-dialog__title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.fork-model-dialog__label {
+  display: block;
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, oklch(45% 0 0));
+}
+
+.fork-model-dialog__select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border-subtle, oklch(70% 0 0 / 0.25));
+}
+
+.fork-model-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.fork-model-dialog__btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.35rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.fork-model-dialog__btn--ghost {
+  background: transparent;
+  border-color: var(--border-subtle, oklch(70% 0 0 / 0.25));
+}
+
+.fork-model-dialog__btn--primary {
+  background: var(--accent, oklch(55% 0.15 250));
+  color: var(--accent-fg, oklch(98% 0 0));
+}

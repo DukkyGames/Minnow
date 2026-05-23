@@ -9,6 +9,7 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
+import { pruneSupersededRunsAfterTruncate } from '../state/runs-store';
 import type { Chat } from '../types';
 import {
   expandAtomicRange,
@@ -72,6 +73,10 @@ export function truncateChatHistory(
   const beforeLen = chat.history.length;
   chat.history = sliceHistoryAtTurn(chat.history, cutIndex, mode);
   const removedCount = beforeLen - chat.history.length;
+
+  const keptThrough =
+    mode === 'inclusive' ? cutIndex : Math.max(0, cutIndex - 1);
+  pruneSupersededRunsAfterTruncate(chat, keptThrough);
 
   touchChat(chat);
   scheduleSaveSessions();

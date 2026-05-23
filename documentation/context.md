@@ -715,12 +715,12 @@ Types in [`src/types.ts`](../src/types.ts). The UI and `localStorage` use the `M
 
 ## Multi-chat sessions
 
-The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **2**).
+The app supports **multiple chat sessions** with a **collapsible left sidebar**. Persisted in **`sessions/state.json`** when `npm start`, else `minnow-sessions-v1` in `localStorage` (key name unchanged; blob **`version`** is **3**).
 
 | Concern | Location |
 |---------|----------|
-| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 2`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts` |
-| Server validate / migrate | `server/config/validators.js` (accepts v1 input, persists v2) |
+| Schema + migration | `src/types.ts` (`SESSION_SCHEMA_VERSION = 3`), `src/state/sessions.ts`, `src/state/session-workspace-scope.ts` |
+| Server validate / migrate | `server/config/validators.js` (accepts v1–v3 input, persists v3) |
 | Sidebar filter + Unassigned | `src/ui/sidebar.ts`, `src/styles/sidebar.css` |
 | Workspace switch hook | `onWorkspaceChanged()` in `sessions.ts`; `applyWorkspaceScopedSession()` in `sidebar.ts`; `applyWorkspaceSwitch()` in `workspace-button.ts` (B1 recent menu uses same path) |
 
@@ -754,6 +754,28 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 | Stop | Partial assistant saved to `history` with `stopped: true` + chip (no client checkpoint) |
 
 **Removed (Phase 3):** `pendingTurn` checkpoints, Continue/Discard recovery banners, orphan user/tool-tail auto-retry (`turn-recovery.ts`). Reload resume is **backend generations only** via `currentGenerationId`.
+
+### Trace and replay (feature 01 / MIN-37)
+
+**Turn runs** are semantic fork records parallel to linear `chat.history`. Each user-message fork can have multiple **`TurnRunRecord`** branches (`chat.runs[]`) with a captured **`TurnSnapshot`** (model, provider, composed system prompt, tool allowlist, sampler) and stored **`outputMessages`** for branch switching without re-calling the LLM.
+
+| Layer | Lifetime | Purpose |
+|-------|----------|---------|
+| `server/generations/*` | Minutes (in-memory) | SSE reconnect / stop (transport bytes) |
+| `chat.runs` | Session (`state.json`) | Replay, fork with model swap, branch picker |
+
+| Concern | Location |
+|---------|----------|
+| Types | `TurnSnapshot`, `TurnRunRecord`, `chat.runs`, `chat.activeBranchByFork` in `src/types.ts` |
+| Store | `src/state/runs-store.ts` — `createRun`, `activateBranch`, `pruneSupersededRunsAfterTruncate` |
+| Snapshot | `src/chat/turn-snapshot.ts` |
+| Fork / replay API | `src/chat/fork-from-run.ts`; `resendFromIndex` delegates here |
+| Turn hook | `runChatTurn` in `src/tools/loop.ts` — `replaySnapshot`, finalize on complete/stop/error |
+| UI | `src/ui/branch-picker.ts`, `src/ui/fork-model-dialog.ts`, message menu **Replay** / **Fork with different model…** |
+| Styles | `src/styles/branch-picker.css` |
+| QA | [`documentation/plans/verification/feature-01-trace-replay.md`](plans/verification/feature-01-trace-replay.md) |
+
+**Distinction:** Replay creates a **new** backend `generationId`; the run record is the source of truth for replay *intent*, not the generation byte buffer.
 
 ### Programmatic chat titles (Step 07)
 

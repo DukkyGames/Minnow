@@ -46,7 +46,7 @@ export function migrateSessionStateV1ToV2(
     ? parsed.chats.map((c) => coerceChat(c)).filter(Boolean)
     : [];
   const state: SessionState = {
-    version: 2,
+    version: 3,
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
     lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
