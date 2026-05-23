@@ -87,6 +87,9 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     void refreshTerminalHistoryForActiveChat();
   }
   renderSidebar();
+  if (document.getElementById('globalBugsView')?.classList.contains('is-open')) {
+    void import('./global-bugs-page').then((m) => m.renderGlobalBugsList());
+  }
 }
 
 function appendChatListSection(
@@ -225,6 +228,7 @@ export function renderSidebar(): void {
   const unassigned = getUnassignedChats(sessionState);
   appendChatListSection(list, 'Unassigned', unassigned, sessionState.activeId);
   syncChatItemDotsInDom();
+  void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 
 function beginRenameChat(

@@ -239,6 +239,9 @@ export async function initApp(): Promise<void> {
   registerProviderHandlers();
   const settingsPage = await import('./ui/settings-page');
   settingsPage.initSettingsPage();
+  const globalBugsPage = await import('./ui/global-bugs-page');
+  globalBugsPage.initGlobalBugsPage();
+  globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();
   updateModelLoadUnloadButtons();

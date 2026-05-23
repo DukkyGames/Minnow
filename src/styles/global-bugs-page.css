@@ -1,0 +1,213 @@
+/**
+ * Global bugs list page (MIN-16 phase 4).
+ */
+
+.global-bugs-page {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+
+.global-bugs-page.is-open {
+  display: flex;
+}
+
+.global-bugs-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.global-bugs-page-header h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.global-bugs-summary {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.global-bugs-page-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.global-bugs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: flex-end;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.global-bugs-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.global-bugs-filters select {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  min-width: 10rem;
+}
+
+.global-bugs-filters .global-bugs-toggle {
+  flex-direction: row;
+  align-items: center;
+  text-transform: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.global-bugs-list-mount {
+  flex: 1;
+  min-height: 8rem;
+}
+
+.global-bugs-empty {
+  margin: 2rem 0;
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.global-bugs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.global-bugs-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+
+.global-bugs-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.global-bugs-table tbody tr {
+  cursor: pointer;
+}
+
+.global-bugs-table tbody tr:hover,
+.global-bugs-table tbody tr:focus-visible {
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  outline: none;
+}
+
+.global-bugs-table__title {
+  font-weight: 600;
+  max-width: 20rem;
+}
+
+.global-bugs-table__workspace,
+.global-bugs-table__updated {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.global-bugs-severity {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.global-bugs-severity--low {
+  color: var(--ink-muted);
+  border: 1px solid var(--border);
+}
+
+.global-bugs-severity--medium {
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.global-bugs-severity--high {
+  color: var(--warning, #b45309);
+  border: 1px solid color-mix(in oklch, var(--warning, #b45309) 40%, var(--border));
+}
+
+.global-bugs-severity--critical {
+  color: var(--danger, #dc2626);
+  border: 1px solid color-mix(in oklch, var(--danger, #dc2626) 40%, var(--border));
+}
+
+/* Sidebar entry */
+.chat-all-bugs-wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-all-bugs-wide:hover {
+  border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+}
+
+.chat-all-bugs-count {
+  min-width: 1.25rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.chat-all-bugs-count[hidden] {
+  display: none;
+}

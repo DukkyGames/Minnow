@@ -61,6 +61,7 @@ function touchBugBoard(chat: Chat): void {
   touchChat(chat);
   scheduleSaveSessions();
   emitBugBoardChange(chat.id);
+  void import('../ui/global-bugs-page.ts').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 
 /** Create bug board if missing and return it. */

@@ -262,6 +262,43 @@
 <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close chat list" onclick="closeMobileSidebar()" aria-hidden="true"></button>
 <button type="button" class="file-sidebar-backdrop" id="fileSidebarBackdrop" aria-label="Close file tree" onclick="closeMobileFileSidebar()" aria-hidden="true"></button>
 
+<main id="globalBugsView" class="global-bugs-page" aria-label="All bugs">
+  <header class="global-bugs-page-header">
+    <button type="button" class="icon-btn" id="btnGlobalBugsBack" aria-label="Back to chat">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h1>All bugs</h1>
+    <span id="globalBugsSummary" class="global-bugs-summary" aria-live="polite"></span>
+  </header>
+  <div class="global-bugs-page-body">
+    <div class="global-bugs-filters" role="search">
+      <label>
+        Workspace
+        <select id="globalBugsScope" aria-label="Workspace scope">
+          <option value="current_workspace">Current workspace</option>
+          <option value="all">All workspaces</option>
+        </select>
+      </label>
+      <label>
+        Column
+        <select id="globalBugsColumn" aria-label="Bug column">
+          <option value="all">All columns</option>
+          <option value="reported">Reported</option>
+          <option value="investigating">Investigating</option>
+          <option value="planned">Planned</option>
+          <option value="fixing">Fixing</option>
+          <option value="complete">Complete</option>
+        </select>
+      </label>
+      <label class="global-bugs-toggle">
+        <input type="checkbox" id="globalBugsHideComplete" checked>
+        <span>Hide complete</span>
+      </label>
+    </div>
+    <div id="globalBugsList" class="global-bugs-list-mount" role="region" aria-label="Bug list"></div>
+  </div>
+</main>
+
 <main id="settingsView" class="settings-page" aria-label="Settings">
   <header class="settings-page-header">
     <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
@@ -570,6 +607,10 @@
       </button>
     </div>
     <button type="button" class="chat-new-wide" onclick="createChat()">+ New chat</button>
+    <button type="button" class="chat-all-bugs-wide" id="btnAllBugs">
+      All bugs
+      <span class="chat-all-bugs-count" id="btnAllBugsCount" hidden aria-hidden="true"></span>
+    </button>
     <button type="button" class="chat-new-compact" aria-label="New chat" onclick="createChat()">+</button>
     <div class="chat-list" id="chatList" role="list"></div>
     <div class="chat-sidebar-footer">

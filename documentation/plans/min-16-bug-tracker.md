@@ -12,9 +12,15 @@ MVP shipped on branch `cursor/bug-tracker-min-16-e60d`.
 - **Agents:** `debugger`, `bug-planner` sub-agent types
 - **Pipeline:** Investigate → Plan fix → Start fix (Orchestrate handoff)
 
+## Phase 4 — Global bugs (shipped)
+
+- Sidebar **All bugs** + `#/bugs` full-page list
+- Filters: workspace scope, column, hide complete
+- Row opens owning chat in Bugs board view
+- See [`min-16-global-bugs.md`](min-16-global-bugs.md)
+
 ## Out of scope (v2)
 
-- Global bug list across workspaces
 - Linear integration
 - Auto-complete when orchestrator finishes (manual column / future sync)
 
