@@ -78,18 +78,32 @@
 
 
 
-/* Board header: chat toggle inline with Open plan / Resume / Stop */
+/* Board header: icon controls (Plan · Chat · play/pause) */
 
-.board-header__controls .board-header__view-toggle {
-
-  width: 32px;
-
-  height: 29px;
-
+.board-header__controls .board-header__view-toggle,
+.board-header__controls .board-header__icon-btn {
+  width: 40px;
+  height: 40px;
   padding: 0;
-
   flex-shrink: 0;
+}
 
+.board-header__controls .board-header__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.board-header__icon-btn--danger:not(:disabled) {
+  border-color: var(--tool-call-status-fail-border);
+  color: var(--danger);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn.board-header__icon-btn--danger:not(:disabled):hover {
+    border-color: var(--banner-danger-hover-border);
+    background: var(--banner-danger-hover-bg);
+    color: var(--banner-danger-hover-text);
+  }
 }
 
 
