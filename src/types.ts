@@ -6,7 +6,7 @@
 import type { ModeId } from './chat/modes/types';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
-export const SESSION_SCHEMA_VERSION = 2 as const;
+export const SESSION_SCHEMA_VERSION = 3 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
@@ -321,6 +321,65 @@ export interface BugBoardState {
   lastUpdatedAt: number;
 }
 
+/** Stable id for one execution from a fork point (branch). */
+export type TurnRunId = string;
+
+/** Snapshot of inputs needed to replay or fork without re-reading UI globals. */
+export interface TurnSnapshot {
+  /** User row index at fork time (anchor). */
+  forkHistoryIndex: number;
+  /** Stored user content (includes skill tags). */
+  userContent: string;
+  /** Parsed skill id when present. */
+  skillId: string | null;
+  providerId: string;
+  modelId: string;
+  temperature: number;
+  maxTokens: number;
+  modeId: ModeId;
+  workAgentId: string | null;
+  workAgentAuto: boolean;
+  expertSelection?: ExpertSelection;
+  uiDesignerMode?: 'plan' | 'implement';
+  /** Composed system string from resolveOutboundSystemMessages. */
+  composedSystemPrompt: string;
+  userRulesContent?: string;
+  /** Ordered tool function names enabled for this turn. */
+  enabledToolNames: string[];
+  maxToolTurns: number;
+  /** SHA-256 hex of JSON.stringify(apiMessages prefix through fork). */
+  historyPrefixHash: string;
+  orchestratePlanPath?: string;
+}
+
+export type TurnRunStatus =
+  | 'running'
+  | 'completed'
+  | 'stopped'
+  | 'failed'
+  | 'superseded';
+
+/** One turn execution from a user-message fork point. */
+export interface TurnRunRecord {
+  runId: TurnRunId;
+  /** One branch id per run (picker labels Branch 1, 2, …). */
+  branchId: string;
+  forkHistoryIndex: number;
+  parentRunId?: TurnRunId;
+  status: TurnRunStatus;
+  createdAt: number;
+  endedAt?: number;
+  snapshot: TurnSnapshot;
+  /** Inclusive indices in chat.history for assistant/tool rows from this run. */
+  outputHistoryStart?: number;
+  outputHistoryEnd?: number;
+  /** Copy of assistant/tool rows produced by this run (for branch switch after truncate). */
+  outputMessages?: Message[];
+  generationIds?: string[];
+  /** Sub-agent correlation id for this main turn. */
+  parentTurnId?: string;
+}
+
 export interface Chat {
   id: string;
   name: string;
@@ -370,6 +429,10 @@ export interface Chat {
   lastMessageAt?: number;
   /** Epoch ms of last session metadata touch (prune, legacy fallback for sort). */
   updatedAt: number;
+  /** Turn runs for replay / branch switching (schema v3). */
+  runs?: TurnRunRecord[];
+  /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
+  activeBranchByFork?: Record<string, string>;
 }
 
 export interface SessionState {

@@ -67,7 +67,118 @@ import type {
   TerminalRunRecord,
   ToolCall,
   ToolResultMessage,
+  TurnRunRecord,
+  TurnRunStatus,
+  TurnSnapshot,
 } from '../types';
+
+const TURN_RUN_STATUSES = new Set<TurnRunStatus>([
+  'running',
+  'completed',
+  'stopped',
+  'failed',
+  'superseded',
+]);
+
+function ensureTurnSnapshot(raw: unknown): TurnSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Partial<TurnSnapshot>;
+  if (typeof row.forkHistoryIndex !== 'number' || !Number.isFinite(row.forkHistoryIndex)) {
+    return null;
+  }
+  if (typeof row.userContent !== 'string') return null;
+  if (typeof row.providerId !== 'string' || typeof row.modelId !== 'string') return null;
+  if (typeof row.composedSystemPrompt !== 'string') return null;
+  if (!Array.isArray(row.enabledToolNames)) return null;
+  return {
+    forkHistoryIndex: row.forkHistoryIndex,
+    userContent: row.userContent,
+    skillId: typeof row.skillId === 'string' ? row.skillId : null,
+    providerId: row.providerId,
+    modelId: row.modelId,
+    temperature: typeof row.temperature === 'number' ? row.temperature : 0.7,
+    maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : 4096,
+    modeId: normalizeModeId(row.modeId),
+    workAgentId:
+      typeof row.workAgentId === 'string' && row.workAgentId.trim()
+        ? row.workAgentId.trim()
+        : null,
+    workAgentAuto: row.workAgentAuto !== false,
+    ...(row.expertSelection && typeof row.expertSelection === 'object'
+      ? { expertSelection: ensureExpertSelection(row.expertSelection) }
+      : {}),
+    ...(row.uiDesignerMode === 'plan' || row.uiDesignerMode === 'implement'
+      ? { uiDesignerMode: row.uiDesignerMode }
+      : {}),
+    composedSystemPrompt: row.composedSystemPrompt,
+    ...(typeof row.userRulesContent === 'string'
+      ? { userRulesContent: row.userRulesContent }
+      : {}),
+    enabledToolNames: row.enabledToolNames.filter((n) => typeof n === 'string'),
+    maxToolTurns: typeof row.maxToolTurns === 'number' ? row.maxToolTurns : 25,
+    historyPrefixHash:
+      typeof row.historyPrefixHash === 'string' ? row.historyPrefixHash : '',
+    ...(typeof row.orchestratePlanPath === 'string'
+      ? { orchestratePlanPath: row.orchestratePlanPath }
+      : {}),
+  };
+}
+
+function ensureTurnRuns(raw: unknown): TurnRunRecord[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: TurnRunRecord[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Partial<TurnRunRecord>;
+    const snapshot = ensureTurnSnapshot(row.snapshot);
+    const runId = typeof row.runId === 'string' ? row.runId.trim() : '';
+    const branchId = typeof row.branchId === 'string' ? row.branchId.trim() : '';
+    const status =
+      typeof row.status === 'string' && TURN_RUN_STATUSES.has(row.status as TurnRunStatus)
+        ? (row.status as TurnRunStatus)
+        : null;
+    if (!runId || !branchId || !snapshot || !status) continue;
+    out.push({
+      runId,
+      branchId,
+      forkHistoryIndex: snapshot.forkHistoryIndex,
+      ...(typeof row.parentRunId === 'string' ? { parentRunId: row.parentRunId } : {}),
+      status,
+      createdAt: typeof row.createdAt === 'number' ? row.createdAt : Date.now(),
+      ...(typeof row.endedAt === 'number' ? { endedAt: row.endedAt } : {}),
+      snapshot,
+      ...(typeof row.outputHistoryStart === 'number'
+        ? { outputHistoryStart: row.outputHistoryStart }
+        : {}),
+      ...(typeof row.outputHistoryEnd === 'number'
+        ? { outputHistoryEnd: row.outputHistoryEnd }
+        : {}),
+      ...(Array.isArray(row.outputMessages)
+        ? {
+            outputMessages: row.outputMessages
+              .map((m) => ensureMessageEntry(m))
+              .filter((m): m is Message => Boolean(m)),
+          }
+        : {}),
+      ...(Array.isArray(row.generationIds)
+        ? { generationIds: row.generationIds.filter((g) => typeof g === 'string') }
+        : {}),
+      ...(typeof row.parentTurnId === 'string' ? { parentTurnId: row.parentTurnId } : {}),
+    });
+  }
+  return out.length ? out : undefined;
+}
+
+function ensureActiveBranchByFork(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key === 'string' && typeof value === 'string' && value.trim()) {
+      out[key] = value.trim();
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** Default expert picker when missing on older chats. */
 export function defaultExpertSelection(): ExpertSelection {
@@ -429,6 +540,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : '';
   const orchestratePlanPath = normalizeOrchestratePlanPath(raw.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(raw.orchestrateBoard);
+  const runs = ensureTurnRuns(raw.runs);
+  const activeBranchByFork = ensureActiveBranchByFork(raw.activeBranchByFork);
   let viewMode = ensureViewMode(raw.viewMode);
   if (raw.modeId === 'debug' && viewMode === 'board') {
     viewMode = 'chat';
@@ -460,6 +573,8 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
     ...(subAgentRuns ? { subAgentRuns } : {}),
+    ...(runs ? { runs } : {}),
+    ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(raw.unread === true ? { unread: true } : {}),
     ...(typeof raw.lastAssistantAt === 'number' &&
@@ -501,7 +616,7 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     return defaultSessionState();
   }
   const ver = parsed.version;
-  if (ver !== 1 && ver !== 2) {
+  if (ver !== 1 && ver !== 2 && ver !== 3) {
     return defaultSessionState();
   }
   return migrateSessionStateV1ToV2(parsed);

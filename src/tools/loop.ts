@@ -59,6 +59,15 @@ import {
   touchChat,
   recordChatMessage,
 } from '../state/sessions';
+import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
+import type { ForkOverrides } from '../chat/fork-from-run';
+import {
+  createRun,
+  finalizeRun,
+  findRunById,
+  noteRunGeneration,
+  noteRunOutputIndex,
+} from '../state/runs-store';
 import type {
   ApiMessage,
   ApiMessageContent,
@@ -70,6 +79,9 @@ import type {
   Message,
   ToolCall,
   ToolCallAccumulator,
+  TurnRunId,
+  TurnSnapshot,
+  UserMessage,
 } from '../types';
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
@@ -305,6 +317,12 @@ export interface RunChatTurnOptions {
   resumeGenerationId?: string;
   /** When false, do not set the global streaming flag (background re-subscribe). */
   ownsGlobalStreaming?: boolean;
+  /** Replay inputs from a prior fork (regenerate / fork with model swap). */
+  replaySnapshot?: TurnSnapshot;
+  /** Prior run at this fork for branch lineage. */
+  parentRunId?: TurnRunId;
+  /** Model/provider overrides when forking without a full snapshot clone. */
+  forkOverrides?: ForkOverrides;
 }
 
 /**
@@ -416,6 +434,7 @@ async function streamCompletionTurn(
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
   onStreamConnected?: () => void,
+  turnRunId?: TurnRunId,
 ): Promise<StreamTurnResult> {
   let generationId = resumeGenerationId;
 
@@ -423,6 +442,9 @@ async function streamCompletionTurn(
     const created = await createGeneration(provider.id, body, { persist: true });
     generationId = created.generationId;
     chat.currentGenerationId = generationId;
+    if (turnRunId) {
+      noteRunGeneration(chat, turnRunId, generationId);
+    }
     scheduleSaveSessions();
   }
 
@@ -523,6 +545,11 @@ async function streamCompletionTurn(
 /**
  * Run the tool-aware SSE loop for one user turn (optionally skip pushing a new user row).
  */
+function trackRunHistoryPush(chat: Chat, turnRunId: TurnRunId | undefined): void {
+  if (!turnRunId || chat.history.length === 0) return;
+  noteRunOutputIndex(chat, turnRunId, chat.history.length - 1);
+}
+
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const {
     chat,
@@ -537,16 +564,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     skillBody: presetSkillBody = null,
     resumeGenerationId,
     ownsGlobalStreaming = true,
+    replaySnapshot,
+    parentRunId,
+    forkOverrides,
   } = options;
 
   if (!beginChatTurnSetup(chat.id)) {
     return;
   }
 
+  let turnRunId: TurnRunId | undefined;
+  let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
+
   try {
-  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-  const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
-  const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
+  const domModelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const domTemp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
+  const domMaxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
+  const modelId = replaySnapshot?.modelId ?? domModelId;
+  const temp = replaySnapshot?.temperature ?? domTemp;
+  const maxTok = replaySnapshot?.maxTokens ?? domMaxTok;
   const legacySysPrompt = (
     document.getElementById('systemPrompt') as HTMLTextAreaElement
   ).value.trim();
@@ -779,8 +815,54 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     routeUserText: userText || rawText,
     overrides: { skillBody },
   });
-  const sysPrompt = outbound.composed;
-  const userRulesContent = outbound.userRules;
+  const sysPrompt = replaySnapshot?.composedSystemPrompt ?? outbound.composed;
+  const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
+
+  if (!resumeGenerationId) {
+    const forkHistoryIndex = resolveForkHistoryIndex(chat, pushUser);
+    const userRow = chat.history[forkHistoryIndex] as UserMessage | undefined;
+    const userContent = userRow?.content ?? historyContent;
+    const activeModeId = normalizeModeId(chat.modeId);
+    let snapTools = getEnabledToolDefinitionsForMode(activeModeId);
+    if (activeWorkAgent?.allowedTools?.length) {
+      const allow = new Set(activeWorkAgent.allowedTools);
+      snapTools = snapTools.filter((t) => allow.has(t.function.name));
+    }
+    snapTools = applyUiDesignerToolFilter(snapTools, uiDesignerCtx);
+    const enabledToolNames = snapTools.map((t) => t.function.name);
+    const maxToolTurnsCap = getChatMetaSync().maxToolTurns;
+
+    if (replaySnapshot) {
+      const run = createRun(chat, replaySnapshot, {
+        parentRunId,
+        parentTurnId,
+        overrides: forkOverrides,
+      });
+      turnRunId = run.runId;
+    } else {
+      const snapshot = await buildTurnSnapshot({
+        chat,
+        forkHistoryIndex,
+        composedSystemPrompt: sysPrompt,
+        userRulesContent: userRulesContent ?? undefined,
+        enabledToolNames,
+        maxToolTurns: maxToolTurnsCap,
+        providerId: sendProviderId,
+        modelId: sendModelId,
+        temperature: temp,
+        maxTokens: maxTok,
+        skillId,
+        userContent,
+      });
+      const run = createRun(chat, snapshot, {
+        parentRunId,
+        parentTurnId,
+        overrides: forkOverrides,
+      });
+      turnRunId = run.runId;
+    }
+    scheduleSaveSessions();
+  }
 
   try {
     const provider = await getActiveProvider(sendProviderId);
@@ -838,6 +920,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         (text) => {
           livePartialText = text;
         },
+        undefined,
+        turnRunId,
       );
 
       cancelAssistantBubbleRenderDebounce();
@@ -876,6 +960,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           tool_calls: turnResult.toolCalls,
         };
         chat.history.push(assistantToolMsg);
+        trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         scheduleSaveSessions();
@@ -904,6 +989,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 tool_call_id: skipped.id,
                 content: STOPPED_TOOL_MSG,
               });
+              trackRunHistoryPush(chat, turnRunId);
             }
             recordChatMessage(chat);
             scheduleSaveSessions();
@@ -953,6 +1039,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               ? { attachments: toolOut.attachments }
               : {}),
           });
+          trackRunHistoryPush(chat, turnRunId);
           if (paintToolCallsInChat) {
             scrollChatIfPinned();
           }
@@ -1107,6 +1194,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           }
         }
         chat.history.push(assistantMsg);
+        trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         if (isStreamDomVisible(chat.id)) {
@@ -1139,6 +1227,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
+      turnRunStatus = 'stopped';
       cancelAllForParentTurn(parentTurnId);
       thinkingTracker?.abort();
       streamCtx.streamStatus.setThinkingElapsed(null);
@@ -1176,6 +1265,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           assistantMsg.thinking = thinkingNorm;
         }
         chat.history.push(assistantMsg);
+        trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         scheduleSaveSessions();
@@ -1185,6 +1275,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('ok', 'Stopped');
       return;
     }
+    turnRunStatus = 'failed';
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
@@ -1249,6 +1340,22 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       streamCtx.wrap.classList.contains('msg--awaiting-prose')
     ) {
       removeOrphanStreamingRow(streamCtx.wrap, streamCtx.streamStatus);
+    }
+    if (turnRunId) {
+      const run = findRunById(chat, turnRunId);
+      const start = run?.outputHistoryStart;
+      const end = run?.outputHistoryEnd;
+      const outputMessages =
+        start !== undefined && end !== undefined && end >= start
+          ? chat.history.slice(start, end + 1).map((m) => ({ ...m }))
+          : undefined;
+      finalizeRun(chat, turnRunId, {
+        status: turnRunStatus,
+        outputHistoryStart: start,
+        outputHistoryEnd: end,
+        outputMessages,
+      });
+      scheduleSaveSessions();
     }
   }
   } finally {
