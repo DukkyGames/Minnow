@@ -2,6 +2,7 @@
  * Priority rule chain: first matching detector wins (unless flags block evaluation).
  */
 
+import { isOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete.ts';
 import type { DetectorContext, DetectorHit } from './detector.ts';
 import {
   detectAmbiguousReport,
@@ -81,6 +82,13 @@ export function pickSupervisorDecision(
     return { action: 'none' };
   }
 
+  if (
+    isOrchestratePlanComplete(ctx.board) &&
+    (rule === 'R4' || rule === 'R6' || rule === 'R7' || rule === 'R8')
+  ) {
+    return { action: 'none' };
+  }
+
   switch (rule) {
     case 'R9': {
       if (!ctx.cfg.askUserOnBudgetExhausted) {
@@ -110,6 +118,9 @@ export function pickSupervisorDecision(
 export function scanTickDetectors(ctx: DetectorContext): DetectorHit | null {
   if (ctx.sup.awaitingUserDecision || ctx.sup.recoveryInFlight) return null;
   if (!ctx.cfg.enabled) return null;
+  if (isOrchestratePlanComplete(ctx.board) || ctx.sup.planCompletedAt != null) {
+    return null;
+  }
 
   for (const fn of TICK_RULE_ORDER) {
     const hit = fn(ctx);

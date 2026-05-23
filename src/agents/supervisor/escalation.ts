@@ -4,6 +4,7 @@
 
 import { pathsForProvider } from '../../providers/paths.ts';
 import { getActiveProvider } from '../../providers/store.ts';
+import { isOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete.ts';
 import type { Chat, OrchestrateBoardState } from '../../types.ts';
 import { getSupervisorConfigSnapshot } from './config.ts';
 import type { SupervisorDecision } from './rules.ts';
@@ -43,6 +44,9 @@ export async function runLlmEscalationJudgement(
   board: OrchestrateBoardState,
   sup: SupervisorChatState,
 ): Promise<SupervisorDecision | null> {
+  if (isOrchestratePlanComplete(board) || sup.planCompletedAt != null) {
+    return { action: 'none' };
+  }
   const cfg = getSupervisorConfigSnapshot();
   const fp = stableBundleFingerprint(chat, board, sup);
   const last = fingerprintAt.get(fp) ?? 0;

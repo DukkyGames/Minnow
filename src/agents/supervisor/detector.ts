@@ -4,6 +4,7 @@
 
 import type { SubAgentRun } from '../types.ts';
 import type { BoardTask, Chat, OrchestrateBoardState } from '../../types.ts';
+import { hasIncompleteOrchestrateWork } from '../../chat/orchestrate/plan-complete.ts';
 import { detectRepetition, type ToolCallLogEntry } from '../self-healing/detector.ts';
 import { isSubAgentRunSuccessful } from '../sub-agent-outcome.ts';
 import { getSupervisorConfigSnapshot } from './config.ts';
@@ -44,9 +45,7 @@ function activeRunsForChat(chatId: string, runs: SubAgentRun[]): SubAgentRun[] {
   );
 }
 
-function hasIncompleteTasks(board: OrchestrateBoardState): boolean {
-  return board.tasks.some((t) => t.status !== 'complete');
-}
+const hasIncompleteTasks = hasIncompleteOrchestrateWork;
 
 function findBlockingTask(board: OrchestrateBoardState): BoardTask | null {
   const order = ['failed', 'blocked', 'in_progress', 'testing', 'planned'] as const;
