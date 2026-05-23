@@ -3,6 +3,7 @@
  */
 
 import { isOrchestratePlanComplete } from '../../chat/orchestrate/plan-complete.ts';
+import { isUserStoppedChat } from '../../chat/orchestrate/user-stopped.ts';
 import type { DetectorContext, DetectorHit } from './detector.ts';
 import {
   detectAmbiguousReport,
@@ -118,6 +119,7 @@ export function pickSupervisorDecision(
 export function scanTickDetectors(ctx: DetectorContext): DetectorHit | null {
   if (ctx.sup.awaitingUserDecision || ctx.sup.recoveryInFlight) return null;
   if (!ctx.cfg.enabled) return null;
+  if (isUserStoppedChat(ctx.chat)) return null;
   if (isOrchestratePlanComplete(ctx.board) || ctx.sup.planCompletedAt != null) {
     return null;
   }

@@ -3,6 +3,7 @@
  */
 
 import { canOrchestrateResume } from '../../chat/orchestrate/plan-complete.ts';
+import { isUserStoppedChat } from '../../chat/orchestrate/user-stopped.ts';
 import { ORCHESTRATE_RESUME_MESSAGE } from '../../chat/orchestrate/resume-message.ts';
 import { isActiveChatStreaming } from '../../chat/streaming-state.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
@@ -76,6 +77,7 @@ export async function executeSupervisorDecision(
   const sup = getSupervisorChatState(chatId);
   const board = chat.orchestrateBoard;
   const cfg = getSupervisorConfigSnapshot();
+  const userStopped = isUserStoppedChat(chat);
 
   switch (decision.action) {
     case 'none':
@@ -87,8 +89,10 @@ export async function executeSupervisorDecision(
       return;
     }
     case 'inject_resume': {
+      if (userStopped) return;
       if (!canOrchestrateResume(board)) return;
       if (isActiveChatStreaming() || resumeInFlight) return;
+      if (getActiveChat().id !== chatId) return;
       const taskId =
         typeof decision.payload?.blockingTaskId === 'string'
           ? decision.payload.blockingTaskId
@@ -116,6 +120,7 @@ export async function executeSupervisorDecision(
       return;
     }
     case 'restart_run': {
+      if (userStopped) return;
       const runId = typeof decision.payload?.runId === 'string' ? decision.payload.runId : '';
       if (!runId) return;
       const h = getRunHealth(runId);
@@ -132,6 +137,7 @@ export async function executeSupervisorDecision(
       return;
     }
     case 'respawn_task': {
+      if (userStopped) return;
       if (decision.rule === 'R2') {
         const taskId =
           (typeof decision.payload?.boardTaskId === 'string' && decision.payload.boardTaskId.trim()
@@ -235,6 +241,7 @@ export async function executeSupervisorDecision(
       return;
     }
     case 'llm_escalate': {
+      if (userStopped) return;
       sup.recoveryInFlight = true;
       try {
         const sub = await runLlmEscalationJudgement(chat, board, sup);

@@ -2,6 +2,7 @@
  * Orchestrate plan completion helpers (supervisor gating, resume, completion copy).
  */
 
+import type { SupervisorChatState } from '../../agents/supervisor/state.ts';
 import type { Chat, OrchestrateBoardState } from '../../types.ts';
 
 /** True when the board has at least one task and every task is `complete`. */
@@ -18,6 +19,21 @@ export function hasIncompleteOrchestrateWork(board: OrchestrateBoardState): bool
 /** Manual/auto resume is allowed only while incomplete work remains. */
 export function canOrchestrateResume(board: OrchestrateBoardState): boolean {
   return hasIncompleteOrchestrateWork(board);
+}
+
+/**
+ * True once orchestration has actually run (not a fresh board with only `startedAt`).
+ * Gates supervisor auto-resume (R7) so new/idle chats are not treated as stalled.
+ */
+export function hasOrchestrateSupervisorSessionStarted(
+  sup: SupervisorChatState,
+  board: OrchestrateBoardState,
+): boolean {
+  if (sup.lastTerminalAt != null && sup.lastTerminalAt > 0) return true;
+  if (sup.lastReportAt != null && sup.lastReportAt > 0) return true;
+  if (sup.lastParentToolResultAt != null && sup.lastParentToolResultAt > 0) return true;
+  if (board.activeParentTurnId?.trim()) return true;
+  return board.tasks.some((t) => t.status !== 'planned');
 }
 
 function shortPlanLabel(planPath: string): string {

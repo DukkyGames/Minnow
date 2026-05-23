@@ -14,6 +14,7 @@ import {
   hasIncompleteOrchestrateWork,
   isOrchestratePlanComplete,
 } from '../chat/orchestrate/plan-complete';
+import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { shouldShowOrchestrateStallBadge } from '../agents/supervisor/state.ts';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
@@ -96,23 +97,7 @@ export function getBoardTaskRunIds(task: BoardTask): string[] {
   return ids;
 }
 
-/** True when the user stopped the latest assistant turn and work remains. */
-export function isUserStoppedChat(chat: Chat): boolean {
-  const board = chat.orchestrateBoard;
-  if (!board || !hasIncompleteOrchestrateWork(board)) {
-    return false;
-  }
-  for (let i = chat.history.length - 1; i >= 0; i--) {
-    const msg = chat.history[i];
-    if (msg.role === 'assistant') {
-      return 'stopped' in msg && msg.stopped === true;
-    }
-    if (msg.role === 'user') {
-      return false;
-    }
-  }
-  return false;
-}
+export { isUserStoppedChat };
 
 /** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete / Cancelled). */
 export function deriveTaskAgentBadge(

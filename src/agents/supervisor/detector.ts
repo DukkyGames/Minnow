@@ -4,7 +4,10 @@
 
 import type { SubAgentRun } from '../types.ts';
 import type { BoardTask, Chat, OrchestrateBoardState } from '../../types.ts';
-import { hasIncompleteOrchestrateWork } from '../../chat/orchestrate/plan-complete.ts';
+import {
+  hasIncompleteOrchestrateWork,
+  hasOrchestrateSupervisorSessionStarted,
+} from '../../chat/orchestrate/plan-complete.ts';
 import { detectRepetition, type ToolCallLogEntry } from '../self-healing/detector.ts';
 import { isSubAgentRunSuccessful } from '../sub-agent-outcome.ts';
 import { getSupervisorConfigSnapshot } from './config.ts';
@@ -205,6 +208,7 @@ export function detectSpawnStuck(ctx: DetectorContext): DetectorHit | null {
 /** R7: no status report and no orchestrator progress within heartbeat window. */
 export function detectMissedOrchestratorHeartbeat(ctx: DetectorContext): DetectorHit | null {
   const { board, cfg, nowMs, sup } = ctx;
+  if (!hasOrchestrateSupervisorSessionStarted(sup, board)) return null;
   const reportRef = sup.lastReportAt ?? board.startedAt;
   const progressRef = Math.max(
     sup.lastOrchestratorProgressAt ?? board.startedAt,
