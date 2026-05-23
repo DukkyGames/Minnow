@@ -72,6 +72,8 @@ body = body.replace(
   ''
 ).trim();
 
-fs.writeFileSync(path.join(root, 'scripts', '_extracted-body.html'), body);
-fs.writeFileSync(path.join(root, 'scripts', '_extracted-app.js'), appJs);
-console.log('Wrote scripts/_extracted-body.html and scripts/_extracted-app.js');
+const archiveDir = path.join(root, 'documentation', 'archive');
+fs.mkdirSync(archiveDir, { recursive: true });
+fs.writeFileSync(path.join(archiveDir, '_extracted-body.html'), body);
+fs.writeFileSync(path.join(archiveDir, '_extracted-app.js'), appJs);
+console.log('Wrote documentation/archive/_extracted-body.html and documentation/archive/_extracted-app.js');
