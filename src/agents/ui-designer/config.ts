@@ -17,16 +17,41 @@ import {
 export type { UiDesignerConfig, UiDesignerConfigMeta };
 export { normalizeUiDesignerConfig, resolveUiDesignerModel };
 
-/** Load uiDesigner section from GET /api/config/meta. */
+let cachedUiDesigner: UiDesignerConfig | null = null;
+
+/** Load uiDesigner section from GET /api/config/meta (cached until reset). */
 export async function loadUiDesignerConfig(): Promise<UiDesignerConfig> {
+  if (cachedUiDesigner) return cachedUiDesigner;
   try {
     const res = await fetch('/api/config/meta', { cache: 'no-store' });
-    if (!res.ok) return normalizeUiDesignerConfig(null);
+    if (!res.ok) {
+      cachedUiDesigner = normalizeUiDesignerConfig(null);
+      return cachedUiDesigner;
+    }
     const body = (await res.json()) as UiDesignerConfigMeta;
-    return normalizeUiDesignerConfig(body.uiDesigner);
+    cachedUiDesigner = normalizeUiDesignerConfig(body.uiDesigner);
+    return cachedUiDesigner;
   } catch {
-    return normalizeUiDesignerConfig(null);
+    cachedUiDesigner = normalizeUiDesignerConfig(null);
+    return cachedUiDesigner;
   }
+}
+
+/** Clear uiDesigner config cache (tests). */
+export function resetUiDesignerConfigCache(): void {
+  cachedUiDesigner = null;
+}
+
+/** Persist partial uiDesigner block via PUT /api/config/meta. */
+export async function saveUiDesignerConfig(patch: Partial<UiDesignerConfig>): Promise<void> {
+  const current = await loadUiDesignerConfig();
+  const next = normalizeUiDesignerConfig({ ...current, ...patch });
+  cachedUiDesigner = next;
+  await fetch('/api/config/meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uiDesigner: next }),
+  });
 }
 
 export interface ResolveUiDesignerBindingOptions {

@@ -2,13 +2,15 @@
  * Per-chat Reef widget LLM provider/model overrides (Settings → Modes → Reef).
  */
 
-import { fetchModelsForProvider } from '../providers/fetch-models';
-import { isProvidersApiAvailable, listProviders } from '../providers/store';
 import {
   getActiveChat,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
+import {
+  fillModelSelect,
+  fillProviderSelect,
+} from './settings-model-binding';
 
 let providerSelectEl: HTMLSelectElement | null = null;
 let modelSelectEl: HTMLSelectElement | null = null;
@@ -21,81 +23,8 @@ function getModelSelect(): HTMLSelectElement | null {
   return modelSelectEl;
 }
 
-async function fillProviderSelect(selectedId: string): Promise<void> {
-  const sel = getProviderSelect();
-  if (!sel) return;
-
-  sel.replaceChildren();
-  const defaultOpt = document.createElement('option');
-  defaultOpt.value = '';
-  defaultOpt.textContent = '(use chat default)';
-  sel.appendChild(defaultOpt);
-
-  if (!isProvidersApiAvailable()) {
-    sel.disabled = true;
-    return;
-  }
-
-  const { providers } = await listProviders();
-  for (const p of providers) {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.label || p.id;
-    sel.appendChild(opt);
-  }
-  sel.value = selectedId || '';
-  sel.disabled = false;
-}
-
-async function fillModelSelectForProvider(
-  providerId: string,
-  selectedModelId: string,
-): Promise<void> {
-  const sel = getModelSelect();
-  if (!sel) return;
-
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = '(use chat default)';
-  sel.replaceChildren();
-  sel.appendChild(empty);
-
-  if (!providerId || !isProvidersApiAvailable()) {
-    sel.disabled = true;
-    return;
-  }
-
-  const { providers } = await listProviders();
-  const provider = providers.find((p) => p.id === providerId);
-  if (!provider) {
-    sel.disabled = true;
-    return;
-  }
-
-  sel.disabled = true;
-  sel.innerHTML = '<option value="">Loading models…</option>';
-  try {
-    const controller = new AbortController();
-    const models = await fetchModelsForProvider(provider, controller.signal);
-    sel.replaceChildren();
-    sel.appendChild(empty);
-    for (const m of models) {
-      if (m.type !== 'llm' && m.type !== 'vlm') continue;
-      const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = m.id;
-      sel.appendChild(opt);
-    }
-    sel.value = selectedModelId || '';
-    sel.disabled = false;
-  } catch {
-    sel.replaceChildren();
-    sel.appendChild(empty);
-    sel.disabled = false;
-  }
-}
-
-function persistFromUi(): void {
+/** Write reef widget provider/model from the mounted selects into the active chat. */
+export function persistReefWidgetBindingFromUi(): void {
   const chat = getActiveChat();
   const providerSel = getProviderSelect();
   const modelSel = getModelSelect();
@@ -162,10 +91,10 @@ export function mountReefWidgetLlmSettings(container: HTMLElement): void {
 
   providerSelectEl.addEventListener('change', () => {
     const providerId = providerSelectEl?.value ?? '';
-    void fillModelSelectForProvider(providerId, '');
-    persistFromUi();
+    void fillModelSelect(modelSelectEl!, providerId, '');
+    persistReefWidgetBindingFromUi();
   });
-  modelSelectEl.addEventListener('change', () => persistFromUi());
+  modelSelectEl.addEventListener('change', () => persistReefWidgetBindingFromUi());
 
   void syncReefWidgetSettingsFromActiveChat();
 }
@@ -179,9 +108,11 @@ export function syncReefWidgetSettingsFromActiveChat(): void {
   const chat = getActiveChat();
 
   void (async () => {
-    await fillProviderSelect(chat.reefWidgetProviderId ?? chat.providerId ?? '');
+    await fillProviderSelect(providerSel, chat.reefWidgetProviderId ?? chat.providerId ?? '', {
+      includeEmptyOption: true,
+    });
     const providerId =
       chat.reefWidgetProviderId ?? chat.providerId ?? providerSel.value ?? '';
-    await fillModelSelectForProvider(providerId, chat.reefWidgetModelId ?? '');
+    await fillModelSelect(modelSel, providerId, chat.reefWidgetModelId ?? '');
   })();
 }

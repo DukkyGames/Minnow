@@ -325,6 +325,53 @@
   border-bottom: none;
 }
 
+.settings-routing-group {
+  margin: 24px 0 0;
+}
+
+.settings-routing-group__title {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.settings-routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.settings-routing-table th,
+.settings-routing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+}
+
+.settings-routing-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.settings-routing-row__selects {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.settings-routing-row__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.settings-inline-link {
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
 .settings-entity-list {
   list-style: none;
   margin: 0;
