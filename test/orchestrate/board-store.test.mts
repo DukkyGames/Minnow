@@ -60,7 +60,8 @@ const EXPECTED_INIT_BOARD_JSON = `{
     }
   ],
   "startedAt": 1710000001000,
-  "lastUpdatedAt": 1710000001000
+  "lastUpdatedAt": 1710000001000,
+  "timerAccumulatedMs": 0
 }`;
 
 /** After W1-A moves to in_progress — wave rollup stays in_progress. */

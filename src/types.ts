@@ -272,6 +272,10 @@ export interface OrchestrateBoardState {
   waves: BoardWave[];
   startedAt: number;
   lastUpdatedAt: number;
+  /** Ms accumulated while orchestration is actively running (pauses when idle/stopped). */
+  timerAccumulatedMs?: number;
+  /** Epoch ms when the current run segment started; unset while the timer is paused. */
+  timerSegmentStartedAt?: number;
   /** Parent turn id for Stop orchestrator (minted in tool loop). */
   activeParentTurnId?: string;
 }

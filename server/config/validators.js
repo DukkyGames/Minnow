@@ -142,6 +142,12 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.activeParentTurnId === 'string' && r.activeParentTurnId.trim()) {
     out.activeParentTurnId = r.activeParentTurnId.trim();
   }
+  if (typeof r.timerAccumulatedMs === 'number') {
+    out.timerAccumulatedMs = r.timerAccumulatedMs;
+  }
+  if (typeof r.timerSegmentStartedAt === 'number') {
+    out.timerSegmentStartedAt = r.timerSegmentStartedAt;
+  }
   return out;
 }
 

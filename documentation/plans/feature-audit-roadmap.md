@@ -62,11 +62,13 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Today:** Single global temperature/maxTokens from the settings drawer; no per-agent overrides in `work-agents.json` / `sub-agents.json`.
 - **Gap:** `sampler: { temperature, topP, topK, minP, repetitionPenalty }` per agent with sensible defaults per role.
 - **Scope:** Extend agent schemas; merge into outgoing chat body in `streamCompletionTurn` ([src/tools/loop.ts](../../src/tools/loop.ts)).
+- **Build plan:** [`Build out/feature-09-sampler-presets.md`](Build%20out/feature-09-sampler-presets.md)
 
 ### 10. Constrained decoding for tool calls — Missing
 - **Today:** Native `tool_calls` only; no grammar mode. Some local models drop malformed args today.
 - **Gap:** Probe provider for grammar / `response_format` support; when present, send a tool-call grammar.
 - **Scope:** New `src/providers/capability-probe.ts`; opt-in path in [src/tools/loop.ts](../../src/tools/loop.ts).
+- **Build plan:** [`documentation/plans/Build out/feature-10-constrained-decoding.md`](Build%20out/feature-10-constrained-decoding.md)
 
 ### 11. Model capability detection — Partial
 - **Today:** Reads `context_length`, `type=vlm`, `loaded_state` from LM Studio's `/api/v0/models`. No equivalent for other providers.
@@ -81,6 +83,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Today:** Custom prompt-configs per-part editor; no diff view; resetting is destructive.
 - **Gap:** Side-by-side or unified diff vs the shipped default for every editable prompt; per-part reset.
 - **Scope:** Pull in a small diff lib; wire into `src/ui/settings-entity-editor.ts`.
+- **Plan:** [`Build out/feature-12-prompt-diffing.md`](Build%20out/feature-12-prompt-diffing.md)
 
 ### 13. Prompt versioning / profiles — Partial
 - **Today:** `activePromptProfile: full|lite|custom`; custom configs are `prompt-configs/<id>.json`. No portable profile (no bundle of prompts + agents + tool selection).
@@ -91,6 +94,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Today:** Stats strip ([src/ui/stats.ts](../../src/ui/stats.ts)) shows tok/s + TTFT. Context-usage ring. Settings prompt-token estimate ([src/ui/settings-prompt-estimate.ts](../../src/ui/settings-prompt-estimate.ts)).
 - **Gap:** Per-agent rollup, per-chat totals, dollar cost for remote providers (price table per `providerId`/`modelId`).
 - **Scope:** Add `pricing` block to provider profile; `chat.tokenLedger`; new `#/settings/usage` panel.
+- **Plan:** [`Build out/feature-14-cost-token-observability.md`](Build%20out/feature-14-cost-token-observability.md)
 
 ### 15. Agent activity view — Partial
 - **Today:** Sub-agent cards + drawer ([src/ui/sub-agent-cards.ts](../../src/ui/sub-agent-cards.ts), [src/ui/sub-agent-drawer.ts](../../src/ui/sub-agent-drawer.ts)); Orchestrate board; status pill. No consolidated "all agents right now" pane.
@@ -110,6 +114,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Today:** MCP supported (Context7 built-in, custom add) ([server/mcp/](../../server/mcp/)). Native tool catalog is repo-internal ([src/tools/definitions.ts](../../src/tools/definitions.ts)).
 - **Gap:** Native local tool plugin path that doesn't require an MCP server — local JS module under `~/.minnow/tools/<name>/{tool.json,handler.mjs}` loaded by `server/tools/loader.js`.
 - **Scope:** Mirror the skills loader pattern; sandbox via vm if needed.
+- **Build plan:** [`Build out/feature-17-tool-plugin.md`](Build%20out/feature-17-tool-plugin.md)
 
 ### 18. Headless mode — Missing
 - **Today:** All flows go through the SPA. `server.js` exposes HTTP but no CLI front-end.
@@ -129,11 +134,13 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Today:** Orchestrate spawns sub-agents serially; no in-chat critic ↔ proposer loop with distinct system prompts side-by-side.
 - **Gap:** New mode (or Reef-style widget) where two named agents take turns, visible as distinct bubbles, with optional human arbiter step.
 - **Scope:** Builds on the existing sub-agent runner; new `multi-model` mode prompt + UI bubble lane.
+- **Build plan:** [`Build out/feature-20-multi-model-conversation.md`](Build%20out/feature-20-multi-model-conversation.md)
 
 ### 21. Local eval harness — Missing
 - **Today:** No user-defined task pack or model comparison runner.
 - **Gap:** User declares N tasks (prompt + tool whitelist + grading rubric prompt) → run across N models → leaderboard. Stored under `~/.minnow/evals/`.
 - **Scope:** New `src/evals/` runner reusing sub-agent isolation; results panel in settings.
+- **Plan:** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](Build%20out/feature-21-local-eval-harness.md)
 
 ### 22. Project-scoped everything — Partial
 - **Today:** Workspace-scoped *chats* (B2) and recent menu. Agent configs, prompts, tool whitelist, MCP servers, model bindings are still **global** in `~/.minnow/`.
