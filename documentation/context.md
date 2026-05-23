@@ -292,7 +292,8 @@ Unified **Orchestrate supervisor** in [`src/agents/supervisor/`](../src/agents/s
 |--------|------|
 | `src/agents/supervisor/detector.ts` | Pure rules R1–R10 signals + verbatim stall evaluator |
 | `src/agents/supervisor/rules.ts` | Priority chain → `SupervisorDecision` |
-| `src/agents/supervisor/actions.ts` | Resume toast + `sendMessage`, sub-agent restart/respawn, `ask_question` on budget; **MIN-35:** one resume toast per stall episode (`shouldShowOrchestrateWatchdogToast`) |
+| `src/agents/supervisor/actions.ts` | Resume toast + `sendMessage` only for **active** chat; sub-agent restart/respawn, `ask_question` on budget; **MIN-35:** one resume toast per stall episode (`shouldShowOrchestrateWatchdogToast`) |
+| `src/chat/orchestrate/plan-complete.ts` | `hasOrchestrateSupervisorSessionStarted` — gates R7 so idle/new boards are not auto-resumed on `startedAt` alone |
 | `src/agents/supervisor/state.ts` | **MIN-35:** `stalledChatIds` pruned when plan complete, streaming, or active subs (`pruneStaleStallUiFlag`); `shouldShowOrchestrateStallBadge` gates board header |
 | `src/agents/supervisor/loop.ts` | `startSupervisor` / `stopSupervisor`, board + run listeners; tick prunes stale stall UI |
 | `src/chat/orchestrate/plan-complete.ts` | **MIN-34:** `isOrchestratePlanComplete`, resume gating, completion summary copy |

@@ -62,6 +62,22 @@ describe('scanTickDetectors + pickSupervisorDecision', () => {
     assert.equal(decision.action, 'escalate_user');
   });
 
+  test('R7 does not fire on idle board with only startedAt (new chat / reload)', () => {
+    const board: OrchestrateBoardState = {
+      planPath: 'p.md',
+      startedAt: NOW - 600_000,
+      lastUpdatedAt: NOW,
+      waves: [{ id: 'W1', status: 'planned' }],
+      tasks: [{ id: 'T1', title: 't', wave: 'W1', category: 'build', status: 'planned' }],
+    };
+    const sup = getSupervisorChatState(CHAT_ID);
+    sup.awaitingUserDecision = false;
+    sup.recoveryInFlight = false;
+    const c = ctx({ board, sup });
+    assert.equal(detectMissedOrchestratorHeartbeat(c), null);
+    assert.equal(scanTickDetectors(c), null);
+  });
+
   test('all-complete board does not tick inject_resume when R7 would match', () => {
     const board: OrchestrateBoardState = {
       planPath: 'p.md',

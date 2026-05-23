@@ -89,6 +89,7 @@ export async function executeSupervisorDecision(
     case 'inject_resume': {
       if (!canOrchestrateResume(board)) return;
       if (isActiveChatStreaming() || resumeInFlight) return;
+      if (getActiveChat().id !== chatId) return;
       const taskId =
         typeof decision.payload?.blockingTaskId === 'string'
           ? decision.payload.blockingTaskId
