@@ -1,6 +1,6 @@
 /**
  * Shared data shapes for sessions, LM Studio API payloads, and UI metrics.
- * Mirrors structures in `scripts/_extracted-app.js` / legacy `index.html`.
+ * Mirrors structures in `documentation/archive/_extracted-app.js` (historical) / legacy `index.html`.
  */
 
 import type { ModeId } from './chat/modes/types';

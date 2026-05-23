@@ -86,9 +86,11 @@ Foundation first, then observability, then plugins/headless:
 
 ## Todos
 
-- [ ] Wave 1 complete (MIN-35, MIN-36, MIN-18)
-- [ ] Wave 2 complete
-- [ ] Wave 3 complete
-- [ ] Wave 4 complete
-- [ ] Wave 5 complete (or scoped MVP per build plan)
-- [ ] MIN-16 scoped / shipped or split into sub-issues
+- [x] Wave 1 complete (MIN-35, MIN-36, MIN-18)
+- [x] Wave 2 complete (MIN-25, MIN-26, MIN-29, MIN-23, MIN-30)
+- [x] Wave 3 complete (MIN-28, MIN-31, MIN-33, MIN-21)
+- [x] Wave 4 partial (MIN-27, MIN-24)
+- [ ] Wave 4 remaining (MIN-20 bundle size)
+- [ ] Wave 3 remaining (MIN-32 file types)
+- [ ] Wave 5 (MIN-37–MIN-58 roadmap features — multi-sprint)
+- [ ] MIN-16 Bug Tracker mode (epic)
