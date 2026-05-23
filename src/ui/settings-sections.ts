@@ -87,6 +87,7 @@ import {
   renderEntityEditorList,
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
+import { renderModelRoutingSection } from './settings-model-routing';
 import {
   loadTerminalMeta,
   saveTerminalMeta,
@@ -676,6 +677,14 @@ async function renderExpertsSection(): Promise<void> {
   );
 }
 
+async function renderModelRoutingSettingsSection(): Promise<void> {
+  const mount = clearMount('settingsModelRoutingBody');
+  if (!mount) return;
+  const generation = beginAsyncSectionRender('model-routing');
+  await renderModelRoutingSection(mount);
+  if (isAsyncSectionRenderStale('model-routing', generation)) return;
+}
+
 async function renderWorkAgentsSection(): Promise<void> {
   const mount = clearMount('settingsWorkAgentsBody');
   if (!mount) return;
@@ -696,7 +705,7 @@ async function renderWorkAgentsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json.',
+      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json. See Settings → Model routing for all role bindings in one place.',
     ),
   );
 
@@ -808,7 +817,7 @@ async function renderSubAgentsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Expand a sub-agent type to edit its system prompt and model binding.',
+      'Expand a sub-agent type to edit its system prompt and model binding. See Settings → Model routing for all role bindings in one place.',
     ),
   );
 
@@ -1708,6 +1717,9 @@ export async function refreshSettingsSection(
       refreshProvidersBanner();
       await listProviders();
       await renderProvidersSettingsSection();
+      break;
+    case 'model-routing':
+      await renderModelRoutingSettingsSection();
       break;
     case 'prompting':
       await renderPromptingSection();

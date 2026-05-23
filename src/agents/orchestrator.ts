@@ -15,6 +15,7 @@ import {
   SUB_AGENT_MAX_TOOL_TURNS_ERROR,
 } from './sub-agent-outcome';
 import { cloneSubAgentMessages, getSubAgentRunner } from './sub-agent-runner';
+import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
 import { clearSubAgentRunListeners, emitSubAgentRunUpdated } from './sub-agent-events';
@@ -231,20 +232,6 @@ function syncBoardTaskOnSettle(
 }
 
 /** Prefer per-type config, then the parent chat's active model/provider. */
-function resolveSubAgentModelBinding(
-  typeConfig: { providerId: string; modelId: string },
-  parentChatId: string | null,
-): { providerId: string; modelId: string } {
-  const parentChat = parentChatId ? findChatById(parentChatId) : undefined;
-  const modelId =
-    typeConfig.modelId?.trim() || parentChat?.modelId?.trim() || '';
-  const providerId =
-    typeConfig.providerId?.trim() ||
-    parentChat?.providerId?.trim() ||
-    typeConfig.providerId;
-  return { providerId, modelId };
-}
-
 /** Push a transcript snapshot to the run row and notify UI subscribers. */
 function publishRunMessages(run: SubAgentRun, messages: ApiMessage[]): void {
   run.messages = cloneSubAgentMessages(messages);
@@ -281,10 +268,8 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     if (!run.startedAt) run.startedAt = nowIso();
     emitSubAgentRunUpdated(run);
 
-    const { providerId, modelId } = resolveSubAgentModelBinding(
-      typeConfig,
-      run.parentChatId,
-    );
+    const parentChat = run.parentChatId ? findChatById(run.parentChatId) : undefined;
+    const { providerId, modelId } = resolveSubAgentModelBinding(typeConfig, parentChat);
     run.providerId = providerId;
     run.modelId = modelId;
     emitSubAgentRunUpdated(run);
