@@ -90,8 +90,13 @@ export const PRELUDE_SCRIPT = `(function () {
 
   /** Catch dynamic DOM (sync scripts, ESM, charts) that mount after the first measure. */
   function scheduleDelayedResizePasses() {
+    /* Direct call first: rAF can be throttled when the host hides the iframe with
+       visibility:hidden during validation, causing resize to arrive after validateResult.
+       postResizeToHost() deduplicates via lastPostedHeight so this is safe to call often. */
+    postResizeToHost();
     scheduleResizePost();
     setTimeout(scheduleResizePost, 0);
+    setTimeout(postResizeToHost, 0);
     setTimeout(scheduleResizePost, 100);
     setTimeout(scheduleResizePost, 400);
     setTimeout(emitValidateResult, 500);
