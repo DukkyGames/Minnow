@@ -54,6 +54,14 @@ import {
   tryResolveReefWidgetReadPath,
   tryResolveReefWidgetsFindRoot,
 } from './server/reef/widget-paths.js';
+import {
+  getHomeReefArtifactsDir,
+  isAllowedReefArtifactPath,
+  tryResolveReefArtifactPath,
+  tryResolveReefArtifactsFindRoot,
+} from './server/reef/artifact-paths.js';
+import { appendArtifactVersionFromSave } from './server/reef/artifact-store.js';
+import { createReefMiddleware } from './server/reef/middleware.js';
 import { syncReefWidgetTemplates } from './server/reef/sync-widgets.js';
 
 const execFileAsync = promisify(execFile);
@@ -80,6 +88,11 @@ function resolveSafePath(userPath, options = {}) {
   const reefModule = tryResolveReefModulePath(userPath);
   if (reefModule) {
     return reefModule;
+  }
+
+  const reefArtifact = tryResolveReefArtifactPath(userPath);
+  if (reefArtifact) {
+    return reefArtifact;
   }
 
   if (options.write && isReefWidgetPathAlias(userPath)) {
@@ -119,6 +132,18 @@ function toRelativePath(absPath) {
   if (isAllowedReefModulePath(absPath)) {
     const rel = path.relative(getHomeReefModulesDir(), absPath).replace(/\\/g, '/');
     return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
+  }
+  if (isAllowedReefArtifactPath(absPath)) {
+    const rel = path.relative(getHomeReefArtifactsDir(), absPath).replace(/\\/g, '/');
+    if (!rel) return '@minnow/reef/artifacts';
+    const segments = rel.split('/');
+    if (segments.length === 1 && segments[0].match(/^v\d+\.md$/)) {
+      return `@minnow/reef/artifacts/${path.basename(path.dirname(absPath))}`;
+    }
+    if (segments[1] === 'manifest.json') {
+      return `@minnow/reef/artifacts/${segments[0]}/manifest.json`;
+    }
+    return rel ? `@minnow/reef/artifacts/${rel}` : '@minnow/reef/artifacts';
   }
   const rel = path.relative(getWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
@@ -259,6 +284,10 @@ async function toolSaveFile(args) {
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
+  if (isAllowedReefArtifactPath(filePath)) {
+    const result = await appendArtifactVersionFromSave(filePath, String(args.content), 'agent');
+    return `Saved reef artifact ${result.manifest.id} v${result.version} (${String(args.content).length} bytes)`;
+  }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, String(args.content), 'utf8');
   return `Saved ${toRelativePath(filePath)} (${String(args.content).length} bytes)`;
@@ -376,25 +405,33 @@ async function toolFindFiles(args) {
     return 'Error: pattern is required';
   }
   const reefModulesRoot = tryResolveReefModulesFindRoot(pattern, args?.path ?? '.');
-  const reefWidgetsRoot = reefModulesRoot
+  const reefArtifactsRoot = reefModulesRoot
     ? null
-    : tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
-  const reefRoot = reefModulesRoot ?? reefWidgetsRoot;
+    : tryResolveReefArtifactsFindRoot(pattern, args?.path ?? '.');
+  const reefWidgetsRoot =
+    reefModulesRoot || reefArtifactsRoot
+      ? null
+      : tryResolveReefWidgetsFindRoot(pattern, args?.path ?? '.');
+  const reefRoot = reefModulesRoot ?? reefArtifactsRoot ?? reefWidgetsRoot;
   const root = reefRoot ?? resolveSafePath(args?.path ?? '.');
   const patternNorm = pattern.replace(/\\/g, '/');
   const matcher = globToRegExp(
     reefModulesRoot && patternNorm.includes('reef/modules')
       ? patternNorm.replace(/^.*reef\/modules\//, '')
-      : reefWidgetsRoot && patternNorm.includes('reef/widgets')
-        ? patternNorm.replace(/^.*reef\/widgets\//, '')
-        : patternNorm,
+      : reefArtifactsRoot && patternNorm.includes('reef/artifacts')
+        ? patternNorm.replace(/^.*reef\/artifacts\//, '')
+        : reefWidgetsRoot && patternNorm.includes('reef/widgets')
+          ? patternNorm.replace(/^.*reef\/widgets\//, '')
+          : patternNorm,
   );
   const matches = [];
   const displayRoot = reefModulesRoot
     ? '@minnow/reef/modules'
-    : reefWidgetsRoot
-      ? '@minnow/reef/widgets'
-      : toRelativePath(root);
+    : reefArtifactsRoot
+      ? '@minnow/reef/artifacts'
+      : reefWidgetsRoot
+        ? '@minnow/reef/widgets'
+        : toRelativePath(root);
 
   function formatMatch(absPath) {
     if (!reefRoot) {
@@ -403,6 +440,9 @@ async function toolFindFiles(args) {
     const rel = path.relative(reefRoot, absPath).replace(/\\/g, '/');
     if (reefModulesRoot) {
       return rel ? `@minnow/reef/modules/${rel}` : '@minnow/reef/modules';
+    }
+    if (reefArtifactsRoot) {
+      return rel ? `@minnow/reef/artifacts/${rel}` : '@minnow/reef/artifacts';
     }
     return rel ? `@minnow/reef/widgets/${rel}` : '@minnow/reef/widgets';
   }
@@ -802,6 +842,7 @@ async function main() {
           server.middlewares.use(createBenchmarksMiddleware());
           server.middlewares.use(createWorkspaceMiddleware());
           server.middlewares.use(createMemoryMiddleware());
+          server.middlewares.use(createReefMiddleware());
           server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
           server.middlewares.use(createMcpMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());

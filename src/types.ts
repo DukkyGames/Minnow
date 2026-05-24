@@ -437,6 +437,19 @@ export interface Chat {
   runs?: TurnRunRecord[];
   /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
   activeBranchByFork?: Record<string, string>;
+  /** Pending user edits from Reef widgets; consumed on next send. */
+  pendingReefArtifactEdits?: ReefArtifactEditEvent[];
+  /** Artifact ids bound to this chat (sidebar / history hints). */
+  reefArtifactIds?: string[];
+}
+
+/** User co-edit on a versioned reef artifact (widget bridge). */
+export interface ReefArtifactEditEvent {
+  artifactId: string;
+  version: number;
+  summary: string;
+  path: string;
+  at: string;
 }
 
 export interface SessionState {

@@ -124,6 +124,8 @@ import {
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
+import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
+import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
 import {
   recordAssistantReplyOnChat,
   setSidebarStreamPhase,
@@ -621,7 +623,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = modelId || chat.modelId;
 
   if (pushUser) {
-    chat.history.push({ role: 'user', content: historyContent });
+    const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
+    const modelUserContent = artifactAppendix
+      ? `${historyContent}${artifactAppendix}`
+      : historyContent;
+    chat.history.push({ role: 'user', content: modelUserContent });
     recordChatMessage(chat);
     scheduleSaveSessions();
     renderSidebar();
@@ -1047,12 +1053,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
-          renderToolResult(toolWrap, toolOut.content, toolOut.attachments, args);
+          let toolContent = toolOut.content;
+          try {
+            const promoted = await maybePromoteToolResultToArtifact({
+              chatId: chat.id,
+              chat,
+              toolName: tc.function.name,
+              args,
+              content: toolContent,
+              toolCallId: tc.id,
+              modeId: toolLoopModeId,
+            });
+            if (promoted) {
+              toolContent = `${toolContent}${promoted.footer}`;
+            }
+          } catch {
+            /* Promotion is best-effort; never block the tool loop. */
+          }
+
+          renderToolResult(toolWrap, toolContent, toolOut.attachments, args);
 
           chat.history.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: toolOut.content,
+            content: toolContent,
             ...(toolOut.attachments?.length
               ? { attachments: toolOut.attachments }
               : {}),
