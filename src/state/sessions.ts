@@ -800,6 +800,14 @@ export function scheduleSaveSessions(): void {
   );
 }
 
+/** Run any debounced session save immediately (unit tests only). */
+export function flushScheduledSessionSaveForTests(): void {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  setSaveTimer(null);
+  saveSessionsNow();
+}
+
 /** Create a chat, make it active, and persist (debounced). */
 export function createAndActivateChat(modelId: string): Chat {
   const state = requireSessionState();

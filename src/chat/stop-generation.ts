@@ -1,4 +1,5 @@
 import { chatFetchAbort } from '../app-state';
+import { clearPendingSteer } from './steer-message';
 import { cancelGeneration } from '../api/generations';
 import { getActiveChat } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
@@ -16,6 +17,8 @@ export function stopGeneration(): void {
       /* best-effort; local abort still tears down the reader */
     });
   }
+
+  clearPendingSteer(chat);
 
   if (chatFetchAbort) chatFetchAbort.abort();
 }

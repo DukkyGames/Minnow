@@ -1112,7 +1112,7 @@ The tool loop™s `streamCompletionTurn` ([`src/tools/loop.ts`](../src/tools/loo
 
 ## Stop generation (feature 14, Epic C1)
 
-While the **active** chat is streaming (`isActiveChatStreaming()` in [`streaming-state.ts`](../src/chat/streaming-state.ts)), the composer primary button (`#sendBtn`) is a **Stop** control (`data-mode="stop"`, class `send-btn--stop` on `--surface-elevated` with icon/label color `--elevated-fg` so the square stays visible on the dark veil in light theme); the textarea stays enabled so the user can draft the next message. **`handleComposerPrimaryAction()`** calls **`stopGeneration()`** → **`chatFetchAbort.abort()`** (v1: one in-flight turn; abort targets the streaming chat even when the user is viewing another thread). When another chat is streaming in the background, the active chat keeps **Send** and shows a composer hint (`composer-stream-hint.ts`: “Reply in progress in …” + **Go to chat**).
+While the **active** chat is streaming (`isActiveChatStreaming()` in [`streaming-state.ts`](../src/chat/streaming-state.ts)), the composer primary button (`#sendBtn`) uses `data-mode="stop"` (class `send-btn--stop`); the textarea stays enabled. **Empty composer + primary click** or the stop affordance calls **`stopGeneration()`** → **`cancelGeneration`** + **`chatFetchAbort.abort()`**. **Non-empty composer + Enter/Send** **steers**: text is stored on **`Chat.pendingSteerMessage`** (last write wins) and injected at the **next tool-loop boundary** in **`runChatTurn`** without aborting the in-flight stream ([`steer-message.ts`](../src/chat/steer-message.ts)). Consumed steer rows are normal **`user`** history entries with **`steer: true`** and a **Steered** chip ([`steer-affordance.ts`](../src/ui/steer-affordance.ts)). Queued steer shows **`composer-steer-queued-hint`**. Stop clears pending steer. When another chat is streaming in the background, the active chat keeps **Send** and shows a composer hint (`composer-stream-hint.ts`: “Reply in progress in …” + **Go to chat**); steer is only available when the active chat is the streaming chat.
 
 ## Switch chats while waiting (sidebar multitask)
 
@@ -1130,11 +1130,13 @@ Users can **`switchChat`** / **`createChat`** while a reply runs in a different 
 |---------|----------|
 | Stop API | [`src/chat/stop-generation.ts`](../src/chat/stop-generation.ts) — `cancelGeneration` + local abort |
 | Composer toggle | [`src/ui/composer-send.ts`](../src/ui/composer-send.ts), [`src/styles/input.css`](../src/styles/input.css) |
+| Interrupt / steer | [`src/chat/steer-message.ts`](../src/chat/steer-message.ts), `Chat.pendingSteerMessage`, consume in [`loop.ts`](../src/tools/loop.ts) |
+| Steered chip | [`src/ui/steer-affordance.ts`](../src/ui/steer-affordance.ts), `.msg--steered` in [`messages.css`](../src/styles/messages.css) |
 | Tool-loop abort | [`src/tools/loop.ts`](../src/tools/loop.ts) — partial assistant in `history` with `stopped: true`, cooperative skip of remaining tools (`Stopped by user.`), `cancelAllForParentTurn` on abort |
 | Stopped chip | [`src/ui/stopped-affordance.ts`](../src/ui/stopped-affordance.ts), `.msg--stopped` in [`messages.css`](../src/styles/messages.css) |
 | History flag | `AssistantMessage.stopped?: boolean` in [`src/types.ts`](../src/types.ts); reload paints chip when set |
 
-**Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/chat/generation-resume.test.mts`, `test/ui/composer-send.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).
+**Tests:** `test/chat/stop-generation.test.mts`, `test/chat/finalize-stopped-turn.test.mts`, `test/chat/generation-resume.test.mts`, `test/ui/composer-send.test.mjs`, `test/chat/steer-message.test.mts`, `test/chat/steer-loop-boundary.test.mts`, `test/ui/composer-steer.test.mjs`. Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md), [`feature-05-interrupt-steer.md`](plans/verification/feature-05-interrupt-steer.md).
 
 ## Message actions (Epic C2 — features 15–17)
 
