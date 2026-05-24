@@ -276,8 +276,13 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 
     const parentTools = getEnabledToolDefinitionsForMode(modeId);
     const tools = resolveSubAgentTools(typeConfig, run.type, parentTools);
-    const systemPrompt = await buildSubAgentSystemPrompt(run.type, run.task, typeConfig);
     const allowedNames = new Set(tools.map((t) => t.function.name));
+    const systemPrompt = await buildSubAgentSystemPrompt(
+      run.type,
+      run.task,
+      typeConfig,
+      [...allowedNames],
+    );
 
     const filteredExecute = async (
       name: string,

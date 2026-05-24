@@ -203,6 +203,20 @@ function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile
   return loaded?.body?.trim() ?? '';
 }
 
+function contextHasAskQuestionTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('ask_question');
+}
+
+/** Mandatory ask_question usage when the tool is enabled for this chat. */
+function resolveAskQuestionEnforcementBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasAskQuestionTool(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'ask-question-enforcement', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
   const includeSummary =
     profile !== 'lite' || ctx.includeChatHistorySummary === true;
@@ -273,6 +287,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const browserInterpolated = interpolatePromptBody(browserAllowlistRaw, vars);
         if (browserInterpolated.trim()) {
           sections.push(browserInterpolated.trim());
+        }
+      }
+      const askQuestionRaw = resolveAskQuestionEnforcementBody(ctx, profileKey);
+      if (askQuestionRaw.trim()) {
+        const askInterpolated = interpolatePromptBody(askQuestionRaw, vars);
+        if (askInterpolated.trim()) {
+          sections.push(askInterpolated.trim());
         }
       }
     }

@@ -15,6 +15,13 @@ export const MAX_EMPTY_POST_TOOL_RETRIES = 1;
 export const EMPTY_POST_TOOL_CONTINUE_INSTRUCTION =
   'You have tool results above. Reply to the user in plain language; do not call more tools unless necessary.';
 
+/** Max extra model rounds when prose looks like multiple-choice but `ask_question` was not called. */
+export const MAX_PROSE_QUESTION_RETRIES = 1;
+
+/** Ephemeral API-only correction when the model asked for choices in prose. */
+export const PROSE_QUESTION_RETRY_INSTRUCTION =
+  'You asked the user to choose among options in plain text. Do not list choices in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.';
+
 export type TurnContinuation = 'continueTools' | 'finalize' | 'retryEmpty';
 
 /** True when dev turn logging is enabled (`localStorage.minnowDebugTurns === '1'`). */

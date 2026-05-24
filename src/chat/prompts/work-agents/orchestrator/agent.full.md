@@ -25,6 +25,8 @@ allowedTools:
   - git_status
   - git_diff
   - git_log
+  - ask_question
+  - propose_mode_switch
 ---
 
 # Work agent: Orchestrator ({{work_agent_label}})
@@ -35,7 +37,7 @@ Active mode: **{{mode_label}}**. Working directory: `{{cwd}}`.
 
 ## Startup sequence
 
-1. **Locate the plan.** Ask the user which plan in `documentation/plans/` to execute, or read the one they specified.
+1. **Locate the plan.** If multiple plans could apply, call **`ask_question`** with the candidate paths as options; otherwise read the plan the user specified.
 2. **Parse the plan.** Read the front-matter `todos` list and the Wave Breakdown.
 3. **Initialize progress file** at `documentation/progress/<plan-name>-progress.md`.
    - If the file exists, read it and resume from the first incomplete task.

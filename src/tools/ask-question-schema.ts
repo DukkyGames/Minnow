@@ -23,6 +23,7 @@ export const ASK_QUESTION_EXAMPLE_JSON = `{
  * Appended to the short summary in definitions.ts.
  */
 export const ASK_QUESTION_TOOL_DESCRIPTION = [
+  'MANDATORY when you need the user to pick among options, priorities, scope, or approvals — do not list choices in chat prose.',
   'Ask the user structured multiple-choice questions and wait for answers.',
   'Required top-level field: questions (array, 1–10 items). Optional: title (string).',
   'Each question object MUST use exactly these keys:',

@@ -177,9 +177,13 @@ import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   hasPostToolTail,
   logTurnDebug,
+  MAX_PROSE_QUESTION_RETRIES,
+  PROSE_QUESTION_RETRY_INSTRUCTION,
   resolveFinalAssistantContent,
   resolveTurnContinuation,
 } from './turn-continuation';
+import { looksLikeProseStructuredQuestion } from './prose-question-detect';
+import { isToolEnabled } from './config';
 import {
   DEFAULT_CHAT_MAX_TOOL_TURNS,
   getChatMetaSync,
@@ -870,6 +874,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
     const activeModeId = normalizeModeId(chat.modeId);
     let emptyPostToolRetries = 0;
+    let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
     const maxToolTurns = getChatMetaSync().maxToolTurns;
 
@@ -1113,6 +1118,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         fullTextLength: fullText.trim().length,
         hasPostToolTail: hasPostToolTail(chat.history),
         emptyPostToolRetries,
+        proseQuestionRetries,
       });
 
       if (continuation === 'retryEmpty') {
@@ -1122,6 +1128,41 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           event: 'retry_empty_post_tool',
           turn,
           emptyPostToolRetries,
+        });
+        removeOrphanStreamingRow(wrap, streamStatus);
+        streamRow = appendStreamingAssistantRow(chat.id);
+        ({ wrap, bubble, cursor, streamStatus } = streamRow);
+        streamCtx.wrap = wrap;
+        streamCtx.streamStatus = streamStatus;
+        lastWrap = wrap;
+        revealProse = (): void => {
+          if (!isStreamDomVisible(chat.id)) return;
+          revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
+        };
+        thoughtController.setAssistantWrap(wrap);
+        thoughtController.resetStreamPhaseHints();
+        if (isStreamDomVisible(chat.id)) {
+          setStatus('spin', 'Generating reply…');
+        }
+        patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+        continue;
+      }
+
+      const askQuestionToolAvailable =
+        enabledTools.some((t) => t.function.name === 'ask_question') &&
+        isToolEnabled('ask_question');
+      if (
+        askQuestionToolAvailable &&
+        fullText.trim() &&
+        looksLikeProseStructuredQuestion(fullText) &&
+        proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
+      ) {
+        proseQuestionRetries += 1;
+        ephemeralPostToolInstruction = PROSE_QUESTION_RETRY_INSTRUCTION;
+        logTurnDebug({
+          event: 'retry_prose_question',
+          turn,
+          proseQuestionRetries,
         });
         removeOrphanStreamingRow(wrap, streamStatus);
         streamRow = appendStreamingAssistantRow(chat.id);

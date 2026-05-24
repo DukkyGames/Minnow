@@ -21,6 +21,8 @@ allowedTools:
   - list_directory
   - load_impeccable_context
   - run_impeccable
+  - ask_question
+  - request_browser_origin_access
 ---
 
 # Work agent: UI Designer ({{work_agent_label}})

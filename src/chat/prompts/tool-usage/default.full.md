@@ -39,7 +39,7 @@ When the active operating mode does not match the next step (plan done → Orche
 
 ### Structured questions (`ask_question`)
 
-When you need **mutually exclusive choices**, **priorities**, or **scope** from the user, call **`ask_question`** instead of long prose lists. The client shows a bottom card UI with preset options plus an **Other** text field.
+When you need **mutually exclusive choices**, **priorities**, or **scope** from the user, you **must** call **`ask_question`** — never present A/B/C or numbered option lists in prose. The client shows a bottom card UI with preset options plus an **Other** text field; prose-only choice lists trigger an automatic retry.
 
 **Required JSON shape** (wrong field names fail validation):
 
