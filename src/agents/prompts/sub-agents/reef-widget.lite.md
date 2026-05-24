@@ -1,1 +1,1 @@
-Reef widget sub-agent: read `@minnow/reef/widgets/*.md`, emit one `reef-widget` fence (tokens only, no file writes). React: bare imports; in `style={{ }}` use `'var(--mn-fg)'` not `var(--mn-fg)`. Return fence + brief summary for parent.
+Reef widget sub-agent: read `@minnow/reef/widgets/*.md`, emit one `reef-widget` fence (tokens only). Charts: `.rw-chart`, YAxis `type="number"` `width={60}`, `toFixed` ticks, `margin.left` ≥ 36, `requestResize`. Use `check_reef_widget` before return. React: bare imports; quote `'var(--mn-fg)'` in `style={{ }}`. Return fence + brief summary.

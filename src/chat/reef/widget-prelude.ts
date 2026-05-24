@@ -96,15 +96,39 @@ export const PRELUDE_SCRIPT = `(function () {
     emitValidateResult();
   }
 
+  function probeChartLayout() {
+    var containers = document.querySelectorAll(".recharts-responsive-container");
+    if (!containers.length) return;
+    for (var c = 0; c < containers.length; c++) {
+      var rect = containers[c].getBoundingClientRect();
+      if (rect.height < 48) {
+        captureWidgetError("Chart did not lay out (responsive container height too small)");
+        break;
+      }
+    }
+    var ticks = document.querySelectorAll(".recharts-cartesian-axis-tick text, .recharts-cartesian-axis-tick tspan");
+    for (var t = 0; t < ticks.length; t++) {
+      var label = (ticks[t].textContent || "").trim();
+      if (/e[+-]?\\d+/i.test(label)) {
+        captureWidgetError("Chart axis uses scientific notation; use toFixed on tickFormatter instead of toExponential");
+        break;
+      }
+    }
+  }
+
   function tryEmitValidateAfterResize() {
     if (validateEmitted) return;
     postResizeToHost();
+    ensureChartParentsSized();
+    probeChartLayout();
     if (lastPostedHeight >= 24) {
       emitValidateResultOnce();
       return;
     }
     setTimeout(function () {
       postResizeToHost();
+      ensureChartParentsSized();
+      probeChartLayout();
       emitValidateResultOnce();
     }, 80);
   }
