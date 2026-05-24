@@ -109,6 +109,8 @@ export interface ExecuteToolContext {
   modeId?: ModeId | string;
   /** When tools run inside a sub-agent, shown on the approval modal. */
   subAgentType?: string;
+  /** Active work agent on the parent chat (main loop tool calls). */
+  workAgentId?: string | null;
 }
 
 const STREAMING_TOOL_NAMES = new Set([
