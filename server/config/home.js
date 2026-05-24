@@ -193,19 +193,13 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'ask_question',
 ]);
 
-const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
-
 function defaultToolsJson() {
   const enabled = {};
   const permissionsDefault = {};
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissionsDefault[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
-      ? 'full'
-      : on
-        ? 'ask'
-        : 'off';
+    permissionsDefault[id] = on ? 'ask' : 'off';
   }
   return {
     enabled,

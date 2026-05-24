@@ -7,7 +7,6 @@ import { BUILT_IN_TOOLS } from '../tools/definitions';
 import {
   createEmptyToolPermissionsConfig,
   type ToolConfig,
-  type ToolPermissionMode,
 } from '../tools/tool-settings-types';
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
@@ -31,14 +30,6 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'propose_mode_switch',
 ]);
 
-/** Tools that default to full permission (no approval strip before running). */
-export const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set([
-  'ask_question',
-  'set_chat_mode',
-  'create_chat_with_mode',
-  'propose_mode_switch',
-]);
-
 /** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
   const enabled: Record<string, boolean> = {};
@@ -46,11 +37,8 @@ export function defaultToolConfig(): ToolConfig {
   for (const tool of BUILT_IN_TOOLS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
     enabled[tool.id] = on;
-    permissions.default[tool.id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id)
-      ? 'full'
-      : on
-        ? 'ask'
-        : 'off';
+    // Enabled tools require user approval; disabled tools stay off.
+    permissions.default[tool.id] = on ? 'ask' : 'off';
   }
   return { enabled, permissions, keys: { braveApiKey: '' } };
 }

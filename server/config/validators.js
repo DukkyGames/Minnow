@@ -515,18 +515,12 @@ export function normalizeToolConfig(raw) {
     'save_memory',
     'ask_question',
   ]);
-  const DEFAULT_FULL_PERMISSION_TOOL_IDS = new Set(['ask_question']);
-
   const enabled = {};
   const permissionsDefault = {};
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissionsDefault[id] = DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id)
-      ? 'full'
-      : on
-        ? 'ask'
-        : 'off';
+    permissionsDefault[id] = on ? 'ask' : 'off';
   }
 
   const config = {
@@ -561,21 +555,13 @@ export function normalizeToolConfig(raw) {
 
   if (!hadPermissionsInFile) {
     for (const id of ALL_TOOL_IDS) {
-      if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id) && config.enabled[id]) {
-        config.permissions.default[id] = 'full';
-      } else {
-        config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
-      }
+      config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
     }
   } else {
     for (const id of ALL_TOOL_IDS) {
       const v = config.permissions.default[id];
       if (!isToolPermissionMode(v)) {
-        if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(id) && config.enabled[id]) {
-          config.permissions.default[id] = 'full';
-        } else {
-          config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
-        }
+        config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
       }
     }
   }

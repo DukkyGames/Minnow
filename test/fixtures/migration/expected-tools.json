@@ -68,7 +68,7 @@
       "read_clipboard": "off",
       "write_clipboard": "off",
       "get_system_info": "off",
-      "ask_question": "full",
+      "ask_question": "ask",
       "list_directory": "off",
       "read_file": "off",
       "read_file_range": "off",

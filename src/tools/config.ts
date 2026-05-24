@@ -4,7 +4,7 @@
  */
 
 import { getTools, putTools } from '../config/api-client';
-import { defaultToolConfig as buildDefaultToolConfig, DEFAULT_FULL_PERMISSION_TOOL_IDS } from '../config/defaults';
+import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
@@ -280,22 +280,14 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
 
   if (!hadPermissionsInFile) {
     for (const tool of BUILT_IN_TOOLS) {
-      if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id) && config.enabled[tool.id] === true) {
-        config.permissions.default[tool.id] = 'full';
-      } else {
-        config.permissions.default[tool.id] =
-          config.enabled[tool.id] === true ? 'ask' : 'off';
-      }
+      config.permissions.default[tool.id] =
+        config.enabled[tool.id] === true ? 'ask' : 'off';
     }
   } else {
     for (const tool of BUILT_IN_TOOLS) {
       if (!isToolPermissionMode(config.permissions.default[tool.id])) {
-        if (DEFAULT_FULL_PERMISSION_TOOL_IDS.has(tool.id) && config.enabled[tool.id] === true) {
-          config.permissions.default[tool.id] = 'full';
-        } else {
-          config.permissions.default[tool.id] =
-            config.enabled[tool.id] === true ? 'ask' : 'off';
-        }
+        config.permissions.default[tool.id] =
+          config.enabled[tool.id] === true ? 'ask' : 'off';
       }
     }
   }
