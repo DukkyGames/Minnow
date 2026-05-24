@@ -5,6 +5,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
+import { readConfigJson, writeConfigJson } from '../config/store.js';
+import { mergeConfigMeta } from '../config/validators.js';
 
 /** @typedef {object} BrowserConfig
  * @property {boolean} enabled
@@ -77,6 +79,30 @@ export async function loadBrowserConfig() {
 export function resetBrowserConfigCache() {
   cachedConfig = null;
   cachedMtime = 0;
+}
+
+/**
+ * Append an origin pattern to config.json when missing (persists allowlist).
+ * @param {string} pattern
+ * @returns {Promise<boolean>} true when a new pattern was written
+ */
+export async function appendBrowserAllowlistPattern(pattern) {
+  const trimmed = pattern.trim();
+  if (!trimmed) return false;
+
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const cfg = mergeBrowserConfig(meta?.browser);
+  if (cfg.allowedOriginPatterns.some((p) => p.trim() === trimmed)) {
+    return false;
+  }
+
+  const nextPatterns = [...cfg.allowedOriginPatterns, trimmed];
+  const merged = mergeConfigMeta(meta, {
+    browser: { allowedOriginPatterns: nextPatterns },
+  });
+  await writeConfigJson('config.json', merged);
+  resetBrowserConfigCache();
+  return true;
 }
 
 /**

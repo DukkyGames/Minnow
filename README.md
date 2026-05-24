@@ -189,7 +189,7 @@ google-chrome --remote-debugging-port=9222
 
 Optional: `MINNOW_BROWSER_URL=http://127.0.0.1:9222` or `browser.defaultUrl` in `~/.minnow/config.json`.
 
-Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). `browser_eval` runs full page JavaScript — use only on trusted pages.
+Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). Edit patterns in **Settings → Tools → Browser navigation allowlist**, or approve when the agent is blocked in chat. `browser_eval` runs full page JavaScript — use only on trusted pages.
 
 ---
 

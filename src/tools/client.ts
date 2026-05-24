@@ -26,6 +26,10 @@ import {
 } from './definitions';
 import { enqueueAskQuestion } from './ask-question-queue';
 import {
+  executeBrowserNavigateWithGate,
+  executeRequestBrowserOriginAccess,
+} from './browser-navigation-gate';
+import {
   executeCreateChatWithMode,
   executeProposeModeSwitch,
   executeSetChatMode,
@@ -201,6 +205,23 @@ async function executeToolInner(
     return { content };
   }
 
+  if (name === 'request_browser_origin_access') {
+    if (!isToolEnabled('request_browser_origin_access')) {
+      return {
+        content:
+          'Error: tool "request_browser_origin_access" is disabled in Settings (enable it to request browser allowlist changes).',
+      };
+    }
+    const blocked = await maybeBlockToolForUserApproval(
+      'request_browser_origin_access',
+      args,
+      context,
+      name,
+    );
+    if (blocked) return blocked;
+    return { content: await executeRequestBrowserOriginAccess(args, context) };
+  }
+
   if (name.startsWith('mcp__')) {
     if (!isLocalServerAvailable()) {
       return {
@@ -306,6 +327,14 @@ async function executeToolInner(
       return {
         content: await executeStreamingCodeTool(name, enrichedArgs, context),
       };
+    }
+    if (name === 'browser_navigate') {
+      return executeBrowserNavigateWithGate(
+        enrichedArgs,
+        executeServerTool,
+        context,
+        context.modeId,
+      );
     }
     return executeServerTool(name, enrichedArgs, context.modeId);
   }

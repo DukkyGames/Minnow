@@ -6,7 +6,11 @@ import { connectTarget } from './client.js';
 import { listTargets, findPageTarget } from './targets.js';
 import { takeSnapshot, resolveUid } from './snapshot.js';
 import * as snapshotCache from './snapshot-cache.js';
-import { assertNavigationAllowed } from './allowlist.js';
+import {
+  assertNavigationAllowed,
+  consumeEphemeralNavigation,
+  originFromUrl,
+} from './allowlist.js';
 import {
   assertBrowserEnabled,
   loadBrowserConfig,
@@ -106,6 +110,7 @@ export async function toolBrowserNavigate(args) {
         titleResult?.result?.value != null ? String(titleResult.result.value) : ''
       );
     snapshotCache.clearSnapshotCache();
+    consumeEphemeralNavigation(originFromUrl(url));
     return `Navigated to: ${url}\nTitle: ${title || '(no title)'}`;
   });
 }

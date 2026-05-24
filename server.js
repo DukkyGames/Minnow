@@ -27,6 +27,7 @@ import { createBenchmarksMiddleware } from './server/benchmarks/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
+import { createBrowserAllowlistMiddleware } from './server/browser-allowlist-middleware.js';
 import { toolRunImpeccable } from './server/impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from './server/impeccable/load-impeccable-context.js';
 import {
@@ -808,6 +809,7 @@ async function main() {
           server.middlewares.use(createGenerationsMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
           server.middlewares.use(createBrowserScreenshotMiddleware());
+          server.middlewares.use(createBrowserAllowlistMiddleware());
           server.middlewares.use(createToolsMiddleware());
           server.middlewares.use(createSkillsMiddleware());
           server.middlewares.use(createTerminalMiddleware(() => getWorkspaceRoot()));

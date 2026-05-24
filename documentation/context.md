@@ -918,24 +918,25 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
-## Built-in tools (55)
+## Built-in tools (56)
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **20** `serverRequired: false` (browser-routed: web, utility, `ask_question`, mode handoff, sub-agent/board orchestration), **35** `serverRequired: true` (Node, including **7** CDP `browser_*`, memory, LSP, Impeccable). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, or `executeServerTool`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **21** `serverRequired: false` (browser-routed: web, utility, `ask_question`, `request_browser_origin_access`, mode handoff, sub-agent/board orchestration), **35** `serverRequired: true` (Node, including **7** CDP `browser_*`, memory, LSP, Impeccable). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, or `executeServerTool`.
 
-### Browser CDP (7 server, Step 12)
+### Browser CDP (7 server + 1 client, Step 12)
 
-Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `MINNOW_BROWSER_URL`. Config: `~/.minnow/config.json` → `browser` (enabled, defaultUrl, allowlist). Handlers: [`server/cdp/`](../server/cdp/).
+Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `MINNOW_BROWSER_URL`. Config: `~/.minnow/config.json` → `browser` (`enabled`, `defaultUrl`, `allowNavigate`, `allowedOriginPatterns`). **Settings → Tools → Browser navigation allowlist** edits patterns via [`src/ui/settings-browser.ts`](../src/ui/settings-browser.ts) and `PUT /api/config/meta`. Agents are taught via [`src/chat/prompts/tool-usage/browser-allowlist.md`](../src/chat/prompts/tool-usage/browser-allowlist.md) (appended when CDP browser tools are enabled): **`ask_question`** with options `once` / `persist` / `deny`, then **`request_browser_origin_access`** with `decision`, then **`browser_navigate`**. Blocked navigations also trigger the same **`ask_question`** cards ([`src/tools/browser-navigation-gate.ts`](../src/tools/browser-navigation-gate.ts)). Handlers: [`server/cdp/`](../server/cdp/).
 
 | id | Purpose |
 |----|---------|
 | `browser_list` | List page targets |
-| `browser_navigate` | Navigate (origin allowlist) |
+| `browser_navigate` | Navigate (origin allowlist; in-chat approval when blocked) |
+| `request_browser_origin_access` | Ask user to allow an origin before/at navigate (client) |
 | `browser_snapshot` | A11y tree + uid cache |
 | `browser_click` / `browser_fill` | Act on snapshot uid |
 | `browser_eval` | `Runtime.evaluate` in page |
 | `browser_screenshot` | PNG + `attachments` for chat UI |
 
-**Screenshot route:** `GET /api/browser/screenshot/:id` serves `~/.minnow/screenshots/{id}.png`.
+**Routes:** `GET /api/browser/screenshot/:id` (PNG); `GET /api/browser/allowlist/check?url=`; `POST /api/browser/allowlist/approve` `{ url, mode: "once" \| "persist" }`.
 
 ### Web (4 browser)
 

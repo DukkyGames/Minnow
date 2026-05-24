@@ -69,6 +69,8 @@ When you need **mutually exclusive choices**, **priorities**, or **scope** from 
 
 **Reef mode — save custom widgets:** In Reef, do **not** `write_file` to `@minnow/reef/modules/<slug>.md` until the user confirms via **`ask_question`** (Yes / No). Templates live under `@minnow/reef/widgets/` (read-only). See `modes/reef.full.md` § User module library.
 
+**Browser CDP — external URLs:** When `browser_navigate` may leave localhost, use **`ask_question`** first (options `once` / `persist` / `deny`), then **`request_browser_origin_access`** with matching **`decision`**, then navigate. See the **Browser navigation allowlist** section when CDP browser tools are enabled.
+
 ### When you are unsure
 
 If you don't know which tool to use, ask the user before guessing. Wrong tool calls waste turns and can have side effects.

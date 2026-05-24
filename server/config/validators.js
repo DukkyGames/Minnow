@@ -843,6 +843,40 @@ export function mergeConfigMeta(existing, patch) {
     base.toolSecurity = existingTs;
   }
 
+  if (p.browser && typeof p.browser === 'object') {
+    const existingBrowser =
+      base.browser && typeof base.browser === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.browser) }
+        : {
+            enabled: true,
+            defaultUrl: 'http://127.0.0.1:9222',
+            allowNavigate: true,
+            allowedOriginPatterns: [
+              'http://localhost:*',
+              'http://127.0.0.1:*',
+              'https://localhost:*',
+            ],
+            screenshotDir: 'screenshots',
+          };
+    const b = /** @type {Record<string, unknown>} */ (p.browser);
+    if (typeof b.enabled === 'boolean') existingBrowser.enabled = b.enabled;
+    if (typeof b.defaultUrl === 'string' && b.defaultUrl.trim()) {
+      existingBrowser.defaultUrl = b.defaultUrl.trim();
+    }
+    if (typeof b.allowNavigate === 'boolean') {
+      existingBrowser.allowNavigate = b.allowNavigate;
+    }
+    if (Array.isArray(b.allowedOriginPatterns)) {
+      existingBrowser.allowedOriginPatterns = b.allowedOriginPatterns.filter(
+        (row) => typeof row === 'string' && row.trim(),
+      );
+    }
+    if (typeof b.screenshotDir === 'string' && b.screenshotDir.trim()) {
+      existingBrowser.screenshotDir = b.screenshotDir.trim();
+    }
+    base.browser = existingBrowser;
+  }
+
   if (p.planning && typeof p.planning === 'object') {
     const existingPlanning =
       base.planning && typeof base.planning === 'object'

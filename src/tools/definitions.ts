@@ -998,6 +998,32 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'request_browser_origin_access',
+    label: 'Request browser origin access',
+    description:
+      'Apply browser allowlist approval after ask_question, or show ask_question if decision omitted.',
+    category: 'browser',
+    serverRequired: false,
+    definition: toolSchema(
+      'request_browser_origin_access',
+      [
+        'Apply browser navigation allowlist approval for browser_navigate.',
+        'Preferred flow: call ask_question first (options once / persist / deny), then call this tool with decision "once" or "persist".',
+        'If decision is omitted and the origin is blocked, the client shows the same ask_question cards.',
+      ].join(' '),
+      {
+        url: { type: 'string', description: 'Full http(s) URL the agent wants to open' },
+        decision: {
+          type: 'string',
+          enum: ['once', 'persist'],
+          description:
+            'User choice from ask_question (once = single navigation, persist = add origin pattern). Omit to prompt via ask_question.',
+        },
+      },
+      ['url'],
+    ),
+  },
+  {
     id: 'browser_snapshot',
     label: 'Browser snapshot',
     description: 'Accessibility tree snapshot with [uid] markers for click/fill.',
