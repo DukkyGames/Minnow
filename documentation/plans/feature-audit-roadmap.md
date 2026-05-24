@@ -25,7 +25,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Gap:** Declared `maxInputTokens` per agent plus an enforcement policy (`summarize` / `slide` / `truncate`).
 - **Scope:** New module `src/chat/context-budget.ts`; hook into `buildApiMessages` and `src/agents/sub-agent-runner.ts`.
 
-### 4. Reef artifacts evolution — Partial
+### 4. Reef artifacts evolution — Built
 - **Today:** Sandboxed iframe widgets ([src/chat/reef/](../../src/chat/reef/)), 15 templates + 6 snippets, user modules persisted at `~/.minnow/reef/modules/`.
 - **Gap:** Live user-edit round-tripped to the agent; version history per artifact; tool-output → artifact pipeline; artifact-to-artifact references.
 - **Scope:** Extend `widget-bridge.ts` with `editArtifact`/`subscribeEdits`; new `~/.minnow/reef/artifacts/<id>/v<n>.md` store; tool result hook.
