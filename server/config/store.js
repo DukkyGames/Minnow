@@ -128,6 +128,9 @@ export async function readResource(resource) {
     if (!data?.chat) {
       patch.chat = DEFAULT_META.chat;
     }
+    if (!data?.browser) {
+      patch.browser = DEFAULT_META.browser;
+    }
     if (Object.keys(patch).length > 0) {
       return mergeConfigMeta(data ?? {}, patch);
     }

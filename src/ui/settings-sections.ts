@@ -75,6 +75,8 @@ import {
   loadToolSecurityMeta,
   saveToolSecurityMeta,
 } from '../config/tool-security-meta';
+import { loadBrowserMeta } from '../config/browser-meta';
+import { renderBrowserAllowlistSettings } from './settings-browser';
 import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
@@ -875,12 +877,14 @@ async function renderToolsSection(): Promise<void> {
   if (isToolConfigReadyForSettingsUi() && isToolSecurityMetaLoaded()) {
     toolSecurity = getToolSecurityMetaCached();
   } else {
-    [toolSecurity] = await Promise.all([
+    const loaded = await Promise.all([
       loadToolSecurityMeta().catch(
         (): ToolSecurityMeta => ({ filesystemAccess: 'workspace' }),
       ),
       loadToolConfigForSettingsUi(),
+      loadBrowserMeta().catch(() => undefined),
     ]);
+    toolSecurity = loaded[0];
     if (generation !== toolsSectionRenderGeneration) return;
   }
 
@@ -954,6 +958,10 @@ async function renderToolsSection(): Promise<void> {
   fsRadios.append(lWorkspace, lFull);
   fsSection.appendChild(fsRadios);
   mount.appendChild(fsSection);
+
+  const browserMount = el('div', 'settings-tool-browser-mount');
+  mount.appendChild(browserMount);
+  await renderBrowserAllowlistSettings(browserMount);
 
   const applyFsRadios = (meta: ToolSecurityMeta = getToolSecurityMetaCached()): void => {
     const mode = meta.filesystemAccess;

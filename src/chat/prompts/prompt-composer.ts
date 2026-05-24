@@ -39,6 +39,23 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'reef',
 ]);
 
+/** Tool ids that imply CDP browser automation (navigation allowlist rules apply). */
+const BROWSER_CDP_TOOL_IDS = new Set([
+  'browser_list',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_fill',
+  'browser_eval',
+  'browser_screenshot',
+  'request_browser_origin_access',
+]);
+
+function contextHasBrowserCdpTools(ctx: ComposeContext): boolean {
+  const ids = ctx.enabledToolIds ?? [];
+  return ids.some((id) => BROWSER_CDP_TOOL_IDS.has(id));
+}
+
 /** Lite truncation caps when no lite template exists. */
 const LITE_TRUNCATE_CAPS: Record<PromptPartId, number> = {
   base: 800,
@@ -176,6 +193,16 @@ function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): st
   return loaded?.body?.trim() ?? '';
 }
 
+/** Browser navigation allowlist + ask_question flow when CDP tools are enabled. */
+function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile): string {
+  if (!contextHasBrowserCdpTools(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'browser-allowlist', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
   const includeSummary =
     profile !== 'lite' || ctx.includeChatHistorySummary === true;
@@ -233,11 +260,19 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
     }
 
     if (partId === 'tool-usage') {
-      const handoffRaw = resolveModeHandoffBody(ctx, effectiveProfile === 'lite' ? 'lite' : 'full');
+      const profileKey = effectiveProfile === 'lite' ? 'lite' : 'full';
+      const handoffRaw = resolveModeHandoffBody(ctx, profileKey);
       if (handoffRaw.trim()) {
         const handoffInterpolated = interpolatePromptBody(handoffRaw, vars);
         if (handoffInterpolated.trim()) {
           sections.push(handoffInterpolated.trim());
+        }
+      }
+      const browserAllowlistRaw = resolveBrowserAllowlistBody(ctx, profileKey);
+      if (browserAllowlistRaw.trim()) {
+        const browserInterpolated = interpolatePromptBody(browserAllowlistRaw, vars);
+        if (browserInterpolated.trim()) {
+          sections.push(browserInterpolated.trim());
         }
       }
     }

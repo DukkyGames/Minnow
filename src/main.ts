@@ -60,6 +60,7 @@ import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
+import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
 import {
   getActiveChat,
@@ -236,6 +237,7 @@ export async function initApp(): Promise<void> {
   filePanel.onFilePanelServerAvailabilityChanged();
   await loadSkillConfigFromStorage();
   await loadToolSecurityMeta().catch(() => undefined);
+  await loadBrowserMeta().catch(() => undefined);
   await loadChatMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();

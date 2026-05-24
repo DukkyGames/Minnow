@@ -15,3 +15,4 @@ Tools: {{enabled_tools}}.
 - No `rm -rf`, no force-push, no `--no-verify` without explicit approval.
 - One-line summary after a tool sequence, not a transcript.
 - For scope or priority decisions, use `ask_question`: `{ questions: [{ id, prompt, options: [{ id, label }, ...] }] }` (not `question`/`choices`/string options).
+- External `browser_navigate`: `ask_question` (once/persist/deny) → `request_browser_origin_access` with `decision` → navigate.
