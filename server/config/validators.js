@@ -1049,6 +1049,40 @@ export function normalizeSubAgentsConfig(body) {
 
     checkToolList('allowedTools');
     checkToolList('deniedTools');
+
+    if (row.maxInputTokens !== undefined && row.maxInputTokens !== null) {
+      const cap = Number(row.maxInputTokens);
+      if (!Number.isFinite(cap) || cap < 1) {
+        row.maxInputTokens = null;
+      } else {
+        row.maxInputTokens = Math.floor(cap);
+      }
+    }
+
+    const policy = row.contextEnforcementPolicy;
+    if (
+      policy !== undefined &&
+      policy !== 'summarize' &&
+      policy !== 'slide' &&
+      policy !== 'truncate'
+    ) {
+      delete row.contextEnforcementPolicy;
+      warnings.push(
+        `Invalid contextEnforcementPolicy for types.${typeId}; removed`,
+      );
+    }
+
+    if (row.minRecentTurns !== undefined) {
+      const n = Number(row.minRecentTurns);
+      row.minRecentTurns =
+        Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+    }
+
+    if (row.summaryReserveTokens !== undefined) {
+      const n = Number(row.summaryReserveTokens);
+      row.summaryReserveTokens =
+        Number.isFinite(n) && n >= 64 ? Math.floor(n) : undefined;
+    }
   }
 
   return { config: base, warnings };

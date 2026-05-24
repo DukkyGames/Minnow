@@ -59,4 +59,17 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('save_file'));
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
+
+  test('user override can set maxInputTokens and context policy', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: {
+          maxInputTokens: 32000,
+          contextEnforcementPolicy: 'summarize',
+        },
+      },
+    });
+    assert.equal(merged.types.explore.maxInputTokens, 32000);
+    assert.equal(merged.types.explore.contextEnforcementPolicy, 'summarize');
+  });
 });

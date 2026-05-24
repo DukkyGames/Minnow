@@ -68,6 +68,10 @@ export async function patchWorkAgentOverride(
     providerId?: string | null;
     modelId?: string | null;
     disabled?: boolean;
+    maxInputTokens?: number | null;
+    contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
+    minRecentTurns?: number;
+    summaryReserveTokens?: number;
   },
 ): Promise<import('./work-agent-types').WorkAgentDefinition | null> {
   try {

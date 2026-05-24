@@ -2,6 +2,7 @@
  * Sub-agent orchestration types (Step 09).
  */
 
+import type { AgentContextBudgetConfig } from '../chat/context-budget';
 import type { ApiMessage, BoardCategory, Stats, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 
@@ -29,6 +30,10 @@ export interface SubAgentTypeConfig {
   allowedTools: string[] | null;
   deniedTools: string[];
   systemPromptPath: string | null;
+  maxInputTokens?: number | null;
+  contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
+  minRecentTurns?: number;
+  summaryReserveTokens?: number;
 }
 
 /** Root sub-agents.json shape (user + merged). */
@@ -160,6 +165,8 @@ export interface SubAgentRunner {
     providerId: string;
     modelId: string;
     maxToolTurns: number;
+    contextBudget?: AgentContextBudgetConfig;
+    modelContextLimit?: number | null;
     signal: AbortSignal;
     /** Passed into each nested tool call (chat id, sub-agent label). */
     toolExecuteContext?: {

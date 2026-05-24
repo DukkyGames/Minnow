@@ -136,6 +136,12 @@ import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
+import {
+  agentContextBudgetFromWorkAgent,
+  applyContextBudget,
+  resolveContextBudget,
+} from '../chat/context-budget';
+import { resolveContextLimit } from '../chat/context-usage';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
 import {
@@ -877,6 +883,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
     const maxToolTurns = getChatMetaSync().maxToolTurns;
+    const workAgentBudget = activeWorkAgent
+      ? agentContextBudgetFromWorkAgent(activeWorkAgent)
+      : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
 
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
@@ -889,13 +898,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
       }
       enabledTools = applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
-      const messages = buildApiMessages(chat, sysPrompt, {
+      const rawMessages = buildApiMessages(chat, sysPrompt, {
         modelId: sendModelId,
         pendingUserText: pushUser ? userText || rawText : undefined,
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
       });
+      const budgetResolved = resolveContextBudget({
+        agentConfig: workAgentBudget,
+        modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
+      });
+      const budgetApplied = applyContextBudget(
+        rawMessages,
+        budgetResolved,
+        workAgentBudget,
+      );
+      const messages = budgetApplied.messages;
+      if (
+        budgetApplied.applied &&
+        budgetApplied.statusMessage &&
+        isStreamDomVisible(chat.id)
+      ) {
+        setStatus('ok', budgetApplied.statusMessage);
+      }
       const body: ChatCompletionBody = {
         model: sendModelId || undefined,
         messages,

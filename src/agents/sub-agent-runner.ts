@@ -13,7 +13,13 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import { postChatCompletions } from '../providers/fetch-chat';
+import { modelCache } from '../app-state';
 import { getActiveProvider } from '../providers/store';
+import {
+  applyContextBudget,
+  resolveContextBudget,
+} from '../chat/context-budget';
+import { contextLengthFromModelRow } from '../lib/context-length';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
 import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
@@ -26,6 +32,14 @@ import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
 export const MAX_SUB_AGENT_TOOL_TURNS = 12;
+
+function resolveSubAgentModelContextLimit(modelId: string): number | null {
+  const id = modelId.trim();
+  if (!id) return null;
+  const cached = modelCache.get(id);
+  if (!cached) return null;
+  return contextLengthFromModelRow(cached);
+}
 
 /** Throttle live transcript pushes so the drawer can keep up while streaming. */
 const LIVE_TRANSCRIPT_EMIT_MS = 80;
@@ -134,6 +148,14 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     const temperature = 0.4;
     const maxTokens = 2048;
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
+    const contextBudget = input.contextBudget ?? {
+      maxInputTokens: null,
+      enforcementPolicy: 'slide',
+    };
+    const modelContextLimit =
+      input.modelContextLimit !== undefined
+        ? input.modelContextLimit
+        : resolveSubAgentModelContextLimit(input.modelId);
     let lastProgressEmit = 0;
     const usageSegments: Usage[] = [];
     const statsSegments: Array<{ stats: Stats; usage: Usage }> = [];
@@ -153,6 +175,16 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     emitProgress(undefined, true);
 
     for (let turn = 0; turn < maxToolTurns; turn++) {
+      const budgetResolved = resolveContextBudget({
+        agentConfig: contextBudget,
+        modelLimit: modelContextLimit,
+      });
+      const budgetApplied = applyContextBudget(messages, budgetResolved, contextBudget);
+      if (budgetApplied.applied) {
+        messages.length = 0;
+        messages.push(...budgetApplied.messages);
+      }
+
       const body: SubAgentCompletionBody = {
         model: input.modelId || undefined,
         messages,

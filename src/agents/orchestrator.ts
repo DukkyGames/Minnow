@@ -14,6 +14,7 @@ import {
   isMaxToolTurnFailure,
   SUB_AGENT_MAX_TOOL_TURNS_ERROR,
 } from './sub-agent-outcome';
+import { agentContextBudgetFromSubAgentType } from '../chat/context-budget';
 import { cloneSubAgentMessages, getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import { resolveSubAgentTools } from './sub-agent-tools';
@@ -318,6 +319,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       providerId,
       modelId,
       maxToolTurns: run.maxToolTurns,
+      contextBudget: agentContextBudgetFromSubAgentType(typeConfig),
       signal: abort.signal,
       toolExecuteContext: {
         chatId: run.parentChatId ?? undefined,
