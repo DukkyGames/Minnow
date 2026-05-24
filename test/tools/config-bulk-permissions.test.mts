@@ -16,7 +16,11 @@ import type { ToolConfig } from '../../src/tools/tool-settings-types.ts';
 function cloneConfig(base: ToolConfig): ToolConfig {
   return {
     enabled: { ...base.enabled },
-    permissions: { ...base.permissions },
+    permissions: {
+      default: { ...base.permissions.default },
+      perAgent: JSON.parse(JSON.stringify(base.permissions.perAgent)),
+      patterns: [...base.permissions.patterns],
+    },
     keys: { ...base.keys },
   };
 }
@@ -27,7 +31,7 @@ describe('applyAllBuiltInToolPermissions', () => {
     applyAllBuiltInToolPermissions(config, 'full');
 
     for (const tool of BUILT_IN_TOOLS) {
-      assert.equal(config.permissions[tool.id], 'full');
+      assert.equal(config.permissions.default[tool.id], 'full');
       assert.equal(config.enabled[tool.id], true);
     }
   });
@@ -41,7 +45,7 @@ describe('applyDefaultBuiltInPermissions', () => {
 
     const defaults = defaultToolConfig();
     for (const tool of BUILT_IN_TOOLS) {
-      assert.equal(config.permissions[tool.id], defaults.permissions[tool.id]);
+      assert.equal(config.permissions.default[tool.id], defaults.permissions.default[tool.id]);
       assert.equal(config.enabled[tool.id], defaults.enabled[tool.id]);
     }
   });
@@ -49,14 +53,14 @@ describe('applyDefaultBuiltInPermissions', () => {
   test('preserves braveApiKey and mcp__ permission entries', () => {
     const config = cloneConfig(defaultToolConfig());
     config.keys.braveApiKey = 'test-key';
-    config.permissions['mcp__test'] = 'full';
+    config.permissions.default['mcp__test'] = 'full';
     config.enabled['mcp__test'] = true;
 
     applyAllBuiltInToolPermissions(config, 'full');
     applyDefaultBuiltInPermissions(config);
 
     assert.equal(config.keys.braveApiKey, 'test-key');
-    assert.equal(config.permissions['mcp__test'], 'full');
+    assert.equal(config.permissions.default['mcp__test'], 'full');
   });
 
   test('web_search is full after bulk full apply', () => {

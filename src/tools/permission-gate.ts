@@ -5,9 +5,9 @@
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { getToolSecurityMetaCached, loadToolSecurityMeta } from '../config/tool-security-meta';
 import {
-  getToolPermissionForId,
   loadToolConfig,
   saveToolConfigAsync,
+  setAgentToolPermission,
   type ToolPermissionMode,
 } from './config';
 import { describeToolInvocation } from './describe-invocation';
@@ -16,6 +16,11 @@ import { isPathUnderWorkspace } from './workspace-path-guard';
 import type { ToolExecutionResult } from '../types';
 import { enqueueToolApproval, type ToolApprovalContext } from './approval-queue';
 import type { ToolApprovalRequest } from './tool-approval-types';
+import {
+  formatApprovalPatternLabel,
+  resolveEffectivePermission,
+  resolveToolAgentKey,
+} from './permission-resolve';
 
 export type { ToolApprovalContext };
 
@@ -31,7 +36,8 @@ export async function maybeBlockToolForUserApproval(
   }
 
   const config = loadToolConfig();
-  const perm = getToolPermissionForId(config, permissionToolId);
+  const resolved = resolveEffectivePermission(config, permissionToolId, args, context);
+  const perm = resolved.mode;
   if (perm === 'off') {
     return {
       content: `Error: tool "${displayToolName ?? permissionToolId}" is disabled in Settings (set permission to Ask or Full to use it).`,
@@ -66,6 +72,10 @@ export async function maybeBlockToolForUserApproval(
       ? `Paths outside the workspace:\n${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nThe server will reject these unless you enable full filesystem access in Settings.`
       : '';
 
+  const agentKey = resolveToolAgentKey(context);
+  const alwaysAllowScope: ToolApprovalRequest['alwaysAllowScope'] =
+    agentKey === 'main' ? 'global' : 'agent';
+
   const decision = await enqueueToolApproval({
     toolName: execName,
     title: summary.title,
@@ -74,6 +84,13 @@ export async function maybeBlockToolForUserApproval(
     workspace,
     pathWarning: pathWarning || undefined,
     subAgentType: context.subAgentType,
+    workAgentId: context.workAgentId,
+    agentKey,
+    alwaysAllowScope,
+    matchedPatternLabel:
+      resolved.matchedPattern ?
+        formatApprovalPatternLabel(resolved.matchedPattern)
+      : undefined,
   });
 
   if (decision === 'cancel') {
@@ -81,7 +98,11 @@ export async function maybeBlockToolForUserApproval(
   }
 
   if (decision === 'always-allow') {
-    config.permissions[permissionToolId] = 'full';
+    if (alwaysAllowScope === 'agent') {
+      setAgentToolPermission(config, agentKey, permissionToolId, 'full');
+    } else {
+      config.permissions.default[permissionToolId] = 'full';
+    }
     await saveToolConfigAsync(config);
   }
 
