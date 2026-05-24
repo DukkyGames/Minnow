@@ -15,8 +15,13 @@
       "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": null,
+      "contextEnforcementPolicy": "slide"
     },
     "explore": {
       "label": "Explore",
@@ -40,8 +45,15 @@
         "wikipedia_search",
         "fetch_web_content"
       ],
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent", "execute_command", "git_commit"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "execute_command",
+        "git_commit"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": 16000,
+      "contextEnforcementPolicy": "slide"
     },
     "researcher": {
       "label": "Research worker",
@@ -51,6 +63,8 @@
       "maxConcurrent": 5,
       "timeoutMs": 420000,
       "maxToolTurns": 16,
+      "maxInputTokens": 12000,
+      "contextEnforcementPolicy": "summarize",
       "workAgentId": null,
       "allowedTools": [
         "get_datetime",
@@ -95,8 +109,13 @@
         "read_file",
         "list_directory"
       ],
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": 8000,
+      "contextEnforcementPolicy": "truncate"
     },
     "explorer": {
       "label": "Explorer (self-heal)",
@@ -108,7 +127,10 @@
       "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
       "systemPromptPath": null
     },
     "debugger": {
@@ -159,7 +181,10 @@
       "maxToolTurns": 16,
       "workAgentId": "planner",
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
       "systemPromptPath": null
     },
     "reef-widget": {

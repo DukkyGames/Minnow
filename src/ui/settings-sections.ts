@@ -703,6 +703,8 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialProviderId: agent.providerId,
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
+        initialMaxInputTokens: agent.maxInputTokens ?? null,
+        initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
         onModelSaved: () => {
           void renderWorkAgentsSection();
         },
@@ -828,6 +830,8 @@ async function renderSubAgentsSection(): Promise<void> {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
           maxToolTurns: type.maxToolTurns,
+          maxInputTokens: type.maxInputTokens ?? null,
+          contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
         },
         (patch) => saveTypePatch(id, patch),
       );

@@ -16,9 +16,29 @@ import {
   type PromptFileFamily,
   type PromptFileProfile,
 } from '../chat/prompts/prompt-file-api';
+import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import { isProvidersApiAvailable, listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
 import { setStatus } from './status';
+
+const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }[] = [
+  { value: 'slide', label: 'Slide (drop oldest turns)' },
+  { value: 'truncate', label: 'Truncate (drop oldest messages)' },
+  { value: 'summarize', label: 'Summarize (compress dropped turns)' },
+];
+
+function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelectElement {
+  const sel = document.createElement('select');
+  sel.className = 'settings-select';
+  for (const opt of CONTEXT_POLICY_OPTIONS) {
+    const node = document.createElement('option');
+    node.value = opt.value;
+    node.textContent = opt.label;
+    sel.appendChild(node);
+  }
+  sel.value = initial;
+  return sel;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -173,6 +193,8 @@ interface WorkAgentEditorOptions {
   initialProviderId: string | null;
   initialModelId: string | null;
   initialDisabled: boolean;
+  initialMaxInputTokens: number | null;
+  initialContextPolicy: ContextEnforcementPolicy;
   onModelSaved?: () => void;
 }
 
@@ -200,6 +222,17 @@ export function mountWorkAgentEditor(
   const disabledCb = document.createElement('input');
   disabledCb.type = 'checkbox';
   disabledCb.checked = !options.initialDisabled;
+
+  const maxInputTokensInput = document.createElement('input');
+  maxInputTokensInput.type = 'number';
+  maxInputTokensInput.className = 'settings-select settings-kv-input';
+  maxInputTokensInput.min = '1';
+  maxInputTokensInput.step = '1';
+  maxInputTokensInput.placeholder = 'No cap';
+  maxInputTokensInput.value =
+    options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
+
+  const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
 
   const reloadPrompt = async () => {
     const data = await fetchWorkAgentPrompt(options.agentId, currentProfile);
@@ -257,7 +290,14 @@ export function mountWorkAgentEditor(
   const disabledRow = el('label', 'settings-toggle-row');
   disabledRow.appendChild(disabledCb);
   disabledRow.appendChild(el('span', '', 'Disabled'));
+  const budgetBlock = el('div', 'settings-model-row');
+  budgetBlock.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
+  budgetBlock.appendChild(maxInputTokensInput);
+  budgetBlock.appendChild(el('label', 'settings-field-label', 'Context policy'));
+  budgetBlock.appendChild(contextPolicySel);
+
   container.appendChild(modelBlock);
+  container.appendChild(budgetBlock);
   container.appendChild(disabledRow);
 
   const meta = el('p', 'settings-field-hint');
@@ -290,10 +330,15 @@ export function mountWorkAgentEditor(
   saveModelBtn.addEventListener('click', () => {
     void (async () => {
       binding.modelId = modelSel.value;
+      const rawCap = maxInputTokensInput.value.trim();
+      const maxInputTokens =
+        rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
       const agent = await patchWorkAgentOverride(options.agentId, {
         providerId: binding.providerId || null,
         modelId: binding.modelId || null,
         disabled: !disabledCb.checked,
+        maxInputTokens,
+        contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
       });
       if (!agent) {
         setStatus('err', 'Could not save binding');
@@ -340,6 +385,8 @@ export function mountSubAgentTypeEditor(
     enabled: boolean;
     maxConcurrent: number;
     maxToolTurns: number;
+    maxInputTokens: number | null;
+    contextEnforcementPolicy: ContextEnforcementPolicy;
   },
   onSaveConfig: (
     patch: Partial<{
@@ -348,6 +395,8 @@ export function mountSubAgentTypeEditor(
       enabled: boolean;
       maxConcurrent: number;
       maxToolTurns: number;
+      maxInputTokens: number | null;
+      contextEnforcementPolicy: ContextEnforcementPolicy;
     }>,
   ) => Promise<boolean>,
 ): void {
@@ -377,6 +426,16 @@ export function mountSubAgentTypeEditor(
   toolTurnsInput.max = '64';
   toolTurnsInput.value = String(initial.maxToolTurns);
 
+  const maxInputTokensInput = document.createElement('input');
+  maxInputTokensInput.type = 'number';
+  maxInputTokensInput.className = 'settings-select';
+  maxInputTokensInput.min = '1';
+  maxInputTokensInput.placeholder = 'No cap';
+  maxInputTokensInput.value =
+    initial.maxInputTokens != null ? String(initial.maxInputTokens) : '';
+
+  const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy);
+
   const modelBlock = el('div','settings-model-row');
   modelBlock.appendChild(el('label', 'settings-field-label', 'Provider'));
   modelBlock.appendChild(providerSel);
@@ -398,7 +457,14 @@ export function mountSubAgentTypeEditor(
   extra.appendChild(modelBlock);
   extra.appendChild(enabledRow);
   extra.appendChild(maxRow);
+  const budgetRow = el('div', 'settings-model-row');
+  budgetRow.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
+  budgetRow.appendChild(maxInputTokensInput);
+  budgetRow.appendChild(el('label', 'settings-field-label', 'Context policy'));
+  budgetRow.appendChild(contextPolicySel);
+
   extra.appendChild(toolTurnsRow);
+  extra.appendChild(budgetRow);
 
   const saveCfgBtn = el('button', 'settings-action-btn', 'Save type settings');
   saveCfgBtn.type = 'button';
@@ -410,6 +476,11 @@ export function mountSubAgentTypeEditor(
         enabled: enabledCb.checked,
         maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
         maxToolTurns: Math.min(64, Math.max(1, Number(toolTurnsInput.value) || 1)),
+        maxInputTokens:
+          maxInputTokensInput.value.trim() === ''
+            ? null
+            : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
+        contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
       });
       setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
     })();

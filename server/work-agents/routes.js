@@ -95,6 +95,14 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       if ('modelId' in body) patch.modelId = body.modelId;
       if ('promptOverride' in body) patch.promptOverride = body.promptOverride;
       if ('disabled' in body) patch.disabled = body.disabled;
+      if ('maxInputTokens' in body) patch.maxInputTokens = body.maxInputTokens;
+      if ('contextEnforcementPolicy' in body) {
+        patch.contextEnforcementPolicy = body.contextEnforcementPolicy;
+      }
+      if ('minRecentTurns' in body) patch.minRecentTurns = body.minRecentTurns;
+      if ('summaryReserveTokens' in body) {
+        patch.summaryReserveTokens = body.summaryReserveTokens;
+      }
       await patchWorkAgentOverride(agentId, patch);
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);
       sendJson(res, 200, { agent });

@@ -117,6 +117,22 @@ export function mergeWorkAgentDefinition(
       override.providerId !== undefined ? override.providerId : builtin.providerId,
     modelId: override.modelId !== undefined ? override.modelId : builtin.modelId,
     disabled: override.disabled !== undefined ? override.disabled : builtin.disabled,
+    maxInputTokens:
+      override.maxInputTokens !== undefined
+        ? override.maxInputTokens
+        : builtin.maxInputTokens,
+    contextEnforcementPolicy:
+      override.contextEnforcementPolicy !== undefined
+        ? override.contextEnforcementPolicy
+        : builtin.contextEnforcementPolicy,
+    minRecentTurns:
+      override.minRecentTurns !== undefined
+        ? override.minRecentTurns
+        : builtin.minRecentTurns,
+    summaryReserveTokens:
+      override.summaryReserveTokens !== undefined
+        ? override.summaryReserveTokens
+        : builtin.summaryReserveTokens,
   };
 }
 

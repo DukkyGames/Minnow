@@ -72,6 +72,17 @@ function parseWorkAgentMeta(raw, relativePath) {
     ? ext.allowedTools.map(String)
     : null;
 
+  const maxInputTokens =
+    typeof ext.maxInputTokens === 'number' && Number.isFinite(ext.maxInputTokens)
+      ? Math.max(1, Math.floor(ext.maxInputTokens))
+      : null;
+
+  const policy = ext.contextEnforcementPolicy;
+  const contextEnforcementPolicy =
+    policy === 'summarize' || policy === 'slide' || policy === 'truncate'
+      ? policy
+      : 'slide';
+
   return {
     id: parsed.id,
     label: parsed.label,
@@ -83,6 +94,8 @@ function parseWorkAgentMeta(raw, relativePath) {
     allowedTools,
     defaultForModes,
     disabled: ext.disabled === true,
+    maxInputTokens,
+    contextEnforcementPolicy,
   };
 }
 
