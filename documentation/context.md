@@ -831,7 +831,7 @@ On the **first user message** while the chat is still named **`New chat`**, an a
 ### Layout (summary)
 
 - **Desktop:** header toggle collapses sidebar (wide vs narrow rail).
-- **Chat list row actions:** rename (✎) and delete (🗑) use **32×32px** controls with **no gap** on fine pointers (`sidebar.css`); **`pointer: coarse`** keeps **`--touch-min` (44px)** for touch targets.
+- **Chat list density:** `.chat-list` uses **2px** row gap; `.chat-item-row` padding **6px 10px** (meta lines **2px** apart). Fine-pointer rename/delete are **28×28px**; **`pointer: coarse`** keeps **`--touch-min` (44px)** buttons and **10px** vertical row padding (`responsive.css`).
 - **Session row hover:** fine-pointer hover on non-active rows uses `--surface-elevated` fill; title and rename/delete use `--text-hover` (direct button hover: green/red). **Active** row keeps accent styling on hover (`sidebar.css`).
 - **Mobile (┤640px):** sidebar overlay + backdrop; safe-area padding.
 - **Stats strip:** `#statsStrip` inference metrics above the terminal; **collapsed by default** (`.is-collapsed`). Toggle **`#btnStats`** in the chat sidebar footer (`initStatsStrip()` in [`stats.ts`](../src/ui/stats.ts), preference `minnow.statsStripOpen` in `localStorage`).
@@ -899,7 +899,7 @@ Browser (same origin :5173)
 
 ### Terminal panel (Step 10 + Epic D1 PTY)
 
-Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus a separate **agent run** stream (SSE) and **Agent runs** sidebar. Toggle metrics via `#btnStats` or terminal via `#btnTerminal` (sidebar footer) or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS). **Chrome:** [`src/styles/terminal.css`](../src/styles/terminal.css) matches bench-instrument panels (stats strip / input bar): hairline borders, `--code-inline-bg` for `#terminalShellHint` and hovers, ink-accent active tabs/history rows, solid bordered controls (no dashed add tab). Tokens: `--code-bg`, `--code-inline-bg` in [`src/styles/tokens.css`](../src/styles/tokens.css).
+Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus a fixed **Agent** tab for agent command output (SSE). Both share one display area; switching tabs shows either the xterm viewport or agent stream. Past runs are selectable from a dropdown in the Agent tab toolbar. Toggle metrics via `#btnStats` or terminal via `#btnTerminal` (sidebar footer) or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS). **Chrome:** [`src/styles/terminal.css`](../src/styles/terminal.css) matches bench-instrument panels (stats strip / input bar): hairline borders, `--code-inline-bg` for `#terminalShellHint` and hovers, ink-accent active tabs, solid bordered controls (no dashed add tab). Tokens: `--code-bg`, `--code-inline-bg` in [`src/styles/tokens.css`](../src/styles/tokens.css).
 
 **Dual backend:** User shell → `@lydell/node-pty`. Agent `execute_command` / `run_javascript` / `run_python` → unchanged `terminal-runner` + SSE (`runCommandWithTerminalStream`).
 

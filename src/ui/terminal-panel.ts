@@ -22,6 +22,9 @@ import {
   initTerminalTabs,
   isTerminalTabsInitialized,
   onTerminalPanelResize,
+  setTerminalTabChangeHandler,
+  switchToAgentTab,
+  type TerminalTabKind,
 } from './terminal-tabs';
 import {
   focusTerminalXterm,
@@ -33,15 +36,17 @@ const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_RATIO = 0.5;
 
 let panelEl: HTMLElement | null = null;
+let agentPaneEl: HTMLElement | null = null;
+let ptyPaneEl: HTMLElement | null = null;
 let outputEl: HTMLElement | null = null;
 let xtermHostEl: HTMLElement | null = null;
-let historyEl: HTMLElement | null = null;
+let agentRunSelectEl: HTMLSelectElement | null = null;
 let offlineBannerEl: HTMLElement | null = null;
 let activeRunId: string | null = null;
 let stickToBottom = true;
 let displayBytes = 0;
 const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
-let agentOutputVisible = false;
+let activeTabKind: TerminalTabKind = 'pty';
 /** Depth of agent runs that requested the top-bar hint while the panel was closed. */
 let agentRunHintDepth = 0;
 
@@ -68,22 +73,42 @@ function clampHeight(px: number): number {
 
 function getElements(): void {
   panelEl = document.getElementById('terminalPanel');
+  agentPaneEl = document.getElementById('terminalAgentPane');
+  ptyPaneEl = document.getElementById('terminalPtyPane');
   outputEl = document.getElementById('terminalOutput');
   xtermHostEl = document.getElementById('terminalXtermHost');
-  historyEl = document.getElementById('terminalHistory');
+  agentRunSelectEl = document.getElementById(
+    'terminalAgentRunSelect',
+  ) as HTMLSelectElement | null;
   offlineBannerEl = document.getElementById('terminalOfflineBanner');
 }
 
-function showAgentOutputPane(): void {
-  if (!outputEl) return;
-  outputEl.classList.remove('hidden');
-  agentOutputVisible = true;
+function applyActiveTabView(kind: TerminalTabKind): void {
+  activeTabKind = kind;
+  const isAgent = kind === 'agent';
+
+  agentPaneEl?.classList.toggle('hidden', !isAgent);
+  ptyPaneEl?.classList.toggle('hidden', isAgent);
+
+  document.getElementById('terminalShellHint')?.classList.toggle('hidden', isAgent);
+  document.getElementById('terminalShellSelect')?.classList.toggle('hidden', isAgent);
+  document.getElementById('btnTerminalClear')?.classList.toggle('hidden', !isAgent);
+
+  if (isAgent) {
+    scrollOutputIfPinned();
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    onTerminalPanelResize();
+    focusTerminalXterm();
+  });
 }
 
-function hideAgentOutputPane(): void {
-  if (!outputEl) return;
-  outputEl.classList.add('hidden');
-  agentOutputVisible = false;
+function ensureAgentTabVisible(): void {
+  if (isTerminalPanelOpen()) {
+    void switchToAgentTab();
+  }
 }
 
 function updateOfflineBanner(): void {
@@ -94,7 +119,7 @@ function updateOfflineBanner(): void {
 }
 
 function scrollOutputIfPinned(): void {
-  if (!outputEl || !stickToBottom || !agentOutputVisible) return;
+  if (!outputEl || !stickToBottom || activeTabKind !== 'agent') return;
   outputEl.scrollTop = outputEl.scrollHeight;
 }
 
@@ -134,7 +159,7 @@ function isTerminalPanelOpen(): boolean {
 }
 
 function beginCommandOutput(command: string, options: { clear?: boolean } = {}): void {
-  showAgentOutputPane();
+  ensureAgentTabVisible();
   if (options.clear) {
     clearOutput();
     appendOutputText(`$ ${command}\n`, 'stdout');
@@ -149,11 +174,8 @@ function beginCommandOutput(command: string, options: { clear?: boolean } = {}):
 }
 
 function setActiveHistoryRun(runId: string): void {
-  if (!historyEl) return;
-  historyEl.querySelectorAll('.terminal-history-item').forEach((el) => {
-    const item = el as HTMLButtonElement;
-    item.classList.toggle('is-active', item.dataset.runId === runId);
-  });
+  if (!agentRunSelectEl) return;
+  agentRunSelectEl.value = runId;
 }
 
 export function appendTerminalOutput(
@@ -162,7 +184,7 @@ export function appendTerminalOutput(
   text: string,
 ): void {
   if (activeRunId && runId !== activeRunId) return;
-  showAgentOutputPane();
+  ensureAgentTabVisible();
   appendOutputText(text, stream);
   externalHooks.onChunk?.(runId, stream, text);
 }
@@ -293,43 +315,43 @@ function upsertChatTerminalRun(
 }
 
 function renderHistoryList(runs: TerminalRunRecord[]): void {
-  if (!historyEl) return;
-  historyEl.innerHTML = '';
+  if (!agentRunSelectEl) return;
+
   const sorted = [...runs].sort((a, b) => b.startedAt - a.startedAt);
+  agentRunSelectEl.innerHTML = '';
 
   if (sorted.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'terminal-history-empty';
+    const empty = document.createElement('option');
+    empty.value = '';
     empty.textContent = 'No agent runs yet';
-    historyEl.appendChild(empty);
+    empty.disabled = true;
+    empty.selected = true;
+    agentRunSelectEl.appendChild(empty);
     return;
   }
 
   for (const run of sorted) {
     const label = historyCommandLabel(run);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'terminal-history-item';
-    btn.dataset.runId = run.id;
-    const cmd = document.createElement('span');
-    cmd.className = 'cmd';
-    cmd.textContent = label;
-    cmd.title = label;
-    btn.appendChild(cmd);
-    btn.addEventListener('click', () => {
-      void loadHistoryRun(run.id);
-      historyEl
-        ?.querySelectorAll('.terminal-history-item')
-        .forEach((el) => el.classList.remove('is-active'));
-      btn.classList.add('is-active');
-    });
-    historyEl.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value = run.id;
+    opt.textContent = label;
+    opt.title = label;
+    agentRunSelectEl.appendChild(opt);
   }
 }
 
+function wireAgentRunSelect(): void {
+  agentRunSelectEl?.addEventListener('change', () => {
+    const runId = agentRunSelectEl?.value?.trim();
+    if (!runId) return;
+    void loadHistoryRun(runId);
+  });
+}
+
 async function loadHistoryRun(runId: string): Promise<void> {
-  showAgentOutputPane();
+  ensureAgentTabVisible();
   clearOutput();
+  setActiveHistoryRun(runId);
   const text = await fetchTerminalLog(runId);
   if (text) {
     appendOutputText(text, 'stdout');
@@ -422,6 +444,7 @@ export async function runCommandWithTerminalStream(
   });
 
   activeRunId = runId;
+  setActiveHistoryRun(runId);
   options.hooks?.onRunStart?.(runId, label);
   externalHooks.onRunStart?.(runId, label);
 
@@ -505,7 +528,6 @@ function wireTerminalPanelButtons(): void {
 
   document.getElementById('btnTerminalClear')?.addEventListener('click', () => {
     clearOutput();
-    hideAgentOutputPane();
   });
 
   document.getElementById('btnTerminalCollapse')?.addEventListener('click', () => {
@@ -518,12 +540,16 @@ export async function initTerminalPanel(): Promise<void> {
   if (!panelEl) return;
 
   wireTerminalPanelButtons();
+  setTerminalTabChangeHandler((_tabId, kind) => {
+    applyActiveTabView(kind);
+  });
+  wireAgentRunSelect();
 
   const meta = await loadTerminalMeta();
   applyPanelHeight(meta.heightPx);
   setPanelOpen(meta.open);
   updateOfflineBanner();
-  hideAgentOutputPane();
+  applyActiveTabView('pty');
 
   if (xtermHostEl) {
     initTerminalXterm(xtermHostEl);

@@ -148,8 +148,8 @@
 /* Coarse pointer: ensure tap targets without changing desktop density */
 @media (pointer: coarse) {
   .chat-item-row {
-    padding-top: 12px;
-    padding-bottom: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
 
   .chat-new-wide {

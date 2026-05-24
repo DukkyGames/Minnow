@@ -1,5 +1,5 @@
 /**
- * Multi-tab bar for interactive PTY terminal sessions.
+ * Multi-tab bar: fixed Agent tab + interactive PTY terminal sessions.
  */
 
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
@@ -20,11 +20,32 @@ import {
   type TerminalTabSession,
 } from './terminal-xterm';
 
+/** Virtual tab id for agent command output (not a PTY session). */
+export const AGENT_TAB_ID = '__minnow_agent__';
+
+export type TerminalTabKind = 'agent' | 'pty';
+
 let tabBarEl: HTMLElement | null = null;
 let shellSelectEl: HTMLSelectElement | null = null;
 let profiles: ShellProfile[] = [];
 const liveTabs = new Map<string, TerminalTabSession>();
 let tabsInitialized = false;
+let onActiveTabChange: ((tabId: string, kind: TerminalTabKind) => void) | null =
+  null;
+
+export function isAgentTabId(tabId: string): boolean {
+  return tabId === AGENT_TAB_ID;
+}
+
+export function setTerminalTabChangeHandler(
+  handler: (tabId: string, kind: TerminalTabKind) => void,
+): void {
+  onActiveTabChange = handler;
+}
+
+function notifyActiveTabChange(tabId: string): void {
+  onActiveTabChange?.(tabId, isAgentTabId(tabId) ? 'agent' : 'pty');
+}
 
 function randomTabId(): string {
   return crypto.randomUUID();
@@ -56,6 +77,25 @@ async function persistTabs(activeId: string | null): Promise<void> {
   });
 }
 
+function renderAgentTab(activeId: string | null): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'terminal-tab terminal-tab--agent';
+  btn.setAttribute('role', 'tab');
+  btn.dataset.tabId = AGENT_TAB_ID;
+  btn.setAttribute(
+    'aria-selected',
+    activeId === AGENT_TAB_ID ? 'true' : 'false',
+  );
+  btn.tabIndex = activeId === AGENT_TAB_ID ? 0 : -1;
+  btn.textContent = 'Agent';
+  btn.title = 'Agent command output';
+  btn.addEventListener('click', () => {
+    void switchTab(AGENT_TAB_ID);
+  });
+  return btn;
+}
+
 function renderTabBar(activeId: string | null): void {
   if (!tabBarEl) return;
   tabBarEl.innerHTML = '';
@@ -63,6 +103,8 @@ function renderTabBar(activeId: string | null): void {
   const list = document.createElement('div');
   list.className = 'terminal-tab-list';
   list.setAttribute('role', 'tablist');
+
+  list.appendChild(renderAgentTab(activeId));
 
   for (const tab of liveTabs.values()) {
     const btn = document.createElement('button');
@@ -119,6 +161,14 @@ function fillShellSelect(): void {
 }
 
 async function switchTab(tabId: string): Promise<void> {
+  if (isAgentTabId(tabId)) {
+    disconnectActiveTerminalWs();
+    renderTabBar(tabId);
+    await persistTabs(tabId);
+    notifyActiveTabChange(tabId);
+    return;
+  }
+
   const tab = liveTabs.get(tabId);
   if (!tab) return;
 
@@ -128,11 +178,19 @@ async function switchTab(tabId: string): Promise<void> {
   } catch {
     renderTabBar(tabId);
     await persistTabs(tabId);
+    notifyActiveTabChange(tabId);
     return;
   }
   renderTabBar(tabId);
   await persistTabs(tabId);
+  notifyActiveTabChange(tabId);
   focusTerminalXterm();
+}
+
+/** Switch the tab bar to the Agent output tab. */
+export async function switchToAgentTab(): Promise<void> {
+  if (!tabsInitialized) return;
+  await switchTab(AGENT_TAB_ID);
 }
 
 export async function addTab(shellProfileId?: string): Promise<string> {
@@ -233,8 +291,12 @@ export async function initTerminalTabs(
     }
     const active = meta.activeTabId ?? saved[0].id;
     renderTabBar(active);
-    if (liveTabs.has(active)) {
+    if (isAgentTabId(active)) {
+      await switchTab(AGENT_TAB_ID);
+    } else if (liveTabs.has(active)) {
       await switchTab(active);
+    } else {
+      await switchTab(saved[0].id);
     }
   } else {
     await addTab(meta.defaultShellProfileId);

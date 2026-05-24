@@ -132,10 +132,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 8px 12px;
+  padding: 4px 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* Metrics + terminal toggles: pinned bottom-left of the session sidebar */
@@ -206,7 +206,7 @@
 /* Session row: div shell + action buttons (no nested interactive controls) */
 .chat-item-row {
   text-align: left;
-  padding: 10px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
@@ -287,8 +287,8 @@
 .chat-delete-btn {
   flex-shrink: 0;
   /* Default: compact hit area on mouse/desktop so glyphs sit closer (was full --touch-min each) */
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -326,7 +326,7 @@
 .chat-item-model {
   font-size: 9px;
   color: var(--mn-fg-subtle);
-  margin-top: 3px;
+  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -335,8 +335,8 @@
 .chat-item-stats {
   font-size: 9px;
   color: var(--mn-fg-muted);
-  margin-top: 4px;
-  line-height: 1.35;
+  margin-top: 2px;
+  line-height: 1.25;
 }
 
 /* Collapsed rail: rows span full list width; status glyph centered in the hit target */
