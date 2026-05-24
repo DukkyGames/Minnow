@@ -188,6 +188,28 @@ async function executeToolInner(
     return { content };
   }
 
+  if (name === 'check_reef_widget') {
+    if (!isToolEnabled('check_reef_widget')) {
+      return {
+        content:
+          'Error: tool "check_reef_widget" is disabled in Settings (enable it to validate Reef widgets).',
+      };
+    }
+    const { checkReefWidgetFenceHtml } = await import('./reef-widget-check.ts');
+    const html = typeof args.html === 'string' ? args.html : '';
+    if (!html.trim()) {
+      return {
+        content: JSON.stringify({
+          ok: false,
+          errors: ['"html" is required'],
+          warnings: [],
+        }),
+      };
+    }
+    const result = await checkReefWidgetFenceHtml(html);
+    return { content: JSON.stringify(result) };
+  }
+
   if (name === 'ask_question') {
     if (!isToolEnabled('ask_question')) {
       return {

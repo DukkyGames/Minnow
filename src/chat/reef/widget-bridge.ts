@@ -13,6 +13,11 @@ import { resolveWidgetLlmBinding, runWidgetCompletion } from './run-widget-compl
 import { subscribeThemeChanges } from './theme-forward.ts';
 import { createReefWidgetErrorPanel } from './widget-error-ui.ts';
 import {
+  hasExhaustedSilentWidgetRepair,
+  tryEnqueueSilentWidgetRepair,
+  showSoftFallbackOnHost,
+} from './widget-repair.ts';
+import {
   REEF_WIDGET_MIN_CONTENT_HEIGHT_PX,
   REEF_WIDGET_VALIDATION_RESIZE_GRACE_MS,
   REEF_WIDGET_VALIDATION_TIMEOUT_MS,
@@ -181,7 +186,6 @@ export function completeReefWidgetValidation(
   const record = hostsByWidgetId.get(widgetId);
   if (!record || record.validationDone) return;
 
-  record.validationDone = true;
   clearReefWidgetValidationTimer(widgetId);
 
   const mergedErrors = [
@@ -197,10 +201,29 @@ export function completeReefWidgetValidation(
     if (!heightOk) {
       errors.push('Widget did not produce visible content (height too small).');
     }
+
+    const repairStarted = tryEnqueueSilentWidgetRepair({
+      widgetId,
+      host: record.host,
+      widgetHtml: record.widgetHtml,
+      errors,
+    });
+    if (repairStarted) {
+      return;
+    }
+
+    record.validationDone = true;
+
+    if (hasExhaustedSilentWidgetRepair(record.host)) {
+      showSoftFallbackOnHost(record.host);
+      return;
+    }
+
     showWidgetValidationFailure(record, errors);
     return;
   }
 
+  record.validationDone = true;
   revealValidatedWidget(record);
 }
 
@@ -519,6 +542,27 @@ export function resetReefBridgeForTests(): void {
 /** Test hook: handle one reef message without window listener. */
 export function handleReefMessageForTests(event: MessageEvent): void {
   onReefMessage(event);
+}
+
+/** Mark validation finished without revealing iframe (soft fallback / repair abort). */
+export function markReefWidgetValidationComplete(widgetId: string): void {
+  const record = hostsByWidgetId.get(widgetId);
+  if (!record) return;
+  record.validationDone = true;
+  clearReefWidgetValidationTimer(widgetId);
+}
+
+/** Lookup mounted host record (repair + diagnostics). */
+export function getReefWidgetHostRecord(
+  widgetId: string,
+): { host: HTMLElement; widgetHtml: string; validationDone: boolean } | undefined {
+  const record = hostsByWidgetId.get(widgetId);
+  if (!record) return undefined;
+  return {
+    host: record.host,
+    widgetHtml: record.widgetHtml,
+    validationDone: record.validationDone,
+  };
 }
 
 /** Test hook: expose active LLM count. */

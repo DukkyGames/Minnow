@@ -71,6 +71,27 @@
   color: var(--mn-fg-muted);
 }
 
+.reef-widget-soft-fallback {
+  padding: 16px;
+  border: 0.5px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg-muted);
+  text-align: center;
+}
+
+.reef-widget-soft-fallback__label {
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.reef-widget-soft-fallback__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
 .reef-widget-host .reef-widget-iframe {
   width: 100%;
   min-height: 120px;

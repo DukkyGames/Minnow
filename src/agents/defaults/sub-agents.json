@@ -143,7 +143,8 @@
         "list_directory",
         "web_search",
         "wikipedia_search",
-        "fetch_web_content"
+        "fetch_web_content",
+        "check_reef_widget"
       ],
       "deniedTools": [
         "spawn_sub_agent",

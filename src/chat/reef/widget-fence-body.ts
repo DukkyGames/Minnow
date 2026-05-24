@@ -3,6 +3,8 @@
  * Rejects corrupted stream output (nested fence markers, truncated tags).
  */
 
+import { lintReefWidgetFence } from './widget-fence-lint.ts';
+
 const REEF_FENCE_MARKER_RE = /```reef-widget/gi;
 const STRAY_CLOSING_FENCE_RE = /^```\s*$/gm;
 const ANY_BACKTICK_FENCE_RE = /```/;
@@ -99,6 +101,11 @@ export function prepareReefWidgetHtml(
 
   if (!/<[a-z][\s\S]*?>/i.test(body)) {
     return { ok: false, errors: ['Widget body does not contain HTML markup.'] };
+  }
+
+  const lint = lintReefWidgetFence(body);
+  if (lint.errors.length > 0) {
+    return { ok: false, errors: lint.errors };
   }
 
   return {
