@@ -17,6 +17,11 @@ import { getActiveProvider } from '../providers/store';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
 import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
+import { looksLikeProseStructuredQuestion } from '../tools/prose-question-detect';
+import {
+  MAX_PROSE_QUESTION_RETRIES,
+  PROSE_QUESTION_RETRY_INSTRUCTION,
+} from '../tools/turn-continuation';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
@@ -124,6 +129,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     ];
 
     let toolTurns = 0;
+    let proseQuestionRetries = 0;
+    const hasAskQuestionTool = input.tools.some((t) => t.function.name === 'ask_question');
     const temperature = 0.4;
     const maxTokens = 2048;
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
@@ -223,6 +230,17 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       if (!summary) {
         summary = 'Sub-agent completed with no text output.';
+      }
+
+      if (
+        hasAskQuestionTool &&
+        looksLikeProseStructuredQuestion(summary) &&
+        proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
+      ) {
+        proseQuestionRetries += 1;
+        messages.push({ role: 'user', content: PROSE_QUESTION_RETRY_INSTRUCTION });
+        emitProgress(undefined, true);
+        continue;
       }
 
       messages.push({ role: 'assistant', content: summary });

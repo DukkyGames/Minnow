@@ -51,13 +51,33 @@ export async function resolveSubAgentBasePrompt(
 /**
  * Full system prompt with task envelope for the sub-agent runner.
  */
+const SUB_AGENT_ASK_QUESTION_RULES = `
+
+### User choices (sub-agent)
+When you need the user to pick among options, priorities, or approvals, call \`ask_question\` — do not list numbered or lettered choices in prose.`;
+
+/** Append ask_question rules when the sub-agent has that tool enabled. */
+export function appendSubAgentAskQuestionRules(
+  systemPrompt: string,
+  enabledToolNames: string[],
+): string {
+  if (!enabledToolNames.includes('ask_question')) {
+    return systemPrompt;
+  }
+  if (systemPrompt.includes('ask_question')) {
+    return systemPrompt;
+  }
+  return `${systemPrompt}${SUB_AGENT_ASK_QUESTION_RULES}`;
+}
+
 export async function buildSubAgentSystemPrompt(
   typeId: string,
   task: string,
   typeConfig: SubAgentTypeConfig,
+  enabledToolNames: string[] = [],
 ): Promise<string> {
   const base = await resolveSubAgentBasePrompt(typeId, typeConfig);
-  return `${base}
+  const envelope = `${base}
 
 ---
 
@@ -66,4 +86,5 @@ Return a concise summary for the parent when done.
 
 Task:
 ${task}`;
+  return appendSubAgentAskQuestionRules(envelope, enabledToolNames);
 }
