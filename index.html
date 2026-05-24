@@ -919,17 +919,24 @@
         <select id="terminalShellSelect" class="terminal-shell-select" aria-label="Shell profile for new tabs"></select>
         <div class="terminal-tab-bar" id="terminalTabBar"></div>
         <div class="terminal-header-actions">
-          <button type="button" class="terminal-header-btn" id="btnTerminalClear">Clear agent output</button>
+          <button type="button" class="terminal-header-btn hidden" id="btnTerminalClear">Clear agent output</button>
           <button type="button" class="terminal-header-btn" id="btnTerminalCollapse" aria-label="Hide terminal">Hide</button>
         </div>
       </header>
       <p id="terminalOfflineBanner" class="tools-server-banner terminal-offline-banner hidden" role="status">Interactive terminal requires <code>npm start</code> (not <code>npm run dev</code>). Agent runs still need the local server.</p>
       <p class="terminal-shell-hint" id="terminalShellHint">Shell has full access on your machine (not limited by workspace tool policy).</p>
       <div class="terminal-body">
-        <aside class="terminal-history" id="terminalHistory" aria-label="Agent runs"></aside>
-        <div class="terminal-main">
-          <pre class="terminal-output terminal-agent-output hidden" id="terminalOutput" aria-live="polite"></pre>
-          <div class="terminal-xterm-host" id="terminalXtermHost" role="tabpanel"></div>
+        <div class="terminal-pane terminal-agent-pane hidden" id="terminalAgentPane" role="tabpanel" aria-label="Agent command output">
+          <div class="terminal-agent-toolbar">
+            <label class="visually-hidden" for="terminalAgentRunSelect">Past agent runs</label>
+            <select id="terminalAgentRunSelect" class="terminal-agent-run-select" aria-label="Past agent runs">
+              <option value="">No agent runs yet</option>
+            </select>
+          </div>
+          <pre class="terminal-output terminal-agent-output" id="terminalOutput" aria-live="polite"></pre>
+        </div>
+        <div class="terminal-pane terminal-pty-pane" id="terminalPtyPane" role="tabpanel" aria-label="Interactive shell">
+          <div class="terminal-xterm-host" id="terminalXtermHost"></div>
         </div>
       </div>
     </section>
