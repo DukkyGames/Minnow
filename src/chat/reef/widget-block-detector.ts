@@ -72,6 +72,15 @@ export function mountReefWidgetBlocks(
     return;
   }
 
+  const msgWrap = bubble.closest('.msg') as HTMLElement | null;
+  const historyIndexRaw = msgWrap?.dataset.historyIndex;
+  const historyIndex =
+    historyIndexRaw != null && historyIndexRaw !== ''
+      ? Number.parseInt(historyIndexRaw, 10)
+      : Number.NaN;
+  const chatId = msgWrap?.dataset.chatId?.trim() ?? '';
+  let widgetMountIndex = 0;
+
   pres.forEach((pre) => {
     if (pre.dataset.reefMounted === 'true') return;
 
@@ -80,7 +89,7 @@ export function mountReefWidgetBlocks(
 
     const rawFenceBody = code.textContent ?? '';
     const prepared = prepareReefWidgetHtml(rawFenceBody);
-    if (!prepared.ok) {
+    if (prepared.ok === false) {
       mountReefWidgetFenceError(pre, prepared.errors);
       return;
     }
@@ -91,6 +100,12 @@ export function mountReefWidgetBlocks(
     const host = document.createElement('div');
     host.className = 'reef-widget-host reef-widget-host--validating';
     host.dataset.reefMounted = 'true';
+    host.dataset.chatId = chatId;
+    if (Number.isFinite(historyIndex)) {
+      host.dataset.historyIndex = String(historyIndex);
+    }
+    host.dataset.widgetIndex = String(widgetMountIndex);
+    widgetMountIndex += 1;
 
     const { iframe, widgetId, setSrcdoc } = createReefWidgetIframe({ widgetHtml });
     host.dataset.widgetId = widgetId;

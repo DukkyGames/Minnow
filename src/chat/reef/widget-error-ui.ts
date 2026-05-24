@@ -59,3 +59,22 @@ export function createReefWidgetValidatingStatus(): HTMLElement {
   row.appendChild(label);
   return row;
 }
+
+/** Non-technical placeholder when silent repair is exhausted. */
+export function createReefWidgetSoftFallbackPanel(): HTMLElement {
+  const panel = document.createElement('div');
+  panel.className = 'reef-widget-soft-fallback';
+  panel.setAttribute('role', 'status');
+
+  const label = document.createElement('p');
+  label.className = 'reef-widget-soft-fallback__label';
+  label.textContent = 'Preview unavailable';
+
+  const hint = document.createElement('p');
+  hint.className = 'reef-widget-soft-fallback__hint';
+  hint.textContent = 'This interactive widget could not be rendered. Ask the assistant to try again.';
+
+  panel.appendChild(label);
+  panel.appendChild(hint);
+  return panel;
+}

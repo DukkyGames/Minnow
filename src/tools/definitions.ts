@@ -116,6 +116,25 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'check_reef_widget',
+    label: 'Check reef widget',
+    description:
+      'Validate a reef-widget fence body (static lint + optional off-DOM iframe probe). Returns JSON { ok, errors, warnings }.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'check_reef_widget',
+      'Validate reef-widget HTML before finishing a Reef reply. Pass the fence body (not markdown delimiters). Returns JSON with ok, errors, and warnings.',
+      {
+        html: {
+          type: 'string',
+          description: 'reef-widget fence body HTML/CSS/JS fragment',
+        },
+      },
+      ['html'],
+    ),
+  },
+  {
     id: 'web_search',
     label: 'Web search',
     description: 'Search the web via Brave API when a key is set; otherwise uses DuckDuckGo on the server.',
