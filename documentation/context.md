@@ -270,7 +270,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 
 ### Memory system (Step 16)
 
-Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part and `{{memory}}` when enabled.
+Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part (`src/chat/prompts/memory/*.md` wraps `{{memory}}` around the retrieved block) when enabled. **Retrieve fallback:** keyword queries with no token matches still inject recent/pinned entries (`server/memory/retrieve.js`). **Sub-agents:** `buildSubAgentSystemPrompt` in [`src/agents/sub-agent-prompt.ts`](../src/agents/sub-agent-prompt.ts) injects the same memory block (task text as query) and `save_memory` guidance when the tool is allowed. **Save guidance:** full/lite base prompts + memory templates tell the model to call `save_memory` for explicit “remember this” requests and stable preferences/facts (not secrets or one-off state).
 
 | API | Purpose |
 |-----|---------|

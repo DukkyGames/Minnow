@@ -282,6 +282,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       run.task,
       typeConfig,
       [...allowedNames],
+      parentChat ?? null,
     );
 
     const filteredExecute = async (

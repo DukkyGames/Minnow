@@ -2,9 +2,17 @@
  * Build system prompts for sub-agent runs.
  */
 
+import { interpolatePromptBody } from '../chat/prompts/interpolate';
+import { loadPromptById } from '../chat/prompts/prompt-loader';
 import { fetchPromptFile } from '../chat/prompts/prompt-file-api';
 import { getPromptMetaSettingsSync } from '../config/prompt-meta';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
+import { fetchMemoryEnabled, retrieveMemoryBlock } from '../memory/client';
+import {
+  fetchMemoryInjectionEnabled,
+  isMemoryEnabledForChat,
+} from '../memory/config';
+import type { Chat } from '../types';
 import { SHIPPED_SUB_AGENT_PROMPTS } from './shipped-sub-agent-prompts';
 import { getWorkAgentPromptOverride } from './work-agent-registry';
 import { fetchWorkAgentPrompt } from './work-agent-prompt-api';
@@ -70,11 +78,84 @@ export function appendSubAgentAskQuestionRules(
   return `${systemPrompt}${SUB_AGENT_ASK_QUESTION_RULES}`;
 }
 
+const SUB_AGENT_SAVE_MEMORY_RULES = `
+
+### Memory (sub-agent)
+Notes below are from prior sessions — treat as context and verify against the codebase.
+Use \`save_memory\` for stable preferences or explicit "remember this" requests (not secrets or one-off state). Confirm only after the tool succeeds.`;
+
+/** Inject retrieved memories and optional save_memory guidance for sub-agents. */
+export async function appendSubAgentMemorySection(
+  systemPrompt: string,
+  task: string,
+  enabledToolNames: string[],
+  parentChat?: Chat | null,
+): Promise<string> {
+  const injectionOn = await fetchMemoryInjectionEnabled();
+  if (!injectionOn) {
+    return appendSubAgentSaveMemoryRules(systemPrompt, enabledToolNames);
+  }
+  const globalEnabled = await fetchMemoryEnabled();
+  const inject = parentChat
+    ? isMemoryEnabledForChat(parentChat, globalEnabled)
+    : globalEnabled;
+  if (!inject) {
+    return appendSubAgentSaveMemoryRules(systemPrompt, enabledToolNames);
+  }
+
+  const meta = getPromptMetaSettingsSync();
+  const profile = meta.activePromptProfile === 'lite' ? 'lite' : 'full';
+  const block = await retrieveMemoryBlock({ query: task, profile });
+
+  let result = systemPrompt;
+  if (block.trim()) {
+    const loaded = loadPromptById('info', 'memory', profile);
+    const template = loaded?.body?.trim() ?? 'Prior notes:\n\n{{memory}}';
+    const section = interpolatePromptBody(template, {
+      mode: '',
+      mode_label: '',
+      profile,
+      expert: '',
+      enabled_tools: '',
+      cwd: '',
+      memory: block,
+      user_message: task,
+      chat_history_summary: '',
+      work_agent: '',
+      work_agent_label: '',
+      skill: '',
+      date: new Date().toISOString().slice(0, 10),
+      os: typeof navigator !== 'undefined' ? navigator.platform : 'node',
+      plan_granularity: '',
+      orchestrate_plan: '',
+    });
+    if (section.trim()) {
+      result = `${result}\n\n---\n\n${section.trim()}`;
+    }
+  }
+
+  return appendSubAgentSaveMemoryRules(result, enabledToolNames);
+}
+
+function appendSubAgentSaveMemoryRules(
+  systemPrompt: string,
+  enabledToolNames: string[],
+): string {
+  if (!enabledToolNames.includes('save_memory')) {
+    return systemPrompt;
+  }
+  if (systemPrompt.includes('save_memory')) {
+    return systemPrompt;
+  }
+  return `${systemPrompt}${SUB_AGENT_SAVE_MEMORY_RULES}`;
+}
+
 export async function buildSubAgentSystemPrompt(
   typeId: string,
   task: string,
   typeConfig: SubAgentTypeConfig,
   enabledToolNames: string[] = [],
+  parentChat?: Chat | null,
 ): Promise<string> {
   const base = await resolveSubAgentBasePrompt(typeId, typeConfig);
   const envelope = `${base}
@@ -86,5 +167,11 @@ Return a concise summary for the parent when done.
 
 Task:
 ${task}`;
-  return appendSubAgentAskQuestionRules(envelope, enabledToolNames);
+  const withMemory = await appendSubAgentMemorySection(
+    envelope,
+    task,
+    enabledToolNames,
+    parentChat,
+  );
+  return appendSubAgentAskQuestionRules(withMemory, enabledToolNames);
 }

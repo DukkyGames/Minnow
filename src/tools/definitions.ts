@@ -1160,7 +1160,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'save_memory',
-      'Save a durable memory entry under ~/.minnow/memory for retrieval in later sessions. Use when the user asks you to remember something or when a stable preference or project fact should persist.',
+      'Save a durable memory entry under ~/.minnow/memory for retrieval in later sessions. Use when the user asks you to remember something, or when you learn a stable preference, convention, or project fact worth carrying into future chats. Do not save secrets, one-off task state, or ephemeral details.',
       {
         title: {
           type: 'string',

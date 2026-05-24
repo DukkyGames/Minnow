@@ -88,6 +88,16 @@ export function retrieveMemoryBlock(allEntries, opts = {}) {
   }));
 
   ranked = ranked.filter((r) => (tokens.length > 0 ? r.score > 0 : r.score >= 0));
+
+  // Keyword queries with no matches still inject recent/pinned notes (v1 has no embeddings).
+  if (ranked.length === 0 && allEntries.length > 0) {
+    ranked = allEntries.map(({ meta, body }) => ({
+      meta,
+      body,
+      score: meta.pinned ? 2 : 1,
+    }));
+  }
+
   ranked.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return String(b.meta.updatedAt).localeCompare(String(a.meta.updatedAt));
