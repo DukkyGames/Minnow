@@ -3,7 +3,9 @@
  */
 
 import { tryNonStreamingFallback } from '../../api/chat.ts';
-import { getActiveChat } from '../../state/sessions.ts';
+import { getActiveChat, scheduleSaveSessions } from '../../state/sessions.ts';
+import { appendReefArtifactVersion } from './artifact-client.ts';
+import { queueReefArtifactUserEdit } from './artifact-context.ts';
 import {
   emitReefWidgetLlmEnded,
   emitReefWidgetLlmStarted,
@@ -41,7 +43,26 @@ interface ReefWidgetHostRecord {
   validationDone: boolean;
   validationErrors: string[];
   lastContentHeightPx: number;
+  artifactId?: string;
 }
+
+export interface ReefArtifactEditPayload {
+  artifactId: string;
+  content?: string;
+  summary?: string;
+  widgetId: string;
+}
+
+export type ReefArtifactEditListener = (payload: {
+  artifactId: string;
+  version: number;
+  summary: string;
+  path: string;
+}) => void;
+
+const artifactEditListeners = new Set<ReefArtifactEditListener>();
+const artifactEditDebounceByKey = new Map<string, ReturnType<typeof setTimeout>>();
+const ARTIFACT_EDIT_DEBOUNCE_MS = 500;
 
 interface ReefPostMessage {
   type?: string;
@@ -57,6 +78,9 @@ interface ReefPostMessage {
   error?: string;
   ok?: boolean;
   errors?: string[];
+  artifactId?: string;
+  content?: string;
+  summary?: string;
 }
 
 const hostsByWidgetId = new Map<string, ReefWidgetHostRecord>();
@@ -123,12 +147,104 @@ function scheduleReefWidgetValidation(widgetId: string): void {
 }
 
 /** Track mounted host for resize / theme refresh / LLM replies. */
+/** Notify UI when an artifact version is written from a widget edit. */
+export function subscribeEdits(listener: ReefArtifactEditListener): () => void {
+  artifactEditListeners.add(listener);
+  return () => {
+    artifactEditListeners.delete(listener);
+  };
+}
+
+export function unsubscribeEdits(listener: ReefArtifactEditListener): void {
+  artifactEditListeners.delete(listener);
+}
+
+function notifyArtifactEditListeners(payload: {
+  artifactId: string;
+  version: number;
+  summary: string;
+  path: string;
+}): void {
+  for (const listener of artifactEditListeners) {
+    listener(payload);
+  }
+}
+
+function resolveArtifactIdForWidget(
+  widgetId: string,
+  payloadArtifactId?: string,
+): string | undefined {
+  const fromPayload = payloadArtifactId?.trim();
+  if (fromPayload) return fromPayload;
+  const record = hostsByWidgetId.get(widgetId);
+  if (record?.artifactId) return record.artifactId;
+  const hostAttr = record?.host.dataset.artifactId?.trim();
+  return hostAttr || undefined;
+}
+
+/** Debounced persist of iframe editArtifact → new artifact version. */
+export function editArtifactFromWidget(
+  widgetId: string,
+  payload: Omit<ReefArtifactEditPayload, 'widgetId'>,
+): void {
+  const artifactId = resolveArtifactIdForWidget(widgetId, payload.artifactId);
+  if (!artifactId) return;
+  if (payload.content == null) return;
+
+  const key = `${widgetId}:${artifactId}`;
+  const existing = artifactEditDebounceByKey.get(key);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    artifactEditDebounceByKey.delete(key);
+    void flushArtifactEdit(widgetId, artifactId, payload.content ?? '', payload.summary);
+  }, ARTIFACT_EDIT_DEBOUNCE_MS);
+  artifactEditDebounceByKey.set(key, timer);
+}
+
+async function flushArtifactEdit(
+  widgetId: string,
+  artifactId: string,
+  content: string,
+  summary?: string,
+): Promise<void> {
+  try {
+    const result = await appendReefArtifactVersion(artifactId, {
+      body: content,
+      author: 'user',
+      summary,
+    });
+    const alias = `@minnow/reef/artifacts/${artifactId}`;
+    const editSummary = summary?.trim() || `updated to v${result.version}`;
+
+    notifyArtifactEditListeners({
+      artifactId,
+      version: result.version,
+      summary: editSummary,
+      path: alias,
+    });
+
+    const chat = getActiveChat();
+    queueReefArtifactUserEdit(chat, {
+      artifactId,
+      version: result.version,
+      summary: editSummary,
+      path: alias,
+    });
+    scheduleSaveSessions();
+    void widgetId;
+  } catch {
+    /* Host surfaces errors via subscribeEdits consumers in future UI. */
+  }
+}
+
 export function registerReefWidgetHost(
   widgetId: string,
   host: HTMLElement,
   iframe: HTMLIFrameElement,
   setSrcdoc: (html: string) => void,
   widgetHtml = '',
+  artifactId?: string,
 ): void {
   hostsByWidgetId.set(widgetId, {
     host,
@@ -138,7 +254,11 @@ export function registerReefWidgetHost(
     validationDone: false,
     validationErrors: [],
     lastContentHeightPx: 0,
+    artifactId,
   });
+  if (artifactId) {
+    host.dataset.artifactId = artifactId;
+  }
 
   if (shouldAutoRevealReefWidgetsForTests()) {
     scheduleReefWidgetValidation(widgetId);
@@ -480,6 +600,13 @@ function onReefMessage(event: MessageEvent): void {
     case 'openLink':
       handleOpenLink(typeof data.url === 'string' ? data.url : '');
       break;
+    case 'editArtifact':
+      editArtifactFromWidget(data.widgetId, {
+        artifactId: typeof data.artifactId === 'string' ? data.artifactId : '',
+        content: typeof data.content === 'string' ? data.content : undefined,
+        summary: typeof data.summary === 'string' ? data.summary : undefined,
+      });
+      break;
     default:
       break;
   }
@@ -532,6 +659,11 @@ export function resetReefBridgeForTests(): void {
     clearTimeout(grace);
   }
   validationResizeGraceByWidgetId.clear();
+  for (const timer of artifactEditDebounceByKey.values()) {
+    clearTimeout(timer);
+  }
+  artifactEditDebounceByKey.clear();
+  artifactEditListeners.clear();
   if (themeUnsubscribe) {
     themeUnsubscribe();
     themeUnsubscribe = null;

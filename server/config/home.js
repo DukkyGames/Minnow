@@ -72,6 +72,7 @@ const SCAFFOLD_DIRS = [
   'screenshots',
   'reef/widgets',
   'reef/modules',
+  'reef/artifacts',
   'benchmarks',
 ];
 
