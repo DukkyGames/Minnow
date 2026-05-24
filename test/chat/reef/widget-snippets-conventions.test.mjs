@@ -80,6 +80,26 @@ function assertChartSnippetConventions(fenceBody, name) {
     hasResize,
     `${name}: chart snippet expected requestResize or useLayoutEffect`,
   );
+  assert.doesNotMatch(
+    fenceBody,
+    /\btoExponential\s*\(/i,
+    `${name}: chart snippet must not use toExponential on axis ticks`,
+  );
+  assert.match(
+    fenceBody,
+    /type:\s*['"]number['"]|type\s*=\s*["']number["']/,
+    `${name}: YAxis must declare type number`,
+  );
+  assert.match(
+    fenceBody,
+    /\bwidth:\s*60\b|\bwidth\s*=\s*\{?\s*60\b/,
+    `${name}: YAxis must set width 60`,
+  );
+  assert.match(
+    fenceBody,
+    /left:\s*3[6-9]\b|left:\s*[4-9]\d\b/,
+    `${name}: chart margin.left must be at least 36`,
+  );
 }
 
 describe('reef widget snippet conventions (Phase 2)', () => {
