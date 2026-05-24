@@ -2,7 +2,7 @@
 id: feature-04
 name: Reef artifacts evolution
 roadmap_ref: documentation/plans/feature-audit-roadmap.md §4
-status: planned
+status: built
 overview: >-
   Evolve Reef from ephemeral inline widgets into versioned, durable artifacts with live
   user-edit round-trip, tool-output promotion, and cross-artifact references — without
