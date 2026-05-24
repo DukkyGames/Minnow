@@ -34,10 +34,9 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ## Agent Layer Polish
 
-### 5. Interrupt and steer — Partial
-- **Today:** Stop button ([src/chat/stop-generation.ts](../../src/chat/stop-generation.ts)) aborts the turn entirely. "Switch chats while waiting" keeps the stream alive in background.
-- **Gap:** Inject a steering message the **current** agent reads at the next tool/loop boundary — no full restart.
-- **Scope:** Add `pendingSteerMessage` to `Chat`; consume at top of each `sendMessageWithTools` round in [src/tools/loop.ts](../../src/tools/loop.ts).
+### 5. Interrupt and steer — Built
+- **Today:** While the active chat streams, non-empty composer text **steers** (queued on `Chat.pendingSteerMessage`, consumed at each `runChatTurn` tool-loop iteration); empty composer + primary button still **stops** ([src/chat/stop-generation.ts](../../src/chat/stop-generation.ts)). Steer rows show a **Steered** chip in history.
+- **Scope:** [src/chat/steer-message.ts](../../src/chat/steer-message.ts), consume in [src/tools/loop.ts](../../src/tools/loop.ts), composer routing in [src/ui/composer-send.ts](../../src/ui/composer-send.ts). Verification: [feature-05-interrupt-steer.md](verification/feature-05-interrupt-steer.md).
 
 ### 6. Approval gates with patterns — Partial
 - **Today:** Per-tool `full|ask|off` ([src/tools/config.ts](../../src/tools/config.ts)); per-sub-agent allowlists; per-path filesystem gate. Approval strip ([src/ui/tool-approval-modal.ts](../../src/ui/tool-approval-modal.ts)).

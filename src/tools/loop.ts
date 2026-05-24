@@ -20,6 +20,11 @@ import {
   isStreamDomVisible,
 } from '../chat/streaming-state';
 import {
+  clearPendingSteer,
+  consumePendingSteer,
+  enqueueSteerMessage,
+} from '../chat/steer-message';
+import {
   clearAttachments,
   getPendingAttachments,
   replacePendingAttachments,
@@ -86,8 +91,10 @@ import type {
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
+  refreshComposerStreamingAffordance,
   setComposerStreamingMode,
   syncComposerFromStreamingState,
+  syncSteerQueuedHint,
 } from '../ui/composer-send';
 import { registerStreamDomRemount } from './stream-chat-dom';
 import { refreshExpertSelectDisabled } from '../ui/expert-select';
@@ -883,6 +890,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         throw new DOMException('Aborted', 'AbortError');
       }
 
+      const steerConsumed = consumePendingSteer(chat);
+      if (steerConsumed.consumed) {
+        syncSteerQueuedHint();
+      }
+
       let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
       if (activeWorkAgent?.allowedTools?.length) {
         const allow = new Set(activeWorkAgent.allowedTools);
@@ -1268,6 +1280,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
+      clearPendingSteer(chat);
       turnRunStatus = 'stopped';
       cancelAllForParentTurn(parentTurnId);
       thinkingTracker?.abort();
@@ -1406,13 +1419,37 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 /** Send the composer text with tool calling (SSE loop; max rounds from Settings → General / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
 export async function sendMessageWithTools(): Promise<void> {
-  if (isActiveChatStreaming()) return;
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+  const rawTextEarly = input.value.trim();
+  if (isActiveChatStreaming()) {
+    if (!rawTextEarly) return;
+    const pendingSteer = getPendingAttachments();
+    const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
+    if (pendingOk.length > 0) {
+      setStatus('err', 'Steer is text only — wait for this turn to finish for attachments');
+      return;
+    }
+    const chat = getActiveChat();
+    const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
+    if (enqueueSteerMessage(chat, rawTextEarly)) {
+      input.value = '';
+      input.style.height = 'auto';
+      setStatus(
+        'ok',
+        hadPrior
+          ? 'Correction updated — applies after current step'
+          : 'Steering at next step…',
+      );
+      refreshComposerStreamingAffordance();
+      syncSteerQueuedHint();
+    }
+    return;
+  }
   if (isChatTurnSetupPending(getActiveChat().id)) return;
   if (isBackgroundStreamBlockingSend()) {
     setStatus('spin', 'Stop or wait for the reply in the other chat first');
     return;
   }
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const rawText = input.value.trim();
   const { consumePendingMessageEdit, completePendingMessageEdit } = await import(
     '../ui/message-actions'

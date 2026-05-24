@@ -55,6 +55,8 @@ export interface Stats {
 export interface UserMessage {
   role: 'user';
   content: string;
+  /** True when the row was injected via steer consume (interrupt-and-steer). */
+  steer?: boolean;
 }
 
 /** Assistant history entry; may include per-bubble metric chips when restored. */
@@ -418,6 +420,8 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
+  /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
+  pendingSteerMessage?: string;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */

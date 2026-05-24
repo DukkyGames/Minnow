@@ -2,11 +2,19 @@ import { sendMessage } from '../chat/messaging';
 import { scrollChatIfPinned } from './chat-scroll';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from './skill-picker';
 
-export {
+import {
   handleComposerPrimaryAction,
+  initComposerSteerInputListener,
   setComposerStreamingMode,
   setSendLoading,
 } from './composer-send';
+
+export {
+  handleComposerPrimaryAction,
+  initComposerSteerInputListener,
+  setComposerStreamingMode,
+  setSendLoading,
+};
 export type { ComposerStreamingMode } from './composer-send';
 
 /** Composer grows with content; caps at 40vh then scrolls without a visible thumb. */
@@ -36,6 +44,7 @@ export function autoResize(el: HTMLTextAreaElement): void {
 export function initComposerInput(el: HTMLTextAreaElement): void {
   autoResize(el);
   window.addEventListener('resize', () => autoResize(el));
+  initComposerSteerInputListener();
 }
 
 export function handleKey(e: KeyboardEvent): void {
