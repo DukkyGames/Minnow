@@ -36,7 +36,7 @@ function ensureLastActiveMap(raw: unknown): Record<string, string> {
   return out;
 }
 
-/** Upgrade v1/v2 session JSON to canonical schema v2 in memory. */
+/** Upgrade v1/v2 session JSON to canonical schema v3 in memory. */
 export function migrateSessionStateV1ToV2(
   parsed: RawSessionJson,
   coerceChat: (raw: unknown) => Chat,

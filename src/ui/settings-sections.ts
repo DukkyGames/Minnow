@@ -605,6 +605,16 @@ async function renderModesSection(): Promise<void> {
       if (id === 'reef') {
         mountReefWidgetLlmSettings(body);
       }
+      if (id === 'research') {
+        // Hint: parallel Research worker runs share the global sub-agent concurrency cap.
+        body.appendChild(
+          el(
+            'p',
+            'settings-field-hint',
+            'Parallel research workers: Settings → Sub-agents → Research worker → Max concurrent (raising Global max concurrent may be needed to avoid queuing).',
+          ),
+        );
+      }
       if (serverReady) {
         mountPromptFileEditor(body, { family: 'modes', entityId: id });
       }
