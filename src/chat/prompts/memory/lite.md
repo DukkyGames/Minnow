@@ -9,4 +9,4 @@ Prior notes (may be stale — verify before acting):
 
 {{memory}}
 
-Use **`save_memory`** when the user wants something remembered (title + body). Confirm only after the tool succeeds.
+Use **`save_memory`** for explicit "remember this" requests or **stable** preferences/facts (title + body). Skip secrets and one-off state. Confirm only after the tool succeeds.

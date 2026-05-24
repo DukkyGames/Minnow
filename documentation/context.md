@@ -210,7 +210,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Enable/disable + persistence | `src/skills/config.ts`, `~/.minnow/skills.json`, `GET/PUT /api/config/skills` |
 | Settings UI (toggles, editor, add custom) | `src/ui/settings-skills.ts`, `src/skills/skill-settings-api.ts` |
 | Custom skill template | `src/skills/_template/SKILL.md` (copied on `POST /api/skills`) |
-| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` — row hover/`--active` set nested label, id, desc, and badge to `--elevated-fg` on `--surface-elevated` (same pattern as chat sidebar / file tree; MIN-12) |
+| Slash picker UI | `src/ui/skill-picker.ts`, `src/styles/skill-picker.css` (row hover/`--active`: `--surface-elevated` + nested `--elevated-fg` on label, id, desc, badge — same pattern as chat sidebar rows) |
 | Server scan + API | `server/skills/scan.js`, `server/skills/middleware.js`, `server/skills/user-skills.js` |
 
 **API** (same CORS as `/api/tools`; requires `npm start` for user skills):
@@ -270,7 +270,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 
 ### Memory system (Step 16)
 
-Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part and `{{memory}}` when enabled.
+Persistent notes under `~/.minnow/memory/` (`index.json` + `entries/<uuid>.md`). Injected via composer `memory` part (`src/chat/prompts/memory/*.md` wraps `{{memory}}` around the retrieved block) when enabled. **Retrieve fallback:** keyword queries with no token matches still inject recent/pinned entries (`server/memory/retrieve.js`). **Sub-agents:** `buildSubAgentSystemPrompt` in [`src/agents/sub-agent-prompt.ts`](../src/agents/sub-agent-prompt.ts) injects the same memory block (task text as query) and `save_memory` guidance when the tool is allowed. **Save guidance:** full/lite base prompts + memory templates tell the model to call `save_memory` for explicit “remember this” requests and stable preferences/facts (not secrets or one-off state).
 
 | API | Purpose |
 |-----|---------|

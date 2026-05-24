@@ -158,6 +158,11 @@ function resolvePartBody(
     return ctx.skillBody.trim();
   }
   if (partId === 'memory' && ctx.memoryBlock?.trim()) {
+    const loadProfile = profile === 'lite' ? 'lite' : 'full';
+    const loaded = loadPromptById('info', 'memory', loadProfile);
+    if (loaded?.body?.trim()) {
+      return loaded.body.trim();
+    }
     return ctx.memoryBlock.trim();
   }
 
