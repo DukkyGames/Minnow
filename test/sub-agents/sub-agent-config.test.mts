@@ -47,11 +47,16 @@ describe('sub-agent config', () => {
     assert.equal(merged.types.generalPurpose.maxToolTurns, 16);
   });
 
-  test('reef-widget type is registered with read-only allow list', () => {
+  test('researcher type is registered with read-only allow list', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, null);
-    const reef = merged.types['reef-widget'];
-    assert.ok(reef);
-    assert.ok(reef.allowedTools?.includes('read_file'));
-    assert.ok(reef.deniedTools.includes('save_file'));
+    const r = merged.types.researcher;
+    assert.ok(r);
+    assert.equal(r.label, 'Research worker');
+    assert.equal(r.maxToolTurns, 16);
+    assert.equal(r.maxConcurrent, 5);
+    assert.equal(r.timeoutMs, 420000);
+    assert.ok(r.allowedTools?.includes('web_search'));
+    assert.ok(r.deniedTools.includes('save_file'));
+    assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
 });

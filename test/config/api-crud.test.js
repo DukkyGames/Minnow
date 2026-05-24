@@ -31,7 +31,7 @@ describe('config API CRUD', () => {
   test('GET sessions on empty home returns default blob', async () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/config/sessions');
     assert.equal(res.status, 200);
-    assert.equal(res.json.version, 2);
+    assert.equal(res.json.version, 3);
     assert.ok(Array.isArray(res.json.chats));
     assert.ok(res.json.chats.length >= 1);
   });

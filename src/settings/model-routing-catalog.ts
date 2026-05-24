@@ -108,7 +108,7 @@ export async function loadModelRoutingCatalog(
 ): Promise<ModelRoutingCatalog> {
   const serverUp = await detectConfigServer();
   const activeChat = getActiveChat();
-  const chatCtx: ChatBindingContext = {
+  const chatCtx: import('./model-routing-effective').ChatBindingContext = {
     providerId: activeChat.providerId ?? defaults.providerId,
     modelId: activeChat.modelId || defaults.modelId,
   };

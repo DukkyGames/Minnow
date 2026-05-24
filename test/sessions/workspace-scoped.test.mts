@@ -1,5 +1,5 @@
 /**
- * Workspace-scoped chats — schema v2 migration and sidebar filters.
+ * Workspace-scoped chats — schema v3 migration and sidebar filters.
  */
 
 import assert from 'node:assert/strict';
@@ -46,7 +46,7 @@ function chatRow(
 
 function seedState(partial: SessionState): SessionState {
   return {
-    version: 2,
+    version: 3,
     sidebarCollapsed: false,
     lastActiveChatIdByWorkspace: {},
     ...partial,
@@ -74,7 +74,7 @@ describe('migrateSessionStateV1ToV2', () => {
       () => coerceChatWorkspaceFields(null),
     );
 
-    assert.equal(migrated.version, 2);
+    assert.equal(migrated.version, 3);
     assert.equal(migrated.chats.length, 1);
     assert.equal(migrated.chats[0].workspacePath, '');
     assert.deepEqual(migrated.lastActiveChatIdByWorkspace, {});
@@ -93,7 +93,7 @@ describe('migrateSessionStateV1ToV2', () => {
       () => coerceChatWorkspaceFields(null),
     );
 
-    assert.equal(migrated.version, 2);
+    assert.equal(migrated.version, 3);
     assert.equal(
       normalizeWorkspacePath(migrated.chats[0].workspacePath),
       normalizeWorkspacePath(PATH_A),

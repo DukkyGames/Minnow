@@ -1118,7 +1118,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         fullTextLength: fullText.trim().length,
         hasPostToolTail: hasPostToolTail(chat.history),
         emptyPostToolRetries,
-        proseQuestionRetries,
       });
 
       if (continuation === 'retryEmpty') {
