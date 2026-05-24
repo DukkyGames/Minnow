@@ -34,6 +34,21 @@ describe('memory retrieve', () => {
     assert.equal(block, expected);
   });
 
+  test('retrieveMemoryBlock falls back when query has no token matches', () => {
+    const all = [
+      { meta: META_A, body: 'Use npm start for integration tests.' },
+      { meta: META_B, body: 'Use poetry for Python projects.' },
+    ];
+    const { block, ids } = retrieveMemoryBlock(all, {
+      query: 'hello world unrelated',
+      limit: 4,
+      maxChars: 4000,
+    });
+    assert.match(block, /npm workflow/);
+    assert.match(block, /Python only/);
+    assert.equal(ids.length, 2);
+  });
+
   test('retrieveMemoryBlock ranks npm over python', () => {
     const all = [
       { meta: META_A, body: 'Use npm start for integration tests.' },
