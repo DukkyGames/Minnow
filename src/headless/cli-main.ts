@@ -1,0 +1,182 @@
+/**
+ * Headless CLI entry (invoked via bin/minnow.mjs + tsx).
+ */
+
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  parseRunArgs,
+  printTopLevelHelp,
+  type HeadlessRunCliOptions,
+} from './argv';
+import {
+  putWorkspace,
+  spawnMinnowServer,
+  stopSpawnedServer,
+  waitForServer,
+} from './preflight';
+import { runHeadless, serializeHeadlessRunResult } from './runner';
+import { installHeadlessFetch, normalizeBaseUrl } from './server-context';
+import { cancelGeneration } from '../api/generations';
+
+let activeGenerationId: string | null = null;
+let shuttingDown = false;
+
+function log(line: string): void {
+  process.stderr.write(`${line}\n`);
+}
+
+async function readStdinPrompt(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8').trim();
+}
+
+async function resolveWorkspace(
+  workspace: string | null,
+  cwd: string,
+): Promise<{ ok: true; path: string } | { ok: false; message: string }> {
+  if (!workspace) return { ok: true, path: '' };
+  const abs = path.isAbsolute(workspace) ? workspace : path.resolve(cwd, workspace);
+  try {
+    const stat = await fs.stat(abs);
+    if (!stat.isDirectory()) {
+      return { ok: false, message: `Workspace is not a directory: ${abs}` };
+    }
+  } catch {
+    return { ok: false, message: `Workspace does not exist: ${abs}` };
+  }
+  return { ok: true, path: abs };
+}
+
+async function ensureServer(cli: HeadlessRunCliOptions): Promise<number | null> {
+  const base = normalizeBaseUrl(cli.baseUrl);
+  installHeadlessFetch(base);
+  if (await waitForServer({ baseUrl: base, timeoutSec: 3 })) {
+    return null;
+  }
+  if (!cli.startServer) {
+    log(`Server not reachable at ${base} (use --start-server or start npm start)`);
+    return 3;
+  }
+  log('Starting Minnow dev server (BROWSER=none)…');
+  spawnMinnowServer({ minnowHome: cli.minnowHome, log });
+  const ok = await waitForServer({ baseUrl: base, timeoutSec: cli.serverTimeoutSec, log });
+  if (!ok) {
+    stopSpawnedServer();
+    return 3;
+  }
+  return null;
+}
+
+async function runCommand(cli: HeadlessRunCliOptions): Promise<number> {
+  if (cli.stdin && (cli.prompt === '__STDIN__' || !cli.prompt)) {
+    cli.prompt = await readStdinPrompt();
+    if (!cli.prompt) {
+      log('Empty stdin — nothing to run');
+      return 2;
+    }
+  }
+
+  const serverExit = await ensureServer(cli);
+  if (serverExit != null) return serverExit;
+
+  const workspaceResolved = await resolveWorkspace(cli.workspace, process.cwd());
+  if (workspaceResolved.ok === false) {
+    log(workspaceResolved.message);
+    return 4;
+  }
+
+  const base = normalizeBaseUrl(cli.baseUrl);
+  installHeadlessFetch(base);
+
+  if (workspaceResolved.path) {
+    try {
+      await putWorkspace(base, workspaceResolved.path);
+    } catch (err) {
+      log(err instanceof Error ? err.message : String(err));
+      return 4;
+    }
+  }
+
+  const controller = new AbortController();
+  const onSignal = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    controller.abort();
+    if (activeGenerationId) {
+      void cancelGeneration(activeGenerationId).catch(() => undefined);
+    }
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  const result = await runHeadless({
+    cli,
+    workspaceAbs: workspaceResolved.path || null,
+    signal: controller.signal,
+    log,
+  });
+
+  if (result.turns.length > 0) {
+    activeGenerationId = result.turns[result.turns.length - 1]?.generationId ?? null;
+  }
+
+  const jsonText = serializeHeadlessRunResult(result);
+
+  if (cli.jsonOut) {
+    await fs.writeFile(cli.jsonOut, jsonText, 'utf8');
+  }
+
+  if (cli.json) {
+    process.stdout.write(jsonText);
+  } else if (!cli.quiet && result.ok) {
+    process.stdout.write(`${result.assistantFinal}\n`);
+  } else if (!cli.quiet && !result.ok && result.assistantFinal) {
+    process.stdout.write(`${result.assistantFinal}\n`);
+  }
+
+  stopSpawnedServer();
+  return result.exitCode;
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
+    printTopLevelHelp();
+    process.exit(0);
+  }
+
+  const sub = argv[0];
+  const rest = argv.slice(1);
+
+  if (sub !== 'run') {
+    log(`Unknown command: ${sub}`);
+    printTopLevelHelp();
+    process.exit(2);
+  }
+
+  const parsed = parseRunArgs(rest);
+  if (parsed.ok === false) {
+    if (parsed.message !== 'help') {
+      log(parsed.message);
+      process.exit(2);
+    }
+    process.exit(0);
+  }
+
+  const code = await runCommand(parsed.options);
+  process.exit(code);
+}
+
+const entry = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (import.meta.url === entry) {
+  main().catch((err) => {
+    log(err instanceof Error ? err.stack ?? err.message : String(err));
+    stopSpawnedServer();
+    process.exit(1);
+  });
+}

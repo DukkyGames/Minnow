@@ -199,6 +199,14 @@ export function registerPackAgentsFromApi(agents: WorkAgentDefinition[]): void {
   }
 }
 
+/** Replace built-in registry from server snapshot (headless CLI — no Vite glob). */
+export function registerWorkAgentsFromServerSnapshot(agents: WorkAgentDefinition[]): void {
+  for (const agent of agents) {
+    if (!agent?.id) continue;
+    builtinAgents.set(agent.id, { ...agent, kind: agent.kind ?? 'work-agent' });
+  }
+}
+
 export function resetWorkAgentRegistry(): void {
   builtinAgents.clear();
   userOverrides = {};

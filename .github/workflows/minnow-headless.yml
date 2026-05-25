@@ -1,0 +1,41 @@
+# Optional CI smoke for headless CLI (mock-friendly unit tests run in npm test).
+# Live LM Studio job can be added with continue-on-error when a provider service is available.
+name: Minnow headless
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'bin/**'
+      - 'src/headless/**'
+      - 'test/headless/**'
+      - 'server.js'
+
+jobs:
+  headless-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/headless/*.test.mts
+
+  # Uncomment for live smoke when LM Studio (or mock upstream) is wired as a service:
+  # headless-smoke:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #     - run: npm ci
+  #     - run: BROWSER=none MINNOW_HEADLESS=1 npm start &
+  #     - run: |
+  #         for i in $(seq 1 60); do
+  #           curl -sf http://127.0.0.1:5173/api/tools/ping && break
+  #           sleep 1
+  #         done
+  #     - run: node bin/minnow.mjs run --base-url http://127.0.0.1:5173 --workspace . --prompt "Reply with exactly OK" --json
+  #     - run: kill $(jobs -p) || true
