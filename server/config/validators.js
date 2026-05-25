@@ -869,6 +869,20 @@ export function mergeConfigMeta(existing, patch) {
     base.chat = { maxToolTurns };
   }
 
+  if (p.toolCalls && typeof p.toolCalls === 'object') {
+    const existingToolCalls =
+      base.toolCalls && typeof base.toolCalls === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.toolCalls) }
+        : { useConstrainedDecoding: false };
+    const tc = /** @type {Record<string, unknown>} */ (p.toolCalls);
+    if (tc.useConstrainedDecoding === true) {
+      existingToolCalls.useConstrainedDecoding = true;
+    } else if (tc.useConstrainedDecoding === false) {
+      existingToolCalls.useConstrainedDecoding = false;
+    }
+    base.toolCalls = existingToolCalls;
+  }
+
   if (p.workspace && typeof p.workspace === 'object') {
     const existingWorkspace =
       base.workspace && typeof base.workspace === 'object'

@@ -67,6 +67,12 @@ export function toProviderPublic(profile, flags) {
     modelsLoadPath: profile.modelsLoadPath,
     modelsUnloadPath: profile.modelsUnloadPath,
     customHeaders: profile.customHeaders || {},
+    constrainedToolCalls:
+      profile.constrainedToolCalls === true
+        ? true
+        : profile.constrainedToolCalls === false
+          ? false
+          : undefined,
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
     hasApiKey: flags.hasApiKey,
@@ -382,6 +388,13 @@ export async function updateProvider(id, body) {
   }
   if (body.customHeaders !== undefined && typeof body.customHeaders === 'object') {
     profile.customHeaders = body.customHeaders;
+  }
+  if (body.constrainedToolCalls === true) {
+    profile.constrainedToolCalls = true;
+  } else if (body.constrainedToolCalls === false) {
+    profile.constrainedToolCalls = false;
+  } else if (body.constrainedToolCalls === null) {
+    delete profile.constrainedToolCalls;
   }
 
   profile.updatedAt = now;

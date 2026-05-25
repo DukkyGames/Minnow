@@ -86,6 +86,14 @@ export interface ChatCompletionBody {
   repetition_penalty?: number;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
+  response_format?: {
+    type: 'json_schema';
+    json_schema: {
+      name: string;
+      strict?: boolean;
+      schema: Record<string, unknown>;
+    };
+  };
 }
 
 // --- Stream / stats helpers ---
