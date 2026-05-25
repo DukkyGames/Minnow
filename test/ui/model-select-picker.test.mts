@@ -3,7 +3,14 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const modelSelectCss = readFileSync(join(root, 'src/styles/model-select.css'), 'utf8');
+const topbarCss = readFileSync(join(root, 'src/styles/topbar.css'), 'utf8');
 
 describe('syncModelSelectPicker', () => {
   test('renders load dots in menu from model cache', async () => {
@@ -100,5 +107,71 @@ describe('syncModelSelectPicker', () => {
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;
     }
+  });
+
+  test('menu rows keep full optionText for long labels (BUG-017)', async () => {
+    const longLabel =
+      'Qwen3.6 35B A3b · Q4_K_M · extended context variant name';
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <div class="model-select-inner">
+        <select id="modelSelect" class="model-select-native">
+          <option value="qwen/qwen3.6-35b-a3b" title="qwen/qwen3.6-35b-a3b — loaded">${longLabel}</option>
+        </select>
+        <button type="button" id="modelSelectTrigger"><span id="modelSelectTriggerText"></span></button>
+        <ul id="modelSelectMenu" class="model-select-menu hidden" role="listbox"></ul>
+      </div>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    try {
+      const { syncModelSelectPicker } = await import('../../src/ui/model-select-picker.ts');
+      const sel = doc.getElementById('modelSelect') as HTMLSelectElement;
+      sel.value = 'qwen/qwen3.6-35b-a3b';
+      syncModelSelectPicker();
+
+      const menuLabel = doc.querySelector('.model-select-option-label');
+      assert.equal(menuLabel?.textContent, longLabel);
+      assert.doesNotMatch(menuLabel?.textContent ?? '', /…/);
+
+      const triggerText = doc.getElementById('modelSelectTriggerText');
+      assert.equal(triggerText?.textContent, longLabel);
+      assert.equal(triggerText?.getAttribute('title'), 'qwen/qwen3.6-35b-a3b — loaded');
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+    }
+  });
+});
+
+describe('model picker truncation CSS (BUG-017)', () => {
+  test('menu option labels avoid ellipsis clipping', () => {
+    const block = modelSelectCss.match(/\.model-select-option-label\s*\{[^}]+\}/s);
+    assert.ok(block, 'expected .model-select-option-label rule');
+    assert.doesNotMatch(block[0], /text-overflow:\s*ellipsis/);
+    assert.match(block[0], /overflow:\s*visible/);
+  });
+
+  test('menu can grow to max-content with a viewport cap', () => {
+    const block = modelSelectCss.match(/\.model-select-menu\s*\{[^}]+\}/s);
+    assert.ok(block, 'expected .model-select-menu rule');
+    assert.match(block[0], /width:\s*max-content/);
+    assert.match(block[0], /max-width:\s*min\(90vw,\s*32rem\)/);
+  });
+
+  test('closed trigger keeps ellipsis; model-wrap width increased', () => {
+    const triggerBlock = modelSelectCss.match(/\.model-select-trigger-text\s*\{[^}]+\}/s);
+    assert.ok(triggerBlock, 'expected .model-select-trigger-text rule');
+    assert.match(triggerBlock[0], /text-overflow:\s*ellipsis/);
+
+    const wrapBlock = topbarCss.match(/\.model-wrap\s*\{[^}]+\}/s);
+    assert.ok(wrapBlock, 'expected .model-wrap rule');
+    assert.match(wrapBlock[0], /max-width:\s*420px/);
   });
 });
