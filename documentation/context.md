@@ -202,7 +202,7 @@ User-defined **task packs** (prompt, tool allow/deny, rubric) run across multipl
 
 ### Benchmark (Bench)
 
-Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). Scores the **active** provider + model from `#modelSelect` against a fixed Minnow-integration battery (capability, speed, tools, skills, modes, coding). **Quick** preset runs capability + speed + modes; **Full** runs all suites serially.
+Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). Scores the **active** provider + model from `#modelSelect` against a fixed Minnow-integration battery (capability, speed, tools, skills, modes, coding). Run bar: **Quick** / **Full** / **Stop** plus an always-visible segmented **suite toggle group** (`#benchmarkSuiteToggles`, `aria-pressed` per suite). **Quick** and **Full** apply their preset to the toggles then start a run using the current toggle selection (Option B; POLISH-003 / MIN-64). Default toggles match Quick (capability, speed, modes). At least one suite must be selected; toggles disable while a run is active.
 
 | Piece | Location |
 |-------|----------|

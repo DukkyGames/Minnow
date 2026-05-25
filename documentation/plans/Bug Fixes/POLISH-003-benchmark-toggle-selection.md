@@ -5,7 +5,7 @@
 | **ID** | POLISH-003 |
 | **Type** | UX polish (not a correctness bug) |
 | **Route** | `#/benchmark` |
-| **Status** | Verified baseline 2026-05-24 — not implemented; Linear [MIN-64](https://linear.app/minnowai/issue/MIN-64/polish-003-benchmark-toggle-selection) |
+| **Status** | Shipped 2026-05-25 — Linear [MIN-64](https://linear.app/minnowai/issue/MIN-64/polish-003-benchmark-toggle-selection) |
 | **Source** | `documentation/bug-hunt-session-2026-05-24.md` |
 | **Related** | BUG-007 (Custom suites control), POLISH-002 (live status), POLISH-004 (test descriptions), POLISH-005 (transcripts) |
 
@@ -172,14 +172,14 @@ Choose **one** primary model and implement consistently (recommend **Option B**)
 
 ## Acceptance criteria
 
-- [ ] All six suites appear as toggle buttons in a single visual group on `#/benchmark` without clicking “Custom suites.”
-- [ ] Selected suites use clear active styling; unselected suites are visibly off.
-- [ ] Clicking **Quick** selects Quick suite set and starts a run using exactly those suites (unless user changed toggles after click — per Option B, run uses state **after** Quick applies template).
-- [ ] Clicking **Full** selects all six suites and starts a full run.
-- [ ] With zero suites selected, Quick/Full do not start a run and user sees an error/status hint.
-- [ ] During a run, suite toggles are disabled; Stop still works.
-- [ ] Compare toggle and history row behave as before.
-- [ ] `npm test` includes updated/added benchmark HTML and toggle tests; no regressions in benchmark runner tests.
+- [x] All six suites appear as toggle buttons in a single visual group on `#/benchmark` without clicking “Custom suites.”
+- [x] Selected suites use clear active styling; unselected suites are visibly off.
+- [x] Clicking **Quick** selects Quick suite set and starts a run using exactly those suites (unless user changed toggles after click — per Option B, run uses state **after** Quick applies template).
+- [x] Clicking **Full** selects all six suites and starts a full run.
+- [x] With zero suites selected, Quick/Full do not start a run and user sees an error/status hint.
+- [x] During a run, suite toggles are disabled; Stop still works.
+- [x] Compare toggle and history row behave as before.
+- [x] `npm test` includes updated/added benchmark HTML and toggle tests; no regressions in benchmark runner tests.
 
 ## Test plan
 

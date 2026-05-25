@@ -689,17 +689,23 @@
   </header>
   <div class="benchmark-page-body">
     <div class="benchmark-run-bar">
-      <button type="button" class="is-primary" id="btnBenchmarkQuick">Quick</button>
-      <button type="button" id="btnBenchmarkFull">Full</button>
-      <button type="button" id="btnBenchmarkCustom">Custom suites</button>
-      <button type="button" id="btnBenchmarkStop" disabled>Stop</button>
-      <div id="benchmarkCustomSuites" class="benchmark-suite-checkboxes" hidden>
-        <label><input type="checkbox" value="capability" checked /> Capability</label>
-        <label><input type="checkbox" value="speed" checked /> Speed</label>
-        <label><input type="checkbox" value="tools" /> Tools</label>
-        <label><input type="checkbox" value="skills" /> Skills</label>
-        <label><input type="checkbox" value="modes" checked /> Modes</label>
-        <label><input type="checkbox" value="coding" /> Coding</label>
+      <div class="benchmark-run-actions">
+        <button type="button" class="is-primary" id="btnBenchmarkQuick">Quick</button>
+        <button type="button" id="btnBenchmarkFull">Full</button>
+        <button type="button" id="btnBenchmarkStop" disabled>Stop</button>
+      </div>
+      <div
+        id="benchmarkSuiteToggles"
+        class="benchmark-suite-toggles"
+        role="group"
+        aria-label="Benchmark suites to run"
+      >
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
+        <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
       </div>
     </div>
     <div id="benchmarkProgress" class="benchmark-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Benchmark progress">
