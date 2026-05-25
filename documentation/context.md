@@ -48,7 +48,7 @@ Eight composed themes on `<html data-theme="{family}-{mode}">` (families: **sage
 |-----|---------|
 | `minnow.theme` | Explicit `ThemeId` (e.g. `sage-dark`) when not following the OS |
 | `minnow.theme.followSystem` | `'1'` when mode tracks `prefers-color-scheme` |
-| `minnow.theme.family` | Active family while follow-system is on (default **sage**) |
+| `minnow.theme.family` | Active family while follow-system is on (default **sage**); when follow-system is off, `getStoredFamily()` derives from `minnow.theme` so the settings picker stays in sync |
 
 **Runtime:** [`src/theme.ts`](../src/theme.ts) (`getStoredTheme`, `applyTheme`, `setThemeFamily`, `setThemeMode`, `setFollowSystem`, legacy `light`/`dark`/`system` migration). [`src/ui/theme.ts`](../src/ui/theme.ts) syncs highlight.js dark stylesheet, CodeMirror, and xterm. **FOUC:** inline script in [`index.html`](../index.html) sets `data-theme` only (no inline `--mn-*`, which would block theme switches); critical CSS uses per-family fallbacks until `tokens.css` loads. `applyTheme()` clears any legacy inline tokens. `initTheme()` adds `theme-ready` and removes `theme-no-transition` after first paint. **Settings → General:** family list with live swatch previews ([`src/ui/settings-theme.ts`](../src/ui/settings-theme.ts)). **Reef iframes:** [`src/chat/reef/theme-forward.ts`](../src/chat/reef/theme-forward.ts) forwards `--mn-bg`, `--mn-fg`, `--mn-accent`, surfaces, borders, radii, fonts. **Tests:** `test/theme.test.mts`, `test/theme-contrast.test.mts`, `test/chat/reef/theme-forward.test.mts`. Plan: [`documentation/plans/token-theme-system.md`](plans/token-theme-system.md). Design source: Color Scheme Exploration (PDF/HTML).
 
