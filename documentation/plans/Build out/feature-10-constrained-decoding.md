@@ -2,7 +2,7 @@
 name: Feature 10 — Constrained decoding for tool calls
 overview: Probe providers for structured-output / grammar support, build a per-turn tool-call JSON schema from enabled tools, and opt-in attach response_format on chat completions to reduce malformed tool arguments on local models.
 roadmap_ref: documentation/plans/feature-audit-roadmap.md §10
-status: missing
+status: shipped
 todos:
   - id: spike-lms-compat
     content: "Spike LM Studio (and one openai-v1 target): response_format + tools + stream in one request; document pass/fail matrix"

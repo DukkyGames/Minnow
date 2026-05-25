@@ -21,6 +21,7 @@ export interface CreateProviderPayload {
   enabled?: boolean;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  constrainedToolCalls?: boolean | null;
 }
 
 /** Body for PUT /api/providers/:id (id is not mutable). */
@@ -32,6 +33,7 @@ export interface UpdateProviderPayload {
   enabled?: boolean;
   modelsPath?: string;
   chatCompletionsPath?: string;
+  constrainedToolCalls?: boolean | null;
 }
 
 const PROVIDERS_TIMEOUT_MS = 800;
