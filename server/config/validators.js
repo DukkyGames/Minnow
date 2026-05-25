@@ -1094,6 +1094,37 @@ export function normalizeSubAgentsConfig(body) {
       row.summaryReserveTokens =
         Number.isFinite(n) && n >= 64 ? Math.floor(n) : undefined;
     }
+
+    if (row.summarySchema !== undefined) {
+      const schema = String(row.summarySchema).trim();
+      if (!schema) {
+        delete row.summarySchema;
+      } else {
+        row.summarySchema = schema.slice(0, 64);
+      }
+    }
+  }
+
+  if (base.defaultMaxInputTokens !== undefined && base.defaultMaxInputTokens !== null) {
+    const cap = Number(base.defaultMaxInputTokens);
+    base.defaultMaxInputTokens =
+      Number.isFinite(cap) && cap >= 1000 ? Math.min(Math.floor(cap), 200000) : null;
+  }
+
+  const defaultPolicy = base.defaultContextEnforcementPolicy;
+  if (
+    defaultPolicy !== undefined &&
+    defaultPolicy !== 'summarize' &&
+    defaultPolicy !== 'slide' &&
+    defaultPolicy !== 'truncate'
+  ) {
+    delete base.defaultContextEnforcementPolicy;
+  }
+
+  if (base.defaultSummarySchema !== undefined) {
+    const schema = String(base.defaultSummarySchema).trim();
+    if (!schema) delete base.defaultSummarySchema;
+    else base.defaultSummarySchema = schema.slice(0, 64);
   }
 
   return { config: base, warnings };

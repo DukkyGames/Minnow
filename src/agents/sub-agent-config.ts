@@ -3,6 +3,8 @@
  */
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
+import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
+import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
 import DEFAULTS from './defaults/sub-agents.json';
 import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
@@ -43,6 +45,13 @@ export function mergeSubAgentConfig(
     globalMaxConcurrent: user?.globalMaxConcurrent ?? defaults.globalMaxConcurrent,
     defaultTimeoutMs: user?.defaultTimeoutMs ?? defaults.defaultTimeoutMs,
     defaultMaxToolTurns,
+    defaultMaxInputTokens: user?.defaultMaxInputTokens ?? defaults.defaultMaxInputTokens,
+    defaultContextEnforcementPolicy:
+      user?.defaultContextEnforcementPolicy ??
+      defaults.defaultContextEnforcementPolicy ??
+      DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+    defaultSummarySchema:
+      user?.defaultSummarySchema ?? defaults.defaultSummarySchema ?? DEFAULT_SUB_AGENT_SUMMARY_SCHEMA,
     types: baseTypes,
   };
 
@@ -64,6 +73,11 @@ export function mergeSubAgentConfig(
         ...existing,
         ...patch,
         maxToolTurns: patch.maxToolTurns ?? existing.maxToolTurns ?? defaultMaxToolTurns,
+        summarySchema:
+          patch.summarySchema ??
+          existing.summarySchema ??
+          merged.defaultSummarySchema ??
+          DEFAULT_SUB_AGENT_SUMMARY_SCHEMA,
         allowedTools:
           patch.allowedTools !== undefined
             ? patch.allowedTools
@@ -80,6 +94,13 @@ export function mergeSubAgentConfig(
   for (const cfg of Object.values(merged.types)) {
     if (!Number.isFinite(cfg.maxToolTurns) || cfg.maxToolTurns < 1) {
       cfg.maxToolTurns = defaultMaxToolTurns;
+    }
+    if (!cfg.summarySchema?.trim()) {
+      cfg.summarySchema = merged.defaultSummarySchema ?? DEFAULT_SUB_AGENT_SUMMARY_SCHEMA;
+    }
+    if (cfg.maxInputTokens != null) {
+      const cap = Math.floor(Number(cfg.maxInputTokens));
+      cfg.maxInputTokens = Number.isFinite(cap) && cap >= 1000 ? Math.min(cap, 200_000) : null;
     }
   }
 

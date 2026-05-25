@@ -39,8 +39,14 @@ export function createMockSubAgentRunner(
       }
       messages.push({ role: 'assistant', content: summary });
       input.onMessagesChange?.(cloneSubAgentMessages(messages));
+      const structuredOutcome = {
+        summary,
+        findings: [] as { title: string; detail: string }[],
+        artifacts: [] as { kind: 'note'; label: string; ref: string }[],
+      };
       return {
         summary,
+        structuredOutcome,
         toolTurns: 0,
         messages,
       };
