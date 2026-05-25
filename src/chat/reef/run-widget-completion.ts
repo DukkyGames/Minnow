@@ -2,10 +2,12 @@
  * Headless LLM completion for reef widget callLLM bridge (no tools).
  */
 
+import { extractStreamDelta } from '../../api/chat.ts';
 import {
-  extractStreamDelta,
-  parseSsePayloads,
-} from '../../api/chat.ts';
+  createSseEventBuffer,
+  feedSseEventBuffer,
+  flushSseEventBuffer,
+} from '../../api/sse-parse.ts';
 import { postChatCompletions } from '../../providers/fetch-chat.ts';
 import { getActiveProvider } from '../../providers/store.ts';
 import type { ApiMessage, ChatCompletionChunk } from '../../types.ts';
@@ -42,7 +44,7 @@ export async function runWidgetCompletion(input: WidgetCompletionInput): Promise
   let fullText = '';
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  const sseBuffer = createSseEventBuffer();
 
   function handleChunk(chunk: ChatCompletionChunk): void {
     const delta = extractStreamDelta(chunk);
@@ -54,13 +56,10 @@ export async function runWidgetCompletion(input: WidgetCompletionInput): Promise
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    parseSsePayloads(lines.join('\n'), handleChunk);
+    feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
   }
 
-  if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
+  flushSseEventBuffer(sseBuffer, handleChunk);
 
   return fullText.trim();
 }

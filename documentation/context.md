@@ -1102,7 +1102,7 @@ Server buffers upstream chat/completions streams so clients can attach, detach, 
 The tool loop™s `streamCompletionTurn` ([`src/tools/loop.ts`](../src/tools/loop.ts)) uses [`src/api/generations.ts`](../src/api/generations.ts) instead of `postChatCompletions` for main turns:
 
 1. `createGeneration(providerId, body, { persist: true })` → persist `chat.currentGenerationId` immediately via `scheduleSaveSessions()`.
-2. `subscribeToGeneration(id, …)` — same line-buffer reader as [`src/api/chat.ts`](../src/api/chat.ts); reuses `parseSsePayloads` / `extractStreamDelta` / `mergeStreamMeta`; parses terminal `event: end` in the subscribe layer.
+2. `subscribeToGeneration(id, …)` — SSE event framing via [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) (`feedSseEventBuffer` / `parseSseEventBlock`); reuses `extractStreamDelta` / `mergeStreamMeta` from [`src/api/chat.ts`](../src/api/chat.ts); parses terminal `event: end` in the subscribe layer. **Non-streaming fallback** (`tryNonStreamingFallback`) reads `res.text()` + `parseCompletionResponseBody` — never `Response.json()` on the shim (avoids BUG-016 `ReadableStreamDefaultController` parse errors).
 3. Clean end clears `currentGenerationId`; `AbortError` calls `cancelGeneration` then rethrows.
 
 `RunChatTurnOptions.resumeGenerationId` skips POST and only subscribes (boot resume wired in Phase 2b `generation-resume.ts`). Sub-agent, reef, title, and plain `sendMessage` still use `postChatCompletions` until the fetch-chat shim lands.
