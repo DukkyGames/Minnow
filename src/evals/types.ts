@@ -11,7 +11,6 @@ export interface EvalTask {
   systemPrompt?: string;
   allowedTools: string[];
   deniedTools: string[];
-  maxToolTurns: number;
   rubricPrompt: string;
 }
 

@@ -30,8 +30,8 @@ export interface SubAgentTypeConfig {
   modelId: string;
   maxConcurrent: number;
   timeoutMs: number;
-  /** Max LLM↔tool rounds before the run fails (configurable in ~/.minnow/sub-agents.json). */
-  maxToolTurns: number;
+  /** Max LLM↔tool rounds (set from root `maxToolTurns` on merge; not per-type configurable). */
+  maxToolTurns?: number;
   workAgentId: string | null;
   allowedTools: string[] | null;
   deniedTools: string[];
@@ -52,7 +52,9 @@ export interface SubAgentsFile {
   enabled: boolean;
   globalMaxConcurrent: number;
   defaultTimeoutMs: number;
-  /** Fallback max tool rounds when a type omits `maxToolTurns`. */
+  /** Max tool rounds for all sub-agent types (Settings → Tools). */
+  maxToolTurns?: number;
+  /** @deprecated Use `maxToolTurns`. Migrated on load. */
   defaultMaxToolTurns?: number;
   defaultMaxInputTokens?: number | null;
   defaultContextEnforcementPolicy?: ContextEnforcementPolicy;

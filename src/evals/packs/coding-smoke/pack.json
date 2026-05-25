@@ -8,7 +8,6 @@
       "prompt": "List TypeScript files under src/agents (names only, no commentary).",
       "allowedTools": ["list_directory", "find_files"],
       "deniedTools": ["execute_command", "save_file"],
-      "maxToolTurns": 6,
       "rubricPrompt": "Score 100 if the answer lists at least three .ts files under src/agents; 0 otherwise. Reply JSON only: {\"score\":number,\"pass\":boolean,\"rationale\":string}"
     },
     {
@@ -16,7 +15,6 @@
       "prompt": "Use search_in_file to find the word SubAgentRunner under src/agents (file paths only, brief).",
       "allowedTools": ["search_in_file", "read_file", "find_files"],
       "deniedTools": ["execute_command", "save_file"],
-      "maxToolTurns": 6,
       "rubricPrompt": "Score 100 if the answer mentions sub-agent-runner.ts or SubAgentRunner; 0 otherwise. Reply JSON only: {\"score\":number,\"pass\":boolean,\"rationale\":string}"
     }
   ]

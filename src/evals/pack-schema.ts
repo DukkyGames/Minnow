@@ -37,10 +37,6 @@ function validateTask(raw: unknown, index: number): EvalTask {
       throw new Error(`tasks[${index}]: unknown tool "${toolId}"`);
     }
   }
-  const maxToolTurns =
-    typeof t.maxToolTurns === 'number' && Number.isFinite(t.maxToolTurns)
-      ? Math.max(1, Math.floor(t.maxToolTurns))
-      : 6;
   const rubricPrompt = typeof t.rubricPrompt === 'string' ? t.rubricPrompt.trim() : '';
   if (!rubricPrompt) {
     throw new Error(`tasks[${index}].rubricPrompt: required`);
@@ -56,7 +52,6 @@ function validateTask(raw: unknown, index: number): EvalTask {
     systemPrompt,
     allowedTools,
     deniedTools,
-    maxToolTurns,
     rubricPrompt,
   };
 }

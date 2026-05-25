@@ -1096,6 +1096,17 @@ export function normalizeSubAgentsConfig(body) {
   if (typeof base.defaultTimeoutMs !== 'number' || base.defaultTimeoutMs < 1000) {
     base.defaultTimeoutMs = 300000;
   }
+  let maxToolTurns = 12;
+  if (typeof base.maxToolTurns === 'number' && Number.isFinite(base.maxToolTurns)) {
+    maxToolTurns = Math.min(64, Math.max(1, Math.round(base.maxToolTurns)));
+  } else if (
+    typeof base.defaultMaxToolTurns === 'number' &&
+    Number.isFinite(base.defaultMaxToolTurns)
+  ) {
+    maxToolTurns = Math.min(64, Math.max(1, Math.round(base.defaultMaxToolTurns)));
+  }
+  base.maxToolTurns = maxToolTurns;
+  delete base.defaultMaxToolTurns;
   if (typeof base.version !== 'number') base.version = 1;
 
   if (!base.types || typeof base.types !== 'object') {
@@ -1174,6 +1185,8 @@ export function normalizeSubAgentsConfig(body) {
         row.sampler = normalized;
       }
     }
+
+    delete row.maxToolTurns;
   }
 
   if (base.defaultMaxInputTokens !== undefined && base.defaultMaxInputTokens !== null) {

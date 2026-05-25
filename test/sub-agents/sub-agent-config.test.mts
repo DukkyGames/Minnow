@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import {
+  getSubAgentsMaxToolTurns,
   loadSubAgentConfig,
   mergeSubAgentConfig,
   resetSubAgentConfigCache,
@@ -32,19 +33,28 @@ describe('sub-agent config', () => {
     assert.equal(config.enabled, false);
   });
 
-  test('types include per-type maxToolTurns defaults', () => {
+  test('all types share global maxToolTurns', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, null);
-    assert.equal(merged.types.generalPurpose.maxToolTurns, 16);
+    assert.equal(getSubAgentsMaxToolTurns(merged), 12);
+    assert.equal(merged.types.generalPurpose.maxToolTurns, 12);
     assert.equal(merged.types.explore.maxToolTurns, 12);
-    assert.equal(merged.defaultMaxToolTurns, 12);
   });
 
-  test('user override can raise maxToolTurns for a type', () => {
+  test('user global maxToolTurns applies to every type', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
-      types: { explore: { maxToolTurns: 24 } },
+      maxToolTurns: 24,
+      types: { explore: { maxToolTurns: 4 } },
     });
+    assert.equal(getSubAgentsMaxToolTurns(merged), 24);
     assert.equal(merged.types.explore.maxToolTurns, 24);
-    assert.equal(merged.types.generalPurpose.maxToolTurns, 16);
+    assert.equal(merged.types.generalPurpose.maxToolTurns, 24);
+  });
+
+  test('migrates legacy defaultMaxToolTurns', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      defaultMaxToolTurns: 20,
+    });
+    assert.equal(getSubAgentsMaxToolTurns(merged), 20);
   });
 
   test('researcher type is registered with read-only allow list', () => {
@@ -52,7 +62,7 @@ describe('sub-agent config', () => {
     const r = merged.types.researcher;
     assert.ok(r);
     assert.equal(r.label, 'Research worker');
-    assert.equal(r.maxToolTurns, 16);
+    assert.equal(r.maxToolTurns, 12);
     assert.equal(r.maxConcurrent, 5);
     assert.equal(r.timeoutMs, 420000);
     assert.ok(r.allowedTools?.includes('web_search'));

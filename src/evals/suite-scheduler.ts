@@ -2,6 +2,10 @@
  * Suite matrix scheduler: task×model runs with concurrency cap and abort.
  */
 
+import {
+  getSubAgentsMaxToolTurns,
+  loadSubAgentConfig,
+} from '../agents/sub-agent-config';
 import { computeLeaderboard } from './leaderboard';
 import { emitEvalSuiteProgress } from './eval-events';
 import {
@@ -69,6 +73,8 @@ async function runOneCell(params: {
   const t0 = performance.now();
 
   const config = await fetchEvalConfig();
+  const subAgents = await loadSubAgentConfig();
+  const subAgentMaxToolTurns = getSubAgentsMaxToolTurns(subAgents);
   const tools = resolveEvalTaskTools(task, params.modeId);
   const systemPrompt =
     task.systemPrompt?.trim() ||
@@ -84,7 +90,7 @@ async function runOneCell(params: {
       tools,
       providerId: target.providerId,
       modelId: target.modelId,
-      maxToolTurns: task.maxToolTurns,
+      maxToolTurns: subAgentMaxToolTurns,
       signal,
       executeTool,
     });
