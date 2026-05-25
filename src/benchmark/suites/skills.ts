@@ -4,6 +4,7 @@
 
 import builtinManifest from '../../skills/builtin-manifest.json';
 import { fetchSkillById } from '../../skills/client';
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { regexMatch } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -32,6 +33,7 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
   const skills = builtinManifest.skills ?? [];
 
   for (const skill of skills) {
+    assertNotAborted(ctx.signal);
     const t0 = performance.now();
     const trigger = SKILL_TRIGGERS[skill.id] ?? {
       prompt: `Follow the ${skill.id} skill instructions. Acknowledge the skill topic briefly.`,
@@ -63,6 +65,7 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         details: out.text.slice(0, 100),
       });
     } catch (err) {
+      rethrowIfAborted(err, ctx.signal);
       tests.push({
         testId: `skill-${skill.id}`,
         suite: 'skills',

@@ -18,6 +18,7 @@ import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } f
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
+import { assertNotAborted } from './abort.ts';
 import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
@@ -146,6 +147,7 @@ async function streamTurn(
   }
 
   while (true) {
+    assertNotAborted(signal);
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -214,6 +216,7 @@ export async function runToolLoop(input: ToolLoopInput): Promise<OneShotResult> 
   let lastFinish: string | undefined;
 
   for (let round = 0; round < maxRounds; round++) {
+    assertNotAborted(input.signal);
     const turn = await streamTurn(
       input.providerId,
       {
@@ -239,6 +242,7 @@ export async function runToolLoop(input: ToolLoopInput): Promise<OneShotResult> 
         tool_calls: turn.toolCalls,
       });
       for (const tc of turn.toolCalls) {
+        assertNotAborted(input.signal);
         const args = parseToolArguments(tc.function.arguments);
         const out = await runExecute(tc.function.name, args, {
           toolCallId: tc.id,

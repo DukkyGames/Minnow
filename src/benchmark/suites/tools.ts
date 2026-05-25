@@ -4,6 +4,7 @@
 
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { executeTool } from '../../tools/client';
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -13,6 +14,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
   const tests: TestResult[] = [];
 
   for (const tool of BUILT_IN_TOOLS) {
+    assertNotAborted(ctx.signal);
     const t0 = performance.now();
     const fixture = getToolFixture(tool);
 
@@ -82,6 +84,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         details: details || (nameOk ? 'tool call ok' : 'no matching tool call'),
       });
     } catch (err) {
+      rethrowIfAborted(err, ctx.signal);
       tests.push({
         testId: `tool-${tool.id}`,
         suite: 'tools',

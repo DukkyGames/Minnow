@@ -2,7 +2,7 @@
 name: BUG-005 — Benchmark Stop does not cancel run
 overview: Stop on `#/benchmark` aborts the local AbortController but the runner still completes, persists, and reports success — so the UI keeps running and tests continue. Fix requires first-class cancellation through runner, suites, LLM driver, and UI.
 source: documentation/bug-hunt-session-2026-05-24.md
-status: verified
+status: shipped
 severity: major
 linear: MIN-61
 verifiedAt: 2026-05-24
@@ -12,34 +12,34 @@ related:
 todos:
   - id: abort-helper
     content: Add shared `assertNotAborted(signal)` (or `isAbortError`) in `src/benchmark/` and use consistently across runner, suites, and llm-driver
-    status: pending
+    status: completed
   - id: runner-cancel-path
     content: Teach `runBenchmark` to detect abort, skip `saveRun`, emit `run-cancelled` (or throw `AbortError`), and avoid `run-done` on cancel
-    status: pending
+    status: completed
   - id: runner-between-tests
     content: Poll `signal.aborted` between suites and after each in-flight test progress emission; break early from suite loops via helper
-    status: pending
+    status: completed
   - id: suites-rethrow-abort
     content: Update all suite modules to rethrow abort in `catch` instead of recording a failed test and continuing
-    status: pending
+    status: completed
   - id: llm-driver-cooperative
     content: Check `signal` between tool-loop rounds and before `executeTool`; optionally cancel backend generation like chat `stopGeneration`
-    status: pending
+    status: completed
   - id: ui-stop-immediate
     content: Make `stopRun()` update UI immediately (status, progress label, `setRunning(false)` when safe) and handle `run-cancelled` / rejected `runBenchmark`
-    status: pending
+    status: completed
   - id: types-progress-event
     content: Extend `BenchmarkProgressEvent` and optionally `BenchmarkRun` with `cancelled` flag if partial runs should be retained in history
-    status: pending
+    status: completed
   - id: tests-runner-cancel
     content: Unit tests for runner abort (mock suites, assert no save, assert throw or cancel event)
-    status: pending
+    status: completed
   - id: tests-ui-stop
     content: UI/unit test that `stopRun()` aborts controller and triggers cancelled UX path
-    status: pending
+    status: completed
   - id: docs-context
     content: Update `documentation/context.md` benchmark section when fix ships; mark BUG-005 resolved in bug-hunt doc
-    status: pending
+    status: completed
 isProject: false
 ---
 

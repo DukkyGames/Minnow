@@ -4,6 +4,7 @@
 
 import { loadModePromptBody, listModes } from '../../chat/modes/registry';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -48,6 +49,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
   const modes = listModes();
 
   for (const mode of modes) {
+    assertNotAborted(ctx.signal);
     const modeId = mode.id as ModeId;
     const system = loadModePromptBody(modeId, 'lite');
     const tools = getEnabledToolDefinitionsForMode(modeId);
@@ -81,6 +83,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           details: calledForbidden ? 'forbidden tool was called' : 'no forbidden tool',
         });
       } catch (err) {
+        rethrowIfAborted(err, ctx.signal);
         tests.push({
           testId: `mode-${modeId}-negative`,
           suite: 'modes',
@@ -136,6 +139,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           details: ok ? 'tool emitted' : 'expected tool missing',
         });
       } catch (err) {
+        rethrowIfAborted(err, ctx.signal);
         tests.push({
           testId: `mode-${modeId}-positive`,
           suite: 'modes',
