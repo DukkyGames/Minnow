@@ -4,7 +4,7 @@
 
 import { streaming, streamingChatId } from '../app-state';
 import { normalizeModeId } from '../chat/modes/types';
-import { getActiveChat } from '../state/sessions';
+import { getActiveChat, isExpertLabChat } from '../state/sessions';
 
 /** Chat id driving the global streaming flag, or null when idle. */
 export function getStreamingChatId(): string | null {
@@ -35,6 +35,7 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
+  if (isExpertLabChat(active)) return false;
   const mode = normalizeModeId(active.modeId);
   if (mode === 'orchestrate' && active.viewMode === 'board') {
     return false;

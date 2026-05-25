@@ -126,6 +126,17 @@ $env:PORT=3000; npm start
 
 **Chats:** Sidebar for create/switch/rename. With `npm start`, sessions persist under `~/.minnow/sessions/state.json`.
 
+### Headless CLI (CI / scripts)
+
+With the dev server running (`BROWSER=none npm start` in CI):
+
+```bash
+minnow run --workspace . --agent builder --mode build \
+  --prompt "Summarize README.md" --json-out run.json
+```
+
+Machine-readable output and exit codes are documented in [`documentation/context.md`](documentation/context.md#headless-cli-feature-18). Tools that need the browser UI (for example `ask_question`) fail with a clear error unless you use unsafe automation flags documented in `minnow run --help`.
+
 ---
 
 ## npm scripts
@@ -133,6 +144,8 @@ $env:PORT=3000; npm start
 | Command | Description |
 |---------|-------------|
 | `npm start` | **Recommended** — Vite + tool server + `~/.minnow` APIs |
+| `npm run minnow:run` | Headless CLI (`minnow run …`) — requires `npm start` (or `--start-server`) |
+| `minnow run --help` | Full flags for CI / scripts (see [Headless CLI](documentation/context.md#headless-cli-feature-18)) |
 | `npm run dev` | Vite only (UI/HMR; most server features unavailable) |
 | `npm run build` | Typecheck + production build → `dist/` (`prebuild` refreshes skills manifest) |
 | `npm run preview` | Preview production build (no tool API) |

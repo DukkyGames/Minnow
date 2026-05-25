@@ -16,7 +16,10 @@ import {
   loadUserRules,
 } from '../../config/user-rules';
 import { getExpertSelection } from '../../state/sessions';
-import { updateExpertAutoHint } from '../../ui/expert-select';
+import type { ExpertHintContext } from '../../ui/experts-settings';
+
+/** No-op: expert Auto hint UI removed (Expert Lab replaces composer dropdown). */
+function updateExpertAutoHint(_ctx: ExpertHintContext): void {}
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { isLocalServerAvailable, loadToolConfig } from '../../tools/config';

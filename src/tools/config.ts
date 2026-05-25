@@ -225,7 +225,7 @@ export function getToolPermissionForId(
 ): ToolPermissionMode {
   const raw = config.permissions.default[id];
   if (isToolPermissionMode(raw)) return raw;
-  if (id.startsWith('mcp__')) return 'ask';
+  if (id.startsWith('mcp__') || id.startsWith('plugin__')) return 'ask';
   if (id === 'web_search_ddg') {
     return getToolPermissionForId(config, 'web_search');
   }
@@ -255,6 +255,7 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     enabled?: unknown;
     keys?: unknown;
     permissions?: unknown;
+    toolCache?: unknown;
   };
   if (stored.enabled && typeof stored.enabled === 'object') {
     const enabledMap = stored.enabled as Record<string, unknown>;
@@ -299,6 +300,16 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+  }
+
+  if (stored.toolCache && typeof stored.toolCache === 'object') {
+    const cacheMap = stored.toolCache as Record<string, unknown>;
+    if (typeof cacheMap.enabled === 'boolean') {
+      config.toolCache = { enabled: cacheMap.enabled };
+    }
+  }
+  if (!config.toolCache) {
+    config.toolCache = { enabled: true };
   }
 
   return config;
@@ -397,6 +408,12 @@ export function loadToolConfig(): ToolConfig {
 /** Current config (loads from storage on first access). */
 export function getToolConfig(): ToolConfig {
   return loadToolConfig();
+}
+
+/** Override in-memory tool config (headless tests). */
+export function setToolConfigForTests(config: ToolConfig): void {
+  cachedConfig = config;
+  toolConfigLoaded = true;
 }
 
 /** Persist config to API or localStorage; server write is best-effort (see {@link saveToolConfigAsync}). */

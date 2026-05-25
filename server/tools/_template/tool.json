@@ -1,0 +1,22 @@
+{
+  "id": "my-plugin",
+  "functionName": "greet",
+  "label": "My Plugin",
+  "description": "Returns a greeting string.",
+  "category": "utility",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name to greet"
+      }
+    },
+    "required": ["name"]
+  },
+  "capabilities": {
+    "filesystem": false,
+    "network": false,
+    "nodeBuiltin": false
+  }
+}

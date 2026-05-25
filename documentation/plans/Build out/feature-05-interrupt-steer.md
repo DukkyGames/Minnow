@@ -2,7 +2,7 @@
 name: Feature 05 — Interrupt and steer
 overview: Let users inject a correction into the in-flight main chat turn at the next tool-loop boundary without aborting the current stream or restarting the turn from scratch.
 source: documentation/plans/feature-audit-roadmap.md §5
-status: planned
+status: shipped
 todos:
   - id: schema-pending-steer
     content: Add Chat.pendingSteerMessage (+ optional UserMessage.steer flag); session persist + migration note in types

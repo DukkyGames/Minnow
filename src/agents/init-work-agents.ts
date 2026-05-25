@@ -6,10 +6,11 @@ import { BUILTIN_RAW } from '../chat/prompts/builtin-globs';
 import registryIndex from '../chat/prompts/work-agents/registry.json';
 import {
   initBuiltinWorkAgentRegistry,
+  registerPackAgentsFromApi,
   setUserWorkAgentOverrides,
   setWorkAgentRegistryIndex,
 } from './work-agent-registry';
-import type { WorkAgentUserOverride } from './work-agent-types';
+import type { WorkAgentDefinition, WorkAgentUserOverride } from './work-agent-types';
 
 /** Load built-ins and optional ~/.minnow overrides from API. */
 export async function initWorkAgentSystem(): Promise<void> {
@@ -27,9 +28,12 @@ export async function initWorkAgentSystem(): Promise<void> {
     const res = await fetch('/api/work-agents', { cache: 'no-store' });
     if (!res.ok) return;
     const body = (await res.json()) as {
-      agents?: unknown[];
+      agents?: WorkAgentDefinition[];
       overrides?: Record<string, WorkAgentUserOverride>;
     };
+    if (Array.isArray(body.agents)) {
+      registerPackAgentsFromApi(body.agents);
+    }
     if (body.overrides) {
       setUserWorkAgentOverrides(body.overrides);
     }

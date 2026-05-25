@@ -1,6 +1,6 @@
 # Feature #12 — Prompt diffing
 
-**Source:** [feature-audit-roadmap.md §12](../feature-audit-roadmap.md) · **Status:** Missing · **Primary UI:** [`src/ui/settings-entity-editor.ts`](../../../src/ui/settings-entity-editor.ts) · **Related:** Feature #13 (prompt profiles / versioning)
+**Source:** [feature-audit-roadmap.md §12](../feature-audit-roadmap.md) · **Status:** Built (MIN-47) · **Primary UI:** [`src/ui/settings-entity-editor.ts`](../../../src/ui/settings-entity-editor.ts) · **Related:** Feature #13 (prompt profiles / versioning)
 
 ---
 

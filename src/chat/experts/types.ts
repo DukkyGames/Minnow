@@ -9,6 +9,24 @@ export interface ExpertTriggers {
   negativeKeywords?: string[];
 }
 
+/** Theme-safe accent token for Expert Lab tiles and timeline rings. */
+export type ExpertAccent =
+  | 'sage'
+  | 'amber'
+  | 'cyan'
+  | 'coral'
+  | 'violet'
+  | 'rose';
+
+export const EXPERT_ACCENT_VALUES: readonly ExpertAccent[] = [
+  'sage',
+  'amber',
+  'cyan',
+  'coral',
+  'violet',
+  'rose',
+] as const;
+
 export interface ExpertMeta {
   id: string;
   label: string;
@@ -20,6 +38,10 @@ export interface ExpertMeta {
   classifierHint?: string;
   /** Fallback when Auto has no strong rules match. */
   default?: boolean;
+  /** Emoji or short glyph for Expert Lab tiles; fallback: first letter of label. */
+  icon?: string;
+  /** Accent palette for Expert Lab UI; fallback: sage. */
+  accent?: ExpertAccent;
 }
 
 /** Loaded expert with full/lite bodies for routing and composer. */

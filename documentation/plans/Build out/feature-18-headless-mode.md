@@ -2,7 +2,7 @@
 
 **Roadmap:** [feature-audit-roadmap.md §18](../feature-audit-roadmap.md)  
 **Architecture context:** [context.md](../../context.md) (generations API, dev server, tool loop)  
-**Status:** Missing (plan only)  
+**Status:** Shipped (v1 CLI + tests)  
 **Suggested sequencing:** After [#22 project-scoped configs](../feature-audit-roadmap.md) if `--profile` / workspace overrides need `.minnow/`; pairs with [#19 determinism](../feature-audit-roadmap.md) for CI replay.
 
 ---
@@ -25,34 +25,34 @@ minnow run --workspace ./my-repo --agent builder --mode build \
 todos:
   - id: headless-0-server-flags
     content: Add BROWSER=none / MINNOW_HEADLESS=1 to skip openBrowser; document PORT and health URLs
-    status: pending
+    status: completed
   - id: headless-1-cli-skeleton
     content: Create bin/minnow.mjs with run subcommand, --help, exit codes, baseUrl resolution
-    status: pending
+    status: completed
   - id: headless-2-server-preflight
     content: Implement waitForServer (ping config + tools + generations); spawn-or-connect mode
-    status: pending
+    status: completed
   - id: headless-3-workspace-profile
     content: Wire --workspace (PUT /api/workspace) and --profile (prompt meta + work-agent prompt profile)
-    status: pending
+    status: completed
   - id: headless-4-runner-core
     content: Extract headless tool loop module from loop.ts (no DOM); reuse buildApiMessages + generations
-    status: pending
+    status: completed
   - id: headless-5-approval-policy
     content: Implement --no-approval with MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION opt-in; CLI ask_question handler
-    status: pending
+    status: completed
   - id: headless-6-json-output
     content: Define HeadlessRunResult schema; --json-out / stdout; stable ordering for CI diff
-    status: pending
+    status: completed
   - id: headless-7-package-bin
     content: Add package.json bin entry; npm script minnow:run for local dev
-    status: pending
+    status: completed
   - id: headless-8-tests
     content: test/headless/*.test.mjs with mock upstream + ephemeral server; document CI workflow snippet
-    status: pending
+    status: completed
   - id: headless-9-docs
     content: Update context.md, README.md, AGENTS.md with CLI usage and CI example
-    status: pending
+    status: completed
 ```
 
 ---

@@ -961,6 +961,17 @@
   font-weight: 600;
 }
 
+.tool-custom-badge {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  vertical-align: middle;
+}
+
 .settings-mcp-badge--builtin {
   background: var(--mn-surface-0);
 }

@@ -22,6 +22,11 @@ const EXPECTED_SHAPE = `{
   "type": "explore",
   "status": "completed",
   "summary": "FIXED_SUMMARY",
+  "outcome": {
+    "summary": "FIXED_SUMMARY",
+    "findings": [],
+    "artifacts": []
+  },
   "startedAt": null,
   "endedAt": null,
   "toolTurns": 0,
@@ -69,9 +74,12 @@ describe('orchestrator aggregate', () => {
       startedAt: '2026-05-19T12:00:00.000Z',
       endedAt: '2026-05-19T12:01:00.000Z',
       toolTurns: 0,
+      maxToolTurns: 12,
       cancelled: false,
       messages: [],
     });
     assert.equal(agg.error, 'boom');
+    assert.equal(agg.outcome.summary, 'Sub-agent completed with no text output.');
+    assert.deepEqual(agg.outcome.findings, []);
   });
 });

@@ -6,13 +6,19 @@ import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 
 const AGENT_ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
+/** Pack-sourced ids: packId.agentKey */
+const PACK_AGENT_ID_RE = /^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$/;
 
 /**
  * Validate work agent id segment (no traversal).
  * @param {string} agentId
  */
 export function assertValidWorkAgentId(agentId) {
-  if (!agentId || typeof agentId !== 'string' || !AGENT_ID_RE.test(agentId)) {
+  if (
+    !agentId ||
+    typeof agentId !== 'string' ||
+    (!AGENT_ID_RE.test(agentId) && !PACK_AGENT_ID_RE.test(agentId))
+  ) {
     throw new Error('Invalid work agent id');
   }
 }

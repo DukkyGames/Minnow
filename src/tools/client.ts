@@ -16,7 +16,10 @@ import {
   setLocalServerAvailable,
 } from './config';
 import { blockPlanModeWrite } from '../chat/modes/plan-write-guard';
-import { filterToolsByMode } from '../chat/modes/tool-policy';
+import {
+  filterToolsByMode,
+  isToolAllowedForMode,
+} from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { ToolExecutionResult } from '../types';
 import {
@@ -39,6 +42,7 @@ import { maybeBlockToolForUserApproval } from './permission-gate';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeReportOrchestratorStatus } from '../agents/supervisor/report-tool.ts';
 import { recordParentToolResult } from '../agents/supervisor/progress.ts';
+import { executeWithResultCache } from './result-cache';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -63,6 +67,9 @@ function maybeRecordOrchestrateParentTool(name: string, context: ExecuteToolCont
 /** Cached MCP tool definitions from GET /api/mcp/tools. */
 let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
 
+/** Cached native plugin tool definitions from GET /api/plugins/tools. */
+let cachedPluginToolDefinitions: OpenAIFunctionDefinition[] = [];
+
 /**
  * Probes the dev server tools API with a short timeout and updates availability in config.
  */
@@ -83,9 +90,10 @@ export async function detectLocalServer(): Promise<boolean> {
     const available = body?.ok === true;
     setLocalServerAvailable(available);
     if (available) {
-      await refreshMcpToolCache();
+      await Promise.all([refreshMcpToolCache(), refreshPluginToolCache()]);
     } else {
       cachedMcpToolDefinitions = [];
+      cachedPluginToolDefinitions = [];
     }
     return available;
   } catch {
@@ -137,6 +145,21 @@ export async function refreshMcpToolCache(): Promise<void> {
     cachedMcpToolDefinitions = Array.isArray(body.tools) ? body.tools : [];
   } catch {
     cachedMcpToolDefinitions = [];
+  }
+}
+
+/** Refresh native plugin tool definitions when the local server is available. */
+export async function refreshPluginToolCache(): Promise<void> {
+  try {
+    const response = await fetch('/api/plugins/tools');
+    if (!response.ok) {
+      cachedPluginToolDefinitions = [];
+      return;
+    }
+    const body = (await response.json()) as { tools?: OpenAIFunctionDefinition[] };
+    cachedPluginToolDefinitions = Array.isArray(body.tools) ? body.tools : [];
+  } catch {
+    cachedPluginToolDefinitions = [];
   }
 }
 
@@ -246,11 +269,11 @@ async function executeToolInner(
     return { content: await executeRequestBrowserOriginAccess(args, context) };
   }
 
-  if (name.startsWith('mcp__')) {
+  if (name.startsWith('mcp__') || name.startsWith('plugin__')) {
     if (!isLocalServerAvailable()) {
       return {
         content:
-          'Error: MCP tools require the local server. Run `npm start` (not Vite-only dev).',
+          'Error: MCP and plugin tools require the local server. Run `npm start` (not Vite-only dev).',
       };
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
@@ -309,12 +332,14 @@ async function executeToolInner(
       'web_search',
     );
     if (blocked) return blocked;
-    if (isLocalServerAvailable()) {
-      return executeServerTool('web_search_ddg', {
-        query: enrichedArgs.query,
-      });
-    }
-    return { content: await executeBrowserTool(name, enrichedArgs) };
+    return executeWithResultCache('web_search', enrichedArgs, context, async () => {
+      if (isLocalServerAvailable()) {
+        return executeServerTool('web_search_ddg', {
+          query: enrichedArgs.query,
+        });
+      }
+      return { content: await executeBrowserTool(name, enrichedArgs) };
+    });
   }
 
   const tool = findToolByFunctionName(name);
@@ -336,6 +361,18 @@ async function executeToolInner(
     return { content: planWriteBlock };
   }
 
+  return executeWithResultCache(name, enrichedArgs, context, () =>
+    executeToolBodyAfterGates(name, enrichedArgs, context, tool),
+  );
+}
+
+/** Runs the tool after approval/plan guards (cache wrapper calls this on miss). */
+async function executeToolBodyAfterGates(
+  name: string,
+  enrichedArgs: Record<string, unknown>,
+  context: ExecuteToolContext,
+  tool: ToolDefinition,
+): Promise<ToolExecutionResult> {
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {
       return {
@@ -383,10 +420,16 @@ export function getEnabledToolCatalogEntries(): ToolDefinition[] {
  * Returns OpenAI function definitions for tools the user enabled and that can run here.
  * Server-required tools are omitted when the local server was not detected.
  */
+function getEnabledDynamicToolDefinitions(): OpenAIFunctionDefinition[] {
+  return [...cachedMcpToolDefinitions, ...cachedPluginToolDefinitions].filter(
+    (def) => isToolEnabled(def.function.name),
+  );
+}
+
 export function getEnabledToolDefinitions(): OpenAIFunctionDefinition[] {
   return [
     ...getEnabledToolCatalogEntries().map((tool) => tool.definition),
-    ...cachedMcpToolDefinitions,
+    ...getEnabledDynamicToolDefinitions(),
   ];
 }
 
@@ -399,10 +442,17 @@ export function getEnabledToolDefinitionsForMode(
   const normalized = normalizeModeId(
     typeof modeId === 'string' ? modeId : modeId ?? undefined,
   );
-  return filterToolsByMode(getEnabledToolCatalogEntries(), normalized).map(
+  const builtins = filterToolsByMode(getEnabledToolCatalogEntries(), normalized).map(
     (tool) => tool.definition,
   );
+  const dynamic = getEnabledDynamicToolDefinitions().filter((def) =>
+    isToolAllowedForMode(normalized, def.function.name),
+  );
+  return [...builtins, ...dynamic];
 }
+
+/** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
+export const getEnabledToolDefinitionsForSend = getEnabledToolDefinitionsForMode;
 
 /** Map code tools to process argv for the terminal runner. */
 function mapCodeToolToCommand(

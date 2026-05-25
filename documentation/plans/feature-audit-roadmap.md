@@ -25,7 +25,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Gap:** Declared `maxInputTokens` per agent plus an enforcement policy (`summarize` / `slide` / `truncate`).
 - **Scope:** New module `src/chat/context-budget.ts`; hook into `buildApiMessages` and `src/agents/sub-agent-runner.ts`.
 
-### 4. Reef artifacts evolution — Partial
+### 4. Reef artifacts evolution — Built
 - **Today:** Sandboxed iframe widgets ([src/chat/reef/](../../src/chat/reef/)), 15 templates + 6 snippets, user modules persisted at `~/.minnow/reef/modules/`.
 - **Gap:** Live user-edit round-tripped to the agent; version history per artifact; tool-output → artifact pipeline; artifact-to-artifact references.
 - **Scope:** Extend `widget-bridge.ts` with `editArtifact`/`subscribeEdits`; new `~/.minnow/reef/artifacts/<id>/v<n>.md` store; tool result hook.
@@ -34,10 +34,9 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ## Agent Layer Polish
 
-### 5. Interrupt and steer — Partial
-- **Today:** Stop button ([src/chat/stop-generation.ts](../../src/chat/stop-generation.ts)) aborts the turn entirely. "Switch chats while waiting" keeps the stream alive in background.
-- **Gap:** Inject a steering message the **current** agent reads at the next tool/loop boundary — no full restart.
-- **Scope:** Add `pendingSteerMessage` to `Chat`; consume at top of each `sendMessageWithTools` round in [src/tools/loop.ts](../../src/tools/loop.ts).
+### 5. Interrupt and steer — Built
+- **Today:** While the active chat streams, non-empty composer text **steers** (queued on `Chat.pendingSteerMessage`, consumed at each `runChatTurn` tool-loop iteration); empty composer + primary button still **stops** ([src/chat/stop-generation.ts](../../src/chat/stop-generation.ts)). Steer rows show a **Steered** chip in history.
+- **Scope:** [src/chat/steer-message.ts](../../src/chat/steer-message.ts), consume in [src/tools/loop.ts](../../src/tools/loop.ts), composer routing in [src/ui/composer-send.ts](../../src/ui/composer-send.ts). Verification: [feature-05-interrupt-steer.md](verification/feature-05-interrupt-steer.md).
 
 ### 6. Approval gates with patterns — Partial
 - **Today:** Per-tool `full|ask|off` ([src/tools/config.ts](../../src/tools/config.ts)); per-sub-agent allowlists; per-path filesystem gate. Approval strip ([src/ui/tool-approval-modal.ts](../../src/ui/tool-approval-modal.ts)).
@@ -49,10 +48,9 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Gap:** Token budget alongside the turn budget; required structured summary schema (not raw transcript) for parent consumption.
 - **Scope:** Add `maxInputTokens` + `summarySchema` to sub-agent config; child emits final `{ summary, findings[], artifacts[] }`.
 
-### 8. Tool result caching — Missing
-- **Today:** Every tool call hits server fresh. `executeTool` ([src/tools/client.ts](../../src/tools/client.ts)) has no cache layer.
-- **Gap:** Session-scoped cache keyed on `(name, normalized-args)` with explicit invalidation (e.g. `save_file` invalidates `read_file` for that path).
-- **Scope:** Wrap `executeTool` with a new `src/tools/result-cache.ts`; per-tool TTL config + bust map.
+### 8. Tool result caching — Built
+- **Today:** [`src/tools/result-cache.ts`](../../src/tools/result-cache.ts) wraps post-gate execution in [`executeTool`](../../src/tools/client.ts) via `executeWithResultCache`; scope = workspace + chat; invalidation map for file/git writes; Settings → Tools toggle `toolCache.enabled`.
+- **Plan:** [`Build out/feature-08-tool-result-cache.md`](Build%20out/feature-08-tool-result-cache.md)
 
 ---
 
@@ -79,10 +77,8 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ## Settings and UX
 
-### 12. Prompt diffing — Missing
-- **Today:** Custom prompt-configs per-part editor; no diff view; resetting is destructive.
-- **Gap:** Side-by-side or unified diff vs the shipped default for every editable prompt; per-part reset.
-- **Scope:** Pull in a small diff lib; wire into `src/ui/settings-entity-editor.ts`.
+### 12. Prompt diffing — Built (MIN-47)
+- **Today:** Settings prompt editors (modes, experts, sub-agents, work agents, custom profile parts) offer **Compare to shipped default** with unified (default) or side-by-side diff; per-part reset on custom configs; `GET ?baseline=builtin` on file-backed prompt APIs.
 - **Plan:** [`Build out/feature-12-prompt-diffing.md`](Build%20out/feature-12-prompt-diffing.md)
 
 ### 13. Prompt versioning / profiles — Partial
@@ -105,19 +101,19 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ### 16. Plugin API for agents — Partial
 - **Today:** Built-in agent dirs + user override path (`~/.minnow/prompts/work-agents/<id>/`, `~/.minnow/work-agents.json`). No package install path; no plugin manifest.
-- **Gap:** Drop-in agent pack = folder under `~/.minnow/agent-packs/<name>/` with manifest declaring system prompt, tool subset, model binding, context strategy. Loader merge + settings UI.
+- **Built (MIN-52):** Drop-in agent packs under `~/.minnow/agent-packs/<name>/` with `manifest.json`; `GET/PATCH /api/agent-packs`; merge into work-agent registry; Settings → Agent packs. Plan: [`documentation/plans/Build out/feature-16-agent-pack-plugin.md`](Build%20out/feature-16-agent-pack-plugin.md).
 - **Scope:** Define `agent-pack.schema.json`; new loader at `src/agents/pack-loader.ts`; share dir convention.
 
-### 17. Plugin API for tools — Partial
-- **Today:** MCP supported (Context7 built-in, custom add) ([server/mcp/](../../server/mcp/)). Native tool catalog is repo-internal ([src/tools/definitions.ts](../../src/tools/definitions.ts)).
-- **Gap:** Native local tool plugin path that doesn't require an MCP server — local JS module under `~/.minnow/tools/<name>/{tool.json,handler.mjs}` loaded by `server/tools/loader.js`.
-- **Scope:** Mirror the skills loader pattern; sandbox via vm if needed.
+### 17. Plugin API for tools — Built
+- **Today:** Drop-in packs at `~/.minnow/tools/<id>/{tool.json,handler.mjs}`; [`server/tools/loader.js`](../../server/tools/loader.js) + `/api/plugins/*`; namespaced as `plugin__<id>__<function>`; client merge in [`src/tools/client.ts`](../../src/tools/client.ts); Settings → Plugins ([`src/ui/settings-plugins.ts`](../../src/ui/settings-plugins.ts)).
+- **Authoring:** [`documentation/plugins/tool-authoring.md`](../plugins/tool-authoring.md). Tests: `npm run test:plugins`.
 - **Build plan:** [`Build out/feature-17-tool-plugin.md`](Build%20out/feature-17-tool-plugin.md)
 
-### 18. Headless mode — Missing
-- **Today:** All flows go through the SPA. `server.js` exposes HTTP but no CLI front-end.
-- **Gap:** `minnow run --agent builder --prompt "…"` that drives the same backend (generations, sub-agents, tools) and returns final transcript JSON. Suitable for CI.
-- **Scope:** New `bin/minnow.mjs`; talks to localhost generations API; supports `--workspace`, `--profile`, `--no-approval` (with safety opt-in).
+### 18. Headless mode — Shipped (v1)
+- **Today:** `bin/minnow.mjs` / `npm run minnow:run` — `minnow run` drives `/api/generations` + server tools without the SPA; machine-readable `HeadlessRunResult` JSON and exit codes for CI.
+- **CLI:** `--workspace`, `--profile`, `--agent`, `--mode`, `--json` / `--json-out`, `--no-approval` (requires `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1`). Orchestrate mode blocked in v1.
+- **Server:** `BROWSER=none` or `MINNOW_HEADLESS=1` skips auto-open in `server.js`.
+- **Build plan:** [`Build out/feature-18-headless-mode.md`](Build%20out/feature-18-headless-mode.md) · Tests: `test/headless/*.test.mts`
 
 ### 19. Determinism mode for testing — Missing
 - **Today:** Unit tests in `test/`; no integration recording.
@@ -134,11 +130,10 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Scope:** Builds on the existing sub-agent runner; new `multi-model` mode prompt + UI bubble lane.
 - **Build plan:** [`Build out/feature-20-multi-model-conversation.md`](Build%20out/feature-20-multi-model-conversation.md)
 
-### 21. Local eval harness — Missing
-- **Today:** No user-defined task pack or model comparison runner.
-- **Gap:** User declares N tasks (prompt + tool whitelist + grading rubric prompt) → run across N models → leaderboard. Stored under `~/.minnow/evals/`.
-- **Scope:** New `src/evals/` runner reusing sub-agent isolation; results panel in settings.
-- **Plan:** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](Build%20out/feature-21-local-eval-harness.md)
+### 21. Local eval harness — Shipped (MIN-57)
+- **Today:** Task packs (built-in `coding-smoke` + user overrides), browser suite scheduler (task×model matrix), LLM rubric grader, leaderboard in **Settings → Evals** (`#/settings/evals`). Persistence under `~/.minnow/evals/` via `npm start` (`/api/evals/*`).
+- **Scope:** `src/evals/`, `server/evals/`, `src/ui/settings-evals.ts`.
+- **Plan:** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](Build%20out/feature-21-local-eval-harness.md) · **QA:** [`documentation/plans/verification/feature-21-eval-harness.md`](verification/feature-21-eval-harness.md)
 
 ### 22. Project-scoped everything — Partial
 - **Today:** Workspace-scoped *chats* (B2) and recent menu. Agent configs, prompts, tool whitelist, MCP servers, model bindings are still **global** in `~/.minnow/`.

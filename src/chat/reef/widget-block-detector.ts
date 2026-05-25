@@ -8,6 +8,7 @@ import {
   createReefWidgetErrorPanel,
   createReefWidgetValidatingStatus,
 } from './widget-error-ui.ts';
+import { parseReefArtifactIdFromFence } from './artifact-fence.ts';
 import { prepareReefWidgetHtml } from './widget-fence-body.ts';
 import {
   applyReefWidgetPendingUi,
@@ -95,6 +96,7 @@ export function mountReefWidgetBlocks(
     }
 
     const widgetHtml = prepared.value.html;
+    const artifactId = parseReefArtifactIdFromFence(rawFenceBody);
     pre.dataset.reefMounted = 'true';
 
     const host = document.createElement('div');
@@ -105,6 +107,9 @@ export function mountReefWidgetBlocks(
       host.dataset.historyIndex = String(historyIndex);
     }
     host.dataset.widgetIndex = String(widgetMountIndex);
+    if (artifactId) {
+      host.dataset.artifactId = artifactId;
+    }
     widgetMountIndex += 1;
 
     const { iframe, widgetId, setSrcdoc } = createReefWidgetIframe({ widgetHtml });
@@ -114,7 +119,7 @@ export function mountReefWidgetBlocks(
     host.appendChild(iframe);
 
     pre.replaceWith(host);
-    registerReefWidgetHost(widgetId, host, iframe, setSrcdoc, widgetHtml);
+    registerReefWidgetHost(widgetId, host, iframe, setSrcdoc, widgetHtml, artifactId);
     /* srcdoc scripts only run reliably once the iframe is in the live document. */
     setSrcdoc(widgetHtml);
   });

@@ -29,6 +29,14 @@ const UPSTREAM_CANDIDATES = [
 
 const SYNC_SUBDIRS = ['reference', 'scripts'];
 
+/** Minnow-only scripts restored after upstream scripts/ sync (not in Impeccable npm package). */
+const MINNOW_SCRIPT_PRESERVES = [
+  {
+    source: path.join(PROJECT_ROOT, 'scripts', 'impeccable-preserves', 'minnow-context.mjs'),
+    dest: path.join(TARGET_DIR, 'scripts', 'minnow-context.mjs'),
+  },
+];
+
 /**
  * @param {string} message
  */
@@ -114,6 +122,15 @@ function syncFromUpstream(upstreamDir) {
       continue;
     }
     copyTree(from, to);
+  }
+
+  for (const { source, dest } of MINNOW_SCRIPT_PRESERVES) {
+    if (!fs.existsSync(source)) {
+      fail(`Missing Minnow preserve script ${path.relative(PROJECT_ROOT, source)}`);
+      continue;
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(source, dest);
   }
 
   const minnowSkill = path.join(TARGET_DIR, 'SKILL.md');

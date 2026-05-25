@@ -13,6 +13,7 @@ import {
   validateAuthStyle,
   validateBaseUrl,
   validateProviderId,
+  validateProviderPricing,
 } from './validate.js';
 
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234';
@@ -67,10 +68,17 @@ export function toProviderPublic(profile, flags) {
     modelsLoadPath: profile.modelsLoadPath,
     modelsUnloadPath: profile.modelsUnloadPath,
     customHeaders: profile.customHeaders || {},
+    constrainedToolCalls:
+      profile.constrainedToolCalls === true
+        ? true
+        : profile.constrainedToolCalls === false
+          ? false
+          : undefined,
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
     hasApiKey: flags.hasApiKey,
     hasBearer: flags.hasBearer,
+    ...(profile.pricing ? { pricing: profile.pricing } : {}),
   };
 }
 
@@ -382,6 +390,22 @@ export async function updateProvider(id, body) {
   }
   if (body.customHeaders !== undefined && typeof body.customHeaders === 'object') {
     profile.customHeaders = body.customHeaders;
+  }
+  if (body.constrainedToolCalls === true) {
+    profile.constrainedToolCalls = true;
+  } else if (body.constrainedToolCalls === false) {
+    profile.constrainedToolCalls = false;
+  } else   if (body.constrainedToolCalls === null) {
+    delete profile.constrainedToolCalls;
+  }
+
+  if (body.pricing !== undefined) {
+    const pricing = validateProviderPricing(body.pricing);
+    if (pricing === null) {
+      delete profile.pricing;
+    } else if (pricing) {
+      profile.pricing = pricing;
+    }
   }
 
   profile.updatedAt = now;

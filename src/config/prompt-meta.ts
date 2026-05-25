@@ -138,4 +138,9 @@ export function resetPromptMetaCache(): void {
   cachedMeta = null;
 }
 
+/** Override cache without persisting (headless --profile, tests). */
+export function setPromptMetaCacheForTests(settings: PromptMetaSettings): void {
+  cachedMeta = settings;
+}
+
 export { DEFAULT_PROMPT_META };

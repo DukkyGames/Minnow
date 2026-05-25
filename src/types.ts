@@ -4,6 +4,11 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { ChatTokenLedger } from './usage/types';
+import type {
+  SubAgentBudgetEvent,
+  SubAgentStructuredOutcome,
+} from './agents/sub-agent-structured-outcome';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 3 as const;
@@ -55,6 +60,8 @@ export interface Stats {
 export interface UserMessage {
   role: 'user';
   content: string;
+  /** True when the row was injected via steer consume (interrupt-and-steer). */
+  steer?: boolean;
 }
 
 /** Assistant history entry; may include per-bubble metric chips when restored. */
@@ -212,6 +219,9 @@ export interface PersistedSubAgentRun {
   task: string;
   status: PersistedSubAgentStatus;
   summary: string;
+  /** Structured handoff for drawer restore (MIN-43). */
+  structuredOutcome?: SubAgentStructuredOutcome;
+  budgetEvents?: SubAgentBudgetEvent[];
   error?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -380,9 +390,14 @@ export interface TurnRunRecord {
   parentTurnId?: string;
 }
 
+/** Hidden session used by Expert Lab (filtered from sidebar). */
+export type ChatKind = 'expert-lab';
+
 export interface Chat {
   id: string;
   name: string;
+  /** When set to expert-lab, chat is owned by Expert Lab and hidden from the sidebar. */
+  kind?: ChatKind;
   /** Normalized absolute workspace root at chat creation; '' = unassigned (legacy). */
   workspacePath: string;
   modelId: string;
@@ -418,6 +433,8 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
+  /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
+  pendingSteerMessage?: string;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
@@ -433,6 +450,30 @@ export interface Chat {
   runs?: TurnRunRecord[];
   /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
   activeBranchByFork?: Record<string, string>;
+  /** Pending user edits from Reef widgets; consumed on next send. */
+  pendingReefArtifactEdits?: ReefArtifactEditEvent[];
+  /** Artifact ids bound to this chat (sidebar / history hints). */
+  reefArtifactIds?: string[];
+  /** Cumulative token usage and optional USD cost (Feature #14). */
+  tokenLedger?: ChatTokenLedger;
+}
+
+export type {
+  ChatTokenLedger,
+  ProviderPricing,
+  TokenLedgerBySource,
+  TokenLedgerEntry,
+  TokenLedgerSource,
+  TokenLedgerTotals,
+} from './usage/types';
+
+/** User co-edit on a versioned reef artifact (widget bridge). */
+export interface ReefArtifactEditEvent {
+  artifactId: string;
+  version: number;
+  summary: string;
+  path: string;
+  at: string;
 }
 
 export interface SessionState {
@@ -457,6 +498,22 @@ export interface SystemPromptSettings {
   text: string;
 }
 
+/** Provenance for a detected model capability (feature #11). */
+export type CapabilitySource = 'catalog' | 'probe' | 'assumed';
+
+/** Per-model capability flags merged from catalog and probe. */
+export interface ModelCapabilities {
+  vision: boolean | null;
+  tools: boolean | null;
+  streaming: boolean | null;
+  grammar: boolean | null;
+  reasoning: boolean | null;
+  contextLength: number | null;
+  loadState: string | null;
+  sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
+  probeErrors?: Record<string, string>;
+}
+
 /** One model row from `GET /api/v0/models` (cached in `modelCache`). */
 export interface LmModelRecord {
   id: string;
@@ -468,6 +525,8 @@ export interface LmModelRecord {
   max_context_length?: number;
   /** Allocated context for a loaded model (LM Studio UI setting). */
   loaded_context_length?: number;
+  /** Merged catalog + probe capabilities (feature #11). */
+  capabilities?: ModelCapabilities;
 }
 
 export interface LmModelsListResponse {

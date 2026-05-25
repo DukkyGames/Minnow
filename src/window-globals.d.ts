@@ -17,6 +17,8 @@ declare global {
     toggleDrawer: () => void;
     openSettingsFromTopbar: () => void;
     openBenchmarkFromTopbar: () => void;
+    openExpertLabFromTopbar: () => void;
+    openExpertLab?: () => void;
     closeDrawer: () => void;
     onDrawerKeydown: (e: KeyboardEvent) => void;
     clearChat: () => void;

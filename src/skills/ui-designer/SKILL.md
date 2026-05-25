@@ -23,7 +23,7 @@ Reply with **`plan`** (default) or **`implement`** after `/ui-designer`:
 
 ## Workflow
 
-1. **Preflight** — `load_impeccable_context` (PRODUCT.md, DESIGN.md, `.impeccable/design.json` from the active workspace). Fail fast if PRODUCT.md is placeholder; suggest `/impeccable teach` (harness).
+1. **Preflight** — `load_impeccable_context` (PRODUCT.md, DESIGN.md, optional `.impeccable/design.json`). Context passes when `hasProduct` / `hasDesign` are true; if `hasDesignJson` is false, note `designJsonSetupHint` and run `/impeccable document` before token-critical edits. Fail fast if PRODUCT.md is placeholder; suggest `/impeccable teach` (harness).
 2. **Observe** — `browser_navigate` → `http://127.0.0.1:<PORT>` (Minnow dev server); `browser_screenshot` for visual evidence (vision model required).
 3. **Audit** — `/impeccable audit` (harness): load `reference/audit.md` after `load_impeccable_context`; apply to `#app` or target CSS/HTML. Do not use `run_impeccable` for audit.
 4. **Shape** — `/impeccable shape` (harness): load `reference/shape.md`; confirm brief with user. Do not use `run_impeccable` for shape.

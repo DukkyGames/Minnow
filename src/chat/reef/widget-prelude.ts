@@ -197,6 +197,14 @@ export const PRELUDE_SCRIPT = `(function () {
     openLink: function (url) {
       post("openLink", { url: String(url == null ? "" : url) });
     },
+    editArtifact: function (opts) {
+      opts = opts || {};
+      post("editArtifact", {
+        artifactId: String(opts.artifactId || ""),
+        content: opts.content != null ? String(opts.content) : undefined,
+        summary: opts.summary != null ? String(opts.summary) : undefined,
+      });
+    },
     requestResize: scheduleResizePost,
   };
 

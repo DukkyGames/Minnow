@@ -8,7 +8,8 @@ Minnow is a Vite + TypeScript SPA chat client for LM Studio and other OpenAI-com
 
 ### Running the app
 
-- **`npm start`** is the recommended dev command — starts Vite + the Node tool server on port 5173 (or next free port). Set `BROWSER=none` to suppress auto-open.
+- **`npm start`** is the recommended dev command — starts Vite + the Node tool server on port 5173 (or next free port). Set `BROWSER=none` or `MINNOW_HEADLESS=1` to suppress auto-open.
+- **Headless CLI:** `minnow run --prompt "…"` (or `npm run minnow:run -- --prompt "…"`) drives the same generations + server tools without the SPA. Requires `npm start` (or `--start-server`). See `minnow run --help` and [`documentation/context.md`](documentation/context.md#headless-cli-feature-18).
 - **`npm run dev`** starts Vite only (no tool server) — useful for pure UI work but most tool-dependent features won't function.
 - The tool server exposes `/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, and other endpoints. Verify health with `curl http://localhost:5173/api/tools/ping`.
 - **LM Studio headless daemon** (`llmster`) can be installed via `curl -fsSL https://lmstudio.ai/install.sh | bash`. Start with `lms daemon up && lms server start`. Download a model with `lms get <model-name> -y` and load it with `lms load <model-name> -y`. The CLI is at `~/.lmstudio/bin/lms` (add to PATH: `export PATH="$HOME/.lmstudio/bin:$PATH"`).

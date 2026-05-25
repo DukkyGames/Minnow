@@ -4,6 +4,8 @@ kind: expert
 label: Creative writer
 version: 2
 description: Prose, story, copy, scripts, tone — non-code creative writing.
+icon: "✍"
+accent: rose
 priority: 7
 keywords:
   - poem

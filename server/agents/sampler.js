@@ -1,0 +1,91 @@
+/**
+ * Shared sampler preset normalization for work-agents and sub-agents APIs.
+ */
+
+const TEMP_MIN = 0;
+const TEMP_MAX = 2;
+const TOP_P_MIN = 0;
+const TOP_P_MAX = 1;
+const MIN_P_MIN = 0;
+const MIN_P_MAX = 1;
+const REP_MIN = 1;
+const REP_MAX = 2;
+const TOP_K_MIN = 1;
+const TOP_K_MAX = 200;
+const MAX_TOKENS_MIN = 1;
+const MAX_TOKENS_MAX = 131072;
+
+function clampTemperature(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(TEMP_MAX, Math.max(TEMP_MIN, n));
+}
+
+function clampTopP(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(TOP_P_MAX, Math.max(TOP_P_MIN, n));
+}
+
+function clampTopK(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < TOP_K_MIN) return undefined;
+  return Math.min(TOP_K_MAX, Math.floor(n));
+}
+
+function clampMinP(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.min(MIN_P_MAX, Math.max(MIN_P_MIN, n));
+}
+
+function clampRepetitionPenalty(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < REP_MIN) return undefined;
+  return Math.min(REP_MAX, n);
+}
+
+function clampMaxTokens(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < MAX_TOKENS_MIN) return undefined;
+  return Math.min(MAX_TOKENS_MAX, Math.floor(n));
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {Record<string, number>|null}
+ */
+export function normalizeSamplerPreset(raw) {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const src = /** @type {Record<string, unknown>} */ (raw);
+  const out = {};
+
+  if ('temperature' in src) {
+    const v = clampTemperature(src.temperature);
+    if (v !== undefined) out.temperature = v;
+  }
+  if ('topP' in src) {
+    const v = clampTopP(src.topP);
+    if (v !== undefined) out.topP = v;
+  }
+  if ('topK' in src) {
+    const v = clampTopK(src.topK);
+    if (v !== undefined) out.topK = v;
+  }
+  if ('minP' in src) {
+    const v = clampMinP(src.minP);
+    if (v !== undefined) out.minP = v;
+  }
+  if ('repetitionPenalty' in src) {
+    const v = clampRepetitionPenalty(src.repetitionPenalty);
+    if (v !== undefined) out.repetitionPenalty = v;
+  }
+  if ('maxTokens' in src) {
+    const v = clampMaxTokens(src.maxTokens);
+    if (v !== undefined) out.maxTokens = v;
+  }
+
+  return Object.keys(out).length > 0 ? out : {};
+}
