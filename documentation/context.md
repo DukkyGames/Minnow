@@ -292,7 +292,7 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | Scripts | `src/skills/impeccable/scripts/` (`load-context.mjs`, `minnow-context.mjs`, …) |
 | Postinstall / sync | `scripts/sync-impeccable-skill.mjs` (vendors from `.agents/skills/impeccable` after `npx impeccable skills install -y`) |
 | npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
-| Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, `.impeccable/design.json` |
+| Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, optional `.impeccable/design.json` (`load_impeccable_context` returns `hasDesignJson`; soft success when sidecar absent — [BUG-012 plan](plans/Bug%20Fixes/BUG-012-impeccable-design-json.md)) |
 
 **Harness vs CLI:** Sub-commands such as `teach`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` injects `reference/<cmd>.md` (see `## Active Impeccable command` in the augmented skill body). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable teach`. **`run_impeccable`** is limited to **`detect`** (CLI) and **`live`** (bundled script); other commands return harness guidance without spawning `npx`.
 
@@ -313,7 +313,7 @@ Dual entry: **`/ui-designer`** slash skill or **UI Designer** Work Agent (`ui-de
 | Runner / preflight | `src/agents/ui-designer/runner.ts`, `preflight.ts` |
 | Tool allowlist | `src/agents/ui-designer/tools.ts` — plan mode blocks writes |
 | Send wiring | `src/tools/loop.ts` — binding, tool filter, one-turn `workAgentId` pin |
-| Impeccable context tool | `load_impeccable_context` → `server/impeccable/load-impeccable-context.js` (script from app root, reads `PRODUCT.md` / `DESIGN.md` / `.impeccable/design.json` from workspace) |
+| Impeccable context tool | `load_impeccable_context` → `server/impeccable/load-impeccable-context.js` (reads `PRODUCT.md` / `DESIGN.md` / optional sidecar; `hasDesignJson: false` + setup hint when `.impeccable/design.json` missing) |
 | Impeccable CLI/scripts tool | `run_impeccable` → `server/impeccable/run-impeccable.js` (`detect`, `live` only; harness commands use `/impeccable`) |
 
 **Modes:** `plan` (default, no file mutations) or `implement` (UI paths only). Composer hint after picking `/ui-designer`.

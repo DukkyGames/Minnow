@@ -2,7 +2,7 @@
 name: BUG-012 — load_impeccable_context missing design.json
 bugId: BUG-012
 severity: Major
-status: Open
+status: Shipped
 linear: MIN-66
 verified: 2026-05-24
 source:
@@ -11,31 +11,31 @@ source:
 todos:
   - id: decide-semantics
     content: Confirm product choice — soft success (exit 0 + flags) vs hard fail with preflight-only UX
-    status: pending
+    status: completed
   - id: soften-read-design-json
     content: Change readDesignJson / main in minnow-context.mjs to exit 0 with hasDesignJson + setupHint when sidecar absent
-    status: pending
+    status: completed
   - id: preserve-sync-script
     content: Add impeccable:sync preserve list or post-sync restore so minnow-context.mjs is not dropped on vendor
-    status: pending
+    status: completed
   - id: server-tool-payload
     content: Optionally surface structured setup fields in load-impeccable-context.js error path (only if keeping partial errors)
-    status: pending
+    status: completed
   - id: agent-prompts
     content: Update SKILL.md, ui-designer prompts, and preflight copy to branch on hasDesignJson / suggest /impeccable document
-    status: pending
+    status: completed
   - id: tool-definition
     content: Revise load_impeccable_context description in definitions.ts to document partial context
-    status: pending
+    status: completed
   - id: tests-missing-sidecar
     content: Add fixture workspace without .impeccable/design.json; extend load-context-tool and skills-impeccable tests
-    status: pending
+    status: completed
   - id: docs-context
     content: Update documentation/context.md Impeccable section when fix ships; link this plan
-    status: pending
+    status: completed
   - id: bug-hunt-close
     content: Mark BUG-012 resolved in bug-hunt-session-2026-05-24.md after verification
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -292,12 +292,12 @@ Commit or generate `.impeccable/design.json` for Minnow; document for other repo
 
 ## Acceptance criteria
 
-- [ ] Workspace with `PRODUCT.md` + `DESIGN.md` but **no** `.impeccable/design.json`: `load_impeccable_context` returns **success** (no `Error:` prefix), valid JSON, `hasDesignJson: false`, actionable hint.
-- [ ] Workspace with valid sidecar: unchanged behavior; `designJson.schemaVersion === 2`.
-- [ ] Workspace with **invalid** sidecar (bad JSON or wrong schema): still **fails** with clear message (exit non-zero or structured error — team choice; prefer fail for corrupt file).
-- [ ] `npm run test:impeccable` and `npm run test:skills-impeccable` pass including new partial fixture cases.
-- [ ] UI Designer / Impeccable prompts tell the model what to do when `hasDesignJson` is false.
-- [ ] `npm run impeccable:sync` does not remove or revert `minnow-context.mjs` behavior.
+- [x] Workspace with `PRODUCT.md` + `DESIGN.md` but **no** `.impeccable/design.json`: `load_impeccable_context` returns **success** (no `Error:` prefix), valid JSON, `hasDesignJson: false`, actionable hint.
+- [x] Workspace with valid sidecar: unchanged behavior; `designJson.schemaVersion === 2`.
+- [x] Workspace with **invalid** sidecar (bad JSON or wrong schema): still **fails** with clear message (exit non-zero or structured error — team choice; prefer fail for corrupt file).
+- [x] `npm run test:impeccable` and `npm run test:skills-impeccable` pass including new partial fixture cases.
+- [x] UI Designer / Impeccable prompts tell the model what to do when `hasDesignJson` is false.
+- [x] `npm run impeccable:sync` does not remove or revert `minnow-context.mjs` behavior.
 
 ---
 
