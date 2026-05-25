@@ -1,0 +1,89 @@
+/**
+ * Headless approval policy — ask permission blocks without env opt-in.
+ */
+
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  UNSAFE_AUTOMATION_ENV,
+  headlessWouldBlockPermission,
+  maybeBlockHeadlessToolApproval,
+} from '../../src/headless/approval.ts';
+import { setToolConfigForTests } from '../../src/tools/config.ts';
+
+describe('headless approval policy', () => {
+  it('headlessWouldBlockPermission treats ask and off as blocking by default', () => {
+    assert.equal(headlessWouldBlockPermission('ask'), true);
+    assert.equal(headlessWouldBlockPermission('off'), true);
+    assert.equal(headlessWouldBlockPermission('full'), false);
+  });
+
+  it('blocks ask permission without --no-approval', () => {
+    setToolConfigForTests({
+      enabled: { read_file: true },
+      permissions: {
+        default: { read_file: 'ask' },
+        perAgent: {},
+        patterns: [],
+      },
+    });
+    const blocked = maybeBlockHeadlessToolApproval(
+      'read_file',
+      { path: 'README.md' },
+      {},
+      { noApproval: false },
+      'read_file',
+    );
+    assert.ok(blocked);
+    assert.match(blocked!.content, /non-interactive/i);
+  });
+
+  it('--no-approval without env var still blocks', () => {
+    const prev = process.env[UNSAFE_AUTOMATION_ENV];
+    delete process.env[UNSAFE_AUTOMATION_ENV];
+    setToolConfigForTests({
+      enabled: { read_file: true },
+      permissions: {
+        default: { read_file: 'ask' },
+        perAgent: {},
+        patterns: [],
+      },
+    });
+    const blocked = maybeBlockHeadlessToolApproval(
+      'read_file',
+      { path: 'README.md' },
+      {},
+      { noApproval: true },
+      'read_file',
+    );
+    assert.ok(blocked);
+    assert.match(blocked!.content, new RegExp(UNSAFE_AUTOMATION_ENV));
+    if (prev !== undefined) process.env[UNSAFE_AUTOMATION_ENV] = prev;
+  });
+
+  it('--no-approval with env allows ask tools', () => {
+    const prev = process.env[UNSAFE_AUTOMATION_ENV];
+    process.env[UNSAFE_AUTOMATION_ENV] = '1';
+    setToolConfigForTests({
+      enabled: { read_file: true },
+      permissions: {
+        default: { read_file: 'ask' },
+        perAgent: {},
+        patterns: [],
+      },
+    });
+    const blocked = maybeBlockHeadlessToolApproval(
+      'read_file',
+      { path: 'README.md' },
+      {},
+      { noApproval: true },
+      'read_file',
+    );
+    assert.equal(blocked, null);
+    if (prev !== undefined) {
+      process.env[UNSAFE_AUTOMATION_ENV] = prev;
+    } else {
+      delete process.env[UNSAFE_AUTOMATION_ENV];
+    }
+  });
+});

@@ -410,6 +410,12 @@ export function getToolConfig(): ToolConfig {
   return loadToolConfig();
 }
 
+/** Override in-memory tool config (headless tests). */
+export function setToolConfigForTests(config: ToolConfig): void {
+  cachedConfig = config;
+  toolConfigLoaded = true;
+}
+
 /** Persist config to API or localStorage; server write is best-effort (see {@link saveToolConfigAsync}). */
 export function saveToolConfig(config: ToolConfig): void {
   void saveToolConfigAsync(config).catch(() => {

@@ -907,7 +907,12 @@ async function main() {
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   });
-  openBrowser(localUrl);
+  // Skip auto-open for CI / headless CLI (BROWSER=none or MINNOW_HEADLESS=1).
+  if (process.env.BROWSER !== 'none' && process.env.MINNOW_HEADLESS !== '1') {
+    openBrowser(localUrl);
+  } else if (process.env.MINNOW_HEADLESS === '1') {
+    console.log('Headless: browser auto-open skipped (MINNOW_HEADLESS=1)');
+  }
 }
 
 main().catch((err) => {

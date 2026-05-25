@@ -193,6 +193,29 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
 | Tests | `npm run test:benchmark` |
 
+### Headless CLI (Feature #18)
+
+Non-interactive agent runs for **GitHub Actions** and local scripts — same generations proxy, work-agent compose path, and **server** tools as `npm start`, without the SPA.
+
+| Piece | Location |
+|-------|----------|
+| CLI entry | [`bin/minnow.mjs`](../bin/minnow.mjs) → [`src/headless/cli-main.ts`](../src/headless/cli-main.ts) (tsx) |
+| Run loop | [`src/headless/runner.ts`](../src/headless/runner.ts) — `buildApiMessages`, `createGeneration` / `subscribeToGeneration`, server `POST /api/tools` |
+| Approval | [`src/headless/approval.ts`](../src/headless/approval.ts) — default **deny** on `ask`; `--no-approval` + `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1` |
+| JSON artifact | [`src/headless/result.ts`](../src/headless/result.ts) — `HeadlessRunResult` v1, stable key order |
+| Preflight | [`src/headless/preflight.ts`](../src/headless/preflight.ts) — `waitForServer`, optional `--start-server` child (`BROWSER=none`) |
+| Tests | `test/headless/*.test.mts` (included in `npm test`) |
+| CI example | [`.github/workflows/minnow-headless.yml`](../.github/workflows/minnow-headless.yml) |
+
+```bash
+BROWSER=none npm start &
+minnow run --workspace ./my-repo --agent builder --mode build \
+  --prompt "Add a unit test for parseSsePayloads" \
+  --json-out ./run.json
+```
+
+**Server flags:** `BROWSER=none` or `MINNOW_HEADLESS=1` skips `openBrowser()` in [`server.js`](../server.js). **v1 limits:** no Orchestrate board mode; browser-only tools (`ask_question`, sub-agent spawn, CDP) return explicit errors; use `--no-approval` only with env opt-in (see `minnow run --help`). Plan: [`documentation/plans/Build out/feature-18-headless-mode.md`](plans/Build%20out/feature-18-headless-mode.md).
+
 Completions use `postChatCompletions` with `persist: false` (no chat session pollution). Distinct from planned Feature 21 eval harness (`~/.minnow/evals/`, multi-model matrix). Plan: [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md).
 
 **Known issue (BUG-006, verified 2026-05-24):** Full preset **Tools** suite runs **61** serial `runToolLoop` probes; `runner.ts` batches all `test-done` progress until the suite finishes, so the UI looks frozen on “Tools suite” for a long time. Real `executeTool` during probes (approvals, `ask_question`, browser/CDP) has no per-test timeout. Fix plan: [`documentation/plans/Bug Fixes/BUG-006-benchmark-tools-suite-hang.md`](plans/Bug%20Fixes/BUG-006-benchmark-tools-suite-hang.md) · Linear [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite).

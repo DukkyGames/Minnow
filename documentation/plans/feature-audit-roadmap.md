@@ -109,10 +109,11 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Authoring:** [`documentation/plugins/tool-authoring.md`](../plugins/tool-authoring.md). Tests: `npm run test:plugins`.
 - **Build plan:** [`Build out/feature-17-tool-plugin.md`](Build%20out/feature-17-tool-plugin.md)
 
-### 18. Headless mode — Missing
-- **Today:** All flows go through the SPA. `server.js` exposes HTTP but no CLI front-end.
-- **Gap:** `minnow run --agent builder --prompt "…"` that drives the same backend (generations, sub-agents, tools) and returns final transcript JSON. Suitable for CI.
-- **Scope:** New `bin/minnow.mjs`; talks to localhost generations API; supports `--workspace`, `--profile`, `--no-approval` (with safety opt-in).
+### 18. Headless mode — Shipped (v1)
+- **Today:** `bin/minnow.mjs` / `npm run minnow:run` — `minnow run` drives `/api/generations` + server tools without the SPA; machine-readable `HeadlessRunResult` JSON and exit codes for CI.
+- **CLI:** `--workspace`, `--profile`, `--agent`, `--mode`, `--json` / `--json-out`, `--no-approval` (requires `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1`). Orchestrate mode blocked in v1.
+- **Server:** `BROWSER=none` or `MINNOW_HEADLESS=1` skips auto-open in `server.js`.
+- **Build plan:** [`Build out/feature-18-headless-mode.md`](Build%20out/feature-18-headless-mode.md) · Tests: `test/headless/*.test.mts`
 
 ### 19. Determinism mode for testing — Missing
 - **Today:** Unit tests in `test/`; no integration recording.
