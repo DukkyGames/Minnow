@@ -48,10 +48,9 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Gap:** Token budget alongside the turn budget; required structured summary schema (not raw transcript) for parent consumption.
 - **Scope:** Add `maxInputTokens` + `summarySchema` to sub-agent config; child emits final `{ summary, findings[], artifacts[] }`.
 
-### 8. Tool result caching — Missing
-- **Today:** Every tool call hits server fresh. `executeTool` ([src/tools/client.ts](../../src/tools/client.ts)) has no cache layer.
-- **Gap:** Session-scoped cache keyed on `(name, normalized-args)` with explicit invalidation (e.g. `save_file` invalidates `read_file` for that path).
-- **Scope:** Wrap `executeTool` with a new `src/tools/result-cache.ts`; per-tool TTL config + bust map.
+### 8. Tool result caching — Built
+- **Today:** [`src/tools/result-cache.ts`](../../src/tools/result-cache.ts) wraps post-gate execution in [`executeTool`](../../src/tools/client.ts) via `executeWithResultCache`; scope = workspace + chat; invalidation map for file/git writes; Settings → Tools toggle `toolCache.enabled`.
+- **Plan:** [`Build out/feature-08-tool-result-cache.md`](Build%20out/feature-08-tool-result-cache.md)
 
 ---
 

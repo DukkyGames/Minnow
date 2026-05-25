@@ -139,6 +139,8 @@ import {
   toggleFileSidebarLayout,
 } from './ui/file-layout';
 import { initWorkspaceButton } from './ui/workspace-button';
+import { getWorkspacePath } from './state/workspace.ts';
+import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import {
   initTerminalPanel,
   onTerminalServerAvailabilityChanged,
@@ -223,6 +225,7 @@ export async function initApp(): Promise<void> {
   await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
   initModelSelectPicker();
   await refreshSkillCatalog();

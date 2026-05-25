@@ -527,6 +527,7 @@ export function normalizeToolConfig(raw) {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
     keys: { braveApiKey: '' },
+    toolCache: { enabled: true },
   };
 
   if (!raw || typeof raw !== 'object') return config;
@@ -576,6 +577,16 @@ export function normalizeToolConfig(raw) {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+  }
+
+  if (stored.toolCache && typeof stored.toolCache === 'object') {
+    const cacheMap = /** @type {Record<string, unknown>} */ (stored.toolCache);
+    if (typeof cacheMap.enabled === 'boolean') {
+      config.toolCache = { enabled: cacheMap.enabled };
+    }
+  }
+  if (!config.toolCache) {
+    config.toolCache = { enabled: true };
   }
 
   return config;

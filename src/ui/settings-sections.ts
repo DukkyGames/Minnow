@@ -918,6 +918,29 @@ async function renderToolsSection(): Promise<void> {
     ),
   );
 
+  const cacheRow = document.createElement('div');
+  cacheRow.className = 'settings-tool-cache-row field';
+  const cacheLabel = document.createElement('label');
+  cacheLabel.className = 'settings-checkbox-option';
+  cacheLabel.htmlFor = 'settingsToolCacheEnabled';
+  const cacheCheckbox = document.createElement('input');
+  cacheCheckbox.type = 'checkbox';
+  cacheCheckbox.id = 'settingsToolCacheEnabled';
+  const cacheLabelText = document.createElement('span');
+  cacheLabelText.className = 'settings-checkbox-option__text';
+  cacheLabelText.textContent =
+    'Cache repeated read-only tool results in this session';
+  cacheLabel.append(cacheCheckbox, cacheLabelText);
+  cacheRow.appendChild(cacheLabel);
+  cacheRow.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Speeds up duplicate read_file and similar calls until the workspace changes or a write invalidates the path. Cleared on workspace switch.',
+    ),
+  );
+  mount.appendChild(cacheRow);
+
   const bulkActions = document.createElement('div');
   bulkActions.className = 'settings-tools-bulk-actions';
   const allFullBtn = document.createElement('button');
@@ -1092,9 +1115,17 @@ async function renderToolsSection(): Promise<void> {
   keyInput.addEventListener('input', persistBraveKey);
   keyInput.addEventListener('change', persistBraveKey);
 
+  const persistToolCache = (): void => {
+    const config = getToolConfig();
+    config.toolCache = { enabled: cacheCheckbox.checked };
+    saveToolConfig(config);
+  };
+  cacheCheckbox.addEventListener('change', persistToolCache);
+
   if (generation !== toolsSectionRenderGeneration) return;
 
   const config = getToolConfig();
+  cacheCheckbox.checked = config.toolCache?.enabled !== false;
   keyInput.value = config.keys.braveApiKey;
   loadToolConfigIntoDrawer(list);
 

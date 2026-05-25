@@ -255,6 +255,7 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     enabled?: unknown;
     keys?: unknown;
     permissions?: unknown;
+    toolCache?: unknown;
   };
   if (stored.enabled && typeof stored.enabled === 'object') {
     const enabledMap = stored.enabled as Record<string, unknown>;
@@ -299,6 +300,16 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+  }
+
+  if (stored.toolCache && typeof stored.toolCache === 'object') {
+    const cacheMap = stored.toolCache as Record<string, unknown>;
+    if (typeof cacheMap.enabled === 'boolean') {
+      config.toolCache = { enabled: cacheMap.enabled };
+    }
+  }
+  if (!config.toolCache) {
+    config.toolCache = { enabled: true };
   }
 
   return config;

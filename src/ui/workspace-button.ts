@@ -10,6 +10,7 @@ import {
   setWorkspaceFromServer,
 } from '../state/workspace';
 import { getLocalServerAvailable } from '../tools/client';
+import { clearCachesForWorkspace } from '../tools/result-cache';
 import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
 import { setStatus } from './status';
 import { applyWorkspaceScopedSession } from './sidebar';
@@ -59,6 +60,7 @@ export function updateWorkspaceButtonLabel(label: string, fullPath: string): voi
  */
 export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const previousPath = getWorkspacePath();
+  clearCachesForWorkspace(previousPath);
   setWorkspaceFromServer(info);
   updateWorkspaceButtonLabel(info.label, info.path);
   applyWorkspaceScopedSession(info.path, previousPath);
