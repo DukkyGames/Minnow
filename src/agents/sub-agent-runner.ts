@@ -12,9 +12,22 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { readProviderCapabilities } from '../providers/capability-probe';
+import {
+  applyConstrainedToolCallsToBody,
+  isResponseFormatRejectionError,
+  stripResponseFormatFromBody,
+} from '../providers/constrained-tool-calls';
+import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { modelCache } from '../app-state';
+import {
+  getToolCallsMetaSync,
+  isConstrainedDecodingEnabledForProvider,
+  loadToolCallsMeta,
+} from '../config/tool-calls-meta';
 import { getActiveProvider } from '../providers/store';
+import { parseToolArguments } from '../tools/parse-tool-arguments';
 import {
   applyContextBudget,
   estimateApiMessagesTokens,
@@ -61,7 +74,7 @@ export function cloneSubAgentMessages(messages: ApiMessage[]): ApiMessage[] {
   return JSON.parse(JSON.stringify(messages)) as ApiMessage[];
 }
 
-interface SubAgentCompletionBody {
+interface SubAgentCompletionBody extends CompletionBodyWithResponseFormat {
   model?: string;
   messages: ApiMessage[];
   temperature: number;
@@ -73,20 +86,6 @@ interface SubAgentCompletionBody {
   stream?: boolean;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
-}
-
-function parseToolArguments(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
 }
 
 /** Headless SSE turn (no DOM). */
@@ -196,6 +195,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     };
 
     emitProgress(undefined, true);
+
+    await loadToolCallsMeta();
+    const provider = await getActiveProvider(input.providerId);
+    const providerCapabilities = await readProviderCapabilities(input.providerId);
+    const toolCallsMeta = getToolCallsMetaSync();
+    const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
+      provider,
+      toolCallsMeta,
+    );
 
     const enforceContextBudget = (turnIndex: number): boolean => {
       const budgetResolved = resolveContextBudget({
@@ -312,16 +320,37 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         body.tool_choice = 'auto';
       }
 
+      let usedConstrained = false;
+      if (input.tools.length > 0) {
+        const constrainedApplied = applyConstrainedToolCallsToBody(body, {
+          providerId: input.providerId,
+          modelId: input.modelId,
+          userEnabled: constrainedUserEnabled,
+          capabilities: providerCapabilities,
+          enabledTools: input.tools,
+        });
+        Object.assign(body, constrainedApplied.body);
+        usedConstrained = constrainedApplied.usedConstrained;
+      }
+
       let streamingAssistant = '';
-      const turnResult = await streamSubAgentTurn(
-        input.providerId,
-        body,
-        input.signal,
-        (delta) => {
+      const runSubTurn = (turnBody: SubAgentCompletionBody) =>
+        streamSubAgentTurn(input.providerId, turnBody, input.signal, (delta) => {
           streamingAssistant += delta;
           emitProgress(streamingAssistant);
-        },
-      );
+        });
+
+      let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
+      try {
+        turnResult = await runSubTurn(body);
+      } catch (streamErr) {
+        if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
+          usedConstrained = false;
+          turnResult = await runSubTurn(stripResponseFormatFromBody(body));
+        } else {
+          throw streamErr;
+        }
+      }
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
       const turnStats = turnResult.streamMeta.stats ?? {};
@@ -345,7 +374,18 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         emitProgress(undefined, true);
 
         for (const tc of turnResult.toolCalls) {
-          const args = parseToolArguments(tc.function.arguments);
+          const { args, parseError } = parseToolArguments(tc.function.arguments, {
+            constrained: usedConstrained,
+          });
+          if (parseError) {
+            messages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: parseError,
+            });
+            emitProgress(undefined, true);
+            continue;
+          }
           const toolOut = await input.executeTool(tc.function.name, args, {
             ...input.toolExecuteContext,
             toolCallId: tc.id,

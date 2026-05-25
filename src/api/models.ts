@@ -16,6 +16,12 @@ import type { ModelInfo } from '../types';
 
 export { contextLengthFromModelRow } from '../lib/context-length';
 import { updateModelStateDot } from '../ui/model-state-dot';
+import {
+  catalogCapabilitiesFromRow,
+  fetchProviderCapabilities,
+  mergeCapabilitiesIntoModelCache,
+  runCapabilityProbeForProvider,
+} from '../providers/model-capabilities';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
@@ -221,6 +227,7 @@ export async function fetchModels(): Promise<void> {
   sel.innerHTML = '<option value="">Loading models…</option>';
   syncModelSelectPicker();
   setStatus('spin', 'Loading models…');
+  const setProbingStatus = () => setStatus('spin', 'Probing capabilities…');
   updateModelLoadUnloadButtons();
 
   let providerLabel = 'provider';
@@ -243,7 +250,16 @@ export async function fetchModels(): Promise<void> {
     syncModelSelectPicker();
 
     modelCache.clear();
-    models.forEach((m) => modelCache.set(m.id, m));
+    models.forEach((m) => {
+      modelCache.set(m.id, { ...m, capabilities: catalogCapabilitiesFromRow(m) });
+    });
+
+    try {
+      const capsFile = await fetchProviderCapabilities(provider.id, signal);
+      mergeCapabilitiesIntoModelCache(capsFile);
+    } catch {
+      /* stale or missing capabilities file is ok */
+    }
 
     const ac = getActiveChat();
     const optionIds = models.map((m) => m.id);
@@ -258,9 +274,21 @@ export async function fetchModels(): Promise<void> {
     setReadyStatus();
     updateModelStateDot(sel.value);
     showCachedModelInfo();
+    syncModelSelectPicker();
     renderSidebar();
     scheduleSaveSessions();
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
+
+    setProbingStatus();
+    void runCapabilityProbeForProvider(provider.id, {
+      modelIds: models.map((m) => m.id),
+      selectedModelId: sel.value,
+    }).then(() => {
+      setReadyStatus();
+      syncModelSelectPicker();
+      showCachedModelInfo();
+      void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
+    });
   } catch (err) {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;

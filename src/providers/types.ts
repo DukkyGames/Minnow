@@ -21,6 +21,8 @@ export interface ProviderPublic {
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
   customHeaders?: Record<string, string>;
+  /** Per-provider override for constrained tool calls; undefined uses global default. */
+  constrainedToolCalls?: boolean;
   createdAt?: string;
   updatedAt?: string;
   hasApiKey: boolean;

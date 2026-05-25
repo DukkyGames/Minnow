@@ -139,7 +139,21 @@ import {
   GENERATION_LOST_ON_RESTART_MESSAGE,
   subscribeToGeneration,
 } from '../api/generations';
+import { readProviderCapabilities } from '../providers/capability-probe';
+import {
+  applyConstrainedToolCallsToBody,
+  isResponseFormatRejectionError,
+  logConstrainedDebug,
+  stripResponseFormatFromBody,
+} from '../providers/constrained-tool-calls';
+import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { getActiveProvider } from '../providers/store';
+import {
+  getToolCallsMetaSync,
+  isConstrainedDecodingEnabledForProvider,
+  loadToolCallsMeta,
+} from '../config/tool-calls-meta';
+import { parseToolArguments } from './parse-tool-arguments';
 import { setStatus } from '../ui/status';
 import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
@@ -223,7 +237,7 @@ export interface BuildApiMessagesOptions {
   ephemeralContinueInstruction?: string;
 }
 
-interface ChatCompletionBody {
+interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   model?: string;
   messages: ApiMessage[];
   temperature: number;
@@ -320,7 +334,12 @@ function buildVlmUserApiContent(
 
 function isVlmModel(modelId: string | undefined): boolean {
   if (!modelId) return false;
-  return modelCache.get(modelId)?.type === 'vlm';
+  const row = modelCache.get(modelId);
+  if (!row) return false;
+  const vision = row.capabilities?.vision;
+  if (vision === true) return true;
+  if (vision === false) return false;
+  return row.type === 'vlm';
 }
 
 /** Options for {@link runChatTurn} (composer send or history resend). */
@@ -417,20 +436,6 @@ export function buildApiMessages(
   }
 
   return messages;
-}
-
-function parseToolArguments(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
 }
 
 interface StreamTurnResult {
@@ -900,6 +905,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   try {
     const provider = await getActiveProvider(sendProviderId);
+    await loadToolCallsMeta();
+    const providerCapabilities = await readProviderCapabilities(provider.id);
+    const toolCallsMeta = getToolCallsMetaSync();
+    const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
+      provider,
+      toolCallsMeta,
+    );
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
     const activeModeId = normalizeModeId(chat.modeId);
@@ -966,25 +978,60 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         body.tool_choice = 'auto';
       }
 
+      let usedConstrained = false;
+      if (enabledTools.length > 0) {
+        const constrainedApplied = applyConstrainedToolCallsToBody(body, {
+          providerId: provider.id,
+          modelId: sendModelId,
+          userEnabled: constrainedUserEnabled,
+          capabilities: providerCapabilities,
+          enabledTools,
+        });
+        Object.assign(body, constrainedApplied.body);
+        usedConstrained = constrainedApplied.usedConstrained;
+        if (usedConstrained) {
+          logConstrainedDebug('attach', {
+            providerId: provider.id,
+            modelId: sendModelId,
+            toolCount: enabledTools.length,
+          });
+        }
+      }
+
       thoughtController.setAssistantWrap(wrap);
       const domVisible = isStreamDomVisible(chat.id);
-      const turnResult = await streamCompletionTurn(
-        chat,
-        provider,
-        body,
-        resumeGenerationId,
-        bubble,
-        cursor,
-        chatSignal,
-        thoughtController,
-        domVisible,
-        revealProse,
-        (text) => {
-          livePartialText = text;
-        },
-        undefined,
-        turnRunId,
-      );
+
+      const runStreamTurn = (turnBody: ChatCompletionBody) =>
+        streamCompletionTurn(
+          chat,
+          provider,
+          turnBody,
+          resumeGenerationId,
+          bubble,
+          cursor,
+          chatSignal,
+          thoughtController,
+          domVisible,
+          revealProse,
+          (text) => {
+            livePartialText = text;
+          },
+          undefined,
+          turnRunId,
+        );
+
+      let turnResult: StreamTurnResult;
+      try {
+        turnResult = await runStreamTurn(body);
+      } catch (streamErr) {
+        if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
+          logConstrainedDebug('strip_retry', { providerId: provider.id });
+          usedConstrained = false;
+          turnResult = await runStreamTurn(stripResponseFormatFromBody(body));
+        } else {
+          throw streamErr;
+        }
+      }
 
       cancelAssistantBubbleRenderDebounce();
       cursor.remove();
@@ -1039,7 +1086,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           if (chatSignal.aborted) {
             for (let sj = ti; sj < turnResult.toolCalls.length; sj++) {
               const skipped = turnResult.toolCalls[sj]!;
-              const skipArgs = parseToolArguments(skipped.function.arguments);
+              const { args: skipArgs } = parseToolArguments(skipped.function.arguments, {
+                constrained: usedConstrained,
+              });
               const skipWrap = renderToolCall(skipped.function.name, skipArgs);
               skipWrap.dataset.toolCallId = skipped.id;
               if (paintToolCallsInChat) {
@@ -1059,7 +1108,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           }
 
           const tc = turnResult.toolCalls[ti]!;
-          const args = parseToolArguments(tc.function.arguments);
+          const { args, parseError } = parseToolArguments(tc.function.arguments, {
+            constrained: usedConstrained,
+          });
           patchMainTurnActivity(chat.id, {
             phase: 'tools',
             currentTool: tc.function.name,
@@ -1069,6 +1120,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           if (paintToolCallsInChat) {
             area.appendChild(toolWrap);
             scrollChatIfPinned();
+          }
+
+          if (parseError) {
+            renderToolResult(toolWrap, parseError);
+            chat.history.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: parseError,
+            });
+            trackRunHistoryPush(chat, turnRunId);
+            recordChatMessage(chat);
+            scheduleSaveSessions();
+            continue;
           }
 
           const toolLoopModeId = normalizeModeId(chat.modeId);
