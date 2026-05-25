@@ -2,7 +2,7 @@
 
 User-facing setup and quick start: [`README.md`](../README.md).
 
-**Feature gap audit (2026):** [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) — shipped vs partial vs missing across agents, Reef, trace/replay, and settings. **Local eval harness (audit #21, planned):** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](plans/Build%20out/feature-21-local-eval-harness.md). **In-app LLM Benchmark screen (Bench, planned):** [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md) — active-model integration battery + run history (complements Feature 21). **#03 Context budgets per agent (plan):** [`documentation/plans/Build out/feature-03-context-budgets.md`](plans/Build%20out/feature-03-context-budgets.md). **#07 Sub-agent budgets + structured summaries (shipped MIN-43):** [`documentation/plans/Build out/feature-07-sub-agent-budgets.md`](plans/Build%20out/feature-07-sub-agent-budgets.md). **#09 Sampler presets per agent (plan):** [`documentation/plans/Build out/feature-09-sampler-presets.md`](plans/Build%20out/feature-09-sampler-presets.md). **#12 Prompt diffing (plan):** [`documentation/plans/Build out/feature-12-prompt-diffing.md`](plans/Build%20out/feature-12-prompt-diffing.md). **#13 Prompt profiles (plan):** [`documentation/plans/Build out/feature-13-prompt-profiles.md`](plans/Build%20out/feature-13-prompt-profiles.md). **#20 Multi-model conversation (plan):** [`documentation/plans/Build out/feature-20-multi-model-conversation.md`](plans/Build%20out/feature-20-multi-model-conversation.md). **Sub-agent orchestration** is documented below under **Sub-agent orchestration (Step 09)**; verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
+**Feature gap audit (2026):** [`documentation/plans/feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) — shipped vs partial vs missing across agents, Reef, trace/replay, and settings. **Local eval harness (audit #21, planned):** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](plans/Build%20out/feature-21-local-eval-harness.md). **In-app LLM Benchmark screen (Bench, planned):** [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md) — active-model integration battery + run history (complements Feature 21). **#03 Context budgets per agent (plan):** [`documentation/plans/Build out/feature-03-context-budgets.md`](plans/Build%20out/feature-03-context-budgets.md). **#07 Sub-agent budgets + structured summaries (shipped MIN-43):** [`documentation/plans/Build out/feature-07-sub-agent-budgets.md`](plans/Build%20out/feature-07-sub-agent-budgets.md). **#09 Sampler presets per agent (built):** per work-agent and sub-agent-type `sampler` objects merged at send time in [`src/agents/resolve-sampler.ts`](../src/agents/resolve-sampler.ts) → [`src/tools/loop.ts`](../src/tools/loop.ts) and [`src/agents/sub-agent-runner.ts`](../src/agents/sub-agent-runner.ts); defaults in [`src/agents/defaults/work-agent-samplers.json`](../src/agents/defaults/work-agent-samplers.json) and [`src/agents/defaults/sub-agents.json`](../src/agents/defaults/sub-agents.json). Plan: [`documentation/plans/Build out/feature-09-sampler-presets.md`](plans/Build%20out/feature-09-sampler-presets.md). **#12 Prompt diffing (plan):** [`documentation/plans/Build out/feature-12-prompt-diffing.md`](plans/Build%20out/feature-12-prompt-diffing.md). **#13 Prompt profiles (plan):** [`documentation/plans/Build out/feature-13-prompt-profiles.md`](plans/Build%20out/feature-13-prompt-profiles.md). **#20 Multi-model conversation (plan):** [`documentation/plans/Build out/feature-20-multi-model-conversation.md`](plans/Build%20out/feature-20-multi-model-conversation.md). **Sub-agent orchestration** is documented below under **Sub-agent orchestration (Step 09)**; verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
 **To-fix roadmap:** Backlog in [`documentation/plans/to-fix.md`](plans/to-fix.md). **Implementation build plans** (with tests and todos): [`documentation/plans/Build out/`](plans/Build%20out/) — `switch-chats-while-waiting`, `reef-files-minnow-home`, `reef-optional-save-prompt`, `no-auto-open-terminal`, `no-restart-finished-chat`, `llm-mode-switch-suggestions`, `fix-chat-titles-thinking-leak`, `files-sidebar-close-arrow` (line numbers in each plan link to `to-fix.md`). Product backlog plans remain `feature-01` … `feature-30` in the same folder. **Persistence contract (Step 02+):** `~/.minnow/sessions/state.json` — single session blob, not per-chat files. **Tests (Step 02+):** `npm test` → `node --test` (JS suites), then `tsx --import ./test/test-loader.mjs --test` (TS/UI; loader stubs `.css` / xterm).
 
@@ -478,6 +478,7 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 | Concern | Location |
 |---------|----------|
 | Types + registry | `src/agents/work-agent-types.ts`, `work-agent-registry.ts` |
+| Sampler presets | `src/agents/sampler-types.ts`, `resolve-sampler.ts`, `defaults/work-agent-samplers.json` |
 | Binding resolver | `src/agents/resolve-work-agent-binding.ts` |
 | Turn resolution | `src/agents/resolve-work-agent.ts`, `set-work-agent.ts` (S09 hook) |
 | Shipped prompts | `src/chat/prompts/work-agents/<id>/agent.{full,lite}.md`, `registry.json` |
@@ -488,7 +489,7 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 **Built-in ids:** `default`, `builder`, `plan` → `planner`, `research` → `researcher`, plus `reviewer`. Mode auto-map via `defaultForModes` when `workAgentAuto` is true (default).
 
-**Send path:** `resolveActiveWorkAgent()` → `resolveComposedSystemPrompt()` sets `workAgentId` / `workAgentLabel` → `resolveWorkAgentBinding()` picks provider + model **per turn** (does not overwrite `chat.modelId`). Optional `allowedTools` filters the tool list. Status pill: `Generating reply (Builder)…`.
+**Send path:** `resolveActiveWorkAgent()` → `resolveComposedSystemPrompt()` sets `workAgentId` / `workAgentLabel` → `resolveWorkAgentBinding()` picks provider + model **per turn** (does not overwrite `chat.modelId`). **`resolveSamplerPreset({ kind: 'work-agent' })`** merges drawer `#temperature` / `#maxTokens` → shipped role defaults (`work-agent-samplers.json`) → `work-agents.json` partial `sampler` override, then `applySamplerToBody()` before `streamCompletionTurn`. Passthrough agent `default` skips role defaults. Optional `allowedTools` filters the tool list. Status pill: `Generating reply (Builder)…`.
 
 **Legacy system prompt:** `#systemPrompt` textarea remains fallback when composed prompt is empty. Full per-agent editor UI deferred to **Step 20**.
 
@@ -498,11 +499,11 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 |--------|------|---------|
 | `GET` | `/api/work-agents` | `{ agents, overrides }` |
 | `GET` | `/api/work-agents/:id` | Single merged agent |
-| `PUT` | `/api/work-agents/:id` | Patch `work-agents.json` override |
+| `PUT` | `/api/work-agents/:id` | Patch `work-agents.json` override (`providerId`, `modelId`, `sampler`, …) |
 | `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content, source }` |
 | `PUT` | `/api/work-agents/:id/prompt` | Write `~/.minnow/prompts/work-agents/...` |
 
-**Tests:** `test/work-agents/**/*.test.mjs`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
+**Tests:** `test/work-agents/**/*.test.mjs`, `test/agents/sampler-resolve.test.mts`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
 
 ### Workspace folder (AI project root)
 
@@ -566,8 +567,9 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 | Config merge | `src/agents/sub-agent-config.ts`, `src/agents/defaults/sub-agents.json` |
 | Orchestrator | `src/agents/orchestrator.ts` — spawn, cancel, queue, `restartSubAgent`, `cancelAllForParentTurn`, list/status helpers; `deriveSubAgentTerminalReason` + `terminalReason` on `get_sub_agent_status` / aggregate JSON |
 | Events | `src/agents/sub-agent-events.ts` |
-| Runner | `src/agents/sub-agent-runner.ts` — headless tool loop; per-type `maxToolTurns`; context budget enforcement; structured JSON final turn; accumulates `usage` / `stats` on `SubAgentRun` for Orchestrate metrics rollup (MIN-36) |
+| Runner | `src/agents/sub-agent-runner.ts` — headless tool loop; per-type `maxToolTurns`; context budget enforcement; **`resolveSamplerPreset({ kind: 'sub-agent' })`** (not parent drawer temperature; default `max_tokens` 2048); structured JSON final turn; accumulates `usage` / `stats` on `SubAgentRun` for Orchestrate metrics rollup (MIN-36) |
 | Structured outcome | `src/agents/sub-agent-structured-outcome.ts`, `src/agents/sub-agent-summary-schemas.ts` |
+| Sampler presets | `src/agents/sampler-types.ts`, `resolve-sampler.ts` |
 | Tool subset | `src/agents/sub-agent-tools.ts` |
 | Prompts | `src/agents/shipped-sub-agent-prompts.ts`, `src/agents/prompts/sub-agents/*.md` |
 | Parent tools | `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` in `src/tools/definitions.ts` |
@@ -578,7 +580,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Built-in types:** `generalPurpose`, `explore`, `shell`, `explorer` (Step 19 self-heal stub, `maxConcurrent: 1`).
 
-**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`, optional `defaultMaxInputTokens`, `defaultContextEnforcementPolicy`, `defaultSummarySchema`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `maxInputTokens`, `contextEnforcementPolicy`, `summarySchema` (Settings → Sub-agents per-type editor), `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the tool-turn cap sets run status **`failed`** with `terminalReason: max_tool_turns`; context budget exhaustion uses **`context_budget`**. `get_sub_agent_status` exposes **`success: false`** and **`outcome`** when terminal; linked board tasks **`failed`** — never **`complete`** when the run did not succeed (`src/agents/sub-agent-outcome.ts`, `syncBoardTaskOnSettle`, `board_update_task` guard) (MIN-15 / MIN-10). Orchestrate supervisor R2 empty-summary detection prefers `structuredOutcome.summary` (`src/agents/supervisor/detector.ts`).
+**Config (`sub-agents.json`):** root `enabled`, `globalMaxConcurrent`, `defaultTimeoutMs`, `defaultMaxToolTurns`, optional `defaultMaxInputTokens`, `defaultContextEnforcementPolicy`, `defaultSummarySchema`; per-type `providerId`, `modelId`, `maxConcurrent`, `timeoutMs`, `maxToolTurns`, `maxInputTokens`, `contextEnforcementPolicy`, `summarySchema`, optional **`sampler`** (`temperature`, `topP`, `topK`, `minP`, `repetitionPenalty`) (Settings → Sub-agents per-type editor), `allowedTools` (whitelist or null), `deniedTools`, optional `workAgentId`. Hitting the tool-turn cap sets run status **`failed`** with `terminalReason: max_tool_turns`; context budget exhaustion uses **`context_budget`**. `get_sub_agent_status` exposes **`success: false`** and **`outcome`** when terminal; linked board tasks **`failed`** — never **`complete`** when the run did not succeed (`src/agents/sub-agent-outcome.ts`, `syncBoardTaskOnSettle`, `board_update_task` guard) (MIN-15 / MIN-10). Orchestrate supervisor R2 empty-summary detection prefers `structuredOutcome.summary` (`src/agents/supervisor/detector.ts`).
 
 **Concurrency:** Over-cap spawns stay **`queued`** until a slot frees (FIFO global queue). Slots are tracked with `holdsConcurrencySlot` so cancelled queued runs do not corrupt the cap; `executeRun` wraps prompt setup + runner in one `try/catch` so a failed start always releases the slot and calls `drainQueue()`. Empty per-type `modelId` falls back to the parent chat's `modelId` before `POST /api/generations`.
 
@@ -586,7 +588,7 @@ Parent tool loop can spawn **isolated sub-agents** (separate messages, model, to
 
 **Persistence:** `GET/PUT /api/config/sub-agents` when `npm start`; client mirror `minnow.subAgents` in `localStorage` when Vite-only. Settled sub-agent transcripts also persist on **`chat.subAgentRuns`** in `sessions/state.json` (capped message list).
 
-**Tests:** `test/sub-agents/**/*.test.mts`. Verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
+**Tests:** `test/sub-agents/**/*.test.mts`, `test/agents/sampler-resolve.test.mts`, `test/agents/sampler-server.test.mjs`. Verification: [`documentation/plans/verification/step-09.md`](plans/verification/step-09.md).
 
 | Method | Path | Purpose |
 |--------|------|---------|

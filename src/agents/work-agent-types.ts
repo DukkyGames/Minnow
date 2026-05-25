@@ -3,6 +3,7 @@
  */
 
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import type { SamplerPreset } from './sampler-types';
 
 /** Shipped or user-defined Work Agent definition. */
 export interface WorkAgentDefinition {
@@ -30,6 +31,8 @@ export interface WorkAgentDefinition {
   minRecentTurns?: number;
   /** summarize: token budget for injected summary block (default 512). */
   summaryReserveTokens?: number;
+  /** Shipped role sampler defaults (from work-agent-samplers.json). */
+  sampler?: SamplerPreset;
 }
 
 /** User overrides stored under ~/.minnow/work-agents.json */
@@ -43,6 +46,8 @@ export interface WorkAgentUserOverride {
   contextEnforcementPolicy?: ContextEnforcementPolicy;
   minRecentTurns?: number;
   summaryReserveTokens?: number;
+  /** Partial sampler override (field-level merge at send time). */
+  sampler?: SamplerPreset | null;
 }
 
 export interface WorkAgentRegistrySnapshot {

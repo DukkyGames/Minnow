@@ -25,7 +25,13 @@
       "systemPromptPath": null,
       "maxInputTokens": null,
       "contextEnforcementPolicy": "slide",
-      "summarySchema": "minnow.sub-agent.v1"
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.4,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.05
+      }
     },
     "explore": {
       "label": "Explore",
@@ -58,7 +64,13 @@
       "systemPromptPath": null,
       "maxInputTokens": 16000,
       "contextEnforcementPolicy": "slide",
-      "summarySchema": "minnow.sub-agent.explore"
+      "summarySchema": "minnow.sub-agent.explore",
+      "sampler": {
+        "temperature": 0.45,
+        "topP": 0.92,
+        "topK": 40,
+        "repetitionPenalty": 1
+      }
     },
     "researcher": {
       "label": "Research worker",
@@ -98,7 +110,13 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.92,
+        "topK": 50,
+        "repetitionPenalty": 1
+      }
     },
     "shell": {
       "label": "Shell",
@@ -122,7 +140,13 @@
       "systemPromptPath": null,
       "maxInputTokens": 8000,
       "contextEnforcementPolicy": "truncate",
-      "summarySchema": "minnow.sub-agent.v1"
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.15,
+        "topP": 0.85,
+        "topK": 20,
+        "repetitionPenalty": 1.1
+      }
     },
     "explorer": {
       "label": "Explorer (self-heal)",
@@ -139,7 +163,13 @@
         "cancel_sub_agent"
       ],
       "systemPromptPath": null,
-      "summarySchema": "minnow.sub-agent.v1"
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.35,
+        "topP": 0.9,
+        "topK": 35,
+        "repetitionPenalty": 1
+      }
     },
     "debugger": {
       "label": "Debugger",
@@ -178,7 +208,13 @@
         "git_push"
       ],
       "systemPromptPath": null,
-      "summarySchema": "minnow.sub-agent.v1"
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.25,
+        "topP": 0.88,
+        "topK": 30,
+        "repetitionPenalty": 1.05
+      }
     },
     "bug-planner": {
       "label": "Bug planner",
@@ -195,7 +231,13 @@
         "cancel_sub_agent"
       ],
       "systemPromptPath": null,
-      "summarySchema": "minnow.sub-agent.v1"
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.55,
+        "topP": 0.92,
+        "topK": 50,
+        "repetitionPenalty": 1
+      }
     },
     "reef-widget": {
       "label": "Reef widget",
@@ -233,7 +275,13 @@
         "git_push"
       ],
       "systemPromptPath": null,
-      "summarySchema": "minnow.sub-agent.lite"
+      "summarySchema": "minnow.sub-agent.lite",
+      "sampler": {
+        "temperature": 0.35,
+        "topP": 0.9,
+        "topK": 35,
+        "repetitionPenalty": 1
+      }
     }
   }
 }

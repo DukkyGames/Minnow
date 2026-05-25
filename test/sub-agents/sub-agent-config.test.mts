@@ -60,6 +60,16 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
 
+  test('user override merges sampler fields on a type', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { sampler: { temperature: 0.6 } },
+      },
+    });
+    assert.equal(merged.types.explore.sampler?.temperature, 0.6);
+    assert.equal(merged.types.explore.sampler?.topP, 0.92);
+  });
+
   test('user override can set maxInputTokens and context policy', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       types: {

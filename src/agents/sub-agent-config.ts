@@ -6,6 +6,7 @@ import { detectConfigServer, isServerStorageMode } from '../config/storage-mode'
 import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
 import DEFAULTS from './defaults/sub-agents.json';
+import { clampSamplerPreset, mergeSamplerLayers } from './sampler-types';
 import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
@@ -21,6 +22,7 @@ function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
     ...raw,
     allowedTools: raw.allowedTools ? [...raw.allowedTools] : null,
     deniedTools: [...raw.deniedTools],
+    sampler: raw.sampler ? { ...raw.sampler } : undefined,
   };
 }
 
@@ -69,6 +71,12 @@ export function mergeSubAgentConfig(
         deniedTools: ['spawn_sub_agent', 'cancel_sub_agent'],
         systemPromptPath: null,
       };
+      const mergedSampler =
+        patch.sampler !== undefined
+          ? clampSamplerPreset(
+              mergeSamplerLayers(existing.sampler, patch.sampler),
+            )
+          : existing.sampler;
       merged.types[id] = {
         ...existing,
         ...patch,
@@ -87,6 +95,7 @@ export function mergeSubAgentConfig(
         deniedTools: patch.deniedTools
           ? [...patch.deniedTools]
           : [...existing.deniedTools],
+        sampler: mergedSampler,
       };
     }
   }

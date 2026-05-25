@@ -37,6 +37,9 @@ import {
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
 } from '../tools/turn-continuation';
+import { getSubAgentTypeConfig } from './sub-agent-config';
+import { resolveSamplerPreset } from './resolve-sampler';
+import { applySamplerToBody } from './sampler-types';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
@@ -63,6 +66,10 @@ interface SubAgentCompletionBody {
   messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  repetition_penalty?: number;
   stream?: boolean;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
@@ -154,8 +161,13 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     let toolTurns = 0;
     let proseQuestionRetries = 0;
     const hasAskQuestionTool = input.tools.some((t) => t.function.name === 'ask_question');
-    const temperature = 0.4;
-    const maxTokens = 2048;
+    const typeConfig = await getSubAgentTypeConfig(input.type);
+    const resolvedSampler = resolveSamplerPreset({
+      kind: 'sub-agent',
+      agentKey: input.type,
+      global: { temperature: 0.4, maxTokens: 2048 },
+      subAgentType: typeConfig,
+    });
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
     const contextBudget = input.contextBudget ?? {
       maxInputTokens: null,
@@ -228,13 +240,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         });
       }
 
-      const body: SubAgentCompletionBody = {
-        model: input.modelId || undefined,
-        messages: finalMessages,
-        temperature,
-        max_tokens: maxTokens,
-        stream: true,
-      };
+      const body = applySamplerToBody(
+        {
+          model: input.modelId || undefined,
+          messages: finalMessages,
+          stream: true,
+        },
+        resolvedSampler.preset,
+        resolvedSampler.maxTokens,
+      ) as SubAgentCompletionBody;
 
       const turnResult = await streamSubAgentTurn(
         input.providerId,
@@ -283,13 +297,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         };
       }
 
-      const body: SubAgentCompletionBody = {
-        model: input.modelId || undefined,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-        stream: true,
-      };
+      const body = applySamplerToBody(
+        {
+          model: input.modelId || undefined,
+          messages,
+          stream: true,
+        },
+        resolvedSampler.preset,
+        resolvedSampler.maxTokens,
+      ) as SubAgentCompletionBody;
 
       if (input.tools.length > 0) {
         body.tools = input.tools;

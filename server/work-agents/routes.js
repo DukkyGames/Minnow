@@ -15,6 +15,7 @@ import {
   readWorkAgentPrompt,
   writeWorkAgentPromptOverride,
 } from './registry.js';
+import { normalizeSamplerPreset } from '../agents/sampler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -102,6 +103,12 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       if ('minRecentTurns' in body) patch.minRecentTurns = body.minRecentTurns;
       if ('summaryReserveTokens' in body) {
         patch.summaryReserveTokens = body.summaryReserveTokens;
+      }
+      if ('sampler' in body) {
+        patch.sampler =
+          body.sampler === null
+            ? null
+            : normalizeSamplerPreset(body.sampler);
       }
       await patchWorkAgentOverride(agentId, patch);
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);

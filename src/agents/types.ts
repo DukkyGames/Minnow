@@ -9,6 +9,7 @@ import type {
   SubAgentBudgetEvent,
   SubAgentStructuredOutcome,
 } from './sub-agent-structured-outcome';
+import type { SamplerPreset } from './sampler-types';
 
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -41,6 +42,8 @@ export interface SubAgentTypeConfig {
   summaryReserveTokens?: number;
   /** Preset id for structured final outcome validation (e.g. minnow.sub-agent.v1). */
   summarySchema?: string;
+  /** Per-type sampler preset (shipped default + user partial override). */
+  sampler?: SamplerPreset;
 }
 
 /** Root sub-agents.json shape (user + merged). */
