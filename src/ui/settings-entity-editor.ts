@@ -16,6 +16,11 @@ import {
   type PromptFileFamily,
   type PromptFileProfile,
 } from '../chat/prompts/prompt-file-api';
+import {
+  resolveFilePromptBuiltinBaseline,
+  resolveWorkAgentBuiltinBaselineText,
+} from '../chat/prompts/prompt-baseline-resolve';
+import { mountPromptDiffControls } from './prompt-diff-panel';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
 import type { SamplerPreset } from '../agents/sampler-types';
@@ -191,11 +196,23 @@ export function mountPromptFileEditor(
 ): void {
   const { family, entityId } = options;
   let currentProfile: PromptFileProfile = 'full';
+  let lastSavedContent = '';
+  let builtinBaseline = '';
   let sourceLabel = el('span', 'settings-badge', '…');
   const ta = document.createElement('textarea');
   ta.className = 'settings-part-editor';
   ta.rows = 12;
   ta.placeholder = 'System prompt body for this profile';
+
+  const reloadBaseline = async () => {
+    builtinBaseline = await resolveFilePromptBuiltinBaseline(
+      family,
+      entityId,
+      currentProfile,
+    );
+    diffControls.setBaseline(builtinBaseline);
+    diffControls.refresh();
+  };
 
   const reload = async () => {
     const data = await fetchPromptFile(family, entityId, currentProfile);
@@ -203,11 +220,15 @@ export function mountPromptFileEditor(
       sourceLabel.textContent = 'unavailable';
       ta.value = '';
       ta.disabled = true;
+      lastSavedContent = '';
+      await reloadBaseline();
       return;
     }
     sourceLabel.textContent = data.source === 'override' ? 'Custom override' : 'Built-in default';
     ta.value = data.content;
+    lastSavedContent = data.content;
     ta.disabled = false;
+    await reloadBaseline();
   };
 
   const tabs = buildProfileTabs((profile) => {
@@ -221,6 +242,13 @@ export function mountPromptFileEditor(
   meta.appendChild(sourceLabel);
   container.appendChild(meta);
   container.appendChild(ta);
+
+  const diffControls = mountPromptDiffControls(container, {
+    getBaseline: () => builtinBaseline,
+    getCurrent: () => ta.value,
+    showOfflineHint: true,
+  });
+  ta.addEventListener('input', () => diffControls.refresh());
 
   const actions = el('div','settings-actions');
   const saveBtn = el('button', 'settings-action-btn', 'Save prompt');
@@ -239,6 +267,8 @@ export function mountPromptFileEditor(
       }
       sourceLabel.textContent =
         saved.source === 'override' ? 'Custom override' : 'Built-in default';
+      lastSavedContent = ta.value;
+      diffControls.refresh();
       setStatus('ok', `Prompt saved (${currentProfile})`);
     })();
   });
@@ -246,7 +276,9 @@ export function mountPromptFileEditor(
   const resetBtn = el('button', 'settings-action-btn', 'Reset to built-in');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
-    if (!confirm('Remove your override and restore the shipped prompt?')) return;
+    const dirty = ta.value !== lastSavedContent;
+    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
+    if (!dirty && !confirm('Remove your override and restore the shipped prompt?')) return;
     void (async () => {
       const restored = await resetPromptFileOverride(
         family,
@@ -258,7 +290,9 @@ export function mountPromptFileEditor(
         return;
       }
       ta.value = restored.content;
+      lastSavedContent = restored.content;
       sourceLabel.textContent = 'Built-in default';
+      await reloadBaseline();
       setStatus('ok', 'Prompt reset to built-in');
     })();
   });
@@ -287,6 +321,8 @@ export function mountWorkAgentEditor(
   options: WorkAgentEditorOptions,
 ): void {
   let currentProfile: WorkAgentPromptProfile = 'full';
+  let lastSavedPromptContent = '';
+  let builtinBaseline = '';
   let binding: ModelBindingState = {
     providerId: options.initialProviderId ?? '',
     modelId: options.initialModelId ?? '',
@@ -320,16 +356,29 @@ export function mountWorkAgentEditor(
     options.initialSampler ?? getUserWorkAgentOverride(options.agentId)?.sampler,
   );
 
+  const reloadBaseline = async () => {
+    builtinBaseline = await resolveWorkAgentBuiltinBaselineText(
+      options.agentId,
+      currentProfile,
+    );
+    diffControls.setBaseline(builtinBaseline);
+    diffControls.refresh();
+  };
+
   const reloadPrompt = async () => {
     const data = await fetchWorkAgentPrompt(options.agentId, currentProfile);
     if (!data) {
       sourceLabel.textContent = 'unavailable';
       ta.value = '';
+      lastSavedPromptContent = '';
+      await reloadBaseline();
       return;
     }
     sourceLabel.textContent =
       data.source === 'override' ? 'Custom override' : 'Built-in default';
     ta.value = data.content;
+    lastSavedPromptContent = data.content;
+    await reloadBaseline();
   };
 
   const fillProviders = async () => {
@@ -399,6 +448,13 @@ export function mountWorkAgentEditor(
   container.appendChild(meta);
   container.appendChild(ta);
 
+  const diffControls = mountPromptDiffControls(container, {
+    getBaseline: () => builtinBaseline,
+    getCurrent: () => ta.value,
+    showOfflineHint: true,
+  });
+  ta.addEventListener('input', () => diffControls.refresh());
+
   const actions = el('div','settings-actions');
 
   const savePromptBtn = el('button', 'settings-action-btn', 'Save prompt');
@@ -414,7 +470,11 @@ export function mountWorkAgentEditor(
         ok ? 'ok' : 'err',
         ok ? `Prompt saved (${currentProfile})` : 'Save failed',
       );
-      if (ok) await reloadPrompt();
+      if (ok) {
+        lastSavedPromptContent = ta.value;
+        diffControls.refresh();
+        await reloadPrompt();
+      }
     })();
   });
 
@@ -446,7 +506,9 @@ export function mountWorkAgentEditor(
   const resetBtn = el('button', 'settings-action-btn', 'Reset prompt to built-in');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
-    if (!confirm('Remove prompt override for this profile?')) return;
+    const dirty = ta.value !== lastSavedPromptContent;
+    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
+    if (!dirty && !confirm('Remove prompt override for this profile?')) return;
     void (async () => {
       const restored = await resetWorkAgentPromptOverride(
         options.agentId,
@@ -457,7 +519,9 @@ export function mountWorkAgentEditor(
         return;
       }
       ta.value = restored.content;
+      lastSavedPromptContent = restored.content;
       sourceLabel.textContent = 'Built-in default';
+      await reloadBaseline();
       setStatus('ok', 'Prompt reset to built-in');
     })();
   });

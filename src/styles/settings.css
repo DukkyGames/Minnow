@@ -385,3 +385,117 @@
 .tool-key-row .field-hint {
   margin: 0;
 }
+
+/* Prompt diff (Feature #12) */
+.prompt-diff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0 4px;
+}
+
+.prompt-diff-toolbar__compare {
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.prompt-diff-toolbar__layout {
+  max-width: 140px;
+}
+
+.prompt-diff-toolbar__match {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.prompt-diff-host {
+  margin: 8px 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  overflow: auto;
+  max-height: min(420px, 50vh);
+}
+
+.prompt-diff__body {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-diff__line {
+  display: flex;
+  gap: 6px;
+}
+
+.prompt-diff__prefix {
+  flex-shrink: 0;
+  width: 1ch;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.prompt-diff__line--add {
+  background: color-mix(in oklch, var(--mn-success, #22c55e) 18%, transparent);
+}
+
+.prompt-diff__line--remove {
+  background: color-mix(in oklch, var(--mn-danger, #ef4444) 18%, transparent);
+}
+
+.prompt-diff__line--unchanged {
+  color: var(--mn-fg-muted);
+}
+
+.prompt-diff--side-by-side .prompt-diff__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  min-height: 120px;
+}
+
+.prompt-diff__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--mn-border);
+}
+
+.prompt-diff__column:last-child {
+  border-right: none;
+}
+
+.prompt-diff__column-label {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mn-fg-muted);
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+}
+
+.prompt-diff__column-body {
+  margin: 0;
+  padding: 8px 10px;
+  flex: 1;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-diff__truncated,
+.prompt-diff__offline,
+.prompt-diff__profile-hint {
+  margin: 6px 10px 0;
+}

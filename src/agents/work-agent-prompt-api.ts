@@ -28,6 +28,23 @@ export async function fetchWorkAgentPrompt(
   }
 }
 
+/** Shipped repo prompt only (ignores ~/.minnow overrides). */
+export async function fetchWorkAgentBuiltinBaseline(
+  agentId: string,
+  profile: WorkAgentPromptProfile = 'full',
+): Promise<WorkAgentPromptResponse | null> {
+  try {
+    const res = await fetch(
+      `/api/work-agents/${encodeURIComponent(agentId)}/prompt?profile=${profile}&baseline=builtin`,
+      { cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as WorkAgentPromptResponse;
+  } catch {
+    return null;
+  }
+}
+
 /** Remove user prompt override for a profile. */
 export async function resetWorkAgentPromptOverride(
   agentId: string,

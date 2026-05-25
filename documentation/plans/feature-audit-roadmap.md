@@ -77,10 +77,8 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ## Settings and UX
 
-### 12. Prompt diffing — Missing
-- **Today:** Custom prompt-configs per-part editor; no diff view; resetting is destructive.
-- **Gap:** Side-by-side or unified diff vs the shipped default for every editable prompt; per-part reset.
-- **Scope:** Pull in a small diff lib; wire into `src/ui/settings-entity-editor.ts`.
+### 12. Prompt diffing — Built (MIN-47)
+- **Today:** Settings prompt editors (modes, experts, sub-agents, work agents, custom profile parts) offer **Compare to shipped default** with unified (default) or side-by-side diff; per-part reset on custom configs; `GET ?baseline=builtin` on file-backed prompt APIs.
 - **Plan:** [`Build out/feature-12-prompt-diffing.md`](Build%20out/feature-12-prompt-diffing.md)
 
 ### 13. Prompt versioning / profiles — Partial

@@ -221,6 +221,20 @@ export async function patchWorkAgentOverride(agentId, patch) {
   return overrides[agentId];
 }
 
+/**
+ * Shipped work-agent prompt only (ignores ~/.minnow overrides).
+ */
+export async function readBuiltinWorkAgentPrompt(projectRoot, agentId, profile) {
+  const builtinPath = path.join(
+    builtinWorkAgentsDir(projectRoot),
+    agentId,
+    `agent.${profile}.md`,
+  );
+  const raw = await fs.readFile(builtinPath, 'utf8');
+  const parsed = parsePromptMarkdown(raw, builtinPath);
+  return { content: parsed.body.trim(), source: 'builtin' };
+}
+
 export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
   const overridePath = (() => {
     try {
@@ -251,14 +265,7 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
     }
   }
 
-  const builtinPath = path.join(
-    builtinWorkAgentsDir(projectRoot),
-    agentId,
-    `agent.${profile}.md`,
-  );
-  const raw = await fs.readFile(builtinPath, 'utf8');
-  const parsed = parsePromptMarkdown(raw, builtinPath);
-  return { content: parsed.body.trim(), source: 'builtin' };
+  return readBuiltinWorkAgentPrompt(projectRoot, agentId, profile);
 }
 
 export async function writeWorkAgentPromptOverride(agentId, profile, content) {

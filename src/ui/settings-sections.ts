@@ -10,6 +10,12 @@ import { PART_ORDER } from '../chat/prompts/prompt-composer';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import {
+  customPartBaselineProfileHint,
+  isPromptPartDiffSupported,
+  resolveBuiltinPromptBaselineForPart,
+} from '../chat/prompts/prompt-baseline';
+import { mountPromptDiffControls } from './prompt-diff-panel';
+import {
   deletePromptConfig,
   duplicatePromptConfig,
   listPromptConfigs,
@@ -335,45 +341,106 @@ async function renderPromptPartsPanel(
 }
 
 function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void {
-  for (const partId of PART_ORDER) {
-    const settings = config.parts[partId] ?? { ...DEFAULT_PART_SETTINGS };
-    const block = el('details', 'settings-part-block');
-    block.open = partId === 'base';
+  void (async () => {
+    const profileHint = await customPartBaselineProfileHint();
 
-    const summary = el('summary', '');
-    const enable = document.createElement('input');
-    enable.type = 'checkbox';
-    enable.checked = settings.enabled !== false;
-    enable.addEventListener('click', (e) => e.stopPropagation());
-    enable.addEventListener('change', () => {
-      if (!activeCustomConfig) return;
-      activeCustomConfig.parts[partId] = {
-        ...(activeCustomConfig.parts[partId] ?? DEFAULT_PART_SETTINGS),
-        enabled: enable.checked,
-      };
-      schedulePromptTokenEstimateRefresh();
-    });
-    summary.appendChild(enable);
-    summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
-    block.appendChild(summary);
+    for (const partId of PART_ORDER) {
+      const settings = config.parts[partId] ?? { ...DEFAULT_PART_SETTINGS };
+      const block = el('details', 'settings-part-block');
+      block.open = partId === 'base';
 
-    const ta = document.createElement('textarea');
-    ta.className = 'settings-part-editor';
-    ta.rows = 6;
-    ta.value = settings.contentOverride ?? '';
-    ta.placeholder = 'Leave empty to use shipped default at send time';
-    ta.addEventListener('input', () => {
-      if (!activeCustomConfig) return;
-      const trimmed = ta.value.trim();
-      activeCustomConfig.parts[partId] = {
-        enabled: enable.checked,
-        contentOverride: trimmed ? ta.value : null,
+      const summary = el('summary', '');
+      const enable = document.createElement('input');
+      enable.type = 'checkbox';
+      enable.checked = settings.enabled !== false;
+      enable.addEventListener('click', (e) => e.stopPropagation());
+      enable.addEventListener('change', () => {
+        if (!activeCustomConfig) return;
+        activeCustomConfig.parts[partId] = {
+          ...(activeCustomConfig.parts[partId] ?? DEFAULT_PART_SETTINGS),
+          enabled: enable.checked,
+        };
+        schedulePromptTokenEstimateRefresh();
+      });
+      summary.appendChild(enable);
+      summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
+      block.appendChild(summary);
+
+      const ta = document.createElement('textarea');
+      ta.className = 'settings-part-editor';
+      ta.rows = 6;
+      ta.value = settings.contentOverride ?? '';
+      ta.placeholder = 'Leave empty to use shipped default at send time';
+
+      let lastSavedOverride: string | null = settings.contentOverride;
+      let builtinBaseline = '';
+
+      const applyPartToConfig = () => {
+        if (!activeCustomConfig) return;
+        const trimmed = ta.value.trim();
+        activeCustomConfig.parts[partId] = {
+          enabled: enable.checked,
+          contentOverride: trimmed ? ta.value : null,
+        };
+        schedulePromptTokenEstimateRefresh();
       };
-      schedulePromptTokenEstimateRefresh();
-    });
-    block.appendChild(ta);
-    mount.appendChild(block);
-  }
+
+      ta.addEventListener('input', () => {
+        applyPartToConfig();
+        if (diffControls) diffControls.refresh();
+      });
+
+      block.appendChild(ta);
+
+      let diffControls: ReturnType<typeof mountPromptDiffControls> | null = null;
+
+      if (isPromptPartDiffSupported(partId)) {
+        const baseline = await resolveBuiltinPromptBaselineForPart(partId);
+        builtinBaseline = baseline;
+        diffControls = mountPromptDiffControls(block, {
+          getBaseline: () => builtinBaseline,
+          getCurrent: () => {
+            const trimmed = ta.value.trim();
+            return trimmed ? ta.value : builtinBaseline;
+          },
+          showOfflineHint: true,
+          profileHint,
+          resetPartLabel: 'Reset part to default',
+          onResetPart: async () => {
+            const hasUnsaved =
+              (ta.value.trim() ? ta.value : null) !== lastSavedOverride;
+            if (hasUnsaved && !confirm('Discard unsaved edits and reset this part to shipped default?')) {
+              return;
+            }
+            if (!activeCustomConfig) return;
+            activeCustomConfig.parts[partId] = {
+              enabled: enable.checked,
+              contentOverride: null,
+            };
+            ta.value = '';
+            lastSavedOverride = null;
+            const saved = await savePromptConfig(activeCustomConfig);
+            if (saved instanceof Error) {
+              setStatus('err', saved.message);
+              return;
+            }
+            schedulePromptTokenEstimateRefresh();
+            setStatus('ok', `${PART_LABELS[partId]} reset to shipped default`);
+          },
+        });
+        diffControls.setBaseline(builtinBaseline);
+      } else {
+        const hint = el(
+          'p',
+          'settings-field-hint',
+          'Diff not available — this part is resolved from the active chat at send time.',
+        );
+        block.appendChild(hint);
+      }
+
+      mount.appendChild(block);
+    }
+  })();
 }
 
 async function refreshCustomConfigSelect(): Promise<void> {
