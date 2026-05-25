@@ -1,0 +1,16 @@
+{
+  "id": "echo",
+  "functionName": "ping",
+  "label": "Echo",
+  "description": "Returns pong.",
+  "category": "utility",
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "capabilities": {
+    "filesystem": false,
+    "network": false
+  }
+}

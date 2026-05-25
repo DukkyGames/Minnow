@@ -1,0 +1,158 @@
+/**
+ * Settings → Tools: native plugin packs (Feature #17).
+ */
+
+import {
+  isToolPermissionMode,
+  loadToolConfig,
+  setToolPermission,
+} from '../tools/config';
+import type { PluginListItem } from '../tools/plugin-settings-types';
+import { bindToolsListChange } from './tools-list';
+
+/** Fetch plugin metadata for settings rows. */
+export async function fetchPluginList(): Promise<PluginListItem[]> {
+  try {
+    const response = await fetch('/api/plugins');
+    if (!response.ok) return [];
+    const body = (await response.json()) as { plugins?: PluginListItem[] };
+    return Array.isArray(body.plugins) ? body.plugins : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Append plugin tool rows to a tools list container (Custom badge + permission select).
+ */
+export async function appendPluginToolsToList(
+  listId: string,
+): Promise<void> {
+  const container = document.getElementById(listId);
+  if (!container) return;
+
+  const plugins = await fetchPluginList();
+  const existing = container.querySelector('[data-tool-category="plugins"]');
+  if (existing) existing.remove();
+
+  if (plugins.length === 0) return;
+
+  const group = document.createElement('section');
+  group.className = 'tool-group';
+  group.setAttribute('data-tool-category', 'plugins');
+
+  const head = document.createElement('div');
+  head.className = 'tool-group-head';
+  const header = document.createElement('h3');
+  header.className = 'tool-group-header';
+  header.textContent = 'Plugins';
+  head.appendChild(header);
+  group.appendChild(head);
+
+  const hint = document.createElement('p');
+  hint.className = 'tool-group-hint';
+  hint.innerHTML =
+    'Drop-in tools under <code>~/.minnow/tools/&lt;id&gt;/</code>. See <a href="documentation/plugins/tool-authoring.md" target="_blank" rel="noopener">tool authoring</a>.';
+  group.appendChild(hint);
+
+  const scaffoldRow = document.createElement('div');
+  scaffoldRow.className = 'settings-plugin-scaffold-row';
+  const scaffoldBtn = document.createElement('button');
+  scaffoldBtn.type = 'button';
+  scaffoldBtn.className = 'settings-inline-btn';
+  scaffoldBtn.textContent = 'Scaffold new plugin…';
+  scaffoldBtn.addEventListener('click', () => {
+    void scaffoldPluginFromPrompt(listId);
+  });
+  scaffoldRow.appendChild(scaffoldBtn);
+  group.appendChild(scaffoldRow);
+
+  const config = loadToolConfig();
+
+  for (const plugin of plugins) {
+    const row = document.createElement('div');
+    row.className = 'tool-row tool-row--plugin';
+    row.setAttribute('data-tool-id', plugin.namespacedName);
+    row.setAttribute('data-server-required', '');
+
+    const controlWrap = document.createElement('div');
+    controlWrap.className = 'tool-permission-wrap';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tool-label';
+    const badge = document.createElement('span');
+    badge.className = 'tool-custom-badge';
+    badge.textContent = 'Custom';
+    nameSpan.append(plugin.label, document.createTextNode(' '), badge);
+
+    const select = document.createElement('select');
+    select.className = 'tool-permission-select';
+    select.setAttribute('aria-label', `${plugin.label} permission`);
+    for (const optDef of [
+      { value: 'off', label: 'Disabled' },
+      { value: 'ask', label: 'Requires permission' },
+      { value: 'full', label: 'Full permission' },
+    ] as const) {
+      const opt = document.createElement('option');
+      opt.value = optDef.value;
+      opt.textContent = optDef.label;
+      select.appendChild(opt);
+    }
+    const mode = config.permissions.default[plugin.namespacedName];
+    select.value =
+      typeof mode === 'string' && isToolPermissionMode(mode) ? mode : 'ask';
+
+    controlWrap.append(nameSpan, select);
+    row.appendChild(controlWrap);
+
+    const desc = document.createElement('p');
+    desc.className = 'tool-desc';
+    desc.textContent = `${plugin.description} (${plugin.namespacedName})`;
+    row.appendChild(desc);
+
+    group.appendChild(row);
+  }
+
+  container.appendChild(group);
+  bindToolsListChange(container);
+}
+
+async function scaffoldPluginFromPrompt(listId: string): Promise<void> {
+  const id = window.prompt(
+    'Plugin id (lowercase letters, numbers, hyphens):',
+    'my-plugin',
+  );
+  if (!id?.trim()) return;
+
+  try {
+    const response = await fetch('/api/plugins/scaffold', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id.trim() }),
+    });
+    const body = (await response.json()) as { error?: string; path?: string };
+    if (!response.ok) {
+      window.alert(body.error ?? `Scaffold failed (HTTP ${response.status})`);
+      return;
+    }
+    await fetch('/api/plugins/reload', { method: 'POST' });
+    const { refreshPluginToolCache } = await import('../tools/client');
+    await refreshPluginToolCache();
+    await appendPluginToolsToList(listId);
+    const { loadToolConfigIntoDrawer } = await import('../tools/config');
+    loadToolConfigIntoDrawer();
+    window.alert(`Plugin created at ${body.path ?? id.trim()}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    window.alert(`Scaffold failed: ${message}`);
+  }
+}
+
+/** Persist permission for a plugin namespaced tool id. */
+export function setPluginToolPermission(
+  namespacedName: string,
+  mode: 'full' | 'ask' | 'off',
+  root: ParentNode = document,
+): void {
+  setToolPermission(namespacedName, mode, root);
+}

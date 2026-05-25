@@ -44,6 +44,8 @@ import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
 import { createMcpMiddleware, initMcpApi } from './server/mcp/middleware.js';
 import { callMcpTool, isMcpToolName } from './server/mcp/registry.js';
+import { callPluginTool, isPluginToolName } from './server/tools/loader.js';
+import { createPluginsMiddleware, initPluginsApi } from './server/tools/middleware.js';
 import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
 import { isResolvedPathUnderRoot } from './server/workspace/safe-path.js';
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
@@ -696,6 +698,10 @@ async function executeServerTool(name, args) {
   const allowOutsideWorkspace = fsAccess === 'full';
   return pathAccessStore.run({ allowOutsideWorkspace }, async () => {
     try {
+      if (isPluginToolName(name)) {
+        const result = await callPluginTool(name, args ?? {});
+        return { result: String(result) };
+      }
       if (isMcpToolName(name)) {
         const result = await callMcpTool(name, args ?? {});
         return { result: String(result) };
@@ -848,6 +854,7 @@ async function main() {
           server.middlewares.use(createReefMiddleware());
           server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
           server.middlewares.use(createMcpMiddleware());
+          server.middlewares.use(createPluginsMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
           server.middlewares.use(createProfilesMiddleware());
           server.middlewares.use(createProviderMiddleware());
@@ -876,6 +883,7 @@ async function main() {
   await initMemoryApi();
   await initLspConfig();
   await initMcpApi();
+  await initPluginsApi();
   const homePath = getMinnowHome();
   console.log(`Minnow data: ${homePath}`);
 

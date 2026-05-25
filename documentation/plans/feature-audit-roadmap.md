@@ -104,10 +104,9 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Built (MIN-52):** Drop-in agent packs under `~/.minnow/agent-packs/<name>/` with `manifest.json`; `GET/PATCH /api/agent-packs`; merge into work-agent registry; Settings → Agent packs. Plan: [`documentation/plans/Build out/feature-16-agent-pack-plugin.md`](Build%20out/feature-16-agent-pack-plugin.md).
 - **Scope:** Define `agent-pack.schema.json`; new loader at `src/agents/pack-loader.ts`; share dir convention.
 
-### 17. Plugin API for tools — Partial
-- **Today:** MCP supported (Context7 built-in, custom add) ([server/mcp/](../../server/mcp/)). Native tool catalog is repo-internal ([src/tools/definitions.ts](../../src/tools/definitions.ts)).
-- **Gap:** Native local tool plugin path that doesn't require an MCP server — local JS module under `~/.minnow/tools/<name>/{tool.json,handler.mjs}` loaded by `server/tools/loader.js`.
-- **Scope:** Mirror the skills loader pattern; sandbox via vm if needed.
+### 17. Plugin API for tools — Built
+- **Today:** Drop-in packs at `~/.minnow/tools/<id>/{tool.json,handler.mjs}`; [`server/tools/loader.js`](../../server/tools/loader.js) + `/api/plugins/*`; namespaced as `plugin__<id>__<function>`; client merge in [`src/tools/client.ts`](../../src/tools/client.ts); Settings → Plugins ([`src/ui/settings-plugins.ts`](../../src/ui/settings-plugins.ts)).
+- **Authoring:** [`documentation/plugins/tool-authoring.md`](../plugins/tool-authoring.md). Tests: `npm run test:plugins`.
 - **Build plan:** [`Build out/feature-17-tool-plugin.md`](Build%20out/feature-17-tool-plugin.md)
 
 ### 18. Headless mode — Missing

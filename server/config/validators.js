@@ -529,6 +529,7 @@ export function normalizeToolConfig(raw) {
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
     keys: { braveApiKey: '' },
     toolCache: { enabled: true },
+    plugins: {},
   };
 
   if (!raw || typeof raw !== 'object') return config;
@@ -588,6 +589,17 @@ export function normalizeToolConfig(raw) {
   }
   if (!config.toolCache) {
     config.toolCache = { enabled: true };
+  }
+
+  if (stored.plugins && typeof stored.plugins === 'object') {
+    const pluginsMap = /** @type {Record<string, unknown>} */ (stored.plugins);
+    for (const [pluginId, meta] of Object.entries(pluginsMap)) {
+      if (!pluginId.trim() || typeof meta !== 'object' || meta === null) continue;
+      const row = /** @type {Record<string, unknown>} */ (meta);
+      config.plugins[pluginId.trim()] = {
+        enabled: row.enabled !== false,
+      };
+    }
   }
 
   return config;

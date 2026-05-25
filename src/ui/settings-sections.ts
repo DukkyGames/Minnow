@@ -1184,6 +1184,8 @@ async function renderToolsSection(): Promise<void> {
   mountToolApprovalRulesSection(mount);
 
   fillToolsSection('settingsToolsList');
+  const { appendPluginToolsToList } = await import('./settings-plugins');
+  await appendPluginToolsToList('settingsToolsList');
 
   allFullBtn.addEventListener('click', () => {
     const ok = window.confirm(

@@ -22,6 +22,7 @@
     "test:memory": "node --test test/memory/*.test.mjs",
     "test:lsp": "node --test test/lsp/*.test.mjs",
     "test:mcp": "node --test test/mcp/*.test.mjs",
+    "test:plugins": "node --test test/tools/plugin-scan.test.mjs test/tools/plugin-loader.test.mjs test/plugins/api.test.mjs",
     "test:ui-designer": "tsx --test test/ui-designer/**/*.test.mts && node scripts/step15-smoke.mjs",
     "test:browser": "node --test test/cdp/*.test.js test/browser-cdp.test.mjs",
     "test:benchmark": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/benchmark/*.test.mts && node --test test/ui/benchmark-page-html.test.mjs"
