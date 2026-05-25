@@ -3,7 +3,7 @@
  * Main chat uses persist:true; headless callers use persist:false (30s eviction).
  */
 
-import { parseSsePayloads } from './chat';
+import { parseSseEventBlock } from './sse-parse';
 import type { ChatCompletionChunk } from '../types';
 
 /** Terminal SSE payload from the server `event: end` sentinel. */
@@ -269,8 +269,8 @@ export async function cancelGeneration(generationId: string): Promise<void> {
 }
 
 function feedSseBlock(block: string, onChunk: (chunk: ChatCompletionChunk) => void): void {
-  const normalized = block.endsWith('\n') ? block : `${block}\n`;
-  parseSsePayloads(normalized, onChunk);
+  if (!block.trim()) return;
+  parseSseEventBlock(block, onChunk);
 }
 
 function parseEndEventBlock(block: string): GenerationEndEvent | null {

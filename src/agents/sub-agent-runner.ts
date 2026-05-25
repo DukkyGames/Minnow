@@ -8,10 +8,14 @@ import {
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
-  parseSsePayloads,
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import {
+  createSseEventBuffer,
+  feedSseEventBuffer,
+  flushSseEventBuffer,
+} from '../api/sse-parse';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
@@ -85,7 +89,7 @@ async function streamSubAgentTurn(
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  const sseBuffer = createSseEventBuffer();
 
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
@@ -100,13 +104,10 @@ async function streamSubAgentTurn(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    parseSsePayloads(lines.join('\n'), handleChunk);
+    feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
   }
 
-  if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
+  flushSseEventBuffer(sseBuffer, handleChunk);
 
   const finishReason =
     streamMeta.finish_reason ||
