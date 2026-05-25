@@ -515,6 +515,10 @@ function bindProvidersAddForm(): void {
       setStatus('ok', `Added provider ${result.provider.label}`);
       await loadProviderSelect();
       await renderProvidersSettingsSection();
+
+      void import('../providers/model-capabilities').then(({ runCapabilityProbeForProvider }) =>
+        runCapabilityProbeForProvider(id),
+      );
     })();
   });
 }

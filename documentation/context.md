@@ -157,7 +157,7 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
     lm-studio-local/
       profile.json         # label, baseUrl, apiKind, paths, optional constrainedToolCalls override
       secrets.json         # apiKey, bearerToken (0o600 on Unix; never in git)
-      capabilities.json    # structured-output probe (#10): structuredOutput, structuredOutputWithTools, …
+      capabilities.json    # per-model matrix (MIN-48) + structured-output flags (#10)
   mcp/                     # scaffold (Step 18)
   lsp/                     # scaffold (Step 17)
   prompt-configs/          # scaffold (Step 04)
@@ -649,14 +649,17 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 | `GET` | `/api/providers/:id/models` | Proxy upstream models (auth injected) |
 | `POST` | `/api/providers/:id/models/load` | Proxy model load (LM Studio v0) |
 | `POST` | `/api/providers/:id/models/unload` | Proxy model unload (LM Studio v0) |
-| `GET` | `/api/providers/:id/capabilities` | Read `capabilities.json` probe results (**404** if never probed) |
-| `POST` | `/api/providers/:id/probe-capabilities` | Non-destructive structured-output probe → writes `capabilities.json` |
+| `GET` | `/api/providers/:id/capabilities` | Read `capabilities.json` (or `{ models: {} }` when missing) |
+| `POST` | `/api/providers/:id/capabilities/probe` | Per-model matrix probe; optional `{ modelIds?, selectedModelId? }` |
+| `POST` | `/api/providers/:id/probe-capabilities` | Structured-output probe (`response_format` / json_schema) |
+
+**`capabilities.json`:** Provider-level `structuredOutput`, `structuredOutputWithTools`, `structuredOutputStreaming`, `probeError` (#10). Per-model `vision`, `tools`, `streaming`, `grammar`, `contextLength`, `loadState`, `sources`, `probeErrors` (MIN-48). Matrix probe runs after **Refresh models** / **Add provider** (max 8 models). Server: [`capabilities-store.js`](../server/providers/capabilities-store.js), [`capability-probe.js`](../server/providers/capability-probe.js). Client: [`model-capabilities.ts`](../src/providers/model-capabilities.ts), [`capability-probe.ts`](../src/providers/capability-probe.ts) (structured output), picker [`capability-badges.ts`](../src/providers/capability-badges.ts).
 
 **`apiKind`:** `lm-studio-v0` (default paths `/api/v0/...`) or `openai-v1` (`/v1/...`). **Chat completions** are not proxied on `/api/providers`; all LLM streams use [`/api/generations`](#backend-owned-generations-phase-1).
 
 **Seed:** On first `npm start` with empty `providers/`, creates `lm-studio-local` from legacy `config.json` `serverUrl` or `http://localhost:1234`.
 
-Client: [`src/providers/`](../src/providers/) (`store.ts`, `resolve.ts`, `fetch-models.ts`, `fetch-chat.ts`). Models/load/unload always use `/api/providers/:id/...`; chat uses [`postChatCompletions`](../src/providers/fetch-chat.ts) → `/api/generations` (shim) or [`src/api/generations.ts`](../src/api/generations.ts) (main tool loop).
+Client: [`src/providers/`](../src/providers/) (`store.ts`, `resolve.ts`, `fetch-models.ts`, `model-capabilities.ts`, `fetch-chat.ts`). Models/load/unload always use `/api/providers/:id/...`; chat uses [`postChatCompletions`](../src/providers/fetch-chat.ts) → `/api/generations` (shim) or [`src/api/generations.ts`](../src/api/generations.ts) (main tool loop).
 
 **Vite-only (`npm run dev`):** No `/api/providers`; client synthesizes a fallback provider id. Settings → **Providers** shows an offline hint and hides the add form until `npm start` is running.
 

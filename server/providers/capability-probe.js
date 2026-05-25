@@ -1,18 +1,23 @@
 /**
- * Probe upstream chat/completions for structured output (response_format) support.
- * Persists results to ~/.minnow/providers/<id>/capabilities.json.
+ * Provider capability probes: per-model matrix (MIN-48) + structured output (#10).
+ * Persists to ~/.minnow/providers/<id>/capabilities.json via capabilities-store.
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { getMinnowHome } from '../config/home.js';
 import { getProviderRuntime } from './store.js';
+import { proxyModels } from './proxy.js';
+import {
+  capabilitiesFileExists,
+  mergeCapabilities,
+  readCapabilities,
+  writeCapabilities,
+} from './capabilities-store.js';
 import { validateProviderId } from './validate.js';
 
-const PROBE_TIMEOUT_MS = 30_000;
-const CAPABILITIES_SCHEMA_VERSION = 1;
+const MAX_MODELS_PER_PROBE = 8;
+const MODEL_PROBE_TIMEOUT_MS = 25_000;
+const STRUCTURED_PROBE_TIMEOUT_MS = 30_000;
 
-/** Minimal JSON Schema used for capability probes. */
+/** Minimal JSON Schema for structured-output probe. */
 const PROBE_SCHEMA = {
   type: 'object',
   properties: {
@@ -32,73 +37,80 @@ const DUMMY_TOOL = {
 };
 
 /**
- * @param {string} id
- * @returns {string}
+ * @param {string[]} modelIds
+ * @param {string | undefined} selectedModelId
+ * @param {Array<{ id: string, state?: string }>} catalog
  */
-function capabilitiesPath(id) {
-  validateProviderId(id);
-  return path.join(getMinnowHome(), 'providers', id, 'capabilities.json');
+export function prioritizeModelIds(modelIds, selectedModelId, catalog = []) {
+  const unique = [...new Set(modelIds.filter((id) => typeof id === 'string' && id.trim()))];
+  const loaded = new Set(
+    catalog.filter((m) => m.state === 'loaded').map((m) => m.id),
+  );
+
+  const score = (id) => {
+    if (selectedModelId && id === selectedModelId) return 0;
+    if (loaded.has(id)) return 1;
+    return 2;
+  };
+
+  return unique
+    .sort((a, b) => {
+      const sa = score(a);
+      const sb = score(b);
+      if (sa !== sb) return sa - sb;
+      return a.localeCompare(b);
+    })
+    .slice(0, MAX_MODELS_PER_PROBE);
 }
 
 /**
- * @param {unknown} raw
- * @param {string} providerId
+ * @param {object} row
  */
-function normalizeCapabilities(raw, providerId) {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const row = /** @type {Record<string, unknown>} */ (raw);
+function ingestFromCatalog(row) {
+  const isVlm = row.type === 'vlm';
+  const contextLength =
+    typeof row.loaded_context_length === 'number' && row.loaded_context_length > 0
+      ? row.loaded_context_length
+      : typeof row.max_context_length === 'number' && row.max_context_length > 0
+        ? row.max_context_length
+        : null;
+
+  const loadState =
+    typeof row.state === 'string' && row.state.trim() ? row.state.trim() : 'unknown';
+
   return {
-    schemaVersion:
-      typeof row.schemaVersion === 'number' ? row.schemaVersion : CAPABILITIES_SCHEMA_VERSION,
-    probedAt: typeof row.probedAt === 'string' ? row.probedAt : '',
-    providerId: typeof row.providerId === 'string' ? row.providerId : providerId,
-    structuredOutput: row.structuredOutput === true,
-    structuredOutputWithTools: row.structuredOutputWithTools === true,
-    structuredOutputStreaming: row.structuredOutputStreaming === true,
-    probeError: typeof row.probeError === 'string' ? row.probeError : null,
-    models:
-      row.models && typeof row.models === 'object'
-        ? /** @type {Record<string, unknown>} */ (row.models)
-        : undefined,
+    vision: isVlm ? true : false,
+    tools: null,
+    streaming: null,
+    grammar: null,
+    reasoning: null,
+    contextLength,
+    loadState,
+    sources: {
+      vision: 'catalog',
+      contextLength: contextLength !== null ? 'catalog' : undefined,
+      loadState: 'catalog',
+    },
+    probeErrors: {},
   };
 }
 
 /**
- * @param {string} id
+ * @param {string} url
+ * @param {Record<string, string>} headers
+ * @param {object} body
+ * @param {number} timeoutMs
+ * @param {AbortSignal | undefined} signal
  */
-export async function readProviderCapabilitiesFile(id) {
-  try {
-    const raw = await fs.readFile(capabilitiesPath(id), 'utf8');
-    return normalizeCapabilities(JSON.parse(raw), id);
-  } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') {
-      return null;
-    }
-    throw err;
-  }
-}
-
-/**
- * @param {string} id
- * @param {object} caps
- */
-async function writeProviderCapabilitiesFile(id, caps) {
-  const file = capabilitiesPath(id);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeFile(tmp, `${JSON.stringify(caps, null, 2)}\n`, 'utf8');
-  await fs.rename(tmp, file);
-}
-
-/**
- * @param {{ url: string, headers: Record<string, string>, body: object }} params
- * @returns {Promise<{ ok: boolean, status: number, error?: string }>}
- */
-async function postProbeCompletion({ url, headers, body }) {
+async function postChatCompletion(url, headers, body, timeoutMs, signal) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const linked = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', linked, { once: true });
+  }
+
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -110,24 +122,217 @@ async function postProbeCompletion({ url, headers, body }) {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    if (res.ok) {
-      return { ok: true, status: res.status };
-    }
     const text = await res.text();
-    return {
-      ok: false,
-      status: res.status,
-      error: text.slice(0, 300),
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, status: 0, error: message };
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      /* non-json */
+    }
+    return { ok: res.ok, status: res.status, json, text };
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', linked);
   }
 }
 
 /**
+ * @param {{ url: string, headers: Record<string, string>, body: object }} params
+ */
+async function postStructuredProbeCompletion({ url, headers, body }) {
+  const result = await postChatCompletion(
+    url,
+    headers,
+    body,
+    STRUCTURED_PROBE_TIMEOUT_MS,
+    undefined,
+  );
+  if (result.ok) {
+    return { ok: true, status: result.status };
+  }
+  return {
+    ok: false,
+    status: result.status,
+    error: result.text?.slice(0, 300) || `HTTP ${result.status}`,
+  };
+}
+
+/**
+ * @param {unknown} json
+ */
+function responseHasToolCalls(json) {
+  if (!json || typeof json !== 'object') return false;
+  const choices = /** @type {{ choices?: unknown[] }} */ (json).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  const first = choices[0];
+  if (!first || typeof first !== 'object') return false;
+  const message = /** @type {{ message?: { tool_calls?: unknown[] } }} */ (first).message;
+  if (message?.tool_calls && message.tool_calls.length > 0) return true;
+  const finish = /** @type {{ finish_reason?: string }} */ (first).finish_reason;
+  return finish === 'tool_calls';
+}
+
+/**
+ * @param {object} cap
+ * @param {{ ok: boolean, json: unknown }} result
+ */
+function applyStreamingProbe(cap, result) {
+  if (result.ok) {
+    cap.streaming = true;
+    cap.sources = { ...cap.sources, streaming: 'probe' };
+  } else {
+    cap.streaming = false;
+    cap.sources = { ...cap.sources, streaming: 'probe' };
+    cap.probeErrors = { ...cap.probeErrors, streaming: 'chat probe failed' };
+  }
+}
+
+/**
+ * @param {object} cap
+ * @param {{ ok: boolean, json: unknown }} result
+ */
+function applyToolsProbe(cap, result) {
+  const hasTools = result.ok && responseHasToolCalls(result.json);
+  cap.tools = hasTools;
+  cap.sources = { ...cap.sources, tools: 'probe' };
+  if (!result.ok) {
+    cap.probeErrors = { ...cap.probeErrors, tools: 'tool probe failed' };
+  }
+}
+
+/**
+ * @param {object} modelRow
+ * @param {{ profile: object, headers: Record<string, string>, paths: object }} runtime
+ * @param {AbortSignal | undefined} signal
+ */
+async function probeModelCapabilities(modelRow, runtime, signal) {
+  const cap = ingestFromCatalog(modelRow);
+  const modelId = modelRow.id;
+  const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+
+  const chatBody = {
+    model: modelId,
+    messages: [{ role: 'user', content: 'ping' }],
+    max_tokens: 1,
+    stream: false,
+  };
+
+  const chatResult = await postChatCompletion(
+    url,
+    runtime.headers,
+    chatBody,
+    MODEL_PROBE_TIMEOUT_MS,
+    signal,
+  );
+  applyStreamingProbe(cap, chatResult);
+
+  const toolBody = {
+    ...chatBody,
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'probe_noop',
+          description: 'Capability probe noop',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ],
+    tool_choice: 'auto',
+  };
+
+  const toolResult = await postChatCompletion(
+    url,
+    runtime.headers,
+    toolBody,
+    MODEL_PROBE_TIMEOUT_MS,
+    signal,
+  );
+  applyToolsProbe(cap, toolResult);
+
+  return cap;
+}
+
+/**
+ * Per-model capability matrix probe (vision, tools, streaming, context).
+ *
+ * @param {string} providerId
+ * @param {{ modelIds?: string[], selectedModelId?: string, signal?: AbortSignal }} [options]
+ */
+export async function runCapabilityProbe(providerId, options = {}) {
+  validateProviderId(providerId);
+  const runtime = await getProviderRuntime(providerId);
+  if (runtime.profile.enabled === false) {
+    throw new Error('Provider is disabled');
+  }
+
+  const modelsResponse = await proxyModels(providerId);
+  const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
+
+  const allIds = options.modelIds?.length
+    ? options.modelIds
+    : catalog.map((m) => m.id);
+
+  const prioritized = prioritizeModelIds(
+    allIds,
+    options.selectedModelId,
+    catalog,
+  );
+
+  const catalogById = new Map(catalog.map((m) => [m.id, m]));
+  const patches = {};
+  const probedAt = new Date().toISOString();
+
+  for (const modelId of prioritized) {
+    if (options.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const row = catalogById.get(modelId) || { id: modelId, type: 'llm' };
+    try {
+      patches[modelId] = await probeModelCapabilities(row, runtime, options.signal);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
+      const base = ingestFromCatalog(row);
+      base.probeErrors = {
+        ...base.probeErrors,
+        probe: err instanceof Error ? err.message : String(err),
+      };
+      patches[modelId] = base;
+    }
+  }
+
+  for (const row of catalog) {
+    if (patches[row.id]) continue;
+    patches[row.id] = ingestFromCatalog(row);
+  }
+
+  return mergeCapabilities(providerId, patches, {
+    probedAt,
+    apiKind: runtime.profile.apiKind,
+  });
+}
+
+/**
+ * Read capabilities for structured-output UI (#10). Returns null when never probed.
+ *
+ * @param {string} id
+ */
+export async function readProviderCapabilitiesFile(id) {
+  if (!(await capabilitiesFileExists(id))) {
+    return null;
+  }
+  const file = await readCapabilities(id);
+  if (!file.probedAt?.trim() && !file.structuredOutput && !file.structuredOutputWithTools) {
+    return null;
+  }
+  return file;
+}
+
+/**
+ * Structured-output probe (response_format / json_schema). Merges into capabilities.json.
+ *
  * @param {string} id
  * @param {{ modelId?: string }} [options]
  */
@@ -150,7 +355,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     },
   };
 
-  const structuredOnly = await postProbeCompletion({
+  const structuredOnly = await postStructuredProbeCompletion({
     url,
     headers: runtime.headers,
     body: {
@@ -163,7 +368,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     },
   });
 
-  const withTools = await postProbeCompletion({
+  const withTools = await postStructuredProbeCompletion({
     url,
     headers: runtime.headers,
     body: {
@@ -178,7 +383,7 @@ export async function probeProviderCapabilities(id, options = {}) {
     },
   });
 
-  const streaming = await postProbeCompletion({
+  const streaming = await postStructuredProbeCompletion({
     url,
     headers: runtime.headers,
     body: {
@@ -198,26 +403,26 @@ export async function probeProviderCapabilities(id, options = {}) {
       ? structuredOnly.error || withTools.error || `HTTP ${structuredOnly.status}`
       : null;
 
-  /** @type {Record<string, unknown>} */
-  const caps = {
-    schemaVersion: CAPABILITIES_SCHEMA_VERSION,
-    probedAt: new Date().toISOString(),
+  const existing = await readCapabilities(id);
+  const models = { ...existing.models };
+
+  if (modelId) {
+    models[modelId] = {
+      ...(models[modelId] || {}),
+      structuredOutput: withTools.ok || structuredOnly.ok,
+      denyReason: null,
+    };
+  }
+
+  return writeCapabilities(id, {
+    ...existing,
     providerId: id,
+    probedAt: new Date().toISOString(),
+    apiKind: runtime.profile.apiKind,
     structuredOutput: structuredOnly.ok,
     structuredOutputWithTools: withTools.ok,
     structuredOutputStreaming: streaming.ok,
     probeError,
-  };
-
-  if (modelId) {
-    caps.models = {
-      [modelId]: {
-        structuredOutput: withTools.ok || structuredOnly.ok,
-        denyReason: null,
-      },
-    };
-  }
-
-  await writeProviderCapabilitiesFile(id, caps);
-  return caps;
+    models,
+  });
 }

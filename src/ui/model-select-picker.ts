@@ -3,6 +3,11 @@
  */
 
 import { modelCache } from '../app-state';
+import {
+  formatCapabilityBadges,
+  formatCapabilityTooltip,
+} from '../providers/capability-badges';
+import { getLastCapabilitiesProbedAt } from '../providers/model-capabilities';
 import { resolveModelState } from './model-state-dot';
 
 let pickerBound = false;
@@ -90,8 +95,12 @@ export function syncModelSelectPicker(): void {
     li.setAttribute('role', 'option');
     li.dataset.value = id;
 
-    const optionTitle = opt.title?.trim() || id;
-    li.title = optionTitle;
+    const caps = cached?.capabilities;
+    const probedAt = getLastCapabilitiesProbedAt();
+    const rowTitle = caps
+      ? formatCapabilityTooltip(id, caps, probedAt)
+      : opt.title?.trim() || id;
+    li.title = rowTitle;
 
     const dot = document.createElement('span');
     dot.className = 'model-load-dot';
@@ -101,10 +110,26 @@ export function syncModelSelectPicker(): void {
     const label = document.createElement('span');
     label.className = 'model-select-option-label';
     label.textContent = opt.text;
-    label.title = optionTitle;
+    label.title = rowTitle;
 
-    li.appendChild(dot);
-    li.appendChild(label);
+    const badges = formatCapabilityBadges(caps);
+    if (badges.length > 0) {
+      const badgeSpan = document.createElement('span');
+      badgeSpan.className = 'model-cap-badges';
+      badgeSpan.setAttribute('aria-hidden', 'true');
+      for (const text of badges) {
+        const chip = document.createElement('span');
+        chip.className = 'model-cap-badge';
+        chip.textContent = text;
+        badgeSpan.appendChild(chip);
+      }
+      li.appendChild(dot);
+      li.appendChild(label);
+      li.appendChild(badgeSpan);
+    } else {
+      li.appendChild(dot);
+      li.appendChild(label);
+    }
     li.addEventListener('mousedown', (e) => {
       e.preventDefault();
       pickModel(id);

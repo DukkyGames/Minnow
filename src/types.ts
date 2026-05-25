@@ -481,6 +481,22 @@ export interface SystemPromptSettings {
   text: string;
 }
 
+/** Provenance for a detected model capability (feature #11). */
+export type CapabilitySource = 'catalog' | 'probe' | 'assumed';
+
+/** Per-model capability flags merged from catalog and probe. */
+export interface ModelCapabilities {
+  vision: boolean | null;
+  tools: boolean | null;
+  streaming: boolean | null;
+  grammar: boolean | null;
+  reasoning: boolean | null;
+  contextLength: number | null;
+  loadState: string | null;
+  sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
+  probeErrors?: Record<string, string>;
+}
+
 /** One model row from `GET /api/v0/models` (cached in `modelCache`). */
 export interface LmModelRecord {
   id: string;
@@ -492,6 +508,8 @@ export interface LmModelRecord {
   max_context_length?: number;
   /** Allocated context for a loaded model (LM Studio UI setting). */
   loaded_context_length?: number;
+  /** Merged catalog + probe capabilities (feature #11). */
+  capabilities?: ModelCapabilities;
 }
 
 export interface LmModelsListResponse {
