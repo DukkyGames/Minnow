@@ -3,8 +3,33 @@
  */
 
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { hasNonEmptyCompletion, speedCompletionDetails } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
-import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
+import type { BenchmarkRunContext, LlmTurnTiming, SuiteResult, TestResult } from '../types.ts';
+
+/** Fields from runOneShot used to score speed tests (unit-tested without live LLM). */
+export interface SpeedCompletionOutcome {
+  text: string;
+  timing: Pick<LlmTurnTiming, 'ttftMs' | 'tokPerSec'>;
+}
+
+/** Pass/fail, details, and optional headline timing samples for one speed completion. */
+export function scoreSpeedCompletion(text: string, timing: SpeedCompletionOutcome['timing']): {
+  passed: boolean;
+  score: number;
+  details: string;
+  ttftSample: number | null;
+  tpsSample: number | null;
+} {
+  const ok = hasNonEmptyCompletion(text);
+  return {
+    passed: ok,
+    score: ok ? 1 : 0,
+    details: speedCompletionDetails(text),
+    ttftSample: ok && timing.ttftMs != null ? timing.ttftMs : null,
+    tpsSample: ok && timing.tokPerSec != null ? timing.tokPerSec : null,
+  };
+}
 
 const SHORT_PROMPT =
   'Write exactly three short sentences about local LLM inference. No preamble.';
@@ -37,19 +62,20 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
         maxTokens: 200,
       });
       const durationMs = performance.now() - t0;
-      if (out.timing.ttftMs != null) ttftSamples.push(out.timing.ttftMs);
-      if (out.timing.tokPerSec != null) tpsSamples.push(out.timing.tokPerSec);
+      const scored = scoreSpeedCompletion(out.text, out.timing);
+      if (scored.ttftSample != null) ttftSamples.push(scored.ttftSample);
+      if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
       tests.push({
         testId: `speed-short-${i + 1}`,
         suite: 'speed',
         label: `Short run ${i + 1}`,
-        passed: true,
+        passed: scored.passed,
         skipped: false,
         durationMs,
         ttftMs: out.timing.ttftMs ?? undefined,
         tokPerSec: out.timing.tokPerSec ?? undefined,
-        score: 1,
-        details: `${out.text.length} chars`,
+        score: scored.score,
+        details: scored.details,
       });
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
@@ -83,16 +109,18 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
       maxTokens: 600,
     });
     const durationMs = performance.now() - tLong;
-    if (out.timing.tokPerSec != null) tpsSamples.push(out.timing.tokPerSec);
+    const scored = scoreSpeedCompletion(out.text, out.timing);
+    if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
     tests.push({
       testId: 'speed-long-1',
       suite: 'speed',
       label: 'Sustained throughput',
-      passed: true,
+      passed: scored.passed,
       skipped: false,
       durationMs,
       tokPerSec: out.timing.tokPerSec ?? undefined,
-      score: 1,
+      score: scored.score,
+      details: scored.details,
     });
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);

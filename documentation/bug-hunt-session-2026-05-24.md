@@ -21,7 +21,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 |----|----------|------|-------|--------|
 | BUG-001 | Major | Bugs tracker / navigation | All bugs view opens then immediately closes on first click | Open |
 | BUG-002 | Major | Benchmark (`#/benchmark`) | Streaming completion test fails for every model | Open |
-| BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Open |
+| BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Fixed (MIN-63) |
 | BUG-004 | Major | Benchmark — capability suite | Multimodal capability test not run for multimodal models | Open |
 | BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Fixed — [MIN-61](https://linear.app/minnowai/issue/MIN-61/bug-005-benchmark-stop-does-not-cancel) |
 | BUG-006 | Major | Benchmark — tools suite | Run hangs or stops on tools suite | Verified — [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite) |
@@ -32,7 +32,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Verified — [plan](plans/Bug%20Fixes/BUG-011-fetch-web-content.md) |
 | BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Verified — [MIN-72](https://linear.app/minnowai/issue/MIN-72/bug-015-rag-web-content-broken) |
 | BUG-016 | Major | Plan mode / streaming | Reply fails: ReadableStream JSON parse error on `close` | Open |
-| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Verified — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
+| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Fixed — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
 | BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
 | BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Fixed — [MIN-60](https://linear.app/minnowai/issue/MIN-60) |
@@ -119,11 +119,13 @@ Streaming completion passes when the active provider returns streamed text (non-
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Speed** suite (`src/benchmark/suites/speed.ts`), short runs `speed-short-1`…`3` |
-| **Status** | Open |
+| **Status** | Fixed (MIN-63, 2026-05-25) |
 
 **Summary**
 
 Speed benchmark cards display **0 chars** in the result details, yet the test is marked **passed**.
+
+**Resolution (MIN-63):** `src/benchmark/suites/speed.ts` gates `passed`/`score` on non-empty completion text via `scoreSpeedCompletion` + `completion-valid.ts`; empty runs use details `empty completion (0 chars)` and do not contribute headline timing samples. Tests: `test/benchmark/speed-suite.test.mts`.
 
 **Steps to reproduce**
 
@@ -600,7 +602,7 @@ Intermittent failure; stream controller `close` throws due to **invalid/extra JS
 |-------|-------|
 | **Severity** | Minor |
 | **Area** | Top bar **model picker** (`#modelSelect`, `.model-wrap` / combobox) |
-| **Status** | Verified (open) — Linear [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
+| **Status** | Fixed — Linear [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | **Plan** | `documentation/plans/Bug Fixes/BUG-017-model-picker-truncation.md` |
 
 **Summary**
@@ -630,7 +632,7 @@ Label **truncated** with ellipsis; full name not readable without opening menu (
 - **Confirmed in code:** `.model-select-trigger-text` and `.model-select-option-label` use `text-overflow: ellipsis`; `.model-wrap` capped at 340px (380px ≥900px). Label pipeline (`formatModelLabel` → `syncModelSelectPicker`) puts full `optionText` in DOM; clipping is CSS-only.
 - **Tooltips OK:** `title` on trigger and menu rows carries canonical id + quant + load (not a substitute for visible text per report).
 - **Not a duplicate of MIN-7:** that issue fixed hover contrast; ellipsis unchanged.
-- **Fix:** follow approved plan (menu non-ellipsis first, then trigger width).
+- **Fix (2026-05-25):** Menu labels no longer ellipsize; menu grows to `max-content` (capped `min(90vw, 32rem)`); `.model-wrap` max-width 420px; trigger ellipsis retained; `title` tooltips unchanged.
 
 ### BUG-018 — Rename file does not work
 

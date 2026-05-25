@@ -2,7 +2,7 @@
 name: BUG-017 — Model picker truncation
 overview: Fix top-bar model combobox so long model names are readable in the closed trigger and in the open menu, without breaking topbar layout on narrow viewports.
 source: documentation/bug-hunt-session-2026-05-24.md (BUG-017)
-status: verified
+status: shipped
 severity: minor
 todos:
   - id: repro-baseline
@@ -10,25 +10,25 @@ todos:
     status: completed
   - id: product-decision
     content: Confirm chosen UX (recommended hybrid below) — trigger readability + full labels in open menu
-    status: pending
+    status: completed
   - id: css-trigger
     content: Adjust trigger label CSS and/or .model-wrap width flex so closed state shows more of formatModelLabel optionText
-    status: pending
+    status: completed
   - id: css-menu
     content: Remove or relax ellipsis on .model-select-option-label; ensure menu min-width shows full row text
-    status: pending
+    status: completed
   - id: layout-topbar
     content: Reconcile .model-wrap max-width (340px / 380px) with .topbar-end flex so picker can grow without crowding status pill
-    status: pending
+    status: completed
   - id: a11y-tooltips
     content: Verify title tooltips on trigger and rows remain full canonical id + quant/load after CSS changes
-    status: pending
+    status: completed
   - id: tests
     content: Extend model-select-picker / topbar tests for long labels and menu non-truncation expectations
-    status: pending
+    status: completed
   - id: docs-context
     content: Update documentation/context.md top-bar model row bullet when shipped; mark BUG-017 resolved in bug-hunt doc
-    status: pending
+    status: completed
 isProject: false
 ---
 

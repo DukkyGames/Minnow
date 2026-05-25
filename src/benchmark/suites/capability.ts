@@ -5,6 +5,7 @@
 import { getActiveProvider } from '../../providers/store';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { hasNonEmptyCompletion } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
@@ -92,7 +93,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       result(
         'cap-stream',
         'Streaming completion',
-        stream.text.length > 0,
+        hasNonEmptyCompletion(stream.text),
         performance.now() - t,
         stream.text.slice(0, 80),
       ),

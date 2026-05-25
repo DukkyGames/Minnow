@@ -46,7 +46,7 @@ isProject: false
 **Tracker:** [documentation/bug-hunt-session-2026-05-24.md](../../bug-hunt-session-2026-05-24.md) — BUG-003  
 **Severity:** Major  
 **Area:** Benchmark — **Speed** suite (`src/benchmark/suites/speed.ts`), tests `speed-short-1` … `speed-short-3`, `speed-long-1`  
-**Status:** Open (plan only — no implementation in this document)
+**Status:** Fixed (MIN-63, 2026-05-25)
 
 ---
 
