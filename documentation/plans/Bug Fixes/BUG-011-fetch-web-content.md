@@ -2,7 +2,7 @@
 name: BUG-011 — Fetch web content fails
 overview: Diagnose and fix `fetch_web_content` returning generic `fetch failed` errors. Primary suspect is browser-side `fetch()` CORS/network failure; fix should mirror the `web_search` → `web_search_ddg` server fallback pattern where appropriate.
 source: documentation/bug-hunt-session-2026-05-24.md § BUG-011
-status: verified (plan only — no fix shipped)
+status: fixed
 todos:
   - id: reproduce-matrix
     content: Reproduce with CORS-open vs CORS-closed URLs; capture full tool result string and DevTools Network tab
@@ -15,22 +15,22 @@ todos:
     status: completed
   - id: server-fetch-handler
     content: Add server-side URL fetch handler (Node fetch, strip HTML, 8KB cap) aligned with fetchUrlText behavior
-    status: pending
+    status: completed
   - id: client-fallback-routing
     content: Route fetch_web_content (and optionally rag_web_content) to server when isLocalServerAvailable(), like web_search → web_search_ddg
-    status: pending
+    status: completed
   - id: error-messages
     content: Improve client/server errors — HTTP status, CORS hint, npm start hint, invalid URL — avoid bare "fetch failed"
-    status: pending
+    status: completed
   - id: unit-tests
     content: Add tests for URL validation, HTML strip, truncation, and server handler success/error paths
-    status: pending
+    status: completed
   - id: manual-qa
     content: Manual QA in Research/Build with npm start — example.com, Wikipedia, and one CORS-strict origin
     status: pending
   - id: docs-update
     content: Update documentation/context.md, README troubleshooting, and close BUG-011 in bug-hunt doc when shipped
-    status: pending
+    status: completed
 isProject: false
 ---
 

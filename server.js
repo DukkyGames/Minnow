@@ -40,6 +40,10 @@ import {
 } from './server/tools/plan-write-guard.js';
 import { toolSaveMemory } from './server/tools/memory-tools.js';
 import { toolReadDocument } from './server/tools/read-document.js';
+import {
+  toolFetchWebContent,
+  toolRagWebContent,
+} from './server/tools/fetch-web-content.js';
 import { createMemoryMiddleware } from './server/memory/middleware.js';
 import { initMemoryApi } from './server/memory/routes.js';
 import { createLspMiddleware, initLspConfig } from './server/lsp/middleware.js';
@@ -650,6 +654,8 @@ async function toolSendNotification(args) {
 /** Map tool name -> handler (serverRequired tools + web_search_ddg, send_notification). */
 const SERVER_TOOL_HANDLERS = {
   web_search_ddg: toolWebSearchDdg,
+  fetch_web_content: toolFetchWebContent,
+  rag_web_content: toolRagWebContent,
   list_directory: toolListDirectory,
   read_file: toolReadFile,
   read_file_range: toolReadFileRange,

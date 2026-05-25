@@ -242,7 +242,7 @@ Override home for tests: `MINNOW_HOME=<temp-dir>`.
 | “Server tools need npm start” | Stop `npm run dev`; run `npm start` instead. |
 | Tool can’t read a file outside the repo | Expected unless `TOOLS_ALLOW_ALL_PATHS=1`. |
 | PDF attachment fails | Run `npm start`; install `pdf-parse` if prompted. |
-| CORS / fetch errors on web tools | Use CDP `browser_navigate` + `browser_snapshot`, or server file tools. |
+| CORS / fetch errors on web tools | Run `npm start` so **Fetch page** uses server-side HTTP; for login/SPA pages use CDP `browser_navigate` + `browser_snapshot`. |
 | CDP browser tools fail | Chrome with `--remote-debugging-port=9222`? `npm start`? Tools enabled? |
 | Context ring shows no limit | Model may not report `context_length`; check loaded model in LM Studio. |
 | Port already in use | Set `PORT` and open the printed URL. |
