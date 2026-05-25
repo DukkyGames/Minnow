@@ -20,7 +20,6 @@ import {
   catalogCapabilitiesFromRow,
   fetchProviderCapabilities,
   mergeCapabilitiesIntoModelCache,
-  runCapabilityProbeForProvider,
 } from '../providers/model-capabilities';
 import { syncModelSelectPicker } from '../ui/model-select-picker';
 import { renderSidebar } from '../ui/sidebar';
@@ -227,7 +226,6 @@ export async function fetchModels(): Promise<void> {
   sel.innerHTML = '<option value="">Loading models…</option>';
   syncModelSelectPicker();
   setStatus('spin', 'Loading models…');
-  const setProbingStatus = () => setStatus('spin', 'Probing capabilities…');
   updateModelLoadUnloadButtons();
 
   let providerLabel = 'provider';
@@ -278,17 +276,6 @@ export async function fetchModels(): Promise<void> {
     renderSidebar();
     scheduleSaveSessions();
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
-
-    setProbingStatus();
-    void runCapabilityProbeForProvider(provider.id, {
-      modelIds: models.map((m) => m.id),
-      selectedModelId: sel.value,
-    }).then(() => {
-      setReadyStatus();
-      syncModelSelectPicker();
-      showCachedModelInfo();
-      void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
-    });
   } catch (err) {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;

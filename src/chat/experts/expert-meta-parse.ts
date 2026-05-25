@@ -30,6 +30,17 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Strip YAML single/double quotes from scalar values (matches parse-front-matter). */
+function unquoteYamlScalar(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 /** Re-parse front matter record for expert-only keys not in PromptFrontMatter. */
 function parseExtendedRecord(raw: string): Record<string, unknown> {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -61,7 +72,7 @@ function parseExtendedRecord(raw: string): Record<string, unknown> {
     if (value === 'true') record[key] = true;
     else if (value === 'false') record[key] = false;
     else if (/^\d+$/.test(value)) record[key] = Number.parseInt(value, 10);
-    else record[key] = value;
+    else record[key] = unquoteYamlScalar(value);
   }
   return record;
 }

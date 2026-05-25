@@ -100,10 +100,12 @@ body {
   scrollbar-gutter: stable;
 }
 
-/* Hide settings page until its lazy CSS chunk loads (settings-page.css sets display:none too,
-   but that chunk loads ~1s after markAppReady — this prevents FOUC during that window). */
+/* Hide full-page routes until lazy CSS loads (each *-page.css also sets display:none;
+   this prevents FOUC between markAppReady and initApp dynamic imports). */
 .settings-page { display: none; }
 .benchmark-page { display: none; }
+.global-bugs-page { display: none; }
+.expert-lab-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -5,7 +5,7 @@
 import '../styles/expert-lab-page.css';
 
 import { getExpert, listExperts } from '../chat/experts/registry';
-import type { ExpertAccent, ExpertMeta, ExpertRecord } from '../chat/experts/types';
+import type { ExpertAccent, ExpertMeta } from '../chat/experts/types';
 import { loadExpertsConfig } from '../config/experts-config';
 import { runChatTurn } from '../tools/loop';
 import {
@@ -84,11 +84,6 @@ function setStep(step: ExpertLabStep): void {
   currentStep = step;
   const root = getRoot();
   if (root) root.dataset.step = step;
-}
-
-function getSelectedExpert(): ExpertRecord | null {
-  if (!selectedExpertId) return null;
-  return getExpert(selectedExpertId);
 }
 
 function setPhaseStatus(phaseId: PhaseId, status: PhaseStatus): void {
@@ -259,11 +254,8 @@ function syncBriefFromInput(): void {
 
 function renderRunUnderstanding(): void {
   const preview = document.getElementById('expertLabRequestPreview');
-  const expert = getSelectedExpert();
   if (!preview) return;
   preview.textContent = briefText;
-  const expertName = document.getElementById('expertLabRunExpertName');
-  if (expertName && expert) expertName.textContent = expert.meta.label;
 }
 
 async function startExpertLabRun(): Promise<void> {

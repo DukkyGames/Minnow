@@ -420,10 +420,17 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   appendPricingFields(form, provider.pricing);
 
   const probeRow = el('div', 'settings-providers-form-actions');
-  const probeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
+  const probeBtn = el('button', 'settings-inline-btn', 'Probe capabilities');
   probeBtn.type = 'button';
   probeBtn.dataset.providerProbe = provider.id;
   probeRow.append(probeBtn);
+  form.append(
+    el(
+      'p',
+      'field-hint',
+      'Runs model capability checks (vision, tools, streaming) and structured-output detection. Not run automatically on refresh.',
+    ),
+  );
   form.append(probeRow);
 
   const err = el('p', 'settings-providers-form-error hidden');
@@ -630,10 +637,6 @@ function bindProvidersAddForm(): void {
       setStatus('ok', `Added provider ${result.provider.label}`);
       await loadProviderSelect();
       await renderProvidersSettingsSection();
-
-      void import('../providers/model-capabilities').then(({ runCapabilityProbeForProvider }) =>
-        runCapabilityProbeForProvider(id),
-      );
     })();
   });
 }
@@ -763,10 +766,16 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     if (probeId) {
       void (async () => {
         try {
-          setStatus('spin', `Probing structured output for ${probeId}…`);
+          setStatus('spin', `Probing capabilities for ${probeId}…`);
+          const { runCapabilityProbeForProvider } = await import(
+            '../providers/model-capabilities'
+          );
+          await runCapabilityProbeForProvider(probeId);
           await probeProviderCapabilities(probeId);
-          setStatus('ok', `Probe complete for ${probeId}`);
+          setStatus('ok', `Capabilities probed for ${probeId}`);
           await renderProvidersSettingsSection();
+          const { syncModelSelectPicker } = await import('./model-select-picker');
+          syncModelSelectPicker();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setStatus('err', msg);

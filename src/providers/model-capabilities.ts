@@ -203,7 +203,7 @@ export function prioritizeModelIdsForProbe(
     .slice(0, 8);
 }
 
-/** Run probe after model list refresh (background, debounced via abort). */
+/** Run capability matrix probe (Settings → Providers button; optional model id filter). */
 export async function runCapabilityProbeForProvider(
   providerId: string,
   options: { modelIds?: string[]; selectedModelId?: string } = {},
@@ -215,10 +215,10 @@ export async function runCapabilityProbeForProvider(
   probeAbort = controller;
 
   try {
-    const ids =
-      options.modelIds ??
-      [...modelCache.keys()];
-    const prioritized = prioritizeModelIdsForProbe(ids, options.selectedModelId);
+    const prioritized =
+      options.modelIds !== undefined
+        ? prioritizeModelIdsForProbe(options.modelIds, options.selectedModelId)
+        : undefined;
     const file = await runCapabilityProbe(providerId, {
       modelIds: prioritized,
       selectedModelId: options.selectedModelId,
@@ -230,7 +230,7 @@ export async function runCapabilityProbeForProvider(
   } catch (err) {
     const e = err as { name?: string };
     if (e?.name === 'AbortError') return;
-    console.warn('[capabilities] probe failed:', err);
+    throw err;
   } finally {
     if (probeAbort === controller) {
       probeAbort = null;
