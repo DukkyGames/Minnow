@@ -12,6 +12,7 @@ import {
   getWorkAgentById,
   loadWorkAgentRegistry,
   patchWorkAgentOverride,
+  readBuiltinWorkAgentPrompt,
   readWorkAgentPrompt,
   writeWorkAgentPromptOverride,
 } from './registry.js';
@@ -125,6 +126,7 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
 
       const params = new URLSearchParams(search);
       const profile = params.get('profile') === 'lite' ? 'lite' : 'full';
+      const baselineBuiltin = params.get('baseline') === 'builtin';
 
       if (req.method === 'GET') {
         const agent = await getWorkAgentById(PROJECT_ROOT, agentId);
@@ -132,7 +134,9 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
           sendJson(res, 404, { error: 'Work agent not found' });
           return true;
         }
-        const result = await readWorkAgentPrompt(PROJECT_ROOT, agentId, profile);
+        const result = baselineBuiltin
+          ? await readBuiltinWorkAgentPrompt(PROJECT_ROOT, agentId, profile)
+          : await readWorkAgentPrompt(PROJECT_ROOT, agentId, profile);
         sendJson(res, 200, result);
         return true;
       }
