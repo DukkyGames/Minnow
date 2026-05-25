@@ -320,7 +320,12 @@ function buildVlmUserApiContent(
 
 function isVlmModel(modelId: string | undefined): boolean {
   if (!modelId) return false;
-  return modelCache.get(modelId)?.type === 'vlm';
+  const row = modelCache.get(modelId);
+  if (!row) return false;
+  const vision = row.capabilities?.vision;
+  if (vision === true) return true;
+  if (vision === false) return false;
+  return row.type === 'vlm';
 }
 
 /** Options for {@link runChatTurn} (composer send or history resend). */

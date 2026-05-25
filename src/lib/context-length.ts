@@ -5,7 +5,12 @@ export function contextLengthFromModelRow(row: {
   state?: string;
   loaded_context_length?: number;
   max_context_length?: number;
+  capabilities?: { contextLength?: number | null };
 }): number | undefined {
+  const fromCaps = row.capabilities?.contextLength;
+  if (typeof fromCaps === 'number' && Number.isFinite(fromCaps) && fromCaps > 0) {
+    return fromCaps;
+  }
   if (isModelLoaded(row.state)) {
     const loaded = row.loaded_context_length;
     if (typeof loaded === 'number' && Number.isFinite(loaded) && loaded > 0) {

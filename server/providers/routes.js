@@ -12,6 +12,8 @@ import {
   updateProvider,
   updateProviderSecrets,
 } from './store.js';
+import { readCapabilities } from './capabilities-store.js';
+import { runCapabilityProbe } from './capability-probe.js';
 import { proxyModelLoad, proxyModelUnload, proxyModels } from './proxy.js';
 import { isSafeProviderPathSegment } from './validate.js';
 
@@ -196,6 +198,69 @@ export async function handleProviderRequest(req, res, pathname) {
         return true;
       }
       sendJson(res, 200, await proxyModels(id));
+      return true;
+    }
+
+    const capabilitiesMatch = pathname.match(
+      /^\/api\/providers\/([^/]+)\/capabilities$/,
+    );
+    if (capabilitiesMatch && req.method === 'GET') {
+      const id = capabilitiesMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      try {
+        await getProvider(id);
+      } catch {
+        sendJson(res, 404, { error: 'Provider not found' });
+        return true;
+      }
+      sendJson(res, 200, await readCapabilities(id));
+      return true;
+    }
+
+    const capabilitiesProbeMatch = pathname.match(
+      /^\/api\/providers\/([^/]+)\/capabilities\/probe$/,
+    );
+    if (capabilitiesProbeMatch && req.method === 'POST') {
+      const id = capabilitiesProbeMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      try {
+        await getProvider(id);
+      } catch {
+        sendJson(res, 404, { error: 'Provider not found' });
+        return true;
+      }
+      let body = {};
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        sendJson(res, 400, { error: 'Invalid JSON body' });
+        return true;
+      }
+      const modelIds = Array.isArray(body.modelIds)
+        ? body.modelIds.filter((m) => typeof m === 'string' && m.trim())
+        : undefined;
+      const selectedModelId =
+        typeof body.selectedModelId === 'string' ? body.selectedModelId : undefined;
+      try {
+        const result = await runCapabilityProbe(id, {
+          modelIds,
+          selectedModelId,
+        });
+        sendJson(res, 200, result);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('disabled')) {
+          sendJson(res, 400, { error: message });
+          return true;
+        }
+        throw err;
+      }
       return true;
     }
 
