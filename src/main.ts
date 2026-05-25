@@ -17,6 +17,7 @@ import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
+import './styles/settings-evals.css';
 import './styles/stats.css';
 import './styles/agent-activity-panel.css';
 import './styles/responsive.css';
@@ -110,10 +111,7 @@ import {
 import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
 import { initOrchestrateStatsLiveRefresh } from './chat/orchestrate/stats-live';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
-import {
-  bindExpertsSettingsCheckbox,
-  initExpertSelect,
-} from './ui/expert-select';
+import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { initReefBridge } from './chat/reef/index.ts';
 import {
   initOrchestratePlanSelector,
@@ -139,6 +137,8 @@ import {
   toggleFileSidebarLayout,
 } from './ui/file-layout';
 import { initWorkspaceButton } from './ui/workspace-button';
+import { getWorkspacePath } from './state/workspace.ts';
+import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import {
   initTerminalPanel,
   onTerminalServerAvailabilityChanged,
@@ -159,6 +159,9 @@ function registerWindowHandlers(): void {
   };
   window.openBenchmarkFromTopbar = () => {
     void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
+  };
+  window.openExpertLabFromTopbar = () => {
+    void import('./ui/expert-lab-page').then((m) => m.openExpertLabFromTopbar());
   };
   window.closeDrawer = closeDrawer;
   window.onDrawerKeydown = onDrawerKeydown;
@@ -220,9 +223,9 @@ export async function initApp(): Promise<void> {
   initViewModeToggle();
   initReefBridge();
   initWorkAgentDevUi();
-  await initExpertSelect();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
   initModelSelectPicker();
   await refreshSkillCatalog();
@@ -257,6 +260,8 @@ export async function initApp(): Promise<void> {
   benchmarkPage.initBenchmarkPage();
   const globalBugsPage = await import('./ui/global-bugs-page');
   globalBugsPage.initGlobalBugsPage();
+  const expertLabPage = await import('./ui/expert-lab-page');
+  expertLabPage.initExpertLabPage();
   globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();

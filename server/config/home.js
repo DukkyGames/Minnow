@@ -64,15 +64,22 @@ const SCAFFOLD_DIRS = [
   'mcp',
   'lsp',
   'prompt-configs',
+  'profiles',
   'prompts',
   'skills',
+  'tools',
+  'agent-packs',
   'backups',
   'logs/sub-agents',
   'logs/terminal',
   'screenshots',
   'reef/widgets',
   'reef/modules',
+  'reef/artifacts',
   'benchmarks',
+  'evals',
+  'evals/packs',
+  'evals/runs',
 ];
 
 const DEFAULT_META = {
@@ -86,6 +93,9 @@ const DEFAULT_META = {
   activePromptProfile: 'full',
   activePromptConfigId: null,
   activeInfoPresetId: 'general-assistant',
+  activeSetupProfileId: null,
+  workspaceProfiles: {},
+  workspaceProfileAutoApply: false,
   titles: {
     enabled: true,
     modelId: '',
@@ -205,6 +215,7 @@ function defaultToolsJson() {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
     keys: { braveApiKey: '' },
+    plugins: {},
   };
 }
 
@@ -273,6 +284,18 @@ export async function ensureMinnowLayout() {
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
     { rel: 'rules.json', data: DEFAULT_RULES },
     { rel: 'bugs/state.json', data: { version: 1, bugs: [] } },
+    {
+      rel: 'evals/config.json',
+      data: {
+        version: 1,
+        maxConcurrency: 2,
+        graderProviderId: '',
+        graderModelId: '',
+        graderTimeoutMs: 30_000,
+        saveFullTranscripts: false,
+        skipApprovalDuringEval: false,
+      },
+    },
   ];
 
   for (const { rel, data } of defaults) {

@@ -13,10 +13,12 @@ const SETTINGS_SECTION_IDS = [
   'prompting',
   'rules',
   'providers',
+  'usage',
   'model-routing',
   'modes',
   'experts',
   'work-agents',
+  'agent-packs',
   'sub-agents',
   'memory',
   'features',
@@ -24,6 +26,7 @@ const SETTINGS_SECTION_IDS = [
   'mcp',
   'lsp',
   'skills',
+  'evals',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
@@ -33,9 +36,11 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsModesBody',
   'settingsExpertsBody',
   'settingsWorkAgentsBody',
+  'settingsAgentPacksBody',
   'settingsSubAgentsBody',
   'settingsToolsBody',
   'settingsSkillsBody',
+  'settingsUsageBody',
 ];
 
 describe('settings page HTML', () => {

@@ -38,6 +38,8 @@ import type {
 import { markChatStalledForUi } from '../agents/supervisor/state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
+import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
+import { getActiveProvider } from '../providers/store';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
   setComposerStreamingMode,
@@ -89,8 +91,20 @@ export interface ChatCompletionBody {
   messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  repetition_penalty?: number;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
+  response_format?: {
+    type: 'json_schema';
+    json_schema: {
+      name: string;
+      strict?: boolean;
+      schema: Record<string, unknown>;
+    };
+  };
 }
 
 // --- Stream / stats helpers ---
@@ -467,12 +481,22 @@ export async function sendMessage(): Promise<void> {
     }
 
     if (fullText) {
+      const tEnd = performance.now();
       const meta = finalizeResponseMeta(
         streamMeta,
         t0,
-        tFirst ?? performance.now(),
-        performance.now()
+        tFirst ?? tEnd,
+        tEnd,
       );
+      const resolvedProvider = await getActiveProvider(chat.providerId);
+      void recordMainChatTurnUsage(chat, {
+        providerId: resolvedProvider.id,
+        modelId: streamMeta.model || modelId,
+        streamMeta,
+        t0,
+        tFirst,
+        tEnd,
+      });
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
       const thinkingNorm = thoughtController.getSegmentsNormalized();
       const thinkingDurationMs = thinkingTracker.finalize();

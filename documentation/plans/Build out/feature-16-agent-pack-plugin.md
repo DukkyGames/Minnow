@@ -2,7 +2,7 @@
 
 **Roadmap:** [`documentation/plans/feature-audit-roadmap.md`](../feature-audit-roadmap.md) §16  
 **Architecture context:** [`documentation/context.md`](../../context.md) — Work Agents (Step 08), Skills framework (Step 13), `~/.minnow` layout  
-**Status:** Not started (plan only)  
+**Status:** Built (MIN-52)  
 **Primary deliverables:** `agent-pack.schema.json`, `src/agents/pack-loader.ts`, `~/.minnow/agent-packs/<name>/`, settings + API merge into existing work-agent flow
 
 ---

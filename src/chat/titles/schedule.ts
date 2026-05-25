@@ -3,6 +3,9 @@
  */
 
 import { loadTitlesConfig } from '../../config/titles-meta';
+import { getActiveProvider } from '../../providers/store';
+import { hasMeasurableUsage } from '../../usage/pricing';
+import { recordChatCompletionUsage } from '../../usage/record-chat-usage';
 import {
   applyGeneratedChatTitle,
   findChatById,
@@ -120,6 +123,9 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
   const resolved = resolveTitleGenerationOptions(chatBefore, config, scheduled);
   if (!resolved) return;
 
+  const activeProvider = await getActiveProvider(resolved.providerId ?? chatBefore.providerId);
+  const providerId = activeProvider.id;
+
   const generated = await titleGenerateImpl(
     seed,
     {
@@ -132,7 +138,18 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
     createTitleProviderPort(resolved.providerId),
   );
 
-  const title = generated ?? fallbackTitleFromSeed(seed);
+  const title = generated.title ?? fallbackTitleFromSeed(seed);
+  if (hasMeasurableUsage(generated.usage)) {
+    const chatForLedger = findChatById(chatId);
+    if (chatForLedger) {
+      void recordChatCompletionUsage(chatForLedger, {
+        source: { kind: 'title' },
+        providerId,
+        modelId: resolved.modelId,
+        usage: generated.usage!,
+      });
+    }
+  }
   if (!title || signal.aborted) return;
 
   const applied = applyGeneratedChatTitle(chatId, title);

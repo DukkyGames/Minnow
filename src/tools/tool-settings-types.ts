@@ -37,6 +37,12 @@ export function createEmptyToolPermissionsConfig(): ToolPermissionsConfig {
   return { default: {}, perAgent: {}, patterns: [] };
 }
 
+/** Session tool result cache toggle (runtime-only; not persisted server-side beyond tools.json). */
+export interface ToolCacheConfig {
+  /** When false, every tool call runs fresh (default true). */
+  enabled: boolean;
+}
+
 /** Persisted tool settings: permissions (source of truth), mirrored `enabled`, and keys. */
 export interface ToolConfig {
   /** Mirrored from permissions.default: true when mode is not `off` (backward-compatible JSON). */
@@ -46,4 +52,6 @@ export interface ToolConfig {
   keys: {
     braveApiKey: string;
   };
+  /** Optional session cache for repeated read-only tool invocations. */
+  toolCache?: ToolCacheConfig;
 }

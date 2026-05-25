@@ -135,6 +135,13 @@ export function openGlobalBugs(): void {
   if (!root || !shell) return;
 
   closeSettings();
+  void import('./expert-lab-page').then((m) => {
+    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  });
+  void import('./benchmark-page').then((m) => {
+    const benchmarkRoot = document.getElementById('benchmarkView');
+    if (benchmarkRoot?.classList.contains('is-open')) m.closeBenchmark();
+  });
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');

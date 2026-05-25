@@ -117,6 +117,22 @@ export function mergeWorkAgentDefinition(
       override.providerId !== undefined ? override.providerId : builtin.providerId,
     modelId: override.modelId !== undefined ? override.modelId : builtin.modelId,
     disabled: override.disabled !== undefined ? override.disabled : builtin.disabled,
+    maxInputTokens:
+      override.maxInputTokens !== undefined
+        ? override.maxInputTokens
+        : builtin.maxInputTokens,
+    contextEnforcementPolicy:
+      override.contextEnforcementPolicy !== undefined
+        ? override.contextEnforcementPolicy
+        : builtin.contextEnforcementPolicy,
+    minRecentTurns:
+      override.minRecentTurns !== undefined
+        ? override.minRecentTurns
+        : builtin.minRecentTurns,
+    summaryReserveTokens:
+      override.summaryReserveTokens !== undefined
+        ? override.summaryReserveTokens
+        : builtin.summaryReserveTokens,
   };
 }
 
@@ -153,6 +169,14 @@ export function setUserWorkAgentOverrides(
   userOverrides = { ...overrides };
 }
 
+/** Merge one agent override row (after Settings save). */
+export function mergeUserWorkAgentOverride(
+  agentId: string,
+  patch: WorkAgentUserOverride,
+): void {
+  userOverrides[agentId] = { ...(userOverrides[agentId] ?? {}), ...patch };
+}
+
 /** Load built-in agents from Vite glob or test fixture map. */
 export function initBuiltinWorkAgentRegistry(raw: Record<string, string> = {}): void {
   builtinAgents = buildAgentsFromRaw(raw);
@@ -163,6 +187,23 @@ export function registerWorkAgentFilesFromRaw(rawMap: Record<string, string>): v
   const built = buildAgentsFromRaw(rawMap);
   for (const [id, agent] of built) {
     builtinAgents.set(id, agent);
+  }
+}
+
+/** Merge pack-sourced agents from GET /api/work-agents (npm start). */
+export function registerPackAgentsFromApi(agents: WorkAgentDefinition[]): void {
+  for (const agent of agents) {
+    if (agent.source === 'pack' && agent.id) {
+      builtinAgents.set(agent.id, { ...agent, kind: 'work-agent' });
+    }
+  }
+}
+
+/** Replace built-in registry from server snapshot (headless CLI — no Vite glob). */
+export function registerWorkAgentsFromServerSnapshot(agents: WorkAgentDefinition[]): void {
+  for (const agent of agents) {
+    if (!agent?.id) continue;
+    builtinAgents.set(agent.id, { ...agent, kind: agent.kind ?? 'work-agent' });
   }
 }
 

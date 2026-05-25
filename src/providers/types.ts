@@ -2,6 +2,8 @@
  * Provider registry types (public API — no secrets on the wire).
  */
 
+import type { ProviderPricing } from '../usage/types';
+
 export type ApiKind = 'lm-studio-v0' | 'openai-v1';
 export type AuthStyle = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderId = string;
@@ -21,10 +23,14 @@ export interface ProviderPublic {
   modelsLoadPath?: string;
   modelsUnloadPath?: string;
   customHeaders?: Record<string, string>;
+  /** Per-provider override for constrained tool calls; undefined uses global default. */
+  constrainedToolCalls?: boolean;
   createdAt?: string;
   updatedAt?: string;
   hasApiKey: boolean;
   hasBearer: boolean;
+  /** Optional per-model API pricing for usage cost estimates. */
+  pricing?: ProviderPricing;
 }
 
 export interface ProviderListResponse {

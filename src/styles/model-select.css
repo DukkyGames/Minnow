@@ -111,6 +111,23 @@
   white-space: nowrap;
 }
 
+.model-cap-badges {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-cap-badge {
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--mn-fg-muted);
+  background: color-mix(in srgb, var(--mn-fg-muted) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mn-fg-muted) 25%, transparent);
+}
+
 /* Load dot: solid when loaded, ring when unloaded / unknown */
 .model-load-dot {
   flex-shrink: 0;

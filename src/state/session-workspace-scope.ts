@@ -8,6 +8,11 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
+/** Expert Lab owns a hidden chat that must not appear in the sidebar. */
+export function isSidebarVisibleChat(chat: Chat): boolean {
+  return chat.kind !== 'expert-lab';
+}
+
 /** Sidebar / prune ordering: last committed message, else legacy `updatedAt`. */
 export function getChatLastMessageAt(chat: Chat): number {
   const last = chat.lastMessageAt;
@@ -63,14 +68,22 @@ export function getChatsForWorkspace(workspacePath: string, state: SessionState)
   const key = normalizeWorkspacePath(workspacePath);
   if (!key) return [];
   return [...state.chats]
-    .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === key)
+    .filter(
+      (c) =>
+        isSidebarVisibleChat(c) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === key,
+    )
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
 export function getUnassignedChats(state: SessionState): Chat[] {
   return [...state.chats]
-    .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === '')
+    .filter(
+      (c) =>
+        isSidebarVisibleChat(c) &&
+        normalizeWorkspacePath(c.workspacePath ?? '') === '',
+    )
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
 }
 
@@ -91,6 +104,7 @@ export function resolveActiveChatIdForWorkspace(
     const chat = state.chats.find(
       (c) =>
         c.id === remembered &&
+        isSidebarVisibleChat(c) &&
         normalizeWorkspacePath(c.workspacePath ?? '') === key,
     );
     if (chat) return chat.id;

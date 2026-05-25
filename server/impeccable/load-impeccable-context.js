@@ -76,7 +76,20 @@ export function toolLoadImpeccableContext(appRoot, workspaceRoot) {
         });
         return;
       }
-      resolve({ result: stdout.trim() || '{}' });
+
+      const trimmed = stdout.trim() || '{}';
+      try {
+        const payload = JSON.parse(trimmed);
+        if (payload.hasDesignJson === false && payload.designJsonSetupHint) {
+          resolve({
+            result: `${trimmed}\n\nNote: ${payload.designJsonSetupHint}`,
+          });
+          return;
+        }
+      } catch {
+        /* Non-JSON stdout — return as-is */
+      }
+      resolve({ result: trimmed });
     });
 
     child.on('error', (err) => {

@@ -163,7 +163,7 @@ export async function buildSubAgentSystemPrompt(
 ---
 
 You are a sub-agent (type: ${typeId}). Complete the following task. You cannot spawn other sub-agents.
-Return a concise summary for the parent when done.
+When finished, you will submit a structured JSON outcome (summary, findings, artifacts) for the parent — not a long prose report.
 
 Task:
 ${task}`;

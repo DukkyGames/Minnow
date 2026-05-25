@@ -3,7 +3,20 @@
  */
 
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
-import type { ExpertMeta, ExpertTriggers } from './types';
+import {
+  EXPERT_ACCENT_VALUES,
+  type ExpertAccent,
+  type ExpertMeta,
+  type ExpertTriggers,
+} from './types';
+
+function parseExpertAccent(value: unknown): ExpertAccent | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  return EXPERT_ACCENT_VALUES.includes(normalized as ExpertAccent)
+    ? (normalized as ExpertAccent)
+    : undefined;
+}
 
 function asStringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -15,6 +28,17 @@ function parseBoolean(value: unknown): boolean | undefined {
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
   return undefined;
+}
+
+/** Strip YAML single/double quotes from scalar values (matches parse-front-matter). */
+function unquoteYamlScalar(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 /** Re-parse front matter record for expert-only keys not in PromptFrontMatter. */
@@ -48,7 +72,7 @@ function parseExtendedRecord(raw: string): Record<string, unknown> {
     if (value === 'true') record[key] = true;
     else if (value === 'false') record[key] = false;
     else if (/^\d+$/.test(value)) record[key] = Number.parseInt(value, 10);
-    else record[key] = value;
+    else record[key] = unquoteYamlScalar(value);
   }
   return record;
 }
@@ -106,5 +130,7 @@ export function parseExpertMetaFromMarkdown(
     classifierHint:
       typeof ext.classifierHint === 'string' ? ext.classifierHint : undefined,
     default: parseBoolean(ext.default) ?? false,
+    icon: typeof ext.icon === 'string' && ext.icon.trim() ? ext.icon.trim() : undefined,
+    accent: parseExpertAccent(ext.accent),
   };
 }

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minnow.local/schemas/agent-pack.schema.json",
+  "title": "MinnowAgentPackManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "label", "version", "agents"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "description": { "type": "string", "maxLength": 500 },
+    "minMinnowVersion": { "type": "string", "maxLength": 32 },
+    "enabled": { "type": "boolean" },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "providerId": { "type": ["string", "null"] },
+        "modelId": { "type": ["string", "null"] },
+        "allowedTools": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/packAgentEntry" }
+    }
+  },
+  "$defs": {
+    "packAgentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "prompts"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$"
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "prompts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["full"],
+          "properties": {
+            "full": { "type": "string", "minLength": 1 },
+            "lite": { "type": "string", "minLength": 1 }
+          }
+        },
+        "providerId": { "type": ["string", "null"] },
+        "modelId": { "type": ["string", "null"] },
+        "allowedTools": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "defaultForModes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "disabled": { "type": "boolean" },
+        "contextStrategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxInputTokens": { "type": ["integer", "null"], "minimum": 1 },
+            "policy": {
+              "type": "string",
+              "enum": ["inherit", "summarize", "slide", "truncate"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

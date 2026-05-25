@@ -2,6 +2,8 @@
  * Client helpers for Work Agent prompt editor API.
  */
 
+import { mergeUserWorkAgentOverride } from './work-agent-registry';
+
 export type WorkAgentPromptProfile = 'full' | 'lite';
 
 export interface WorkAgentPromptResponse {
@@ -17,6 +19,23 @@ export async function fetchWorkAgentPrompt(
   try {
     const res = await fetch(
       `/api/work-agents/${encodeURIComponent(agentId)}/prompt?profile=${profile}`,
+      { cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as WorkAgentPromptResponse;
+  } catch {
+    return null;
+  }
+}
+
+/** Shipped repo prompt only (ignores ~/.minnow overrides). */
+export async function fetchWorkAgentBuiltinBaseline(
+  agentId: string,
+  profile: WorkAgentPromptProfile = 'full',
+): Promise<WorkAgentPromptResponse | null> {
+  try {
+    const res = await fetch(
+      `/api/work-agents/${encodeURIComponent(agentId)}/prompt?profile=${profile}&baseline=builtin`,
       { cache: 'no-store' },
     );
     if (!res.ok) return null;
@@ -68,6 +87,11 @@ export async function patchWorkAgentOverride(
     providerId?: string | null;
     modelId?: string | null;
     disabled?: boolean;
+    maxInputTokens?: number | null;
+    contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
+    minRecentTurns?: number;
+    summaryReserveTokens?: number;
+    sampler?: import('./sampler-types').SamplerPreset | null;
   },
 ): Promise<import('./work-agent-types').WorkAgentDefinition | null> {
   try {
@@ -78,6 +102,7 @@ export async function patchWorkAgentOverride(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { agent: import('./work-agent-types').WorkAgentDefinition };
+    mergeUserWorkAgentOverride(agentId, patch);
     return data.agent ?? null;
   } catch {
     return null;

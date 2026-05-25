@@ -188,6 +188,29 @@ function getStoredBodies(prompt: ParsedPrompt): LoadedPromptBody {
 }
 
 /**
+ * Resolve shipped built-in prompt body only (ignores user registry overrides).
+ */
+export function loadBuiltinPromptById(
+  kind: PromptKind,
+  id: string,
+  profile: PromptProfile,
+): LoadedPromptBody | null {
+  initBuiltinPromptRegistry();
+  const key = registryKey(kind, id);
+  const prompt = registry.get(key);
+  if (!prompt) return null;
+
+  const bodies = getStoredBodies(prompt);
+  if (profile === 'lite' && bodies.liteBody?.trim()) {
+    return { body: bodies.liteBody.trim(), fullBody: bodies.fullBody, liteBody: bodies.liteBody };
+  }
+  if (profile === 'lite') {
+    return { body: bodies.fullBody ?? bodies.body, fullBody: bodies.fullBody, liteBody: bodies.liteBody };
+  }
+  return { body: bodies.fullBody ?? bodies.body, fullBody: bodies.fullBody, liteBody: bodies.liteBody };
+}
+
+/**
  * Resolve prompt body for kind + id and profile.
  */
 export function loadPromptById(

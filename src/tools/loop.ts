@@ -20,6 +20,11 @@ import {
   isStreamDomVisible,
 } from '../chat/streaming-state';
 import {
+  clearPendingSteer,
+  consumePendingSteer,
+  enqueueSteerMessage,
+} from '../chat/steer-message';
+import {
   clearAttachments,
   getPendingAttachments,
   replacePendingAttachments,
@@ -37,6 +42,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
@@ -86,11 +92,21 @@ import type {
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
+  refreshComposerStreamingAffordance,
   setComposerStreamingMode,
   syncComposerFromStreamingState,
+  syncSteerQueuedHint,
 } from '../ui/composer-send';
 import { registerStreamDomRemount } from './stream-chat-dom';
-import { refreshExpertSelectDisabled } from '../ui/expert-select';
+import {
+  notifyExpertLabFirstToken,
+  notifyExpertLabPartialText,
+  notifyExpertLabRunEnd,
+  notifyExpertLabRunError,
+  notifyExpertLabRunStart,
+  notifyExpertLabToolRound,
+} from '../ui/expert-lab-stream';
+import { isExpertLabChat } from '../state/sessions';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
@@ -117,6 +133,8 @@ import {
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
+import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
+import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
 import {
   recordAssistantReplyOnChat,
   setSidebarStreamPhase,
@@ -130,12 +148,33 @@ import {
   GENERATION_LOST_ON_RESTART_MESSAGE,
   subscribeToGeneration,
 } from '../api/generations';
+import { readProviderCapabilities } from '../providers/capability-probe';
+import {
+  applyConstrainedToolCallsToBody,
+  isResponseFormatRejectionError,
+  logConstrainedDebug,
+  stripResponseFormatFromBody,
+} from '../providers/constrained-tool-calls';
+import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { getActiveProvider } from '../providers/store';
+import { isVisionModel } from '../providers/vision-model.ts';
+import {
+  getToolCallsMetaSync,
+  isConstrainedDecodingEnabledForProvider,
+  loadToolCallsMeta,
+} from '../config/tool-calls-meta';
+import { parseToolArguments } from './parse-tool-arguments';
 import { setStatus } from '../ui/status';
 import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import { estimateTokensFromText } from '../chat/prompts/token-estimate';
+import {
+  agentContextBudgetFromWorkAgent,
+  applyContextBudget,
+  resolveContextBudget,
+} from '../chat/context-budget';
+import { resolveContextLimit } from '../chat/context-usage';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
 import {
@@ -154,6 +193,8 @@ import {
 import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
+import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { applySamplerToBody } from '../agents/sampler-types';
 import {
   cancelAllForParentTurn,
 } from '../agents/orchestrator';
@@ -206,11 +247,15 @@ export interface BuildApiMessagesOptions {
   ephemeralContinueInstruction?: string;
 }
 
-interface ChatCompletionBody {
+interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   model?: string;
   messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  repetition_penalty?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
   tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;
@@ -297,11 +342,6 @@ function buildVlmUserApiContent(
   return parts;
 }
 
-function isVlmModel(modelId: string | undefined): boolean {
-  if (!modelId) return false;
-  return modelCache.get(modelId)?.type === 'vlm';
-}
-
 /** Options for {@link runChatTurn} (composer send or history resend). */
 export interface RunChatTurnOptions {
   chat: Chat;
@@ -327,6 +367,8 @@ export interface RunChatTurnOptions {
   parentRunId?: TurnRunId;
   /** Model/provider overrides when forking without a full snapshot clone. */
   forkOverrides?: ForkOverrides;
+  /** When set, replaces composed system prompt (Expert Lab expert full body). */
+  composedSystemPromptOverride?: string;
 }
 
 /**
@@ -349,7 +391,7 @@ export function buildApiMessages(
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
   const lastUserIdx = indexOfLastUserMessage(chat.history);
   const modelId = options?.modelId;
-  const vlm = isVlmModel(modelId);
+  const vlm = isVisionModel(modelId);
 
   for (let i = 0; i < chat.history.length; i += 1) {
     const m = chat.history[i];
@@ -396,20 +438,6 @@ export function buildApiMessages(
   }
 
   return messages;
-}
-
-function parseToolArguments(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
 }
 
 interface StreamTurnResult {
@@ -571,6 +599,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     replaySnapshot,
     parentRunId,
     forkOverrides,
+    composedSystemPromptOverride,
   } = options;
 
   if (!beginChatTurnSetup(chat.id)) {
@@ -614,7 +643,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = modelId || chat.modelId;
 
   if (pushUser) {
-    chat.history.push({ role: 'user', content: historyContent });
+    const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
+    const modelUserContent = artifactAppendix
+      ? `${historyContent}${artifactAppendix}`
+      : historyContent;
+    chat.history.push({ role: 'user', content: modelUserContent });
     recordChatMessage(chat);
     scheduleSaveSessions();
     renderSidebar();
@@ -641,6 +674,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
+  const resolvedSampler = resolveSamplerPreset({
+    kind: 'work-agent',
+    agentKey: activeWorkAgent?.id ?? null,
+    global: { temperature: temp, maxTokens: maxTok },
+  });
   let sendModelId = modelId || chat.modelId;
   let sendProviderId = chat.providerId;
 
@@ -717,10 +755,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? ` (${activeWorkAgent.label})`
       : '';
 
+  if (isExpertLabChat(chat)) {
+    notifyExpertLabRunStart(chat.id);
+  }
+
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
     refreshModeSelectorDisabled();
-    refreshExpertSelectDisabled();
     refreshOrchestratePlanSelectorDisabled();
     refreshBoardOnboardingIfMounted();
     refreshViewModeToggleDisabled();
@@ -819,7 +860,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     routeUserText: userText || rawText,
     overrides: { skillBody },
   });
-  const sysPrompt = replaySnapshot?.composedSystemPrompt ?? outbound.composed;
+  const sysPrompt =
+    options.composedSystemPromptOverride?.trim() ??
+    replaySnapshot?.composedSystemPrompt ??
+    outbound.composed;
   const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
 
   if (!resumeGenerationId) {
@@ -853,8 +897,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         maxToolTurns: maxToolTurnsCap,
         providerId: sendProviderId,
         modelId: sendModelId,
-        temperature: temp,
-        maxTokens: maxTok,
+        temperature: resolvedSampler.preset.temperature ?? temp,
+        maxTokens: resolvedSampler.maxTokens,
         skillId,
         userContent,
       });
@@ -870,6 +914,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   try {
     const provider = await getActiveProvider(sendProviderId);
+    await loadToolCallsMeta();
+    const providerCapabilities = await readProviderCapabilities(provider.id);
+    const toolCallsMeta = getToolCallsMetaSync();
+    const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
+      provider,
+      toolCallsMeta,
+    );
     thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
 
     const activeModeId = normalizeModeId(chat.modeId);
@@ -877,10 +928,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     let proseQuestionRetries = 0;
     let ephemeralPostToolInstruction: string | undefined;
     const maxToolTurns = getChatMetaSync().maxToolTurns;
+    const workAgentBudget = activeWorkAgent
+      ? agentContextBudgetFromWorkAgent(activeWorkAgent)
+      : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
 
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
+      }
+
+      const steerConsumed = consumePendingSteer(chat);
+      if (steerConsumed.consumed) {
+        syncSteerQueuedHint();
       }
 
       let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
@@ -889,45 +948,107 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
       }
       enabledTools = applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
-      const messages = buildApiMessages(chat, sysPrompt, {
+      const rawMessages = buildApiMessages(chat, sysPrompt, {
         modelId: sendModelId,
         pendingUserText: pushUser ? userText || rawText : undefined,
         composedSystemPrompt: sysPrompt,
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
       });
-      const body: ChatCompletionBody = {
-        model: sendModelId || undefined,
-        messages,
-        temperature: temp,
-        max_tokens: maxTok,
-        stream: true,
-        stream_options: { include_usage: true },
-      };
+      const budgetResolved = resolveContextBudget({
+        agentConfig: workAgentBudget,
+        modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
+      });
+      const budgetApplied = applyContextBudget(
+        rawMessages,
+        budgetResolved,
+        workAgentBudget,
+      );
+      const messages = budgetApplied.messages;
+      if (
+        budgetApplied.applied &&
+        budgetApplied.statusMessage &&
+        isStreamDomVisible(chat.id)
+      ) {
+        setStatus('ok', budgetApplied.statusMessage);
+      }
+      const body = applySamplerToBody(
+        {
+          model: sendModelId || undefined,
+          messages,
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+        resolvedSampler.preset,
+        resolvedSampler.maxTokens,
+      ) as ChatCompletionBody;
       if (enabledTools.length > 0) {
         body.tools = enabledTools;
         body.tool_choice = 'auto';
       }
 
+      let usedConstrained = false;
+      if (enabledTools.length > 0) {
+        const constrainedApplied = applyConstrainedToolCallsToBody(body, {
+          providerId: provider.id,
+          modelId: sendModelId,
+          userEnabled: constrainedUserEnabled,
+          capabilities: providerCapabilities,
+          enabledTools,
+        });
+        Object.assign(body, constrainedApplied.body);
+        usedConstrained = constrainedApplied.usedConstrained;
+        if (usedConstrained) {
+          logConstrainedDebug('attach', {
+            providerId: provider.id,
+            modelId: sendModelId,
+            toolCount: enabledTools.length,
+          });
+        }
+      }
+
       thoughtController.setAssistantWrap(wrap);
       const domVisible = isStreamDomVisible(chat.id);
-      const turnResult = await streamCompletionTurn(
-        chat,
-        provider,
-        body,
-        resumeGenerationId,
-        bubble,
-        cursor,
-        chatSignal,
-        thoughtController,
-        domVisible,
-        revealProse,
-        (text) => {
-          livePartialText = text;
-        },
-        undefined,
-        turnRunId,
-      );
+
+      const runStreamTurn = (turnBody: ChatCompletionBody) =>
+        streamCompletionTurn(
+          chat,
+          provider,
+          turnBody,
+          resumeGenerationId,
+          bubble,
+          cursor,
+          chatSignal,
+          thoughtController,
+          domVisible,
+          () => {
+            revealProse();
+            if (isExpertLabChat(chat)) {
+              notifyExpertLabFirstToken(chat.id);
+            }
+          },
+          (text) => {
+            livePartialText = text;
+            if (isExpertLabChat(chat)) {
+              notifyExpertLabPartialText(chat.id, text);
+            }
+          },
+          undefined,
+          turnRunId,
+        );
+
+      let turnResult: StreamTurnResult;
+      try {
+        turnResult = await runStreamTurn(body);
+      } catch (streamErr) {
+        if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
+          logConstrainedDebug('strip_retry', { providerId: provider.id });
+          usedConstrained = false;
+          turnResult = await runStreamTurn(stripResponseFormatFromBody(body));
+        } else {
+          throw streamErr;
+        }
+      }
 
       cancelAssistantBubbleRenderDebounce();
       cursor.remove();
@@ -951,6 +1072,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
+        void recordMainChatTurnUsage(chat, {
+          providerId: sendProviderId,
+          modelId: sendModelId,
+          streamMeta: turnResult.streamMeta,
+          t0: turnResult.t0,
+          tFirst: turnResult.tFirst,
+          tEnd: turnResult.tEnd,
+          workAgentId: activeWorkAgent?.id ?? null,
+        });
+
         const toolProse = turnResult.fullText.trim();
         if (toolProse && isStreamDomVisible(chat.id)) {
           revealProse();
@@ -982,7 +1113,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           if (chatSignal.aborted) {
             for (let sj = ti; sj < turnResult.toolCalls.length; sj++) {
               const skipped = turnResult.toolCalls[sj]!;
-              const skipArgs = parseToolArguments(skipped.function.arguments);
+              const { args: skipArgs } = parseToolArguments(skipped.function.arguments, {
+                constrained: usedConstrained,
+              });
               const skipWrap = renderToolCall(skipped.function.name, skipArgs);
               skipWrap.dataset.toolCallId = skipped.id;
               if (paintToolCallsInChat) {
@@ -1002,7 +1135,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           }
 
           const tc = turnResult.toolCalls[ti]!;
-          const args = parseToolArguments(tc.function.arguments);
+          const { args, parseError } = parseToolArguments(tc.function.arguments, {
+            constrained: usedConstrained,
+          });
           patchMainTurnActivity(chat.id, {
             phase: 'tools',
             currentTool: tc.function.name,
@@ -1012,6 +1147,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           if (paintToolCallsInChat) {
             area.appendChild(toolWrap);
             scrollChatIfPinned();
+          }
+
+          if (parseError) {
+            renderToolResult(toolWrap, parseError);
+            chat.history.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: parseError,
+            });
+            trackRunHistoryPush(chat, turnRunId);
+            recordChatMessage(chat);
+            scheduleSaveSessions();
+            continue;
           }
 
           const toolLoopModeId = normalizeModeId(chat.modeId);
@@ -1027,20 +1175,42 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           const planBlock = uiDesignerCtx.active
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
+          const toolName = tc.function.name;
           const toolOut = planBlock
             ? { content: planBlock }
-            : await executeTool(tc.function.name, args, {
+            : await executeTool(toolName, args, {
                 chatId: chat.id,
                 toolCallId: tc.id,
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
-          renderToolResult(toolWrap, toolOut.content, toolOut.attachments, args);
+          if (isExpertLabChat(chat)) {
+            notifyExpertLabToolRound(chat.id, toolName);
+          }
+          let toolContent = toolOut.content;
+          try {
+            const promoted = await maybePromoteToolResultToArtifact({
+              chatId: chat.id,
+              chat,
+              toolName: tc.function.name,
+              args,
+              content: toolContent,
+              toolCallId: tc.id,
+              modeId: toolLoopModeId,
+            });
+            if (promoted) {
+              toolContent = `${toolContent}${promoted.footer}`;
+            }
+          } catch {
+            /* Promotion is best-effort; never block the tool loop. */
+          }
+
+          renderToolResult(toolWrap, toolContent, toolOut.attachments, args);
 
           chat.history.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: toolOut.content,
+            content: toolContent,
             ...(toolOut.attachments?.length
               ? { attachments: toolOut.attachments }
               : {}),
@@ -1088,12 +1258,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       let streamMeta = turnResult.streamMeta;
 
       if (!fullText.trim()) {
-        const fallbackBody: ChatCompletionBody = {
-          model: sendModelId || undefined,
-          messages,
-          temperature: temp,
-          max_tokens: maxTok,
-        };
+        const fallbackBody = applySamplerToBody(
+          {
+            model: sendModelId || undefined,
+            messages,
+          },
+          resolvedSampler.preset,
+          resolvedSampler.maxTokens,
+        ) as ChatCompletionBody;
         if (enabledTools.length > 0) {
           fallbackBody.tools = enabledTools;
           fallbackBody.tool_choice = 'auto';
@@ -1206,6 +1378,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         turnResult.tFirst ?? turnResult.tEnd,
         turnResult.tEnd,
       );
+      void recordMainChatTurnUsage(chat, {
+        providerId: sendProviderId,
+        modelId: sendModelId,
+        streamMeta,
+        t0: turnResult.t0,
+        tFirst: turnResult.tFirst,
+        tEnd: turnResult.tEnd,
+        workAgentId: activeWorkAgent?.id ?? null,
+      });
       const displayMeta = applyOrchestrateAggregatedStatsToChat(chat, parentTurnId, meta);
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, displayMeta.model_info);
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
@@ -1238,6 +1419,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
+        if (isExpertLabChat(chat)) {
+          notifyExpertLabRunEnd(chat.id, finalContent);
+        }
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, meta.stats, meta.usage);
           if (thinkingNorm.length > 0) {
@@ -1268,6 +1452,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e && e.name === 'AbortError') {
+      clearPendingSteer(chat);
       turnRunStatus = 'stopped';
       cancelAllForParentTurn(parentTurnId);
       thinkingTracker?.abort();
@@ -1317,6 +1502,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return;
     }
     turnRunStatus = 'failed';
+    if (isExpertLabChat(chat)) {
+      notifyExpertLabRunError(
+        chat.id,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
@@ -1363,7 +1554,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null);
       syncChatItemDotsInDom();
       refreshModeSelectorDisabled();
-      refreshExpertSelectDisabled();
       refreshOrchestratePlanSelectorDisabled();
       refreshBoardOnboardingIfMounted();
       syncViewModeToggleFromActiveChat();
@@ -1406,13 +1596,37 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 /** Send the composer text with tool calling (SSE loop; max rounds from Settings → General / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
 export async function sendMessageWithTools(): Promise<void> {
-  if (isActiveChatStreaming()) return;
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+  const rawTextEarly = input.value.trim();
+  if (isActiveChatStreaming()) {
+    if (!rawTextEarly) return;
+    const pendingSteer = getPendingAttachments();
+    const pendingOk = pendingSteer.filter((a) => a.kind !== 'error');
+    if (pendingOk.length > 0) {
+      setStatus('err', 'Steer is text only — wait for this turn to finish for attachments');
+      return;
+    }
+    const chat = getActiveChat();
+    const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
+    if (enqueueSteerMessage(chat, rawTextEarly)) {
+      input.value = '';
+      input.style.height = 'auto';
+      setStatus(
+        'ok',
+        hadPrior
+          ? 'Correction updated — applies after current step'
+          : 'Steering at next step…',
+      );
+      refreshComposerStreamingAffordance();
+      syncSteerQueuedHint();
+    }
+    return;
+  }
   if (isChatTurnSetupPending(getActiveChat().id)) return;
   if (isBackgroundStreamBlockingSend()) {
     setStatus('spin', 'Stop or wait for the reply in the other chat first');
     return;
   }
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const rawText = input.value.trim();
   const { consumePendingMessageEdit, completePendingMessageEdit } = await import(
     '../ui/message-actions'

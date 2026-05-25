@@ -2,41 +2,41 @@
 name: Feature 11 — Model capability detection
 overview: Persist a per-provider, per-model capability matrix under ~/.minnow/providers/<id>/capabilities.json, refreshed by lightweight probe completions on model list refresh and provider add, and surface badges in the model picker.
 source: documentation/plans/feature-audit-roadmap.md §11
-status: planned
+status: shipped
 todos:
   - id: f11-schema
     content: Define capabilities.json schema (schemaVersion, probedAt, models map) + validators in server/config
-    status: pending
+    status: completed
   - id: f11-server-store
     content: Add server/providers/capabilities-store.js read/write/merge under provider dir
-    status: pending
+    status: completed
   - id: f11-probe-runner
     content: Implement server/providers/capability-probe.js (catalog ingest + tiny chat/tool probes)
-    status: pending
+    status: completed
   - id: f11-api-routes
     content: Add POST /api/providers/:id/capabilities/probe and GET .../capabilities; hook proxyModels refresh
-    status: pending
+    status: completed
   - id: f11-client-merge
     content: Add src/providers/model-capabilities.ts merge layer; extend LmModelRecord + modelCache
-    status: pending
+    status: completed
   - id: f11-fetch-hook
     content: Wire fetchModels() to trigger probe after list fetch (debounced, cancellable)
-    status: pending
+    status: completed
   - id: f11-provider-create
     content: Run probe after settings createProvider + set-active success
-    status: pending
+    status: completed
   - id: f11-picker-ui
     content: Show capability chips in model-select-picker + option title; CSS tokens
-    status: pending
+    status: completed
   - id: f11-consumers
     content: Route isVlmModel, context ring, attachment hints through merged capabilities
-    status: pending
+    status: completed
   - id: f11-tests
     content: Server probe/store tests + client merge/picker tests; document verification steps
-    status: pending
+    status: completed
   - id: f11-context-doc
     content: Update documentation/context.md persistence + providers API tables when shipped
-    status: pending
+    status: completed
 isProject: false
 ---
 

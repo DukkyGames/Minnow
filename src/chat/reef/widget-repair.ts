@@ -177,13 +177,14 @@ async function runSilentWidgetRepair(input: RunSilentRepairInput): Promise<void>
   const repairTimeout = setTimeout(() => repairAbort.abort(), 120_000);
   let fixedBody = '';
   try {
-    fixedBody = await runWidgetCompletion({
+    const repaired = await runWidgetCompletion({
       providerId: binding.providerId,
       modelId: binding.modelId,
       messages,
       signal: repairAbort.signal,
       onDelta: () => {},
     });
+    fixedBody = repaired.text;
   } catch {
     clearTimeout(repairTimeout);
     showSoftFallbackOnHost(input.record.host);

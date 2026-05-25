@@ -45,6 +45,8 @@ export function persistSubAgentRunSnapshot(run: SubAgentRun): void {
     task: run.task,
     status: run.status,
     summary: run.summary,
+    ...(run.structuredOutcome ? { structuredOutcome: run.structuredOutcome } : {}),
+    ...(run.budgetEvents?.length ? { budgetEvents: run.budgetEvents } : {}),
     error: run.error,
     startedAt: run.startedAt,
     endedAt: run.endedAt,

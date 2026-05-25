@@ -101,6 +101,7 @@
 .stat-cell.green .stat-name .stat-icon { color: var(--mn-success); }
 .stat-cell.yellow .stat-name .stat-icon { color: var(--mn-warning); }
 .stat-cell.red .stat-name .stat-icon { color: var(--mn-danger); }
+.stat-cell.purple .stat-name .stat-icon { color: color-mix(in srgb, var(--mn-accent) 70%, var(--mn-fg)); }
 
 .stat-val {
   font-size: 17px;
@@ -113,6 +114,7 @@
 .stat-cell.green .stat-val { color: var(--mn-success); }
 .stat-cell.yellow .stat-val { color: var(--mn-warning); }
 .stat-cell.red .stat-val { color: var(--mn-danger); }
+.stat-cell.purple .stat-val { color: color-mix(in srgb, var(--mn-accent) 70%, var(--mn-fg)); }
 .stat-val.blank { color: var(--mn-border-strong) !important; }
 
 /* Est. cost values are short; keep the column narrow so model info stays on one row */

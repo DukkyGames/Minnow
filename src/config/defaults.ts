@@ -40,7 +40,12 @@ export function defaultToolConfig(): ToolConfig {
     // Enabled tools require user approval; disabled tools stay off.
     permissions.default[tool.id] = on ? 'ask' : 'off';
   }
-  return { enabled, permissions, keys: { braveApiKey: '' } };
+  return {
+    enabled,
+    permissions,
+    keys: { braveApiKey: '' },
+    toolCache: { enabled: true },
+  };
 }
 
 /** Default ~/.minnow/rules.json contents. */

@@ -7,6 +7,7 @@ import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync';
 import { getActiveChat } from '../state/sessions';
+import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
 import { scrollBottom } from './input';
 import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
@@ -61,9 +62,21 @@ function fillCard(el: HTMLElement, run: SubAgentRun | PersistedSubAgentRun): voi
   task.className = 'sub-agent-card__task';
   task.textContent = taskPreview(run.task);
 
+  const subtitle = document.createElement('div');
+  subtitle.className = 'sub-agent-card__subtitle';
+  const outcome =
+    run.structuredOutcome ??
+    (run.summary?.trim() ? legacyOutcomeFromSummary(run.summary) : null);
+  if (outcome?.findings?.[0]?.title) {
+    subtitle.textContent = outcome.findings[0].title;
+  } else if (outcome?.summary?.trim()) {
+    const s = outcome.summary.trim();
+    subtitle.textContent = s.length > 100 ? `${s.slice(0, 100)}…` : s;
+  }
+
   const hint = document.createElement('div');
   hint.className = 'sub-agent-card__hint';
-  hint.textContent = 'Click to view transcript';
+  hint.textContent = 'Click to view details';
 
   const live = run as SubAgentRun;
   const nested =
@@ -75,6 +88,7 @@ function fillCard(el: HTMLElement, run: SubAgentRun | PersistedSubAgentRun): voi
 
   el.appendChild(head);
   el.appendChild(task);
+  if (subtitle.textContent) el.appendChild(subtitle);
   if (nested) {
     const meta = document.createElement('div');
     meta.className = 'sub-agent-card__meta';

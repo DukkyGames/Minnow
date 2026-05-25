@@ -141,27 +141,47 @@ function renderBugCard(entry: GlobalBugEntry): HTMLElement {
     });
   }
 
+  const header = document.createElement('div');
+  header.className = 'bug-task-card__header';
+
   const title = document.createElement('h4');
-  title.className = 'board-task-card__title';
+  title.className = 'bug-task-card__title';
   title.textContent = bug.title;
+  title.title = bug.title;
 
-  const meta = document.createElement('div');
-  meta.className = 'board-task-card__meta';
-  const ws = formatGlobalBugWorkspaceLabel(bug);
-  meta.textContent = `${bug.severity} · ${ws}${bug.chatId ? ` · ${chatName}` : ''}`;
-
-  card.appendChild(title);
-  card.appendChild(meta);
+  header.appendChild(title);
 
   if (bug.description) {
     const desc = document.createElement('p');
     desc.className = 'bug-task-card__description';
-    desc.textContent =
-      bug.description.length > 160
-        ? `${bug.description.slice(0, 157)}…`
-        : bug.description;
-    card.appendChild(desc);
+    desc.textContent = bug.description;
+    header.appendChild(desc);
   }
+
+  card.appendChild(header);
+
+  const meta = document.createElement('div');
+  meta.className = 'bug-task-card__meta';
+
+  const severityEl = document.createElement('span');
+  severityEl.className = `global-bugs-severity global-bugs-severity--${bug.severity}`;
+  severityEl.textContent = bug.severity;
+  meta.appendChild(severityEl);
+
+  const ws = formatGlobalBugWorkspaceLabel(bug);
+  const wsEl = document.createElement('span');
+  wsEl.className = 'bug-task-card__meta-part';
+  wsEl.textContent = ws;
+  meta.appendChild(wsEl);
+
+  if (bug.chatId) {
+    const chatEl = document.createElement('span');
+    chatEl.className = 'bug-task-card__meta-part';
+    chatEl.textContent = chatName;
+    meta.appendChild(chatEl);
+  }
+
+  card.appendChild(meta);
 
   if (bug.notes) {
     const notes = document.createElement('p');
@@ -226,7 +246,15 @@ function renderAddBugForm(container: HTMLElement): void {
   submit.className = 'board-btn';
   submit.textContent = 'Add bug';
 
-  form.append(titleInput, descInput, severitySelect, submit);
+  const fields = document.createElement('div');
+  fields.className = 'bug-add-form__fields';
+  fields.append(titleInput, descInput);
+
+  const actions = document.createElement('div');
+  actions.className = 'bug-add-form__actions';
+  actions.append(severitySelect, submit);
+
+  form.append(fields, actions);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();

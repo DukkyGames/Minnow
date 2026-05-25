@@ -11,6 +11,8 @@ import {
   builtinWorkAgentsDir,
   workAgentsOverridesPath,
 } from './paths.js';
+import { loadPackWorkAgents, getPackAgentSource } from '../agent-packs/registry.js';
+import { resolvePackPromptPath } from '../agent-packs/paths.js';
 
 const SKIP = new Set(['_template', '_example', 'README.md']);
 
@@ -72,6 +74,17 @@ function parseWorkAgentMeta(raw, relativePath) {
     ? ext.allowedTools.map(String)
     : null;
 
+  const maxInputTokens =
+    typeof ext.maxInputTokens === 'number' && Number.isFinite(ext.maxInputTokens)
+      ? Math.max(1, Math.floor(ext.maxInputTokens))
+      : null;
+
+  const policy = ext.contextEnforcementPolicy;
+  const contextEnforcementPolicy =
+    policy === 'summarize' || policy === 'slide' || policy === 'truncate'
+      ? policy
+      : 'slide';
+
   return {
     id: parsed.id,
     label: parsed.label,
@@ -83,6 +96,8 @@ function parseWorkAgentMeta(raw, relativePath) {
     allowedTools,
     defaultForModes,
     disabled: ext.disabled === true,
+    maxInputTokens,
+    contextEnforcementPolicy,
   };
 }
 
@@ -182,7 +197,17 @@ export async function loadWorkAgentRegistry(projectRoot) {
   const { agents: builtins } = await loadBuiltinAgents(projectRoot);
   const overrides = await loadUserOverrides();
 
-  const agents = builtins.map((a) => mergeDefinition(a, overrides[a.id]));
+  const builtinIds = new Set(builtins.map((a) => a.id));
+  const { agents: packAgents } = await loadPackWorkAgents(projectRoot, builtinIds);
+
+  const mergedBuiltins = builtins.map((a) => ({
+    ...mergeDefinition(a, overrides[a.id]),
+    source: 'builtin',
+  }));
+
+  const mergedPacks = packAgents.map((a) => mergeDefinition(a, overrides[a.id]));
+
+  const agents = [...mergedBuiltins, ...mergedPacks];
   return { agents, overrides };
 }
 
@@ -206,6 +231,39 @@ export async function patchWorkAgentOverride(agentId, patch) {
   overrides[agentId] = { ...prev, ...patch };
   await saveUserOverrides(overrides);
   return overrides[agentId];
+}
+
+/**
+ * Shipped work-agent prompt only (ignores ~/.minnow overrides).
+ */
+export async function readBuiltinWorkAgentPrompt(projectRoot, agentId, profile) {
+  const builtinPath = path.join(
+    builtinWorkAgentsDir(projectRoot),
+    agentId,
+    `agent.${profile}.md`,
+  );
+  const raw = await fs.readFile(builtinPath, 'utf8');
+  const parsed = parsePromptMarkdown(raw, builtinPath);
+  return { content: parsed.body.trim(), source: 'builtin' };
+}
+
+async function readPackWorkAgentPrompt(agentId, profile) {
+  const source = getPackAgentSource(agentId);
+  if (!source) return null;
+
+  const rel =
+    profile === 'lite' && source.promptPaths.lite
+      ? source.promptPaths.lite
+      : source.promptPaths.full;
+  const filePath = resolvePackPromptPath(source.packRoot, rel);
+  const raw = await fs.readFile(filePath, 'utf8');
+  const { parsePromptMarkdown } = await import('../prompts/parse.js');
+  try {
+    const parsed = parsePromptMarkdown(raw, filePath);
+    return { content: parsed.body.trim(), source: 'pack' };
+  } catch {
+    return { content: raw.trim(), source: 'pack' };
+  }
 }
 
 export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
@@ -238,14 +296,10 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
     }
   }
 
-  const builtinPath = path.join(
-    builtinWorkAgentsDir(projectRoot),
-    agentId,
-    `agent.${profile}.md`,
-  );
-  const raw = await fs.readFile(builtinPath, 'utf8');
-  const parsed = parsePromptMarkdown(raw, builtinPath);
-  return { content: parsed.body.trim(), source: 'builtin' };
+  const packPrompt = await readPackWorkAgentPrompt(agentId, profile);
+  if (packPrompt) return packPrompt;
+
+  return readBuiltinWorkAgentPrompt(projectRoot, agentId, profile);
 }
 
 export async function writeWorkAgentPromptOverride(agentId, profile, content) {

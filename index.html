@@ -240,6 +240,9 @@
     <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
+    <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Expert Lab" title="Expert Lab" onclick="openExpertLabFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 4h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l1-4z"/><path d="M12 11v6M9 14h6"/></svg>
+    </button>
     <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -296,7 +299,7 @@
           Enable experts
         </label>
       </div>
-      <p class="field-hint">Choose an expert in the chat bar (Auto or manual). Built-in ids:</p>
+      <p class="field-hint">Pick specialists in <button type="button" class="settings-inline-link" onclick="openExpertLabFromTopbar()">Expert Lab</button>. Built-in ids:</p>
       <div id="expertsBuiltinList"></div>
     </section>
     <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
@@ -377,10 +380,12 @@
       <button type="button" data-settings-nav="prompting">Prompting</button>
       <button type="button" data-settings-nav="rules">Rules</button>
       <button type="button" data-settings-nav="providers">Providers</button>
+      <button type="button" data-settings-nav="usage">Usage</button>
       <button type="button" data-settings-nav="model-routing">Model routing</button>
       <button type="button" data-settings-nav="modes">Modes</button>
       <button type="button" data-settings-nav="experts">Experts</button>
       <button type="button" data-settings-nav="work-agents">Work agents</button>
+      <button type="button" data-settings-nav="agent-packs">Agent packs</button>
       <button type="button" data-settings-nav="sub-agents">Sub-agents</button>
       <button type="button" data-settings-nav="memory">Memory</button>
       <button type="button" data-settings-nav="features">Features</button>
@@ -388,6 +393,7 @@
       <button type="button" data-settings-nav="mcp">MCP</button>
       <button type="button" data-settings-nav="lsp">LSP</button>
       <button type="button" data-settings-nav="skills">Skills</button>
+      <button type="button" data-settings-nav="evals">Evals</button>
     </nav>
     <div class="settings-content">
       <section id="settingsSection-general" class="settings-section is-active">
@@ -403,6 +409,7 @@
           aria-live="polite"
         >Computing estimate…</p>
         <p>Active profile controls which prompt templates are composed on send.</p>
+        <div id="settingsSetupProfilesMount"></div>
         <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
           <button type="button" data-profile-tab="full" class="is-active">Full</button>
           <button type="button" data-profile-tab="lite">Lite</button>
@@ -435,6 +442,10 @@
         <div class="settings-rules-actions">
           <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
         </div>
+      </section>
+      <section id="settingsSection-usage" class="settings-section">
+        <h2>Usage &amp; cost</h2>
+        <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -520,6 +531,10 @@
       <section id="settingsSection-work-agents" class="settings-section">
         <h2>Work agents</h2>
         <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-agent-packs" class="settings-section">
+        <h2>Agent packs</h2>
+        <div id="settingsAgentPacksBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-sub-agents" class="settings-section">
         <h2>Sub-agents</h2>
@@ -657,6 +672,10 @@
         <h2>Skills</h2>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
       </section>
+      <section id="settingsSection-evals" class="settings-section">
+        <h2>Evals</h2>
+        <div id="settingsEvalsBody" class="settings-section-body"></div>
+      </section>
     </div>
   </div>
 </main>
@@ -707,6 +726,85 @@
       <label><input type="checkbox" id="benchmarkCompareToggle" /> Compare</label>
     </div>
     <div id="benchmarkSuites"></div>
+  </div>
+</main>
+
+<main id="expertLabView" class="expert-lab-page" data-step="pick" aria-label="Expert Lab">
+  <header class="expert-lab-page-header">
+    <button class="icon-btn" type="button" id="btnExpertLabPageBack" aria-label="Back">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h1>Expert Lab</h1>
+  </header>
+  <div class="expert-lab-body">
+    <div id="expertLabDisabled" class="expert-lab-empty hidden" role="status">
+      <p>Experts are turned off. Enable them in Settings → Experts, then return here.</p>
+    </div>
+    <section class="expert-lab-step expert-lab-step--pick" aria-label="Choose an expert">
+      <p class="expert-lab-intro">Pick a specialist, describe your request, and watch a step-by-step run with clarifying questions when needed.</p>
+      <div id="expertLabGrid" class="expert-lab-grid" role="list"></div>
+    </section>
+    <section class="expert-lab-step expert-lab-step--brief" aria-label="Your brief">
+      <div class="expert-lab-brief-header">
+        <span id="expertLabBriefChip" class="expert-lab-chip expert-accent-sage"></span>
+        <button type="button" class="settings-inline-btn" id="btnExpertLabBriefBack">Change expert</button>
+      </div>
+      <div class="expert-lab-brief-form">
+        <label for="expertLabBriefInput">Your request</label>
+        <textarea id="expertLabBriefInput" class="expert-lab-brief-input" rows="6" placeholder="Describe what you need…"></textarea>
+        <div class="expert-lab-actions">
+          <button type="button" class="is-primary" id="btnExpertLabRun">Run</button>
+        </div>
+      </div>
+    </section>
+    <section class="expert-lab-step expert-lab-step--run" aria-label="Run timeline">
+      <div class="expert-lab-run-header">
+        <span id="expertLabRunChip" class="expert-lab-chip expert-accent-sage"></span>
+      </div>
+      <div id="expertLabTimeline" class="expert-lab-timeline expert-accent-sage">
+        <article class="expert-lab-phase" data-phase="understanding">
+          <div class="expert-lab-phase-head">
+            <span class="expert-lab-phase-num">1</span>
+            <span class="expert-lab-phase-title">Understanding</span>
+            <span class="expert-lab-phase-status">Pending</span>
+          </div>
+          <div class="expert-lab-phase-body">
+            <pre id="expertLabRequestPreview" class="expert-lab-request-preview"></pre>
+          </div>
+        </article>
+        <article class="expert-lab-phase" data-phase="clarifying" hidden>
+          <div class="expert-lab-phase-head">
+            <span class="expert-lab-phase-num">2</span>
+            <span class="expert-lab-phase-title">Clarifying questions</span>
+            <span class="expert-lab-phase-status">Pending</span>
+          </div>
+          <div class="expert-lab-phase-body expert-lab-clarifying-slot" id="expertLabClarifyingBody"></div>
+        </article>
+        <article class="expert-lab-phase" data-phase="working">
+          <div class="expert-lab-phase-head">
+            <span class="expert-lab-phase-num">3</span>
+            <span class="expert-lab-phase-title">Working</span>
+            <span class="expert-lab-phase-status">Pending</span>
+          </div>
+          <div class="expert-lab-phase-body">
+            <div class="expert-lab-working-meta">
+              <span class="expert-lab-spinner" aria-hidden="true"></span>
+              <span id="expertLabWorkingCount">0 tokens</span>
+            </div>
+          </div>
+        </article>
+        <article class="expert-lab-phase" data-phase="output">
+          <div class="expert-lab-phase-head">
+            <span class="expert-lab-phase-num">4</span>
+            <span class="expert-lab-phase-title">Output</span>
+            <span class="expert-lab-phase-status">Pending</span>
+          </div>
+          <div class="expert-lab-phase-body">
+            <div id="expertLabOutputBubble" class="expert-lab-output-bubble msg-bubble--md"></div>
+          </div>
+        </article>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -774,11 +872,6 @@
             </select>
             <button type="button" class="orchestrate-plan-refresh" id="orchestratePlanRefresh" aria-label="Refresh plan list" title="Refresh plan list">↻</button>
             <span id="orchestratePlanHint" class="orchestrate-plan-hint hidden" role="status"></span>
-          </div>
-          <div class="composer-control">
-            <label class="visually-hidden" for="expertSelect">Expert</label>
-            <select id="expertSelect" aria-label="Expert: Auto"></select>
-            <span id="expertAutoHint" class="expert-auto-hint hidden" aria-live="polite"></span>
           </div>
           <div id="workAgentDev" class="composer-control work-agent-dev hidden" aria-hidden="true">
             <label class="composer-control-label" for="workAgentSelect">Work agent (dev)</label>
@@ -873,6 +966,10 @@
       <div class="stat-cell red">
         <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>Total Tokens</div>
         <div class="stat-val blank" id="stripTotal">—</div>
+      </div>
+      <div class="stat-cell purple">
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>Est. cost</div>
+        <div class="stat-val blank" id="stripCost">—</div>
       </div>
       <div class="token-cell">
         <div class="token-bar-row">

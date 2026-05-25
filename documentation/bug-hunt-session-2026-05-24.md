@@ -458,7 +458,7 @@ Tool **does not work** (error, empty result, or **`fetch failed`** — same clas
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Impeccable skill / `load_impeccable_context` — `src/skills/impeccable/scripts/minnow-context.mjs` |
-| **Status** | Open |
+| **Status** | Fixed — soft success with `hasDesignJson: false` ([MIN-66](https://linear.app/minnowai/issue/MIN-66), plan `documentation/plans/Bug Fixes/BUG-012-impeccable-design-json.md`) |
 
 **Summary**
 

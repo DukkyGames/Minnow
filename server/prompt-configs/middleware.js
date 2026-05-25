@@ -14,6 +14,7 @@ import {
 import { buildPromptRegistry } from '../prompts/registry.js';
 import {
   deletePromptFileOverride,
+  readBuiltinPromptFile,
   readPromptFile,
   writePromptFileOverride,
 } from '../prompts/file-overrides.js';
@@ -66,6 +67,7 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
 
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const profileParam = params.get('profile') === 'lite' ? 'lite' : 'full';
+  const baselineBuiltin = params.get('baseline') === 'builtin';
 
   setCorsHeaders(res);
 
@@ -113,7 +115,9 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
       const entityId = filePromptMatch[2];
 
       if (req.method === 'GET') {
-        const result = await readPromptFile(PROJECT_ROOT, family, entityId, profileParam);
+        const result = baselineBuiltin
+          ? await readBuiltinPromptFile(PROJECT_ROOT, family, entityId, profileParam)
+          : await readPromptFile(PROJECT_ROOT, family, entityId, profileParam);
         sendJson(res, 200, result);
         return true;
       }
