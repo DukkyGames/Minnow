@@ -60,7 +60,7 @@ export function appendThemeControls(mount: HTMLElement): void {
   const familyButtons: HTMLButtonElement[] = [];
 
   const currentId = getStoredTheme();
-  const currentFamily = getFollowSystem() ? getStoredFamily() : currentId.split('-')[0];
+  const currentFamily = getStoredFamily();
   const currentMode = getMode(currentId);
 
   function refreshChrome(): void {

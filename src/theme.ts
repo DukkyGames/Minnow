@@ -118,7 +118,11 @@ export function getFollowSystem(): boolean {
   return readStorage(THEME_FOLLOW_SYSTEM_KEY) === '1';
 }
 
+/** Family from follow-system storage, or derived from the explicit theme id. */
 export function getStoredFamily(): ThemeFamily {
+  if (!getFollowSystem()) {
+    return getFamily(getStoredTheme());
+  }
   const raw = readStorage(THEME_FAMILY_KEY);
   if (isThemeFamily(raw)) return raw;
   return DEFAULT_THEME_FAMILY;
