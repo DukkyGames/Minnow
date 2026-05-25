@@ -15,6 +15,10 @@ import {
 import { readCapabilities } from './capabilities-store.js';
 import { runCapabilityProbe } from './capability-probe.js';
 import { proxyModelLoad, proxyModelUnload, proxyModels } from './proxy.js';
+import {
+  probeProviderCapabilities,
+  readProviderCapabilitiesFile,
+} from './capability-probe.js';
 import { isSafeProviderPathSegment } from './validate.js';
 
 /** CORS headers aligned with /api/config and /api/tools. */
@@ -190,6 +194,26 @@ export async function handleProviderRequest(req, res, pathname) {
       return true;
     }
 
+    const probeMatch = pathname.match(/^\/api\/providers\/([^/]+)\/probe-capabilities$/);
+    if (probeMatch && req.method === 'POST') {
+      const id = probeMatch[1];
+      if (!isSafeProviderPathSegment(id)) {
+        sendJson(res, 400, { error: 'Invalid provider id' });
+        return true;
+      }
+      try {
+        await getProvider(id);
+      } catch {
+        sendJson(res, 404, { error: 'Provider not found' });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const modelId =
+        body && typeof body.modelId === 'string' ? body.modelId.trim() : undefined;
+      sendJson(res, 200, await probeProviderCapabilities(id, { modelId: modelId || undefined }));
+      return true;
+    }
+
     const modelsMatch = pathname.match(/^\/api\/providers\/([^/]+)\/models$/);
     if (modelsMatch && req.method === 'GET') {
       const id = modelsMatch[1];
@@ -214,6 +238,11 @@ export async function handleProviderRequest(req, res, pathname) {
         await getProvider(id);
       } catch {
         sendJson(res, 404, { error: 'Provider not found' });
+        return true;
+      }
+      const structuredOnly = await readProviderCapabilitiesFile(id);
+      if (structuredOnly) {
+        sendJson(res, 200, structuredOnly);
         return true;
       }
       sendJson(res, 200, await readCapabilities(id));

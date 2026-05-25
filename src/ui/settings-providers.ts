@@ -6,6 +6,12 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
+  probeProviderCapabilities,
+  readProviderCapabilities,
+  structuredOutputBadge,
+  type ProviderCapabilities,
+} from '../providers/capability-probe';
+import {
   createProvider,
   deleteProvider,
   isProvidersApiAvailable,
@@ -266,6 +272,45 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   enabledLabel.append(enabledInput, el('span', undefined, 'Enabled'));
   form.append(enabledLabel);
 
+  const constrainedField = el('div', 'field');
+  constrainedField.append(el('label', undefined, 'Constrained tool calls'));
+  const constrainedSel = document.createElement('select');
+  constrainedSel.className = 'settings-select';
+  constrainedSel.name = 'constrainedToolCalls';
+  for (const opt of [
+    { value: 'inherit', label: 'Use global default' },
+    { value: 'on', label: 'Enabled' },
+    { value: 'off', label: 'Disabled' },
+  ]) {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    constrainedSel.appendChild(o);
+  }
+  if (provider.constrainedToolCalls === true) {
+    constrainedSel.value = 'on';
+  } else if (provider.constrainedToolCalls === false) {
+    constrainedSel.value = 'off';
+  } else {
+    constrainedSel.value = 'inherit';
+  }
+  constrainedField.append(constrainedSel);
+  constrainedField.append(
+    el(
+      'p',
+      'field-hint',
+      'Attach JSON Schema response_format on tool turns when the provider probe reports structured output support.',
+    ),
+  );
+  form.append(constrainedField);
+
+  const probeRow = el('div', 'settings-providers-form-actions');
+  const probeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
+  probeBtn.type = 'button';
+  probeBtn.dataset.providerProbe = provider.id;
+  probeRow.append(probeBtn);
+  form.append(probeRow);
+
   const err = el('p', 'settings-providers-form-error hidden');
   err.setAttribute('role', 'alert');
   err.dataset.providerEditError = provider.id;
@@ -280,11 +325,19 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   return form;
 }
 
+function formatStructuredOutputBadge(caps: ProviderCapabilities | null): string {
+  const badge = structuredOutputBadge(caps);
+  if (badge === 'yes') return 'Structured output: yes';
+  if (badge === 'no') return 'Structured output: no';
+  return 'Structured output: unknown';
+}
+
 /** Build one provider row in the settings list. */
 function createProviderSettingsRow(
   provider: ProviderPublic,
   activeProviderId: string,
   canRemove: boolean,
+  capabilities: ProviderCapabilities | null,
 ): HTMLElement {
   const row = el('article', 'settings-providers-row');
   row.setAttribute('role', 'listitem');
@@ -303,6 +356,14 @@ function createProviderSettingsRow(
   if (provider.enabled === false) {
     head.append(el('span', 'settings-badge settings-badge--muted', 'Disabled'));
   }
+
+  head.append(
+    el(
+      'span',
+      'settings-badge settings-badge--muted',
+      formatStructuredOutputBadge(capabilities),
+    ),
+  );
 
   if (provider.id === activeProviderId) {
     head.append(el('span', 'settings-badge', 'Active'));
@@ -493,6 +554,13 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
     return;
   }
 
+  const constrainedSel = form.querySelector<HTMLSelectElement>(
+    'select[name="constrainedToolCalls"]',
+  );
+  let constrainedToolCalls: boolean | null = null;
+  if (constrainedSel?.value === 'on') constrainedToolCalls = true;
+  else if (constrainedSel?.value === 'off') constrainedToolCalls = false;
+
   const result = await updateProvider(id, {
     label,
     baseUrl,
@@ -501,6 +569,7 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
     enabled: enabledInput?.checked === true,
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
+    constrainedToolCalls,
   });
 
   if (result.ok === false) {
@@ -562,6 +631,22 @@ function bindProvidersListActions(listEl: HTMLElement): void {
       return;
     }
 
+    const probeId = target.dataset.providerProbe;
+    if (probeId) {
+      void (async () => {
+        try {
+          setStatus('spin', `Probing structured output for ${probeId}…`);
+          await probeProviderCapabilities(probeId);
+          setStatus('ok', `Probe complete for ${probeId}`);
+          await renderProvidersSettingsSection();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setStatus('err', msg);
+        }
+      })();
+      return;
+    }
+
     const removeId = target.dataset.providerRemove;
     if (!removeId) return;
 
@@ -616,6 +701,9 @@ export async function renderProvidersSettingsSection(): Promise<void> {
   }
 
   for (const provider of providers) {
-    listEl.appendChild(createProviderSettingsRow(provider, activeProviderId, canRemove));
+    const caps = await readProviderCapabilities(provider.id);
+    listEl.appendChild(
+      createProviderSettingsRow(provider, activeProviderId, canRemove, caps),
+    );
   }
 }

@@ -64,7 +64,7 @@ export function normalizeModelCapabilities(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const row = /** @type {Record<string, unknown>} */ (raw);
 
-  return {
+  const out = {
     vision: coerceNullableBool(row.vision),
     tools: coerceNullableBool(row.tools),
     streaming: coerceNullableBool(row.streaming),
@@ -78,6 +78,17 @@ export function normalizeModelCapabilities(raw) {
     sources: normalizeSources(row.sources),
     probeErrors: normalizeProbeErrors(row.probeErrors),
   };
+
+  if (row.structuredOutput === true || row.structuredOutput === false) {
+    out.structuredOutput = row.structuredOutput;
+  }
+  if (typeof row.denyReason === 'string') {
+    out.denyReason = row.denyReason;
+  } else if (row.denyReason === null) {
+    out.denyReason = null;
+  }
+
+  return out;
 }
 
 /**
@@ -89,8 +100,12 @@ export function normalizeCapabilitiesFile(raw) {
     return {
       schemaVersion: SCHEMA_VERSION,
       providerId: '',
-      probedAt: new Date(0).toISOString(),
+      probedAt: '',
       apiKind: 'openai-v1',
+      structuredOutput: false,
+      structuredOutputWithTools: false,
+      structuredOutputStreaming: false,
+      probeError: null,
       models: {},
     };
   }
@@ -111,14 +126,15 @@ export function normalizeCapabilitiesFile(raw) {
         ? file.schemaVersion
         : SCHEMA_VERSION,
     providerId: typeof file.providerId === 'string' ? file.providerId : '',
-    probedAt:
-      typeof file.probedAt === 'string' && file.probedAt.trim()
-        ? file.probedAt
-        : new Date(0).toISOString(),
+    probedAt: typeof file.probedAt === 'string' ? file.probedAt : '',
     apiKind:
       typeof file.apiKind === 'string' && file.apiKind.trim()
         ? file.apiKind
         : 'openai-v1',
+    structuredOutput: file.structuredOutput === true,
+    structuredOutputWithTools: file.structuredOutputWithTools === true,
+    structuredOutputStreaming: file.structuredOutputStreaming === true,
+    probeError: typeof file.probeError === 'string' ? file.probeError : null,
     models,
   };
 }

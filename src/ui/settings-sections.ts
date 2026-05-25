@@ -101,6 +101,11 @@ import {
   loadChatMeta,
   saveChatMeta,
 } from '../config/chat-meta';
+import {
+  getToolCallsMetaSync,
+  loadToolCallsMeta,
+  saveToolCallsMeta,
+} from '../config/tool-calls-meta';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -162,6 +167,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
 /** Main composer tool-loop cap (persisted in config.json `chat`). */
 async function appendMainChatControls(mount: HTMLElement): Promise<void> {
   await loadChatMeta();
+  await loadToolCallsMeta();
   const block = el('div', 'settings-main-chat-block');
   block.appendChild(el('p', 'settings-field-label', 'Main chat'));
   block.appendChild(
@@ -194,6 +200,38 @@ async function appendMainChatControls(mount: HTMLElement): Promise<void> {
         setStatus('ok', 'Main chat settings updated');
       } catch {
         setStatus('err', 'Could not save main chat settings');
+      }
+    })();
+  });
+
+  const constrainedRow = el('label', 'settings-toggle-row');
+  const constrainedCb = document.createElement('input');
+  constrainedCb.type = 'checkbox';
+  constrainedCb.checked = getToolCallsMetaSync().useConstrainedDecoding;
+  constrainedCb.setAttribute('aria-label', 'Constrained tool calls global default');
+  constrainedRow.append(
+    constrainedCb,
+    el(
+      'span',
+      undefined,
+      'Constrained tool calls (global default)',
+    ),
+  );
+  block.appendChild(constrainedRow);
+  block.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Probe each provider under Settings → Providers.',
+    ),
+  );
+  constrainedCb.addEventListener('change', () => {
+    void (async () => {
+      try {
+        await saveToolCallsMeta({ useConstrainedDecoding: constrainedCb.checked });
+        setStatus('ok', 'Constrained tool calls setting updated');
+      } catch {
+        setStatus('err', 'Could not save constrained tool calls setting');
       }
     })();
   });

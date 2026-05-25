@@ -26,7 +26,7 @@ let probeAbort: AbortController | null = null;
 /** ISO timestamp of the last capabilities file applied to modelCache. */
 export function getLastCapabilitiesProbedAt(): string | undefined {
   const at = lastAppliedCapabilities?.probedAt;
-  if (!at || at === new Date(0).toISOString()) return undefined;
+  if (!at?.trim()) return undefined;
   return at;
 }
 

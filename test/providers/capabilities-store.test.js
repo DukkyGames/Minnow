@@ -35,6 +35,7 @@ describe('capabilities-store', () => {
   it('returns empty models when file missing', async () => {
     const data = await readCapabilities('cap-test-provider');
     assert.equal(data.schemaVersion, 1);
+    assert.equal(data.probedAt, '');
     assert.deepEqual(data.models, {});
   });
 

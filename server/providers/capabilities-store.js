@@ -51,6 +51,10 @@ export async function writeCapabilities(id, file) {
     providerId: id,
     probedAt: normalized.probedAt || new Date().toISOString(),
     apiKind: normalized.apiKind || 'openai-v1',
+    structuredOutput: normalized.structuredOutput === true,
+    structuredOutputWithTools: normalized.structuredOutputWithTools === true,
+    structuredOutputStreaming: normalized.structuredOutputStreaming === true,
+    probeError: normalized.probeError ?? null,
     models: normalized.models || {},
   };
   await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
@@ -77,5 +81,22 @@ export async function mergeCapabilities(id, modelPatches, meta = {}) {
     probedAt: meta.probedAt || new Date().toISOString(),
     apiKind: meta.apiKind || existing.apiKind,
     models,
+    ...meta.providerFields,
   });
+}
+
+/**
+ * @param {string} id
+ * @returns {Promise<boolean>}
+ */
+export async function capabilitiesFileExists(id) {
+  try {
+    await fs.access(capabilitiesPath(id));
+    return true;
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') {
+      return false;
+    }
+    throw err;
+  }
 }
