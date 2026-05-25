@@ -5,11 +5,18 @@
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import type { SamplerPreset } from './sampler-types';
 
+/** Where a work agent definition was loaded from. */
+export type WorkAgentSource = 'builtin' | 'pack' | 'override';
+
 /** Shipped or user-defined Work Agent definition. */
 export interface WorkAgentDefinition {
   id: string;
   label: string;
   description: string;
+  /** Registry origin (built-in prompt, agent pack, or user-only override row). */
+  source?: WorkAgentSource;
+  /** Parent pack id when source is pack. */
+  packId?: string;
   /** Prompt kind for S04 loader; files under work-agents/<id>/ */
   kind: 'work-agent';
   version: string;

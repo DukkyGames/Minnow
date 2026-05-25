@@ -1,0 +1,176 @@
+/**
+ * HTTP middleware for /api/agent-packs
+ */
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  getCachedAgentPackList,
+  refreshAgentPackCache,
+  setPackEnabled,
+} from './registry.js';
+import { assertValidPackId } from './paths.js';
+import { builtinWorkAgentsDir } from '../work-agents/paths.js';
+import fs from 'node:fs/promises';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
+}
+
+async function loadBuiltinAgentIdSet() {
+  const ids = new Set();
+  const baseDir = builtinWorkAgentsDir(PROJECT_ROOT);
+  let entries;
+  try {
+    entries = await fs.readdir(baseDir, { withFileTypes: true });
+  } catch {
+    return ids;
+  }
+  for (const ent of entries) {
+    if (ent.isDirectory() && !ent.name.startsWith('_')) {
+      ids.add(ent.name);
+    }
+  }
+  try {
+    const indexPath = path.join(baseDir, 'registry.json');
+    const raw = await fs.readFile(indexPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.ids)) {
+      for (const id of parsed.ids) ids.add(String(id));
+    }
+  } catch {
+    /* ignore */
+  }
+  return ids;
+}
+
+function packListResponse(packs) {
+  return packs.map((p) => ({
+    id: p.id,
+    label: p.label,
+    version: p.version,
+    description: p.description,
+    enabled: p.enabled,
+    valid: p.valid,
+    errors: p.errors,
+    agents: p.agents,
+    packRoot: p.packRoot,
+  }));
+}
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {string} pathname
+ * @returns {Promise<boolean>}
+ */
+export async function handleAgentPacksRequest(req, res, pathname) {
+  if (!pathname.startsWith('/api/agent-packs')) {
+    return false;
+  }
+
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+
+  try {
+    const builtinIds = await loadBuiltinAgentIdSet();
+
+    if (pathname === '/api/agent-packs/ping' && req.method === 'GET') {
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    if (pathname === '/api/agent-packs' && req.method === 'GET') {
+      const packs = await refreshAgentPackCache(PROJECT_ROOT, builtinIds);
+      sendJson(res, 200, { packs: packListResponse(packs) });
+      return true;
+    }
+
+    const packMatch = pathname.match(/^\/api\/agent-packs\/([a-z][a-z0-9-]{0,63})$/);
+    if (packMatch && req.method === 'GET') {
+      const packId = packMatch[1];
+      await refreshAgentPackCache(PROJECT_ROOT, builtinIds);
+      const pack = getCachedAgentPackList().find((p) => p.id === packId);
+      if (!pack) {
+        sendJson(res, 404, { error: 'Agent pack not found' });
+        return true;
+      }
+      sendJson(res, 200, { pack: packListResponse([pack])[0] });
+      return true;
+    }
+
+    if (packMatch && req.method === 'PATCH') {
+      const packId = packMatch[1];
+      assertValidPackId(packId);
+      const body = await readJsonBody(req);
+      if (typeof body.enabled !== 'boolean') {
+        sendJson(res, 400, { error: 'enabled boolean required' });
+        return true;
+      }
+      await setPackEnabled(packId, body.enabled);
+      await refreshAgentPackCache(PROJECT_ROOT, builtinIds);
+      const pack = getCachedAgentPackList().find((p) => p.id === packId);
+      if (!pack) {
+        sendJson(res, 404, { error: 'Agent pack not found' });
+        return true;
+      }
+      sendJson(res, 200, { pack: packListResponse([pack])[0] });
+      return true;
+    }
+
+    sendJson(res, 404, { error: 'Not found' });
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const status = message.includes('Invalid') ? 400 : 500;
+    sendJson(res, status, { error: message });
+    return true;
+  }
+}
+
+/**
+ * Vite connect middleware factory.
+ */
+export function createAgentPacksMiddleware() {
+  return async (req, res, next) => {
+    const url = req.url ?? '';
+    const q = url.indexOf('?');
+    const pathname = q >= 0 ? url.slice(0, q) : url;
+
+    const handled = await handleAgentPacksRequest(req, res, pathname);
+    if (handled) return;
+    next();
+  };
+}

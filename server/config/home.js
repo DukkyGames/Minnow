@@ -67,6 +67,7 @@ const SCAFFOLD_DIRS = [
   'profiles',
   'prompts',
   'skills',
+  'agent-packs',
   'backups',
   'logs/sub-agents',
   'logs/terminal',

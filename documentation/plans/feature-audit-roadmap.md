@@ -101,7 +101,7 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 
 ### 16. Plugin API for agents — Partial
 - **Today:** Built-in agent dirs + user override path (`~/.minnow/prompts/work-agents/<id>/`, `~/.minnow/work-agents.json`). No package install path; no plugin manifest.
-- **Gap:** Drop-in agent pack = folder under `~/.minnow/agent-packs/<name>/` with manifest declaring system prompt, tool subset, model binding, context strategy. Loader merge + settings UI.
+- **Built (MIN-52):** Drop-in agent packs under `~/.minnow/agent-packs/<name>/` with `manifest.json`; `GET/PATCH /api/agent-packs`; merge into work-agent registry; Settings → Agent packs. Plan: [`documentation/plans/Build out/feature-16-agent-pack-plugin.md`](Build%20out/feature-16-agent-pack-plugin.md).
 - **Scope:** Define `agent-pack.schema.json`; new loader at `src/agents/pack-loader.ts`; share dir convention.
 
 ### 17. Plugin API for tools — Partial

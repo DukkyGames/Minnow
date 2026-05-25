@@ -12,6 +12,7 @@ export type SettingsSectionId =
   | 'modes'
   | 'experts'
   | 'work-agents'
+  | 'agent-packs'
   | 'sub-agents'
   | 'memory'
   | 'features'
@@ -31,6 +32,7 @@ export const SETTINGS_SECTIONS: SettingsSectionId[] = [
   'modes',
   'experts',
   'work-agents',
+  'agent-packs',
   'sub-agents',
   'memory',
   'features',
