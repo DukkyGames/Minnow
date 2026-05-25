@@ -366,6 +366,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       tools,
       providerId,
       modelId,
+      parentChatId: run.parentChatId,
       maxToolTurns: run.maxToolTurns,
       contextBudget: agentContextBudgetFromSubAgentType(typeConfig),
       summarySchema: typeConfig.summarySchema,

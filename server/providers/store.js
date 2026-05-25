@@ -13,6 +13,7 @@ import {
   validateAuthStyle,
   validateBaseUrl,
   validateProviderId,
+  validateProviderPricing,
 } from './validate.js';
 
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234';
@@ -77,6 +78,7 @@ export function toProviderPublic(profile, flags) {
     updatedAt: profile.updatedAt,
     hasApiKey: flags.hasApiKey,
     hasBearer: flags.hasBearer,
+    ...(profile.pricing ? { pricing: profile.pricing } : {}),
   };
 }
 
@@ -393,8 +395,17 @@ export async function updateProvider(id, body) {
     profile.constrainedToolCalls = true;
   } else if (body.constrainedToolCalls === false) {
     profile.constrainedToolCalls = false;
-  } else if (body.constrainedToolCalls === null) {
+  } else   if (body.constrainedToolCalls === null) {
     delete profile.constrainedToolCalls;
+  }
+
+  if (body.pricing !== undefined) {
+    const pricing = validateProviderPricing(body.pricing);
+    if (pricing === null) {
+      delete profile.pricing;
+    } else if (pricing) {
+      profile.pricing = pricing;
+    }
   }
 
   profile.updatedAt = now;

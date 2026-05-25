@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { ChatTokenLedger } from './usage/types';
 import type {
   SubAgentBudgetEvent,
   SubAgentStructuredOutcome,
@@ -448,7 +449,18 @@ export interface Chat {
   pendingReefArtifactEdits?: ReefArtifactEditEvent[];
   /** Artifact ids bound to this chat (sidebar / history hints). */
   reefArtifactIds?: string[];
+  /** Cumulative token usage and optional USD cost (Feature #14). */
+  tokenLedger?: ChatTokenLedger;
 }
+
+export type {
+  ChatTokenLedger,
+  ProviderPricing,
+  TokenLedgerBySource,
+  TokenLedgerEntry,
+  TokenLedgerSource,
+  TokenLedgerTotals,
+} from './usage/types';
 
 /** User co-edit on a versioned reef artifact (widget bridge). */
 export interface ReefArtifactEditEvent {

@@ -30,7 +30,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, 'Redis cache tuning');
+    assert.equal(result.title, 'Redis cache tuning');
     assert.equal(capturedBody.stream, undefined);
     assert.equal(capturedBody.max_tokens, 24);
     assert.equal(capturedBody.temperature, 0.3);
@@ -62,7 +62,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, null);
+    assert.equal(result.title, null);
   });
 
   test('ignores reasoning even when it looks like a valid title', async () => {
@@ -87,7 +87,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, null);
+    assert.equal(result.title, null);
   });
 
   test('rejects content duplicated from reasoning channel', async () => {
@@ -113,7 +113,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, null);
+    assert.equal(result.title, null);
   });
 
   test('rejects thinking leaked into content', async () => {
@@ -138,7 +138,7 @@ describe('generateChatTitle', () => {
       port,
     );
 
-    assert.equal(result, null);
+    assert.equal(result.title, null);
   });
 
   test('HTTP failure returns null', async () => {
@@ -153,6 +153,6 @@ describe('generateChatTitle', () => {
       { modelId: 'm', maxTokens: 24, temperature: 0.3 },
       port,
     );
-    assert.equal(result, null);
+    assert.equal(result.title, null);
   });
 });

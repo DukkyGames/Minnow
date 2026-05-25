@@ -6,7 +6,13 @@ import { extractMessageText } from '../../api/chat';
 import { extractReasoningMessage } from '../../api/reasoning';
 import { buildTitleMessages } from './prompt';
 import { normalizeTitle } from './sanitize';
+import type { Usage } from '../../types';
 import type { TitleGenerationOptions, TitleProviderPort } from './types';
+
+export interface TitleGenerationResult {
+  title: string | null;
+  usage?: Usage;
+}
 
 type TitleCompletionMessage = {
   content?: string;
@@ -35,7 +41,7 @@ export async function generateChatTitle(
   seed: string,
   options: TitleGenerationOptions,
   port: TitleProviderPort,
-): Promise<string | null> {
+): Promise<TitleGenerationResult> {
   const messages = buildTitleMessages(seed);
 
   try {
@@ -50,8 +56,13 @@ export async function generateChatTitle(
     );
 
     const raw = extractTitleCompletionText(chunk.choices?.[0]?.message);
-    return normalizeTitle(raw);
+    const title = normalizeTitle(raw);
+    const usage = chunk.usage;
+    return {
+      title,
+      ...(usage && Object.keys(usage).length > 0 ? { usage } : {}),
+    };
   } catch {
-    return null;
+    return { title: null };
   }
 }

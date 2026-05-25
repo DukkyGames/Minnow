@@ -1,4 +1,6 @@
 import { STATS_STRIP_OPEN_KEY } from '../constants';
+import { getActiveChat } from '../state/sessions';
+import { formatUsd } from '../usage/token-ledger';
 import type { LastStats, ModelInfo, Stats, Usage } from '../types';
 
 export function buildLastStatsSnapshot(stats: Stats | undefined, usage: Usage | undefined): LastStats {
@@ -154,6 +156,14 @@ export function updateStrip(
   );
 
   set('stripTotal', u.total_tokens != null ? String(u.total_tokens) : '—', u.total_tokens == null);
+
+  const ledger = getActiveChat().tokenLedger;
+  const lastEntry = ledger?.entries?.[ledger.entries.length - 1];
+  const costLabel =
+    lastEntry?.costUsd != null && lastEntry.costUsd > 0
+      ? formatUsd(lastEntry.costUsd)
+      : '—';
+  set('stripCost', costLabel, costLabel === '—');
 
   const p = u.prompt_tokens ?? 0;
   const c = u.completion_tokens ?? 0;

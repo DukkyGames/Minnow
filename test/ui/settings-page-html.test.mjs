@@ -13,6 +13,7 @@ const SETTINGS_SECTION_IDS = [
   'prompting',
   'rules',
   'providers',
+  'usage',
   'model-routing',
   'modes',
   'experts',
@@ -36,6 +37,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsSubAgentsBody',
   'settingsToolsBody',
   'settingsSkillsBody',
+  'settingsUsageBody',
 ];
 
 describe('settings page HTML', () => {
