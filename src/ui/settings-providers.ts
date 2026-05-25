@@ -20,6 +20,8 @@ import {
   updateProvider,
   updateProviderSecrets,
 } from '../providers/store';
+import { normalizeModelPricingRates, normalizeProviderPricing } from '../usage/pricing';
+import type { ProviderPricing } from '../usage/types';
 import { loadProviderSelect } from './settings';
 import { setStatus } from './status';
 
@@ -92,6 +94,117 @@ function wirePathSyncOnApiKindChange(form: HTMLElement, kindSel: HTMLSelectEleme
     }
     kindSel.dataset.prevApiKind = kindSel.value;
   });
+}
+
+/** Optional per-model API pricing fields on provider edit form. */
+function appendPricingFields(form: HTMLElement, pricing?: ProviderPricing): void {
+  const details = document.createElement('details');
+  details.className = 'settings-providers-pricing-panel';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Model pricing (optional)';
+  details.append(summary);
+
+  const hint = el(
+    'p',
+    'field-hint',
+    'USD per 1M tokens. Used for Usage & cost estimates; local providers can leave zeros.',
+  );
+  details.append(hint);
+
+  const row = el('div', 'field-row');
+  const inField = el('div', 'field');
+  inField.append(el('label', undefined, 'Default input / 1M'));
+  const inInput = document.createElement('input');
+  inInput.type = 'number';
+  inInput.min = '0';
+  inInput.step = 'any';
+  inInput.className = 'settings-input';
+  inInput.name = 'pricingDefaultInput';
+  inInput.value = String(pricing?.default?.inputPer1M ?? 0);
+  inField.append(inInput);
+  row.append(inField);
+
+  const outField = el('div', 'field');
+  outField.append(el('label', undefined, 'Default output / 1M'));
+  const outInput = document.createElement('input');
+  outInput.type = 'number';
+  outInput.min = '0';
+  outInput.step = 'any';
+  outInput.className = 'settings-input';
+  outInput.name = 'pricingDefaultOutput';
+  outInput.value = String(pricing?.default?.outputPer1M ?? 0);
+  outField.append(outInput);
+  row.append(outField);
+  details.append(row);
+
+  const modelsField = el('div', 'field');
+  modelsField.append(el('label', undefined, 'Per-model overrides (JSON)'));
+  const modelsArea = document.createElement('textarea');
+  modelsArea.className = 'settings-input settings-providers-pricing-json';
+  modelsArea.name = 'pricingModelsJson';
+  modelsArea.rows = 5;
+  modelsArea.spellcheck = false;
+  modelsArea.placeholder = '{"gpt-4o-mini":{"inputPer1M":0.15,"outputPer1M":0.6},"*":{"inputPer1M":1,"outputPer1M":3}}';
+  if (pricing?.models && Object.keys(pricing.models).length > 0) {
+    modelsArea.value = JSON.stringify(pricing.models, null, 2);
+  }
+  modelsField.append(modelsArea);
+  details.append(modelsField);
+
+  form.append(details);
+}
+
+function parsePricingFromForm(form: ParentNode): ProviderPricing | null | { error: string } {
+  const inRaw = form.querySelector<HTMLInputElement>('input[name="pricingDefaultInput"]')?.value;
+  const outRaw = form.querySelector<HTMLInputElement>('input[name="pricingDefaultOutput"]')?.value;
+  const jsonRaw =
+    form.querySelector<HTMLTextAreaElement>('textarea[name="pricingModelsJson"]')?.value.trim() ??
+    '';
+
+  const inputPer1M = Number(inRaw);
+  const outputPer1M = Number(outRaw);
+  if (!Number.isFinite(inputPer1M) || !Number.isFinite(outputPer1M)) {
+    return { error: 'Default pricing must be valid numbers.' };
+  }
+  if (inputPer1M < 0 || outputPer1M < 0) {
+    return { error: 'Default pricing cannot be negative.' };
+  }
+
+  let models: Record<string, { inputPer1M: number; outputPer1M: number }> | undefined;
+  if (jsonRaw) {
+    try {
+      const parsed = JSON.parse(jsonRaw) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { error: 'Per-model pricing must be a JSON object.' };
+      }
+      models = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        const rates = normalizeModelPricingRates(value);
+        if (!rates) {
+          return { error: `Invalid rates for model "${key}".` };
+        }
+        models[key] = rates;
+      }
+    } catch {
+      return { error: 'Per-model pricing JSON is invalid.' };
+    }
+  }
+
+  const hasDefault = inputPer1M > 0 || outputPer1M > 0;
+  const hasModels = models && Object.keys(models).length > 0;
+  if (!hasDefault && !hasModels) {
+    return null;
+  }
+
+  const normalized = normalizeProviderPricing({
+    currency: 'USD',
+    default: { inputPer1M, outputPer1M },
+    ...(hasModels ? { models } : {}),
+  });
+  if (!normalized) {
+    return { error: 'Could not normalize pricing.' };
+  }
+  return normalized;
 }
 
 /** Append models + chat path inputs after API kind row. */
@@ -303,6 +416,8 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
     ),
   );
   form.append(constrainedField);
+
+  appendPricingFields(form, provider.pricing);
 
   const probeRow = el('div', 'settings-providers-form-actions');
   const probeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
@@ -554,6 +669,15 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
     return;
   }
 
+  const pricingParsed = parsePricingFromForm(form);
+  if (pricingParsed && 'error' in pricingParsed) {
+    if (errEl) {
+      errEl.textContent = pricingParsed.error;
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
   const constrainedSel = form.querySelector<HTMLSelectElement>(
     'select[name="constrainedToolCalls"]',
   );
@@ -570,6 +694,10 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
     modelsPath: paths.modelsPath,
     chatCompletionsPath: paths.chatCompletionsPath,
     constrainedToolCalls,
+    pricing:
+      pricingParsed === null
+        ? null
+        : (pricingParsed as ProviderPricing),
   });
 
   if (result.ok === false) {

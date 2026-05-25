@@ -200,6 +200,8 @@ export interface SubAgentRunner {
     tools: OpenAIFunctionDefinition[];
     providerId: string;
     modelId: string;
+    /** Parent chat for token ledger attribution. */
+    parentChatId?: string | null;
     maxToolTurns: number;
     contextBudget?: AgentContextBudgetConfig;
     summarySchema?: string;

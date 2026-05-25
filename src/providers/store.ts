@@ -4,6 +4,7 @@
 
 import { isServerStorageMode } from '../config/storage-mode';
 import { parseServerBaseUrl, serverUrl } from '../ui/status';
+import type { ProviderPricing } from '../usage/types';
 import type {
   ApiKind,
   AuthStyle,
@@ -22,6 +23,7 @@ export interface CreateProviderPayload {
   modelsPath?: string;
   chatCompletionsPath?: string;
   constrainedToolCalls?: boolean | null;
+  pricing?: ProviderPricing | null;
 }
 
 /** Body for PUT /api/providers/:id (id is not mutable). */
@@ -34,6 +36,7 @@ export interface UpdateProviderPayload {
   modelsPath?: string;
   chatCompletionsPath?: string;
   constrainedToolCalls?: boolean | null;
+  pricing?: ProviderPricing | null;
 }
 
 const PROVIDERS_TIMEOUT_MS = 800;

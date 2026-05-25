@@ -12,6 +12,8 @@ import {
 } from './activity-events.ts';
 import type { ApiMessage } from '../../types.ts';
 import { resolveWidgetLlmBinding, runWidgetCompletion } from './run-widget-completion.ts';
+import { recordChatCompletionUsage } from '../../usage/record-chat-usage.ts';
+import { hasMeasurableUsage } from '../../usage/pricing.ts';
 import { subscribeThemeChanges } from './theme-forward.ts';
 import { createReefWidgetErrorPanel } from './widget-error-ui.ts';
 import {
@@ -472,7 +474,7 @@ async function runWidgetCompletionForBridge(
   abortByRequestId.set(requestId, controller);
 
   try {
-    let fullText = await runWidgetCompletion({
+    let completion = await runWidgetCompletion({
       providerId: binding.providerId,
       modelId,
       messages,
@@ -487,6 +489,7 @@ async function runWidgetCompletionForBridge(
         });
       },
     });
+    let fullText = completion.text;
 
     if (!fullText) {
       const fallback = await tryNonStreamingFallback(
@@ -500,6 +503,9 @@ async function runWidgetCompletionForBridge(
         binding.providerId,
       );
       fullText = (fallback.choices?.[0]?.message?.content as string | undefined)?.trim() ?? '';
+      if (fallback.usage && hasMeasurableUsage(fallback.usage)) {
+        completion = { text: fullText, usage: fallback.usage };
+      }
       if (fullText) {
         postToWidget(widgetId, {
           type: 'reef',
@@ -509,6 +515,15 @@ async function runWidgetCompletionForBridge(
           delta: fullText,
         });
       }
+    }
+
+    if (hasMeasurableUsage(completion.usage)) {
+      void recordChatCompletionUsage(chat, {
+        source: { kind: 'reef-widget' },
+        providerId: binding.providerId,
+        modelId,
+        usage: completion.usage!,
+      });
     }
 
     postToWidget(widgetId, {

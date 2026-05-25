@@ -42,6 +42,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
@@ -1055,6 +1056,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
+        void recordMainChatTurnUsage(chat, {
+          providerId: sendProviderId,
+          modelId: sendModelId,
+          streamMeta: turnResult.streamMeta,
+          t0: turnResult.t0,
+          tFirst: turnResult.tFirst,
+          tEnd: turnResult.tEnd,
+          workAgentId: activeWorkAgent?.id ?? null,
+        });
+
         const toolProse = turnResult.fullText.trim();
         if (toolProse && isStreamDomVisible(chat.id)) {
           revealProse();
@@ -1347,6 +1358,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         turnResult.tFirst ?? turnResult.tEnd,
         turnResult.tEnd,
       );
+      void recordMainChatTurnUsage(chat, {
+        providerId: sendProviderId,
+        modelId: sendModelId,
+        streamMeta,
+        t0: turnResult.t0,
+        tFirst: turnResult.tFirst,
+        tEnd: turnResult.tEnd,
+        workAgentId: activeWorkAgent?.id ?? null,
+      });
       const displayMeta = applyOrchestrateAggregatedStatsToChat(chat, parentTurnId, meta);
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, displayMeta.model_info);
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;

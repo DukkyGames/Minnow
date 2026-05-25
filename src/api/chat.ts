@@ -38,6 +38,8 @@ import type {
 import { markChatStalledForUi } from '../agents/supervisor/state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
+import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
+import { getActiveProvider } from '../providers/store';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
   setComposerStreamingMode,
@@ -61,7 +63,6 @@ import {
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
-import { getActiveProvider } from '../providers/store';
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 
@@ -488,12 +489,22 @@ export async function sendMessage(): Promise<void> {
     }
 
     if (fullText) {
+      const tEnd = performance.now();
       const meta = finalizeResponseMeta(
         streamMeta,
         t0,
-        tFirst ?? performance.now(),
-        performance.now()
+        tFirst ?? tEnd,
+        tEnd,
       );
+      const resolvedProvider = await getActiveProvider(chat.providerId);
+      void recordMainChatTurnUsage(chat, {
+        providerId: resolvedProvider.id,
+        modelId: streamMeta.model || modelId,
+        streamMeta,
+        t0,
+        tFirst,
+        tEnd,
+      });
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, meta.model_info);
       const thinkingNorm = thoughtController.getSegmentsNormalized();
       const thinkingDurationMs = thinkingTracker.finalize();

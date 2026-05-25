@@ -43,6 +43,7 @@ import {
 import type { SubAgentBudgetEvent, SubAgentStructuredOutcome } from './sub-agent-structured-outcome';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
+import { recordSubAgentTurnUsage } from '../usage/record-chat-usage';
 import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import { looksLikeProseStructuredQuestion } from '../tools/prose-question-detect';
@@ -99,6 +100,9 @@ async function streamSubAgentTurn(
   finishReason: string | undefined;
   toolCalls: ReturnType<typeof finalizeToolCalls>;
   streamMeta: StreamMetaAccumulator;
+  t0: number;
+  tFirst: number | null;
+  tEnd: number;
 }> {
   const provider = await getActiveProvider(providerId);
   const res = await postChatCompletions(provider, body, signal);
@@ -111,6 +115,8 @@ async function streamSubAgentTurn(
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
+  const t0 = performance.now();
+  let tFirst: number | null = null;
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -121,6 +127,7 @@ async function streamSubAgentTurn(
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
     const delta = extractStreamDelta(chunk);
     if (delta) {
+      if (tFirst == null) tFirst = performance.now();
       fullText += delta;
       onDelta?.(delta);
     }
@@ -141,12 +148,33 @@ async function streamSubAgentTurn(
     streamMeta.finish_reason ||
     (Object.keys(toolAcc).length > 0 ? 'tool_calls' : undefined);
 
+  const tEnd = performance.now();
+
   return {
     fullText,
     finishReason,
     toolCalls: finalizeToolCalls(toolAcc),
     streamMeta,
+    t0,
+    tFirst,
+    tEnd,
   };
+}
+
+async function ledgerSubAgentTurn(
+  input: { parentChatId?: string | null; type: string; runId: string; providerId: string; modelId: string },
+  turn: Awaited<ReturnType<typeof streamSubAgentTurn>>,
+): Promise<void> {
+  await recordSubAgentTurnUsage(input.parentChatId, {
+    subAgentType: input.type,
+    runId: input.runId,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    streamMeta: turn.streamMeta,
+    t0: turn.t0,
+    tFirst: turn.tFirst,
+    tEnd: turn.tEnd,
+  });
 }
 
 /** Default runner: LM Studio stream + nested tools. */
@@ -263,6 +291,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         body,
         input.signal,
       );
+      await ledgerSubAgentTurn(input, turnResult);
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
       const turnStats = turnResult.streamMeta.stats ?? {};
@@ -351,6 +380,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           throw streamErr;
         }
       }
+
+      await ledgerSubAgentTurn(input, turnResult);
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
       const turnStats = turnResult.streamMeta.stats ?? {};

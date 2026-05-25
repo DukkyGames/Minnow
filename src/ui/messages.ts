@@ -28,6 +28,7 @@ import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
+import { resetTokenLedger } from '../usage/token-ledger';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
@@ -514,6 +515,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   chat.history = [];
+  resetTokenLedger(chat);
   chat.lastStats = null;
   chat.modelInfo = {};
   chat.lastMessageAt = 0;

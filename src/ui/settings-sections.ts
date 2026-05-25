@@ -43,6 +43,7 @@ import {
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { listProviders } from '../providers/store';
 import { renderProvidersSettingsSection } from './settings-providers';
+import { renderUsageSettingsSection } from './settings-usage';
 import {
   createMemoryEntry,
   deleteMemoryEntry,
@@ -1851,6 +1852,9 @@ export async function refreshSettingsSection(
       refreshProvidersBanner();
       await listProviders();
       await renderProvidersSettingsSection();
+      break;
+    case 'usage':
+      await renderUsageSettingsSection();
       break;
     case 'model-routing':
       await renderModelRoutingSettingsSection();

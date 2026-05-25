@@ -4,11 +4,13 @@
 
 import {
   extractStreamDelta,
+  mergeStreamMeta,
   parseSsePayloads,
+  type StreamMetaAccumulator,
 } from '../../api/chat.ts';
 import { postChatCompletions } from '../../providers/fetch-chat.ts';
 import { getActiveProvider } from '../../providers/store.ts';
-import type { ApiMessage, ChatCompletionChunk } from '../../types.ts';
+import type { ApiMessage, ChatCompletionChunk, Usage } from '../../types.ts';
 
 export interface WidgetCompletionInput {
   providerId: string;
@@ -18,8 +20,15 @@ export interface WidgetCompletionInput {
   onDelta: (delta: string) => void;
 }
 
+export interface WidgetCompletionResult {
+  text: string;
+  usage?: Usage;
+}
+
 /** Stream a single widget LLM completion; invokes onDelta for each text chunk. */
-export async function runWidgetCompletion(input: WidgetCompletionInput): Promise<string> {
+export async function runWidgetCompletion(
+  input: WidgetCompletionInput,
+): Promise<WidgetCompletionResult> {
   const provider = await getActiveProvider(input.providerId);
   const body = {
     model: input.modelId || undefined,
@@ -40,11 +49,13 @@ export async function runWidgetCompletion(input: WidgetCompletionInput): Promise
   }
 
   let fullText = '';
+  let streamMeta: StreamMetaAccumulator = {};
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
   function handleChunk(chunk: ChatCompletionChunk): void {
+    streamMeta = mergeStreamMeta(streamMeta, chunk);
     const delta = extractStreamDelta(chunk);
     if (!delta) return;
     fullText += delta;
@@ -62,7 +73,12 @@ export async function runWidgetCompletion(input: WidgetCompletionInput): Promise
 
   if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
 
-  return fullText.trim();
+  const text = fullText.trim();
+  const usage = streamMeta.usage;
+  return {
+    text,
+    ...(usage && Object.keys(usage).length > 0 ? { usage } : {}),
+  };
 }
 
 /** Resolve provider/model for widget LLM from chat overrides. */
