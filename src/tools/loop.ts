@@ -230,7 +230,7 @@ import {
   getChatMetaSync,
 } from '../config/chat-meta';
 
-/** Default max assistant↔tool rounds (see Settings → General and `chat.maxToolTurns` in config). */
+/** Default max assistant↔tool rounds (see Settings → Tools and `chat.maxToolTurns` in config). */
 export const MAX_TOOL_TURNS = DEFAULT_CHAT_MAX_TOOL_TURNS;
 
 /** Options for {@link buildApiMessages} when the composer has pending files. */
@@ -1594,7 +1594,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 }
 
-/** Send the composer text with tool calling (SSE loop; max rounds from Settings → General / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
+/** Send the composer text with tool calling (SSE loop; max rounds from Settings → Tools / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
 export async function sendMessageWithTools(): Promise<void> {
   const input = document.getElementById('msgInput') as HTMLTextAreaElement;
   const rawTextEarly = input.value.trim();

@@ -15,7 +15,6 @@ const VALID_PACK = `{
       "prompt": "Say hello.",
       "allowedTools": ["list_directory"],
       "deniedTools": ["execute_command"],
-      "maxToolTurns": 4,
       "rubricPrompt": "Score 100 if hello. JSON: {\\"score\\":number,\\"pass\\":boolean,\\"rationale\\":string}"
     }
   ]

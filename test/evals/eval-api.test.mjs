@@ -93,7 +93,6 @@ describe('evals API', () => {
           prompt: 'Ping',
           allowedTools: ['get_datetime'],
           deniedTools: [],
-          maxToolTurns: 2,
           rubricPrompt:
             'Score 100 always. JSON: {"score":number,"pass":boolean,"rationale":string}',
         },

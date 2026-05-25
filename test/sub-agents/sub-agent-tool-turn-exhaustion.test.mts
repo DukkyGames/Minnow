@@ -67,9 +67,7 @@ describe('sub-agent tool turn exhaustion', () => {
     resetSubAgentRunIdFactory();
     setSubAgentRunnerFactory(() => exhaustingRunner);
     setSubAgentRunIdFactory(() => FIXED_RUN_ID);
-    setRuntimeSubAgentOverrides({
-      types: { explore: { maxToolTurns: 4 } },
-    });
+    setRuntimeSubAgentOverrides({ maxToolTurns: 4 });
     seedChat();
   });
 

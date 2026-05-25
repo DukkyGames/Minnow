@@ -542,7 +542,6 @@ export function mountSubAgentTypeEditor(
   initial: ModelBindingState & {
     enabled: boolean;
     maxConcurrent: number;
-    maxToolTurns: number;
     maxInputTokens: number | null;
     contextEnforcementPolicy: ContextEnforcementPolicy;
     summarySchema: string;
@@ -554,7 +553,6 @@ export function mountSubAgentTypeEditor(
       modelId: string;
       enabled: boolean;
       maxConcurrent: number;
-      maxToolTurns: number;
       maxInputTokens: number | null;
       contextEnforcementPolicy: ContextEnforcementPolicy;
       summarySchema: string;
@@ -580,13 +578,6 @@ export function mountSubAgentTypeEditor(
   maxInput.min = '1';
   maxInput.max = '8';
   maxInput.value = String(initial.maxConcurrent);
-
-  const toolTurnsInput = document.createElement('input');
-  toolTurnsInput.type = 'number';
-  toolTurnsInput.className = 'settings-select';
-  toolTurnsInput.min = '1';
-  toolTurnsInput.max = '64';
-  toolTurnsInput.value = String(initial.maxToolTurns);
 
   const maxInputTokensInput = document.createElement('input');
   maxInputTokensInput.type = 'number';
@@ -614,10 +605,6 @@ export function mountSubAgentTypeEditor(
   maxRow.appendChild(el('span', '', 'Max concurrent'));
   maxRow.appendChild(maxInput);
 
-  const toolTurnsRow = el('label', 'settings-toggle-row');
-  toolTurnsRow.appendChild(el('span', '', 'Max tool turns'));
-  toolTurnsRow.appendChild(toolTurnsInput);
-
   extra.appendChild(modelBlock);
   extra.appendChild(enabledRow);
   extra.appendChild(maxRow);
@@ -629,7 +616,6 @@ export function mountSubAgentTypeEditor(
   budgetRow.appendChild(el('label', 'settings-field-label', 'Summary schema'));
   budgetRow.appendChild(summarySchemaSel);
 
-  extra.appendChild(toolTurnsRow);
   extra.appendChild(budgetRow);
   extra.appendChild(
     el(
@@ -649,7 +635,6 @@ export function mountSubAgentTypeEditor(
         modelId: modelSel.value,
         enabled: enabledCb.checked,
         maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
-        maxToolTurns: Math.min(64, Math.max(1, Number(toolTurnsInput.value) || 1)),
         maxInputTokens:
           maxInputTokensInput.value.trim() === ''
             ? null

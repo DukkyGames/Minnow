@@ -19,7 +19,6 @@ const pack: EvalPack = {
       prompt: 'A',
       allowedTools: [],
       deniedTools: [],
-      maxToolTurns: 1,
       rubricPrompt: 'JSON score',
     },
     {
@@ -27,7 +26,6 @@ const pack: EvalPack = {
       prompt: 'B',
       allowedTools: [],
       deniedTools: [],
-      maxToolTurns: 1,
       rubricPrompt: 'JSON score',
     },
   ],

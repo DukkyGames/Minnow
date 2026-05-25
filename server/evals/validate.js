@@ -36,10 +36,6 @@ function validateTask(raw, index) {
       throw new Error(`tasks[${index}]: unknown tool "${toolId}"`);
     }
   }
-  const maxToolTurns =
-    typeof raw.maxToolTurns === 'number' && Number.isFinite(raw.maxToolTurns)
-      ? Math.max(1, Math.floor(raw.maxToolTurns))
-      : 6;
   const rubricPrompt =
     typeof raw.rubricPrompt === 'string' ? raw.rubricPrompt.trim() : '';
   if (!rubricPrompt) throw new Error(`tasks[${index}].rubricPrompt: required`);
@@ -54,7 +50,6 @@ function validateTask(raw, index) {
     systemPrompt,
     allowedTools,
     deniedTools,
-    maxToolTurns,
     rubricPrompt,
   };
 }

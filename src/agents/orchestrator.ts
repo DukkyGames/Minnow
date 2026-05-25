@@ -9,7 +9,7 @@ import { executeTool, getEnabledToolDefinitionsForMode } from '../tools/client';
 import { loadSubAgentConfig } from './sub-agent-config';
 import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
 import { createSubAgentRunId } from './sub-agent-run-id';
-import { DEFAULT_SUB_AGENT_MAX_TOOL_TURNS } from './sub-agent-config';
+import { getSubAgentsMaxToolTurns } from './sub-agent-config';
 import {
   isContextBudgetFailure,
   isMaxToolTurnFailure,
@@ -490,12 +490,7 @@ async function spawnSubAgentInternal(
     startedAt: null,
     endedAt: null,
     toolTurns: 0,
-    maxToolTurns: Math.max(
-      1,
-      typeConfig.maxToolTurns ??
-        config.defaultMaxToolTurns ??
-        DEFAULT_SUB_AGENT_MAX_TOOL_TURNS,
-    ),
+    maxToolTurns: getSubAgentsMaxToolTurns(config),
     cancelled: false,
     messages: [],
     ...(input.category ? { category: input.category } : {}),
