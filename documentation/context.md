@@ -212,6 +212,8 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
 | Tests | `npm run test:benchmark` |
 
+**Speed suite pass criteria (BUG-003, fixed MIN-63):** Short runs (`speed-short-*`) and **Sustained throughput** (`speed-long-1`) pass only when `runOneShot` returns non-empty completion text (`hasNonEmptyCompletion` in `src/benchmark/completion-valid.ts`, shared with **cap-stream**). Empty text fails with details `empty completion (0 chars)`; headline TTFT/tok/s medians exclude failed-empty runs.
+
 ### Headless CLI (Feature #18)
 
 Non-interactive agent runs for **GitHub Actions** and local scripts — same generations proxy, work-agent compose path, and **server** tools as `npm start`, without the SPA.
