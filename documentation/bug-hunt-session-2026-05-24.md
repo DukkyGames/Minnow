@@ -21,7 +21,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 |----|----------|------|-------|--------|
 | BUG-001 | Major | Bugs tracker / navigation | All bugs view opens then immediately closes on first click | Open |
 | BUG-002 | Major | Benchmark (`#/benchmark`) | Streaming completion test fails for every model | Open |
-| BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Open |
+| BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Fixed (MIN-63) |
 | BUG-004 | Major | Benchmark — capability suite | Multimodal capability test not run for multimodal models | Open |
 | BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Open |
 | BUG-006 | Major | Benchmark — tools suite | Run hangs or stops on tools suite | Verified — [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite) |
@@ -119,11 +119,13 @@ Streaming completion passes when the active provider returns streamed text (non-
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Speed** suite (`src/benchmark/suites/speed.ts`), short runs `speed-short-1`…`3` |
-| **Status** | Open |
+| **Status** | Fixed (MIN-63, 2026-05-25) |
 
 **Summary**
 
 Speed benchmark cards display **0 chars** in the result details, yet the test is marked **passed**.
+
+**Resolution (MIN-63):** `src/benchmark/suites/speed.ts` gates `passed`/`score` on non-empty completion text via `scoreSpeedCompletion` + `completion-valid.ts`; empty runs use details `empty completion (0 chars)` and do not contribute headline timing samples. Tests: `test/benchmark/speed-suite.test.mts`.
 
 **Steps to reproduce**
 
