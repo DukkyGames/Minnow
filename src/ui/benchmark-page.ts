@@ -25,6 +25,16 @@ const SUITE_LABELS: Record<SuiteId, string> = {
   coding: 'Coding',
 };
 
+/** Display order for suite toggle buttons in the run bar. */
+const SUITE_TOGGLE_ORDER: SuiteId[] = [
+  'capability',
+  'speed',
+  'tools',
+  'skills',
+  'modes',
+  'coding',
+];
+
 let abortController: AbortController | null = null;
 let lastRun: BenchmarkRun | null = null;
 let compareRun: BenchmarkRun | null = null;
@@ -360,12 +370,35 @@ function renderSuites(run: BenchmarkRun, compare: BenchmarkRun | null): void {
     .join('');
 }
 
-function getSelectedSuites(): SuiteId[] | undefined {
-  const custom = document.getElementById('benchmarkCustomSuites');
-  if (!(custom instanceof HTMLElement) || custom.hidden) return undefined;
-  const boxes = custom.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked');
-  const ids = [...boxes].map((b) => b.value as SuiteId);
-  return ids.length ? ids : undefined;
+function getSuiteToggleButtons(): HTMLButtonElement[] {
+  const group = document.getElementById('benchmarkSuiteToggles');
+  if (!group) return [];
+  return [...group.querySelectorAll<HTMLButtonElement>('.benchmark-suite-toggle')];
+}
+
+/** Reads pressed suite toggles (always visible; no hidden-panel guard). */
+function getSelectedSuites(): SuiteId[] {
+  return getSuiteToggleButtons()
+    .filter((btn) => btn.getAttribute('aria-pressed') === 'true')
+    .map((btn) => btn.dataset.suiteId as SuiteId)
+    .filter((id): id is SuiteId => Boolean(id));
+}
+
+/** Option B: Quick/Full shortcuts set toggle state before run. */
+function applyPresetToToggles(preset: BenchmarkPreset): void {
+  const target = new Set(resolveBenchmarkSuites(preset));
+  for (const btn of getSuiteToggleButtons()) {
+    const id = btn.dataset.suiteId as SuiteId | undefined;
+    if (!id) continue;
+    const on = target.has(id);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+}
+
+function setSuiteTogglesDisabled(disabled: boolean): void {
+  for (const btn of getSuiteToggleButtons()) {
+    btn.toggleAttribute('disabled', disabled);
+  }
 }
 
 function setRunning(running: boolean): void {
@@ -376,6 +409,7 @@ function setRunning(running: boolean): void {
   quick?.toggleAttribute('disabled', running);
   full?.toggleAttribute('disabled', running);
   stop?.toggleAttribute('disabled', !running);
+  setSuiteTogglesDisabled(running);
   root?.classList.toggle('is-running', running);
 }
 
@@ -400,19 +434,25 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
     return;
   }
 
+  const selectedSuites = getSelectedSuites();
+  if (!selectedSuites.length) {
+    setStatus('err', 'Select at least one benchmark suite above, then Quick or Full.');
+    return;
+  }
+
   abortController?.abort();
   abortController = new AbortController();
   setRunning(true);
   setStatus('ok', preset === 'quick' ? 'Benchmark Quick running…' : 'Benchmark Full running…');
 
-  const suiteIds = resolveBenchmarkSuites(preset, getSelectedSuites());
+  const suiteIds = selectedSuites;
   const compareMap = compareMapFromRun(compareRun);
   initLiveRunUI(preset, suiteIds);
 
   try {
     const run = await runBenchmark({
       preset,
-      suites: getSelectedSuites(),
+      suites: selectedSuites,
       signal: abortController.signal,
       onProgress: (event) => {
         onBenchmarkProgress(event, compareMap);
@@ -479,6 +519,21 @@ export function setBenchmarkAbortControllerForTests(controller: AbortController 
   abortController = controller;
 }
 
+/** Test hook: read suite toggle selection. */
+export function getSelectedSuitesForTests(): SuiteId[] {
+  return getSelectedSuites();
+}
+
+/** Test hook: apply Quick/Full preset to suite toggles. */
+export function applyPresetToTogglesForTests(preset: BenchmarkPreset): void {
+  applyPresetToToggles(preset);
+}
+
+/** Test hook: suite ids used for toggle button order. */
+export function getSuiteToggleOrderForTests(): readonly SuiteId[] {
+  return SUITE_TOGGLE_ORDER;
+}
+
 async function onCompareChange(): Promise<void> {
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
   const toggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
@@ -543,19 +598,27 @@ function onHashChange(): void {
   }
 }
 
+function onSuiteToggleClick(this: HTMLButtonElement): void {
+  if (this.disabled) return;
+  const pressed = this.getAttribute('aria-pressed') === 'true';
+  this.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+}
+
 export function initBenchmarkPage(): void {
   document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => closeBenchmark());
-  document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => void startRun('quick'));
-  document.getElementById('btnBenchmarkFull')?.addEventListener('click', () => void startRun('full'));
+  document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
+    applyPresetToToggles('quick');
+    void startRun('quick');
+  });
+  document.getElementById('btnBenchmarkFull')?.addEventListener('click', () => {
+    applyPresetToToggles('full');
+    void startRun('full');
+  });
   document.getElementById('btnBenchmarkStop')?.addEventListener('click', () => stopRun());
 
-  const customBtn = document.getElementById('btnBenchmarkCustom');
-  const customPanel = document.getElementById('benchmarkCustomSuites');
-  customBtn?.addEventListener('click', () => {
-    if (customPanel instanceof HTMLElement) {
-      customPanel.hidden = !customPanel.hidden;
-    }
-  });
+  for (const btn of getSuiteToggleButtons()) {
+    btn.addEventListener('click', onSuiteToggleClick);
+  }
 
   document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => void onCompareChange());
   document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => void onCompareChange());
