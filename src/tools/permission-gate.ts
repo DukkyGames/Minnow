@@ -36,7 +36,11 @@ export async function maybeBlockToolForUserApproval(
   }
 
   const config = loadToolConfig();
-  const resolved = resolveEffectivePermission(config, permissionToolId, args, context);
+  const resolved = resolveEffectivePermission(config, permissionToolId, args, {
+    subAgentType: context.subAgentType,
+    workAgentId: context.workAgentId,
+    modeId: context.modeId,
+  });
   const perm = resolved.mode;
   if (perm === 'off') {
     return {

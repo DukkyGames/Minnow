@@ -2,6 +2,7 @@
  * Resolves effective tool permission for an invocation (patterns → per-agent → default).
  */
 
+import { normalizeModeId } from '../chat/modes/types';
 import { getToolPermissionForId, isToolPermissionMode, type ToolConfig } from './config';
 import type {
   ApprovalPattern,
@@ -15,6 +16,8 @@ export const MAX_APPROVAL_PATTERNS = 64;
 export interface ToolPermissionContext {
   subAgentType?: string;
   workAgentId?: string | null;
+  /** Active composer mode — General forces approval before every tool run. */
+  modeId?: string;
 }
 
 /** Derives the agent key used for per-agent overrides and pattern scope. */
@@ -120,23 +123,42 @@ export function resolveEffectivePermission(
   const defaultMode = getToolPermissionForId(config, toolId);
 
   if (defaultMode === 'off') {
-    return { mode: 'off', matchedPattern: null, agentKey };
+    return applyGeneralModeApprovalGate('off', null, agentKey, context);
   }
 
   const matchedPattern = findMatchingApprovalPattern(config, toolId, args, agentKey);
   if (matchedPattern) {
-    return { mode: 'full', matchedPattern, agentKey };
+    return applyGeneralModeApprovalGate('full', matchedPattern, agentKey, context);
   }
 
   const agentMode = readPerAgentMode(config, agentKey, toolId);
   if (agentMode === 'off') {
-    return { mode: 'off', matchedPattern: null, agentKey };
+    return applyGeneralModeApprovalGate('off', null, agentKey, context);
   }
   if (agentMode === 'full' || agentMode === 'ask') {
-    return { mode: agentMode, matchedPattern: null, agentKey };
+    return applyGeneralModeApprovalGate(agentMode, matchedPattern, agentKey, context);
   }
 
-  return { mode: defaultMode, matchedPattern: null, agentKey };
+  return applyGeneralModeApprovalGate(defaultMode, matchedPattern, agentKey, context);
+}
+
+/**
+ * General mode may use any enabled tool, but each invocation requires user approval
+ * (Settings "Full" and auto-approve patterns do not bypass the strip in General).
+ */
+function applyGeneralModeApprovalGate(
+  mode: ToolPermissionMode,
+  matchedPattern: ApprovalPattern | null,
+  agentKey: ToolAgentKey,
+  context: ToolPermissionContext,
+): ResolvedToolPermission {
+  if (mode === 'off') {
+    return { mode: 'off', matchedPattern, agentKey };
+  }
+  if (normalizeModeId(context.modeId) === 'general') {
+    return { mode: 'ask', matchedPattern: null, agentKey };
+  }
+  return { mode, matchedPattern, agentKey };
 }
 
 /** Human-readable label for a matched pattern (settings / approval UI). */

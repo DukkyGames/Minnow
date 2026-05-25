@@ -37,18 +37,6 @@ const RESEARCH_EXTRA_DENIED_TOOLS: string[] = [
   'write_clipboard',
 ];
 
-/** Orchestration and sub-agent tools denied in General (moderate everyday Q&A). */
-const GENERAL_ORCHESTRATION_DENIED_TOOLS: string[] = [
-  'spawn_sub_agent',
-  'cancel_sub_agent',
-  'list_sub_agents',
-  'get_sub_agent_status',
-  'board_init',
-  'board_update_task',
-  'board_get_state',
-  'report_orchestrator_status',
-];
-
 function denyListToolPolicy(denied: string[]): ModeToolPolicy {
   const tools: Record<string, 'deny'> = {};
   for (const id of denied) {
@@ -61,13 +49,10 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
   {
     id: 'general',
     label: 'General',
-    description: 'Everyday Q&A, explanations, and brainstorming with read-focused tools.',
+    description:
+      'Everyday Q&A and brainstorming; all enabled tools, with approval before each run.',
     promptId: 'general',
-    toolPolicy: denyListToolPolicy([
-      ...PLAN_DENIED_TOOLS,
-      ...RESEARCH_EXTRA_DENIED_TOOLS,
-      ...GENERAL_ORCHESTRATION_DENIED_TOOLS,
-    ]),
+    toolPolicy: { default: 'allow' },
   },
   {
     id: 'build',

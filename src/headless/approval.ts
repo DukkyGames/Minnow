@@ -31,7 +31,11 @@ export function maybeBlockHeadlessToolApproval(
   displayToolName?: string,
 ): ToolExecutionResult | null {
   const config = loadToolConfig();
-  const resolved = resolveEffectivePermission(config, permissionToolId, args, context);
+  const resolved = resolveEffectivePermission(config, permissionToolId, args, {
+    subAgentType: context.subAgentType,
+    workAgentId: context.workAgentId,
+    modeId: context.modeId,
+  });
   const perm: ToolPermissionMode = resolved.mode;
   const execName = displayToolName ?? permissionToolId;
 

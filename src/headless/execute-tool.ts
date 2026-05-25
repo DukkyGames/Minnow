@@ -143,7 +143,7 @@ export async function executeHeadlessTool(
   const blocked = maybeBlockHeadlessToolApproval(
     permissionId,
     args,
-    context,
+    { ...context, modeId },
     options,
     name,
   );
