@@ -4,10 +4,14 @@
 
 import { getActiveProvider } from '../../providers/store';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
+import { isVisionModel } from '../../providers/vision-model.ts';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
 import { hasNonEmptyCompletion } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
+import type { LmModelRecord } from '../../types.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
+import { scoreMultimodalProbe } from './cap-multimodal.ts';
 
 function result(
   id: string,
@@ -31,17 +35,13 @@ function result(
   };
 }
 
-/** Heuristic VLM detection when model cache type is unavailable. */
-function modelLooksMultimodal(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  return /vlm|vision|llava|bakllava|moondream|multimodal/.test(id);
-}
-
 export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<SuiteResult> {
   const tests: TestResult[] = [];
   const t0 = () => performance.now();
 
   assertNotAborted(ctx.signal);
+
+  let catalogModels: LmModelRecord[] | undefined;
 
   // 1 — Provider reachable
   let t = t0();
@@ -200,19 +200,19 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 6 — Models list
+  // 6 — Models list (fetch once; catalog reused for multimodal gate)
   assertNotAborted(ctx.signal);
   t = t0();
   try {
     const provider = await getActiveProvider(ctx.providerId);
-    const models = await fetchModelsForProvider(provider, ctx.signal);
+    catalogModels = await fetchModelsForProvider(provider, ctx.signal);
     tests.push(
       result(
         'cap-models-list',
         'Models list',
-        Array.isArray(models) && models.length > 0,
+        Array.isArray(catalogModels) && catalogModels.length > 0,
         performance.now() - t,
-        `${models.length} models`,
+        `${catalogModels.length} models`,
       ),
     );
   } catch (err) {
@@ -228,9 +228,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 7 — Multimodal (skip on text-only)
+  // 7 — Multimodal (skip text-only; run image probe for vision models)
+  assertNotAborted(ctx.signal);
   t = t0();
-  if (!modelLooksMultimodal(ctx.modelId)) {
+  const catalogArg = catalogModels ?? [];
+  if (!isVisionModel(ctx.modelId, catalogArg)) {
     tests.push(
       result(
         'cap-multimodal',
@@ -239,21 +241,44 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         performance.now() - t,
         undefined,
         true,
-        'not a VLM model',
+        'not a vision model',
       ),
     );
   } else {
-    tests.push(
-      result(
-        'cap-multimodal',
-        'Multimodal request',
-        true,
-        performance.now() - t,
-        'skipped deep image probe in v1',
-        true,
-        'VLM probe deferred',
-      ),
-    );
+    try {
+      const stream = await runOneShot({
+        providerId: ctx.providerId,
+        modelId: ctx.modelId,
+        signal: ctx.signal,
+        messages: buildMultimodalProbeMessages(),
+        maxTokens: 64,
+      });
+      const scored = scoreMultimodalProbe(stream.text);
+      tests.push(
+        result(
+          'cap-multimodal',
+          'Multimodal request',
+          scored.passed,
+          performance.now() - t,
+          scored.details,
+        ),
+      );
+    } catch (err) {
+      rethrowIfAborted(err, ctx.signal);
+      const scored = scoreMultimodalProbe(
+        '',
+        err instanceof Error ? err.message : String(err),
+      );
+      tests.push(
+        result(
+          'cap-multimodal',
+          'Multimodal request',
+          scored.passed,
+          performance.now() - t,
+          scored.details,
+        ),
+      );
+    }
   }
 
   const passed = tests.filter((x) => !x.skipped && x.passed).length;

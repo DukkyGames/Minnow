@@ -215,6 +215,8 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 
 **Speed suite pass criteria (BUG-003, fixed MIN-63):** Short runs (`speed-short-*`) and **Sustained throughput** (`speed-long-1`) pass only when `runOneShot` returns non-empty completion text (`hasNonEmptyCompletion` in `src/benchmark/completion-valid.ts`, shared with **cap-stream**). Empty text fails with details `empty completion (0 chars)`; headline TTFT/tok/s medians exclude failed-empty runs.
 
+**Capability multimodal probe (BUG-004, fixed MIN-65):** **`cap-multimodal`** uses shared [`isVisionModel`](../src/providers/vision-model.ts) (`modelCache` `type === 'vlm'` / `capabilities.vision`, then models-list catalog, then id regex when catalog arg is passed). Text-only models skip with **`not a vision model`**. Vision models run a deterministic inline PNG + text probe via [`buildMultimodalProbeMessages`](../src/benchmark/fixtures/multimodal-probe.ts) and pass when assistant text is non-empty (`scoreMultimodalProbe` in [`cap-multimodal.ts`](../src/benchmark/suites/cap-multimodal.ts)). Chat send uses the same `isVisionModel` helper ([`loop.ts`](../src/tools/loop.ts), cache-only — no regex fallback).
+
 ### Headless CLI (Feature #18)
 
 Non-interactive agent runs for **GitHub Actions** and local scripts — same generations proxy, work-agent compose path, and **server** tools as `npm start`, without the SPA.

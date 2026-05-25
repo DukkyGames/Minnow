@@ -2,7 +2,7 @@
 name: BUG-004 — Multimodal capability test not run
 overview: Fix the Capability suite `cap-multimodal` test so vision-capable models are detected via catalog metadata (not ID regex) and receive a real image+text probe that reports pass/fail instead of always skipping.
 source: documentation/bug-hunt-session-2026-05-24.md (BUG-004)
-status: planned
+status: shipped
 severity: major
 area: Benchmark — Capability suite (`src/benchmark/suites/capability.ts`)
 related:
@@ -15,22 +15,22 @@ todos:
     status: completed
   - id: bug004-shared-vlm-detect
     content: Add shared `isVisionModel(modelId)` using `modelCache` + optional catalog lookup fallback; remove duplicate regex-only gate in capability suite
-    status: pending
+    status: completed
   - id: bug004-probe-fixture
     content: Add deterministic inline probe image + prompt constants (small base64 PNG/JPEG, known answer heuristic)
-    status: pending
+    status: completed
   - id: bug004-run-probe
     content: Implement real multimodal `runOneShot` in `cap-multimodal` with pass/fail scoring and clear details text
-    status: pending
+    status: completed
   - id: bug004-tests
     content: Add unit tests for VLM detection + multimodal test branches (mock `runOneShot` / `modelCache`)
-    status: pending
+    status: completed
   - id: bug004-manual-verify
     content: Manual QA on VLM + text-only model; run `npm run test:benchmark`
-    status: pending
+    status: completed
   - id: bug004-context-doc
     content: Update `documentation/context.md` benchmark section after fix ships
-    status: pending
+    status: completed
 isProject: false
 ---
 
