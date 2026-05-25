@@ -48,7 +48,7 @@ Eight composed themes on `<html data-theme="{family}-{mode}">` (families: **sage
 |-----|---------|
 | `minnow.theme` | Explicit `ThemeId` (e.g. `sage-dark`) when not following the OS |
 | `minnow.theme.followSystem` | `'1'` when mode tracks `prefers-color-scheme` |
-| `minnow.theme.family` | Active family while follow-system is on (default **sage**) |
+| `minnow.theme.family` | Active family while follow-system is on (default **sage**); when follow-system is off, `getStoredFamily()` derives from `minnow.theme` so the settings picker stays in sync |
 
 **Runtime:** [`src/theme.ts`](../src/theme.ts) (`getStoredTheme`, `applyTheme`, `setThemeFamily`, `setThemeMode`, `setFollowSystem`, legacy `light`/`dark`/`system` migration). [`src/ui/theme.ts`](../src/ui/theme.ts) syncs highlight.js dark stylesheet, CodeMirror, and xterm. **FOUC:** inline script in [`index.html`](../index.html) sets `data-theme` only (no inline `--mn-*`, which would block theme switches); critical CSS uses per-family fallbacks until `tokens.css` loads. `applyTheme()` clears any legacy inline tokens. `initTheme()` adds `theme-ready` and removes `theme-no-transition` after first paint. **Settings → General:** family list with live swatch previews ([`src/ui/settings-theme.ts`](../src/ui/settings-theme.ts)). **Reef iframes:** [`src/chat/reef/theme-forward.ts`](../src/chat/reef/theme-forward.ts) forwards `--mn-bg`, `--mn-fg`, `--mn-accent`, surfaces, borders, radii, fonts. **Tests:** `test/theme.test.mts`, `test/theme-contrast.test.mts`, `test/chat/reef/theme-forward.test.mts`. Plan: [`documentation/plans/token-theme-system.md`](plans/token-theme-system.md). Design source: Color Scheme Exploration (PDF/HTML).
 
@@ -212,33 +212,6 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
 | Tests | `npm run test:benchmark` |
 | Cancel / Stop | `AbortController` in `benchmark-page.ts` → `runBenchmark({ signal })`; cooperative exit via `src/benchmark/abort.ts` (`assertNotAborted`, `rethrowIfAborted` in suites + `llm-driver.ts`). On cancel: `run-cancelled` progress event, **no** `saveRun`, throws `AbortError` so UI shows **Benchmark cancelled.** (BUG-005 fixed, MIN-61). |
-
-**Speed suite pass criteria (BUG-003, fixed MIN-63):** Short runs (`speed-short-*`) and **Sustained throughput** (`speed-long-1`) pass only when `runOneShot` returns non-empty completion text (`hasNonEmptyCompletion` in `src/benchmark/completion-valid.ts`, shared with **cap-stream**). Empty text fails with details `empty completion (0 chars)`; headline TTFT/tok/s medians exclude failed-empty runs.
-
-**Capability multimodal probe (BUG-004, fixed MIN-65):** **`cap-multimodal`** uses shared [`isVisionModel`](../src/providers/vision-model.ts) (`modelCache` `type === 'vlm'` / `capabilities.vision`, then models-list catalog, then id regex when catalog arg is passed). Text-only models skip with **`not a vision model`**. Vision models run a deterministic inline PNG + text probe via [`buildMultimodalProbeMessages`](../src/benchmark/fixtures/multimodal-probe.ts) and pass when assistant text is non-empty (`scoreMultimodalProbe` in [`cap-multimodal.ts`](../src/benchmark/suites/cap-multimodal.ts)). Chat send uses the same `isVisionModel` helper ([`loop.ts`](../src/tools/loop.ts), cache-only — no regex fallback).
-
-### Headless CLI (Feature #18)
-
-Non-interactive agent runs for **GitHub Actions** and local scripts — same generations proxy, work-agent compose path, and **server** tools as `npm start`, without the SPA.
-
-| Piece | Location |
-|-------|----------|
-| CLI entry | [`bin/minnow.mjs`](../bin/minnow.mjs) → [`src/headless/cli-main.ts`](../src/headless/cli-main.ts) (tsx) |
-| Run loop | [`src/headless/runner.ts`](../src/headless/runner.ts) — `buildApiMessages`, `createGeneration` / `subscribeToGeneration`, server `POST /api/tools` |
-| Approval | [`src/headless/approval.ts`](../src/headless/approval.ts) — default **deny** on `ask`; `--no-approval` + `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1` |
-| JSON artifact | [`src/headless/result.ts`](../src/headless/result.ts) — `HeadlessRunResult` v1, stable key order |
-| Preflight | [`src/headless/preflight.ts`](../src/headless/preflight.ts) — `waitForServer`, optional `--start-server` child (`BROWSER=none`) |
-| Tests | `test/headless/*.test.mts` (included in `npm test`) |
-| CI example | [`.github/workflows/minnow-headless.yml`](../.github/workflows/minnow-headless.yml) |
-
-```bash
-BROWSER=none npm start &
-minnow run --workspace ./my-repo --agent builder --mode build \
-  --prompt "Add a unit test for parseSsePayloads" \
-  --json-out ./run.json
-```
-
-**Server flags:** `BROWSER=none` or `MINNOW_HEADLESS=1` skips `openBrowser()` in [`server.js`](../server.js). **v1 limits:** no Orchestrate board mode; browser-only tools (`ask_question`, sub-agent spawn, CDP) return explicit errors; use `--no-approval` only with env opt-in (see `minnow run --help`). Plan: [`documentation/plans/Build out/feature-18-headless-mode.md`](plans/Build%20out/feature-18-headless-mode.md).
 
 Completions use `postChatCompletions` with `persist: false` (no chat session pollution). Distinct from planned Feature 21 eval harness (`~/.minnow/evals/`, multi-model matrix). Plan: [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md).
 
@@ -1200,7 +1173,7 @@ Server buffers upstream chat/completions streams so clients can attach, detach, 
 The tool loop™s `streamCompletionTurn` ([`src/tools/loop.ts`](../src/tools/loop.ts)) uses [`src/api/generations.ts`](../src/api/generations.ts) instead of `postChatCompletions` for main turns:
 
 1. `createGeneration(providerId, body, { persist: true })` → persist `chat.currentGenerationId` immediately via `scheduleSaveSessions()`.
-2. `subscribeToGeneration(id, …)` — same line-buffer reader as [`src/api/chat.ts`](../src/api/chat.ts); reuses `parseSsePayloads` / `extractStreamDelta` / `mergeStreamMeta`; parses terminal `event: end` in the subscribe layer.
+2. `subscribeToGeneration(id, …)` — SSE event framing via [`src/api/sse-parse.ts`](../src/api/sse-parse.ts) (`feedSseEventBuffer` / `parseSseEventBlock`); reuses `extractStreamDelta` / `mergeStreamMeta` from [`src/api/chat.ts`](../src/api/chat.ts); parses terminal `event: end` in the subscribe layer. **Non-streaming fallback** (`tryNonStreamingFallback`) reads `res.text()` + `parseCompletionResponseBody` — never `Response.json()` on the shim (avoids BUG-016 `ReadableStreamDefaultController` parse errors).
 3. Clean end clears `currentGenerationId`; `AbortError` calls `cancelGeneration` then rethrows.
 
 `RunChatTurnOptions.resumeGenerationId` skips POST and only subscribes (boot resume wired in Phase 2b `generation-resume.ts`). Sub-agent, reef, title, and plain `sendMessage` still use `postChatCompletions` until the fetch-chat shim lands.

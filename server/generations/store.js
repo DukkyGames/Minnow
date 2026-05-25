@@ -101,7 +101,8 @@ function writeToSubscriber(state, res, buf) {
  * @param {GenerationState} state
  */
 function broadcastTerminalEvent(state) {
-  const line = `event: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
+  // Leading blank line ensures client `\n\n` framing never merges with the last upstream chunk.
+  const line = `\n\nevent: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
   const buf = Buffer.from(line, 'utf8');
   for (const res of [...state.subscribers]) {
     state.subscribers.delete(res);
@@ -216,7 +217,7 @@ export function addSubscriber(state, res) {
   }
 
   if (isTerminal(state.status)) {
-    const line = `event: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
+    const line = `\n\nevent: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
     try {
       if (canWriteToSubscriber(res)) {
         res.write(Buffer.from(line, 'utf8'));

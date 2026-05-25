@@ -33,7 +33,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Verified — [MIN-72](https://linear.app/minnowai/issue/MIN-72/bug-015-rag-web-content-broken) |
 | BUG-016 | Major | Plan mode / streaming | Reply fails: ReadableStream JSON parse error on `close` | Open |
 | BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Fixed — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
-| BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Fixed — [MIN-66](https://linear.app/minnowai/issue/MIN-66) |
+| BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
 | BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
 | BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Fixed — [MIN-60](https://linear.app/minnowai/issue/MIN-60) |
 | BUG-018 | Major | File panel | **Rename file** does not work | Verified — [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
@@ -41,7 +41,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-020 | Major | Orchestrate / streaming | Stuck retrying; stream close **Unexpected end of JSON input** | Verified — [MIN-84](https://linear.app/minnowai/issue/MIN-84/bug-020-orchestrator-stuck-retrying-stream) |
 | BUG-021 | Major | Reef widgets | Non-chart widgets (e.g. Calculator) fail with chart/toExponential error | Open |
 
-**Counts:** 19 open · 2 fixed · 0 won't fix
+**Counts:** 20 open · 1 fixed · 0 won't fix
 
 ---
 

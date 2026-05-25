@@ -104,6 +104,13 @@ describe('theme', () => {
     assert.equal(getStoredFamily(), 'coral');
   });
 
+  test('getStoredFamily derives from theme id when not following system', () => {
+    store.set(THEME_STORAGE_KEY, 'cyan-dark');
+    store.set(THEME_FAMILY_KEY, 'sage');
+    assert.equal(getFollowSystem(), false);
+    assert.equal(getStoredFamily(), 'cyan');
+  });
+
   test('applyTheme clears FOUC inline tokens so stylesheet themes apply', async () => {
     const { Window } = await import('happy-dom');
     const window = new Window();

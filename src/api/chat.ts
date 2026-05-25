@@ -63,8 +63,18 @@ import {
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
+import { getActiveProvider } from '../providers/store';
+import {
+  createSseEventBuffer,
+  feedSseEventBuffer,
+  flushSseEventBuffer,
+  parseCompletionResponseBody,
+  parseSsePayloads,
+} from './sse-parse';
 import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
+
+export { parseSsePayloads } from './sse-parse';
 
 /** Accumulated metadata from SSE chunks (stats, usage, model_info). */
 export interface StreamMetaAccumulator {
@@ -197,21 +207,6 @@ export function mergeStreamMeta(
   return next;
 }
 
-/** Parse SSE `data:` lines and invoke onChunk for each JSON payload. */
-export function parseSsePayloads(text: string, onChunk: (chunk: ChatCompletionChunk) => void): void {
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || !trimmed.startsWith('data:')) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload === '[DONE]') continue;
-    try {
-      onChunk(JSON.parse(payload) as ChatCompletionChunk);
-    } catch {
-      /* Ignore malformed SSE lines. */
-    }
-  }
-}
-
 /** Client-side TTFT / generation time / TPS when the server omits stats. */
 export function buildClientStats(
   t0: number,
@@ -266,7 +261,8 @@ export async function tryNonStreamingFallback(
     stream: false,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<ChatCompletionChunk>;
+  const text = await res.text();
+  return parseCompletionResponseBody(text);
 }
 
 /** Send the composer text to LM Studio with SSE streaming and optional JSON fallback. */
@@ -419,7 +415,7 @@ export async function sendMessage(): Promise<void> {
 
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    const sseBuffer = createSseEventBuffer();
 
     function handleChunk(chunk: ChatCompletionChunk): void {
       streamMeta = mergeStreamMeta(streamMeta, chunk);
@@ -446,14 +442,10 @@ export async function sendMessage(): Promise<void> {
       const { done, value } = await reader.read();
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      parseSsePayloads(lines.join('\n'), handleChunk);
+      feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
     }
 
-    if (buffer.trim()) parseSsePayloads(buffer, handleChunk);
+    flushSseEventBuffer(sseBuffer, handleChunk);
 
     thoughtController.endReasoningPhase();
 
