@@ -65,7 +65,12 @@
 
 .stats-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(140px, 1.6fr) minmax(100px, 1fr);
+  /* 4 inference stats + compact cost + token bars + model info (7 children) */
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr))
+    minmax(72px, max-content)
+    minmax(120px, 1.4fr)
+    minmax(100px, 1fr);
 }
 
 .stat-cell {
@@ -109,6 +114,16 @@
 .stat-cell.yellow .stat-val { color: var(--mn-warning); }
 .stat-cell.red .stat-val { color: var(--mn-danger); }
 .stat-val.blank { color: var(--mn-border-strong) !important; }
+
+/* Est. cost values are short; keep the column narrow so model info stays on one row */
+.stat-cell.purple {
+  min-width: 0;
+  padding-inline: 10px 12px;
+}
+
+.stat-cell.purple .stat-name {
+  gap: 6px;
+}
 
 /* File editor split: compact metrics in the chat column only (feature 26 / E6) */
 .workspace-split.viewer-open .stats-strip {
@@ -215,6 +230,7 @@
   justify-content: center;
   gap: 4px;
   font-size: 11px;
+  min-width: 0;
 }
 
 .irow { display: flex; gap: 6px; align-items: baseline; }
