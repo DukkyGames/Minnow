@@ -3,11 +3,19 @@
  */
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
+import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { loadSubAgentConfig, saveSubAgentConfigToServer } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
+import { mountSetupProfilesPanel } from './settings-profiles';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
+import {
+  customPartBaselineProfileHint,
+  isPromptPartDiffSupported,
+  resolveBuiltinPromptBaselineForPart,
+} from '../chat/prompts/prompt-baseline';
+import { mountPromptDiffControls } from './prompt-diff-panel';
 import {
   deletePromptConfig,
   duplicatePromptConfig,
@@ -35,6 +43,7 @@ import {
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { listProviders } from '../providers/store';
 import { renderProvidersSettingsSection } from './settings-providers';
+import { renderUsageSettingsSection } from './settings-usage';
 import {
   createMemoryEntry,
   deleteMemoryEntry,
@@ -100,6 +109,11 @@ import {
   loadChatMeta,
   saveChatMeta,
 } from '../config/chat-meta';
+import {
+  getToolCallsMetaSync,
+  loadToolCallsMeta,
+  saveToolCallsMeta,
+} from '../config/tool-calls-meta';
 
 const PART_LABELS: Record<PromptPartId, string> = {
   base: 'Base',
@@ -161,6 +175,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
 /** Main composer tool-loop cap (persisted in config.json `chat`). */
 async function appendMainChatControls(mount: HTMLElement): Promise<void> {
   await loadChatMeta();
+  await loadToolCallsMeta();
   const block = el('div', 'settings-main-chat-block');
   block.appendChild(el('p', 'settings-field-label', 'Main chat'));
   block.appendChild(
@@ -193,6 +208,38 @@ async function appendMainChatControls(mount: HTMLElement): Promise<void> {
         setStatus('ok', 'Main chat settings updated');
       } catch {
         setStatus('err', 'Could not save main chat settings');
+      }
+    })();
+  });
+
+  const constrainedRow = el('label', 'settings-toggle-row');
+  const constrainedCb = document.createElement('input');
+  constrainedCb.type = 'checkbox';
+  constrainedCb.checked = getToolCallsMetaSync().useConstrainedDecoding;
+  constrainedCb.setAttribute('aria-label', 'Constrained tool calls global default');
+  constrainedRow.append(
+    constrainedCb,
+    el(
+      'span',
+      undefined,
+      'Constrained tool calls (global default)',
+    ),
+  );
+  block.appendChild(constrainedRow);
+  block.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Probe each provider under Settings → Providers.',
+    ),
+  );
+  constrainedCb.addEventListener('change', () => {
+    void (async () => {
+      try {
+        await saveToolCallsMeta({ useConstrainedDecoding: constrainedCb.checked });
+        setStatus('ok', 'Constrained tool calls setting updated');
+      } catch {
+        setStatus('err', 'Could not save constrained tool calls setting');
       }
     })();
   });
@@ -334,45 +381,106 @@ async function renderPromptPartsPanel(
 }
 
 function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void {
-  for (const partId of PART_ORDER) {
-    const settings = config.parts[partId] ?? { ...DEFAULT_PART_SETTINGS };
-    const block = el('details', 'settings-part-block');
-    block.open = partId === 'base';
+  void (async () => {
+    const profileHint = await customPartBaselineProfileHint();
 
-    const summary = el('summary', '');
-    const enable = document.createElement('input');
-    enable.type = 'checkbox';
-    enable.checked = settings.enabled !== false;
-    enable.addEventListener('click', (e) => e.stopPropagation());
-    enable.addEventListener('change', () => {
-      if (!activeCustomConfig) return;
-      activeCustomConfig.parts[partId] = {
-        ...(activeCustomConfig.parts[partId] ?? DEFAULT_PART_SETTINGS),
-        enabled: enable.checked,
-      };
-      schedulePromptTokenEstimateRefresh();
-    });
-    summary.appendChild(enable);
-    summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
-    block.appendChild(summary);
+    for (const partId of PART_ORDER) {
+      const settings = config.parts[partId] ?? { ...DEFAULT_PART_SETTINGS };
+      const block = el('details', 'settings-part-block');
+      block.open = partId === 'base';
 
-    const ta = document.createElement('textarea');
-    ta.className = 'settings-part-editor';
-    ta.rows = 6;
-    ta.value = settings.contentOverride ?? '';
-    ta.placeholder = 'Leave empty to use shipped default at send time';
-    ta.addEventListener('input', () => {
-      if (!activeCustomConfig) return;
-      const trimmed = ta.value.trim();
-      activeCustomConfig.parts[partId] = {
-        enabled: enable.checked,
-        contentOverride: trimmed ? ta.value : null,
+      const summary = el('summary', '');
+      const enable = document.createElement('input');
+      enable.type = 'checkbox';
+      enable.checked = settings.enabled !== false;
+      enable.addEventListener('click', (e) => e.stopPropagation());
+      enable.addEventListener('change', () => {
+        if (!activeCustomConfig) return;
+        activeCustomConfig.parts[partId] = {
+          ...(activeCustomConfig.parts[partId] ?? DEFAULT_PART_SETTINGS),
+          enabled: enable.checked,
+        };
+        schedulePromptTokenEstimateRefresh();
+      });
+      summary.appendChild(enable);
+      summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
+      block.appendChild(summary);
+
+      const ta = document.createElement('textarea');
+      ta.className = 'settings-part-editor';
+      ta.rows = 6;
+      ta.value = settings.contentOverride ?? '';
+      ta.placeholder = 'Leave empty to use shipped default at send time';
+
+      let lastSavedOverride: string | null = settings.contentOverride;
+      let builtinBaseline = '';
+
+      const applyPartToConfig = () => {
+        if (!activeCustomConfig) return;
+        const trimmed = ta.value.trim();
+        activeCustomConfig.parts[partId] = {
+          enabled: enable.checked,
+          contentOverride: trimmed ? ta.value : null,
+        };
+        schedulePromptTokenEstimateRefresh();
       };
-      schedulePromptTokenEstimateRefresh();
-    });
-    block.appendChild(ta);
-    mount.appendChild(block);
-  }
+
+      ta.addEventListener('input', () => {
+        applyPartToConfig();
+        if (diffControls) diffControls.refresh();
+      });
+
+      block.appendChild(ta);
+
+      let diffControls: ReturnType<typeof mountPromptDiffControls> | null = null;
+
+      if (isPromptPartDiffSupported(partId)) {
+        const baseline = await resolveBuiltinPromptBaselineForPart(partId);
+        builtinBaseline = baseline;
+        diffControls = mountPromptDiffControls(block, {
+          getBaseline: () => builtinBaseline,
+          getCurrent: () => {
+            const trimmed = ta.value.trim();
+            return trimmed ? ta.value : builtinBaseline;
+          },
+          showOfflineHint: true,
+          profileHint,
+          resetPartLabel: 'Reset part to default',
+          onResetPart: async () => {
+            const hasUnsaved =
+              (ta.value.trim() ? ta.value : null) !== lastSavedOverride;
+            if (hasUnsaved && !confirm('Discard unsaved edits and reset this part to shipped default?')) {
+              return;
+            }
+            if (!activeCustomConfig) return;
+            activeCustomConfig.parts[partId] = {
+              enabled: enable.checked,
+              contentOverride: null,
+            };
+            ta.value = '';
+            lastSavedOverride = null;
+            const saved = await savePromptConfig(activeCustomConfig);
+            if (saved instanceof Error) {
+              setStatus('err', saved.message);
+              return;
+            }
+            schedulePromptTokenEstimateRefresh();
+            setStatus('ok', `${PART_LABELS[partId]} reset to shipped default`);
+          },
+        });
+        diffControls.setBaseline(builtinBaseline);
+      } else {
+        const hint = el(
+          'p',
+          'settings-field-hint',
+          'Diff not available — this part is resolved from the active chat at send time.',
+        );
+        block.appendChild(hint);
+      }
+
+      mount.appendChild(block);
+    }
+  })();
 }
 
 async function refreshCustomConfigSelect(): Promise<void> {
@@ -522,6 +630,10 @@ async function bindPromptingToolbar(): Promise<void> {
 }
 
 async function renderPromptingSection(): Promise<void> {
+  const profilesMount = document.getElementById('settingsSetupProfilesMount');
+  if (profilesMount) {
+    mountSetupProfilesPanel(profilesMount, setStatus);
+  }
   await refreshCustomConfigSelect();
   await bindPromptingToolbar();
   const meta = await loadPromptMetaSettings();
@@ -703,6 +815,9 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialProviderId: agent.providerId,
         initialModelId: agent.modelId,
         initialDisabled: agent.disabled === true,
+        initialMaxInputTokens: agent.maxInputTokens ?? null,
+        initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
+        initialSampler: getUserWorkAgentOverride(id)?.sampler ?? null,
         onModelSaved: () => {
           void renderWorkAgentsSection();
         },
@@ -828,6 +943,10 @@ async function renderSubAgentsSection(): Promise<void> {
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
           maxToolTurns: type.maxToolTurns,
+          maxInputTokens: type.maxInputTokens ?? null,
+          contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
+          summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
+          sampler: type.sampler ?? null,
         },
         (patch) => saveTypePatch(id, patch),
       );
@@ -913,6 +1032,29 @@ async function renderToolsSection(): Promise<void> {
       'Each tool can be off, require confirmation before each run, or run with full permission. Bulk enable sets tools to require confirmation. File and git tools need npm start.',
     ),
   );
+
+  const cacheRow = document.createElement('div');
+  cacheRow.className = 'settings-tool-cache-row field';
+  const cacheLabel = document.createElement('label');
+  cacheLabel.className = 'settings-checkbox-option';
+  cacheLabel.htmlFor = 'settingsToolCacheEnabled';
+  const cacheCheckbox = document.createElement('input');
+  cacheCheckbox.type = 'checkbox';
+  cacheCheckbox.id = 'settingsToolCacheEnabled';
+  const cacheLabelText = document.createElement('span');
+  cacheLabelText.className = 'settings-checkbox-option__text';
+  cacheLabelText.textContent =
+    'Cache repeated read-only tool results in this session';
+  cacheLabel.append(cacheCheckbox, cacheLabelText);
+  cacheRow.appendChild(cacheLabel);
+  cacheRow.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Speeds up duplicate read_file and similar calls until the workspace changes or a write invalidates the path. Cleared on workspace switch.',
+    ),
+  );
+  mount.appendChild(cacheRow);
 
   const bulkActions = document.createElement('div');
   bulkActions.className = 'settings-tools-bulk-actions';
@@ -1088,9 +1230,17 @@ async function renderToolsSection(): Promise<void> {
   keyInput.addEventListener('input', persistBraveKey);
   keyInput.addEventListener('change', persistBraveKey);
 
+  const persistToolCache = (): void => {
+    const config = getToolConfig();
+    config.toolCache = { enabled: cacheCheckbox.checked };
+    saveToolConfig(config);
+  };
+  cacheCheckbox.addEventListener('change', persistToolCache);
+
   if (generation !== toolsSectionRenderGeneration) return;
 
   const config = getToolConfig();
+  cacheCheckbox.checked = config.toolCache?.enabled !== false;
   keyInput.value = config.keys.braveApiKey;
   loadToolConfigIntoDrawer(list);
 
@@ -1702,6 +1852,9 @@ export async function refreshSettingsSection(
       refreshProvidersBanner();
       await listProviders();
       await renderProvidersSettingsSection();
+      break;
+    case 'usage':
+      await renderUsageSettingsSection();
       break;
     case 'model-routing':
       await renderModelRoutingSettingsSection();

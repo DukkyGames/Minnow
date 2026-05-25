@@ -39,6 +39,7 @@ import { maybeBlockToolForUserApproval } from './permission-gate';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeReportOrchestratorStatus } from '../agents/supervisor/report-tool.ts';
 import { recordParentToolResult } from '../agents/supervisor/progress.ts';
+import { executeWithResultCache } from './result-cache';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -309,12 +310,14 @@ async function executeToolInner(
       'web_search',
     );
     if (blocked) return blocked;
-    if (isLocalServerAvailable()) {
-      return executeServerTool('web_search_ddg', {
-        query: enrichedArgs.query,
-      });
-    }
-    return { content: await executeBrowserTool(name, enrichedArgs) };
+    return executeWithResultCache('web_search', enrichedArgs, context, async () => {
+      if (isLocalServerAvailable()) {
+        return executeServerTool('web_search_ddg', {
+          query: enrichedArgs.query,
+        });
+      }
+      return { content: await executeBrowserTool(name, enrichedArgs) };
+    });
   }
 
   const tool = findToolByFunctionName(name);
@@ -336,6 +339,18 @@ async function executeToolInner(
     return { content: planWriteBlock };
   }
 
+  return executeWithResultCache(name, enrichedArgs, context, () =>
+    executeToolBodyAfterGates(name, enrichedArgs, context, tool),
+  );
+}
+
+/** Runs the tool after approval/plan guards (cache wrapper calls this on miss). */
+async function executeToolBodyAfterGates(
+  name: string,
+  enrichedArgs: Record<string, unknown>,
+  context: ExecuteToolContext,
+  tool: ToolDefinition,
+): Promise<ToolExecutionResult> {
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {
       return {

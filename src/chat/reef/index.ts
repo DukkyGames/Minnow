@@ -12,8 +12,23 @@ export {
   initReefBridge,
   unmountReefWidgetsInChat,
   completeReefWidgetValidation,
+  subscribeEdits,
+  unsubscribeEdits,
+  editArtifactFromWidget,
   type ReefWidgetValidationResult,
+  type ReefArtifactEditListener,
 } from './widget-bridge.ts';
+export {
+  listReefArtifacts,
+  getReefArtifact,
+  createReefArtifact,
+  appendReefArtifactVersion,
+} from './artifact-client.ts';
+export {
+  queueReefArtifactUserEdit,
+  consumeReefArtifactEditsForPrompt,
+  loadArtifactBundle,
+} from './artifact-context.ts';
 export type { MountReefWidgetBlocksOptions };
 export { setSkipReefWidgetValidationForTests } from './widget-validation.ts';
 

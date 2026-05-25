@@ -377,6 +377,7 @@
       <button type="button" data-settings-nav="prompting">Prompting</button>
       <button type="button" data-settings-nav="rules">Rules</button>
       <button type="button" data-settings-nav="providers">Providers</button>
+      <button type="button" data-settings-nav="usage">Usage</button>
       <button type="button" data-settings-nav="model-routing">Model routing</button>
       <button type="button" data-settings-nav="modes">Modes</button>
       <button type="button" data-settings-nav="experts">Experts</button>
@@ -403,6 +404,7 @@
           aria-live="polite"
         >Computing estimate…</p>
         <p>Active profile controls which prompt templates are composed on send.</p>
+        <div id="settingsSetupProfilesMount"></div>
         <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
           <button type="button" data-profile-tab="full" class="is-active">Full</button>
           <button type="button" data-profile-tab="lite">Lite</button>
@@ -435,6 +437,10 @@
         <div class="settings-rules-actions">
           <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
         </div>
+      </section>
+      <section id="settingsSection-usage" class="settings-section">
+        <h2>Usage &amp; cost</h2>
+        <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -867,6 +873,10 @@
       <div class="stat-cell red">
         <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>Total Tokens</div>
         <div class="stat-val blank" id="stripTotal">—</div>
+      </div>
+      <div class="stat-cell purple">
+        <div class="stat-name"><span class="stat-icon" aria-hidden="true"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>Est. cost</div>
+        <div class="stat-val blank" id="stripCost">—</div>
       </div>
       <div class="token-cell">
         <div class="token-bar-row">

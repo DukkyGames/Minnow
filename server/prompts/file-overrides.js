@@ -79,6 +79,27 @@ function extractBody(raw, filePath) {
  * @param {string} entityId
  * @param {'full'|'lite'} profile
  */
+/**
+ * Shipped repo prompt only (ignores ~/.minnow overrides).
+ * @param {string} projectRoot
+ * @param {'modes'|'experts'|'sub-agents'} family
+ * @param {string} entityId
+ * @param {'full'|'lite'} profile
+ */
+export async function readBuiltinPromptFile(projectRoot, family, entityId, profile) {
+  assertValidPromptEntityId(entityId);
+  if (profile !== 'full' && profile !== 'lite') {
+    throw new Error('Invalid profile');
+  }
+
+  const builtinPath = resolveUnderRoot(
+    path.resolve(projectRoot),
+    builtinRelativePath(family, entityId, profile),
+  );
+  const raw = await fs.readFile(builtinPath, 'utf8');
+  return { content: extractBody(raw, builtinPath), source: 'builtin' };
+}
+
 export async function readPromptFile(projectRoot, family, entityId, profile) {
   assertValidPromptEntityId(entityId);
   if (profile !== 'full' && profile !== 'lite') {
@@ -95,12 +116,7 @@ export async function readPromptFile(projectRoot, family, entityId, profile) {
     /* fall through */
   }
 
-  const builtinPath = resolveUnderRoot(
-    path.resolve(projectRoot),
-    builtinRelativePath(family, entityId, profile),
-  );
-  const raw = await fs.readFile(builtinPath, 'utf8');
-  return { content: extractBody(raw, builtinPath), source: 'builtin' };
+  return readBuiltinPromptFile(projectRoot, family, entityId, profile);
 }
 
 /**

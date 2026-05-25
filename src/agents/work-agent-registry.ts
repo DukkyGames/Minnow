@@ -117,6 +117,22 @@ export function mergeWorkAgentDefinition(
       override.providerId !== undefined ? override.providerId : builtin.providerId,
     modelId: override.modelId !== undefined ? override.modelId : builtin.modelId,
     disabled: override.disabled !== undefined ? override.disabled : builtin.disabled,
+    maxInputTokens:
+      override.maxInputTokens !== undefined
+        ? override.maxInputTokens
+        : builtin.maxInputTokens,
+    contextEnforcementPolicy:
+      override.contextEnforcementPolicy !== undefined
+        ? override.contextEnforcementPolicy
+        : builtin.contextEnforcementPolicy,
+    minRecentTurns:
+      override.minRecentTurns !== undefined
+        ? override.minRecentTurns
+        : builtin.minRecentTurns,
+    summaryReserveTokens:
+      override.summaryReserveTokens !== undefined
+        ? override.summaryReserveTokens
+        : builtin.summaryReserveTokens,
   };
 }
 
@@ -151,6 +167,14 @@ export function setUserWorkAgentOverrides(
   overrides: Record<string, WorkAgentUserOverride>,
 ): void {
   userOverrides = { ...overrides };
+}
+
+/** Merge one agent override row (after Settings save). */
+export function mergeUserWorkAgentOverride(
+  agentId: string,
+  patch: WorkAgentUserOverride,
+): void {
+  userOverrides[agentId] = { ...(userOverrides[agentId] ?? {}), ...patch };
 }
 
 /** Load built-in agents from Vite glob or test fixture map. */

@@ -2,6 +2,10 @@
  * Parse Work Agent metadata from agent.full.md front matter.
  */
 
+import {
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+  type ContextEnforcementPolicy,
+} from '../chat/context-budget';
 import { parsePromptMarkdown } from '../chat/prompts/parse-front-matter';
 import type { WorkAgentDefinition } from './work-agent-types';
 
@@ -15,6 +19,25 @@ function parseNullableString(value: unknown): string | null {
   if (value === null || value === 'null' || value === '') return null;
   if (typeof value === 'string' && value.trim()) return value.trim();
   return null;
+}
+
+function parseNullablePositiveInt(value: unknown): number | null {
+  if (value === null || value === 'null' || value === '') return null;
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
+function parseContextPolicy(value: unknown): ContextEnforcementPolicy | undefined {
+  if (value === 'summarize' || value === 'slide' || value === 'truncate') {
+    return value;
+  }
+  return undefined;
 }
 
 /** Re-parse extended YAML keys not in PromptFrontMatter. */
@@ -95,5 +118,9 @@ export function parseWorkAgentMetaFromMarkdown(
     allowedTools,
     defaultForModes,
     disabled,
+    maxInputTokens: parseNullablePositiveInt(ext.maxInputTokens),
+    contextEnforcementPolicy:
+      parseContextPolicy(ext.contextEnforcementPolicy) ??
+      DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   };
 }

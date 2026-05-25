@@ -6,6 +6,8 @@ version: "3"
 description: Strictly read-only guardrails for the main Research chat turn; orchestration lives in the Research mode prompt.
 providerId: null
 modelId: null
+maxInputTokens: 12000
+contextEnforcementPolicy: summarize
 defaultForModes:
   - research
 allowedTools:

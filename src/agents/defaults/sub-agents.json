@@ -4,6 +4,9 @@
   "globalMaxConcurrent": 3,
   "defaultTimeoutMs": 300000,
   "defaultMaxToolTurns": 12,
+  "defaultMaxInputTokens": null,
+  "defaultContextEnforcementPolicy": "slide",
+  "defaultSummarySchema": "minnow.sub-agent.v1",
   "types": {
     "generalPurpose": {
       "label": "General purpose",
@@ -15,8 +18,20 @@
       "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": null,
+      "contextEnforcementPolicy": "slide",
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.4,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.05
+      }
     },
     "explore": {
       "label": "Explore",
@@ -40,8 +55,22 @@
         "wikipedia_search",
         "fetch_web_content"
       ],
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent", "execute_command", "git_commit"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "execute_command",
+        "git_commit"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": 16000,
+      "contextEnforcementPolicy": "slide",
+      "summarySchema": "minnow.sub-agent.explore",
+      "sampler": {
+        "temperature": 0.45,
+        "topP": 0.92,
+        "topK": 40,
+        "repetitionPenalty": 1
+      }
     },
     "researcher": {
       "label": "Research worker",
@@ -51,6 +80,9 @@
       "maxConcurrent": 5,
       "timeoutMs": 420000,
       "maxToolTurns": 16,
+      "maxInputTokens": 12000,
+      "contextEnforcementPolicy": "summarize",
+      "summarySchema": "minnow.sub-agent.v1",
       "workAgentId": null,
       "allowedTools": [
         "get_datetime",
@@ -78,7 +110,13 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.92,
+        "topK": 50,
+        "repetitionPenalty": 1
+      }
     },
     "shell": {
       "label": "Shell",
@@ -95,8 +133,20 @@
         "read_file",
         "list_directory"
       ],
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": 8000,
+      "contextEnforcementPolicy": "truncate",
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.15,
+        "topP": 0.85,
+        "topK": 20,
+        "repetitionPenalty": 1.1
+      }
     },
     "explorer": {
       "label": "Explorer (self-heal)",
@@ -108,8 +158,18 @@
       "maxToolTurns": 16,
       "workAgentId": null,
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.35,
+        "topP": 0.9,
+        "topK": 35,
+        "repetitionPenalty": 1
+      }
     },
     "debugger": {
       "label": "Debugger",
@@ -147,7 +207,14 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.25,
+        "topP": 0.88,
+        "topK": 30,
+        "repetitionPenalty": 1.05
+      }
     },
     "bug-planner": {
       "label": "Bug planner",
@@ -159,8 +226,18 @@
       "maxToolTurns": 16,
       "workAgentId": "planner",
       "allowedTools": null,
-      "deniedTools": ["spawn_sub_agent", "cancel_sub_agent"],
-      "systemPromptPath": null
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent"
+      ],
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1",
+      "sampler": {
+        "temperature": 0.55,
+        "topP": 0.92,
+        "topK": 50,
+        "repetitionPenalty": 1
+      }
     },
     "reef-widget": {
       "label": "Reef widget",
@@ -197,7 +274,14 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.lite",
+      "sampler": {
+        "temperature": 0.35,
+        "topP": 0.9,
+        "topK": 35,
+        "repetitionPenalty": 1
+      }
     }
   }
 }

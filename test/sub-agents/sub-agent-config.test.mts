@@ -59,4 +59,41 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('save_file'));
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
+
+  test('user override merges sampler fields on a type', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { sampler: { temperature: 0.6 } },
+      },
+    });
+    assert.equal(merged.types.explore.sampler?.temperature, 0.6);
+    assert.equal(merged.types.explore.sampler?.topP, 0.92);
+  });
+
+  test('user override can set maxInputTokens and context policy', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: {
+          maxInputTokens: 32000,
+          contextEnforcementPolicy: 'summarize',
+        },
+      },
+    });
+    assert.equal(merged.types.explore.maxInputTokens, 32000);
+    assert.equal(merged.types.explore.contextEnforcementPolicy, 'summarize');
+  });
+
+  test('merge applies default summarySchema to types', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    assert.equal(merged.types.explore.summarySchema, 'minnow.sub-agent.explore');
+    assert.equal(merged.types['reef-widget'].summarySchema, 'minnow.sub-agent.lite');
+    assert.equal(merged.defaultSummarySchema, 'minnow.sub-agent.v1');
+  });
+
+  test('user override can set summarySchema per type', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: { shell: { summarySchema: 'minnow.sub-agent.lite' } },
+    });
+    assert.equal(merged.types.shell.summarySchema, 'minnow.sub-agent.lite');
+  });
 });

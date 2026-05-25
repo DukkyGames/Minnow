@@ -4,6 +4,7 @@
 
 import { ALL_TOOL_IDS } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
+import { normalizeSamplerPreset } from '../agents/sampler.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
@@ -527,6 +528,7 @@ export function normalizeToolConfig(raw) {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
     keys: { braveApiKey: '' },
+    toolCache: { enabled: true },
   };
 
   if (!raw || typeof raw !== 'object') return config;
@@ -576,6 +578,16 @@ export function normalizeToolConfig(raw) {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+  }
+
+  if (stored.toolCache && typeof stored.toolCache === 'object') {
+    const cacheMap = /** @type {Record<string, unknown>} */ (stored.toolCache);
+    if (typeof cacheMap.enabled === 'boolean') {
+      config.toolCache = { enabled: cacheMap.enabled };
+    }
+  }
+  if (!config.toolCache) {
+    config.toolCache = { enabled: true };
   }
 
   return config;
@@ -857,6 +869,20 @@ export function mergeConfigMeta(existing, patch) {
     base.chat = { maxToolTurns };
   }
 
+  if (p.toolCalls && typeof p.toolCalls === 'object') {
+    const existingToolCalls =
+      base.toolCalls && typeof base.toolCalls === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.toolCalls) }
+        : { useConstrainedDecoding: false };
+    const tc = /** @type {Record<string, unknown>} */ (p.toolCalls);
+    if (tc.useConstrainedDecoding === true) {
+      existingToolCalls.useConstrainedDecoding = true;
+    } else if (tc.useConstrainedDecoding === false) {
+      existingToolCalls.useConstrainedDecoding = false;
+    }
+    base.toolCalls = existingToolCalls;
+  }
+
   if (p.workspace && typeof p.workspace === 'object') {
     const existingWorkspace =
       base.workspace && typeof base.workspace === 'object'
@@ -986,6 +1012,39 @@ export function mergeConfigMeta(existing, patch) {
     base.planning = existingPlanning;
   }
 
+  if (
+    p.activePromptProfile === 'full' ||
+    p.activePromptProfile === 'lite' ||
+    p.activePromptProfile === 'custom'
+  ) {
+    base.activePromptProfile = p.activePromptProfile;
+  }
+  if (p.activePromptConfigId === null || typeof p.activePromptConfigId === 'string') {
+    base.activePromptConfigId = p.activePromptConfigId;
+  }
+  if (typeof p.activeInfoPresetId === 'string' && p.activeInfoPresetId.trim()) {
+    base.activeInfoPresetId = p.activeInfoPresetId.trim();
+  }
+  if (p.activeSetupProfileId === null || typeof p.activeSetupProfileId === 'string') {
+    base.activeSetupProfileId = p.activeSetupProfileId;
+  }
+  if (typeof p.workspaceProfileAutoApply === 'boolean') {
+    base.workspaceProfileAutoApply = p.workspaceProfileAutoApply;
+  }
+  if (p.workspaceProfiles && typeof p.workspaceProfiles === 'object') {
+    const out = {};
+    for (const [key, value] of Object.entries(
+      /** @type {Record<string, unknown>} */ (p.workspaceProfiles),
+    )) {
+      if (typeof value !== 'string' || !value.trim()) continue;
+      const normKey = normalizeWorkspacePath(key);
+      if (!normKey) continue;
+      if (!/^[a-z0-9][a-z0-9-_]{0,63}$/.test(value.trim())) continue;
+      out[normKey] = value.trim();
+    }
+    base.workspaceProfiles = out;
+  }
+
   if (p.supervisor && typeof p.supervisor === 'object') {
     base.supervisor = mergeSupervisorConfig(
       /** @type {Record<string, unknown>} */ (p.supervisor),
@@ -1049,6 +1108,82 @@ export function normalizeSubAgentsConfig(body) {
 
     checkToolList('allowedTools');
     checkToolList('deniedTools');
+
+    if (row.maxInputTokens !== undefined && row.maxInputTokens !== null) {
+      const cap = Number(row.maxInputTokens);
+      if (!Number.isFinite(cap) || cap < 1) {
+        row.maxInputTokens = null;
+      } else {
+        row.maxInputTokens = Math.floor(cap);
+      }
+    }
+
+    const policy = row.contextEnforcementPolicy;
+    if (
+      policy !== undefined &&
+      policy !== 'summarize' &&
+      policy !== 'slide' &&
+      policy !== 'truncate'
+    ) {
+      delete row.contextEnforcementPolicy;
+      warnings.push(
+        `Invalid contextEnforcementPolicy for types.${typeId}; removed`,
+      );
+    }
+
+    if (row.minRecentTurns !== undefined) {
+      const n = Number(row.minRecentTurns);
+      row.minRecentTurns =
+        Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+    }
+
+    if (row.summaryReserveTokens !== undefined) {
+      const n = Number(row.summaryReserveTokens);
+      row.summaryReserveTokens =
+        Number.isFinite(n) && n >= 64 ? Math.floor(n) : undefined;
+    }
+
+    if (row.summarySchema !== undefined) {
+      const schema = String(row.summarySchema).trim();
+      if (!schema) {
+        delete row.summarySchema;
+      } else {
+        row.summarySchema = schema.slice(0, 64);
+      }
+    }
+
+    if (row.sampler !== undefined) {
+      const normalized = normalizeSamplerPreset(row.sampler);
+      if (normalized === null) {
+        delete row.sampler;
+      } else if (Object.keys(normalized).length === 0) {
+        delete row.sampler;
+      } else {
+        row.sampler = normalized;
+      }
+    }
+  }
+
+  if (base.defaultMaxInputTokens !== undefined && base.defaultMaxInputTokens !== null) {
+    const cap = Number(base.defaultMaxInputTokens);
+    base.defaultMaxInputTokens =
+      Number.isFinite(cap) && cap >= 1000 ? Math.min(Math.floor(cap), 200000) : null;
+  }
+
+  const defaultPolicy = base.defaultContextEnforcementPolicy;
+  if (
+    defaultPolicy !== undefined &&
+    defaultPolicy !== 'summarize' &&
+    defaultPolicy !== 'slide' &&
+    defaultPolicy !== 'truncate'
+  ) {
+    delete base.defaultContextEnforcementPolicy;
+  }
+
+  if (base.defaultSummarySchema !== undefined) {
+    const schema = String(base.defaultSummarySchema).trim();
+    if (!schema) delete base.defaultSummarySchema;
+    else base.defaultSummarySchema = schema.slice(0, 64);
   }
 
   return { config: base, warnings };

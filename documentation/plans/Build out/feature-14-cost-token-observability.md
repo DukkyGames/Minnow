@@ -1,7 +1,7 @@
 # Feature #14 — Cost / token observability
 
 **Roadmap:** [`feature-audit-roadmap.md`](../feature-audit-roadmap.md) item **#14** (Partial → Built)  
-**Status:** Plan (not started)  
+**Status:** Built (MIN-50)  
 **Suggested sequencing:** Quick win (roadmap “Quick wins” bucket, alongside #2 / #6 / #9)
 
 ---

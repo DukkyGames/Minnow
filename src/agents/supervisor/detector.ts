@@ -261,7 +261,9 @@ export function detectSubAgentRepetition(
 export function detectEmptyCompletedSummary(run: SubAgentRun): DetectorHit | null {
   if (run.status !== 'completed') return null;
   if (!isSubAgentRunSuccessful(run)) return null;
-  if (run.summary != null && String(run.summary).trim().length > 0) return null;
+  const summaryText =
+    run.structuredOutcome?.summary?.trim() || String(run.summary ?? '').trim();
+  if (summaryText.length > 0) return null;
   return { rule: 'R2', payload: { runId: run.runId, boardTaskId: run.boardTaskId } };
 }
 

@@ -28,10 +28,12 @@ import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
+import { resetTokenLedger } from '../usage/token-ledger';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
 import { markMessageStopped } from './stopped-affordance';
+import { markMessageSteered } from './steer-affordance';
 import {
   clearSubAgentCardDomRegistry,
   renderPersistedSubAgentCardsForChat,
@@ -167,12 +169,16 @@ export function renderChatFromHistory(chat: Chat): void {
     if (msg.role === 'tool') continue;
 
     if (msg.role === 'user') {
-      const { wrap } = appendBubble('user', msg.content, {
+      const userMsg = msg;
+      const { wrap } = appendBubble('user', userMsg.content, {
         historyIndex: i,
         turnKind: 'user',
         chatId: chat.id,
         modeId: chat.modeId,
       }, { renderFromHistory: true });
+      if (userMsg.steer) {
+        markMessageSteered(wrap);
+      }
       attachMessageActions(wrap, {
         chatId: chat.id,
         historyIndex: i,
@@ -509,6 +515,7 @@ export function clearChat(): void {
   if (!confirm('Clear all messages in this chat? The chat stays in your sidebar.')) return;
   const chat = getActiveChat();
   chat.history = [];
+  resetTokenLedger(chat);
   chat.lastStats = null;
   chat.modelInfo = {};
   chat.lastMessageAt = 0;

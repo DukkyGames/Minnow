@@ -17,6 +17,7 @@ import {
   type RawSessionJson,
 } from './session-workspace-scope';
 import { setStatus } from '../ui/status';
+import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -546,7 +547,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (raw.modeId === 'debug' && viewMode === 'board') {
     viewMode = 'chat';
   }
-  return {
+  const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
       typeof raw.name === 'string' && raw.name.trim()
@@ -592,7 +593,12 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         : typeof raw.updatedAt === 'number'
           ? raw.updatedAt
           : Date.now(),
+    ...(raw.tokenLedger && typeof raw.tokenLedger === 'object'
+      ? { tokenLedger: raw.tokenLedger }
+      : {}),
   };
+  ensureTokenLedger(chat);
+  return chat;
 }
 
 /** Read expert selection for a chat (defaults to Auto). */
@@ -798,6 +804,14 @@ export function scheduleSaveSessions(): void {
       saveSessionsNow();
     }, SAVE_DEBOUNCE_MS)
   );
+}
+
+/** Run any debounced session save immediately (unit tests only). */
+export function flushScheduledSessionSaveForTests(): void {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  setSaveTimer(null);
+  saveSessionsNow();
 }
 
 /** Create a chat, make it active, and persist (debounced). */

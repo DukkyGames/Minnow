@@ -12,9 +12,11 @@ import {
   getWorkAgentById,
   loadWorkAgentRegistry,
   patchWorkAgentOverride,
+  readBuiltinWorkAgentPrompt,
   readWorkAgentPrompt,
   writeWorkAgentPromptOverride,
 } from './registry.js';
+import { normalizeSamplerPreset } from '../agents/sampler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -95,6 +97,20 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       if ('modelId' in body) patch.modelId = body.modelId;
       if ('promptOverride' in body) patch.promptOverride = body.promptOverride;
       if ('disabled' in body) patch.disabled = body.disabled;
+      if ('maxInputTokens' in body) patch.maxInputTokens = body.maxInputTokens;
+      if ('contextEnforcementPolicy' in body) {
+        patch.contextEnforcementPolicy = body.contextEnforcementPolicy;
+      }
+      if ('minRecentTurns' in body) patch.minRecentTurns = body.minRecentTurns;
+      if ('summaryReserveTokens' in body) {
+        patch.summaryReserveTokens = body.summaryReserveTokens;
+      }
+      if ('sampler' in body) {
+        patch.sampler =
+          body.sampler === null
+            ? null
+            : normalizeSamplerPreset(body.sampler);
+      }
       await patchWorkAgentOverride(agentId, patch);
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);
       sendJson(res, 200, { agent });
@@ -110,6 +126,7 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
 
       const params = new URLSearchParams(search);
       const profile = params.get('profile') === 'lite' ? 'lite' : 'full';
+      const baselineBuiltin = params.get('baseline') === 'builtin';
 
       if (req.method === 'GET') {
         const agent = await getWorkAgentById(PROJECT_ROOT, agentId);
@@ -117,7 +134,9 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
           sendJson(res, 404, { error: 'Work agent not found' });
           return true;
         }
-        const result = await readWorkAgentPrompt(PROJECT_ROOT, agentId, profile);
+        const result = baselineBuiltin
+          ? await readBuiltinWorkAgentPrompt(PROJECT_ROOT, agentId, profile)
+          : await readWorkAgentPrompt(PROJECT_ROOT, agentId, profile);
         sendJson(res, 200, result);
         return true;
       }

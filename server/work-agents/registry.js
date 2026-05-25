@@ -72,6 +72,17 @@ function parseWorkAgentMeta(raw, relativePath) {
     ? ext.allowedTools.map(String)
     : null;
 
+  const maxInputTokens =
+    typeof ext.maxInputTokens === 'number' && Number.isFinite(ext.maxInputTokens)
+      ? Math.max(1, Math.floor(ext.maxInputTokens))
+      : null;
+
+  const policy = ext.contextEnforcementPolicy;
+  const contextEnforcementPolicy =
+    policy === 'summarize' || policy === 'slide' || policy === 'truncate'
+      ? policy
+      : 'slide';
+
   return {
     id: parsed.id,
     label: parsed.label,
@@ -83,6 +94,8 @@ function parseWorkAgentMeta(raw, relativePath) {
     allowedTools,
     defaultForModes,
     disabled: ext.disabled === true,
+    maxInputTokens,
+    contextEnforcementPolicy,
   };
 }
 
@@ -208,6 +221,20 @@ export async function patchWorkAgentOverride(agentId, patch) {
   return overrides[agentId];
 }
 
+/**
+ * Shipped work-agent prompt only (ignores ~/.minnow overrides).
+ */
+export async function readBuiltinWorkAgentPrompt(projectRoot, agentId, profile) {
+  const builtinPath = path.join(
+    builtinWorkAgentsDir(projectRoot),
+    agentId,
+    `agent.${profile}.md`,
+  );
+  const raw = await fs.readFile(builtinPath, 'utf8');
+  const parsed = parsePromptMarkdown(raw, builtinPath);
+  return { content: parsed.body.trim(), source: 'builtin' };
+}
+
 export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
   const overridePath = (() => {
     try {
@@ -238,14 +265,7 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
     }
   }
 
-  const builtinPath = path.join(
-    builtinWorkAgentsDir(projectRoot),
-    agentId,
-    `agent.${profile}.md`,
-  );
-  const raw = await fs.readFile(builtinPath, 'utf8');
-  const parsed = parsePromptMarkdown(raw, builtinPath);
-  return { content: parsed.body.trim(), source: 'builtin' };
+  return readBuiltinWorkAgentPrompt(projectRoot, agentId, profile);
 }
 
 export async function writeWorkAgentPromptOverride(agentId, profile, content) {
