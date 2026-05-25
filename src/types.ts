@@ -4,6 +4,10 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type {
+  SubAgentBudgetEvent,
+  SubAgentStructuredOutcome,
+} from './agents/sub-agent-structured-outcome';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 3 as const;
@@ -214,6 +218,9 @@ export interface PersistedSubAgentRun {
   task: string;
   status: PersistedSubAgentStatus;
   summary: string;
+  /** Structured handoff for drawer restore (MIN-43). */
+  structuredOutcome?: SubAgentStructuredOutcome;
+  budgetEvents?: SubAgentBudgetEvent[];
   error?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;

@@ -72,4 +72,18 @@ describe('sub-agent config', () => {
     assert.equal(merged.types.explore.maxInputTokens, 32000);
     assert.equal(merged.types.explore.contextEnforcementPolicy, 'summarize');
   });
+
+  test('merge applies default summarySchema to types', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    assert.equal(merged.types.explore.summarySchema, 'minnow.sub-agent.explore');
+    assert.equal(merged.types['reef-widget'].summarySchema, 'minnow.sub-agent.lite');
+    assert.equal(merged.defaultSummarySchema, 'minnow.sub-agent.v1');
+  });
+
+  test('user override can set summarySchema per type', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: { shell: { summarySchema: 'minnow.sub-agent.lite' } },
+    });
+    assert.equal(merged.types.shell.summarySchema, 'minnow.sub-agent.lite');
+  });
 });

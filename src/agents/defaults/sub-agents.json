@@ -4,6 +4,9 @@
   "globalMaxConcurrent": 3,
   "defaultTimeoutMs": 300000,
   "defaultMaxToolTurns": 12,
+  "defaultMaxInputTokens": null,
+  "defaultContextEnforcementPolicy": "slide",
+  "defaultSummarySchema": "minnow.sub-agent.v1",
   "types": {
     "generalPurpose": {
       "label": "General purpose",
@@ -21,7 +24,8 @@
       ],
       "systemPromptPath": null,
       "maxInputTokens": null,
-      "contextEnforcementPolicy": "slide"
+      "contextEnforcementPolicy": "slide",
+      "summarySchema": "minnow.sub-agent.v1"
     },
     "explore": {
       "label": "Explore",
@@ -53,7 +57,8 @@
       ],
       "systemPromptPath": null,
       "maxInputTokens": 16000,
-      "contextEnforcementPolicy": "slide"
+      "contextEnforcementPolicy": "slide",
+      "summarySchema": "minnow.sub-agent.explore"
     },
     "researcher": {
       "label": "Research worker",
@@ -65,6 +70,7 @@
       "maxToolTurns": 16,
       "maxInputTokens": 12000,
       "contextEnforcementPolicy": "summarize",
+      "summarySchema": "minnow.sub-agent.v1",
       "workAgentId": null,
       "allowedTools": [
         "get_datetime",
@@ -115,7 +121,8 @@
       ],
       "systemPromptPath": null,
       "maxInputTokens": 8000,
-      "contextEnforcementPolicy": "truncate"
+      "contextEnforcementPolicy": "truncate",
+      "summarySchema": "minnow.sub-agent.v1"
     },
     "explorer": {
       "label": "Explorer (self-heal)",
@@ -131,7 +138,8 @@
         "spawn_sub_agent",
         "cancel_sub_agent"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1"
     },
     "debugger": {
       "label": "Debugger",
@@ -169,7 +177,8 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1"
     },
     "bug-planner": {
       "label": "Bug planner",
@@ -185,7 +194,8 @@
         "spawn_sub_agent",
         "cancel_sub_agent"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.v1"
     },
     "reef-widget": {
       "label": "Reef widget",
@@ -222,7 +232,8 @@
         "git_add",
         "git_push"
       ],
-      "systemPromptPath": null
+      "systemPromptPath": null,
+      "summarySchema": "minnow.sub-agent.lite"
     }
   }
 }

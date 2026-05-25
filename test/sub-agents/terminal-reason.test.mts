@@ -8,6 +8,7 @@ import {
   buildSubAgentStatusPayload,
   deriveSubAgentTerminalReason,
 } from '../../src/agents/orchestrator.ts';
+import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from '../../src/agents/sub-agent-outcome.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 
 function run(partial: Partial<SubAgentRun>): SubAgentRun {
@@ -51,6 +52,19 @@ describe('deriveSubAgentTerminalReason', () => {
 
   test('cancelled for cancelled run', () => {
     assert.equal(deriveSubAgentTerminalReason(run({ status: 'cancelled' })), 'cancelled');
+  });
+
+  test('context_budget for budget exhaustion', () => {
+    assert.equal(
+      deriveSubAgentTerminalReason(
+        run({
+          status: 'failed',
+          error: SUB_AGENT_CONTEXT_BUDGET_ERROR,
+          summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
+        }),
+      ),
+      'context_budget',
+    );
   });
 
   test('payload includes terminalReason when terminal', () => {

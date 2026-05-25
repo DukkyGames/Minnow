@@ -832,6 +832,7 @@ async function renderSubAgentsSection(): Promise<void> {
           maxToolTurns: type.maxToolTurns,
           maxInputTokens: type.maxInputTokens ?? null,
           contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
+          summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
         },
         (patch) => saveTypePatch(id, patch),
       );

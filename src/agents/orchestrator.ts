@@ -11,10 +11,19 @@ import { buildSubAgentSystemPrompt } from './sub-agent-prompt';
 import { createSubAgentRunId } from './sub-agent-run-id';
 import { DEFAULT_SUB_AGENT_MAX_TOOL_TURNS } from './sub-agent-config';
 import {
+  isContextBudgetFailure,
   isMaxToolTurnFailure,
+  SUB_AGENT_CONTEXT_BUDGET_ERROR,
   SUB_AGENT_MAX_TOOL_TURNS_ERROR,
 } from './sub-agent-outcome';
-import { agentContextBudgetFromSubAgentType } from '../chat/context-budget';
+import {
+  legacyOutcomeFromSummary,
+  type SubAgentStructuredOutcome,
+} from './sub-agent-structured-outcome';
+import {
+  agentContextBudgetFromSubAgentType,
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+} from '../chat/context-budget';
 import { cloneSubAgentMessages, getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import { resolveSubAgentTools } from './sub-agent-tools';
@@ -44,8 +53,32 @@ export function deriveSubAgentTerminalReason(
   }
   if (run.status === 'cancelled') return 'cancelled';
   if (isMaxToolTurnFailure(run.summary, run.error)) return 'max_tool_turns';
+  if (isContextBudgetFailure(run.error)) return 'context_budget';
   if (run.status === 'failed') return 'failed';
   return 'success';
+}
+
+/** Parent-facing outcome (structured or legacy prose fallback). */
+function outcomeForRun(run: SubAgentRun): SubAgentStructuredOutcome {
+  return run.structuredOutcome ?? legacyOutcomeFromSummary(run.summary);
+}
+
+/** Cap finding detail and counts before serializing to parent JSON (~32 KB). */
+function trimOutcomeForAggregate(outcome: SubAgentStructuredOutcome): SubAgentStructuredOutcome {
+  const maxDetail = 500;
+  const summary =
+    outcome.summary.length > 2000
+      ? `${outcome.summary.slice(0, 2000)}…`
+      : outcome.summary;
+  return {
+    summary,
+    findings: outcome.findings.slice(0, 20).map((f) => ({
+      ...f,
+      detail:
+        f.detail.length > maxDetail ? `${f.detail.slice(0, maxDetail)}…` : f.detail,
+    })),
+    artifacts: outcome.artifacts.slice(0, 20),
+  };
 }
 
 const AGGREGATE_MAX_BYTES = 32 * 1024;
@@ -149,11 +182,13 @@ export function formatAggregateResult(result: AggregateResult): string {
 
 /** Build aggregate payload from a settled run. */
 export function buildAggregateResult(run: SubAgentRun): AggregateResult {
+  const outcome = trimOutcomeForAggregate(outcomeForRun(run));
   const out: AggregateResult = {
     runId: run.runId,
     type: run.type,
     status: run.status,
-    summary: run.summary,
+    summary: outcome.summary,
+    outcome,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,
@@ -162,6 +197,15 @@ export function buildAggregateResult(run: SubAgentRun): AggregateResult {
   if (run.error) out.error = run.error;
   const terminalReason = deriveSubAgentTerminalReason(run);
   if (terminalReason) out.terminalReason = terminalReason;
+  if (run.budgetEvents?.length) {
+    const lastEstimate = run.budgetEvents[run.budgetEvents.length - 1]?.estimatedTokens;
+    out.contextBudget = {
+      maxInputTokens: run.contextBudgetMaxInputTokens ?? 0,
+      estimatedInputTokens: lastEstimate ?? 0,
+      policy: run.contextBudgetPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+      events: run.budgetEvents.map((e) => e.label),
+    };
+  }
   return out;
 }
 
@@ -310,6 +354,10 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       { role: 'user', content: run.task },
     ]);
 
+    run.contextBudgetMaxInputTokens = typeConfig.maxInputTokens ?? null;
+    run.contextBudgetPolicy =
+      typeConfig.contextEnforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY;
+
     const output = await getSubAgentRunner().run({
       runId: run.runId,
       type: run.type,
@@ -320,6 +368,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       modelId,
       maxToolTurns: run.maxToolTurns,
       contextBudget: agentContextBudgetFromSubAgentType(typeConfig),
+      summarySchema: typeConfig.summarySchema,
       signal: abort.signal,
       toolExecuteContext: {
         chatId: run.parentChatId ?? undefined,
@@ -336,6 +385,20 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     if (output.usage) run.usage = output.usage;
     if (output.stats) run.stats = output.stats;
 
+    if (output.budgetEvents?.length) {
+      run.budgetEvents = output.budgetEvents;
+    }
+
+    if (output.contextBudgetExhausted) {
+      settleRun(
+        internals,
+        'failed',
+        output.summary,
+        SUB_AGENT_CONTEXT_BUDGET_ERROR,
+      );
+      return;
+    }
+
     if (output.toolTurnLimitExhausted) {
       settleRun(
         internals,
@@ -344,6 +407,15 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
         SUB_AGENT_MAX_TOOL_TURNS_ERROR,
       );
       return;
+    }
+
+    if (output.structuredOutcomeParseError) {
+      settleRun(internals, 'failed', output.summary, output.structuredOutcomeParseError);
+      return;
+    }
+
+    if (output.structuredOutcome) {
+      run.structuredOutcome = output.structuredOutcome;
     }
 
     settleRun(internals, 'completed', output.summary, null);
@@ -713,12 +785,14 @@ export function formatSubAgentListToolResult(parentTurnId: string | null | undef
 export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unknown> {
   const success =
     run.status === 'completed' && !isMaxToolTurnFailure(run.summary, run.error);
+  const outcome = outcomeForRun(run);
   const payload: Record<string, unknown> = {
     runId: run.runId,
     type: run.type,
     status: run.status,
     success,
-    summary: run.summary,
+    summary: outcome.summary,
+    outcome,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,
@@ -731,6 +805,9 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   if (run.liveCurrentToolName) payload.liveCurrentToolName = run.liveCurrentToolName;
   if (run.modelId) payload.modelId = run.modelId;
   if (run.providerId) payload.providerId = run.providerId;
+  if (run.budgetEvents?.length) {
+    payload.budgetEvents = run.budgetEvents;
+  }
   const terminalReason = deriveSubAgentTerminalReason(run);
   if (terminalReason) payload.terminalReason = terminalReason;
   return payload;

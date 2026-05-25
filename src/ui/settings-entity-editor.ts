@@ -17,6 +17,7 @@ import {
   type PromptFileProfile,
 } from '../chat/prompts/prompt-file-api';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
 import { isProvidersApiAvailable, listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
 import { setStatus } from './status';
@@ -26,6 +27,19 @@ const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }
   { value: 'truncate', label: 'Truncate (drop oldest messages)' },
   { value: 'summarize', label: 'Summarize (compress dropped turns)' },
 ];
+
+function buildSummarySchemaSelect(initial: string): HTMLSelectElement {
+  const sel = document.createElement('select');
+  sel.className = 'settings-select';
+  for (const id of listSummarySchemaPresetIds()) {
+    const node = document.createElement('option');
+    node.value = id;
+    node.textContent = id;
+    sel.appendChild(node);
+  }
+  sel.value = initial;
+  return sel;
+}
 
 function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelectElement {
   const sel = document.createElement('select');
@@ -387,6 +401,7 @@ export function mountSubAgentTypeEditor(
     maxToolTurns: number;
     maxInputTokens: number | null;
     contextEnforcementPolicy: ContextEnforcementPolicy;
+    summarySchema: string;
   },
   onSaveConfig: (
     patch: Partial<{
@@ -397,6 +412,7 @@ export function mountSubAgentTypeEditor(
       maxToolTurns: number;
       maxInputTokens: number | null;
       contextEnforcementPolicy: ContextEnforcementPolicy;
+      summarySchema: string;
     }>,
   ) => Promise<boolean>,
 ): void {
@@ -435,6 +451,7 @@ export function mountSubAgentTypeEditor(
     initial.maxInputTokens != null ? String(initial.maxInputTokens) : '';
 
   const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy);
+  const summarySchemaSel = buildSummarySchemaSelect(initial.summarySchema);
 
   const modelBlock = el('div','settings-model-row');
   modelBlock.appendChild(el('label', 'settings-field-label', 'Provider'));
@@ -462,6 +479,8 @@ export function mountSubAgentTypeEditor(
   budgetRow.appendChild(maxInputTokensInput);
   budgetRow.appendChild(el('label', 'settings-field-label', 'Context policy'));
   budgetRow.appendChild(contextPolicySel);
+  budgetRow.appendChild(el('label', 'settings-field-label', 'Summary schema'));
+  budgetRow.appendChild(summarySchemaSel);
 
   extra.appendChild(toolTurnsRow);
   extra.appendChild(budgetRow);
@@ -481,6 +500,7 @@ export function mountSubAgentTypeEditor(
             ? null
             : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
+        summarySchema: summarySchemaSel.value,
       });
       setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
     })();

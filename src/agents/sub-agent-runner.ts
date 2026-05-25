@@ -17,8 +17,17 @@ import { modelCache } from '../app-state';
 import { getActiveProvider } from '../providers/store';
 import {
   applyContextBudget,
+  estimateApiMessagesTokens,
   resolveContextBudget,
 } from '../chat/context-budget';
+import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome';
+import {
+  buildSubAgentFinalizationPrompt,
+  parseStructuredOutcomeJson,
+  SUB_AGENT_STRUCTURED_OUTCOME_REPAIR_PROMPT,
+  validateStructuredOutcome,
+} from './sub-agent-structured-outcome';
+import type { SubAgentBudgetEvent, SubAgentStructuredOutcome } from './sub-agent-structured-outcome';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
 import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
@@ -159,6 +168,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     let lastProgressEmit = 0;
     const usageSegments: Usage[] = [];
     const statsSegments: Array<{ stats: Stats; usage: Usage }> = [];
+    const budgetEvents: SubAgentBudgetEvent[] = [];
+    const summarySchema = input.summarySchema;
 
     const emitProgress = (partialAssistant?: string, force = false): void => {
       if (!input.onMessagesChange) return;
@@ -174,15 +185,102 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
     emitProgress(undefined, true);
 
-    for (let turn = 0; turn < maxToolTurns; turn++) {
+    const enforceContextBudget = (turnIndex: number): boolean => {
       const budgetResolved = resolveContextBudget({
         agentConfig: contextBudget,
         modelLimit: modelContextLimit,
       });
+      const limit = budgetResolved.effectiveLimit;
       const budgetApplied = applyContextBudget(messages, budgetResolved, contextBudget);
       if (budgetApplied.applied) {
         messages.length = 0;
         messages.push(...budgetApplied.messages);
+        if (budgetApplied.statusMessage) {
+          budgetEvents.push({
+            turn: turnIndex,
+            label: budgetApplied.statusMessage,
+            estimatedTokens: budgetApplied.tokensAfter,
+          });
+        }
+      }
+      if (limit != null && estimateApiMessagesTokens(messages) > limit) {
+        return false;
+      }
+      return true;
+    };
+
+    const requestStructuredOutcome = async (
+      repair: boolean,
+    ): Promise<
+      | { ok: true; outcome: SubAgentStructuredOutcome; rawText: string }
+      | { ok: false; parseError: string; rawText: string }
+    > => {
+      const finalMessages = cloneSubAgentMessages(messages);
+      if (repair) {
+        finalMessages.push({
+          role: 'user',
+          content: SUB_AGENT_STRUCTURED_OUTCOME_REPAIR_PROMPT,
+        });
+      } else {
+        finalMessages.push({
+          role: 'user',
+          content: buildSubAgentFinalizationPrompt(summarySchema).trim(),
+        });
+      }
+
+      const body: SubAgentCompletionBody = {
+        model: input.modelId || undefined,
+        messages: finalMessages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: true,
+      };
+
+      const turnResult = await streamSubAgentTurn(
+        input.providerId,
+        body,
+        input.signal,
+      );
+
+      const turnUsage = turnResult.streamMeta.usage ?? {};
+      const turnStats = turnResult.streamMeta.stats ?? {};
+      if (Object.keys(turnUsage).length > 0) usageSegments.push(turnUsage);
+      if (Object.keys(turnStats).length > 0 || Object.keys(turnUsage).length > 0) {
+        statsSegments.push({ stats: turnStats, usage: turnUsage });
+      }
+
+      let rawText = turnResult.fullText.trim();
+      if (!rawText) {
+        const { stream: _stream, ...fallbackBody } = body;
+        const fallback = await tryNonStreamingFallback(
+          fallbackBody,
+          input.signal,
+          input.providerId,
+        );
+        rawText = extractMessageText(fallback.choices?.[0]?.message).trim();
+      }
+
+      try {
+        const parsed = parseStructuredOutcomeJson(rawText);
+        const outcome = validateStructuredOutcome(parsed, summarySchema);
+        if (outcome) return { ok: true, outcome, rawText };
+        return { ok: false, parseError: 'JSON did not match summary schema', rawText };
+      } catch {
+        return { ok: false, parseError: 'Invalid JSON in final response', rawText };
+      }
+    };
+
+    for (let turn = 0; turn < maxToolTurns; turn++) {
+      if (!enforceContextBudget(turn)) {
+        return {
+          summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
+          toolTurns,
+          messages,
+          contextBudgetExhausted: true,
+          budgetEvents,
+          usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+          stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+        };
       }
 
       const body: SubAgentCompletionBody = {
@@ -249,24 +347,21 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         continue;
       }
 
-      let summary = turnResult.fullText.trim();
-      if (!summary) {
+      let prose = turnResult.fullText.trim();
+      if (!prose) {
         const { stream: _stream, ...fallbackBody } = body;
         const fallback = await tryNonStreamingFallback(
           fallbackBody,
           input.signal,
           input.providerId,
         );
-        summary = extractMessageText(fallback.choices?.[0]?.message).trim();
-      }
-
-      if (!summary) {
-        summary = 'Sub-agent completed with no text output.';
+        prose = extractMessageText(fallback.choices?.[0]?.message).trim();
       }
 
       if (
         hasAskQuestionTool &&
-        looksLikeProseStructuredQuestion(summary) &&
+        prose &&
+        looksLikeProseStructuredQuestion(prose) &&
         proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
       ) {
         proseQuestionRetries += 1;
@@ -275,12 +370,44 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         continue;
       }
 
-      messages.push({ role: 'assistant', content: summary });
+      if (!enforceContextBudget(turn)) {
+        return {
+          summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
+          toolTurns,
+          messages,
+          contextBudgetExhausted: true,
+          budgetEvents,
+          usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+          stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+        };
+      }
+
+      const firstFinal = await requestStructuredOutcome(false);
+      const finalized = firstFinal.ok
+        ? firstFinal
+        : await requestStructuredOutcome(true);
+
+      if (finalized.ok === false) {
+        const parseError = finalized.parseError;
+        return {
+          summary: parseError,
+          toolTurns,
+          messages,
+          structuredOutcomeParseError: parseError,
+          budgetEvents: budgetEvents.length ? budgetEvents : undefined,
+          usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+          stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+        };
+      }
+
+      messages.push({ role: 'assistant', content: finalized.rawText });
       emitProgress(undefined, true);
       return {
-        summary,
+        summary: finalized.outcome.summary,
+        structuredOutcome: finalized.outcome,
         toolTurns,
         messages,
+        budgetEvents: budgetEvents.length ? budgetEvents : undefined,
         usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
         stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
       };
