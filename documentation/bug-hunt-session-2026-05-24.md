@@ -24,22 +24,24 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Open |
 | BUG-004 | Major | Benchmark — capability suite | Multimodal capability test not run for multimodal models | Open |
 | BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Open |
-| BUG-006 | Major | Benchmark — tools suite | Run hangs or stops on tools suite | Open |
+| BUG-006 | Major | Benchmark — tools suite | Run hangs or stops on tools suite | Verified — [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite) |
 | BUG-007 | Major | Benchmark (`#/benchmark`) | Custom suites button does nothing | Open |
-| BUG-008 | Major | Benchmark — modes suite | Mode tests fail: **expected tool missing** despite tools enabled | Open |
-| BUG-009 | Major | Benchmark — skills suite | Most skills tests fail | Open |
+| BUG-008 | Major | Benchmark — modes suite | Mode tests fail: **expected tool missing** despite tools enabled | Open (verified — see plan + MIN-81) |
+| BUG-009 | Major | Benchmark — skills suite | Most skills tests fail | Verified — [MIN-71](https://linear.app/minnowai/issue/MIN-71/bug-009-skills-benchmark-failures) |
 | BUG-010 | Blocker | Browser tools (CDP) | Browser tools not working at all | Open |
-| BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Open |
-| BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Open |
+| BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Verified — [plan](plans/Bug%20Fixes/BUG-011-fetch-web-content.md) |
+| BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Verified — [MIN-72](https://linear.app/minnowai/issue/MIN-72/bug-015-rag-web-content-broken) |
 | BUG-016 | Major | Plan mode / streaming | Reply fails: ReadableStream JSON parse error on `close` | Open |
-| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Open |
+| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Verified — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
-| BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open |
-| BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Open |
-| BUG-018 | Major | File panel | **Rename file** does not work | Open |
-| BUG-019 | Major | Context / tokens UI | Context usage not live during tools + thinking | Open |
+| BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
+| BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Open — [MIN-60](https://linear.app/minnowai/issue/MIN-60), plan verified 2026-05-24 |
+| BUG-018 | Major | File panel | **Rename file** does not work | Verified — [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
+| BUG-019 | Major | Context / tokens UI | Context usage not live during tools + thinking | Verified — [MIN-75](https://linear.app/minnowai/issue/MIN-75) |
+| BUG-020 | Major | Orchestrate / streaming | Stuck retrying; stream close **Unexpected end of JSON input** | Verified — [MIN-84](https://linear.app/minnowai/issue/MIN-84/bug-020-orchestrator-stuck-retrying-stream) |
+| BUG-021 | Major | Reef widgets | Non-chart widgets (e.g. Calculator) fail with chart/toExponential error | Open |
 
-**Counts:** 19 open · 0 fixed · 0 won't fix
+**Counts:** 21 open · 0 fixed · 0 won't fix
 
 ---
 
@@ -175,6 +177,8 @@ Test is not executed for the multimodal model (skipped or absent from active run
 - When heuristic matches, test is still **`skipped: true`** with **`VLM probe deferred`** / details **`skipped deep image probe in v1`** — no real multimodal request in either path.
 - Fix likely needs provider/model **capability flags** (not ID regex) and/or implementing the deferred image probe.
 
+**Verification (2026-05-24):** **Confirmed** via code review. Benchmark uses regex-only `modelLooksMultimodal()`; chat uses `modelCache` `type === 'vlm'`. Both branches skip — never call `runOneShot` with image content. Plan: `documentation/plans/Bug Fixes/BUG-004-multimodal-capability-test.md`. Manual bench on live VLM deferred.
+
 ### BUG-005 — Benchmark Stop does not work
 
 | Field | Value |
@@ -212,7 +216,8 @@ Stop has no effect (or no reliable effect); benchmark keeps going.
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Tools** suite (`src/benchmark/suites/tools.ts`), Full/Quick runs that include tools |
-| **Status** | Open |
+| **Status** | Verified (code review 2026-05-24) — [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite) |
+| **Plan** | `documentation/plans/Bug Fixes/BUG-006-benchmark-tools-suite-hang.md` |
 
 **Summary**
 
@@ -234,6 +239,7 @@ Run **stalls on tools** — no further progress, or the whole benchmark **stops*
 
 **Notes**
 
+- **Verified 2026-05-24:** `runner.ts` emits all Tools `test-done` only after `runToolsSuite()` finishes (~61 serial `runToolLoop` probes); UI shows no tool cards until then. `runToolLoop` runs real `executeTool` (approvals, `ask_question`, browser/CDP) with no per-test timeout; duplicate `executeTool` in `tools.ts` after loop.
 - May be timeout, hung tool call, unhandled promise, or suite never resolving.
 - Overlaps with **BUG-005** if user tries Stop while stuck (Stop also ineffective).
 - Suite location: `src/benchmark/suites/tools.ts`, `tools-fixtures.ts`.
@@ -244,7 +250,8 @@ Run **stalls on tools** — no further progress, or the whole benchmark **stops*
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Custom suites** control (`#btnBenchmarkCustom`, panel `#benchmarkCustomSuites`) |
-| **Status** | Open |
+| **Status** | Open — **verified 2026-05-24** (see plan + Linear MIN-90) |
+| **Plan** | `documentation/plans/Bug Fixes/BUG-007-custom-suites-button.md` |
 
 **Summary**
 
@@ -271,17 +278,23 @@ Button click does nothing useful — panel stays hidden, broken toggle, or custo
 - Relates to **POLISH-003** (toggle button group for test selection) — may replace or overlap this control.
 - Preset type `'custom'` in `src/benchmark/types.ts`.
 
+**Verification (2026-05-24): CONFIRMED.** Click handler runs and flips `hidden`, but `.benchmark-suite-checkboxes { display: flex }` in `src/styles/benchmark-page.css` keeps `getComputedStyle(...).display === 'flex'` even when `hidden=true`, so the panel never hides and the button appears dead. Fix: add `.benchmark-suite-checkboxes[hidden] { display: none !important; }`. Plan: `documentation/plans/Bug Fixes/BUG-007-custom-suites-button.md`. Linear: [MIN-90](https://linear.app/minnowai/issue/MIN-90/bug-007-custom-suites-button-broken).
+
 ### BUG-008 — Modes suite fails with “expected tool missing” (tools enabled)
 
 | Field | Value |
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Modes** suite (`src/benchmark/suites/modes.ts`) |
-| **Status** | Open |
+| **Status** | Open (verified 2026-05-24) |
+| **Plan** | [BUG-008-modes-expected-tool-missing.md](plans/Bug%20Fixes/BUG-008-modes-expected-tool-missing.md) |
+| **Linear** | [MIN-81](https://linear.app/minnowai/issue/MIN-81/bug-008-modes-suite-expected-tool-missing) |
 
 **Summary**
 
 **Most mode tests fail** with detail **`expected tool missing`**, even when **all tools are enabled** in settings.
+
+**Verification (2026-05-24):** Mode tool **policy** allows all probed tools. **Default** `tools.json` leaves `list_directory` / `read_file` **off**, so build/plan/orchestrate positive probes fail on fresh install. Suite passes the **full** enabled tool catalog to the API (unlike Tools suite single-tool tests) — likely overload for local models. Static test: `test/benchmark/modes-suite-probes.test.mts`.
 
 **Steps to reproduce**
 
@@ -310,11 +323,13 @@ Majority of mode tests **fail**; failure message **`expected tool missing`** (mo
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark — **Skills** suite (`src/benchmark/suites/skills.ts`, built-in manifest) |
-| **Status** | Open |
+| **Status** | Verified open — [MIN-71](https://linear.app/minnowai/issue/MIN-71/bug-009-skills-benchmark-failures) |
 
 **Summary**
 
 The majority of **skills** suite tests **fail** when running the benchmark.
+
+**Verification (2026-05-24):** Run `2026-05-24T21-03-56-933Z.json` — **2/12** pass (`browser-automation`, `docs-update`); **10** fail with empty `details` (empty `runOneShot` text). Same-day `cap-stream` failed with empty `details` → primary suspect **BUG-002**. Plan: `documentation/plans/Bug Fixes/BUG-009-skills-benchmark-failures.md`.
 
 **Steps to reproduce**
 
@@ -359,7 +374,7 @@ Browser tools connect to CDP endpoint and complete requests (navigate, snapshot,
 
 **Actual**
 
-Browser tools **completely non-functional** (errors, timeouts, or no-op — exact message not yet captured).
+Browser tools **completely non-functional**. Verification (2026-05-24): with `browser.enabled: true` and all `browser_*` tools enabled, **`browser_list`** returns **`Error: fetch failed`** when `http://127.0.0.1:9222` has no Chrome CDP listener (Node `fetch` to `/json/list` fails). Mock CDP unit tests still pass (`npm run test:browser` 12/12).
 
 **Notes**
 
@@ -374,11 +389,13 @@ Browser tools **completely non-functional** (errors, timeouts, or no-op — exac
 |-------|-------|
 | **Severity** | Major |
 | **Area** | **Fetch web content** tool (web fetch / `fetch` tool — browser or server path) |
-| **Status** | Open |
+| **Status** | Verified (2026-05-24) — H1 CORS + missing server proxy; plan only |
 
 **Summary**
 
 **Fetch web content** returns failure — reported message **`fetch failed`**.
+
+**Verification (2026-05-24):** Code review + Node/JSDOM repro on `https://example.com` succeeds when HTTP fetch completes; browser path has no server fallback (`SERVER_TOOL_HANDLERS` lacks handler). Primary cause = in-page `fetch()` CORS failures, not HTML strip regression. See `documentation/plans/Bug Fixes/BUG-011-fetch-web-content.md`.
 
 **Steps to reproduce**
 
@@ -533,6 +550,8 @@ When the sidebar is **closed/collapsed**, the **thinking** indicator spins the *
 - Expanded sidebar may behave correctly (dot spinner vs badge); bug is specific to **collapsed** layout (`sidebar.css` — `.chat-sidebar.collapsed:not(.mobile-open)` + thinking badge rules).
 - Related CSS: `.chat-item-dot__spinner`, `.chat-item-agent-badge` thinking styles.
 
+**Verification (2026-05-24):** Root cause confirmed — `tool-call-spin` on `.chat-item-agent-badge` (collapsed thinking) rotates border + text; expanded dot uses child `.chat-item-dot__spinner` only. Manual live-stream repro still recommended.
+
 ### BUG-016 — Plan reply fails: stream JSON parse on close
 
 | Field | Value |
@@ -577,7 +596,8 @@ Intermittent failure; stream controller `close` throws due to **invalid/extra JS
 |-------|-------|
 | **Severity** | Minor |
 | **Area** | Top bar **model picker** (`#modelSelect`, `.model-wrap` / combobox) |
-| **Status** | Open |
+| **Status** | Verified (open) — Linear [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
+| **Plan** | `documentation/plans/Bug Fixes/BUG-017-model-picker-truncation.md` |
 
 **Summary**
 
@@ -601,17 +621,32 @@ Label **truncated** with ellipsis; full name not readable without opening menu (
 - Session screenshot: green status dot + truncated white label + caret.
 - CSS likely `text-overflow: ellipsis` + fixed width on `.model-wrap` / select trigger.
 
+**Verification (2026-05-24)**
+
+- **Confirmed in code:** `.model-select-trigger-text` and `.model-select-option-label` use `text-overflow: ellipsis`; `.model-wrap` capped at 340px (380px ≥900px). Label pipeline (`formatModelLabel` → `syncModelSelectPicker`) puts full `optionText` in DOM; clipping is CSS-only.
+- **Tooltips OK:** `title` on trigger and menu rows carries canonical id + quant + load (not a substitute for visible text per report).
+- **Not a duplicate of MIN-7:** that issue fixed hover contrast; ellipsis unchanged.
+- **Fix:** follow approved plan (menu non-ellipsis first, then trigger width).
+
 ### BUG-018 — Rename file does not work
 
 | Field | Value |
 |-------|-------|
 | **Severity** | Major |
 | **Area** | File sidebar / file tree — rename action |
-| **Status** | Open |
+| **Status** | Verified (partial) — plan + Linear |
+| **Plan** | [`documentation/plans/Bug Fixes/BUG-018-rename-file.md`](plans/Bug%20Fixes/BUG-018-rename-file.md) |
+| **Linear** | [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
 
 **Summary**
 
 **Renaming a file** in the file panel (context menu, inline rename, or equivalent) **does not work** — name unchanged, error, or UI no-op.
+
+**Verification (2026-05-24)**
+
+- **Partially confirmed:** `move_file` via `POST /api/tools` renames on disk; browser `renamePath` succeeds when `window.prompt` returns a new name.
+- **Likely “no-op” causes:** prompt cancel or same basename → `renamePath` returns `false` with **no status message**; **F2** ignored while CodeMirror focused; Rename disabled when tool server offline; Windows **EBUSY** when file is locked (error only in status bar).
+- **Deferred:** full manual context-menu / F2 session (~25 min).
 
 **Steps to reproduce**
 
@@ -630,8 +665,8 @@ Rename **fails** or has no effect (exact error not yet captured).
 
 **Notes**
 
-- May depend on server tool (`rename` / `write` / file API via `POST /api/tools`).
-- Capture console/network error when reproducing.
+- Implementation: `src/ui/file-tree-ops.ts` → `move_file` (not a separate rename API).
+- Capture console/network on manual repro; check status strip for `Error: EBUSY` on Windows.
 
 ### BUG-019 — Context usage not real-time (tools + thinking)
 
@@ -639,7 +674,7 @@ Rename **fails** or has no effect (exact error not yet captured).
 |-------|-------|
 | **Severity** | Major |
 | **Area** | **Context usage** indicator / token budget UI (composer or status) |
-| **Status** | Open |
+| **Status** | Verified (2026-05-24 static review) — Linear [MIN-75](https://linear.app/minnowai/issue/MIN-75), plan `documentation/plans/Bug Fixes/BUG-019-context-usage-realtime.md` |
 
 **Summary**
 
@@ -664,6 +699,82 @@ Context usage is calculated/updated **only after the message is received** (end 
 - Feature #03 context budgets may exist server-side; UI feedback lag is the reported issue.
 - Affects user awareness before hitting context limits mid-turn.
 
+### BUG-020 — Orchestrator stuck retrying: stream JSON EOF on close
+
+| Field | Value |
+|-------|-------|
+| **Severity** | Major |
+| **Area** | **Orchestrate** mode — orchestrator turn streaming + retry loop |
+| **Status** | Open |
+
+**Summary**
+
+Orchestrator can **get stuck retrying** and never complete the reply. User sees streaming failure when the stream closes.
+
+**Error (user-reported)**
+
+```
+Could not complete this reply: Failed to execute 'close' on 'ReadableStreamDefaultController': Unexpected end of JSON input
+```
+
+**Steps to reproduce**
+
+1. Run **Orchestrate** mode with board + sub-agents (active orchestration).
+2. Let orchestrator run until failure (may involve retries).
+3. Observe stuck retry behavior and error banner.
+
+**Expected**
+
+Turn completes or fails cleanly with recoverable state; retries succeed or stop with clear limit.
+
+**Actual**
+
+**Stuck in retry loop**; stream `close` throws **Unexpected end of JSON input** (truncated/malformed SSE JSON vs **BUG-016** partial JSON).
+
+**Notes**
+
+- Related **BUG-016** (Plan mode, “non-whitespace after JSON at position 3583”) — same `ReadableStreamDefaultController` class, different parse failure.
+- Related **POLISH-022** (status visibility). Known llmster/browser SSE issues per `AGENTS.md`.
+- Capture whether supervisor stall/restart triggers the loop.
+
+### BUG-021 — Reef widget error on non-chart widgets (Calculator)
+
+| Field | Value |
+|-------|-------|
+| **Severity** | Major |
+| **Area** | **Reef** widgets — `reef-widget` mount / validation (`widget-fence-lint.ts`, `widget-prelude.ts`, `widget-error-ui.ts`) |
+| **Status** | Open |
+
+**Summary**
+
+Widgets that **do not use charts** (e.g. **Calculator**) show **Widget could not be displayed** with a **misleading chart-axis error** about `toExponential`.
+
+**Error UI (user-reported)**
+
+- Title: **Widget could not be displayed**
+- Message: **Do not use toExponential on axis ticks (collapses Y-axis width); use toFixed instead.**
+- Hint: Ask the assistant to fix the reef-widget fence…
+
+**Steps to reproduce**
+
+1. Open or generate a **Calculator** reef widget (no Recharts).
+2. Widget fails validation / mount.
+3. Error cites `toExponential` / axis ticks despite no chart.
+
+**Expected**
+
+Calculator (and other non-chart templates) render without chart-specific lint/runtime checks.
+
+**Actual**
+
+False positive or over-broad validation — chart rules applied to non-chart widgets.
+
+**Notes**
+
+- Static lint: `widget-fence-lint.ts` flags `\btoExponential\s*\(` in fence body.
+- Runtime: `widget-prelude.ts` `probeChartLayout()` scans axis tick text for scientific notation (`/e[+-]?\d+/i`) — may false-positive on non-chart text.
+- Related **POLISH-020** (Reef merged into General/Research). Templates: `src/chat/reef/widgets/calculator*.md`.
+
 ---
 
 ## Polish / UX (not bugs)
@@ -679,18 +790,20 @@ Context usage is calculated/updated **only after the message is received** (end 
 | POLISH-007 | File editor | Edit `.md` files with basic text editor tooling | **Requested** |
 | POLISH-008 | File editor + chat | Right-click selection → **Add to chat** | **Requested** |
 | POLISH-009 | File tree + chat | Right-click file in tree → **Add to chat** | **Requested** |
-| POLISH-010 | Bug tracker (`#/bugs`) | Title and description on separate lines; more title space | **Requested** |
-| POLISH-011 | App shell | In-app **browser view** (embedded browser; plan TBD) | **Requested** |
+| POLISH-010 | Bug tracker (`#/bugs`) | Title and description on separate lines; more title space | **Done** (verified 2026-05-24) |
+| POLISH-011 | App shell | In-app **browser view** (embedded browser; [architecture plan](plans/Bug%20Fixes/POLISH-011-in-app-browser-view.md)) | **Planned** |
 | POLISH-012 | Bug tracker | Categories + file/code links on bugs | **Requested** |
 | POLISH-013 | Editor + file tree | Right-click **Report bug** (pre-fill from selection/file) | **Requested** |
-| POLISH-014 | Bug view layout | File sidebar + viewer visible while on `#/bugs` | **Requested** |
+| POLISH-014 | Bug view layout | File sidebar + viewer visible while on `#/bugs` | Verified — [MIN-93](https://linear.app/minnowai/issue/MIN-93/polish-014-file-panel-on-bug-view) |
 | POLISH-015 | Bug view layout | Keep main **top bar** visible on bug tracker | **Requested** |
 | POLISH-016 | Onboarding / shell | First launch → **workspace select** home (Cursor-style) | **Requested** |
 | POLISH-017 | Chat sidebar | **Pin chats** to top of session list | **Requested** |
-| POLISH-018 | Plan mode | Intent picker: preset buttons + preprompt + user input | **Requested** |
+| POLISH-018 | Plan mode | Intent picker: preset buttons + preprompt + user input | **Planned** |
 | POLISH-019 | Composer modes | Add **General** / **Chat** mode (lightweight conversation) | **Requested** |
 | POLISH-020 | Composer modes | **Merge Reef** into General + Research (remove Reef as own mode) | **Requested** |
 | POLISH-021 | Agent tools | **`grep` / search in files** tool for agents | **Requested** |
+| POLISH-022 | Orchestrate mode | Richer orchestrator status (per worker/sub-agent step) | **Requested** |
+| POLISH-023 | Bug tracker | Bug **detail view** + attachments (images, files, etc.) | **Requested** |
 
 ### POLISH-002 — Benchmark run animation (fading status copy)
 
@@ -884,31 +997,26 @@ Bug tracker cards/rows need **more room for titles** and a clearer layout: **tit
 
 - UX/layout only. Related navigation bug: **BUG-001** (first open flash).
 
-### POLISH-011 — In-app browser view (needs architecture plan)
+### POLISH-011 — In-app browser view
 
 **Summary**
 
 Add an **embedded browser view** inside Minnow so users can see and interact with pages without leaving the app (today browser tools rely on external Chrome CDP — **BUG-010**).
+
+**Architecture plan:** [`documentation/plans/Bug Fixes/POLISH-011-in-app-browser-view.md`](plans/Bug%20Fixes/POLISH-011-in-app-browser-view.md) — **recommended v1:** CDP **screencast mirror** of the agent’s Chrome target (Option A); optional v2 server-managed Chrome (Option D). Rejects iframe/proxy and Electron-for-browsing for v1.
 
 **Desired behavior (high level)**
 
 - Dedicated browser panel or tab in the UI (navigate, view page, link to agent tools).
 - Agent/browser tools can target the in-app view where appropriate.
 
-**Open decisions (needs Opus / plan doc)**
-
-- **Engine:** Embedded Chromium (CEF/Electron webview?), iframe + proxy, or continue CDP to external Chrome with mirrored UI?
-- Security: origin allowlist, sandboxing, downloads, auth flows.
-- How this relates to existing `browser_*` tools and `MINNOW_BROWSER_URL`.
-- Desktop vs web build constraints (Vite SPA + Node tool server).
-
 **Area**
 
-- New UI surface + server/CDP integration; likely `documentation/plans/` write-up before implementation.
+- New UI surface + server/CDP integration per plan doc.
 
 **Notes**
 
-- Large feature — **not** a bug-hunt quick fix. Blocked on product/architecture plan.
+- Large feature — implementation after plan approval and **BUG-010** fix.
 - Complements fixing **BUG-010** / **BUG-011** / **BUG-015** (tools) but distinct (visible browser chrome in app).
 
 ### POLISH-012 — Bug tracker: categories + linked files/code
@@ -973,6 +1081,8 @@ When viewing the **bug tracker** (`#/bugs` / All bugs), user should still see th
 **Notes**
 
 - Layout/UX request. Related **BUG-001** (bugs view open/close). Complements **POLISH-012** / **POLISH-013** (file-linked bugs).
+
+**Status:** Verified (open) 2026-05-24 — `openGlobalBugs()` hides `#appBody` (file panel inside); plan Option 1. Linear [MIN-93](https://linear.app/minnowai/issue/MIN-93/polish-014-file-panel-on-bug-view). Plan: `documentation/plans/Bug Fixes/POLISH-014-bug-view-file-panel.md`.
 
 ### POLISH-015 — Keep top bar in bug tracker
 
@@ -1136,6 +1246,53 @@ Agents need a **`grep`** (or equivalent) tool to **search file contents** by pat
 
 - No `grep` tool id in definitions today (session check). Complements codebase search / LSP tools if any.
 - Related **BUG-008** (mode tool probes) if grep becomes required for mode tests.
+
+### POLISH-022 — Orchestrator status: more granular detail
+
+**Summary**
+
+**Orchestrate** mode status should show **more detailed, step-level messages** — not only high-level “orchestrating” state.
+
+**Example (user request)**
+
+- `Generating sub-agent prompt for W1-A`
+- (Extend to: spawning worker, worker running, tool use, handoff, completed/failed per worker id)
+
+**Desired behavior**
+
+- Live status line / board / activity UI updates as orchestrator progresses.
+- Include **worker or sub-agent id** (e.g. `W1-A`) and **action** (generating prompt, executing, waiting, etc.).
+- Surface via existing `report_orchestrator_status` tool and/or Orchestrate UI (board, agent activity).
+
+**Area**
+
+- Orchestrate mode UI, `src/tools/board-tools.ts`, orchestrator prompts, `#btnAgentActivity` / board views
+
+**Notes**
+
+- Observability / UX; helps debug orchestration without reading raw tool logs.
+
+### POLISH-023 — Bug detail view + rich attachments
+
+**Summary**
+
+Bug tracker needs a **full detail view** per bug and support for **attachments** (images, files, and related artifacts).
+
+**Desired behavior**
+
+- **Click a bug** (kanban card or global list row) → **detail panel or page** with full title, description, category, status, workspace, linked code/files (**POLISH-012**), investigation chat link, history.
+- **Attachments:** upload or link **images** (screenshots), **files**, and optionally URLs; show thumbnails/previews in detail view.
+- Add/remove attachments when creating or editing a bug (**POLISH-013** Report bug may attach context automatically).
+
+**Area**
+
+- `src/ui/bug-board.ts`, `#/bugs`, `bug-board-store` / `~/.minnow/bugs/state.json` schema extension
+- Storage: attachment paths or blobs under `~/.minnow/bugs/` (TBD)
+
+**Notes**
+
+- Extends **POLISH-010** (title + description layout), **POLISH-012** / **POLISH-013** / **POLISH-014**.
+- Distinct from **BUG-001** (first-open flash).
 
 ---
 
