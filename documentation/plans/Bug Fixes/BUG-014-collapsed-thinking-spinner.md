@@ -7,24 +7,24 @@ related:
   - documentation/context.md (Chat list row dot / collapsed sidebar badge)
   - src/styles/sidebar.css
   - src/ui/chat-item-dot.ts
-status: verified-open
+status: shipped
 severity: minor
 todos:
   - id: repro-manual
     content: Collapse sidebar, start chat with work-agent badge (RES/BUI), confirm abbrev rotates during thinking SSE
-    status: pending
+    status: cancelled
   - id: css-ring-pseudo
     content: Replace badge-level tool-call-spin with ::after ring on .chat-item-agent-badge (position relative; static label)
-    status: pending
+    status: completed
   - id: match-dot-spinner
     content: Mirror .chat-item-dot__spinner border colors and reduced-motion rule from expanded dot
-    status: pending
+    status: completed
   - id: expanded-regression
     content: Confirm expanded sidebar dot spinner unchanged; idle/unread/needs-input collapsed badge fills unchanged
-    status: pending
+    status: completed
   - id: docs-context
     content: Update documentation/context.md collapsed-badge bullet if implementation details change; mark BUG-014 resolved in bug-hunt doc
-    status: pending
+    status: completed
 isProject: false
 ---
 

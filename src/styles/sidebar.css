@@ -473,17 +473,29 @@
 }
 
 .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge {
+  position: relative;
   background: transparent;
   color: var(--mn-accent);
+  border-color: transparent;
+}
+
+/* Outer ring only — label stays upright (matches .chat-item-dot__spinner). */
+.chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  box-sizing: border-box;
+  border-radius: inherit;
   border: 2px solid var(--mn-border);
   border-top-color: var(--mn-accent);
   animation: tool-call-spin 0.75s linear infinite;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge {
+  .chat-sidebar.collapsed:not(.mobile-open) .chat-item-row[data-dot-state='thinking'] .chat-item-agent-badge::after {
     animation: none;
-    opacity: 0.85;
+    opacity: 0.7;
   }
 }
 
