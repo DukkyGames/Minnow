@@ -23,7 +23,9 @@ import { createProviderMiddleware } from './server/providers/routes.js';
 import { createGenerationsMiddleware } from './server/generations/routes.js';
 import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { createWorkAgentsMiddleware } from './server/work-agents/routes.js';
+import { createAgentPacksMiddleware } from './server/agent-packs/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
+import { ensureAgentPacksLayout } from './server/agent-packs/registry.js';
 import { createBenchmarksMiddleware } from './server/benchmarks/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
@@ -851,6 +853,7 @@ async function main() {
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createGenerationsMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());
+          server.middlewares.use(createAgentPacksMiddleware());
           server.middlewares.use(createBrowserScreenshotMiddleware());
           server.middlewares.use(createBrowserAllowlistMiddleware());
           server.middlewares.use(createToolsMiddleware());
@@ -862,6 +865,7 @@ async function main() {
   });
 
   await ensureMinnowLayout();
+  await ensureAgentPacksLayout();
   const reefSync = await syncReefWidgetTemplates();
   if (reefSync.copied > 0) {
     console.log(`Reef widgets: synced ${reefSync.copied} template(s) to ${reefSync.destDir}`);
@@ -883,6 +887,7 @@ async function main() {
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Generations API: ${localUrl.replace(/\/$/, '')}/api/generations`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
+  console.log(`Agent packs API: ${localUrl.replace(/\/$/, '')}/api/agent-packs`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);

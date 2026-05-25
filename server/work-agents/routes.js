@@ -76,7 +76,9 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       return true;
     }
 
-    const agentMatch = pathname.match(/^\/api\/work-agents\/([a-z][a-z0-9-]{0,63})$/);
+    const agentMatch = pathname.match(
+      /^\/api\/work-agents\/([a-z][a-z0-9-]{0,63}(?:\.[a-z][a-z0-9-]{0,31})?)$/,
+    );
     if (agentMatch && req.method === 'GET') {
       const agentId = agentMatch[1];
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);
@@ -118,7 +120,7 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
     }
 
     const promptMatch = pathname.match(
-      /^\/api\/work-agents\/([a-z][a-z0-9-]{0,63})\/prompt$/,
+      /^\/api\/work-agents\/([a-z][a-z0-9-]{0,63}(?:\.[a-z][a-z0-9-]{0,31})?)\/prompt$/,
     );
     if (promptMatch) {
       const agentId = promptMatch[1];

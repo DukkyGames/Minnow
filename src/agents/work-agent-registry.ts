@@ -190,6 +190,15 @@ export function registerWorkAgentFilesFromRaw(rawMap: Record<string, string>): v
   }
 }
 
+/** Merge pack-sourced agents from GET /api/work-agents (npm start). */
+export function registerPackAgentsFromApi(agents: WorkAgentDefinition[]): void {
+  for (const agent of agents) {
+    if (agent.source === 'pack' && agent.id) {
+      builtinAgents.set(agent.id, { ...agent, kind: 'work-agent' });
+    }
+  }
+}
+
 export function resetWorkAgentRegistry(): void {
   builtinAgents.clear();
   userOverrides = {};

@@ -1,0 +1,23 @@
+{
+  "id": "minimal",
+  "label": "Minimal test pack",
+  "version": "1.0.0",
+  "description": "Fixture for agent pack scan tests.",
+  "agents": [
+    {
+      "key": "helper",
+      "label": "Minimal helper",
+      "description": "Reads files only.",
+      "prompts": {
+        "full": "prompts/helper.full.md",
+        "lite": "prompts/helper.lite.md"
+      },
+      "allowedTools": ["read_file", "find_files", "list_directory"],
+      "defaultForModes": ["research"]
+    }
+  ],
+  "defaults": {
+    "providerId": null,
+    "modelId": null
+  }
+}

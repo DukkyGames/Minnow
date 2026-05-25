@@ -165,6 +165,8 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
   profiles/_rollback/      # optional pre-activate snapshots
   prompts/                 # user prompt overrides (Step 04; work-agents/ subdir Step 08)
   work-agents.json         # per-agent provider/model/disabled overrides (Step 08)
+  agent-packs/             # drop-in agent pack folders (Feature #16)
+  agent-packs.json         # per-pack enabled flags (Feature #16)
   sub-agents.json          # sub-agent types, concurrency, tool allow/deny (Step 09)
   bugs/state.json          # global bug tracker (MIN-16)
   logs/sub-agents/         # optional per-run debug transcripts (Step 09)
@@ -506,13 +508,18 @@ Task-specific agents with per-agent prompts, optional provider/model binding, an
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/work-agents` | `{ agents, overrides }` |
+| `GET` | `/api/work-agents` | `{ agents, overrides }` — includes enabled **pack** agents (`source: "pack"`) |
 | `GET` | `/api/work-agents/:id` | Single merged agent |
 | `PUT` | `/api/work-agents/:id` | Patch `work-agents.json` override (`providerId`, `modelId`, `sampler`, …) |
-| `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content, source }` |
+| `GET` | `/api/work-agents/:id/prompt?profile=full\|lite` | `{ content, source }` — pack prompts from `~/.minnow/agent-packs/<pack>/` when no user override |
 | `PUT` | `/api/work-agents/:id/prompt` | Write `~/.minnow/prompts/work-agents/...` |
+| `GET` | `/api/agent-packs` | `{ packs: AgentPackListItem[] }` — scan + validation |
+| `GET` | `/api/agent-packs/:id` | Single pack |
+| `PATCH` | `/api/agent-packs/:id` | `{ enabled: boolean }` → `agent-packs.json` |
 
-**Tests:** `test/work-agents/**/*.test.mjs`, `test/agents/sampler-resolve.test.mts`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
+**Agent packs (Feature #16):** Drop-in folders under `~/.minnow/agent-packs/<id>/manifest.json` declare extra work agents with ids `packId.agentKey`. Server: `server/agent-packs/` (`scan.js`, `validate.js`, `routes.js`); client merge: [`src/agents/pack-loader.ts`](../src/agents/pack-loader.ts), [`src/agents/init-work-agents.ts`](../src/agents/init-work-agents.ts); Settings → **Agent packs** (`src/ui/settings-agent-packs.ts`). Schema: [`src/agents/schema/agent-pack.schema.json`](../src/agents/schema/agent-pack.schema.json). Author docs: [`documentation/agent-packs/README.md`](agent-packs/README.md). Plan: [`documentation/plans/Build out/feature-16-agent-pack-plugin.md`](plans/Build%20out/feature-16-agent-pack-plugin.md).
+
+**Tests:** `test/work-agents/**/*.test.mjs`, `test/server/agent-packs-scan.test.mjs`, `test/agents/pack-loader.test.mts`, `test/agents/sampler-resolve.test.mts`. Verification: [`documentation/plans/verification/step-08.md`](plans/verification/step-08.md).
 
 ### Workspace folder (AI project root)
 

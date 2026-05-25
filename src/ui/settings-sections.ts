@@ -52,6 +52,7 @@ import {
 } from '../memory/client';
 import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
+import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
 import { renderSupervisorSettingsSection } from './settings-supervisor';
 import {
@@ -1524,6 +1525,12 @@ async function renderMcpSection(): Promise<void> {
   }
 }
 
+async function renderAgentPacksSection(): Promise<void> {
+  const mount = clearMount('settingsAgentPacksBody');
+  if (!mount) return;
+  await renderAgentPacksSettingsSection(mount);
+}
+
 async function renderSkillsSection(): Promise<void> {
   const mount = clearMount('settingsSkillsBody');
   if (!mount) return;
@@ -1873,6 +1880,9 @@ export async function refreshSettingsSection(
       break;
     case 'work-agents':
       await renderWorkAgentsSection();
+      break;
+    case 'agent-packs':
+      await renderAgentPacksSection();
       break;
     case 'sub-agents':
       await renderSubAgentsSection();

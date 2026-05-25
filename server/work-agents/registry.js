@@ -11,6 +11,8 @@ import {
   builtinWorkAgentsDir,
   workAgentsOverridesPath,
 } from './paths.js';
+import { loadPackWorkAgents, getPackAgentSource } from '../agent-packs/registry.js';
+import { resolvePackPromptPath } from '../agent-packs/paths.js';
 
 const SKIP = new Set(['_template', '_example', 'README.md']);
 
@@ -195,7 +197,17 @@ export async function loadWorkAgentRegistry(projectRoot) {
   const { agents: builtins } = await loadBuiltinAgents(projectRoot);
   const overrides = await loadUserOverrides();
 
-  const agents = builtins.map((a) => mergeDefinition(a, overrides[a.id]));
+  const builtinIds = new Set(builtins.map((a) => a.id));
+  const { agents: packAgents } = await loadPackWorkAgents(projectRoot, builtinIds);
+
+  const mergedBuiltins = builtins.map((a) => ({
+    ...mergeDefinition(a, overrides[a.id]),
+    source: 'builtin',
+  }));
+
+  const mergedPacks = packAgents.map((a) => mergeDefinition(a, overrides[a.id]));
+
+  const agents = [...mergedBuiltins, ...mergedPacks];
   return { agents, overrides };
 }
 
@@ -235,6 +247,25 @@ export async function readBuiltinWorkAgentPrompt(projectRoot, agentId, profile) 
   return { content: parsed.body.trim(), source: 'builtin' };
 }
 
+async function readPackWorkAgentPrompt(agentId, profile) {
+  const source = getPackAgentSource(agentId);
+  if (!source) return null;
+
+  const rel =
+    profile === 'lite' && source.promptPaths.lite
+      ? source.promptPaths.lite
+      : source.promptPaths.full;
+  const filePath = resolvePackPromptPath(source.packRoot, rel);
+  const raw = await fs.readFile(filePath, 'utf8');
+  const { parsePromptMarkdown } = await import('../prompts/parse.js');
+  try {
+    const parsed = parsePromptMarkdown(raw, filePath);
+    return { content: parsed.body.trim(), source: 'pack' };
+  } catch {
+    return { content: raw.trim(), source: 'pack' };
+  }
+}
+
 export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
   const overridePath = (() => {
     try {
@@ -264,6 +295,9 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
       /* fall through */
     }
   }
+
+  const packPrompt = await readPackWorkAgentPrompt(agentId, profile);
+  if (packPrompt) return packPrompt;
 
   return readBuiltinWorkAgentPrompt(projectRoot, agentId, profile);
 }
