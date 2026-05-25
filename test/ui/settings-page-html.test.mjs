@@ -26,6 +26,7 @@ const SETTINGS_SECTION_IDS = [
   'mcp',
   'lsp',
   'skills',
+  'evals',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */

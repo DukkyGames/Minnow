@@ -77,6 +77,9 @@ const SCAFFOLD_DIRS = [
   'reef/modules',
   'reef/artifacts',
   'benchmarks',
+  'evals',
+  'evals/packs',
+  'evals/runs',
 ];
 
 const DEFAULT_META = {
@@ -281,6 +284,18 @@ export async function ensureMinnowLayout() {
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
     { rel: 'rules.json', data: DEFAULT_RULES },
     { rel: 'bugs/state.json', data: { version: 1, bugs: [] } },
+    {
+      rel: 'evals/config.json',
+      data: {
+        version: 1,
+        maxConcurrency: 2,
+        graderProviderId: '',
+        graderModelId: '',
+        graderTimeoutMs: 30_000,
+        saveFullTranscripts: false,
+        skipApprovalDuringEval: false,
+      },
+    },
   ];
 
   for (const { rel, data } of defaults) {
