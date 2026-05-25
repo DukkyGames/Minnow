@@ -14,12 +14,22 @@ const BENCHMARK_IDS = [
   'btnBenchmarkQuick',
   'btnBenchmarkFull',
   'btnBenchmarkStop',
+  'benchmarkSuiteToggles',
   'benchmarkProgress',
   'benchmarkProgressFill',
   'benchmarkSummary',
   'benchmarkHistorySelect',
   'benchmarkCompareToggle',
   'benchmarkSuites',
+];
+
+const SUITE_TOGGLE_IDS = [
+  'capability',
+  'speed',
+  'tools',
+  'skills',
+  'modes',
+  'coding',
 ];
 
 describe('benchmark page HTML', () => {
@@ -41,5 +51,33 @@ describe('benchmark page HTML', () => {
     const bench = html.indexOf('id="benchmarkView"');
     const app = html.indexOf('id="appBody"');
     assert.ok(bench > 0 && app > bench);
+  });
+
+  test('custom suites control removed (POLISH-003)', () => {
+    assert.doesNotMatch(html, /id="btnBenchmarkCustom"/);
+    assert.doesNotMatch(html, /id="benchmarkCustomSuites"/);
+  });
+
+  test('suite toggle group has six aria-pressed buttons', () => {
+    assert.match(html, /id="benchmarkSuiteToggles"[^>]*role="group"/);
+    for (const suiteId of SUITE_TOGGLE_IDS) {
+      assert.match(
+        html,
+        new RegExp(
+          `data-suite-id="${suiteId}"[^>]*aria-pressed="(true|false)"`,
+        ),
+      );
+    }
+    const toggleMatches = html.match(/class="benchmark-suite-toggle"/g);
+    assert.equal(toggleMatches?.length, 6);
+  });
+
+  test('default suite toggles match Quick preset', () => {
+    assert.match(html, /data-suite-id="capability"[^>]*aria-pressed="true"/);
+    assert.match(html, /data-suite-id="speed"[^>]*aria-pressed="true"/);
+    assert.match(html, /data-suite-id="modes"[^>]*aria-pressed="true"/);
+    assert.match(html, /data-suite-id="tools"[^>]*aria-pressed="false"/);
+    assert.match(html, /data-suite-id="skills"[^>]*aria-pressed="false"/);
+    assert.match(html, /data-suite-id="coding"[^>]*aria-pressed="false"/);
   });
 });
