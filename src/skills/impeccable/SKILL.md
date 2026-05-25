@@ -12,9 +12,9 @@ Design and iterate Minnow’s frontend using **project context files** and vendo
 
 ## Context gate (required before UI edits)
 
-Load full product + design context in one JSON blob (no `head` / `grep` / `jq` on output):
+Load product + design context in one JSON blob (no `head` / `grep` / `jq` on output):
 
-**In Minnow (preferred):** call the `load_impeccable_context` tool. It runs the bundled script from the Minnow app root and reads `PRODUCT.md`, `DESIGN.md`, and `.impeccable/design.json` from the **active workspace** (works when the workspace is not the Minnow repo).
+**In Minnow (preferred):** call the `load_impeccable_context` tool. It runs the bundled script from the Minnow app root and reads `PRODUCT.md`, `DESIGN.md`, and optionally `.impeccable/design.json` from the **active workspace** (works when the workspace is not the Minnow repo). The tool always succeeds when markdown context exists; check **`hasDesignJson`**. When it is `false`, run **`/impeccable document`** before token-critical critique or component work that needs the sidecar.
 
 **From the Minnow repo root only:**
 
@@ -34,11 +34,11 @@ Set `IMPECCABLE_CONTEXT_DIR` to the workspace root or a monorepo sub-app path wh
 |------|------|
 | `PRODUCT.md` | Users, register (`product`), tone, anti-references |
 | `DESIGN.md` | Human design spec (Bench Instrument north star) |
-| `.impeccable/design.json` | Structured tokens (`schemaVersion: 2`) for critique/document |
+| `.impeccable/design.json` | Structured tokens (`schemaVersion: 2`) when present; absent until `/impeccable document` |
 | `src/styles/tokens.css` | Runtime CSS variables — edit tokens here, not hardcoded hex in components |
 | `index.html`, `src/styles/*.css`, `src/ui/**` | Implementation targets |
 
-When implementing or critiquing components, read **`.impeccable/design.json`** for machine-readable roles and bindings.
+When **`hasDesignJson`** is true, read **`designJson`** from the tool payload for machine-readable roles and bindings. When false, use `DESIGN.md` frontmatter and run `/impeccable document` to generate the sidecar before deep token work.
 
 ## Harness vs CLI
 

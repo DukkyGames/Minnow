@@ -1118,12 +1118,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'load_impeccable_context',
     label: 'Load Impeccable context',
-    description: 'Load PRODUCT.md, DESIGN.md, and .impeccable/design.json from the workspace as JSON.',
+    description:
+      'Load PRODUCT.md, DESIGN.md, and optional .impeccable/design.json from the workspace as JSON.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'load_impeccable_context',
-      'Returns JSON with product, design, and designJson for the active workspace. Use before UI edits (not a workspace-relative node path).',
+      'Returns JSON with product, design, hasDesignJson, and designJson (null until sidecar exists). Use before UI edits (not a workspace-relative node path).',
       {},
       [],
     ),

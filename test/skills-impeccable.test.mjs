@@ -90,8 +90,32 @@ describe('Impeccable built-in (Step 14)', () => {
     assert.equal(typeof payload.product, 'string');
     assert.equal(payload.hasDesign, true);
     assert.equal(typeof payload.design, 'string');
+    assert.equal(payload.hasDesignJson, true);
     assert.equal(payload.designJson.schemaVersion, 2);
     assert.equal(payload.workspaceRoot, PROJECT_ROOT);
+  });
+
+  it('minnow-context.mjs soft success without .impeccable/design.json', () => {
+    const partialFixture = path.join(
+      PROJECT_ROOT,
+      'test/fixtures/impeccable-workspace-partial',
+    );
+    const result = spawnSync(
+      process.execPath,
+      ['src/skills/impeccable/scripts/minnow-context.mjs'],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, IMPECCABLE_CONTEXT_DIR: partialFixture },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.hasProduct, true);
+    assert.equal(payload.hasDesign, true);
+    assert.equal(payload.hasDesignJson, false);
+    assert.equal(payload.designJson, null);
+    assert.match(payload.designJsonSetupHint, /\/impeccable document/);
   });
 
   it('minnow-context.mjs honors IMPECCABLE_CONTEXT_DIR', () => {
