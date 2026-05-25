@@ -281,6 +281,11 @@ function onBenchmarkProgress(
     return;
   }
 
+  if (event.type === 'run-cancelled') {
+    finishLiveRunUI();
+    return;
+  }
+
   if (event.type === 'run-done') {
     updateProgressBar(100, 'Complete');
     for (const suite of event.run.suites) {
@@ -411,6 +416,10 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
       signal: abortController.signal,
       onProgress: (event) => {
         onBenchmarkProgress(event, compareMap);
+        if (event.type === 'run-cancelled') {
+          setStatus('ok', 'Benchmark cancelled.');
+          return;
+        }
         if (event.type === 'run-done') {
           lastRun = event.run;
           renderSummary(lastRun);
@@ -452,7 +461,22 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
 }
 
 function stopRun(): void {
-  abortController?.abort();
+  if (!abortController) return;
+  abortController.abort();
+  if (liveRunActive) {
+    setStatus('ok', 'Stopping benchmark…');
+    updateProgressBar(liveProgressPercent(), 'Cancelling…');
+  }
+}
+
+/** Test hook: abort controller for the in-flight benchmark run. */
+export function getBenchmarkAbortControllerForTests(): AbortController | null {
+  return abortController;
+}
+
+/** Test hook: wire abort controller without starting a full run. */
+export function setBenchmarkAbortControllerForTests(controller: AbortController | null): void {
+  abortController = controller;
 }
 
 async function onCompareChange(): Promise<void> {
