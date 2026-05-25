@@ -322,9 +322,9 @@ MCP tools are namespaced `mcp__<serverId>__<toolName>` and merged into `getEnabl
 
 **Tests:** `npm run test:mcp` (in-process `fixture` server returns `pong`).
 
-### Native tool plugins (Feature #17 — planned)
+### Native tool plugins (Feature #17 — built)
 
-Drop-in **local** tools without MCP: `~/.minnow/tools/<pluginId>/{tool.json,handler.mjs}`, loaded by `server/tools/loader.js`, exposed as `plugin__<pluginId>__<functionName>` (mirrors skills scan + MCP namespacing). Build plan: [`documentation/plans/Build out/feature-17-tool-plugin.md`](plans/Build%20out/feature-17-tool-plugin.md). Roadmap gap: [`feature-audit-roadmap.md`](plans/feature-audit-roadmap.md) item **#17**.
+Drop-in **local** tools without MCP: `~/.minnow/tools/<pluginId>/{tool.json,handler.mjs}`, scanned by [`server/tools/scan.js`](../server/tools/scan.js), executed via [`server/tools/loader.js`](../server/tools/loader.js), exposed as `plugin__<pluginId>__<functionName>` (hyphens in id → underscores in the namespace segment). APIs: `GET /api/plugins/tools`, `POST /api/plugins/reload`, `POST /api/plugins/scaffold` ([`server/tools/middleware.js`](../server/tools/middleware.js)). Client cache: `refreshPluginToolCache()` in [`src/tools/client.ts`](../src/tools/client.ts); merged into `getEnabledToolDefinitionsForMode()` with MCP tools. Pack enable flags: `tools.json` → `plugins`; permissions use namespaced ids (default `ask`). Settings: **Tools → Plugins** ([`src/ui/settings-plugins.ts`](../src/ui/settings-plugins.ts)). Authoring: [`documentation/plugins/tool-authoring.md`](plugins/tool-authoring.md). Tests: `npm run test:plugins`.
 
 ### Orchestrate supervisor (replaces MIN-9 watchdog + Step 19 self-healing)
 

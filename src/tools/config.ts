@@ -225,7 +225,7 @@ export function getToolPermissionForId(
 ): ToolPermissionMode {
   const raw = config.permissions.default[id];
   if (isToolPermissionMode(raw)) return raw;
-  if (id.startsWith('mcp__')) return 'ask';
+  if (id.startsWith('mcp__') || id.startsWith('plugin__')) return 'ask';
   if (id === 'web_search_ddg') {
     return getToolPermissionForId(config, 'web_search');
   }

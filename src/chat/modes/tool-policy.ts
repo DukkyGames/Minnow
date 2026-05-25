@@ -33,6 +33,17 @@ export function filterToolsByMode(
 ): ToolDefinition[] {
   return defs.filter((tool) => {
     const name = tool.definition.function.name;
-    return effectiveAction(modeId, name) === 'allow';
+    return isToolAllowedForMode(modeId, name);
   });
+}
+
+/**
+ * Whether a tool function name may be sent to the model for this mode.
+ * MCP and plugin tools use the same policy map as built-ins.
+ */
+export function isToolAllowedForMode(
+  modeId: ModeId,
+  toolName: string,
+): boolean {
+  return effectiveAction(modeId, toolName) === 'allow';
 }

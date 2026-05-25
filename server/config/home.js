@@ -67,6 +67,7 @@ const SCAFFOLD_DIRS = [
   'profiles',
   'prompts',
   'skills',
+  'tools',
   'agent-packs',
   'backups',
   'logs/sub-agents',
@@ -211,6 +212,7 @@ function defaultToolsJson() {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
     keys: { braveApiKey: '' },
+    plugins: {},
   };
 }
 
