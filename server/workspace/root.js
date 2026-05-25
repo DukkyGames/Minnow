@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
+import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
 
 /** Directory where `npm start` was launched (Minnow install). */
 const APP_ROOT = path.resolve(process.cwd());
@@ -220,6 +221,12 @@ export async function setWorkspaceRoot(userPath) {
   const merged = mergeConfigMeta(meta, { workspace: { path: resolved } });
   await writeConfigJson('config.json', merged);
   await touchRecentWorkspacePath(resolved);
+  try {
+    await maybeAutoApplyWorkspaceProfile(resolved);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[profiles] workspace auto-apply skipped: ${message}`);
+  }
   return resolved;
 }
 

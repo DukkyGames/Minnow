@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minnow.local/schemas/profile.json",
+  "type": "object",
+  "required": ["id", "label", "schemaVersion", "prompt", "agents", "tools"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-_]{0,63}$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "minnowVersion": { "type": "string" }
+      }
+    },
+    "prompt": {
+      "type": "object",
+      "required": ["promptProfile"],
+      "additionalProperties": true,
+      "properties": {
+        "promptProfile": { "enum": ["full", "lite", "custom"] },
+        "activePromptConfigId": { "type": ["string", "null"] },
+        "activeInfoPresetId": { "type": "string" },
+        "planGranularity": { "enum": ["large", "medium", "small"] },
+        "source": { "enum": ["embedded", "prompt-config", "full", "lite"] },
+        "parts": { "type": "object" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "properties": {
+        "workAgents": { "type": "object" },
+        "subAgents": { "type": "object" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "properties": {
+        "permissions": { "type": "object" },
+        "replaceAll": { "type": "boolean" },
+        "keys": { "type": "object" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "text": { "type": "string" }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "object" }
+      }
+    }
+  }
+}

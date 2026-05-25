@@ -1012,6 +1012,39 @@ export function mergeConfigMeta(existing, patch) {
     base.planning = existingPlanning;
   }
 
+  if (
+    p.activePromptProfile === 'full' ||
+    p.activePromptProfile === 'lite' ||
+    p.activePromptProfile === 'custom'
+  ) {
+    base.activePromptProfile = p.activePromptProfile;
+  }
+  if (p.activePromptConfigId === null || typeof p.activePromptConfigId === 'string') {
+    base.activePromptConfigId = p.activePromptConfigId;
+  }
+  if (typeof p.activeInfoPresetId === 'string' && p.activeInfoPresetId.trim()) {
+    base.activeInfoPresetId = p.activeInfoPresetId.trim();
+  }
+  if (p.activeSetupProfileId === null || typeof p.activeSetupProfileId === 'string') {
+    base.activeSetupProfileId = p.activeSetupProfileId;
+  }
+  if (typeof p.workspaceProfileAutoApply === 'boolean') {
+    base.workspaceProfileAutoApply = p.workspaceProfileAutoApply;
+  }
+  if (p.workspaceProfiles && typeof p.workspaceProfiles === 'object') {
+    const out = {};
+    for (const [key, value] of Object.entries(
+      /** @type {Record<string, unknown>} */ (p.workspaceProfiles),
+    )) {
+      if (typeof value !== 'string' || !value.trim()) continue;
+      const normKey = normalizeWorkspacePath(key);
+      if (!normKey) continue;
+      if (!/^[a-z0-9][a-z0-9-_]{0,63}$/.test(value.trim())) continue;
+      out[normKey] = value.trim();
+    }
+    base.workspaceProfiles = out;
+  }
+
   if (p.supervisor && typeof p.supervisor === 'object') {
     base.supervisor = mergeSupervisorConfig(
       /** @type {Record<string, unknown>} */ (p.supervisor),
