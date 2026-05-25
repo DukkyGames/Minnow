@@ -1,5 +1,5 @@
 /**
- * Operating mode registry — five primary modes and prompt path helpers.
+ * Operating mode registry — six primary modes and prompt path helpers.
  */
 
 import { loadPromptById } from '../prompts/prompt-loader';
@@ -37,6 +37,18 @@ const RESEARCH_EXTRA_DENIED_TOOLS: string[] = [
   'write_clipboard',
 ];
 
+/** Orchestration and sub-agent tools denied in General (moderate everyday Q&A). */
+const GENERAL_ORCHESTRATION_DENIED_TOOLS: string[] = [
+  'spawn_sub_agent',
+  'cancel_sub_agent',
+  'list_sub_agents',
+  'get_sub_agent_status',
+  'board_init',
+  'board_update_task',
+  'board_get_state',
+  'report_orchestrator_status',
+];
+
 function denyListToolPolicy(denied: string[]): ModeToolPolicy {
   const tools: Record<string, 'deny'> = {};
   for (const id of denied) {
@@ -46,6 +58,17 @@ function denyListToolPolicy(denied: string[]): ModeToolPolicy {
 }
 
 const MODE_DEFINITIONS: ModeDefinition[] = [
+  {
+    id: 'general',
+    label: 'General',
+    description: 'Everyday Q&A, explanations, and brainstorming with read-focused tools.',
+    promptId: 'general',
+    toolPolicy: denyListToolPolicy([
+      ...PLAN_DENIED_TOOLS,
+      ...RESEARCH_EXTRA_DENIED_TOOLS,
+      ...GENERAL_ORCHESTRATION_DENIED_TOOLS,
+    ]),
+  },
   {
     id: 'build',
     label: 'Build',
@@ -86,7 +109,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
   },
 ];
 
-/** Fixed five modes in display order. */
+/** Fixed six modes in display order (General first). */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }

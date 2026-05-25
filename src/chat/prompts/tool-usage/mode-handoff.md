@@ -14,8 +14,9 @@ Use **`ask_question`** (or **`propose_mode_switch`** for standard presets) when 
 | Situation | Action |
 |-----------|--------|
 | Plan document written | Offer **New Orchestrate chat** / **Stay in Plan** / **Other** |
-| User asks to implement while in Plan or Research | Offer **Switch to Build** |
-| User asks to plan while in Build | Offer **Switch to Plan** |
+| User asks to implement while in Plan, Research, or **General** | Offer **Switch to Build** |
+| User asks to plan while in Build or **General** | Offer **Switch to Plan** |
+| User wants a deep research report while in **General** | Offer **Switch to Research** |
 | Explainer, data, or UI-friendly topic (not already Reef) | Offer **Show as Reef widget** |
 
 ### After the user chooses

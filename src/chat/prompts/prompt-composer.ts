@@ -32,6 +32,7 @@ const PART_SEPARATOR = '\n\n---\n\n';
 
 /** Operating modes that receive the shared mode-handoff tool-usage fragment. */
 const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
+  'general',
   'plan',
   'build',
   'research',

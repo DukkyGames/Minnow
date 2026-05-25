@@ -11,6 +11,7 @@ import { getToolPermissionForId } from '../../src/tools/config.ts';
 
 /** Mirrors MODE_POSITIVE in src/benchmark/suites/modes.ts */
 const MODE_POSITIVE: Record<string, string> = {
+  general: 'read_file',
   build: 'list_directory',
   plan: 'read_file',
   research: 'web_search',

@@ -7,6 +7,18 @@ import { describe, test } from 'node:test';
 import { resolveModePromptPath } from '../../src/chat/modes/registry.ts';
 
 describe('resolveModePromptPath', () => {
+  test('general full', () => {
+    assert.ok(
+      resolveModePromptPath('general', 'full').endsWith('modes/general.full.md'),
+    );
+  });
+
+  test('general lite', () => {
+    assert.ok(
+      resolveModePromptPath('general', 'lite').endsWith('modes/general.lite.md'),
+    );
+  });
+
   test('build full', () => {
     assert.ok(resolveModePromptPath('build', 'full').endsWith('modes/build.full.md'));
   });
