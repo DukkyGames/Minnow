@@ -81,7 +81,7 @@
   gap: 8px;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 340px;
+  max-width: 420px;
 }
 
 .model-select-inner {
@@ -268,7 +268,13 @@ html[data-theme$='-dark'] .icon-btn .icon-img {
   font-size: 12px;
   color: var(--mn-fg-muted);
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.status-pill #sText {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .s-dot {

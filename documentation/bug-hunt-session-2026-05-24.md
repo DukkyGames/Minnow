@@ -32,7 +32,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Verified — [plan](plans/Bug%20Fixes/BUG-011-fetch-web-content.md) |
 | BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Verified — [MIN-72](https://linear.app/minnowai/issue/MIN-72/bug-015-rag-web-content-broken) |
 | BUG-016 | Major | Plan mode / streaming | Reply fails: ReadableStream JSON parse error on `close` | Open |
-| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Verified — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
+| BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Fixed — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
 | BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
 | BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Open — [MIN-60](https://linear.app/minnowai/issue/MIN-60), plan verified 2026-05-24 |
@@ -41,7 +41,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-020 | Major | Orchestrate / streaming | Stuck retrying; stream close **Unexpected end of JSON input** | Verified — [MIN-84](https://linear.app/minnowai/issue/MIN-84/bug-020-orchestrator-stuck-retrying-stream) |
 | BUG-021 | Major | Reef widgets | Non-chart widgets (e.g. Calculator) fail with chart/toExponential error | Open |
 
-**Counts:** 21 open · 0 fixed · 0 won't fix
+**Counts:** 20 open · 1 fixed · 0 won't fix
 
 ---
 
@@ -596,7 +596,7 @@ Intermittent failure; stream controller `close` throws due to **invalid/extra JS
 |-------|-------|
 | **Severity** | Minor |
 | **Area** | Top bar **model picker** (`#modelSelect`, `.model-wrap` / combobox) |
-| **Status** | Verified (open) — Linear [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
+| **Status** | Fixed — Linear [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | **Plan** | `documentation/plans/Bug Fixes/BUG-017-model-picker-truncation.md` |
 
 **Summary**
@@ -626,7 +626,7 @@ Label **truncated** with ellipsis; full name not readable without opening menu (
 - **Confirmed in code:** `.model-select-trigger-text` and `.model-select-option-label` use `text-overflow: ellipsis`; `.model-wrap` capped at 340px (380px ≥900px). Label pipeline (`formatModelLabel` → `syncModelSelectPicker`) puts full `optionText` in DOM; clipping is CSS-only.
 - **Tooltips OK:** `title` on trigger and menu rows carries canonical id + quant + load (not a substitute for visible text per report).
 - **Not a duplicate of MIN-7:** that issue fixed hover contrast; ellipsis unchanged.
-- **Fix:** follow approved plan (menu non-ellipsis first, then trigger width).
+- **Fix (2026-05-25):** Menu labels no longer ellipsize; menu grows to `max-content` (capped `min(90vw, 32rem)`); `.model-wrap` max-width 420px; trigger ellipsis retained; `title` tooltips unchanged.
 
 ### BUG-018 — Rename file does not work
 
