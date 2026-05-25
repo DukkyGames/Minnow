@@ -500,6 +500,13 @@ export function openBenchmark(): void {
     return;
   }
 
+  void import('./expert-lab-page').then((m) => {
+    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  });
+  void import('./global-bugs-page').then((m) => {
+    if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
+  });
+
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');

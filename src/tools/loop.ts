@@ -98,7 +98,15 @@ import {
   syncSteerQueuedHint,
 } from '../ui/composer-send';
 import { registerStreamDomRemount } from './stream-chat-dom';
-import { refreshExpertSelectDisabled } from '../ui/expert-select';
+import {
+  notifyExpertLabFirstToken,
+  notifyExpertLabPartialText,
+  notifyExpertLabRunEnd,
+  notifyExpertLabRunError,
+  notifyExpertLabRunStart,
+  notifyExpertLabToolRound,
+} from '../ui/expert-lab-stream';
+import { isExpertLabChat } from '../state/sessions';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
@@ -368,6 +376,8 @@ export interface RunChatTurnOptions {
   parentRunId?: TurnRunId;
   /** Model/provider overrides when forking without a full snapshot clone. */
   forkOverrides?: ForkOverrides;
+  /** When set, replaces composed system prompt (Expert Lab expert full body). */
+  composedSystemPromptOverride?: string;
 }
 
 /**
@@ -598,6 +608,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     replaySnapshot,
     parentRunId,
     forkOverrides,
+    composedSystemPromptOverride,
   } = options;
 
   if (!beginChatTurnSetup(chat.id)) {
@@ -753,10 +764,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? ` (${activeWorkAgent.label})`
       : '';
 
+  if (isExpertLabChat(chat)) {
+    notifyExpertLabRunStart(chat.id);
+  }
+
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
     refreshModeSelectorDisabled();
-    refreshExpertSelectDisabled();
     refreshOrchestratePlanSelectorDisabled();
     refreshBoardOnboardingIfMounted();
     refreshViewModeToggleDisabled();
@@ -855,7 +869,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     routeUserText: userText || rawText,
     overrides: { skillBody },
   });
-  const sysPrompt = replaySnapshot?.composedSystemPrompt ?? outbound.composed;
+  const sysPrompt =
+    options.composedSystemPromptOverride?.trim() ??
+    replaySnapshot?.composedSystemPrompt ??
+    outbound.composed;
   const userRulesContent = replaySnapshot?.userRulesContent ?? outbound.userRules;
 
   if (!resumeGenerationId) {
@@ -1013,9 +1030,17 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           chatSignal,
           thoughtController,
           domVisible,
-          revealProse,
+          () => {
+            revealProse();
+            if (isExpertLabChat(chat)) {
+              notifyExpertLabFirstToken(chat.id);
+            }
+          },
           (text) => {
             livePartialText = text;
+            if (isExpertLabChat(chat)) {
+              notifyExpertLabPartialText(chat.id, text);
+            }
           },
           undefined,
           turnRunId,
@@ -1159,14 +1184,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           const planBlock = uiDesignerCtx.active
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
+          const toolName = tc.function.name;
           const toolOut = planBlock
             ? { content: planBlock }
-            : await executeTool(tc.function.name, args, {
+            : await executeTool(toolName, args, {
                 chatId: chat.id,
                 toolCallId: tc.id,
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
+          if (isExpertLabChat(chat)) {
+            notifyExpertLabToolRound(chat.id, toolName);
+          }
           let toolContent = toolOut.content;
           try {
             const promoted = await maybePromoteToolResultToArtifact({
@@ -1399,6 +1428,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
+        if (isExpertLabChat(chat)) {
+          notifyExpertLabRunEnd(chat.id, finalContent);
+        }
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, meta.stats, meta.usage);
           if (thinkingNorm.length > 0) {
@@ -1479,6 +1511,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return;
     }
     turnRunStatus = 'failed';
+    if (isExpertLabChat(chat)) {
+      notifyExpertLabRunError(
+        chat.id,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
@@ -1525,7 +1563,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null);
       syncChatItemDotsInDom();
       refreshModeSelectorDisabled();
-      refreshExpertSelectDisabled();
       refreshOrchestratePlanSelectorDisabled();
       refreshBoardOnboardingIfMounted();
       syncViewModeToggleFromActiveChat();

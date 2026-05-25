@@ -3,7 +3,20 @@
  */
 
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
-import type { ExpertMeta, ExpertTriggers } from './types';
+import {
+  EXPERT_ACCENT_VALUES,
+  type ExpertAccent,
+  type ExpertMeta,
+  type ExpertTriggers,
+} from './types';
+
+function parseExpertAccent(value: unknown): ExpertAccent | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  return EXPERT_ACCENT_VALUES.includes(normalized as ExpertAccent)
+    ? (normalized as ExpertAccent)
+    : undefined;
+}
 
 function asStringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -106,5 +119,7 @@ export function parseExpertMetaFromMarkdown(
     classifierHint:
       typeof ext.classifierHint === 'string' ? ext.classifierHint : undefined,
     default: parseBoolean(ext.default) ?? false,
+    icon: typeof ext.icon === 'string' && ext.icon.trim() ? ext.icon.trim() : undefined,
+    accent: parseExpertAccent(ext.accent),
   };
 }
