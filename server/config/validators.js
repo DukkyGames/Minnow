@@ -4,6 +4,7 @@
 
 import { ALL_TOOL_IDS } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
+import { normalizeSamplerPreset } from '../agents/sampler.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
@@ -1101,6 +1102,17 @@ export function normalizeSubAgentsConfig(body) {
         delete row.summarySchema;
       } else {
         row.summarySchema = schema.slice(0, 64);
+      }
+    }
+
+    if (row.sampler !== undefined) {
+      const normalized = normalizeSamplerPreset(row.sampler);
+      if (normalized === null) {
+        delete row.sampler;
+      } else if (Object.keys(normalized).length === 0) {
+        delete row.sampler;
+      } else {
+        row.sampler = normalized;
       }
     }
   }

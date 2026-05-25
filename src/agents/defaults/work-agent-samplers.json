@@ -1,0 +1,34 @@
+{
+  "builder": {
+    "temperature": 0.25,
+    "topP": 0.95,
+    "topK": 40,
+    "repetitionPenalty": 1.05
+  },
+  "planner": {
+    "temperature": 0.55,
+    "topP": 0.92,
+    "topK": 50,
+    "minP": 0.05,
+    "repetitionPenalty": 1
+  },
+  "reviewer": {
+    "temperature": 0.2,
+    "topP": 0.9,
+    "topK": 30,
+    "repetitionPenalty": 1.08
+  },
+  "researcher": {
+    "temperature": 0.65,
+    "topP": 0.95,
+    "topK": 60,
+    "minP": 0.03,
+    "repetitionPenalty": 1
+  },
+  "ui-designer": {
+    "temperature": 0.4,
+    "topP": 0.9,
+    "topK": 40,
+    "repetitionPenalty": 1.02
+  }
+}

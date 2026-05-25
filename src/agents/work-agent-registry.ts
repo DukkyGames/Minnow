@@ -169,6 +169,14 @@ export function setUserWorkAgentOverrides(
   userOverrides = { ...overrides };
 }
 
+/** Merge one agent override row (after Settings save). */
+export function mergeUserWorkAgentOverride(
+  agentId: string,
+  patch: WorkAgentUserOverride,
+): void {
+  userOverrides[agentId] = { ...(userOverrides[agentId] ?? {}), ...patch };
+}
+
 /** Load built-in agents from Vite glob or test fixture map. */
 export function initBuiltinWorkAgentRegistry(raw: Record<string, string> = {}): void {
   builtinAgents = buildAgentsFromRaw(raw);

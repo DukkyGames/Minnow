@@ -3,6 +3,7 @@
  */
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
+import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { loadSubAgentConfig, saveSubAgentConfigToServer } from '../agents/sub-agent-config';
 import type { SubAgentTypeConfig } from '../agents/types';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
@@ -705,6 +706,7 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialDisabled: agent.disabled === true,
         initialMaxInputTokens: agent.maxInputTokens ?? null,
         initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
+        initialSampler: getUserWorkAgentOverride(id)?.sampler ?? null,
         onModelSaved: () => {
           void renderWorkAgentsSection();
         },
@@ -833,6 +835,7 @@ async function renderSubAgentsSection(): Promise<void> {
           maxInputTokens: type.maxInputTokens ?? null,
           contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
+          sampler: type.sampler ?? null,
         },
         (patch) => saveTypePatch(id, patch),
       );

@@ -2,6 +2,8 @@
  * Client helpers for Work Agent prompt editor API.
  */
 
+import { mergeUserWorkAgentOverride } from './work-agent-registry';
+
 export type WorkAgentPromptProfile = 'full' | 'lite';
 
 export interface WorkAgentPromptResponse {
@@ -72,6 +74,7 @@ export async function patchWorkAgentOverride(
     contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
     minRecentTurns?: number;
     summaryReserveTokens?: number;
+    sampler?: import('./sampler-types').SamplerPreset | null;
   },
 ): Promise<import('./work-agent-types').WorkAgentDefinition | null> {
   try {
@@ -82,6 +85,7 @@ export async function patchWorkAgentOverride(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { agent: import('./work-agent-types').WorkAgentDefinition };
+    mergeUserWorkAgentOverride(agentId, patch);
     return data.agent ?? null;
   } catch {
     return null;

@@ -80,6 +80,10 @@ export interface ChatCompletionBody {
   messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  repetition_penalty?: number;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
 }

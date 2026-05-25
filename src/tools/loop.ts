@@ -169,6 +169,8 @@ import {
 import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
+import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { applySamplerToBody } from '../agents/sampler-types';
 import {
   cancelAllForParentTurn,
 } from '../agents/orchestrator';
@@ -226,6 +228,10 @@ interface ChatCompletionBody {
   messages: ApiMessage[];
   temperature: number;
   max_tokens: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  repetition_penalty?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
   tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;
@@ -660,6 +666,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
+  const resolvedSampler = resolveSamplerPreset({
+    kind: 'work-agent',
+    agentKey: activeWorkAgent?.id ?? null,
+    global: { temperature: temp, maxTokens: maxTok },
+  });
   let sendModelId = modelId || chat.modelId;
   let sendProviderId = chat.providerId;
 
@@ -872,8 +883,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         maxToolTurns: maxToolTurnsCap,
         providerId: sendProviderId,
         modelId: sendModelId,
-        temperature: temp,
-        maxTokens: maxTok,
+        temperature: resolvedSampler.preset.temperature ?? temp,
+        maxTokens: resolvedSampler.maxTokens,
         skillId,
         userContent,
       });
@@ -940,14 +951,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ) {
         setStatus('ok', budgetApplied.statusMessage);
       }
-      const body: ChatCompletionBody = {
-        model: sendModelId || undefined,
-        messages,
-        temperature: temp,
-        max_tokens: maxTok,
-        stream: true,
-        stream_options: { include_usage: true },
-      };
+      const body = applySamplerToBody(
+        {
+          model: sendModelId || undefined,
+          messages,
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+        resolvedSampler.preset,
+        resolvedSampler.maxTokens,
+      ) as ChatCompletionBody;
       if (enabledTools.length > 0) {
         body.tools = enabledTools;
         body.tool_choice = 'auto';
@@ -1150,12 +1163,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       let streamMeta = turnResult.streamMeta;
 
       if (!fullText.trim()) {
-        const fallbackBody: ChatCompletionBody = {
-          model: sendModelId || undefined,
-          messages,
-          temperature: temp,
-          max_tokens: maxTok,
-        };
+        const fallbackBody = applySamplerToBody(
+          {
+            model: sendModelId || undefined,
+            messages,
+          },
+          resolvedSampler.preset,
+          resolvedSampler.maxTokens,
+        ) as ChatCompletionBody;
         if (enabledTools.length > 0) {
           fallbackBody.tools = enabledTools;
           fallbackBody.tool_choice = 'auto';
