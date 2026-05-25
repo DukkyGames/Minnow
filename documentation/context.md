@@ -187,6 +187,7 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Persistence | `GET/POST /api/benchmarks`, `GET /api/benchmarks/:id` → `~/.minnow/benchmarks/`; `localStorage` fallback (`minnow.benchmarks.history`, cap 5) when `npm run dev` only |
 | Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
 | Tests | `npm run test:benchmark` |
+| Cancel / Stop | `AbortController` in `benchmark-page.ts` → `runBenchmark({ signal })`; cooperative exit via `src/benchmark/abort.ts` (`assertNotAborted`, `rethrowIfAborted` in suites + `llm-driver.ts`). On cancel: `run-cancelled` progress event, **no** `saveRun`, throws `AbortError` so UI shows **Benchmark cancelled.** (BUG-005 fixed, MIN-61). |
 
 Completions use `postChatCompletions` with `persist: false` (no chat session pollution). Distinct from planned Feature 21 eval harness (`~/.minnow/evals/`, multi-model matrix). Plan: [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md).
 
