@@ -4,6 +4,8 @@ kind: expert
 label: General
 version: 2
 description: Balanced help across everyday tasks without a strong domain signal.
+icon: "💡"
+accent: sage
 default: true
 priority: 0
 keywords:

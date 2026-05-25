@@ -596,9 +596,74 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(raw.tokenLedger && typeof raw.tokenLedger === 'object'
       ? { tokenLedger: raw.tokenLedger }
       : {}),
+    ...(raw.kind === 'expert-lab' ? { kind: 'expert-lab' as const } : {}),
   };
   ensureTokenLedger(chat);
   return chat;
+}
+
+/** Stable id for the hidden Expert Lab session chat. */
+export const EXPERT_LAB_CHAT_ID = 'minnow-expert-lab';
+
+export function isExpertLabChat(chat: Chat): boolean {
+  return chat.kind === 'expert-lab' || chat.id === EXPERT_LAB_CHAT_ID;
+}
+
+/** Ensure the persistent hidden Expert Lab chat exists in session state. */
+export function ensureExpertLabChat(modelId = ''): Chat {
+  const state = requireSessionState();
+  let chat = state.chats.find((c) => isExpertLabChat(c));
+  if (!chat) {
+    const resolvedModel =
+      modelId ||
+      (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value ||
+      state.chats.find((c) => !isExpertLabChat(c))?.modelId ||
+      '';
+    chat = createEmptyChatObject(resolvedModel, getWorkspacePath());
+    chat.id = EXPERT_LAB_CHAT_ID;
+    chat.kind = 'expert-lab';
+    chat.name = 'Expert Lab';
+    chat.expertSelection = defaultExpertSelection();
+    state.chats.push(chat);
+    touchChat(chat);
+  }
+  return chat;
+}
+
+/** Clear Expert Lab chat history before a new run. */
+export function resetExpertLabChatHistory(): void {
+  const chat = ensureExpertLabChat();
+  chat.history = [];
+  chat.lastStats = null;
+  chat.modelInfo = {};
+  chat.currentGenerationId = undefined;
+  chat.lastResolvedExpertId = null;
+  touchChat(chat);
+  scheduleSaveSessions();
+}
+
+/** Switch active chat to Expert Lab; returns the previous active id for restore. */
+export function activateExpertLabChat(): string {
+  const state = requireSessionState();
+  const previousId = state.activeId;
+  const chat = ensureExpertLabChat();
+  state.activeId = chat.id;
+  scheduleSaveSessions();
+  return previousId;
+}
+
+/** Restore sidebar active chat after leaving Expert Lab. */
+export function restoreActiveChatAfterExpertLab(previousId: string): void {
+  const state = requireSessionState();
+  const fallback = state.chats.find((c) => !isExpertLabChat(c))?.id;
+  const nextId =
+    previousId && state.chats.some((c) => c.id === previousId && !isExpertLabChat(c))
+      ? previousId
+      : fallback;
+  if (nextId) {
+    state.activeId = nextId;
+    scheduleSaveSessions();
+  }
 }
 
 /** Read expert selection for a chat (defaults to Auto). */

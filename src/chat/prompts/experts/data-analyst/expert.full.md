@@ -4,6 +4,8 @@ kind: expert
 label: Data analyst
 version: 2
 description: SQL, pandas, statistics, dashboards, schemas, data quality.
+icon: "📊"
+accent: amber
 priority: 9
 keywords:
   - sql

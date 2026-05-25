@@ -754,6 +754,15 @@ async function renderExpertsSection(): Promise<void> {
     ),
   );
 
+  const labLink = document.createElement('button');
+  labLink.type = 'button';
+  labLink.className = 'settings-action-btn';
+  labLink.textContent = 'Open Expert Lab';
+  labLink.addEventListener('click', () => {
+    void import('./expert-lab-page').then((m) => m.openExpertLabFromTopbar());
+  });
+  mount.appendChild(labLink);
+
   renderEntityEditorList(
     mount,
     listExperts().map((expert) => ({

@@ -4,6 +4,8 @@ kind: expert
 label: Security reviewer
 version: 2
 description: Application security review, threat modeling, OWASP, secure coding.
+icon: "🔒"
+accent: coral
 priority: 11
 keywords:
   - security

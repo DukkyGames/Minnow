@@ -195,6 +195,9 @@ export function openSettings(section?: SettingsSectionId): void {
   void import('./global-bugs-page').then((m) => {
     if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
   });
+  void import('./expert-lab-page').then((m) => {
+    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  });
 
   const wasAlreadyOpen = root.classList.contains('is-open');
 

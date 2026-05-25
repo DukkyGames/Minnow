@@ -516,10 +516,13 @@ Domain personas under `src/chat/prompts/experts/<id>/` (`expert.full.md`, `exper
 | Registry + routing | `src/chat/experts/registry.ts`, `rules-router.ts`, `resolve.ts` |
 | Optional LLM classify | `src/chat/experts/llm-classifier.ts` (not awaited on send — latency) |
 | Config | `config.json` → `experts` block; loader `src/config/experts-config.ts` |
-| UI | `#expertSelect` in composer strip (`src/ui/expert-select.ts`) |
-| Persistence | `Chat.expertSelection`, `Chat.lastResolvedExpertId` in session blob |
+| Expert Lab (MIN-59) | `#/experts`, topbar `#btnExpertLab`, `src/ui/expert-lab-page.ts`, `src/styles/expert-lab-page.css` |
+| Settings | `src/ui/experts-settings.ts` (enable toggle + built-in id list); Settings → Experts → **Open Expert Lab** |
+| Persistence | `Chat.expertSelection`, `Chat.lastResolvedExpertId` (dormant on normal chats); hidden `kind: 'expert-lab'` chat (`EXPERT_LAB_CHAT_ID`) |
 
-**Behavior:** **Auto** re-runs rules router each send; **Manual** pins `expertId` until user selects Auto. `resolveExpertForTurn()` → `resolveComposedSystemPrompt()` sets `expertId` / `expertLabel` for `{{expert}}` interpolation.
+**Expert Lab:** Three-step flow (pick tile grid → brief → run timeline). Runs use `runChatTurn` with `composedSystemPromptOverride` = expert `fullBody`; stream hooks in `src/ui/expert-lab-stream.ts` (called from `src/tools/loop.ts`). Phases: Understanding, Clarifying (`ask_question` + `#questionHost` reparent), Working, Output (markdown via `setAssistantBubbleContent`). Sidebar filters `kind: 'expert-lab'`. Meta: optional `icon` + `accent` (`sage` \| `amber` \| `cyan` \| `coral` \| `violet` \| `rose`) in expert front matter.
+
+**Behavior (chat):** **Auto** re-runs rules router each send when experts are enabled; composer expert dropdown removed. `resolveExpertForTurn()` → `resolveComposedSystemPrompt()` sets `expertId` / `expertLabel` for `{{expert}}` interpolation.
 
 **Built-in ids:** `general` (default), `software-engineer`, `technical-writer`, `data-analyst`, `creative-writer`, `security-reviewer`. Template: `src/chat/prompts/experts/_template/`.
 

@@ -4,6 +4,8 @@ kind: expert
 label: Software engineer
 version: 2
 description: Implementation, debugging, refactors, APIs, stack-specific code work.
+icon: "🛠"
+accent: cyan
 priority: 10
 keywords:
   - code

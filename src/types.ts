@@ -390,9 +390,14 @@ export interface TurnRunRecord {
   parentTurnId?: string;
 }
 
+/** Hidden session used by Expert Lab (filtered from sidebar). */
+export type ChatKind = 'expert-lab';
+
 export interface Chat {
   id: string;
   name: string;
+  /** When set to expert-lab, chat is owned by Expert Lab and hidden from the sidebar. */
+  kind?: ChatKind;
   /** Normalized absolute workspace root at chat creation; '' = unassigned (legacy). */
   workspacePath: string;
   modelId: string;

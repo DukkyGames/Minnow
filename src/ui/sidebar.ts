@@ -25,7 +25,6 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
-import { syncExpertSelectForActiveChat } from './expert-select';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
@@ -80,7 +79,6 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     renderChatFromHistory(activeChat);
     renderStatsForChat(activeChat);
     syncModeSelectorFromActiveChat();
-    syncExpertSelectForActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
     syncViewModeToggleFromActiveChat();
     syncWorkAgentDevFromActiveChat();
@@ -351,7 +349,6 @@ export function switchChat(id: string): void {
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
-  syncExpertSelectForActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
@@ -414,7 +411,6 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
-  syncExpertSelectForActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncWorkAgentDevFromActiveChat();
