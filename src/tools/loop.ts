@@ -157,6 +157,7 @@ import {
 } from '../providers/constrained-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { getActiveProvider } from '../providers/store';
+import { isVisionModel } from '../providers/vision-model.ts';
 import {
   getToolCallsMetaSync,
   isConstrainedDecodingEnabledForProvider,
@@ -341,16 +342,6 @@ function buildVlmUserApiContent(
   return parts;
 }
 
-function isVlmModel(modelId: string | undefined): boolean {
-  if (!modelId) return false;
-  const row = modelCache.get(modelId);
-  if (!row) return false;
-  const vision = row.capabilities?.vision;
-  if (vision === true) return true;
-  if (vision === false) return false;
-  return row.type === 'vlm';
-}
-
 /** Options for {@link runChatTurn} (composer send or history resend). */
 export interface RunChatTurnOptions {
   chat: Chat;
@@ -400,7 +391,7 @@ export function buildApiMessages(
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
   const lastUserIdx = indexOfLastUserMessage(chat.history);
   const modelId = options?.modelId;
-  const vlm = isVlmModel(modelId);
+  const vlm = isVisionModel(modelId);
 
   for (let i = 0; i < chat.history.length; i += 1) {
     const m = chat.history[i];
