@@ -104,6 +104,7 @@ export interface LlmTurnTiming {
 export type BenchmarkProgressEvent =
   | { type: 'suite-start'; suiteId: SuiteId; label: string }
   | { type: 'test-done'; result: TestResult }
+  | { type: 'run-cancelled' }
   | { type: 'run-done'; run: BenchmarkRun };
 
 export interface RunBenchmarkOptions {

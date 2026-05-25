@@ -2,6 +2,7 @@
  * Coding suite: deterministic outputs + inline LLM judge cases.
  */
 
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { exactMatch, parseJudgeJson } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -117,6 +118,7 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
   const tests: TestResult[] = [];
 
   for (const c of CASES) {
+    assertNotAborted(ctx.signal);
     const t0 = performance.now();
     try {
       const out = await runOneShot({
@@ -147,6 +149,7 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         details,
       });
     } catch (err) {
+      rethrowIfAborted(err, ctx.signal);
       tests.push({
         testId: c.id,
         suite: 'coding',

@@ -23,7 +23,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-002 | Major | Benchmark (`#/benchmark`) | Streaming completion test fails for every model | Open |
 | BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Open |
 | BUG-004 | Major | Benchmark — capability suite | Multimodal capability test not run for multimodal models | Open |
-| BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Open |
+| BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Fixed — [MIN-61](https://linear.app/minnowai/issue/MIN-61/bug-005-benchmark-stop-does-not-cancel) |
 | BUG-006 | Major | Benchmark — tools suite | Run hangs or stops on tools suite | Verified — [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite) |
 | BUG-007 | Major | Benchmark (`#/benchmark`) | Custom suites button does nothing | Open |
 | BUG-008 | Major | Benchmark — modes suite | Mode tests fail: **expected tool missing** despite tools enabled | Open (verified — see plan + MIN-81) |
@@ -185,11 +185,13 @@ Test is not executed for the multimodal model (skipped or absent from active run
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark screen (`#/benchmark`) — **Stop** control during an active run |
-| **Status** | Open |
+| **Status** | Fixed (2026-05-25) — cooperative cancel in runner, suites, LLM driver; `run-cancelled` event; no history save on abort |
 
 **Summary**
 
 Clicking **Stop** while a benchmark is running does not stop the run (tests continue, UI may still show running state).
+
+**Resolution (2026-05-25):** `src/benchmark/abort.ts`; runner skips `saveRun` / `run-done` on abort; suites rethrow abort; `runToolLoop` polls signal between rounds; UI `stopRun()` shows immediate “Stopping…” / “Benchmark cancelled.” Tests: `test/benchmark/abort.test.mts`, `runner-cancel.test.mts`, `test/ui/benchmark-stop.test.mts`.
 
 **Steps to reproduce**
 

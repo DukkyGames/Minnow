@@ -4,6 +4,7 @@
 
 import { getActiveProvider } from '../../providers/store';
 import { fetchModelsForProvider } from '../../providers/fetch-models';
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
@@ -39,6 +40,8 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   const tests: TestResult[] = [];
   const t0 = () => performance.now();
 
+  assertNotAborted(ctx.signal);
+
   // 1 — Provider reachable
   let t = t0();
   try {
@@ -47,6 +50,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       result('cap-provider', 'Provider reachable', Boolean(provider.baseUrl), performance.now() - t, provider.id),
     );
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push(
       result(
         'cap-provider',
@@ -71,6 +75,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   );
 
   // 3 — Streaming
+  assertNotAborted(ctx.signal);
   t = t0();
   try {
     const stream = await runOneShot({
@@ -93,6 +98,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       ),
     );
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push(
       result(
         'cap-stream',
@@ -105,6 +111,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   }
 
   // 4 — Usage chunk (skip if absent)
+  assertNotAborted(ctx.signal);
   t = t0();
   try {
     const stream = await runOneShot({
@@ -133,6 +140,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       tests.push(result('cap-usage', 'Usage metadata', true, performance.now() - t));
     }
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push(
       result(
         'cap-usage',
@@ -145,6 +153,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   }
 
   // 5 — Tool schema accepted
+  assertNotAborted(ctx.signal);
   t = t0();
   try {
     const stream = await runOneShot({
@@ -178,6 +187,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       ),
     );
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push(
       result(
         'cap-tools-schema',
@@ -190,6 +200,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   }
 
   // 6 — Models list
+  assertNotAborted(ctx.signal);
   t = t0();
   try {
     const provider = await getActiveProvider(ctx.providerId);
@@ -204,6 +215,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       ),
     );
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push(
       result(
         'cap-models-list',

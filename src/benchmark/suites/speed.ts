@@ -2,6 +2,7 @@
  * Speed suite: median TTFT and tok/s from fixed prompts.
  */
 
+import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
@@ -25,6 +26,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
   const tpsSamples: number[] = [];
 
   for (let i = 0; i < 3; i++) {
+    assertNotAborted(ctx.signal);
     const t0 = performance.now();
     try {
       const out = await runOneShot({
@@ -50,6 +52,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
         details: `${out.text.length} chars`,
       });
     } catch (err) {
+      rethrowIfAborted(err, ctx.signal);
       tests.push({
         testId: `speed-short-${i + 1}`,
         suite: 'speed',
@@ -63,6 +66,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     }
   }
 
+  assertNotAborted(ctx.signal);
   const tLong = performance.now();
   try {
     const out = await runOneShot({
@@ -91,6 +95,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
       score: 1,
     });
   } catch (err) {
+    rethrowIfAborted(err, ctx.signal);
     tests.push({
       testId: 'speed-long-1',
       suite: 'speed',
