@@ -1539,6 +1539,13 @@ async function renderSkillsSection(): Promise<void> {
   await renderSkillsSettingsSection(mount);
 }
 
+async function renderEvalsSection(): Promise<void> {
+  const mount = clearMount('settingsEvalsBody');
+  if (!mount) return;
+  const { renderEvalsSettingsSection } = await import('./settings-evals');
+  await renderEvalsSettingsSection(mount);
+}
+
 let memoryListBindingsDone = false;
 let memoryAddFormBound = false;
 
@@ -1906,6 +1913,9 @@ export async function refreshSettingsSection(
       break;
     case 'skills':
       await renderSkillsSection();
+      break;
+    case 'evals':
+      await renderEvalsSection();
       break;
     default:
       break;

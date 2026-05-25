@@ -27,6 +27,7 @@ import { createAgentPacksMiddleware } from './server/agent-packs/routes.js';
 import { createSkillsMiddleware } from './server/skills/middleware.js';
 import { ensureAgentPacksLayout } from './server/agent-packs/registry.js';
 import { createBenchmarksMiddleware } from './server/benchmarks/middleware.js';
+import { createEvalsMiddleware } from './server/evals/middleware.js';
 import { ensureProviderRegistry } from './server/providers/store.js';
 import { BROWSER_TOOL_HANDLERS } from './server/cdp/browser-tools.js';
 import { createBrowserScreenshotMiddleware } from './server/browser-screenshot-middleware.js';
@@ -849,6 +850,7 @@ async function main() {
           }
           server.middlewares.use(createConfigMiddleware());
           server.middlewares.use(createBenchmarksMiddleware());
+          server.middlewares.use(createEvalsMiddleware());
           server.middlewares.use(createWorkspaceMiddleware());
           server.middlewares.use(createMemoryMiddleware());
           server.middlewares.use(createReefMiddleware());

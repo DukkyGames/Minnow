@@ -17,6 +17,7 @@ import './styles/thoughts.css';
 import './styles/input.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
+import './styles/settings-evals.css';
 import './styles/stats.css';
 import './styles/agent-activity-panel.css';
 import './styles/responsive.css';

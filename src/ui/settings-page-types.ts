@@ -19,7 +19,8 @@ export type SettingsSectionId =
   | 'tools'
   | 'mcp'
   | 'lsp'
-  | 'skills';
+  | 'skills'
+  | 'evals';
 
 /** Nav order for hash routing and panel wiring (must match index.html). */
 export const SETTINGS_SECTIONS: SettingsSectionId[] = [
@@ -40,4 +41,5 @@ export const SETTINGS_SECTIONS: SettingsSectionId[] = [
   'mcp',
   'lsp',
   'skills',
+  'evals',
 ];

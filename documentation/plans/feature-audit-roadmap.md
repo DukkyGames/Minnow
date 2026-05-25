@@ -130,11 +130,10 @@ A 22-item product wishlist was reviewed against the current Minnow build. This d
 - **Scope:** Builds on the existing sub-agent runner; new `multi-model` mode prompt + UI bubble lane.
 - **Build plan:** [`Build out/feature-20-multi-model-conversation.md`](Build%20out/feature-20-multi-model-conversation.md)
 
-### 21. Local eval harness — Missing
-- **Today:** No user-defined task pack or model comparison runner.
-- **Gap:** User declares N tasks (prompt + tool whitelist + grading rubric prompt) → run across N models → leaderboard. Stored under `~/.minnow/evals/`.
-- **Scope:** New `src/evals/` runner reusing sub-agent isolation; results panel in settings.
-- **Plan:** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](Build%20out/feature-21-local-eval-harness.md)
+### 21. Local eval harness — Shipped (MIN-57)
+- **Today:** Task packs (built-in `coding-smoke` + user overrides), browser suite scheduler (task×model matrix), LLM rubric grader, leaderboard in **Settings → Evals** (`#/settings/evals`). Persistence under `~/.minnow/evals/` via `npm start` (`/api/evals/*`).
+- **Scope:** `src/evals/`, `server/evals/`, `src/ui/settings-evals.ts`.
+- **Plan:** [`documentation/plans/Build out/feature-21-local-eval-harness.md`](Build%20out/feature-21-local-eval-harness.md) · **QA:** [`documentation/plans/verification/feature-21-eval-harness.md`](verification/feature-21-eval-harness.md)
 
 ### 22. Project-scoped everything — Partial
 - **Today:** Workspace-scoped *chats* (B2) and recent menu. Agent configs, prompts, tool whitelist, MCP servers, model bindings are still **global** in `~/.minnow/`.
