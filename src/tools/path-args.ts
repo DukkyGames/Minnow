@@ -2,6 +2,8 @@
  * Collect filesystem path arguments from tool calls for workspace boundary checks.
  */
 
+import { normalizePathForComparison } from './workspace-path-guard.ts';
+
 /** Argument keys that hold user-supplied paths per tool (aligned with server.js resolveSafePath usage). */
 const TOOL_PATH_ARG_KEYS: Record<string, readonly string[]> = {
   list_directory: ['path'],
@@ -47,4 +49,17 @@ export function extractPathLikeArgs(
     }
   }
   return out;
+}
+
+/** Stable path string for cache keys and invalidation prefix matching. */
+export function normalizePathArg(path: string): string {
+  let p = path.trim().replace(/\\/g, '/');
+  p = p.replace(/\/+/g, '/');
+  if (p.startsWith('./')) {
+    p = p.slice(2);
+  }
+  while (p.startsWith('./')) {
+    p = p.slice(2);
+  }
+  return normalizePathForComparison(p);
 }
