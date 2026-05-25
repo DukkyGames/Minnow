@@ -35,13 +35,13 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Verified — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
 | BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
 | BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
-| BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Open — [MIN-60](https://linear.app/minnowai/issue/MIN-60), plan verified 2026-05-24 |
+| BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Fixed — [MIN-60](https://linear.app/minnowai/issue/MIN-60) |
 | BUG-018 | Major | File panel | **Rename file** does not work | Verified — [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
 | BUG-019 | Major | Context / tokens UI | Context usage not live during tools + thinking | Verified — [MIN-75](https://linear.app/minnowai/issue/MIN-75) |
 | BUG-020 | Major | Orchestrate / streaming | Stuck retrying; stream close **Unexpected end of JSON input** | Verified — [MIN-84](https://linear.app/minnowai/issue/MIN-84/bug-020-orchestrator-stuck-retrying-stream) |
 | BUG-021 | Major | Reef widgets | Non-chart widgets (e.g. Calculator) fail with chart/toExponential error | Open |
 
-**Counts:** 21 open · 0 fixed · 0 won't fix
+**Counts:** 20 open · 1 fixed · 0 won't fix
 
 ---
 
@@ -524,7 +524,7 @@ Highlighting **broken** — missing, uniform color, or incorrect token classes.
 |-------|-------|
 | **Severity** | Minor |
 | **Area** | Chat sidebar **collapsed rail** — work-agent badge / thinking state (`.chat-item-agent-badge`, `data-dot-state='thinking'`) |
-| **Status** | Open |
+| **Status** | Fixed (2026-05-25) |
 
 **Summary**
 
@@ -551,6 +551,8 @@ When the sidebar is **closed/collapsed**, the **thinking** indicator spins the *
 - Related CSS: `.chat-item-dot__spinner`, `.chat-item-agent-badge` thinking styles.
 
 **Verification (2026-05-24):** Root cause confirmed — `tool-call-spin` on `.chat-item-agent-badge` (collapsed thinking) rotates border + text; expanded dot uses child `.chat-item-dot__spinner` only. Manual live-stream repro still recommended.
+
+**Fix (2026-05-25):** `sidebar.css` — thinking collapsed badge keeps static label; `::after` pseudo-element carries the accent ring + `tool-call-spin` (same reduced-motion rule as `.chat-item-dot__spinner`).
 
 ### BUG-016 — Plan reply fails: stream JSON parse on close
 
