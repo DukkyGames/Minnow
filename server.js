@@ -17,6 +17,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createConfigMiddleware } from './server/config/middleware.js';
 import { createPromptConfigsMiddleware } from './server/prompt-configs/middleware.js';
+import { createProfilesMiddleware } from './server/profiles/middleware.js';
 import { ensureMinnowLayout, getMinnowHome } from './server/config/home.js';
 import { createProviderMiddleware } from './server/providers/routes.js';
 import { createGenerationsMiddleware } from './server/generations/routes.js';
@@ -846,6 +847,7 @@ async function main() {
           server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
           server.middlewares.use(createMcpMiddleware());
           server.middlewares.use(createPromptConfigsMiddleware());
+          server.middlewares.use(createProfilesMiddleware());
           server.middlewares.use(createProviderMiddleware());
           server.middlewares.use(createGenerationsMiddleware());
           server.middlewares.use(createWorkAgentsMiddleware());

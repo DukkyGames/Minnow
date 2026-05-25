@@ -64,6 +64,7 @@ const SCAFFOLD_DIRS = [
   'mcp',
   'lsp',
   'prompt-configs',
+  'profiles',
   'prompts',
   'skills',
   'backups',
@@ -87,6 +88,9 @@ const DEFAULT_META = {
   activePromptProfile: 'full',
   activePromptConfigId: null,
   activeInfoPresetId: 'general-assistant',
+  activeSetupProfileId: null,
+  workspaceProfiles: {},
+  workspaceProfileAutoApply: false,
   titles: {
     enabled: true,
     modelId: '',

@@ -8,6 +8,7 @@ import { loadSubAgentConfig, saveSubAgentConfigToServer } from '../agents/sub-ag
 import type { SubAgentTypeConfig } from '../agents/types';
 import { PART_ORDER } from '../chat/prompts/prompt-composer';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
+import { mountSetupProfilesPanel } from './settings-profiles';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import {
   customPartBaselineProfileHint,
@@ -628,6 +629,10 @@ async function bindPromptingToolbar(): Promise<void> {
 }
 
 async function renderPromptingSection(): Promise<void> {
+  const profilesMount = document.getElementById('settingsSetupProfilesMount');
+  if (profilesMount) {
+    mountSetupProfilesPanel(profilesMount, setStatus);
+  }
   await refreshCustomConfigSelect();
   await bindPromptingToolbar();
   const meta = await loadPromptMetaSettings();
