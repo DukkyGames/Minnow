@@ -46,14 +46,11 @@ export function createEvalExecuteTool(
   toolContext?: import('../tools/client').ExecuteToolContext,
 ) => Promise<ToolExecutionResult> {
   return async (name, args, toolContext) => {
-    const ctx = {
+    return executeTool(name, args, {
       ...toolContext,
       chatId: toolContext?.chatId ?? 'eval-run',
       subAgentType: 'eval',
       modeId: toolContext?.modeId ?? 'build',
-    };
-    void config;
-    void workspacePath;
-    return executeTool(name, args, ctx);
+    });
   };
 }
