@@ -8,6 +8,7 @@ import {
   renderSideBySidePromptDiff,
   renderUnifiedPromptDiff,
 } from './prompt-diff-unified';
+import { createSettingsSwitch } from './settings-switch';
 
 export type PromptDiffLayout = 'unified' | 'side-by-side';
 
@@ -71,13 +72,14 @@ export function mountPromptDiffControls(
   let layout: PromptDiffLayout = getPromptDiffLayout();
 
   const toolbar = el('div', 'prompt-diff-toolbar');
-  const compareCb = document.createElement('input');
-  compareCb.type = 'checkbox';
-  compareCb.id = `prompt-diff-compare-${Math.random().toString(36).slice(2, 9)}`;
-  const compareLabel = document.createElement('label');
-  compareLabel.htmlFor = compareCb.id;
-  compareLabel.textContent = 'Compare to shipped default';
-  compareLabel.className = 'prompt-diff-toolbar__compare';
+  const compareId = `prompt-diff-compare-${Math.random().toString(36).slice(2, 9)}`;
+  const compareWrap = el('div', 'prompt-diff-toolbar__compare');
+  const compareText = el('span', 'prompt-diff-toolbar__compare-label', 'Compare to shipped default');
+  const { root: compareSwitch, input: compareCb } = createSettingsSwitch({
+    id: compareId,
+    ariaLabel: 'Compare to shipped default',
+  });
+  compareWrap.append(compareText, compareSwitch);
 
   const matchNote = el('span', 'prompt-diff-toolbar__match hidden', 'Matches shipped default');
 
@@ -118,8 +120,7 @@ export function mountPromptDiffControls(
     resetBtn.textContent = options.resetPartLabel ?? 'Reset part to default';
   }
 
-  toolbar.appendChild(compareCb);
-  toolbar.appendChild(compareLabel);
+  toolbar.appendChild(compareWrap);
   toolbar.appendChild(matchNote);
   toolbar.appendChild(layoutSel);
   if (resetBtn) toolbar.appendChild(resetBtn);

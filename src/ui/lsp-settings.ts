@@ -8,6 +8,7 @@ import {
   type LspServerStatus,
 } from '../lsp/config-client';
 import { isLocalServerAvailable } from '../tools/config';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -63,18 +64,11 @@ function createLspServerRow(
 
   const head = el('div', 'settings-lsp-row-head');
 
-  const labelWrap = el('label', 'settings-toggle-row');
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.checked = !server.disabled;
-  checkbox.setAttribute(
-    'aria-label',
-    `${server.disabled ? 'Enable' : 'Disable'} ${server.label}`,
-  );
-  checkbox.addEventListener('change', () => {
-    onToggle(server.id, checkbox.checked);
+  const { row: labelWrap, input: checkbox } = createSettingsToggleRow(server.label, {
+    checked: !server.disabled,
+    ariaLabel: `${server.disabled ? 'Enable' : 'Disable'} ${server.label}`,
+    onChange: (enabled) => onToggle(server.id, enabled),
   });
-  labelWrap.append(checkbox, el('span', '', server.label));
   head.append(labelWrap);
 
   if (server.builtin) {

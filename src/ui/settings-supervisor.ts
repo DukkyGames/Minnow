@@ -4,6 +4,7 @@
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { invalidateSupervisorConfigCache } from '../agents/supervisor/config.ts';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 type SupervisorPatch = Record<string, unknown>;
@@ -139,35 +140,48 @@ export async function renderSupervisorSettingsSection(): Promise<void> {
   );
   mount.appendChild(intro);
 
-  const row = (label: string, input: HTMLElement): HTMLElement => {
-    const wrap = el('div', 'settings-toggle-row');
-    wrap.appendChild(el('span', undefined, label));
-    wrap.appendChild(input);
-    return wrap;
-  };
-
-  const mkCb = (id: string, label: string, field: string, checked: boolean): HTMLInputElement => {
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.id = id;
-    cb.checked = checked;
-    cb.addEventListener('change', () => {
-      void saveSupervisorPatch({ [field]: cb.checked });
+  const mkSwitch = (
+    id: string,
+    label: string,
+    field: string,
+    checked: boolean,
+  ): HTMLInputElement => {
+    const { row, input } = createSettingsToggleRow(label, {
+      id,
+      checked,
+      onChange: (on) => {
+        void saveSupervisorPatch({ [field]: on });
+      },
     });
-    mount.appendChild(row(label, cb));
-    return cb;
+    mount.appendChild(row);
+    return input;
   };
 
-  mkCb('settingsSupervisorEnabled', 'Enable supervisor', 'enabled', sup.enabled !== false);
-  mkCb('settingsSupervisorAutoResume', 'Auto-resume orchestrator', 'autoResume', sup.autoResume !== false);
-  mkCb(
+  const enabledInput = mkSwitch(
+    'settingsSupervisorEnabled',
+    'Enable supervisor',
+    'enabled',
+    sup.enabled !== false,
+  );
+  mkSwitch(
+    'settingsSupervisorAutoResume',
+    'Auto-resume orchestrator',
+    'autoResume',
+    sup.autoResume !== false,
+  );
+  mkSwitch(
     'settingsSupervisorRepetition',
     'Detect repeated tool calls (sub-agents)',
     'repetitionDetection',
     sup.repetitionDetection !== false,
   );
-  mkCb('settingsSupervisorLlmEscalation', 'LLM escalation (ambiguous stalls)', 'llmEscalation', sup.llmEscalation !== false);
-  mkCb(
+  mkSwitch(
+    'settingsSupervisorLlmEscalation',
+    'LLM escalation (ambiguous stalls)',
+    'llmEscalation',
+    sup.llmEscalation !== false,
+  );
+  mkSwitch(
     'settingsSupervisorAskUser',
     'Ask user when budgets are exhausted',
     'askUserOnBudgetExhausted',
@@ -175,11 +189,10 @@ export async function renderSupervisorSettingsSection(): Promise<void> {
   );
 
   const fieldset = el('fieldset', 'settings-part-block');
-  const enabledCb = document.getElementById('settingsSupervisorEnabled') as HTMLInputElement | null;
   const syncDisabled = (): void => {
-    fieldset.disabled = enabledCb ? !enabledCb.checked : false;
+    fieldset.disabled = !enabledInput.checked;
   };
-  enabledCb?.addEventListener('change', syncDisabled);
+  enabledInput.addEventListener('change', syncDisabled);
 
   const details = el('details', 'settings-part-block');
   const sum = el('summary', undefined, 'Supervisor thresholds');

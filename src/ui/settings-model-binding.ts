@@ -91,9 +91,12 @@ export function appendProviderModelFields(
   container: HTMLElement,
   ids: { provider: string; model: string },
   labels?: { provider?: string; model?: string },
+  layout?: 'stacked' | 'inline',
 ): { providerSelect: HTMLSelectElement; modelSelect: HTMLSelectElement } {
+  const fieldClass =
+    layout === 'inline' ? 'settings-field settings-field--inline' : 'settings-field';
   const providerField = document.createElement('div');
-  providerField.className = 'settings-field';
+  providerField.className = fieldClass;
   const providerLabel = document.createElement('label');
   providerLabel.className = 'settings-field-label';
   providerLabel.htmlFor = ids.provider;
@@ -106,7 +109,7 @@ export function appendProviderModelFields(
   container.appendChild(providerField);
 
   const modelField = document.createElement('div');
-  modelField.className = 'settings-field';
+  modelField.className = fieldClass;
   const modelLabel = document.createElement('label');
   modelLabel.className = 'settings-field-label';
   modelLabel.htmlFor = ids.model;

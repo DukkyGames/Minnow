@@ -96,6 +96,11 @@ import { renderBrowserAllowlistSettings } from './settings-browser';
 import { renderLspSection } from './lsp-settings';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
+import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import {
+  createSettingsSwitch,
+  createSettingsToggleRow,
+} from './settings-switch';
 import { appendThemeControls } from './settings-theme';
 import {
   mountPromptFileEditor,
@@ -166,45 +171,39 @@ function serverBanner(message: string): HTMLElement {
 /** Terminal panel note (agent runs do not auto-open the dock). */
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
   void (await loadTerminalMeta());
-  const block = el('div', 'settings-terminal-block');
-  block.appendChild(el('p', 'settings-field-label', 'Terminal'));
-  block.appendChild(
+  mount.appendChild(
     el(
       'p',
       'settings-field-hint',
       'Agent and sub-agent shell commands run in the background. The terminal panel stays closed unless you open it; the Terminal button pulses while a command is running.',
     ),
   );
-  mount.appendChild(block);
 }
 
 /** Constrained decoding default (persisted in config.json `toolCalls`). */
-async function appendMainChatControls(mount: HTMLElement): Promise<void> {
+async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
   await loadToolCallsMeta();
-  const block = el('div', 'settings-main-chat-block');
-  block.appendChild(el('p', 'settings-field-label', 'Main chat'));
 
-  const constrainedRow = el('label', 'settings-toggle-row');
-  const constrainedCb = document.createElement('input');
-  constrainedCb.type = 'checkbox';
-  constrainedCb.checked = getToolCallsMetaSync().useConstrainedDecoding;
-  constrainedCb.setAttribute('aria-label', 'Constrained tool calls global default');
-  constrainedRow.append(
-    constrainedCb,
-    el(
-      'span',
-      undefined,
-      'Constrained tool calls (global default)',
-    ),
+  const { row: constrainedRow, input: constrainedCb } = createSettingsToggleRow(
+    'Constrained tool calls (global default)',
+    {
+      checked: getToolCallsMetaSync().useConstrainedDecoding,
+      ariaLabel: 'Constrained tool calls global default',
+    },
   );
-  block.appendChild(constrainedRow);
-  block.appendChild(
+  mount.appendChild(constrainedRow);
+  mount.appendChild(
     el(
       'p',
       'settings-field-hint',
-      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Probe each provider under Settings → Providers.',
+      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Capability probes run per provider.',
     ),
   );
+  const probeLink = linkToSettingsSection('Open Providers →', 'providers');
+  const probeWrap = el('p', 'settings-field-hint');
+  probeWrap.append('Configure probes under ', probeLink, '.');
+  mount.appendChild(probeWrap);
+
   constrainedCb.addEventListener('change', () => {
     void (async () => {
       try {
@@ -215,8 +214,6 @@ async function appendMainChatControls(mount: HTMLElement): Promise<void> {
       }
     })();
   });
-
-  mount.appendChild(block);
 }
 
 async function renderGeneralSection(): Promise<void> {
@@ -232,12 +229,28 @@ async function renderGeneralSection(): Promise<void> {
     );
   }
 
-  appendThemeControls(mount);
-  await appendTerminalControls(mount);
-  await appendMainChatControls(mount);
+  const appearance = appendSettingsGroup(
+    mount,
+    'Appearance',
+    'Palette family, light/dark mode, and follow-system behavior.',
+  );
+  appendThemeControls(appearance);
+
+  const chat = appendSettingsGroup(
+    mount,
+    'Chat & terminal',
+    'How the main thread and background shells behave.',
+  );
+  await appendTerminalControls(chat);
 
   const { providers, activeProviderId } = await listProviders();
   const active = providers.find((p) => p.id === activeProviderId) ?? providers[0];
+
+  const connection = appendSettingsGroup(
+    mount,
+    'Connection summary',
+    'Quick readout of the active LLM backend. Edit backends under Providers.',
+  );
 
   const summary = el('dl', 'settings-kv');
   const addRow = (term: string, value: string) => {
@@ -250,15 +263,29 @@ async function renderGeneralSection(): Promise<void> {
   addRow('Active provider', active?.label ?? '—');
   addRow('Base URL', active?.baseUrl ?? '—');
   addRow('Storage', serverUp ? '~/.minnow' : 'Browser (localStorage)');
+  connection.appendChild(summary);
 
-  mount.appendChild(summary);
-
-  const hint = el(
-    'p',
-    'settings-field-hint',
-    'Temperature and max tokens stay in the quick settings drawer until migrated here.',
+  const cross = el('div', 'settings-crosslinks');
+  cross.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
+  cross.append(
+    linkToSettingsSection('Providers', 'providers'),
+    linkToSettingsSection('Model routing', 'model-routing'),
+    linkToSettingsSection('Tools', 'tools'),
   );
-  mount.appendChild(hint);
+  connection.appendChild(cross);
+
+  const drawerHint = appendSettingsGroup(
+    mount,
+    'Quick drawer',
+    'Temperature and max tokens remain in the gear drawer on the chat screen for now.',
+  );
+  drawerHint.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Open the drawer from the top bar while chatting to adjust sampling without leaving the thread.',
+    ),
+  );
 }
 
 function defaultCustomConfig(id: string, label: string): PromptConfig {
@@ -362,9 +389,10 @@ function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void
       block.open = partId === 'base';
 
       const summary = el('summary', '');
-      const enable = document.createElement('input');
-      enable.type = 'checkbox';
-      enable.checked = settings.enabled !== false;
+      const { root: enableSwitch, input: enable } = createSettingsSwitch({
+        checked: settings.enabled !== false,
+        ariaLabel: `Enable ${PART_LABELS[partId]} part`,
+      });
       enable.addEventListener('click', (e) => e.stopPropagation());
       enable.addEventListener('change', () => {
         if (!activeCustomConfig) return;
@@ -374,7 +402,7 @@ function renderCustomPartEditors(mount: HTMLElement, config: PromptConfig): void
         };
         schedulePromptTokenEstimateRefresh();
       });
-      summary.appendChild(enable);
+      summary.appendChild(enableSwitch);
       summary.appendChild(document.createTextNode(` ${PART_LABELS[partId]}`));
       block.appendChild(summary);
 
@@ -835,11 +863,11 @@ async function renderSubAgentsSection(): Promise<void> {
   };
 
   const enabledDd = addTerm('Enabled');
-  const enabledCb = document.createElement('input');
-  enabledCb.type = 'checkbox';
-  enabledCb.checked = config.enabled !== false;
-  enabledCb.setAttribute('aria-label', 'Enable sub-agents');
-  enabledDd.appendChild(enabledCb);
+  const { root: enabledSwitch, input: enabledCb } = createSettingsSwitch({
+    checked: config.enabled !== false,
+    ariaLabel: 'Enable sub-agents',
+  });
+  enabledDd.appendChild(enabledSwitch);
 
   const maxDd = addTerm('Max concurrent');
   const maxInput = document.createElement('input');
@@ -937,14 +965,10 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
   await Promise.all([loadChatMeta(), loadSubAgentConfig()]);
   const subConfig = await loadSubAgentConfig();
 
-  const section = el('section', 'settings-tool-turn-limits');
-  section.appendChild(el('h3', 'settings-subheading', 'Tool turn limits'));
-  section.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Maximum assistant → tool → assistant rounds per run. Applies to the main composer and all sub-agents (including eval runs).',
-    ),
+  const section = appendSettingsGroup(
+    mount,
+    'Tool turn limits',
+    'Maximum assistant → tool → assistant rounds per run. Applies to the main composer and all sub-agents (including eval runs).',
   );
 
   const mainRow = el('label', 'settings-toggle-row');
@@ -1026,6 +1050,14 @@ async function renderToolsSection(): Promise<void> {
 
   const generation = ++toolsSectionRenderGeneration;
 
+  const toolDefaults = appendSettingsGroup(
+    mount,
+    'Structured tool arguments',
+    'Optional JSON Schema on tool turns when the active provider supports it.',
+  );
+  await appendToolCallDefaults(toolDefaults);
+  if (generation !== toolsSectionRenderGeneration) return;
+
   await appendToolTurnLimitsSection(mount);
   if (generation !== toolsSectionRenderGeneration) return;
 
@@ -1051,28 +1083,19 @@ async function renderToolsSection(): Promise<void> {
   banner.textContent = 'Server tools need npm start (not npm run dev).';
   mount.appendChild(banner);
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note settings-tools-intro',
-      'Each tool can be off, require confirmation before each run, or run with full permission. Bulk enable sets tools to require confirmation. File and git tools need npm start.',
-    ),
+  const permissions = appendSettingsGroup(
+    mount,
+    'Permissions & cache',
+    'Each tool can be off, ask before run, or full permission. File and git tools need npm start.',
   );
 
   const cacheRow = document.createElement('div');
   cacheRow.className = 'settings-tool-cache-row field';
-  const cacheLabel = document.createElement('label');
-  cacheLabel.className = 'settings-checkbox-option';
-  cacheLabel.htmlFor = 'settingsToolCacheEnabled';
-  const cacheCheckbox = document.createElement('input');
-  cacheCheckbox.type = 'checkbox';
-  cacheCheckbox.id = 'settingsToolCacheEnabled';
-  const cacheLabelText = document.createElement('span');
-  cacheLabelText.className = 'settings-checkbox-option__text';
-  cacheLabelText.textContent =
-    'Cache repeated read-only tool results in this session';
-  cacheLabel.append(cacheCheckbox, cacheLabelText);
-  cacheRow.appendChild(cacheLabel);
+  const { row: cacheToggle, input: cacheCheckbox } = createSettingsToggleRow(
+    'Cache repeated read-only tool results in this session',
+    { id: 'settingsToolCacheEnabled' },
+  );
+  cacheRow.appendChild(cacheToggle);
   cacheRow.appendChild(
     el(
       'p',
@@ -1080,7 +1103,7 @@ async function renderToolsSection(): Promise<void> {
       'Speeds up duplicate read_file and similar calls until the workspace changes or a write invalidates the path. Cleared on workspace switch.',
     ),
   );
-  mount.appendChild(cacheRow);
+  permissions.appendChild(cacheRow);
 
   const bulkActions = document.createElement('div');
   bulkActions.className = 'settings-tools-bulk-actions';
@@ -1095,21 +1118,15 @@ async function renderToolsSection(): Promise<void> {
   resetDefaultsBtn.className = 'settings-inline-btn settings-tools-bulk-reset';
   resetDefaultsBtn.textContent = 'Reset to defaults';
   bulkActions.append(allFullBtn, resetDefaultsBtn);
-  mount.appendChild(bulkActions);
+  permissions.appendChild(bulkActions);
 
-  const fsSection = document.createElement('section');
-  fsSection.className = 'settings-tool-filesystem';
-  const fsHeading = document.createElement('h3');
-  fsHeading.className = 'settings-subheading';
-  fsHeading.textContent = 'Filesystem access for AI tools';
-  fsSection.appendChild(fsHeading);
-  fsSection.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'When restricted, the server blocks file tools from resolving paths outside the workspace. Full access removes that restriction for all tools (dangerous on untrusted models).',
-    ),
+  const fsGroup = appendSettingsGroup(
+    mount,
+    'Filesystem access',
+    'When restricted, file tools cannot resolve paths outside the workspace. Full access is dangerous on untrusted models.',
   );
+  const fsSection = document.createElement('div');
+  fsSection.className = 'settings-tool-filesystem';
   const fsRadios = document.createElement('div');
   fsRadios.className = 'settings-filesystem-radios';
   const rWorkspace = document.createElement('input');
@@ -1136,10 +1153,15 @@ async function renderToolsSection(): Promise<void> {
   lFull.append(rFull, spanFull);
   fsRadios.append(lWorkspace, lFull);
   fsSection.appendChild(fsRadios);
-  mount.appendChild(fsSection);
+  fsGroup.appendChild(fsSection);
 
+  const browserGroup = appendSettingsGroup(
+    mount,
+    'Browser automation',
+    'Allowlisted origins for CDP browser tools when the browser server is enabled.',
+  );
   const browserMount = el('div', 'settings-tool-browser-mount');
-  mount.appendChild(browserMount);
+  browserGroup.appendChild(browserMount);
   await renderBrowserAllowlistSettings(browserMount);
 
   const applyFsRadios = (meta: ToolSecurityMeta = getToolSecurityMetaCached()): void => {
@@ -1201,12 +1223,18 @@ async function renderToolsSection(): Promise<void> {
   );
 
   /** One hairline-framed block for the permission list and Brave key (matches bench-instrument settings). */
+  const catalog = appendSettingsGroup(
+    mount,
+    'Tool catalog',
+    'Toggle and set permission per built-in tool. Plugin tools appear when installed.',
+  );
+
   const toolsPanel = el('div', 'settings-tools-panel');
   toolsPanel.appendChild(list);
   toolsPanel.appendChild(keyRow);
-  mount.appendChild(toolsPanel);
+  catalog.appendChild(toolsPanel);
 
-  mountToolApprovalRulesSection(mount);
+  mountToolApprovalRulesSection(catalog);
 
   fillToolsSection('settingsToolsList');
   const { appendPluginToolsToList } = await import('./settings-plugins');
@@ -1300,21 +1328,18 @@ function createMcpSettingsRow(server: McpServerSummary): HTMLElement {
   const head = document.createElement('div');
   head.className = 'settings-mcp-row-head';
 
-  const label = document.createElement('label');
+  const label = document.createElement('div');
   label.className = 'settings-mcp-toggle';
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.checked = server.enabled;
+  const { root: switchRoot, input: checkbox } = createSettingsSwitch({
+    checked: server.enabled,
+    ariaLabel: `${server.enabled ? 'Disable' : 'Enable'} ${server.label}`,
+  });
   checkbox.dataset.mcpToggle = server.id;
-  checkbox.setAttribute(
-    'aria-label',
-    `${server.enabled ? 'Disable' : 'Enable'} ${server.label}`,
-  );
 
   const title = document.createElement('span');
   title.className = 'settings-mcp-name';
   title.textContent = server.label;
-  label.append(checkbox, title);
+  label.append(switchRoot, title);
   head.append(label);
 
   if (server.builtin) {
