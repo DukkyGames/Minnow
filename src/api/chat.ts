@@ -229,6 +229,80 @@ export function buildClientStats(
   return stats;
 }
 
+/** Upper bound for believable decode throughput (guards bad provider stats). */
+const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
+
+/** Relative error allowed between tps×genTime and completion_tokens. */
+const USAGE_TIMING_TOLERANCE = 0.35;
+
+function serverTimingMatchesUsage(server: Stats, usage: Usage | undefined): boolean {
+  const completion = usage?.completion_tokens;
+  const tps = server.tokens_per_second;
+  const gen = server.generation_time;
+  if (completion == null || completion <= 0) return true;
+  if (tps == null || gen == null || !Number.isFinite(tps) || !Number.isFinite(gen) || gen <= 0) {
+    return true;
+  }
+  if (tps > MAX_PLAUSIBLE_TOKENS_PER_SECOND) return false;
+  const implied = tps * gen;
+  return Math.abs(implied - completion) / completion <= USAGE_TIMING_TOLERANCE;
+}
+
+function serverTimingMatchesClientWallClock(server: Stats, client: Stats): boolean {
+  const serverGen = server.generation_time;
+  const clientGen = client.generation_time;
+  if (
+    serverGen == null ||
+    clientGen == null ||
+    !Number.isFinite(serverGen) ||
+    !Number.isFinite(clientGen) ||
+    clientGen <= 0
+  ) {
+    return true;
+  }
+  if (clientGen < 1) return true;
+  return serverGen >= clientGen * 0.2;
+}
+
+/**
+ * Prefer provider timing when it agrees with usage and browser wall clock; otherwise
+ * keep client timings and recompute tok/s from completion_tokens.
+ */
+export function reconcileCompletionStats(
+  clientStats: Stats,
+  serverStats: Stats,
+  usage: Usage | undefined
+): Stats {
+  const out: Stats = { ...clientStats };
+  if (serverStats.stop_reason) out.stop_reason = serverStats.stop_reason;
+
+  const hasServerTiming =
+    serverStats.tokens_per_second != null ||
+    serverStats.generation_time != null ||
+    serverStats.time_to_first_token != null;
+  if (!hasServerTiming) return out;
+
+  const trustServer =
+    serverTimingMatchesUsage(serverStats, usage) &&
+    serverTimingMatchesClientWallClock(serverStats, clientStats);
+
+  if (trustServer) {
+    if (serverStats.time_to_first_token != null) {
+      out.time_to_first_token = serverStats.time_to_first_token;
+    }
+    if (serverStats.generation_time != null) out.generation_time = serverStats.generation_time;
+    if (serverStats.tokens_per_second != null) out.tokens_per_second = serverStats.tokens_per_second;
+    return out;
+  }
+
+  const completion = usage?.completion_tokens;
+  const gen = out.generation_time;
+  if (completion != null && gen != null && gen > 0) {
+    out.tokens_per_second = completion / gen;
+  }
+  return out;
+}
+
 /** Combine server stream meta with client timing into final stats + usage. */
 export function finalizeResponseMeta(
   streamMeta: StreamMetaAccumulator,
@@ -239,10 +313,7 @@ export function finalizeResponseMeta(
   const usage = streamMeta.usage || {};
   const serverStats = streamMeta.stats || {};
   const clientStats = buildClientStats(t0, tFirst, tEnd, usage, streamMeta.finish_reason);
-  const stats: Stats = {
-    ...clientStats,
-    ...serverStats,
-  };
+  const stats = reconcileCompletionStats(clientStats, serverStats, usage);
   return {
     stats,
     usage,
