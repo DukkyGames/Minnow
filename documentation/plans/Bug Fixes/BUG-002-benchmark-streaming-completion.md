@@ -48,7 +48,7 @@ isProject: false
 **Tracker:** [documentation/bug-hunt-session-2026-05-24.md](../../bug-hunt-session-2026-05-24.md) — BUG-002  
 **Severity:** Major  
 **Area:** Benchmark (`#/benchmark`) — Capability suite test **`cap-stream`** / **Streaming completion** (`src/benchmark/suites/capability.ts`)  
-**Status:** Open (plan only — no implementation in this document)
+**Status:** Fixed (MIN-96, 2026-05-26)
 
 ---
 

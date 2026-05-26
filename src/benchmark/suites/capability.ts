@@ -7,7 +7,7 @@ import { fetchModelsForProvider } from '../../providers/fetch-models';
 import { isVisionModel } from '../../providers/vision-model.ts';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
-import { hasNonEmptyCompletion } from '../completion-valid.ts';
+import { hasNonEmptyCompletion, streamCompletionTestDetails } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
 import { buildTestResult } from '../test-result.ts';
 import type { LmModelRecord } from '../../types.ts';
@@ -90,14 +90,15 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       ],
       maxTokens: 32,
     });
+    const streamPassed = hasNonEmptyCompletion(stream.text);
     tests.push(
       buildTestResult(
         result(
           'cap-stream',
           'Streaming completion',
-          hasNonEmptyCompletion(stream.text),
+          streamPassed,
           performance.now() - t,
-          stream.text.slice(0, 80),
+          streamCompletionTestDetails(stream, streamPassed),
         ),
         stream,
       ),
@@ -277,6 +278,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         messages: buildMultimodalProbeMessages(),
         maxTokens: 64,
       });
+      const multimodalPassed = hasNonEmptyCompletion(stream.text);
       const scored = scoreMultimodalProbe(stream.text);
       tests.push(
         buildTestResult(
@@ -285,7 +287,9 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
             'Multimodal request',
             scored.passed,
             performance.now() - t,
-            scored.details,
+            multimodalPassed
+              ? scored.details
+              : streamCompletionTestDetails(stream, false),
           ),
           stream,
         ),

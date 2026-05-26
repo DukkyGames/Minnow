@@ -20,7 +20,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | ID | Severity | Area | Title | Status |
 |----|----------|------|-------|--------|
 | BUG-001 | Major | Bugs tracker / navigation | All bugs view opens then immediately closes on first click | Open |
-| BUG-002 | Major | Benchmark (`#/benchmark`) | Streaming completion test fails for every model | Open |
+| BUG-002 | Major | Benchmark (`#/benchmark`) | Streaming completion test fails for every model | Fixed (MIN-96) |
 | BUG-003 | Major | Benchmark — speed suite | Speed tests show **0 chars** in details but still pass | Fixed (MIN-63) |
 | BUG-004 | Major | Benchmark — capability suite | Multimodal capability test not run for multimodal models | Open |
 | BUG-005 | Major | Benchmark (`#/benchmark`) | Stop control does not cancel an in-progress run | Fixed — [MIN-61](https://linear.app/minnowai/issue/MIN-61/bug-005-benchmark-stop-does-not-cancel) |
@@ -86,11 +86,13 @@ First click: open → immediate close. Second click: opens normally.
 |-------|-------|
 | **Severity** | Major |
 | **Area** | Benchmark screen (`#/benchmark`, `#btnBenchmark`) — capability suite test **`cap-stream`** / label **Streaming completion** (`src/benchmark/suites/capability.ts`) |
-| **Status** | Open |
+| **Status** | Fixed — [MIN-96](https://linear.app/minnowai/issue/MIN-96/bug-002-benchmark-streaming-completion-fails) |
 
 **Summary**
 
-The **Streaming completion** benchmark check fails for every model tested, not an isolated model/provider issue.
+The **Streaming completion** benchmark check failed for every model tested when providers streamed **reasoning-only** deltas (`delta.reasoning` / `delta.reasoning_content`) with empty `delta.content`, and when non-streaming fallback omitted reasoning fields.
+
+**Fix (2026-05-26):** `src/benchmark/stream-text.ts` + `accumulateBenchmarkStreamDelta` in `llm-driver.ts`; fallback uses `completionTextFromFallback`; `streamCompletionTestDetails` for `cap-stream` / empty multimodal. Tests: `test/benchmark/stream-text.test.mts`, `test/benchmark/llm-driver-stream.test.mts`.
 
 **Steps to reproduce**
 
