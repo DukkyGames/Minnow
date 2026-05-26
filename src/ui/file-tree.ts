@@ -474,8 +474,33 @@ export async function initFileTreeIfNeeded(): Promise<void> {
   }
 }
 
+/** F2 rename — tree row focus or open file while CodeMirror is focused (BUG-018). */
+function handleRenameShortcut(e: KeyboardEvent): void {
+  if (e.key !== 'F2' || !isFileTreeServerAvailable()) return;
+
+  if (focusedTreePath && focusedTreeKind) {
+    e.preventDefault();
+    fileTreeOps.renamePath(focusedTreePath, focusedTreeKind);
+    return;
+  }
+
+  if (!isFileViewerEditorFocused()) return;
+
+  e.preventDefault();
+  void import('./file-viewer').then((viewer) => {
+    const open = viewer.getOpenViewerPath();
+    if (open) fileTreeOps.renamePath(open, 'file');
+  });
+}
+
 function handleTreeKeydown(e: KeyboardEvent): void {
   if (!isFileTreeServerAvailable()) return;
+
+  if (e.key === 'F2') {
+    handleRenameShortcut(e);
+    return;
+  }
+
   if (isFileViewerEditorFocused()) return;
   if (!focusedTreePath || !focusedTreeKind) return;
 
@@ -500,12 +525,6 @@ function handleTreeKeydown(e: KeyboardEvent): void {
     return;
   }
 
-  if (e.key === 'F2') {
-    e.preventDefault();
-    void fileTreeOps.renamePath(focusedTreePath, focusedTreeKind);
-    return;
-  }
-
   if (e.key === 'Delete') {
     e.preventDefault();
     void fileTreeOps.deletePath(focusedTreePath, focusedTreeKind);
@@ -521,6 +540,7 @@ export function initFileTreeCrud(): void {
   if (!host) return;
 
   host.addEventListener('keydown', handleTreeKeydown);
+  document.addEventListener('keydown', handleRenameShortcut);
 
   host.addEventListener('contextmenu', (e) => {
     const target = e.target as HTMLElement;

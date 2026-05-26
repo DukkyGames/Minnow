@@ -382,7 +382,19 @@ async function toolMoveFile(args) {
   const source = resolveSafePath(args?.source);
   const destination = resolveSafePath(args?.destination, { write: true });
   await fs.mkdir(path.dirname(destination), { recursive: true });
-  await fs.rename(source, destination);
+  try {
+    await fs.rename(source, destination);
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+    if (code === 'EBUSY' || code === 'EPERM') {
+      const hint =
+        code === 'EBUSY'
+          ? 'File is in use — close other apps using it, then try again.'
+          : 'Permission denied — check file permissions or close apps using this file.';
+      return `Error: ${hint}`;
+    }
+    throw err;
+  }
   return `Moved ${toRelativePath(source)} -> ${toRelativePath(destination)}`;
 }
 
