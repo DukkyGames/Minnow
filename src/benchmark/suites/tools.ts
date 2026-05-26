@@ -40,7 +40,6 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         signal: ctx.signal,
         messages: [{ role: 'user', content: fixture.prompt }],
         tools: [tool.definition],
-        maxTokens: 512,
         maxToolRounds: 2,
       });
 

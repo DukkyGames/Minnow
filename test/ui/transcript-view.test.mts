@@ -42,6 +42,25 @@ describe('renderTranscriptView', () => {
     assert.equal(assistantEl?.textContent, assistant);
   });
 
+  test('shows assistant reasoning when content is empty', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [
+      { role: 'user', content: 'Count to three.' },
+      {
+        role: 'assistant',
+        content: null,
+        reasoning_content: 'One, two, three.',
+      },
+    ]);
+
+    assert.equal(
+      body.querySelector('.transcript-view__assistant')?.textContent,
+      'One, two, three.',
+    );
+    assert.equal(body.textContent?.includes('(empty assistant message)'), false);
+  });
+
   test('shows full multimodal user prompt text, not a single token', () => {
     setupDom();
     const body = document.getElementById('transcriptBody')!;

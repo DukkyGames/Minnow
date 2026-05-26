@@ -10,6 +10,7 @@ import {
   accumulateBenchmarkStreamDelta,
   completionTextFromFallback,
   completionTextFromMessage,
+  resolveBenchmarkCompletionText,
 } from '../../src/benchmark/stream-text.ts';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 
@@ -79,6 +80,29 @@ describe('completionTextFromFallback', () => {
       ],
     };
     assert.equal(completionTextFromFallback(fallback), 'ok');
+  });
+
+  test('uses reasoning when content is empty', () => {
+    const fallback: ChatCompletionChunk = {
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', reasoning_content: 'thought then answer' },
+        },
+      ],
+    };
+    assert.equal(completionTextFromFallback(fallback), 'thought then answer');
+  });
+});
+
+describe('resolveBenchmarkCompletionText', () => {
+  test('prefers content over reasoning', () => {
+    assert.equal(resolveBenchmarkCompletionText('answer', 'thought'), 'answer');
+  });
+
+  test('falls back to reasoning when content empty', () => {
+    assert.equal(resolveBenchmarkCompletionText('', 'only reasoning'), 'only reasoning');
   });
 });
 

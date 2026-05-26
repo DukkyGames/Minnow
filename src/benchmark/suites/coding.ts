@@ -110,7 +110,6 @@ async function runJudge(
         content: `Task: ${task}\nAnswer: ${answer}\nGrade whether the answer satisfies the task.`,
       },
     ],
-    maxTokens: 128,
   });
   const verdict = parseJudgeJson(out.text);
   return { ...verdict, raw: out.text };
@@ -128,7 +127,6 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         modelId: ctx.modelId,
         signal: ctx.signal,
         messages: [{ role: 'user', content: c.prompt }],
-        maxTokens: c.judge ? 400 : 200,
       });
 
       let passed = c.score(out.text);

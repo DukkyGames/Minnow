@@ -5,22 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import {
-  applyBenchmarkSystemPrompt,
-  MIN_BENCHMARK_MAX_TOKENS,
-  resolveBenchmarkMaxTokens,
-} from '../../src/benchmark/completion-messages.ts';
-
-describe('resolveBenchmarkMaxTokens', () => {
-  test('floors small requested limits', () => {
-    assert.equal(resolveBenchmarkMaxTokens(32), MIN_BENCHMARK_MAX_TOKENS);
-    assert.equal(resolveBenchmarkMaxTokens(128), MIN_BENCHMARK_MAX_TOKENS);
-  });
-
-  test('preserves large requested limits', () => {
-    assert.equal(resolveBenchmarkMaxTokens(600), 600);
-  });
-});
+import { applyBenchmarkSystemPrompt } from '../../src/benchmark/completion-messages.ts';
 
 describe('applyBenchmarkSystemPrompt', () => {
   test('prepends system message when none exists', () => {

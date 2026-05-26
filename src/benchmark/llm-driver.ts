@@ -11,13 +11,12 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { applyBenchmarkSystemPrompt } from './completion-messages.ts';
 import {
-  applyBenchmarkSystemPrompt,
-  resolveBenchmarkMaxTokens,
-} from './completion-messages.ts';
-import {
+  BenchmarkStreamReasoningAccumulator,
   BenchmarkStreamTextAccumulator,
   completionTextFromFallback,
+  resolveBenchmarkCompletionText,
 } from './stream-text.ts';
 import {
   createSseEventBuffer,
@@ -35,7 +34,6 @@ import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_MAX_TOKENS = 2048;
 
 export interface OneShotInput {
   providerId: string;
@@ -109,7 +107,7 @@ async function streamTurn(
     model?: string;
     messages: ApiMessage[];
     temperature: number;
-    max_tokens: number;
+    max_tokens?: number;
     stream: true;
     tools?: OpenAIFunctionDefinition[];
     tool_choice?: 'auto';
@@ -141,6 +139,7 @@ async function streamTurn(
   }
 
   const textAcc = new BenchmarkStreamTextAccumulator();
+  const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
 
@@ -158,6 +157,7 @@ async function streamTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    reasoningAcc.ingestChunk(chunk);
     const before = textAcc.getText().length;
     textAcc.ingestChunk(chunk);
     if (textAcc.getText().length > before && tFirst == null) {
@@ -184,7 +184,7 @@ async function streamTurn(
     (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
   return {
-    fullText: textAcc.getText(),
+    fullText: resolveBenchmarkCompletionText(textAcc.getText(), reasoningAcc.getText()),
     toolCalls,
     finishReason,
     streamMeta,
@@ -196,76 +196,90 @@ const REASONING_ONLY_RETRY_SYSTEM =
   'Your previous attempt used only the reasoning channel with no main content. ' +
   'Reply again with the final answer in main content only.';
 
+type OneShotStreamBody = {
+  model?: string;
+  messages: ApiMessage[];
+  temperature: number;
+  max_tokens?: number;
+  stream: true;
+  tools?: OpenAIFunctionDefinition[];
+  tool_choice?: 'auto';
+};
+
+async function tryBenchmarkNonStreamingFallback(
+  providerId: string,
+  body: OneShotStreamBody,
+  signal: AbortSignal,
+): Promise<{ text: string; finishReason?: string; toolCalls?: ToolCall[] }> {
+  const { stream: _s, ...fallbackBody } = body;
+  const fallback = await tryNonStreamingFallback(
+    fallbackBody as Parameters<typeof tryNonStreamingFallback>[0],
+    signal,
+    providerId,
+  );
+  const fbMessage = fallback.choices?.[0]?.message as
+    | { tool_calls?: ToolCall[] }
+    | undefined;
+  return {
+    text: completionTextFromFallback(fallback),
+    finishReason: fallback.choices?.[0]?.finish_reason ?? undefined,
+    toolCalls: fbMessage?.tool_calls,
+  };
+}
+
 async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
   const messages = applyBenchmarkSystemPrompt([...input.messages]);
-  const maxTokens = resolveBenchmarkMaxTokens(input.maxTokens, DEFAULT_MAX_TOKENS);
   const bodyExtras = input.tools?.length
     ? { tools: input.tools, tool_choice: 'auto' as const }
     : {};
 
-  const runStream = () =>
-    streamTurn(
-      input.providerId,
-      {
-        model: input.modelId || undefined,
-        messages,
-        temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: maxTokens,
-        stream: true,
-        ...bodyExtras,
-      },
-      input.signal,
-    );
+  const streamBodyFor = (msgs: ApiMessage[]): OneShotStreamBody => ({
+    model: input.modelId || undefined,
+    messages: msgs,
+    temperature: input.temperature ?? DEFAULT_TEMPERATURE,
+    stream: true,
+    ...bodyExtras,
+    ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
+  });
 
-  let turn = await runStream();
+  let turn = await streamTurn(input.providerId, streamBodyFor(messages), input.signal);
   let text = turn.fullText.trim();
   let finishReason = turn.finishReason;
   let toolCalls = turn.toolCalls;
+  let fallbackMessages = messages;
 
   if (!text) {
-    const { stream: _s, ...fallbackBody } = {
-      model: input.modelId || undefined,
-      messages,
-      temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: maxTokens,
-      stream: true as const,
-      ...bodyExtras,
-    };
-    const fallback = await tryNonStreamingFallback(
-      fallbackBody,
-      input.signal,
+    const fb = await tryBenchmarkNonStreamingFallback(
       input.providerId,
+      streamBodyFor(messages),
+      input.signal,
     );
-    text = completionTextFromFallback(fallback);
-    finishReason =
-      finishReason || (fallback.choices?.[0]?.finish_reason ?? undefined);
-    const fbMessage = fallback.choices?.[0]?.message as
-      | { tool_calls?: ToolCall[] }
-      | undefined;
-    if (fbMessage?.tool_calls?.length) toolCalls = fbMessage.tool_calls;
+    text = fb.text.trim();
+    finishReason = finishReason || fb.finishReason;
+    if (fb.toolCalls?.length) toolCalls = fb.toolCalls;
   }
 
   const usedReasoningBudget =
     !text && (turn.timing.usage?.completion_tokens ?? 0) > 0;
   if (usedReasoningBudget) {
-    const retryMessages = applyBenchmarkSystemPrompt([...input.messages], {
+    fallbackMessages = applyBenchmarkSystemPrompt([...input.messages], {
       extraSystem: REASONING_ONLY_RETRY_SYSTEM,
     });
-    turn = await streamTurn(
-      input.providerId,
-      {
-        model: input.modelId || undefined,
-        messages: retryMessages,
-        temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: Math.min(maxTokens * 2, 4096),
-        stream: true,
-        ...bodyExtras,
-      },
-      input.signal,
-    );
+    turn = await streamTurn(input.providerId, streamBodyFor(fallbackMessages), input.signal);
     text = turn.fullText.trim();
     finishReason = turn.finishReason ?? finishReason;
     toolCalls = turn.toolCalls.length > 0 ? turn.toolCalls : toolCalls;
+  }
+
+  if (!text) {
+    const fb = await tryBenchmarkNonStreamingFallback(
+      input.providerId,
+      streamBodyFor(fallbackMessages),
+      input.signal,
+    );
+    text = fb.text.trim();
+    finishReason = finishReason || fb.finishReason;
+    if (fb.toolCalls?.length) toolCalls = fb.toolCalls;
   }
 
   return {
@@ -298,8 +312,9 @@ export function appendAssistantToMessages(
 
 async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
   const messages: ApiMessage[] = applyBenchmarkSystemPrompt([...input.messages]);
-  const maxTokens = resolveBenchmarkMaxTokens(input.maxTokens, DEFAULT_MAX_TOKENS);
   const maxRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+  const tokenField =
+    input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {};
   const runExecute =
     input.executeToolFn ??
     ((name, args, ctx) => executeTool(name, args, { ...ctx, modeId: input.modeId }));
@@ -323,8 +338,8 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: maxTokens,
         stream: true,
+        ...tokenField,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       },
       input.signal,
@@ -362,12 +377,12 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: maxTokens,
         stream: true as const,
+        ...tokenField,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       };
       const fallback = await tryNonStreamingFallback(
-        fallbackBody,
+        fallbackBody as Parameters<typeof tryNonStreamingFallback>[0],
         input.signal,
         input.providerId,
       );

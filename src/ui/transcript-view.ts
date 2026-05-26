@@ -63,10 +63,22 @@ function appendUserTranscriptRow(body: HTMLElement, content: ApiMessageContent):
   body.appendChild(wrap);
 }
 
+/** Assistant display text from `content` or provider reasoning fields. */
+function assistantTranscriptProse(msg: Record<string, unknown>): string {
+  const fromContent = apiMessageContentToText(msg.content as ApiMessageContent).trim();
+  if (fromContent) return fromContent;
+  if (typeof msg.reasoning === 'string' && msg.reasoning.trim()) {
+    return msg.reasoning.trim();
+  }
+  if (typeof msg.reasoning_content === 'string' && msg.reasoning_content.trim()) {
+    return msg.reasoning_content.trim();
+  }
+  return '';
+}
+
 /** Render assistant prose (string or multimodal-shaped content). */
-function appendAssistantTranscriptRow(body: HTMLElement, content: unknown): void {
-  const prose =
-    content != null ? apiMessageContentToText(content as ApiMessageContent).trim() : '';
+function appendAssistantTranscriptRow(body: HTMLElement, msg: Record<string, unknown>): void {
+  const prose = assistantTranscriptProse(msg);
   if (!prose) return;
   const row = document.createElement('div');
   row.className = 'transcript-view__assistant';
@@ -118,7 +130,7 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
     }
     if (role === 'assistant') {
       const toolCalls = msg.tool_calls;
-      appendAssistantTranscriptRow(body, msg.content);
+      appendAssistantTranscriptRow(body, msg);
       if (Array.isArray(toolCalls) && toolCalls.length > 0) {
         for (const tc of toolCalls as Array<{
           id: string;
@@ -133,10 +145,7 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
           }
         }
       }
-      const prose =
-        msg.content != null
-          ? apiMessageContentToText(msg.content as ApiMessageContent).trim()
-          : '';
+      const prose = assistantTranscriptProse(msg);
       if (!prose && (!Array.isArray(toolCalls) || toolCalls.length === 0)) {
         const row = document.createElement('div');
         row.className = 'transcript-view__assistant';

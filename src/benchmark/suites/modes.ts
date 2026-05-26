@@ -73,7 +73,6 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
             { role: 'user', content: neg.prompt },
           ],
           tools,
-          maxTokens: 256,
           maxToolRounds: 1,
         });
         const calledForbidden = toolNameMatch(out.toolCalls, neg.forbiddenTool);
@@ -140,7 +139,6 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
             { role: 'user', content: pos.prompt },
           ],
           tools,
-          maxTokens: 256,
           maxToolRounds: 2,
         });
         const ok = toolNameMatch(out.toolCalls, pos.expectedTool);

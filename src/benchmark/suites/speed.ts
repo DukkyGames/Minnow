@@ -60,7 +60,6 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
         modelId: ctx.modelId,
         signal: ctx.signal,
         messages: [{ role: 'user', content: SHORT_PROMPT }],
-        maxTokens: 200,
       });
       const durationMs = performance.now() - t0;
       const scored = scoreSpeedCompletion(out.text, out.timing);
@@ -118,7 +117,6 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
             'Explain how transformer attention works in about 400 words. Use clear paragraphs.',
         },
       ],
-      maxTokens: 600,
     });
     const durationMs = performance.now() - tLong;
     const scored = scoreSpeedCompletion(out.text, out.timing);

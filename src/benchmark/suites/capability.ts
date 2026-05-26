@@ -85,7 +85,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       modelId: ctx.modelId,
       signal: ctx.signal,
       messages: [{ role: 'user', content: 'Say hello in one short word.' }],
-      maxTokens: 128,
     });
     const streamPassed = hasNonEmptyCompletion(stream.text);
     reportTest(ctx, tests,
@@ -126,7 +125,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       modelId: ctx.modelId,
       signal: ctx.signal,
       messages: [{ role: 'user', content: 'Count to three.' }],
-      maxTokens: 64,
     });
     const hasUsage =
       stream.timing.usage.completion_tokens != null ||
@@ -191,7 +189,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
           },
         },
       ],
-      maxTokens: 128,
     });
     reportTest(ctx, tests,
       buildTestResult(
@@ -273,7 +270,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         modelId: ctx.modelId,
         signal: ctx.signal,
         messages: buildMultimodalProbeMessages(),
-        maxTokens: 64,
       });
       const multimodalPassed = hasNonEmptyCompletion(stream.text);
       const scored = scoreMultimodalProbe(stream.text);

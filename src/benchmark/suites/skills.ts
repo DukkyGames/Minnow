@@ -52,7 +52,6 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
           ...(system ? [{ role: 'system' as const, content: system }] : []),
           { role: 'user', content: trigger.prompt },
         ],
-        maxTokens: 256,
       });
       const passed = regexMatch(out.text, trigger.pattern);
       reportTest(ctx, tests,
