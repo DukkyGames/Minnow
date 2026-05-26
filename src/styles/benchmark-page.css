@@ -359,17 +359,6 @@
   color: var(--mn-fg);
 }
 
-.benchmark-history-compare {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding-bottom: 7px;
-  font-size: 13px;
-  color: var(--mn-fg);
-  cursor: pointer;
-}
-
 .benchmark-back-to-current {
   margin-bottom: 7px;
   font: inherit;
@@ -598,8 +587,7 @@
   }
 }
 
-.benchmark-test-card.is-fail .benchmark-test-card-status,
-.benchmark-test-card.is-regression .benchmark-test-card-status {
+.benchmark-test-card.is-fail .benchmark-test-card-status {
   border-color: color-mix(in srgb, var(--mn-danger) 40%, var(--mn-border));
   background: color-mix(in srgb, var(--mn-danger) 10%, var(--mn-bg));
   color: var(--mn-danger);
@@ -629,10 +617,6 @@
 
 .benchmark-test-card.is-skip .benchmark-test-card-status {
   color: var(--mn-fg-muted);
-}
-
-.benchmark-test-card.is-regression {
-  background: color-mix(in srgb, var(--mn-danger) 5%, var(--mn-bg));
 }
 
 .benchmark-test-card[role='button'] {

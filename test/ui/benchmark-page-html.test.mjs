@@ -20,7 +20,6 @@ const BENCHMARK_IDS = [
   'benchmarkSummary',
   'benchmarkHistorySelect',
   'btnBenchmarkBackToCurrent',
-  'benchmarkCompareToggle',
   'btnBenchmarkClearHistory',
   'benchmarkSuites',
 ];
@@ -76,6 +75,11 @@ describe('benchmark page HTML', () => {
 
   test('separate Stop button removed', () => {
     assert.doesNotMatch(html, /id="btnBenchmarkStop"/);
+  });
+
+  test('compare-to-selected-run control removed', () => {
+    assert.doesNotMatch(html, /id="benchmarkCompareToggle"/);
+    assert.doesNotMatch(html, /Compare to selected run/);
   });
 
   test('default suite toggles match Quick preset', () => {

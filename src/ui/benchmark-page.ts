@@ -61,7 +61,6 @@ let abortController: AbortController | null = null;
 /** Bumped on Stop or new Run so in-flight `startRun` finally blocks do not fight UI reset. */
 let benchmarkRunGeneration = 0;
 let lastRun: BenchmarkRun | null = null;
-let compareRun: BenchmarkRun | null = null;
 let historySummaries: BenchmarkRunSummary[] = [];
 
 /** Tracks in-flight UI while a run is active. */
@@ -117,9 +116,8 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function statusText(result: TestResult, regression: boolean): string {
+function statusText(result: TestResult): string {
   if (result.skipped) return result.skipReason ?? 'Skipped';
-  if (regression) return 'Regression';
   if (result.passed) return 'Pass';
   return 'Fail';
 }
@@ -140,16 +138,15 @@ function iconSvg(kind: 'pass' | 'fail' | 'skip' | 'running' | 'pending'): string
   return `<span class="benchmark-test-icon benchmark-test-icon--dot" aria-hidden="true"></span>`;
 }
 
-function cardState(result: TestResult, regression: boolean): string {
+function cardState(result: TestResult): string {
   if (result.skipped) return 'is-skip';
-  if (regression) return 'is-regression';
   if (result.passed) return 'is-pass';
   return 'is-fail';
 }
 
-function cardIconKind(result: TestResult, regression: boolean): 'pass' | 'fail' | 'skip' {
+function cardIconKind(result: TestResult): 'pass' | 'fail' | 'skip' {
   if (result.skipped) return 'skip';
-  if (regression || !result.passed) return 'fail';
+  if (!result.passed) return 'fail';
   return 'pass';
 }
 
@@ -200,12 +197,12 @@ function renderRunningTestCard(testId: string, suite: SuiteId, label: string): s
   </article>`;
 }
 
-function renderTestCard(result: TestResult, regression: boolean, animate = false): string {
-  const state = cardState(result, regression);
-  const icon = cardIconKind(result, regression);
+function renderTestCard(result: TestResult, animate = false): string {
+  const state = cardState(result);
+  const icon = cardIconKind(result);
   const judged = result.judged ? ' · judged' : '';
   const details = result.details?.trim();
-  const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result, regression)}${judged}`;
+  const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result)}${judged}`;
 
   const titleId = testCardDomId(result.testId, 'title');
   const descId = testCardDomId(result.testId, 'desc');
@@ -214,7 +211,7 @@ function renderTestCard(result: TestResult, regression: boolean, animate = false
     ? `<p class="benchmark-test-card-desc" id="${escapeHtml(descId)}">${escapeHtml(formatTestCardDescription(catalogDesc))}</p>`
     : '';
 
-  const ariaLabel = `View transcript: ${result.label}, ${statusText(result, regression)}`;
+  const ariaLabel = `View transcript: ${result.label}, ${statusText(result)}`;
   const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
   const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
 
@@ -408,17 +405,11 @@ function applyActiveSessionToLiveState(session: ActiveBenchmarkSession): void {
   }
 }
 
-function regressionForTest(test: TestResult, compareMap: Map<string, TestResult>): boolean {
-  const prev = compareMap.get(test.testId);
-  return Boolean(prev?.passed && !test.skipped && !test.passed);
-}
-
 function openTranscriptForCard(card: HTMLElement): void {
   const test = resolveTestFromCard(card);
   const meta = transcriptRunMeta();
   if (!test || !meta) return;
-  const compareMap = compareMapFromRun(compareRun);
-  openBenchmarkTranscriptDrawer(test, meta, { regression: regressionForTest(test, compareMap) });
+  openBenchmarkTranscriptDrawer(test, meta);
 }
 
 function onBenchmarkTestCardClick(ev: MouseEvent): void {
@@ -433,17 +424,6 @@ function onBenchmarkTestCardKeydown(ev: KeyboardEvent): void {
   if (!card) return;
   ev.preventDefault();
   openTranscriptForCard(card);
-}
-
-function compareMapFromRun(compare: BenchmarkRun | null): Map<string, TestResult> {
-  const map = new Map<string, TestResult>();
-  if (!compare) return map;
-  for (const suite of compare.suites) {
-    for (const t of suite.tests) {
-      map.set(t.testId, t);
-    }
-  }
-  return map;
 }
 
 function setProgressVisible(visible: boolean): void {
@@ -564,7 +544,7 @@ function upsertRunningTestCard(suiteId: SuiteId, testId: string, label: string):
   }
 }
 
-function upsertLiveTestCard(result: TestResult, compareMap: Map<string, TestResult>): void {
+function upsertLiveTestCard(result: TestResult): void {
   if (liveCurrentTestId === result.testId) {
     liveCurrentTestId = null;
     liveCurrentTestMeta = null;
@@ -572,10 +552,8 @@ function upsertLiveTestCard(result: TestResult, compareMap: Map<string, TestResu
   const grid = ensureSuiteSection(result.suite, true);
   if (!grid) return;
 
-  const prev = compareMap.get(result.testId);
-  const regression = Boolean(prev?.passed && !result.skipped && !result.passed);
   const existing = grid.querySelector(`[data-test-id="${CSS.escape(result.testId)}"]`);
-  const html = renderTestCard(result, regression, true);
+  const html = renderTestCard(result, true);
 
   if (existing) {
     existing.outerHTML = html;
@@ -678,10 +656,7 @@ function liveProgressPercent(): number {
   return Math.min(98, suiteBase + within);
 }
 
-function onBenchmarkProgress(
-  event: BenchmarkProgressEvent,
-  compareMap: Map<string, TestResult>,
-): void {
+function onBenchmarkProgress(event: BenchmarkProgressEvent): void {
   if (event.type === 'test-done') {
     liveTestResults.set(event.result.testId, event.result);
   }
@@ -709,7 +684,7 @@ function onBenchmarkProgress(
   if (event.type === 'test-done') {
     liveTestsDone += 1;
     liveTestsInSuite += 1;
-    upsertLiveTestCard(event.result, compareMap);
+    upsertLiveTestCard(event.result);
     const suiteTests = [...liveTestResults.values()].filter(
       (t) => t.suite === event.result.suite,
     );
@@ -782,22 +757,14 @@ function renderSummary(run: BenchmarkRun | null): void {
   `;
 }
 
-function renderSuites(run: BenchmarkRun, compare: BenchmarkRun | null): void {
+function renderSuites(run: BenchmarkRun): void {
   const mount = document.getElementById('benchmarkSuites');
   if (!mount) return;
-
-  const compareMap = compareMapFromRun(compare);
 
   mount.classList.remove('is-live');
   mount.innerHTML = run.suites
     .map((suite) => {
-      const cards = suite.tests
-        .map((t) => {
-          const prev = compareMap.get(t.testId);
-          const regression = Boolean(prev?.passed && !t.skipped && !t.passed);
-          return renderTestCard(t, regression, false);
-        })
-        .join('');
+      const cards = suite.tests.map((t) => renderTestCard(t, false)).join('');
       const total = suite.passed + suite.failed + suite.skipped;
       return `<section class="benchmark-suite-block" data-suite="${suite.id}">
         <header class="benchmark-suite-block-header">
@@ -881,7 +848,7 @@ function updateBackToCurrentControl(): void {
 }
 
 /** Rebuild the live suite panel from in-memory progress (after browsing saved history). */
-function renderLiveRunFromState(compareMap: Map<string, TestResult>): void {
+function renderLiveRunFromState(): void {
   const mount = document.getElementById('benchmarkSuites');
   if (!mount) return;
 
@@ -903,7 +870,7 @@ function renderLiveRunFromState(compareMap: Map<string, TestResult>): void {
       if (result.testId === liveCurrentTestId) continue;
       grid.insertAdjacentHTML(
         'beforeend',
-        renderTestCard(result, regressionForTest(result, compareMap), false),
+        renderTestCard(result, false),
       );
     }
 
@@ -942,14 +909,14 @@ function restoreCurrentRunView(): void {
   updateBackToCurrentControl();
 
   if (isLiveRunInProgress()) {
-    renderLiveRunFromState(compareMapFromRun(compareRun));
+    renderLiveRunFromState();
     setStatus('ok', 'Showing current benchmark run.');
     return;
   }
 
   if (lastRun) {
     renderSummary(lastRun);
-    renderSuites(lastRun, compareRun);
+    renderSuites(lastRun);
     setStatus('ok', `Showing latest run · ${formatScore(lastRun.totalScore)}`);
   }
 }
@@ -984,13 +951,12 @@ async function refreshHistorySelect(): Promise<void> {
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
   if (!select) return;
   const previous = select.value;
-  const compareToggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
   historySummaries = await listRuns();
   const currentOption = isLiveRunInProgress()
     ? `<option value="${HISTORY_CURRENT_VALUE}">Current run (in progress)</option>`
     : '';
   select.innerHTML =
-    '<option value="">View or compare a saved run…</option>' +
+    '<option value="">View a saved run…</option>' +
     currentOption +
     historySummaries
       .filter((h) => h.id !== lastRun?.id)
@@ -1000,11 +966,8 @@ async function refreshHistorySelect(): Promise<void> {
       )
       .join('');
 
-  const restoreId =
-    (previous && historySummaries.some((h) => h.id === previous) ? previous : null) ??
-    (compareToggle?.checked && compareRun?.id ? compareRun.id : null);
-  if (restoreId) {
-    select.value = restoreId;
+  if (previous && historySummaries.some((h) => h.id === previous)) {
+    select.value = previous;
   }
   syncClearHistoryButton();
 }
@@ -1024,12 +987,8 @@ async function onClearHistoryClick(): Promise<void> {
 
   await clearAllRuns();
   lastRun = null;
-  compareRun = null;
   browsingHistory = false;
   liveRunDrawerMeta = null;
-
-  const compareToggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
-  if (compareToggle) compareToggle.checked = false;
 
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
   if (select) select.value = '';
@@ -1046,10 +1005,9 @@ async function onClearHistoryClick(): Promise<void> {
   setStatus('ok', 'Benchmark history cleared.');
 }
 
-/** Load a saved run for viewing, or as the compare baseline when Compare is checked. */
+/** Load a saved run into the main panel for viewing. */
 async function onHistorySelectChange(): Promise<void> {
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
-  const toggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
   if (!select) return;
 
   const id = select.value;
@@ -1060,14 +1018,13 @@ async function onHistorySelectChange(): Promise<void> {
   }
 
   if (!id) {
-    compareRun = null;
     if (browsingHistory || isLiveRunInProgress()) {
       restoreCurrentRunView();
       return;
     }
     if (lastRun) {
       renderSummary(lastRun);
-      renderSuites(lastRun, null);
+      renderSuites(lastRun);
     }
     return;
   }
@@ -1075,42 +1032,22 @@ async function onHistorySelectChange(): Promise<void> {
   const loaded = await loadRun(id);
   if (!loaded) {
     setStatus('err', 'Could not load that benchmark run.');
-    compareRun = null;
     if (browsingHistory || isLiveRunInProgress()) {
       restoreCurrentRunView();
     } else if (lastRun) {
       renderSummary(lastRun);
-      renderSuites(lastRun, null);
+      renderSuites(lastRun);
     }
-    return;
-  }
-
-  if (toggle?.checked) {
-    compareRun = loaded;
-    if (isLiveRunInProgress()) {
-      browsingHistory = false;
-      renderLiveRunFromState(compareMapFromRun(compareRun));
-      updateBackToCurrentControl();
-      setStatus('ok', 'Comparing current run against saved baseline.');
-      return;
-    }
-    if (!lastRun) {
-      setStatus('ok', 'Run a benchmark to compare against this saved run.');
-      return;
-    }
-    renderSummary(lastRun);
-    renderSuites(lastRun, compareRun);
     return;
   }
 
   browsingHistory = true;
-  compareRun = null;
   if (!isLiveRunInProgress()) {
     lastRun = loaded;
     syncLiveDrawerMetaFromRun(loaded);
   }
   renderSummary(loaded);
-  renderSuites(loaded, null);
+  renderSuites(loaded);
   updateBackToCurrentControl();
   setStatus('ok', `Loaded saved run · ${formatScore(loaded.totalScore)}`);
 }
@@ -1130,7 +1067,6 @@ async function executeBenchmarkRun(options: {
   setRunning(true);
   setStatus('ok', resume ? 'Resuming benchmark…' : runningStatusLabel(mode));
 
-  const compareMap = compareMapFromRun(compareRun);
   const modelId = getActiveModelIdFromDom() ?? resume?.modelId ?? 'unknown';
   const startedAt = resume?.startedAt ?? new Date().toISOString();
   liveRunId = resume?.runId ?? startedAt.replace(/[:.]/g, '-');
@@ -1143,7 +1079,7 @@ async function executeBenchmarkRun(options: {
 
   if (resume) {
     applyActiveSessionToLiveState(resume);
-    renderLiveRunFromState(compareMap);
+    renderLiveRunFromState();
     setProgressVisible(true);
     updateBackToCurrentControl();
   } else {
@@ -1176,7 +1112,7 @@ async function executeBenchmarkRun(options: {
       signal: runSignal,
       onProgress: (event) => {
         if (generation !== benchmarkRunGeneration) return;
-        onBenchmarkProgress(event, compareMap);
+        onBenchmarkProgress(event);
         if (event.type === 'run-cancelled') {
           setStatus('ok', 'Benchmark cancelled.');
           return;
@@ -1186,7 +1122,7 @@ async function executeBenchmarkRun(options: {
           liveRunId = event.run.id;
           syncLiveDrawerMetaFromRun(event.run);
           renderSummary(lastRun);
-          renderSuites(lastRun, compareRun);
+          renderSuites(lastRun);
           void refreshHistorySelect();
         }
       },
@@ -1195,7 +1131,7 @@ async function executeBenchmarkRun(options: {
     lastRun = run;
     liveRunId = run.id;
     renderSummary(run);
-    renderSuites(run, compareRun);
+    renderSuites(run);
     await refreshHistorySelect();
     if (generation !== benchmarkRunGeneration) return;
     setStatus('ok', `Benchmark done · ${formatScore(run.totalScore)}`);
@@ -1405,7 +1341,7 @@ function syncBenchmarkPageOnOpen(): void {
     return;
   }
   renderSummary(lastRun);
-  if (lastRun) renderSuites(lastRun, compareRun);
+  if (lastRun) renderSuites(lastRun);
 }
 
 export function openBenchmark(): void {
@@ -1482,9 +1418,6 @@ export function initBenchmarkPage(): void {
   }
 
   document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => {
-    void onHistorySelectChange();
-  });
-  document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => {
     void onHistorySelectChange();
   });
   document.getElementById('btnBenchmarkBackToCurrent')?.addEventListener('click', () => {
