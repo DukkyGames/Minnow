@@ -105,6 +105,14 @@ export function startInlineRename(path: string, kind: FileTreeEntryKind): void {
     kind === 'dir' ? 'New folder name' : 'New file name',
   );
 
+  // Row click opens files / toggles folders; keep pointer events on the input only.
+  const stopRowPointer = (e: Event) => {
+    e.stopPropagation();
+  };
+  inp.addEventListener('mousedown', stopRowPointer);
+  inp.addEventListener('click', stopRowPointer);
+  inp.addEventListener('dblclick', stopRowPointer);
+
   label.replaceWith(inp);
   activeRenamePath = norm;
   inp.focus();
@@ -139,12 +147,16 @@ export function startInlineRename(path: string, kind: FileTreeEntryKind): void {
       e.preventDefault();
       e.stopPropagation();
       finish(false);
+      return;
     }
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       finish(true);
+      return;
     }
+    // Row Space/Enter activate tree items; keep typing (e.g. "my file.ts") in the input.
+    e.stopPropagation();
   });
 
   inp.addEventListener('blur', () => {
