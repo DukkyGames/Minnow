@@ -4,6 +4,7 @@
 
 import {
   buildClientStats,
+  reconcileCompletionStats,
   extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
@@ -80,7 +81,7 @@ function timingFromStream(
   const usage = streamMeta.usage ?? {};
   const serverStats = streamMeta.stats ?? {};
   const clientStats = buildClientStats(t0, tFirst, tEnd, usage, streamMeta.finish_reason);
-  const stats = { ...clientStats, ...serverStats };
+  const stats = reconcileCompletionStats(clientStats, serverStats, usage);
   const ttftMs =
     stats.time_to_first_token != null ? Math.round(stats.time_to_first_token * 1000) : null;
   const tokPerSec = stats.tokens_per_second ?? null;
