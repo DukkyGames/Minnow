@@ -7,6 +7,7 @@ import { fetchSkillById } from '../../skills/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { regexMatch } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
+import { buildTestResult } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 const SKILL_TRIGGERS: Record<string, { prompt: string; pattern: RegExp }> = {
@@ -54,28 +55,39 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         maxTokens: 256,
       });
       const passed = regexMatch(out.text, trigger.pattern);
-      tests.push({
-        testId: `skill-${skill.id}`,
-        suite: 'skills',
-        label: skill.label,
-        passed,
-        skipped: false,
-        durationMs: performance.now() - t0,
-        score: passed ? 1 : 0,
-        details: out.text.slice(0, 100),
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: `skill-${skill.id}`,
+            suite: 'skills',
+            label: skill.label,
+            passed,
+            skipped: false,
+            durationMs: performance.now() - t0,
+            score: passed ? 1 : 0,
+            details: out.text.slice(0, 100),
+          },
+          out,
+        ),
+      );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push({
-        testId: `skill-${skill.id}`,
-        suite: 'skills',
-        label: skill.label,
-        passed: false,
-        skipped: false,
-        durationMs: performance.now() - t0,
-        score: 0,
-        details: err instanceof Error ? err.message : String(err),
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: `skill-${skill.id}`,
+            suite: 'skills',
+            label: skill.label,
+            passed: false,
+            skipped: false,
+            durationMs: performance.now() - t0,
+            score: 0,
+            details: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          { error: err instanceof Error ? err.message : String(err) },
+        ),
+      );
     }
   }
 

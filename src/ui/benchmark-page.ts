@@ -3,6 +3,7 @@
  */
 
 import '../styles/benchmark-page.css';
+import '../styles/sub-agent-drawer.css';
 
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
 import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
@@ -14,16 +15,12 @@ import type {
   TestResult,
 } from '../benchmark/types.ts';
 import { getActiveModelIdFromDom } from '../benchmark/resolve-binding.ts';
+import {
+  closeBenchmarkTranscriptDrawer,
+  openBenchmarkTranscriptDrawer,
+} from './benchmark-transcript-drawer.ts';
+import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
-
-const SUITE_LABELS: Record<SuiteId, string> = {
-  capability: 'Capability',
-  speed: 'Speed',
-  tools: 'Tools',
-  skills: 'Skills',
-  modes: 'Modes',
-  coding: 'Coding',
-};
 
 /** Display order for suite toggle buttons in the run bar. */
 const SUITE_TOGGLE_ORDER: SuiteId[] = [
@@ -121,7 +118,9 @@ function renderTestCard(result: TestResult, regression: boolean, animate = false
   const details = result.details?.trim();
   const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result, regression)}${judged}`;
 
-  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}">
+  const ariaLabel = `View transcript: ${result.label}, ${statusText(result, regression)}`;
+
+  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}">
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg(icon)}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title">${escapeHtml(result.label)}</h3>
@@ -129,6 +128,56 @@ function renderTestCard(result: TestResult, regression: boolean, animate = false
       ${details ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>` : ''}
     </div>
   </article>`;
+}
+
+/** Resolve a test result from a run by card `data-test-id`. */
+export function resolveTestResultForCard(
+  run: BenchmarkRun | null,
+  testId: string,
+): TestResult | null {
+  if (!run) return null;
+  for (const suite of run.suites) {
+    const found = suite.tests.find((t) => t.testId === testId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function regressionForTest(test: TestResult, compareMap: Map<string, TestResult>): boolean {
+  const prev = compareMap.get(test.testId);
+  return Boolean(prev?.passed && !test.skipped && !test.passed);
+}
+
+function openTranscriptForCard(card: HTMLElement): void {
+  if (!lastRun || liveRunActive) return;
+  const testId = card.dataset.testId;
+  if (!testId) return;
+  const test = resolveTestResultForCard(lastRun, testId);
+  if (!test) return;
+  const compareMap = compareMapFromRun(compareRun);
+  openBenchmarkTranscriptDrawer(
+    test,
+    {
+      preset: lastRun.preset,
+      modelId: lastRun.model.id,
+      startedAt: lastRun.startedAt,
+    },
+    { regression: regressionForTest(test, compareMap) },
+  );
+}
+
+function onBenchmarkTestCardClick(ev: MouseEvent): void {
+  const card = (ev.target as HTMLElement).closest<HTMLElement>('.benchmark-test-card');
+  if (!card || liveRunActive) return;
+  openTranscriptForCard(card);
+}
+
+function onBenchmarkTestCardKeydown(ev: KeyboardEvent): void {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const card = (ev.target as HTMLElement).closest<HTMLElement>('.benchmark-test-card');
+  if (!card || liveRunActive) return;
+  ev.preventDefault();
+  openTranscriptForCard(card);
 }
 
 function compareMapFromRun(compare: BenchmarkRun | null): Map<string, TestResult> {
@@ -576,6 +625,7 @@ export function closeBenchmark(): void {
   const root = getBenchmarkRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
+  closeBenchmarkTranscriptDrawer();
   stopRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
@@ -622,6 +672,10 @@ export function initBenchmarkPage(): void {
 
   document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => void onCompareChange());
   document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => void onCompareChange());
+
+  const suitesMount = document.getElementById('benchmarkSuites');
+  suitesMount?.addEventListener('click', onBenchmarkTestCardClick);
+  suitesMount?.addEventListener('keydown', onBenchmarkTestCardKeydown);
 
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash === '#/benchmark') {
