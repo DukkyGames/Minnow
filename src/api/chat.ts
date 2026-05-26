@@ -52,6 +52,7 @@ import {
   revealAssistantProseBubble,
   setAssistantErrorBubble,
 } from '../ui/messages';
+import { streamDeltaContentToText } from './message-content.ts';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
@@ -122,10 +123,9 @@ export {
 export function extractStreamDelta(chunk: ChatCompletionChunk): string {
   const choice = chunk.choices?.[0];
   if (!choice) return '';
-  const delta = choice.delta;
-  if (delta?.content) return delta.content;
-  if (choice.message?.content) return choice.message.content;
-  return '';
+  const fromDelta = streamDeltaContentToText(choice.delta?.content);
+  if (fromDelta) return fromDelta;
+  return streamDeltaContentToText(choice.message?.content);
 }
 
 /** Merge streaming `tool_calls` fragments into an accumulator keyed by `index`. */
@@ -187,9 +187,12 @@ export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[] {
 }
 
 /** Plain message content from a non-streaming completion. */
-export function extractMessageText(message: { content?: string } | null | undefined): string {
+export function extractMessageText(
+  message: { content?: string | unknown } | null | undefined,
+): string {
   if (!message?.content) return '';
-  return message.content;
+  if (typeof message.content === 'string') return message.content;
+  return streamDeltaContentToText(message.content);
 }
 
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */

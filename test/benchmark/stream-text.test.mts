@@ -1,5 +1,5 @@
 /**
- * BUG-002: benchmark stream text accumulation (content + reasoning).
+ * Benchmark stream text accumulation (prose only; not reasoning).
  */
 
 import assert from 'node:assert/strict';
@@ -21,14 +21,14 @@ describe('accumulateBenchmarkStreamDelta', () => {
     assert.equal(accumulateBenchmarkStreamDelta(chunk), 'hi');
   });
 
-  test('reasoning-only delta', () => {
+  test('reasoning-only delta is ignored', () => {
     const chunk: ChatCompletionChunk = {
       choices: [{ index: 0, delta: { reasoning_content: 'think' } }],
     };
-    assert.equal(accumulateBenchmarkStreamDelta(chunk), 'think');
+    assert.equal(accumulateBenchmarkStreamDelta(chunk), '');
   });
 
-  test('mixed content and reasoning in one chunk', () => {
+  test('mixed content and reasoning returns prose only', () => {
     const chunk: ChatCompletionChunk = {
       choices: [
         {
@@ -37,7 +37,7 @@ describe('accumulateBenchmarkStreamDelta', () => {
         },
       ],
     };
-    assert.equal(accumulateBenchmarkStreamDelta(chunk), 'ab');
+    assert.equal(accumulateBenchmarkStreamDelta(chunk), 'a');
   });
 
   test('usage-only terminal chunk yields empty', () => {
@@ -54,24 +54,21 @@ describe('completionTextFromMessage', () => {
     assert.equal(completionTextFromMessage({ content: 'hello' }), 'hello');
   });
 
-  test('reasoning only', () => {
-    assert.equal(
-      completionTextFromMessage({ reasoning_content: 'chain' }),
-      'chain',
-    );
+  test('reasoning only yields empty', () => {
+    assert.equal(completionTextFromMessage({ reasoning_content: 'chain' }), '');
   });
 
-  test('prose and reasoning combined', () => {
+  test('prose wins when both prose and reasoning present', () => {
     const text = completionTextFromMessage({
       content: 'answer',
       reasoning: 'thought',
     });
-    assert.equal(text, 'answer\n\nthought');
+    assert.equal(text, 'answer');
   });
 });
 
 describe('completionTextFromFallback', () => {
-  test('reads message fields from completion chunk', () => {
+  test('reads message content only from completion chunk', () => {
     const fallback: ChatCompletionChunk = {
       choices: [
         {
@@ -81,7 +78,7 @@ describe('completionTextFromFallback', () => {
         },
       ],
     };
-    assert.equal(completionTextFromFallback(fallback), 'ok\n\nr');
+    assert.equal(completionTextFromFallback(fallback), 'ok');
   });
 });
 

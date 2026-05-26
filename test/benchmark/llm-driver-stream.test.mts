@@ -23,12 +23,12 @@ function accumulateFromSseBytes(sse: string): string {
 }
 
 describe('benchmark SSE accumulation (streamTurn pattern)', () => {
-  test('reasoning-only stream produces non-empty text', () => {
+  test('reasoning-only stream does not count as completion text', () => {
     const sse =
       'data: {"choices":[{"delta":{"reasoning_content":"hello"}}]}\n\n' +
       'data: {"choices":[{"finish_reason":"stop"}]}\n\n' +
       'data: [DONE]\n\n';
-    assert.equal(accumulateFromSseBytes(sse), 'hello');
+    assert.equal(accumulateFromSseBytes(sse), '');
   });
 
   test('content stream produces prose', () => {

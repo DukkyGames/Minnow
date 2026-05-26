@@ -1,24 +1,21 @@
 /**
- * Benchmark stream text accumulation (prose + reasoning channels).
+ * Benchmark stream text accumulation (assistant prose only).
+ * Reasoning/thinking streams to thought UI in chat; benchmarks score visible output.
  */
 
 import { extractStreamDelta, extractMessageText } from '../api/chat';
-import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import type { ChatCompletionChunk } from '../types';
 
-/** Per-chunk assistant signal for benchmark completion text (content + reasoning). */
+/** Per-chunk assistant prose for benchmark completion text (`delta.content` only). */
 export function accumulateBenchmarkStreamDelta(chunk: ChatCompletionChunk): string {
-  return extractStreamDelta(chunk) + extractReasoningDelta(chunk);
+  return extractStreamDelta(chunk);
 }
 
-/** Non-streaming fallback message → combined assistant text for benchmarks. */
+/** Non-streaming fallback message → assistant prose for benchmarks. */
 export function completionTextFromMessage(
-  message: { content?: string; reasoning?: string; reasoning_content?: string } | null | undefined,
+  message: { content?: string | unknown } | null | undefined,
 ): string {
-  const prose = extractMessageText(message).trim();
-  const reasoning = extractReasoningMessage(message).trim();
-  if (prose && reasoning) return `${prose}\n\n${reasoning}`;
-  return prose || reasoning;
+  return extractMessageText(message).trim();
 }
 
 /** Full completion object from tryNonStreamingFallback. */

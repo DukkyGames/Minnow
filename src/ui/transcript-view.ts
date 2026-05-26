@@ -2,7 +2,8 @@
  * Shared read-only transcript renderer (messages, tool calls, tool results).
  */
 
-import type { ToolImageAttachment } from '../types';
+import { apiMessageContentToText } from '../api/message-content.ts';
+import type { ApiMessageContent, ContentPart, ToolImageAttachment } from '../types';
 import { renderToolCall, renderToolResult } from './tool-messages';
 
 /** Parse stored tool `arguments` JSON for display. */
@@ -18,6 +19,59 @@ export function parseToolArgsForTranscriptDisplay(raw: string): Record<string, u
   } catch {
     return { _raw: raw };
   }
+}
+
+/** Render multimodal user content (text blocks + inline images). */
+function appendUserTranscriptRow(body: HTMLElement, content: ApiMessageContent): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'transcript-view__user';
+
+  if (typeof content === 'string') {
+    wrap.textContent = content;
+    body.appendChild(wrap);
+    return;
+  }
+
+  if (!Array.isArray(content)) {
+    wrap.textContent = apiMessageContentToText(content);
+    body.appendChild(wrap);
+    return;
+  }
+
+  for (const part of content) {
+    if (part.type === 'text' && part.text) {
+      const textEl = document.createElement('p');
+      textEl.className = 'transcript-view__user-text';
+      textEl.textContent = part.text;
+      wrap.appendChild(textEl);
+      continue;
+    }
+    if (part.type === 'image_url' && part.image_url?.url) {
+      const img = document.createElement('img');
+      img.className = 'transcript-view__user-image';
+      img.src = part.image_url.url;
+      img.alt = 'Attached image';
+      img.loading = 'lazy';
+      wrap.appendChild(img);
+    }
+  }
+
+  if (!wrap.childNodes.length) {
+    wrap.textContent = apiMessageContentToText(content);
+  }
+
+  body.appendChild(wrap);
+}
+
+/** Render assistant prose (string or multimodal-shaped content). */
+function appendAssistantTranscriptRow(body: HTMLElement, content: unknown): void {
+  const prose =
+    content != null ? apiMessageContentToText(content as ApiMessageContent).trim() : '';
+  if (!prose) return;
+  const row = document.createElement('div');
+  row.className = 'transcript-view__assistant';
+  row.textContent = prose;
+  body.appendChild(row);
 }
 
 /** Render API-shaped messages into a scrollable transcript body. */
@@ -59,25 +113,12 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
       continue;
     }
     if (role === 'user') {
-      const row = document.createElement('div');
-      row.className = 'transcript-view__user';
-      row.textContent =
-        typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
-      body.appendChild(row);
+      appendUserTranscriptRow(body, msg.content as ApiMessageContent);
       continue;
     }
     if (role === 'assistant') {
       const toolCalls = msg.tool_calls;
-      const prose =
-        msg.content != null && typeof msg.content === 'string'
-          ? msg.content.trim()
-          : '';
-      if (prose) {
-        const row = document.createElement('div');
-        row.className = 'transcript-view__assistant';
-        row.textContent = prose;
-        body.appendChild(row);
-      }
+      appendAssistantTranscriptRow(body, msg.content);
       if (Array.isArray(toolCalls) && toolCalls.length > 0) {
         for (const tc of toolCalls as Array<{
           id: string;
@@ -92,6 +133,10 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
           }
         }
       }
+      const prose =
+        msg.content != null
+          ? apiMessageContentToText(msg.content as ApiMessageContent).trim()
+          : '';
       if (!prose && (!Array.isArray(toolCalls) || toolCalls.length === 0)) {
         const row = document.createElement('div');
         row.className = 'transcript-view__assistant';

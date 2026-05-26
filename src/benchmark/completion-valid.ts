@@ -19,7 +19,7 @@ export function speedCompletionDetails(text: string): string {
 
 /** cap-stream / multimodal details: preview on pass, actionable message on empty stream. */
 export function streamCompletionTestDetails(stream: OneShotResult, passed: boolean): string {
-  if (passed) return stream.text.trim().slice(0, 80);
+  if (passed) return stream.text.trim().slice(0, 320);
   const finish = stream.finishReason ?? 'none';
   const ct = stream.timing.usage?.completion_tokens;
   const usage =
