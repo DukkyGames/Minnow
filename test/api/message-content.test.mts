@@ -8,6 +8,7 @@ import { describe, test } from 'node:test';
 import {
   apiMessageContentToText,
   contentPartsToText,
+  StreamingContentAccumulator,
   streamDeltaContentToText,
 } from '../../src/api/message-content.ts';
 import { extractMessageText, extractStreamDelta } from '../../src/api/chat.ts';
@@ -63,6 +64,26 @@ describe('extractMessageText with structured message content', () => {
       }),
       'Full assistant reply here.',
     );
+  });
+});
+
+describe('StreamingContentAccumulator', () => {
+  test('merges string deltas across chunks', () => {
+    const acc = new StreamingContentAccumulator();
+    acc.ingestChoice({ delta: { content: 'Hel' } });
+    acc.ingestChoice({ delta: { content: 'lo' } });
+    assert.equal(acc.getText(), 'Hello');
+  });
+
+  test('replaces cumulative text on the same part index', () => {
+    const acc = new StreamingContentAccumulator();
+    acc.ingestChoice({
+      delta: { content: [{ index: 0, type: 'text', text: 'Hello' }] },
+    });
+    acc.ingestChoice({
+      delta: { content: [{ index: 0, type: 'text', text: 'Hello world' }] },
+    });
+    assert.equal(acc.getText(), 'Hello world');
   });
 });
 

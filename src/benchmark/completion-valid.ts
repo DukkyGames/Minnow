@@ -26,5 +26,9 @@ export function streamCompletionTestDetails(stream: OneShotResult, passed: boole
     ct != null || stream.timing.usage?.total_tokens != null
       ? `, completion_tokens=${ct ?? '?'}, total_tokens=${stream.timing.usage?.total_tokens ?? '?'}`
       : '';
-  return `empty stream (finish=${finish}${usage})`;
+  const reasoningOnlyHint =
+    ct != null && ct > 0
+      ? '; tokens were emitted but main content was empty (reasoning-only or structured content mismatch)'
+      : '';
+  return `empty stream (finish=${finish}${usage}${reasoningOnlyHint})`;
 }

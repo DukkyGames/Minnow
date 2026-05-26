@@ -84,11 +84,8 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       providerId: ctx.providerId,
       modelId: ctx.modelId,
       signal: ctx.signal,
-      messages: [
-        { role: 'system', content: 'Reply with one short word only.' },
-        { role: 'user', content: 'Say hello.' },
-      ],
-      maxTokens: 32,
+      messages: [{ role: 'user', content: 'Say hello in one short word.' }],
+      maxTokens: 128,
     });
     const streamPassed = hasNonEmptyCompletion(stream.text);
     reportTest(ctx, tests,

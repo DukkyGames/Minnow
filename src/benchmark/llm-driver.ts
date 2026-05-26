@@ -12,7 +12,11 @@ import {
   type StreamMetaAccumulator,
 } from '../api/chat';
 import {
-  accumulateBenchmarkStreamDelta,
+  applyBenchmarkSystemPrompt,
+  resolveBenchmarkMaxTokens,
+} from './completion-messages.ts';
+import {
+  BenchmarkStreamTextAccumulator,
   completionTextFromFallback,
 } from './stream-text.ts';
 import {
@@ -136,7 +140,7 @@ async function streamTurn(
     throw new Error('No response body');
   }
 
-  let fullText = '';
+  const textAcc = new BenchmarkStreamTextAccumulator();
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
 
@@ -154,10 +158,10 @@ async function streamTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    const delta = accumulateBenchmarkStreamDelta(chunk);
-    if (delta) {
-      if (tFirst == null) tFirst = performance.now();
-      fullText += delta;
+    const before = textAcc.getText().length;
+    textAcc.ingestChunk(chunk);
+    if (textAcc.getText().length > before && tFirst == null) {
+      tFirst = performance.now();
     }
   }
 
@@ -180,7 +184,7 @@ async function streamTurn(
     (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
   return {
-    fullText,
+    fullText: textAcc.getText(),
     toolCalls,
     finishReason,
     streamMeta,
@@ -188,21 +192,32 @@ async function streamTurn(
   };
 }
 
-async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
-  const messages: ApiMessage[] = [...input.messages];
-  const turn = await streamTurn(
-    input.providerId,
-    {
-      model: input.modelId || undefined,
-      messages,
-      temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
-      stream: true,
-      ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
-    },
-    input.signal,
-  );
+const REASONING_ONLY_RETRY_SYSTEM =
+  'Your previous attempt used only the reasoning channel with no main content. ' +
+  'Reply again with the final answer in main content only.';
 
+async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
+  const messages = applyBenchmarkSystemPrompt([...input.messages]);
+  const maxTokens = resolveBenchmarkMaxTokens(input.maxTokens, DEFAULT_MAX_TOKENS);
+  const bodyExtras = input.tools?.length
+    ? { tools: input.tools, tool_choice: 'auto' as const }
+    : {};
+
+  const runStream = () =>
+    streamTurn(
+      input.providerId,
+      {
+        model: input.modelId || undefined,
+        messages,
+        temperature: input.temperature ?? DEFAULT_TEMPERATURE,
+        max_tokens: maxTokens,
+        stream: true,
+        ...bodyExtras,
+      },
+      input.signal,
+    );
+
+  let turn = await runStream();
   let text = turn.fullText.trim();
   let finishReason = turn.finishReason;
   let toolCalls = turn.toolCalls;
@@ -212,9 +227,9 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
       model: input.modelId || undefined,
       messages,
       temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: maxTokens,
       stream: true as const,
-      ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
+      ...bodyExtras,
     };
     const fallback = await tryNonStreamingFallback(
       fallbackBody,
@@ -222,11 +237,35 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
       input.providerId,
     );
     text = completionTextFromFallback(fallback);
-    finishReason = finishReason || fallback.choices?.[0]?.finish_reason;
+    finishReason =
+      finishReason || (fallback.choices?.[0]?.finish_reason ?? undefined);
     const fbMessage = fallback.choices?.[0]?.message as
       | { tool_calls?: ToolCall[] }
       | undefined;
     if (fbMessage?.tool_calls?.length) toolCalls = fbMessage.tool_calls;
+  }
+
+  const usedReasoningBudget =
+    !text && (turn.timing.usage?.completion_tokens ?? 0) > 0;
+  if (usedReasoningBudget) {
+    const retryMessages = applyBenchmarkSystemPrompt([...input.messages], {
+      extraSystem: REASONING_ONLY_RETRY_SYSTEM,
+    });
+    turn = await streamTurn(
+      input.providerId,
+      {
+        model: input.modelId || undefined,
+        messages: retryMessages,
+        temperature: input.temperature ?? DEFAULT_TEMPERATURE,
+        max_tokens: Math.min(maxTokens * 2, 4096),
+        stream: true,
+        ...bodyExtras,
+      },
+      input.signal,
+    );
+    text = turn.fullText.trim();
+    finishReason = turn.finishReason ?? finishReason;
+    toolCalls = turn.toolCalls.length > 0 ? turn.toolCalls : toolCalls;
   }
 
   return {
@@ -258,7 +297,8 @@ export function appendAssistantToMessages(
 }
 
 async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
-  const messages: ApiMessage[] = [...input.messages];
+  const messages: ApiMessage[] = applyBenchmarkSystemPrompt([...input.messages]);
+  const maxTokens = resolveBenchmarkMaxTokens(input.maxTokens, DEFAULT_MAX_TOKENS);
   const maxRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
   const runExecute =
     input.executeToolFn ??
@@ -283,7 +323,7 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
+        max_tokens: maxTokens,
         stream: true,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       },
@@ -322,7 +362,7 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
+        max_tokens: maxTokens,
         stream: true as const,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       };

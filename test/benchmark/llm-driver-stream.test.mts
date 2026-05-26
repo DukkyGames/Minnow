@@ -6,20 +6,19 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { createSseEventBuffer, feedSseEventBuffer, flushSseEventBuffer } from '../../src/api/sse-parse.ts';
-import { accumulateBenchmarkStreamDelta } from '../../src/benchmark/stream-text.ts';
+import { BenchmarkStreamTextAccumulator } from '../../src/benchmark/stream-text.ts';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 
 /** Mirror streamTurn handleChunk accumulation for fixtures. */
 function accumulateFromSseBytes(sse: string): string {
-  let fullText = '';
+  const textAcc = new BenchmarkStreamTextAccumulator();
   const buffer = createSseEventBuffer();
   const handleChunk = (chunk: ChatCompletionChunk): void => {
-    const delta = accumulateBenchmarkStreamDelta(chunk);
-    if (delta) fullText += delta;
+    textAcc.ingestChunk(chunk);
   };
   feedSseEventBuffer(buffer, sse, handleChunk);
   flushSseEventBuffer(buffer, handleChunk);
-  return fullText;
+  return textAcc.getText();
 }
 
 describe('benchmark SSE accumulation (streamTurn pattern)', () => {
