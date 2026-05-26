@@ -1035,8 +1035,8 @@ Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `
 |----|---------|
 | `web_search` | Browser (Brave API if `braveApiKey` / `api_key`; else client routes to `web_search_ddg` when server up) |
 | `wikipedia_search` | Browser |
-| `fetch_web_content` | Browser (fetch + strip HTML, ~8KB cap; CORS limits apply) |
-| `rag_web_content` | Browser (fetch + sentence scoring by query) |
+| `fetch_web_content` | Server when `npm start` (Node HTTP fetch + strip, ~8KB); browser fallback (CORS limits) |
+| `rag_web_content` | Server when `npm start` (same fetch + sentence scoring); browser fallback |
 
 ### Utility (5 browser)
 

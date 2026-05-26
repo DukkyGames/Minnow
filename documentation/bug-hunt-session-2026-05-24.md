@@ -29,7 +29,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-008 | Major | Benchmark — modes suite | Mode tests fail: **expected tool missing** despite tools enabled | Open (verified — see plan + MIN-81) |
 | BUG-009 | Major | Benchmark — skills suite | Most skills tests fail | Verified — [MIN-71](https://linear.app/minnowai/issue/MIN-71/bug-009-skills-benchmark-failures) |
 | BUG-010 | Blocker | Browser tools (CDP) | Browser tools not working at all | Open |
-| BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Verified — [plan](plans/Bug%20Fixes/BUG-011-fetch-web-content.md) |
+| BUG-011 | Major | Tools — web fetch | Fetch web content fails (**fetch failed**) | Fixed — server HTTP fetch + client routing ([MIN-73](https://linear.app/minnowai/issue/MIN-73)) |
 | BUG-015 | Major | Tools — `rag_web_content` | Web RAG tool does not work | Verified — [MIN-72](https://linear.app/minnowai/issue/MIN-72/bug-015-rag-web-content-broken) |
 | BUG-016 | Major | Plan mode / streaming | Reply fails: ReadableStream JSON parse error on `close` | Open |
 | BUG-017 | Minor | Top bar — model picker | Model name truncated in dropdown (ellipsis) | Fixed — [MIN-62](https://linear.app/minnowai/issue/MIN-62/bug-017-model-picker-truncates-name) |
@@ -393,7 +393,7 @@ Browser tools **completely non-functional**. Verification (2026-05-24): with `br
 |-------|-------|
 | **Severity** | Major |
 | **Area** | **Fetch web content** tool (web fetch / `fetch` tool — browser or server path) |
-| **Status** | Verified (2026-05-24) — H1 CORS + missing server proxy; plan only |
+| **Status** | Fixed — server-side `fetch_web_content` / `rag_web_content` handlers + client routing when `npm start` |
 
 **Summary**
 

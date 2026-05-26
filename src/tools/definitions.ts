@@ -173,12 +173,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'fetch_web_content',
     label: 'Fetch page',
-    description: 'Fetches a URL and returns stripped plain text (about 8KB max). Subject to CORS in the browser.',
+    description:
+      'Fetches a URL and returns stripped plain text (about 8KB max). Uses server HTTP fetch when `npm start` is running; browser path is CORS-limited.',
     category: 'web',
     serverRequired: false,
     definition: toolSchema(
       'fetch_web_content',
-      'Fetch a web page URL and return its main text content (HTML stripped, length capped).',
+      'Fetch a web page URL and return its main text content (HTML stripped, length capped). Prefer npm start for reliable fetch without browser CORS limits.',
       {
         url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
       },
