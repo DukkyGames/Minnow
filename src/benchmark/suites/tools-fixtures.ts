@@ -47,6 +47,11 @@ const OVERRIDES: Record<string, ToolFixture> = {
     expectArgs: (a) => typeof a.query === 'string',
     emitOnly: true,
   },
+  ask_question: {
+    prompt:
+      'Call ask_question with one question id "bench-scope", prompt "Pick a scope", and two options bench-a and bench-b. Use the tool only.',
+    expectArgs: (a) => Array.isArray(a.questions) && (a.questions as unknown[]).length > 0,
+  },
 };
 
 export function getToolFixture(tool: ToolDefinition): ToolFixture {

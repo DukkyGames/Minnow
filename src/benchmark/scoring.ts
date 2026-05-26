@@ -58,6 +58,26 @@ export function aggregateSuiteScore(scores: number[]): number {
   return sum / scores.length;
 }
 
+export interface SuiteStatsTest {
+  passed: boolean;
+  skipped: boolean;
+}
+
+/** Suite pass/fail counts and pass-rate score (0..1); skipped tests are excluded from score. */
+export function computeSuiteResultStats(tests: SuiteStatsTest[]): {
+  passed: number;
+  failed: number;
+  skipped: number;
+  score: number;
+} {
+  const skipped = tests.filter((t) => t.skipped).length;
+  const active = tests.filter((t) => !t.skipped);
+  const passed = active.filter((t) => t.passed).length;
+  const failed = active.length - passed;
+  const score = active.length ? passed / active.length : 0;
+  return { passed, failed, skipped, score };
+}
+
 /** Overall run score from suite scores weighted by non-skipped test counts. */
 export function aggregateRunScore(suites: { score: number; tests: { skipped: boolean }[] }[]): number {
   let weighted = 0;

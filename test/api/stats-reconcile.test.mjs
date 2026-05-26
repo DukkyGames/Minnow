@@ -40,6 +40,14 @@ describe('reconcileCompletionStats', () => {
     assert.equal(stats.stop_reason, 'eos');
   });
 
+  test('reconcile uses wall-clock decode when first token arrives in a burst', () => {
+    const client = buildClientStats(0, 45999, 46000, { completion_tokens: 172 }, 'stop');
+    const stats = reconcileCompletionStats(client, {}, { completion_tokens: 172 });
+
+    assert.ok(stats.tokens_per_second < 100);
+    assert.notEqual(stats.tokens_per_second, 2000);
+  });
+
   test('finalizeResponseMeta applies reconciliation', () => {
     const meta = finalizeResponseMeta(
       {

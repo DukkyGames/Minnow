@@ -52,6 +52,7 @@ import {
   revealAssistantProseBubble,
   setAssistantErrorBubble,
 } from '../ui/messages';
+import { streamDeltaContentToText } from './message-content.ts';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
@@ -63,7 +64,6 @@ import {
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
-import { getActiveProvider } from '../providers/store';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -122,10 +122,9 @@ export {
 export function extractStreamDelta(chunk: ChatCompletionChunk): string {
   const choice = chunk.choices?.[0];
   if (!choice) return '';
-  const delta = choice.delta;
-  if (delta?.content) return delta.content;
-  if (choice.message?.content) return choice.message.content;
-  return '';
+  const fromDelta = streamDeltaContentToText(choice.delta?.content);
+  if (fromDelta) return fromDelta;
+  return streamDeltaContentToText(choice.message?.content);
 }
 
 /** Merge streaming `tool_calls` fragments into an accumulator keyed by `index`. */
@@ -187,9 +186,12 @@ export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[] {
 }
 
 /** Plain message content from a non-streaming completion. */
-export function extractMessageText(message: { content?: string } | null | undefined): string {
+export function extractMessageText(
+  message: { content?: string | unknown } | null | undefined,
+): string {
   if (!message?.content) return '';
-  return message.content;
+  if (typeof message.content === 'string') return message.content;
+  return streamDeltaContentToText(message.content);
 }
 
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */
@@ -207,6 +209,35 @@ export function mergeStreamMeta(
   return next;
 }
 
+/** Upper bound for believable decode throughput (guards bad provider stats). */
+export const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
+
+const MIN_DECODE_SECONDS = 0.001;
+
+/**
+ * Wall-clock decode window for tok/s. When the first visible token arrives in a
+ * final burst (common with reasoning models), use full stream duration instead
+ * of a sub-millisecond slice so throughput matches chat-style metrics.
+ */
+export function resolveDecodeSeconds(
+  t0: number,
+  tFirst: number | null,
+  tEnd: number,
+  completionTokens: number | null | undefined,
+): { ttft: number; genTime: number } | null {
+  if (tFirst == null) return null;
+  const ttft = (tFirst - t0) / 1000;
+  const streamSec = Math.max((tEnd - t0) / 1000, MIN_DECODE_SECONDS);
+  let genTime = Math.max((tEnd - tFirst) / 1000, MIN_DECODE_SECONDS);
+  if (completionTokens != null && completionTokens > 0) {
+    const burstTps = completionTokens / genTime;
+    if (burstTps > MAX_PLAUSIBLE_TOKENS_PER_SECOND) {
+      genTime = streamSec;
+    }
+  }
+  return { ttft, genTime };
+}
+
 /** Client-side TTFT / generation time / TPS when the server omits stats. */
 export function buildClientStats(
   t0: number,
@@ -215,22 +246,18 @@ export function buildClientStats(
   usage: Usage | undefined,
   finishReason: string | undefined
 ): Stats {
-  if (tFirst == null) return {};
-  const ttft = (tFirst - t0) / 1000;
-  const genTime = Math.max((tEnd - tFirst) / 1000, 0.001);
   const completionTokens = usage?.completion_tokens;
-  const tps = completionTokens != null ? completionTokens / genTime : null;
+  const timings = resolveDecodeSeconds(t0, tFirst, tEnd, completionTokens);
+  if (!timings) return {};
+  const tps = completionTokens != null ? completionTokens / timings.genTime : null;
   const stats: Stats = {
-    time_to_first_token: ttft,
-    generation_time: genTime,
+    time_to_first_token: timings.ttft,
+    generation_time: timings.genTime,
   };
   if (tps != null) stats.tokens_per_second = tps;
   if (finishReason) stats.stop_reason = finishReason;
   return stats;
 }
-
-/** Upper bound for believable decode throughput (guards bad provider stats). */
-const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
 
 /** Relative error allowed between tps×genTime and completion_tokens. */
 const USAGE_TIMING_TOLERANCE = 0.35;

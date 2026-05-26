@@ -65,23 +65,48 @@ export function extractFirstJsonValue(text: string): string | null {
   return null;
 }
 
-/** Try JSON.parse on payload; on glued JSON, parse only the first value. */
+/**
+ * Walk a buffer that may contain multiple concatenated JSON values (`{}{}`).
+ * Invokes `onSlice` for each complete top-level object/array substring.
+ */
+export function forEachJsonValueInText(
+  text: string,
+  onSlice: (jsonSlice: string) => void,
+): void {
+  let rest = text.trim();
+  while (rest.length > 0) {
+    const first = extractFirstJsonValue(rest);
+    if (!first) break;
+    onSlice(first);
+    rest = rest.slice(first.length).trim();
+  }
+}
+
+/** Try JSON.parse on payload; on glued JSON, emit every concatenated chunk. */
 function parseOpenAiChunkPayload(
   payload: string,
   onChunk: (chunk: ChatCompletionChunk) => void,
 ): void {
   if (!payload || payload === '[DONE]') return;
 
+  const trimmed = payload.trim();
+  if (!trimmed) return;
+
   try {
-    onChunk(JSON.parse(payload) as ChatCompletionChunk);
+    onChunk(JSON.parse(trimmed) as ChatCompletionChunk);
     return;
   } catch {
-    const first = extractFirstJsonValue(payload);
-    if (!first) return;
-    try {
-      onChunk(JSON.parse(first) as ChatCompletionChunk);
-    } catch {
-      /* Ignore malformed provider payloads. */
+    let parsedAny = false;
+    forEachJsonValueInText(trimmed, (jsonSlice) => {
+      try {
+        onChunk(JSON.parse(jsonSlice) as ChatCompletionChunk);
+        parsedAny = true;
+      } catch {
+        /* Ignore malformed provider payloads. */
+      }
+    });
+    if (!parsedAny) {
+      /* no-op */
     }
   }
 }
@@ -162,16 +187,37 @@ export function parseCompletionResponseBody(text: string): ChatCompletionChunk {
   }
 
   if (normalized.startsWith('{') || normalized.startsWith('[')) {
-    const first = extractFirstJsonValue(normalized) ?? normalized;
-    try {
-      const parsed = JSON.parse(first) as ChatCompletionChunk | ChatCompletionChunk[];
-      if (Array.isArray(parsed)) {
-        return parsed[parsed.length - 1] ?? ({} as ChatCompletionChunk);
+    const tryParseChunk = (slice: string): ChatCompletionChunk | null => {
+      try {
+        const parsed = JSON.parse(slice) as ChatCompletionChunk | ChatCompletionChunk[];
+        if (Array.isArray(parsed)) {
+          return parsed[parsed.length - 1] ?? null;
+        }
+        return parsed;
+      } catch {
+        return null;
       }
-      return parsed;
-    } catch {
-      /* Fall through — body may be SSE with leading noise. */
-    }
+    };
+
+    const direct = tryParseChunk(normalized);
+    if (direct) return direct;
+
+    let lastGlued: ChatCompletionChunk | null = null;
+    let lastWithMessage: ChatCompletionChunk | null = null;
+    forEachJsonValueInText(normalized, (jsonSlice) => {
+      const chunk = tryParseChunk(jsonSlice);
+      if (!chunk) return;
+      lastGlued = chunk;
+      const msg = chunk.choices?.[0]?.message;
+      if (
+        msg &&
+        (msg.content != null || msg.reasoning != null || msg.reasoning_content != null)
+      ) {
+        lastWithMessage = chunk;
+      }
+    });
+    if (lastWithMessage) return lastWithMessage;
+    if (lastGlued) return lastGlued;
   }
 
   let last: ChatCompletionChunk | null = null;

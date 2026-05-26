@@ -2,30 +2,30 @@
 name: POLISH-004 — Benchmark per-test descriptions
 overview: Add static helper copy to each benchmark test card so users understand purpose, method, and pass criteria—not only short labels and runtime details.
 source: documentation/bug-hunt-session-2026-05-24.md § POLISH-004
-status: planned
-scope: plan-only (no implementation in this item)
+status: shipped
+scope: implemented (MIN-94)
 todos:
   - id: catalog-schema
     content: Define BenchmarkTestDescription type and test-catalog module keyed by testId (incl. dynamic patterns)
-    status: pending
+    status: completed
   - id: catalog-content
     content: Author descriptions for all static tests; templates for tool-*, skill-*, mode-* probes
-    status: pending
+    status: completed
   - id: catalog-validation
     content: Add test/benchmark/catalog-coverage.test.mts asserting every emitted testId resolves in catalog
-    status: pending
+    status: completed
   - id: ui-render
     content: Render description on cards in benchmark-page.ts (live + history); separate from runtime details
-    status: pending
+    status: completed
   - id: ui-styles-a11y
     content: Style .benchmark-test-card-desc; optional details/summary expand; aria-labelledby on cards
-    status: pending
+    status: completed
   - id: suite-intros
     content: Optional one-line suite blurbs in suite block headers (capability, speed, tools, …)
-    status: pending
+    status: completed
   - id: docs-context
     content: Link plan from context.md benchmark section; note POLISH-004 in bug-hunt when shipped
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -241,12 +241,12 @@ Reuse existing tool/skill `description` fields where accurate; add benchmark-spe
 
 ## Acceptance criteria
 
-- [ ] Every `testId` produced by [`runCapabilitySuite`](../../../src/benchmark/suites/capability.ts), [`runSpeedSuite`](../../../src/benchmark/suites/speed.ts), [`runToolsSuite`](../../../src/benchmark/suites/tools.ts), [`runSkillsSuite`](../../../src/benchmark/suites/skills.ts), [`runModesSuite`](../../../src/benchmark/suites/modes.ts), and [`runCodingSuite`](../../../src/benchmark/suites/coding.ts) resolves to non-empty `purpose` + `passCriteria` via catalog.
-- [ ] Benchmark cards in live run and history view show description distinct from runtime `details`.
-- [ ] Skipped tests (e.g. `cap-usage`, `cap-multimodal`, tool `needs npm start`) explain skip semantics in `passCriteria` or method text.
-- [ ] `npm run test:benchmark` passes including new catalog coverage test.
-- [ ] No change to benchmark scores, persistence schema, or API routes.
-- [ ] `documentation/context.md` benchmark bullet mentions per-test descriptions once shipped.
+- [x] Every `testId` produced by [`runCapabilitySuite`](../../../src/benchmark/suites/capability.ts), [`runSpeedSuite`](../../../src/benchmark/suites/speed.ts), [`runToolsSuite`](../../../src/benchmark/suites/tools.ts), [`runSkillsSuite`](../../../src/benchmark/suites/skills.ts), [`runModesSuite`](../../../src/benchmark/suites/modes.ts), and [`runCodingSuite`](../../../src/benchmark/suites/coding.ts) resolves to non-empty `purpose` + `passCriteria` via catalog.
+- [x] Benchmark cards in live run and history view show description distinct from runtime `details`.
+- [x] Skipped tests (e.g. `cap-usage`, `cap-multimodal`, tool `needs npm start`) explain skip semantics in `passCriteria` or method text.
+- [x] `npm run test:benchmark` passes including new catalog coverage test.
+- [x] No change to benchmark scores, persistence schema, or API routes.
+- [x] `documentation/context.md` benchmark bullet mentions per-test descriptions once shipped.
 
 ---
 

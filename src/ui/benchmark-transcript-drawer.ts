@@ -63,7 +63,6 @@ function renderEmptyState(root: HTMLElement, test: TestResult): void {
 export function openBenchmarkTranscriptDrawer(
   test: TestResult,
   runMeta: BenchmarkTranscriptRunMeta,
-  options?: { regression?: boolean },
 ): void {
   closeBenchmarkTranscriptDrawer();
 
@@ -93,7 +92,7 @@ export function openBenchmarkTranscriptDrawer(
   suiteSpan.textContent = SUITE_LABELS[test.suite] ?? test.suite;
   const badge = document.createElement('span');
   badge.className = `benchmark-transcript-drawer__badge ${statusBadgeClass(test)}`;
-  badge.textContent = options?.regression ? 'Regression' : statusBadgeLabel(test);
+  badge.textContent = statusBadgeLabel(test);
   const duration = document.createElement('span');
   duration.textContent = formatDurationMs(test.durationMs);
   meta.appendChild(suiteSpan);

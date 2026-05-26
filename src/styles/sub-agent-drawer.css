@@ -315,6 +315,25 @@
   word-break: break-word;
 }
 
+.transcript-view__user-text {
+  margin: 0 0 8px;
+}
+
+.transcript-view__user-text:last-child {
+  margin-bottom: 0;
+}
+
+.transcript-view__user-image {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  margin-top: 8px;
+  border-radius: var(--radius-sm, 4px);
+  object-fit: contain;
+}
+
 .transcript-view__assistant {
   align-self: flex-start;
   max-width: 92%;

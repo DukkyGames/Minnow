@@ -34,17 +34,32 @@ describe('parseSseEventBlock', () => {
     assert.equal(chunks[0].choices[0].delta.content, 'x');
   });
 
-  it('recovers the first object when two JSON values are glued', () => {
+  it('emits every object when two JSON values are glued in one data line', () => {
     const glued =
       '{"choices":[{"delta":{"content":"a"}}]}{"choices":[{"delta":{"content":"b"}}]}';
     const chunks = [];
     parseSseEventBlock(`data: ${glued}\n`, (c) => chunks.push(c));
-    assert.equal(chunks.length, 1);
+    assert.equal(chunks.length, 2);
     assert.equal(chunks[0].choices[0].delta.content, 'a');
+    assert.equal(chunks[1].choices[0].delta.content, 'b');
   });
 });
 
 describe('feedSseEventBuffer', () => {
+  it('accumulates glued per-token payloads into full completion text', () => {
+    const glued =
+      '{"choices":[{"delta":{"content":"Hel"}}]}{"choices":[{"delta":{"content":"lo"}}]}';
+    let full = '';
+    const state = createSseEventBuffer();
+    const onChunk = (chunk) => {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (typeof delta === 'string') full += delta;
+    };
+    feedSseEventBuffer(state, `data: ${glued}\n\n`, onChunk);
+    flushSseEventBuffer(state, onChunk);
+    assert.equal(full, 'Hello');
+  });
+
   it('splits events on blank lines across chunk boundaries', () => {
     const state = createSseEventBuffer();
     const chunks = [];

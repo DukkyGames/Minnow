@@ -7,9 +7,10 @@ import { fetchModelsForProvider } from '../../providers/fetch-models';
 import { isVisionModel } from '../../providers/vision-model.ts';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
-import { hasNonEmptyCompletion } from '../completion-valid.ts';
+import { hasNonEmptyCompletion, streamCompletionTestDetails } from '../completion-valid.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { LmModelRecord } from '../../types.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { scoreMultimodalProbe } from './cap-multimodal.ts';
@@ -46,14 +47,19 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
 
   // 1 — Provider reachable
   let t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-provider',
+    suite: 'capability',
+    label: 'Provider reachable',
+  });
   try {
     const provider = await getActiveProvider(ctx.providerId);
-    tests.push(
+    reportTest(ctx, tests,
       result('cap-provider', 'Provider reachable', Boolean(provider.baseUrl), performance.now() - t, provider.id),
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       result(
         'cap-provider',
         'Provider reachable',
@@ -66,7 +72,12 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
 
   // 2 — Model resolves
   t = t0();
-  tests.push(
+  announceTestStart(ctx, {
+    testId: 'cap-model',
+    suite: 'capability',
+    label: 'Active model selected',
+  });
+  reportTest(ctx, tests,
     result(
       'cap-model',
       'Active model selected',
@@ -79,32 +90,34 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 3 — Streaming
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-stream',
+    suite: 'capability',
+    label: 'Streaming completion',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
       modelId: ctx.modelId,
       signal: ctx.signal,
-      messages: [
-        { role: 'system', content: 'Reply with one short word only.' },
-        { role: 'user', content: 'Say hello.' },
-      ],
-      maxTokens: 32,
+      messages: [{ role: 'user', content: 'Say hello in one short word.' }],
     });
-    tests.push(
+    const streamPassed = hasNonEmptyCompletion(stream.text);
+    reportTest(ctx, tests,
       buildTestResult(
         result(
           'cap-stream',
           'Streaming completion',
-          hasNonEmptyCompletion(stream.text),
+          streamPassed,
           performance.now() - t,
-          stream.text.slice(0, 80),
+          streamCompletionTestDetails(stream, streamPassed),
         ),
         stream,
       ),
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         result(
           'cap-stream',
@@ -122,19 +135,23 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 4 — Usage chunk (skip if absent)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-usage',
+    suite: 'capability',
+    label: 'Usage metadata',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
       modelId: ctx.modelId,
       signal: ctx.signal,
       messages: [{ role: 'user', content: 'Count to three.' }],
-      maxTokens: 64,
     });
     const hasUsage =
       stream.timing.usage.completion_tokens != null ||
       stream.timing.usage.total_tokens != null;
     if (!hasUsage) {
-      tests.push(
+      reportTest(ctx, tests,
         result(
           'cap-usage',
           'Usage metadata',
@@ -146,7 +163,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         ),
       );
     } else {
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           result('cap-usage', 'Usage metadata', true, performance.now() - t),
           stream,
@@ -155,7 +172,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     }
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         result(
           'cap-usage',
@@ -173,6 +190,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 5 — Tool schema accepted
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-tools-schema',
+    suite: 'capability',
+    label: 'Tool schema accepted',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
@@ -193,9 +215,8 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
           },
         },
       ],
-      maxTokens: 128,
     });
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         result(
           'cap-tools-schema',
@@ -209,7 +230,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         result(
           'cap-tools-schema',
@@ -227,10 +248,15 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 6 — Models list (fetch once; catalog reused for multimodal gate)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-models-list',
+    suite: 'capability',
+    label: 'Models list',
+  });
   try {
     const provider = await getActiveProvider(ctx.providerId);
     catalogModels = await fetchModelsForProvider(provider, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       result(
         'cap-models-list',
         'Models list',
@@ -241,7 +267,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       result(
         'cap-models-list',
         'Models list',
@@ -255,9 +281,14 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 7 — Multimodal (skip text-only; run image probe for vision models)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-multimodal',
+    suite: 'capability',
+    label: 'Multimodal request',
+  });
   const catalogArg = catalogModels ?? [];
   if (!isVisionModel(ctx.modelId, catalogArg)) {
-    tests.push(
+    reportTest(ctx, tests,
       result(
         'cap-multimodal',
         'Multimodal request',
@@ -275,17 +306,19 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         modelId: ctx.modelId,
         signal: ctx.signal,
         messages: buildMultimodalProbeMessages(),
-        maxTokens: 64,
       });
+      const multimodalPassed = hasNonEmptyCompletion(stream.text);
       const scored = scoreMultimodalProbe(stream.text);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           result(
             'cap-multimodal',
             'Multimodal request',
             scored.passed,
             performance.now() - t,
-            scored.details,
+            multimodalPassed
+              ? scored.details
+              : streamCompletionTestDetails(stream, false),
           ),
           stream,
         ),
@@ -296,7 +329,7 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         '',
         err instanceof Error ? err.message : String(err),
       );
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           result(
             'cap-multimodal',
@@ -312,19 +345,12 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     }
   }
 
-  const passed = tests.filter((x) => !x.skipped && x.passed).length;
-  const failed = tests.filter((x) => !x.skipped && !x.passed).length;
-  const skipped = tests.filter((x) => x.skipped).length;
-  const active = tests.filter((x) => !x.skipped);
-  const score = active.length ? active.filter((x) => x.passed).length / active.length : 0;
+  const stats = computeSuiteResultStats(tests);
 
   return {
     id: 'capability',
     label: 'Capability',
-    passed,
-    failed,
-    skipped,
-    score,
+    ...stats,
     tests,
   };
 }

@@ -3,8 +3,9 @@
  * Pure helpers — safe for Node tests (no DOM).
  */
 
+import { apiMessageContentToText, contentPartsToText } from '../api/message-content.ts';
 import { estimateTokensFromText } from './prompts/token-estimate-core';
-import type { ApiMessage, ApiMessageContent, ContentPart } from '../types';
+import type { ApiMessage, ContentPart } from '../types';
 
 /** How to fit outbound messages under a token ceiling. */
 export type ContextEnforcementPolicy = 'summarize' | 'slide' | 'truncate';
@@ -53,25 +54,10 @@ function normalizePositiveInt(value: unknown): number | null {
   return n > 0 ? n : null;
 }
 
-function contentPartsToText(content: ContentPart[]): string {
-  let out = '';
-  for (const part of content) {
-    if (part.type === 'text') out += part.text;
-    else out += JSON.stringify(part);
-  }
-  return out;
-}
-
-function apiContentToText(content: ApiMessageContent): string {
-  if (content == null) return '';
-  if (typeof content === 'string') return content;
-  return contentPartsToText(content);
-}
-
 export function serializeApiMessageForEstimate(msg: ApiMessage): string {
   if (msg.role === 'system') return msg.content;
   if (msg.role === 'user') {
-    const text = apiContentToText(msg.content);
+    const text = apiMessageContentToText(msg.content);
     if (Array.isArray(msg.content)) {
       let extra = 0;
       for (const part of msg.content) {
@@ -83,7 +69,7 @@ export function serializeApiMessageForEstimate(msg: ApiMessage): string {
   }
   if (msg.role === 'tool') return msg.content;
   if (msg.role === 'assistant') {
-    const base = apiContentToText(msg.content);
+    const base = apiMessageContentToText(msg.content);
     if (msg.tool_calls?.length) {
       return base + JSON.stringify(msg.tool_calls);
     }
