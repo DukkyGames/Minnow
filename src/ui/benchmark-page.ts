@@ -5,7 +5,7 @@
 import '../styles/benchmark-page.css';
 import '../styles/sub-agent-drawer.css';
 
-import { aggregateRunScore } from '../benchmark/scoring.ts';
+import { aggregateRunScore, computeSuiteResultStats } from '../benchmark/scoring.ts';
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
 import {
   formatTestCardDescription,
@@ -19,7 +19,12 @@ import {
   saveActiveBenchmarkSession,
   type ActiveBenchmarkSession,
 } from '../benchmark/active-run-session.ts';
-import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
+import {
+  clearAllRuns,
+  listRuns,
+  loadRun,
+  type BenchmarkRunSummary,
+} from '../benchmark/persistence.ts';
 import type {
   BenchmarkPreset,
   BenchmarkRun,
@@ -311,6 +316,10 @@ function transcriptRunMeta(): BenchmarkTranscriptRunMeta | null {
   };
 }
 
+function suiteStatsFromTests(tests: TestResult[]): ReturnType<typeof computeSuiteResultStats> {
+  return computeSuiteResultStats(tests);
+}
+
 function buildPartialBenchmarkRun(
   meta: BenchmarkTranscriptRunMeta,
   results: Map<string, TestResult>,
@@ -320,23 +329,10 @@ function buildPartialBenchmarkRun(
   for (const suiteId of suiteIds) {
     const tests = [...results.values()].filter((t) => t.suite === suiteId);
     if (!tests.length) continue;
-    let passed = 0;
-    let failed = 0;
-    let skipped = 0;
-    for (const t of tests) {
-      if (t.skipped) skipped += 1;
-      else if (t.passed) passed += 1;
-      else failed += 1;
-    }
-    const score =
-      tests.length > 0 ? tests.reduce((sum, t) => sum + t.score, 0) / tests.length : 0;
     suites.push({
       id: suiteId,
       label: SUITE_LABELS[suiteId],
-      passed,
-      failed,
-      skipped,
-      score,
+      ...suiteStatsFromTests(tests),
       tests,
     });
   }
@@ -714,6 +710,12 @@ function onBenchmarkProgress(
     liveTestsDone += 1;
     liveTestsInSuite += 1;
     upsertLiveTestCard(event.result, compareMap);
+    const suiteTests = [...liveTestResults.values()].filter(
+      (t) => t.suite === event.result.suite,
+    );
+    const stats = suiteStatsFromTests(suiteTests);
+    const total = stats.passed + stats.failed + stats.skipped;
+    updateSuiteScore(event.result.suite, stats.passed, Math.max(total, 1), stats.score);
     updateProgressBar(
       liveProgressPercent(),
       `${SUITE_LABELS[event.result.suite]} · ${event.result.label}`,
@@ -860,6 +862,7 @@ function setRunning(running: boolean): void {
   updateRunStopButton(running);
   setSuiteTogglesDisabled(running);
   root?.classList.toggle('is-running', running);
+  syncClearHistoryButton();
 }
 
 function isBenchmarkRunActive(): boolean {
@@ -912,20 +915,13 @@ function renderLiveRunFromState(compareMap: Map<string, TestResult>): void {
       );
     }
 
-    let passed = 0;
-    let failed = 0;
-    let skipped = 0;
-    for (const t of suiteTests) {
-      if (t.skipped) skipped += 1;
-      else if (t.passed) passed += 1;
-      else failed += 1;
-    }
-    const total = passed + failed + skipped + (liveCurrentTestMeta?.suite === suiteId ? 1 : 0);
-    const score =
-      suiteTests.length > 0
-        ? suiteTests.reduce((sum, t) => sum + t.score, 0) / suiteTests.length
-        : 0;
-    updateSuiteScore(suiteId, passed, Math.max(total, 1), score);
+    const stats = suiteStatsFromTests(suiteTests);
+    const total =
+      stats.passed +
+      stats.failed +
+      stats.skipped +
+      (liveCurrentTestMeta?.suite === suiteId ? 1 : 0);
+    updateSuiteScore(suiteId, stats.passed, Math.max(total, 1), stats.score);
   }
 
   setProgressVisible(liveRunActive);
@@ -975,6 +971,15 @@ function syncLiveDrawerMetaFromRun(run: BenchmarkRun): void {
   };
 }
 
+/** Enable Clear history when there is something to remove and no run is active. */
+function syncClearHistoryButton(): void {
+  const btn = document.getElementById('btnBenchmarkClearHistory') as HTMLButtonElement | null;
+  if (!btn) return;
+  const hasPersisted = historySummaries.length > 0;
+  const hasPanelRun = Boolean(lastRun) || browsingHistory;
+  btn.disabled = isBenchmarkRunActive() || (!hasPersisted && !hasPanelRun);
+}
+
 async function refreshHistorySelect(): Promise<void> {
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
   if (!select) return;
@@ -1001,6 +1006,44 @@ async function refreshHistorySelect(): Promise<void> {
   if (restoreId) {
     select.value = restoreId;
   }
+  syncClearHistoryButton();
+}
+
+async function onClearHistoryClick(): Promise<void> {
+  if (isBenchmarkRunActive()) {
+    setStatus('err', 'Stop the current run before clearing history.');
+    return;
+  }
+  if (
+    !confirm(
+      'Delete all saved benchmark runs? This removes server and browser copies and cannot be undone.',
+    )
+  ) {
+    return;
+  }
+
+  await clearAllRuns();
+  lastRun = null;
+  compareRun = null;
+  browsingHistory = false;
+  liveRunDrawerMeta = null;
+
+  const compareToggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
+  if (compareToggle) compareToggle.checked = false;
+
+  const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
+  if (select) select.value = '';
+
+  closeBenchmarkTranscriptDrawer();
+  renderSummary(null);
+  const mount = document.getElementById('benchmarkSuites');
+  if (mount) {
+    mount.classList.remove('is-live');
+    mount.innerHTML = '';
+  }
+  updateBackToCurrentControl();
+  await refreshHistorySelect();
+  setStatus('ok', 'Benchmark history cleared.');
 }
 
 /** Load a saved run for viewing, or as the compare baseline when Compare is checked. */
@@ -1446,6 +1489,9 @@ export function initBenchmarkPage(): void {
   });
   document.getElementById('btnBenchmarkBackToCurrent')?.addEventListener('click', () => {
     restoreCurrentRunView();
+  });
+  document.getElementById('btnBenchmarkClearHistory')?.addEventListener('click', () => {
+    void onClearHistoryClick();
   });
 
   const suitesMount = document.getElementById('benchmarkSuites');

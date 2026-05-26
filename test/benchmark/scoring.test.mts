@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   aggregateRunScore,
   aggregateSuiteScore,
+  computeSuiteResultStats,
   exactMatch,
   parseJudgeJson,
   toolNameMatch,
@@ -36,5 +37,18 @@ describe('benchmark scoring', () => {
       { score: 0, tests: [{ skipped: false }] },
     ]);
     assert.equal(score, 2 / 3);
+  });
+
+  test('computeSuiteResultStats matches pass rate among non-skipped tests', () => {
+    const stats = computeSuiteResultStats([
+      { passed: true, skipped: false },
+      { passed: true, skipped: false },
+      { passed: false, skipped: false },
+      { passed: false, skipped: true },
+    ]);
+    assert.equal(stats.passed, 2);
+    assert.equal(stats.failed, 1);
+    assert.equal(stats.skipped, 1);
+    assert.equal(stats.score, 2 / 3);
   });
 });

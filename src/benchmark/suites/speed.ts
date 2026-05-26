@@ -4,6 +4,7 @@
 
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { hasNonEmptyCompletion, speedCompletionDetails } from '../completion-valid.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, LlmTurnTiming, SuiteResult, TestResult } from '../types.ts';
@@ -167,14 +168,13 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     );
   }
 
+  const stats = computeSuiteResultStats(tests);
+
   return {
     suite: {
       id: 'speed',
       label: 'Speed',
-      passed: tests.filter((t) => t.passed).length,
-      failed: tests.filter((t) => !t.passed).length,
-      skipped: 0,
-      score: 1,
+      ...stats,
       tests,
     },
     headlineTtftMs: median(ttftSamples),

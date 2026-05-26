@@ -8,6 +8,7 @@ import { isVisionModel } from '../../providers/vision-model.ts';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
 import { hasNonEmptyCompletion, streamCompletionTestDetails } from '../completion-valid.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { LmModelRecord } from '../../types.ts';
@@ -344,19 +345,12 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     }
   }
 
-  const passed = tests.filter((x) => !x.skipped && x.passed).length;
-  const failed = tests.filter((x) => !x.skipped && !x.passed).length;
-  const skipped = tests.filter((x) => x.skipped).length;
-  const active = tests.filter((x) => !x.skipped);
-  const score = active.length ? active.filter((x) => x.passed).length / active.length : 0;
+  const stats = computeSuiteResultStats(tests);
 
   return {
     id: 'capability',
     label: 'Capability',
-    passed,
-    failed,
-    skipped,
-    score,
+    ...stats,
     tests,
   };
 }

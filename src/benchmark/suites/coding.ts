@@ -3,6 +3,7 @@
  */
 
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import {
   CODING_JAVASCRIPT_PROMPT_SUFFIX,
   fizzBuzzLinePasses,
@@ -264,15 +265,12 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
     }
   }
 
-  const passed = tests.filter((t) => t.passed).length;
-  const skipped = tests.filter((t) => t.skipped).length;
+  const stats = computeSuiteResultStats(tests);
+
   return {
     id: 'coding',
     label: 'Coding',
-    passed,
-    failed: tests.length - passed - skipped,
-    skipped,
-    score: tests.length ? passed / tests.length : 0,
+    ...stats,
     tests,
   };
 }

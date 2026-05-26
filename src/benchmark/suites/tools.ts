@@ -5,7 +5,7 @@
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { executeTool } from '../../tools/client';
 import { assertNotAborted, raceWithAbort, rethrowIfAborted } from '../abort.ts';
-import { toolNameMatch } from '../scoring.ts';
+import { computeSuiteResultStats, toolNameMatch } from '../scoring.ts';
 import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
@@ -119,19 +119,12 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     }
   }
 
-  const passed = tests.filter((t) => !t.skipped && t.passed).length;
-  const failed = tests.filter((t) => !t.skipped && !t.passed).length;
-  const skipped = tests.filter((t) => t.skipped).length;
-  const active = tests.filter((t) => !t.skipped);
-  const score = active.length ? passed / active.length : 0;
+  const stats = computeSuiteResultStats(tests);
 
   return {
     id: 'tools',
     label: 'Tools',
-    passed,
-    failed,
-    skipped,
-    score,
+    ...stats,
     tests,
   };
 }

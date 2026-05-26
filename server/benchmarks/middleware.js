@@ -15,7 +15,7 @@ function benchmarksDir() {
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -120,6 +120,27 @@ async function handleGetOne(id, res) {
   }
 }
 
+/** Remove every persisted run file under ~/.minnow/benchmarks. */
+async function handleDeleteAll(res) {
+  await ensureMinnowLayout();
+  const dir = benchmarksDir();
+  let entries = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    sendJson(res, 200, { ok: true, deleted: 0 });
+    return;
+  }
+
+  let deleted = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    await fs.unlink(path.join(dir, entry.name));
+    deleted += 1;
+  }
+  sendJson(res, 200, { ok: true, deleted });
+}
+
 async function handlePost(body, res) {
   await ensureMinnowLayout();
   const id =
@@ -167,6 +188,11 @@ export function createBenchmarksMiddleware() {
       if (url === '/api/benchmarks' && req.method === 'POST') {
         const body = await readJsonBody(req);
         await handlePost(body, res);
+        return;
+      }
+
+      if (url === '/api/benchmarks' && req.method === 'DELETE') {
+        await handleDeleteAll(res);
         return;
       }
 

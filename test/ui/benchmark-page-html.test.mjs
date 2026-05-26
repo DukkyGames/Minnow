@@ -21,6 +21,7 @@ const BENCHMARK_IDS = [
   'benchmarkHistorySelect',
   'btnBenchmarkBackToCurrent',
   'benchmarkCompareToggle',
+  'btnBenchmarkClearHistory',
   'benchmarkSuites',
 ];
 

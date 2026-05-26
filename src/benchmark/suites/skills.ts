@@ -5,6 +5,7 @@
 import builtinManifest from '../../skills/builtin-manifest.json';
 import { fetchSkillById, refreshSkillCatalog } from '../../skills/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
 import { runOneShot, runToolLoop } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
@@ -152,17 +153,12 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
     }
   }
 
-  const passed = tests.filter((t) => t.passed).length;
-  const skipped = tests.filter((t) => t.skipped).length;
-  const failed = tests.length - passed - skipped;
+  const stats = computeSuiteResultStats(tests);
 
   return {
     id: 'skills',
     label: 'Skills',
-    passed,
-    failed,
-    skipped,
-    score: tests.length ? passed / tests.length : 0,
+    ...stats,
     tests,
   };
 }

@@ -35,6 +35,11 @@ function writeLocalRuns(runs: BenchmarkRun[]): void {
   localStorage.setItem(LOCAL_KEY, JSON.stringify(runs.slice(0, LOCAL_CAP)));
 }
 
+/** Drop all runs stored in localStorage (offline fallback). */
+export function clearLocalBenchmarkRuns(): void {
+  localStorage.removeItem(LOCAL_KEY);
+}
+
 function summaryFromRun(run: BenchmarkRun): BenchmarkRunSummary {
   return {
     id: run.id,
@@ -106,6 +111,18 @@ export async function listRuns(): Promise<BenchmarkRunSummary[]> {
     }
   }
   return localSummaries;
+}
+
+/** Delete every saved run (server files and local fallback). */
+export async function clearAllRuns(): Promise<void> {
+  clearLocalBenchmarkRuns();
+  const serverUp = await detectLocalServer();
+  if (!serverUp) return;
+  try {
+    await fetch('/api/benchmarks', { method: 'DELETE' });
+  } catch {
+    /* local history already cleared */
+  }
 }
 
 /** Load full run JSON by id. */

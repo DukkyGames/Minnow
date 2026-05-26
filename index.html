@@ -732,23 +732,27 @@
             <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
               <button type="button" id="btnBenchmarkQuick">Quick</button>
               <button type="button" id="btnBenchmarkFull">Full</button>
-              <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
             </div>
           </div>
           <div class="benchmark-deck-field benchmark-deck-field--suites">
             <span class="benchmark-field-label" id="benchmarkSuitesLabel">Suites</span>
-            <div
-              id="benchmarkSuiteToggles"
-              class="benchmark-suite-toggles"
-              role="group"
-              aria-labelledby="benchmarkSuitesLabel"
-            >
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
-              <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+            <div class="benchmark-suites-row">
+              <div
+                id="benchmarkSuiteToggles"
+                class="benchmark-suite-toggles"
+                role="group"
+                aria-labelledby="benchmarkSuitesLabel"
+              >
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
+                <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+              </div>
+              <div class="benchmark-run-actions benchmark-run-actions--suites">
+                <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
+              </div>
             </div>
           </div>
         </div>
@@ -777,6 +781,15 @@
           <input type="checkbox" id="benchmarkCompareToggle" />
           <span>Compare to selected run</span>
         </label>
+        <button
+          type="button"
+          id="btnBenchmarkClearHistory"
+          class="benchmark-clear-history"
+          disabled
+          aria-label="Clear all saved benchmark runs"
+        >
+          Clear history
+        </button>
       </div>
       <div id="benchmarkSuites" class="benchmark-suites-mount"></div>
     </div>
