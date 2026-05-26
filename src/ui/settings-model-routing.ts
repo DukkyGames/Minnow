@@ -23,6 +23,7 @@ import {
   fillModelSelect,
   fillProviderSelect,
 } from './settings-model-binding';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
@@ -45,6 +46,7 @@ interface RowControls {
   modelSelect: HTMLSelectElement;
   fallbackCb?: HTMLInputElement;
   enabledCb?: HTMLInputElement;
+  effectiveEl?: HTMLElement;
 }
 
 let mountedRows: RowControls[] = [];
@@ -63,12 +65,17 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function formatEffective(row: ModelRoutingRow): string {
   if (row.usesChatDefault && row.persistKind !== 'ui-designer') {
-    return `Effective: ${row.effectiveModelId || '(chat default)'} on ${row.effectiveProviderId || '—'}`;
+    return `${row.effectiveModelId || '(chat default)'} · ${row.effectiveProviderId || '—'}`;
   }
   if (row.persistKind === 'ui-designer' && row.fallbackToChatModel && row.usesChatDefault) {
-    return `Effective: chat default (${row.effectiveModelId || '—'})`;
+    return `chat default (${row.effectiveModelId || '—'})`;
   }
-  return `Effective: ${row.effectiveModelId || '—'} on ${row.effectiveProviderId || '—'}`;
+  return `${row.effectiveModelId || '—'} · ${row.effectiveProviderId || '—'}`;
+}
+
+function setEffectiveText(controls: RowControls): void {
+  if (!controls.effectiveEl) return;
+  controls.effectiveEl.textContent = formatEffective(controls.row);
 }
 
 async function wireProviderModelSelects(
@@ -179,52 +186,68 @@ function appendRoutingRow(
   const title = el('div', 'settings-routing-row__title', row.label);
   labelCell.appendChild(title);
   if (row.description) {
-    labelCell.appendChild(el('p', 'settings-field-hint', row.description));
+    const desc = el('p', 'settings-routing-row__desc', row.description);
+    labelCell.appendChild(desc);
   }
+  const meta = el('div', 'settings-routing-row__meta');
   if (row.disabled) {
-    labelCell.appendChild(el('span', 'settings-badge', 'disabled'));
+    meta.appendChild(el('span', 'settings-badge', 'disabled'));
   }
   if (row.group === 'reef' && row.activeChatName) {
-    labelCell.appendChild(
-      el('p', 'settings-field-hint', `Active chat: ${row.activeChatName}`),
+    meta.appendChild(
+      el('span', 'settings-routing-row__chat', `Chat: ${row.activeChatName}`),
     );
   }
+  if (meta.childElementCount) labelCell.appendChild(meta);
   tr.appendChild(labelCell);
 
   const bindingCell = el('td', 'settings-routing-row__binding');
   bindingCell.appendChild(bindingHost);
 
-  if (row.persistKind === 'ui-designer' && controls.fallbackCb) {
-    const fallbackRow = el('label', 'settings-toggle-row');
-    fallbackRow.appendChild(controls.fallbackCb);
-    fallbackRow.appendChild(el('span', '', 'Fallback to chat model when unset'));
-    bindingCell.appendChild(fallbackRow);
+  const extras = el('div', 'settings-routing-row__extras');
+  if (row.persistKind === 'ui-designer') {
+    const { row: fallbackRow, input: fallbackInput } = createSettingsToggleRow(
+      'Fallback to chat model when unset',
+      { checked: row.fallbackToChatModel !== false },
+    );
+    fallbackRow.classList.add('settings-toggle-row--compact');
+    controls.fallbackCb = fallbackInput;
+    extras.appendChild(fallbackRow);
   }
-  if (row.persistKind === 'titles' && controls.enabledCb) {
-    const enabledRow = el('label', 'settings-toggle-row');
-    enabledRow.appendChild(controls.enabledCb);
-    enabledRow.appendChild(el('span', '', 'Enable automatic title generation'));
-    bindingCell.appendChild(enabledRow);
+  if (row.persistKind === 'titles') {
+    const { row: enabledRow, input: enabledInput } = createSettingsToggleRow(
+      'Enable automatic title generation',
+      { checked: row.titlesEnabled !== false },
+    );
+    enabledRow.classList.add('settings-toggle-row--compact');
+    controls.enabledCb = enabledInput;
+    extras.appendChild(enabledRow);
   }
+  if (extras.childElementCount) bindingCell.appendChild(extras);
 
-  bindingCell.appendChild(el('p', 'settings-field-hint', formatEffective(row)));
+  const effective = el('p', 'settings-routing-effective');
+  effective.appendChild(el('span', 'settings-routing-effective__label', 'Effective'));
+  const value = el('span', 'settings-routing-effective__value', formatEffective(row));
+  effective.appendChild(document.createTextNode(' '));
+  effective.appendChild(value);
+  controls.effectiveEl = value;
+  bindingCell.appendChild(effective);
   tr.appendChild(bindingCell);
 
   const actionsCell = el('td', 'settings-routing-row__actions');
-  const saveBtn = el('button', 'settings-action-btn', 'Save');
+  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save');
   saveBtn.type = 'button';
   saveBtn.addEventListener('click', () => {
     void saveRow(controls);
   });
   actionsCell.appendChild(saveBtn);
 
-  const advancedLink = el('a', 'settings-inline-link', 'Advanced…');
-  advancedLink.href = row.advancedSettingsHash;
-  advancedLink.addEventListener('click', (e) => {
-    e.preventDefault();
+  const advancedBtn = el('button', 'settings-inline-link', 'Advanced');
+  advancedBtn.type = 'button';
+  advancedBtn.addEventListener('click', () => {
     window.location.hash = row.advancedSettingsHash;
   });
-  actionsCell.appendChild(advancedLink);
+  actionsCell.appendChild(advancedBtn);
   tr.appendChild(actionsCell);
 
   tableBody.appendChild(tr);
@@ -242,19 +265,23 @@ function renderGroup(
     section.appendChild(
       el(
         'p',
-        'settings-field-hint',
+        'settings-routing-group__lead',
         'Reef widget LLM is stored per chat. Values below apply to the sidebar active chat only.',
       ),
     );
   }
 
+  const tableWrap = el('div', 'settings-routing-table-wrap');
   const table = el('table', 'settings-routing-table');
-  table.appendChild(
-    Object.assign(el('thead'), {
-      innerHTML:
-        '<tr><th scope="col">Role</th><th scope="col">Binding</th><th scope="col">Actions</th></tr>',
-    }),
-  );
+  const thead = el('thead');
+  const headRow = el('tr');
+  for (const label of ['Role', 'Provider & model', '']) {
+    const th = el('th', '', label);
+    if (!label) th.setAttribute('aria-label', 'Actions');
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
   const tbody = el('tbody');
   table.appendChild(tbody);
 
@@ -264,21 +291,13 @@ function renderGroup(
       model: `modelRouting-${row.id}-model`,
     };
     const bindingHost = el('div', 'settings-routing-row__selects');
-    const { providerSelect, modelSelect } = appendProviderModelFields(bindingHost, ids);
+    const { providerSelect, modelSelect } = appendProviderModelFields(
+      bindingHost,
+      ids,
+      undefined,
+      'inline',
+    );
     const controls: RowControls = { row, providerSelect, modelSelect };
-
-    if (row.persistKind === 'ui-designer') {
-      const fallbackCb = document.createElement('input');
-      fallbackCb.type = 'checkbox';
-      fallbackCb.checked = row.fallbackToChatModel !== false;
-      controls.fallbackCb = fallbackCb;
-    }
-    if (row.persistKind === 'titles') {
-      const enabledCb = document.createElement('input');
-      enabledCb.type = 'checkbox';
-      enabledCb.checked = row.titlesEnabled !== false;
-      controls.enabledCb = enabledCb;
-    }
 
     mountedRows.push(controls);
     appendRoutingRow(tbody, controls, bindingHost);
@@ -288,7 +307,8 @@ function renderGroup(
     );
   }
 
-  section.appendChild(table);
+  tableWrap.appendChild(table);
+  section.appendChild(tableWrap);
   mount.appendChild(section);
 }
 
@@ -305,12 +325,13 @@ export function syncModelRoutingReefFromActiveChat(): void {
     const providerId =
       chat.reefWidgetProviderId ?? chat.providerId ?? reef.providerSelect.value ?? '';
     await fillModelSelect(reef.modelSelect, providerId, chat.reefWidgetModelId ?? '');
-    const nameEl = document.querySelector(
-      '[data-routing-id="reef-widget"] .settings-field-hint',
+    const chatEl = document.querySelector(
+      '[data-routing-id="reef-widget"] .settings-routing-row__chat',
     );
-    if (nameEl) {
-      nameEl.textContent = `Active chat: ${chat.name?.trim() || 'Untitled chat'}`;
+    if (chatEl) {
+      chatEl.textContent = `Chat: ${chat.name?.trim() || 'Untitled chat'}`;
     }
+    setEffectiveText(reef);
   })();
 }
 
@@ -318,14 +339,6 @@ export function syncModelRoutingReefFromActiveChat(): void {
 export async function renderModelRoutingSection(mount: HTMLElement): Promise<void> {
   mountedRows = [];
   mount.replaceChildren();
-
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Main chat default is the top-bar model picker. This page lists per-role overrides for work agents, sub-agents, background jobs, and Reef.',
-    ),
-  );
 
   if (!isServerStorageMode()) {
     mount.appendChild(

@@ -376,80 +376,52 @@
   </header>
   <div class="settings-page-body">
     <nav class="settings-nav" aria-label="Settings sections">
-      <button type="button" data-settings-nav="general" aria-current="page">General</button>
-      <button type="button" data-settings-nav="prompting">Prompting</button>
-      <button type="button" data-settings-nav="rules">Rules</button>
-      <button type="button" data-settings-nav="providers">Providers</button>
-      <button type="button" data-settings-nav="usage">Usage</button>
-      <button type="button" data-settings-nav="model-routing">Model routing</button>
-      <button type="button" data-settings-nav="modes">Modes</button>
-      <button type="button" data-settings-nav="experts">Experts</button>
-      <button type="button" data-settings-nav="work-agents">Work agents</button>
-      <button type="button" data-settings-nav="agent-packs">Agent packs</button>
-      <button type="button" data-settings-nav="sub-agents">Sub-agents</button>
-      <button type="button" data-settings-nav="memory">Memory</button>
-      <button type="button" data-settings-nav="features">Features</button>
-      <button type="button" data-settings-nav="tools">Tools</button>
-      <button type="button" data-settings-nav="mcp">MCP</button>
-      <button type="button" data-settings-nav="lsp">LSP</button>
-      <button type="button" data-settings-nav="skills">Skills</button>
-      <button type="button" data-settings-nav="evals">Evals</button>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavApp">
+        <p id="settingsNavApp" class="settings-nav-group__label">App</p>
+        <button type="button" data-settings-nav="general" aria-current="page">General</button>
+      </div>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavModels">
+        <p id="settingsNavModels" class="settings-nav-group__label">Models &amp; APIs</p>
+        <button type="button" data-settings-nav="providers">Providers</button>
+        <button type="button" data-settings-nav="usage">Usage &amp; cost</button>
+        <button type="button" data-settings-nav="model-routing">Model routing</button>
+      </div>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
+        <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
+        <button type="button" data-settings-nav="prompting">Prompting</button>
+        <button type="button" data-settings-nav="rules">Rules</button>
+        <button type="button" data-settings-nav="memory">Memory</button>
+      </div>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAgents">
+        <p id="settingsNavAgents" class="settings-nav-group__label">Agents</p>
+        <button type="button" data-settings-nav="modes">Modes</button>
+        <button type="button" data-settings-nav="experts">Experts</button>
+        <button type="button" data-settings-nav="work-agents">Work agents</button>
+        <button type="button" data-settings-nav="agent-packs">Agent packs</button>
+        <button type="button" data-settings-nav="sub-agents">Sub-agents</button>
+      </div>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavIntegrations">
+        <p id="settingsNavIntegrations" class="settings-nav-group__label">Tools &amp; integrations</p>
+        <button type="button" data-settings-nav="tools">Tools</button>
+        <button type="button" data-settings-nav="mcp">MCP servers</button>
+        <button type="button" data-settings-nav="lsp">Language servers</button>
+        <button type="button" data-settings-nav="skills">Skills</button>
+      </div>
+      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
+        <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
+        <button type="button" data-settings-nav="features">Orchestration</button>
+        <button type="button" data-settings-nav="evals">Evals</button>
+      </div>
     </nav>
     <div class="settings-content">
       <section id="settingsSection-general" class="settings-section is-active">
         <h2>General</h2>
+        <p class="settings-lead">Appearance, chat behavior, and where settings are stored. Model backends live under <strong>Providers</strong>.</p>
         <div id="settingsGeneralBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-prompting" class="settings-section">
-        <h2>Prompting</h2>
-        <p
-          id="settingsPromptTokenBreakdown"
-          class="settings-prompt-estimate-breakdown"
-          role="status"
-          aria-live="polite"
-        >Computing estimate…</p>
-        <p>Active profile controls which prompt templates are composed on send.</p>
-        <div id="settingsSetupProfilesMount"></div>
-        <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
-          <button type="button" data-profile-tab="full" class="is-active">Full</button>
-          <button type="button" data-profile-tab="lite">Lite</button>
-          <button type="button" data-profile-tab="custom">Custom</button>
-        </div>
-        <div id="settingsCustomConfigBar" class="settings-custom-bar hidden">
-          <select id="settingsCustomConfigSelect" aria-label="Custom configuration"></select>
-          <button type="button" id="settingsCustomConfigNew">New</button>
-          <button type="button" id="settingsCustomConfigSave">Save</button>
-          <button type="button" id="settingsCustomConfigDuplicate">Duplicate</button>
-          <button type="button" id="settingsCustomConfigDelete">Delete</button>
-        </div>
-        <div id="settingsPromptParts" class="settings-parts-mount"></div>
-      </section>
-      <section id="settingsSection-rules" class="settings-section">
-        <h2>Rules</h2>
-        <p class="field-hint">Global instructions applied on every parent chat send, as a second system message after the composed programmatic prompt.</p>
-        <label class="settings-toggle-row">
-          <span>Enable user rules</span>
-          <input type="checkbox" id="settingsRulesEnabled">
-        </label>
-        <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
-          Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
-        </p>
-        <div class="field settings-rules-field">
-          <label for="settingsRulesText">Instructions</label>
-          <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
-            placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
-        </div>
-        <div class="settings-rules-actions">
-          <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
-        </div>
-      </section>
-      <section id="settingsSection-usage" class="settings-section">
-        <h2>Usage &amp; cost</h2>
-        <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
-        <p class="field-hint">LLM backends stored under <code>~/.minnow/providers/</code>. Active provider drives the top-bar model picker and chat routing.</p>
+        <p class="settings-lead">LLM backends under <code>~/.minnow/providers/</code>. The active provider drives the top-bar model picker and chat routing.</p>
         <p id="settingsProvidersOffline" class="field-hint settings-providers-offline hidden">Start with <code>npm start</code> to add and manage providers.</p>
         <div id="settingsProvidersList" class="settings-providers-list" role="list" aria-label="Configured LLM providers"></div>
         <details id="settingsProvidersAddPanel" class="settings-providers-add-panel hidden">
@@ -516,37 +488,76 @@
           </form>
         </details>
       </section>
-      <section id="settingsSection-model-routing" class="settings-section">
+      <section id="settingsSection-usage" class="settings-section">
+        <h2>Usage &amp; cost</h2>
+        <p class="settings-lead">Token and cost estimates per provider and model. Requires <code>npm start</code> for persisted history.</p>
+        <div id="settingsUsageBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-model-routing" class="settings-section settings-section--wide">
         <h2>Model routing</h2>
-        <div id="settingsModelRoutingBody" class="settings-section-body"></div>
+        <p class="settings-lead">Per-role provider and model overrides. Empty bindings use the active chat model (top-bar picker). Main chat is not listed here.</p>
+        <div id="settingsModelRoutingBody" class="settings-section-body settings-section-body--routing"></div>
       </section>
-      <section id="settingsSection-modes" class="settings-section">
-        <h2>Modes</h2>
-        <div id="settingsModesBody" class="settings-section-body"></div>
+      <section id="settingsSection-prompting" class="settings-section">
+        <h2>Prompting</h2>
+        <p class="settings-lead">Profiles, portable setup bundles, and per-part prompt templates composed on each send.</p>
+        <p
+          id="settingsPromptTokenBreakdown"
+          class="settings-prompt-estimate-breakdown"
+          role="status"
+          aria-live="polite"
+        >Computing estimate…</p>
+        <div id="settingsSetupProfilesMount"></div>
+        <div class="settings-profile-tabs" role="group" aria-label="Prompt profile">
+          <button type="button" data-profile-tab="full" class="is-active">Full</button>
+          <button type="button" data-profile-tab="lite">Lite</button>
+          <button type="button" data-profile-tab="custom">Custom</button>
+        </div>
+        <div id="settingsCustomConfigBar" class="settings-custom-bar hidden">
+          <select id="settingsCustomConfigSelect" aria-label="Custom configuration"></select>
+          <button type="button" id="settingsCustomConfigNew">New</button>
+          <button type="button" id="settingsCustomConfigSave">Save</button>
+          <button type="button" id="settingsCustomConfigDuplicate">Duplicate</button>
+          <button type="button" id="settingsCustomConfigDelete">Delete</button>
+        </div>
+        <div id="settingsPromptParts" class="settings-parts-mount"></div>
       </section>
-      <section id="settingsSection-experts" class="settings-section">
-        <h2>Experts</h2>
-        <div id="settingsExpertsBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-work-agents" class="settings-section">
-        <h2>Work agents</h2>
-        <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-agent-packs" class="settings-section">
-        <h2>Agent packs</h2>
-        <div id="settingsAgentPacksBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-sub-agents" class="settings-section">
-        <h2>Sub-agents</h2>
-        <div id="settingsSubAgentsBody" class="settings-section-body"></div>
+      <section id="settingsSection-rules" class="settings-section">
+        <h2>Rules</h2>
+        <p class="settings-lead">Global instructions on every parent chat send, as a second system message after the composed programmatic prompt.</p>
+        <label class="settings-toggle-row">
+          <span>Enable user rules</span>
+          <input type="checkbox" id="settingsRulesEnabled">
+        </label>
+        <p id="settingsRulesOffline" class="field-hint settings-rules-offline hidden">
+          Start with <code>npm start</code> to persist rules to <code>~/.minnow/rules.json</code>. Edits are kept in this browser until then.
+        </p>
+        <div class="field settings-rules-field">
+          <label for="settingsRulesText">Instructions</label>
+          <textarea id="settingsRulesText" class="settings-rules-textarea" rows="12" spellcheck="true"
+            placeholder="e.g. Always use TypeScript strict mode. Prefer small diffs."></textarea>
+        </div>
+        <div class="settings-rules-actions">
+          <button type="button" id="settingsRulesSave" class="btn-primary">Save rules</button>
+        </div>
       </section>
       <section id="settingsSection-memory" class="settings-section">
         <h2>Memory</h2>
-        <p class="field-hint">Persistent notes under <code>~/.minnow/memory/</code>. On send, matching entries are ranked and injected into the composed prompt when the store is enabled and <code>npm start</code> is running.</p>
+        <p class="settings-lead">Persistent notes under <code>~/.minnow/memory/</code>. Matching entries can be ranked and injected into the composed prompt on send.</p>
+        <section class="settings-group settings-group--flat">
+          <h3 class="settings-group__title">Store &amp; retrieval</h3>
+          <div class="settings-group__body">
         <label class="settings-toggle-row">
           <span>Enable memory store</span>
           <input type="checkbox" id="settingsMemoryEnabled">
         </label>
+        <label class="settings-toggle-row">
+          <span>Inject matching memories on send</span>
+          <input type="checkbox" id="settingsFeatureMemoryInjection" checked>
+        </label>
+        <p class="settings-field-hint">When injection is off, entries are still saved but not added to the prompt.</p>
+          </div>
+        </section>
         <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>
@@ -587,24 +598,39 @@
           <button type="button" id="settingsMemoryClear" class="settings-action-btn settings-action-btn--danger">Clear (archive)</button>
         </div>
       </section>
-      <section id="settingsSection-features" class="settings-section">
-        <h2>Features</h2>
-        <p class="settings-section-note">
-          The <strong>Orchestrate supervisor</strong> replaces the old stall watchdog and self-healing toggles: one panel below for heartbeat, resumes, repetition detection, and optional LLM escalation. Legacy <code>selfHealing.*</code> in config is still read for migration until you save here.
-        </p>
-        <div id="settingsSupervisorBody" class="settings-section-body"></div>
-        <label class="settings-toggle-row">
-          <span>Memory injection (feature flag)</span>
-          <input type="checkbox" id="settingsFeatureMemoryInjection" checked>
-        </label>
+      <section id="settingsSection-modes" class="settings-section">
+        <h2>Modes</h2>
+        <p class="settings-lead">Build, Plan, Orchestrate, Research, and Reef — each mode’s prompts and tool policy. Expand a row to edit overrides.</p>
+        <div id="settingsModesBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-experts" class="settings-section">
+        <h2>Experts</h2>
+        <p class="settings-lead">Persona prompts selected in the composer. Overrides live under <code>~/.minnow/prompts/experts/</code>.</p>
+        <div id="settingsExpertsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-work-agents" class="settings-section">
+        <h2>Work agents</h2>
+        <p class="settings-lead">Specialized agents (e.g. UI Designer) with their own prompts and optional model bindings.</p>
+        <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-agent-packs" class="settings-section">
+        <h2>Agent packs</h2>
+        <p class="settings-lead">Bundled agent definitions you can enable for a workspace or session.</p>
+        <div id="settingsAgentPacksBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-sub-agents" class="settings-section">
+        <h2>Sub-agents</h2>
+        <p class="settings-lead">Background workers (explore, shell, research, …) — concurrency, tool turns, and per-type prompts.</p>
+        <div id="settingsSubAgentsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-tools" class="settings-section">
         <h2>Tools</h2>
+        <p class="settings-lead">Built-in tool permissions, filesystem policy, browser allowlist, and API keys. Server tools need <code>npm start</code>.</p>
         <div id="settingsToolsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-mcp" class="settings-section">
         <h2>MCP servers</h2>
-        <p class="field-hint">Model Context Protocol tools are loaded from <code>~/.minnow/mcp/</code> when <code>npm start</code> is running. Namespaced tools use the <code>mcp__</code> prefix in the tool loop.</p>
+        <p class="settings-lead">Model Context Protocol servers under <code>~/.minnow/mcp/</code>. Tools appear as <code>mcp__…</code> in the loop when <code>npm start</code> is running.</p>
         <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
         <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
         <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
@@ -656,7 +682,7 @@
       </section>
       <section id="settingsSection-lsp" class="settings-section">
         <h2>Language servers</h2>
-        <p class="field-hint">Agent tools <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> use these servers when <code>npm start</code> is running. Overrides are saved to <code>~/.minnow/lsp.json</code>.</p>
+        <p class="settings-lead">Used by <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> when <code>npm start</code> is running. Overrides save to <code>~/.minnow/lsp.json</code>.</p>
         <p id="settingsLspOffline" class="field-hint settings-lsp-offline hidden">Start with <code>npm start</code> to load and toggle language servers.</p>
         <label class="settings-toggle-row" id="settingsLspMasterRow">
           <span>Enable language servers</span>
@@ -670,10 +696,17 @@
       </section>
       <section id="settingsSection-skills" class="settings-section">
         <h2>Skills</h2>
+        <p class="settings-lead">Slash commands and SKILL packs (built-in and user). Toggle which skills the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-features" class="settings-section">
+        <h2>Orchestration</h2>
+        <p class="settings-lead">Orchestrate supervisor: heartbeat, stall resumes, repetition detection, and optional LLM escalation. Replaces legacy <code>selfHealing.*</code> toggles.</p>
+        <div id="settingsSupervisorBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-evals" class="settings-section">
         <h2>Evals</h2>
+        <p class="settings-lead">Local eval harness — task packs, suite runs, and rubric grading under <code>~/.minnow/evals/</code>.</p>
         <div id="settingsEvalsBody" class="settings-section-body"></div>
       </section>
     </div>

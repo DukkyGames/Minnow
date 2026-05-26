@@ -20,6 +20,7 @@ import { getWorkspacePath } from '../state/workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { refreshSettingsSection } from './settings-sections';
 import { schedulePromptTokenEstimateRefresh } from './settings-prompt-estimate';
+import { createSettingsToggleRow } from './settings-switch';
 
 type StatusFn = (kind: 'ok' | 'err', message: string) => void;
 
@@ -140,22 +141,21 @@ export function mountSetupProfilesPanel(
   block.appendChild(importErr);
 
   const wsField = el('div', 'settings-field');
-  const wsLabel = el('label', 'settings-field-label', 'Workspace default');
-  wsLabel.htmlFor = 'settingsWorkspaceProfileDefault';
-  const wsCheck = document.createElement('input');
-  wsCheck.type = 'checkbox';
-  wsCheck.id = 'settingsWorkspaceProfileDefault';
+  wsField.appendChild(el('p', 'settings-field-label', 'Workspace default'));
+  const { row: wsToggle, input: wsCheck } = createSettingsToggleRow(
+    'Use selected profile as workspace default',
+    { id: 'settingsWorkspaceProfileDefault' },
+  );
   const wsHint = el(
     'p',
     'settings-field-hint',
     'When enabled, switching to this workspace auto-applies the selected setup profile.',
   );
-  const autoApplyCheck = document.createElement('input');
-  autoApplyCheck.type = 'checkbox';
-  autoApplyCheck.id = 'settingsWorkspaceProfileAutoApply';
-  const autoApplyLabel = el('label', 'settings-toggle-row', '');
-  autoApplyLabel.append(autoApplyCheck, document.createTextNode(' Auto-apply on workspace switch'));
-  wsField.append(wsLabel, wsCheck, wsHint, autoApplyLabel);
+  const { row: autoApplyRow, input: autoApplyCheck } = createSettingsToggleRow(
+    'Auto-apply on workspace switch',
+    { id: 'settingsWorkspaceProfileAutoApply' },
+  );
+  wsField.append(wsToggle, wsHint, autoApplyRow);
   block.appendChild(wsField);
 
   container.prepend(block);

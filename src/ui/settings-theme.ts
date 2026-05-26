@@ -15,6 +15,7 @@ import {
   type ThemeMode,
 } from '../theme';
 import { applyResolvedTheme } from './theme';
+import { createSettingsToggleRow } from './settings-switch';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -33,7 +34,6 @@ const CHECK_SVG =
 /** Mount theme family list, mode pills, and follow-system control. */
 export function appendThemeControls(mount: HTMLElement): void {
   const block = el('div', 'settings-theme-block');
-  block.appendChild(el('p', 'settings-field-label', 'Theme'));
   block.appendChild(
     el(
       'p',
@@ -42,12 +42,10 @@ export function appendThemeControls(mount: HTMLElement): void {
     ),
   );
 
-  const followRow = el('label', 'settings-theme-follow');
-  const followInput = document.createElement('input');
-  followInput.type = 'checkbox';
-  followInput.checked = getFollowSystem();
-  followRow.appendChild(followInput);
-  followRow.appendChild(document.createTextNode('Follow system appearance'));
+  const { row: followRow, input: followInput } = createSettingsToggleRow(
+    'Follow system appearance',
+    { checked: getFollowSystem() },
+  );
   block.appendChild(followRow);
 
   const modeRow = el('div', 'settings-theme-modes');

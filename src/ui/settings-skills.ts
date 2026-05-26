@@ -16,6 +16,7 @@ import {
 import { createCustomSkill, saveSkillContent } from '../skills/skill-settings-api';
 import type { SkillListItem, SkillSource } from '../skills/types';
 import { isLocalServerAvailable } from '../tools/config';
+import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -37,19 +38,7 @@ function createSwitch(
   checked: boolean,
   onChange: (enabled: boolean) => void,
 ): HTMLLabelElement {
-  const row = el('label', 'settings-skill-switch');
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.className = 'settings-skill-switch__input';
-  input.checked = checked;
-  input.setAttribute('role', 'switch');
-  input.addEventListener('change', () => onChange(input.checked));
-  const track = el('span', 'settings-skill-switch__track');
-  const thumb = el('span', 'settings-skill-switch__thumb');
-  track.appendChild(thumb);
-  row.appendChild(input);
-  row.appendChild(track);
-  return row;
+  return createSettingsSwitch({ checked, onChange }).root;
 }
 
 function mountSkillEditor(
