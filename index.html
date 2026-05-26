@@ -723,9 +723,9 @@
   <div class="benchmark-page-body">
     <div class="benchmark-run-bar">
       <div class="benchmark-run-actions">
-        <button type="button" class="is-primary" id="btnBenchmarkQuick">Quick</button>
+        <button type="button" id="btnBenchmarkQuick">Quick</button>
         <button type="button" id="btnBenchmarkFull">Full</button>
-        <button type="button" id="btnBenchmarkStop" disabled>Stop</button>
+        <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
       </div>
       <div
         id="benchmarkSuiteToggles"
@@ -751,7 +751,7 @@
       </div>
     </div>
     <div id="benchmarkSummary" class="benchmark-summary">
-      <p class="benchmark-empty">Run Quick or Full to score the active model.</p>
+      <p class="benchmark-empty">Select suites below, then Run — or use Quick / Full presets.</p>
     </div>
     <div class="benchmark-history-row">
       <label for="benchmarkHistorySelect">History</label>

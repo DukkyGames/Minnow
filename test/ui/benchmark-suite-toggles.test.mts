@@ -4,9 +4,11 @@ import { resolveBenchmarkSuites } from '../../src/benchmark/runner.ts';
 import type { SuiteId } from '../../src/benchmark/types.ts';
 import {
   applyPresetToTogglesForTests,
+  applyStartModeToToggles,
   getSelectedSuitesForTests,
   getSuiteToggleOrderForTests,
   initBenchmarkPage,
+  storedPresetForStartMode,
 } from '../../src/ui/benchmark-page.ts';
 
 const QUICK_SUITES = resolveBenchmarkSuites('quick');
@@ -23,7 +25,7 @@ function buildBenchmarkRunBarHtml(): string {
     <div class="benchmark-run-bar">
       <button type="button" id="btnBenchmarkQuick">Quick</button>
       <button type="button" id="btnBenchmarkFull">Full</button>
-      <button type="button" id="btnBenchmarkStop" disabled>Stop</button>
+      <button type="button" id="btnBenchmarkRun">Run</button>
       <div id="benchmarkSuiteToggles" class="benchmark-suite-toggles" role="group" aria-label="Benchmark suites to run">
         ${toggles}
       </div>
@@ -87,5 +89,20 @@ describe('benchmark suite toggles', () => {
     );
     speed?.click();
     assert.deepEqual(pressedSuiteIds(), ['speed']);
+  });
+
+  test('selected start mode leaves toggles unchanged', () => {
+    setAllToggles(false);
+    document
+      .querySelector<HTMLButtonElement>('.benchmark-suite-toggle[data-suite-id="tools"]')
+      ?.click();
+    applyStartModeToToggles('selected');
+    assert.deepEqual(pressedSuiteIds(), ['tools']);
+  });
+
+  test('stored preset for selected runs is custom', () => {
+    assert.equal(storedPresetForStartMode('selected'), 'custom');
+    assert.equal(storedPresetForStartMode('quick'), 'quick');
+    assert.equal(storedPresetForStartMode('full'), 'full');
   });
 });

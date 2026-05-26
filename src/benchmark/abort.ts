@@ -35,3 +35,29 @@ export function benchmarkAbortError(signal: AbortSignal): DOMException {
 function abortErrorFromSignal(signal: AbortSignal): DOMException {
   return benchmarkAbortError(signal);
 }
+
+/**
+ * Rejects as soon as `signal` aborts so callers can escape hung work (e.g. blocking tools).
+ * The underlying promise may still run; pair with fetch/stream abort where possible.
+ */
+export function raceWithAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(benchmarkAbortError(signal));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      reject(benchmarkAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}

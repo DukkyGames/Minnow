@@ -202,7 +202,7 @@ User-defined **task packs** (prompt, tool allow/deny, rubric) run across multipl
 
 ### Benchmark (Bench)
 
-Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). Scores the **active** provider + model from `#modelSelect` against a fixed Minnow-integration battery (capability, speed, tools, skills, modes, coding). Run bar (two rows): row 1 — **Quick** / **Full** / **Stop**; row 2 — always-visible segmented **suite toggle group** (`#benchmarkSuiteToggles`, `aria-pressed` per suite). **Quick** and **Full** apply their preset to the toggles then start a run using the current toggle selection (Option B; POLISH-003 / MIN-64). Default toggles match Quick (capability, speed, modes). At least one suite must be selected; toggles disable while a run is active.
+Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). Scores the **active** provider + model from `#modelSelect` against a fixed Minnow-integration battery (capability, speed, tools, skills, modes, coding). Run bar (two rows): row 1 — **Quick** / **Full** / **Run** (primary, toggles to **Stop** while a run is active); row 2 — always-visible segmented **suite toggle group** (`#benchmarkSuiteToggles`, `aria-pressed` per suite). **Run** starts only the pressed suites without changing toggles (`preset: custom` on the saved run). **Quick** and **Full** apply their preset to the toggles then start (Option B; POLISH-003 / MIN-64). Default toggles match Quick (capability, speed, modes). At least one suite must be selected; suite toggles and Quick/Full disable while a run is active.
 
 | Piece | Location |
 |-------|----------|
@@ -212,7 +212,7 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Transcript drill-down (POLISH-005) | Click a finished test card → `benchmark-transcript-drawer.ts` (read-only messages/tools; reuses `transcript-view.ts`). `TestResult.transcript` / `transcriptMeta` captured via `buildTestResult` in suites; `prepareBenchmarkRunForPersistence` trims oversized JSON before POST. Old runs without `transcript` show empty-state + `details`. |
 | Headless smoke | `node scripts/benchmark-headless.mjs http://localhost:5173` |
 | Tests | `npm run test:benchmark` |
-| Cancel / Stop | `AbortController` in `benchmark-page.ts` → `runBenchmark({ signal })`; cooperative exit via `src/benchmark/abort.ts` (`assertNotAborted`, `rethrowIfAborted` in suites + `llm-driver.ts`). On cancel: `run-cancelled` progress event, **no** `saveRun`, throws `AbortError` so UI shows **Benchmark cancelled.** (BUG-005 fixed, MIN-61). |
+| Cancel / Stop | Combined **Run** button → **Stop** while active; `stopRun()` aborts, clears `abortController` (so the next click starts a new run), resets the run bar, and bumps `benchmarkRunGeneration`. `postChatCompletions` calls `cancelGeneration` on abort (same as chat stop) so LM Studio is not left with a stuck upstream request. `raceWithAbort` + stream `reader.cancel()` in `llm-driver.ts`. On cancel: `run-cancelled`, **no** `saveRun`, `AbortError` (BUG-005 / MIN-61). |
 
 Completions use `postChatCompletions` with `persist: false` (no chat session pollution). Distinct from planned Feature 21 eval harness (`~/.minnow/evals/`, multi-model matrix). Plan: [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md).
 

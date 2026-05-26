@@ -17,7 +17,7 @@
   display: flex;
 }
 
-.benchmark-page.is-running .benchmark-run-bar button:not(#btnBenchmarkStop) {
+.benchmark-page.is-running .benchmark-run-bar button:not(#btnBenchmarkRun) {
   opacity: 0.65;
 }
 

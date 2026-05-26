@@ -13,7 +13,7 @@ const BENCHMARK_IDS = [
   'btnBenchmarkPageBack',
   'btnBenchmarkQuick',
   'btnBenchmarkFull',
-  'btnBenchmarkStop',
+  'btnBenchmarkRun',
   'benchmarkSuiteToggles',
   'benchmarkProgress',
   'benchmarkProgressFill',
@@ -70,6 +70,10 @@ describe('benchmark page HTML', () => {
     }
     const toggleMatches = html.match(/class="benchmark-suite-toggle"/g);
     assert.equal(toggleMatches?.length, 6);
+  });
+
+  test('separate Stop button removed', () => {
+    assert.doesNotMatch(html, /id="btnBenchmarkStop"/);
   });
 
   test('default suite toggles match Quick preset', () => {

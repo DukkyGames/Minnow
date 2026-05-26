@@ -4,6 +4,7 @@
  */
 
 import {
+  cancelGeneration,
   createGeneration,
   subscribeToGenerationRaw,
   type GenerationEndEvent,
@@ -71,6 +72,9 @@ export async function postChatCompletions(
         () => {
           unsubscribe();
           closeStream();
+          void cancelGeneration(generationId).catch(() => {
+            /* best-effort; matches chat stopGeneration */
+          });
         },
         { once: true },
       );

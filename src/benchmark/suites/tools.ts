@@ -4,7 +4,7 @@
 
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { executeTool } from '../../tools/client';
-import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
+import { assertNotAborted, raceWithAbort, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import { buildTestResult } from '../test-result.ts';
@@ -61,7 +61,10 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
       if (nameOk && firstCall && !fixture.emitOnly && !EMIT_ONLY_TOOL_IDS.has(tool.id)) {
         try {
           const args = JSON.parse(firstCall.function.arguments || '{}') as Record<string, unknown>;
-          const exec = await executeTool(tool.id, args);
+          const exec = await raceWithAbort(
+            ctx.signal,
+            executeTool(tool.id, args),
+          );
           execOk = !exec.content.startsWith('Error:');
           details = execOk ? 'executed' : exec.content.slice(0, 120);
         } catch (err) {
