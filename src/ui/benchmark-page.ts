@@ -12,6 +12,13 @@ import {
   resolveTestDescription,
   SUITE_INTROS,
 } from '../benchmark/test-catalog.ts';
+import {
+  clearActiveBenchmarkSession,
+  loadActiveBenchmarkSession,
+  remainingSuiteIds,
+  saveActiveBenchmarkSession,
+  type ActiveBenchmarkSession,
+} from '../benchmark/active-run-session.ts';
 import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
 import type {
   BenchmarkPreset,
@@ -31,6 +38,9 @@ import { setStatus } from './status';
 
 /** How a benchmark run was started from the run bar. */
 export type BenchmarkStartMode = 'quick' | 'full' | 'selected';
+
+/** History dropdown value to return from a saved-run view to the live panel. */
+const HISTORY_CURRENT_VALUE = '__current__';
 
 /** Display order for suite toggle buttons in the run bar. */
 const SUITE_TOGGLE_ORDER: SuiteId[] = [
@@ -63,6 +73,12 @@ let liveTestsInSuite = 0;
 let liveCurrentTestId: string | null = null;
 /** Metadata for the in-flight probe (used when marking Stopped on cancel). */
 let liveCurrentTestMeta: { testId: string; suite: SuiteId; label: string } | null = null;
+/** User is viewing a saved run in the main panel while a live run may still be updating. */
+let browsingHistory = false;
+/** Stable id for the in-flight run (matches persisted session and saved run). */
+let liveRunId: string | null = null;
+/** How the active run was started (for session restore labels). */
+let liveStartMode: BenchmarkStartMode = 'selected';
 
 function getBenchmarkRoot(): HTMLElement | null {
   return document.getElementById('benchmarkView');
@@ -343,6 +359,55 @@ function commitPartialRunFromLive(): void {
   lastRun = buildPartialBenchmarkRun(liveRunDrawerMeta, liveTestResults, liveSuiteIds);
 }
 
+function completedSuitesFromLiveProgress(): BenchmarkRun['suites'] {
+  if (!liveRunDrawerMeta || liveSuiteIndex <= 0) return [];
+  return buildPartialBenchmarkRun(
+    liveRunDrawerMeta,
+    liveTestResults,
+    liveSuiteIds.slice(0, liveSuiteIndex),
+  ).suites;
+}
+
+function persistActiveRunSession(): void {
+  if (!liveRunDrawerMeta || !liveRunId || !isLiveRunInProgress()) return;
+  saveActiveBenchmarkSession({
+    version: 1,
+    runId: liveRunId,
+    startedAt: liveRunDrawerMeta.startedAt,
+    preset: liveRunDrawerMeta.preset,
+    startMode: liveStartMode,
+    suiteIds: liveSuiteIds,
+    modelId: liveRunDrawerMeta.modelId,
+    completedSuites: completedSuitesFromLiveProgress(),
+    completedTests: [...liveTestResults.values()],
+    status: 'running',
+  });
+}
+
+function clearActiveRunPersistence(): void {
+  clearActiveBenchmarkSession();
+}
+
+function applyActiveSessionToLiveState(session: ActiveBenchmarkSession): void {
+  liveRunId = session.runId;
+  liveStartMode = session.startMode;
+  liveRunDrawerMeta = {
+    preset: session.preset,
+    modelId: session.modelId,
+    startedAt: session.startedAt,
+  };
+  liveSuiteIds = [...session.suiteIds];
+  liveSuiteIndex = session.completedSuites.length;
+  liveTestsDone = session.completedTests.length;
+  liveRunActive = true;
+  liveCurrentTestId = null;
+  liveCurrentTestMeta = null;
+  liveTestResults.clear();
+  for (const result of session.completedTests) {
+    liveTestResults.set(result.testId, result);
+  }
+}
+
 function regressionForTest(test: TestResult, compareMap: Map<string, TestResult>): boolean {
   const prev = compareMap.get(test.testId);
   return Boolean(prev?.passed && !test.skipped && !test.passed);
@@ -554,6 +619,7 @@ function runningTestProgressLabel(suiteId: SuiteId, label: string): string {
 }
 
 function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
+  browsingHistory = false;
   liveRunActive = true;
   liveSuiteIds = suiteIds;
   liveTestsDone = 0;
@@ -577,6 +643,7 @@ function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
 
   setProgressVisible(true);
   updateProgressBar(0, progressStartLabel(mode));
+  updateBackToCurrentControl();
 }
 
 function finishLiveRunUI(options?: {
@@ -615,13 +682,18 @@ function onBenchmarkProgress(
   event: BenchmarkProgressEvent,
   compareMap: Map<string, TestResult>,
 ): void {
-  if (!liveRunActive) return;
+  if (event.type === 'test-done') {
+    liveTestResults.set(event.result.testId, event.result);
+  }
+
+  if (browsingHistory || !liveRunActive) return;
 
   if (event.type === 'suite-start') {
     liveSuiteIndex = liveSuiteIds.indexOf(event.suiteId);
     liveTestsInSuite = 0;
     ensureSuiteSection(event.suiteId, true);
     updateProgressBar(liveProgressPercent(), `${event.label} suite`);
+    persistActiveRunSession();
     return;
   }
 
@@ -637,22 +709,25 @@ function onBenchmarkProgress(
   if (event.type === 'test-done') {
     liveTestsDone += 1;
     liveTestsInSuite += 1;
-    liveTestResults.set(event.result.testId, event.result);
     upsertLiveTestCard(event.result, compareMap);
     updateProgressBar(
       liveProgressPercent(),
       `${SUITE_LABELS[event.result.suite]} · ${event.result.label}`,
     );
+    persistActiveRunSession();
     return;
   }
 
   if (event.type === 'run-cancelled') {
+    clearActiveRunPersistence();
     finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
     setRunning(false);
     return;
   }
 
   if (event.type === 'run-done') {
+    browsingHistory = false;
+    updateBackToCurrentControl();
     updateProgressBar(100, 'Complete');
     for (const suite of event.run.suites) {
       updateSuiteScore(
@@ -664,6 +739,7 @@ function onBenchmarkProgress(
       const section = document.querySelector(`[data-suite="${suite.id}"]`);
       section?.classList.remove('is-active');
     }
+    clearActiveRunPersistence();
     finishLiveRunUI();
   }
 }
@@ -784,6 +860,98 @@ function isBenchmarkRunActive(): boolean {
   return abortController != null && !abortController.signal.aborted;
 }
 
+function isLiveRunInProgress(): boolean {
+  return liveRunActive || isBenchmarkRunActive();
+}
+
+function updateBackToCurrentControl(): void {
+  const btn = document.getElementById('btnBenchmarkBackToCurrent');
+  if (!btn) return;
+  const show = browsingHistory && isLiveRunInProgress();
+  btn.hidden = !show;
+}
+
+/** Rebuild the live suite panel from in-memory progress (after browsing saved history). */
+function renderLiveRunFromState(compareMap: Map<string, TestResult>): void {
+  const mount = document.getElementById('benchmarkSuites');
+  if (!mount) return;
+
+  mount.innerHTML = '';
+  mount.classList.add('is-live');
+
+  const summary = document.getElementById('benchmarkSummary');
+  if (summary) {
+    summary.innerHTML =
+      '<p class="benchmark-empty benchmark-empty--live">Scoring the active model…</p>';
+  }
+
+  for (const suiteId of liveSuiteIds) {
+    const suiteTests = [...liveTestResults.values()].filter((t) => t.suite === suiteId);
+    const grid = ensureSuiteSection(suiteId, liveCurrentTestMeta?.suite === suiteId);
+    if (!grid) continue;
+
+    for (const result of suiteTests) {
+      if (result.testId === liveCurrentTestId) continue;
+      grid.insertAdjacentHTML(
+        'beforeend',
+        renderTestCard(result, regressionForTest(result, compareMap), false),
+      );
+    }
+
+    if (liveCurrentTestMeta?.suite === suiteId) {
+      upsertRunningTestCard(
+        liveCurrentTestMeta.suite,
+        liveCurrentTestMeta.testId,
+        liveCurrentTestMeta.label,
+      );
+    }
+
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const t of suiteTests) {
+      if (t.skipped) skipped += 1;
+      else if (t.passed) passed += 1;
+      else failed += 1;
+    }
+    const total = passed + failed + skipped + (liveCurrentTestMeta?.suite === suiteId ? 1 : 0);
+    const score =
+      suiteTests.length > 0
+        ? suiteTests.reduce((sum, t) => sum + t.score, 0) / suiteTests.length
+        : 0;
+    updateSuiteScore(suiteId, passed, Math.max(total, 1), score);
+  }
+
+  setProgressVisible(liveRunActive);
+  if (liveRunActive) {
+    const label = liveCurrentTestMeta
+      ? runningTestProgressLabel(liveCurrentTestMeta.suite, liveCurrentTestMeta.label)
+      : 'Benchmark running…';
+    updateProgressBar(liveProgressPercent(), label);
+  }
+}
+
+function restoreCurrentRunView(): void {
+  browsingHistory = false;
+  const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
+  if (select && select.value !== '') {
+    select.value = '';
+  }
+  updateBackToCurrentControl();
+
+  if (isLiveRunInProgress()) {
+    renderLiveRunFromState(compareMapFromRun(compareRun));
+    setStatus('ok', 'Showing current benchmark run.');
+    return;
+  }
+
+  if (lastRun) {
+    renderSummary(lastRun);
+    renderSuites(lastRun, compareRun);
+    setStatus('ok', `Showing latest run · ${formatScore(lastRun.totalScore)}`);
+  }
+}
+
 function onRunStopClick(): void {
   if (isBenchmarkRunActive()) {
     stopRun();
@@ -807,8 +975,12 @@ async function refreshHistorySelect(): Promise<void> {
   const previous = select.value;
   const compareToggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
   historySummaries = await listRuns();
+  const currentOption = isLiveRunInProgress()
+    ? `<option value="${HISTORY_CURRENT_VALUE}">Current run (in progress)</option>`
+    : '';
   select.innerHTML =
     '<option value="">View or compare a saved run…</option>' +
+    currentOption +
     historySummaries
       .filter((h) => h.id !== lastRun?.id)
       .map(
@@ -832,9 +1004,22 @@ async function onHistorySelectChange(): Promise<void> {
   if (!select) return;
 
   const id = select.value;
+
+  if (id === HISTORY_CURRENT_VALUE) {
+    restoreCurrentRunView();
+    return;
+  }
+
   if (!id) {
     compareRun = null;
-    if (lastRun) renderSuites(lastRun, null);
+    if (browsingHistory || isLiveRunInProgress()) {
+      restoreCurrentRunView();
+      return;
+    }
+    if (lastRun) {
+      renderSummary(lastRun);
+      renderSuites(lastRun, null);
+    }
     return;
   }
 
@@ -842,65 +1027,103 @@ async function onHistorySelectChange(): Promise<void> {
   if (!loaded) {
     setStatus('err', 'Could not load that benchmark run.');
     compareRun = null;
-    if (lastRun) renderSuites(lastRun, null);
+    if (browsingHistory || isLiveRunInProgress()) {
+      restoreCurrentRunView();
+    } else if (lastRun) {
+      renderSummary(lastRun);
+      renderSuites(lastRun, null);
+    }
     return;
   }
 
   if (toggle?.checked) {
     compareRun = loaded;
+    if (isLiveRunInProgress()) {
+      browsingHistory = false;
+      renderLiveRunFromState(compareMapFromRun(compareRun));
+      updateBackToCurrentControl();
+      setStatus('ok', 'Comparing current run against saved baseline.');
+      return;
+    }
     if (!lastRun) {
       setStatus('ok', 'Run a benchmark to compare against this saved run.');
       return;
     }
+    renderSummary(lastRun);
     renderSuites(lastRun, compareRun);
     return;
   }
 
+  browsingHistory = true;
   compareRun = null;
-  lastRun = loaded;
-  syncLiveDrawerMetaFromRun(loaded);
-  renderSummary(lastRun);
-  renderSuites(lastRun, null);
+  if (!isLiveRunInProgress()) {
+    lastRun = loaded;
+    syncLiveDrawerMetaFromRun(loaded);
+  }
+  renderSummary(loaded);
+  renderSuites(loaded, null);
+  updateBackToCurrentControl();
   setStatus('ok', `Loaded saved run · ${formatScore(loaded.totalScore)}`);
 }
 
-async function startRun(mode: BenchmarkStartMode): Promise<void> {
-  if (!getActiveModelIdFromDom()) {
-    setStatus('err', 'Load a model before running Benchmark.');
-    return;
-  }
-
-  applyStartModeToToggles(mode);
-
-  const selectedSuites = getSelectedSuites();
-  if (!selectedSuites.length) {
-    setStatus('err', 'Select at least one benchmark suite, then Run (or Quick / Full).');
-    return;
-  }
-
-  const storedPreset = storedPresetForStartMode(mode);
+async function executeBenchmarkRun(options: {
+  mode: BenchmarkStartMode;
+  suiteIds: SuiteId[];
+  preset: BenchmarkPreset;
+  resume?: ActiveBenchmarkSession;
+}): Promise<void> {
+  const { mode, suiteIds, preset, resume } = options;
 
   abortController?.abort();
   const generation = ++benchmarkRunGeneration;
   abortController = new AbortController();
   const runSignal = abortController.signal;
   setRunning(true);
-  setStatus('ok', runningStatusLabel(mode));
+  setStatus('ok', resume ? 'Resuming benchmark…' : runningStatusLabel(mode));
 
-  const suiteIds = selectedSuites;
   const compareMap = compareMapFromRun(compareRun);
-  const modelId = getActiveModelIdFromDom() ?? 'unknown';
+  const modelId = getActiveModelIdFromDom() ?? resume?.modelId ?? 'unknown';
+  const startedAt = resume?.startedAt ?? new Date().toISOString();
+  liveRunId = resume?.runId ?? startedAt.replace(/[:.]/g, '-');
+  liveStartMode = resume?.startMode ?? mode;
   liveRunDrawerMeta = {
-    preset: storedPreset,
+    preset,
     modelId,
-    startedAt: new Date().toISOString(),
+    startedAt,
   };
-  initLiveRunUI(mode, suiteIds);
+
+  if (resume) {
+    applyActiveSessionToLiveState(resume);
+    renderLiveRunFromState(compareMap);
+    setProgressVisible(true);
+    updateBackToCurrentControl();
+  } else {
+    initLiveRunUI(mode, suiteIds);
+  }
+
+  persistActiveRunSession();
+  void refreshHistorySelect();
+
+  const suitesToRun = resume ? remainingSuiteIds(resume) : suiteIds;
+  if (!suitesToRun.length) {
+    clearActiveRunPersistence();
+    setRunning(false);
+    abortController = null;
+    return;
+  }
 
   try {
     const run = await runBenchmark({
-      preset: storedPreset,
-      suites: selectedSuites,
+      preset,
+      suites: suitesToRun,
+      runId: liveRunId,
+      resume: resume
+        ? {
+            runId: resume.runId,
+            startedAt: resume.startedAt,
+            priorSuites: resume.completedSuites,
+          }
+        : undefined,
       signal: runSignal,
       onProgress: (event) => {
         if (generation !== benchmarkRunGeneration) return;
@@ -911,11 +1134,8 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
         }
         if (event.type === 'run-done') {
           lastRun = event.run;
-          liveRunDrawerMeta = {
-            preset: lastRun.preset,
-            modelId: lastRun.model.id,
-            startedAt: lastRun.startedAt,
-          };
+          liveRunId = event.run.id;
+          syncLiveDrawerMetaFromRun(event.run);
           renderSummary(lastRun);
           renderSuites(lastRun, compareRun);
           void refreshHistorySelect();
@@ -924,6 +1144,7 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
     });
     if (generation !== benchmarkRunGeneration) return;
     lastRun = run;
+    liveRunId = run.id;
     renderSummary(run);
     renderSuites(run, compareRun);
     await refreshHistorySelect();
@@ -932,6 +1153,9 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
   } catch (err) {
     if (generation !== benchmarkRunGeneration) return;
     const aborted = runSignal.aborted;
+    if (aborted) {
+      clearActiveRunPersistence();
+    }
     finishLiveRunUI({ markCurrentStopped: aborted, commitPartial: aborted });
     if (aborted) {
       setStatus('ok', 'Benchmark cancelled.');
@@ -949,9 +1173,58 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
     }
   } finally {
     if (generation !== benchmarkRunGeneration) return;
+    liveRunId = null;
     setRunning(false);
     abortController = null;
   }
+}
+
+async function startRun(mode: BenchmarkStartMode): Promise<void> {
+  if (!getActiveModelIdFromDom()) {
+    setStatus('err', 'Load a model before running Benchmark.');
+    return;
+  }
+
+  applyStartModeToToggles(mode);
+
+  const selectedSuites = getSelectedSuites();
+  if (!selectedSuites.length) {
+    setStatus('err', 'Select at least one benchmark suite, then Run (or Quick / Full).');
+    return;
+  }
+
+  const storedPreset = storedPresetForStartMode(mode);
+  await executeBenchmarkRun({ mode, suiteIds: selectedSuites, preset: storedPreset });
+}
+
+async function resumeBenchmarkFromSession(session: ActiveBenchmarkSession): Promise<void> {
+  if (isBenchmarkRunActive()) return;
+
+  const remaining = remainingSuiteIds(session);
+  if (!remaining.length) {
+    clearActiveBenchmarkSession();
+    return;
+  }
+
+  if (!getActiveModelIdFromDom()) {
+    setStatus('err', 'Load a model to resume the benchmark.');
+    return;
+  }
+
+  applyStartModeToToggles(session.startMode);
+  await executeBenchmarkRun({
+    mode: session.startMode,
+    suiteIds: session.suiteIds,
+    preset: session.preset,
+    resume: session,
+  });
+}
+
+function tryResumeBenchmarkFromSession(): void {
+  const session = loadActiveBenchmarkSession();
+  if (!session) return;
+  if (isBenchmarkRunActive()) return;
+  void resumeBenchmarkFromSession(session);
 }
 
 function stopRun(): void {
@@ -959,6 +1232,8 @@ function stopRun(): void {
   benchmarkRunGeneration += 1;
   abortController.abort();
   abortController = null;
+  clearActiveRunPersistence();
+  liveRunId = null;
   finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
   setRunning(false);
   setStatus('ok', 'Stopping benchmark…');
@@ -1030,6 +1305,60 @@ export function updateRunStopButtonForTests(running: boolean): void {
   updateRunStopButton(running);
 }
 
+/** Test hook: seed live-run panel state for history-browse restore tests. */
+export function seedLiveRunPanelForTests(options: {
+  suiteIds: SuiteId[];
+  results?: TestResult[];
+  running?: { testId: string; suite: SuiteId; label: string } | null;
+}): void {
+  liveRunActive = true;
+  liveSuiteIds = options.suiteIds;
+  liveTestResults.clear();
+  for (const result of options.results ?? []) {
+    liveTestResults.set(result.testId, result);
+  }
+  liveCurrentTestId = options.running?.testId ?? null;
+  liveCurrentTestMeta = options.running ?? null;
+  document.body.innerHTML = `
+    <div id="benchmarkSummary"></div>
+    <div id="benchmarkProgress" hidden><div id="benchmarkProgressFill"></div></div>
+    <div id="benchmarkSuites"></div>
+    <button type="button" id="btnBenchmarkBackToCurrent" hidden>Current run</button>
+  `;
+}
+
+/** Test hook: mark that the user is viewing saved history while a run is active. */
+export function setBrowsingHistoryForTests(browsing: boolean): void {
+  browsingHistory = browsing;
+  updateBackToCurrentControl();
+}
+
+/** Test hook: restore the live benchmark panel. */
+export function restoreCurrentRunViewForTests(): void {
+  restoreCurrentRunView();
+}
+
+/** Test hook: whether the back-to-current control is visible. */
+export function isBackToCurrentVisibleForTests(): boolean {
+  const btn = document.getElementById('btnBenchmarkBackToCurrent');
+  return btn instanceof HTMLElement && !btn.hidden;
+}
+
+function syncBenchmarkPageOnOpen(): void {
+  void refreshHistorySelect();
+  if (browsingHistory) {
+    updateBackToCurrentControl();
+    return;
+  }
+  if (isLiveRunInProgress()) {
+    setRunning(isBenchmarkRunActive());
+    restoreCurrentRunView();
+    return;
+  }
+  renderSummary(lastRun);
+  if (lastRun) renderSuites(lastRun, compareRun);
+}
+
 export function openBenchmark(): void {
   const root = getBenchmarkRoot();
   const shell = getChatShell();
@@ -1050,9 +1379,7 @@ export function openBenchmark(): void {
   shell.classList.add('hidden');
   window.location.hash = '#/benchmark';
 
-  void refreshHistorySelect();
-  renderSummary(lastRun);
-  if (lastRun) renderSuites(lastRun, compareRun);
+  syncBenchmarkPageOnOpen();
 }
 
 export function closeBenchmark(): void {
@@ -1060,12 +1387,16 @@ export function closeBenchmark(): void {
   const shell = getChatShell();
   if (!root || !shell) return;
   closeBenchmarkTranscriptDrawer();
-  stopRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   if (window.location.hash.startsWith('#/benchmark')) {
     window.location.hash = '#/';
   }
+}
+
+/** Whether a benchmark is running (including while another page is open). */
+export function isBenchmarkRunningInBackground(): boolean {
+  return isLiveRunInProgress();
 }
 
 function onHashChange(): void {
@@ -1107,12 +1438,16 @@ export function initBenchmarkPage(): void {
   document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => {
     void onHistorySelectChange();
   });
+  document.getElementById('btnBenchmarkBackToCurrent')?.addEventListener('click', () => {
+    restoreCurrentRunView();
+  });
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);
   suitesMount?.addEventListener('keydown', onBenchmarkTestCardKeydown);
 
   window.addEventListener('hashchange', onHashChange);
+  tryResumeBenchmarkFromSession();
   if (window.location.hash === '#/benchmark') {
     openBenchmark();
   }

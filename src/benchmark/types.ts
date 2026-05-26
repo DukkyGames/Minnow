@@ -128,9 +128,20 @@ export type BenchmarkProgressEvent =
   | { type: 'run-cancelled' }
   | { type: 'run-done'; run: BenchmarkRun };
 
+/** Prior work to merge when resuming after a page reload (suite-level skip). */
+export interface BenchmarkResumeState {
+  runId: string;
+  startedAt: string;
+  priorSuites: SuiteResult[];
+}
+
 export interface RunBenchmarkOptions {
   suites?: SuiteId[];
   preset?: BenchmarkPreset;
   signal?: AbortSignal;
   onProgress?: (event: BenchmarkProgressEvent) => void;
+  /** Reuse run id / startedAt and skip suites already in `priorSuites`. */
+  resume?: BenchmarkResumeState;
+  /** Override generated run id (must match session when resuming). */
+  runId?: string;
 }

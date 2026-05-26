@@ -19,6 +19,7 @@ const BENCHMARK_IDS = [
   'benchmarkProgressFill',
   'benchmarkSummary',
   'benchmarkHistorySelect',
+  'btnBenchmarkBackToCurrent',
   'benchmarkCompareToggle',
   'benchmarkSuites',
 ];

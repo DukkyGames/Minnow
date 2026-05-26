@@ -54,6 +54,31 @@ function newRunId(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+function headlineSpeedFromPriorSuites(priorSuites: SuiteResult[]): {
+  headlineTtftMs: number;
+  headlineTokPerSec: number;
+} {
+  const speed = priorSuites.find((s) => s.id === 'speed');
+  if (!speed) return { headlineTtftMs: 0, headlineTokPerSec: 0 };
+  const ttfts = speed.tests
+    .map((t) => t.ttftMs)
+    .filter((n): n is number => typeof n === 'number' && n > 0);
+  const tpss = speed.tests
+    .map((t) => t.tokPerSec)
+    .filter((n): n is number => typeof n === 'number' && n > 0);
+  return {
+    headlineTtftMs: median(ttfts),
+    headlineTokPerSec: median(tpss),
+  };
+}
+
 function suiteLabel(suiteId: SuiteId): string {
   if (suiteId === 'capability') return 'Capability';
   if (suiteId === 'speed') return 'Speed';
@@ -74,6 +99,10 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
   const suites = suitesForPreset(preset, options.suites);
   const signal = options.signal ?? new AbortController().signal;
   const onProgress = options.onProgress;
+  const priorSuites = options.resume?.priorSuites ?? [];
+  const priorSuiteIds = new Set(priorSuites.map((s) => s.id));
+  const startedAt = options.resume?.startedAt ?? new Date().toISOString();
+  const runId = options.runId ?? options.resume?.runId ?? newRunId();
 
   const binding = await resolveBenchmarkBinding();
   const localServer = await detectLocalServer();
@@ -97,15 +126,19 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     },
   };
 
-  const startedAt = new Date().toISOString();
   const runT0 = performance.now();
-  const suiteResults: SuiteResult[] = [];
-  let headlineTtftMs = 0;
-  let headlineTokPerSec = 0;
+  const suiteResults: SuiteResult[] = [...priorSuites];
+  const priorHeadline = headlineSpeedFromPriorSuites(priorSuites);
+  let headlineTtftMs = priorHeadline.headlineTtftMs;
+  let headlineTokPerSec = priorHeadline.headlineTokPerSec;
 
   try {
     for (const suiteId of suites) {
       assertNotAborted(signal);
+
+      if (priorSuiteIds.has(suiteId)) {
+        continue;
+      }
 
       onProgress?.({ type: 'suite-start', suiteId, label: suiteLabel(suiteId) });
 
@@ -162,7 +195,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     const modesSuite = suiteResults.find((s) => s.id === 'modes');
 
     const run: BenchmarkRun = {
-      id: newRunId(),
+      id: runId,
       startedAt,
       durationMs: Math.round(performance.now() - runT0),
       preset,

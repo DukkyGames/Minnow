@@ -1,0 +1,63 @@
+/**
+ * Persist an in-flight benchmark to sessionStorage so a full page reload can resume.
+ */
+
+import type { BenchmarkPreset, SuiteId, SuiteResult, TestResult } from './types.ts';
+
+const SESSION_KEY = 'minnow.benchmark.activeRun';
+const SESSION_VERSION = 1 as const;
+
+/** How the benchmark run bar started the active session (for UI labels on resume). */
+export type ActiveBenchmarkStartMode = 'quick' | 'full' | 'selected';
+
+export interface ActiveBenchmarkSession {
+  version: typeof SESSION_VERSION;
+  runId: string;
+  startedAt: string;
+  preset: BenchmarkPreset;
+  startMode: ActiveBenchmarkStartMode;
+  suiteIds: SuiteId[];
+  modelId: string;
+  /** Fully finished suites (used to skip work on resume). */
+  completedSuites: SuiteResult[];
+  /** All finished probes so far (restores cards after reload). */
+  completedTests: TestResult[];
+  status: 'running';
+}
+
+export function loadActiveBenchmarkSession(): ActiveBenchmarkSession | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveBenchmarkSession;
+    if (parsed?.version !== SESSION_VERSION || parsed.status !== 'running') return null;
+    if (!parsed.runId || !Array.isArray(parsed.suiteIds) || parsed.suiteIds.length === 0) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveBenchmarkSession(session: ActiveBenchmarkSession): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    /* quota or private mode */
+  }
+}
+
+export function clearActiveBenchmarkSession(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Suites not yet fully present in `completedSuites`. */
+export function remainingSuiteIds(session: ActiveBenchmarkSession): SuiteId[] {
+  const done = new Set(session.completedSuites.map((s) => s.id));
+  return session.suiteIds.filter((id) => !done.has(id));
+}
