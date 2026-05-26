@@ -41,6 +41,11 @@ export interface BenchmarkRunContext {
   modelId: string;
   localServer: boolean;
   signal: AbortSignal;
+  /**
+   * Set by `runBenchmark` to forward each finished probe to `onProgress` as `{ type: 'test-done' }`.
+   * Suites should call `reportTest` (or invoke this after each result) so the UI updates per test.
+   */
+  onTestDone?: (result: TestResult) => void;
 }
 
 export interface TestResult {

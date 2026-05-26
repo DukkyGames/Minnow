@@ -19,9 +19,9 @@ import { runModesSuite } from './suites/modes.ts';
 import { runCodingSuite } from './suites/coding.ts';
 import type {
   BenchmarkPreset,
+  BenchmarkProgressEvent,
   BenchmarkRun,
   BenchmarkRunContext,
-  BenchmarkProgressEvent,
   RunBenchmarkOptions,
   SuiteId,
   SuiteResult,
@@ -63,17 +63,6 @@ function suiteLabel(suiteId: SuiteId): string {
   return 'Coding';
 }
 
-function emitTestResults(
-  suite: SuiteResult,
-  onProgress: ((event: BenchmarkProgressEvent) => void) | undefined,
-  signal: AbortSignal,
-): void {
-  for (const result of suite.tests) {
-    if (signal.aborted) break;
-    onProgress?.({ type: 'test-done', result });
-  }
-}
-
 function notifyCancelled(
   onProgress: ((event: BenchmarkProgressEvent) => void) | undefined,
 ): void {
@@ -93,6 +82,10 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     modelId: binding.modelId,
     localServer,
     signal,
+    onTestDone: (result) => {
+      if (signal.aborted) return;
+      onProgress?.({ type: 'test-done', result });
+    },
   };
 
   const startedAt = new Date().toISOString();
@@ -110,7 +103,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       if (suiteId === 'capability') {
         const suite = await runCapabilitySuite(ctx);
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
         continue;
       }
@@ -120,7 +112,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
         headlineTtftMs = ttft;
         headlineTokPerSec = tps;
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
         continue;
       }
@@ -128,7 +119,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       if (suiteId === 'tools') {
         const suite = await runToolsSuite(ctx);
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
         continue;
       }
@@ -136,7 +126,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       if (suiteId === 'skills') {
         const suite = await runSkillsSuite(ctx);
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
         continue;
       }
@@ -144,7 +133,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       if (suiteId === 'modes') {
         const suite = await runModesSuite(ctx);
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
         continue;
       }
@@ -152,7 +140,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       if (suiteId === 'coding') {
         const suite = await runCodingSuite(ctx);
         suiteResults.push(suite);
-        emitTestResults(suite, onProgress, signal);
         if (signal.aborted) break;
       }
     }

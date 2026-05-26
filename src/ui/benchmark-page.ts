@@ -6,6 +6,11 @@ import '../styles/benchmark-page.css';
 import '../styles/sub-agent-drawer.css';
 
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
+import {
+  formatTestCardDescription,
+  resolveTestDescription,
+  SUITE_INTROS,
+} from '../benchmark/test-catalog.ts';
 import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
 import type {
   BenchmarkPreset,
@@ -116,6 +121,11 @@ function cardIconKind(result: TestResult, regression: boolean): 'pass' | 'fail' 
   return 'pass';
 }
 
+function testCardDomId(testId: string, suffix: string): string {
+  const slug = testId.replace(/[^a-zA-Z0-9-]/g, '-');
+  return `benchmark-${suffix}-${slug}`;
+}
+
 function renderTestCard(result: TestResult, regression: boolean, animate = false): string {
   const state = cardState(result, regression);
   const icon = cardIconKind(result, regression);
@@ -123,12 +133,22 @@ function renderTestCard(result: TestResult, regression: boolean, animate = false
   const details = result.details?.trim();
   const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result, regression)}${judged}`;
 
-  const ariaLabel = `View transcript: ${result.label}, ${statusText(result, regression)}`;
+  const titleId = testCardDomId(result.testId, 'title');
+  const descId = testCardDomId(result.testId, 'desc');
+  const catalogDesc = resolveTestDescription(result.testId, result.suite, result.label);
+  const descriptionHtml = catalogDesc
+    ? `<p class="benchmark-test-card-desc" id="${escapeHtml(descId)}">${escapeHtml(formatTestCardDescription(catalogDesc))}</p>`
+    : '';
 
-  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}">
+  const ariaLabel = `View transcript: ${result.label}, ${statusText(result, regression)}`;
+  const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
+  const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
+
+  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg(icon)}</div>
     <div class="benchmark-test-card-body">
-      <h3 class="benchmark-test-card-title">${escapeHtml(result.label)}</h3>
+      <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(result.label)}</h3>
+      ${descriptionHtml}
       <p class="benchmark-test-card-meta">${escapeHtml(meta)}</p>
       ${details ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>` : ''}
     </div>
@@ -232,7 +252,10 @@ function ensureSuiteSection(suiteId: SuiteId, running = false): HTMLElement | nu
     section.dataset.suite = suiteId;
     section.innerHTML = `
       <header class="benchmark-suite-block-header">
-        <h2>${escapeHtml(SUITE_LABELS[suiteId])}</h2>
+        <div class="benchmark-suite-block-heading">
+          <h2>${escapeHtml(SUITE_LABELS[suiteId])}</h2>
+          <p class="benchmark-suite-block-intro">${escapeHtml(SUITE_INTROS[suiteId])}</p>
+        </div>
         <span class="benchmark-suite-block-score" data-suite-score>—</span>
       </header>
       <div class="benchmark-test-grid" data-suite-tests></div>
@@ -441,7 +464,10 @@ function renderSuites(run: BenchmarkRun, compare: BenchmarkRun | null): void {
       const total = suite.passed + suite.failed + suite.skipped;
       return `<section class="benchmark-suite-block" data-suite="${suite.id}">
         <header class="benchmark-suite-block-header">
-          <h2>${escapeHtml(suite.label)}</h2>
+          <div class="benchmark-suite-block-heading">
+            <h2>${escapeHtml(suite.label)}</h2>
+            <p class="benchmark-suite-block-intro">${escapeHtml(SUITE_INTROS[suite.id])}</p>
+          </div>
           <span class="benchmark-suite-block-score">${suite.passed}/${total} · ${formatScore(suite.score)}</span>
         </header>
         <div class="benchmark-test-grid">${cards}</div>

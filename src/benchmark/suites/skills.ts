@@ -7,7 +7,7 @@ import { fetchSkillById } from '../../skills/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { regexMatch } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 const SKILL_TRIGGERS: Record<string, { prompt: string; pattern: RegExp }> = {
@@ -55,7 +55,7 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         maxTokens: 256,
       });
       const passed = regexMatch(out.text, trigger.pattern);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `skill-${skill.id}`,
@@ -72,7 +72,7 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
       );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `skill-${skill.id}`,
