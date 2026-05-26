@@ -7,7 +7,7 @@ import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import type { ModeId } from '../../chat/modes/types';
 
@@ -77,7 +77,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           maxToolRounds: 1,
         });
         const calledForbidden = toolNameMatch(out.toolCalls, neg.forbiddenTool);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-negative`,
@@ -94,7 +94,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-negative`,
@@ -117,7 +117,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     if (pos) {
       const t0 = performance.now();
       if (pos.expectedTool === 'web_search' && !ctx.localServer) {
-        tests.push({
+        reportTest(ctx, tests, {
           testId: `mode-${modeId}-positive`,
           suite: 'modes',
           label: `${mode.label} allows tool`,
@@ -144,7 +144,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           maxToolRounds: 2,
         });
         const ok = toolNameMatch(out.toolCalls, pos.expectedTool);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-positive`,
@@ -161,7 +161,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-positive`,

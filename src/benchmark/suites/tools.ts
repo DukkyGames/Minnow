@@ -7,7 +7,7 @@ import { executeTool } from '../../tools/client';
 import { assertNotAborted, raceWithAbort, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { EMIT_ONLY_TOOL_IDS, getToolFixture } from './tools-fixtures.ts';
 
@@ -20,7 +20,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     const fixture = getToolFixture(tool);
 
     if (tool.serverRequired && !ctx.localServer) {
-      tests.push({
+      reportTest(ctx, tests, {
         testId: `tool-${tool.id}`,
         suite: 'tools',
         label: tool.label,
@@ -77,7 +77,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
       }
 
       const passed = nameOk && argsOk && execOk;
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `tool-${tool.id}`,
@@ -94,7 +94,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
       );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `tool-${tool.id}`,

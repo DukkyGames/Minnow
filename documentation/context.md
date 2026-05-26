@@ -217,7 +217,7 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 
 Completions use `postChatCompletions` with `persist: false` (no chat session pollution). Distinct from planned Feature 21 eval harness (`~/.minnow/evals/`, multi-model matrix). Plan: [`documentation/plans/benchmark-system-implementation.md`](plans/benchmark-system-implementation.md).
 
-**Known issue (BUG-006, verified 2026-05-24):** Full preset **Tools** suite runs **61** serial `runToolLoop` probes; `runner.ts` batches all `test-done` progress until the suite finishes, so the UI looks frozen on “Tools suite” for a long time. Real `executeTool` during probes (approvals, `ask_question`, browser/CDP) has no per-test timeout. Fix plan: [`documentation/plans/Bug Fixes/BUG-006-benchmark-tools-suite-hang.md`](plans/Bug%20Fixes/BUG-006-benchmark-tools-suite-hang.md) · Linear [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite).
+**Known issue (BUG-006, verified 2026-05-24):** Full preset **Tools** suite runs **61** serial `runToolLoop` probes; live UI now emits **`test-done` per probe** as each completes (no post-suite batching). Remaining risks: real `executeTool` during probes (approvals, `ask_question`, browser/CDP) can still block or hang with no per-test timeout. Fix plan: [`documentation/plans/Bug Fixes/BUG-006-benchmark-tools-suite-hang.md`](plans/Bug%20Fixes/BUG-006-benchmark-tools-suite-hang.md) · Linear [MIN-67](https://linear.app/minnowai/issue/MIN-67/bug-006-benchmark-stuck-on-tools-suite).
 
 **Built-in prompts** ship under `src/chat/prompts/` (Step 04). **Built-in skills** under `src/skills/` (Step 13). User overrides use `~/.minnow/prompts/` and `~/.minnow/skills/`.
 

@@ -5,7 +5,7 @@
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { exactMatch, parseJudgeJson } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 interface CodingCase {
@@ -141,7 +141,7 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
         judgeRaw = verdict.raw;
       }
 
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: c.id,
@@ -160,7 +160,7 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
       );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: c.id,

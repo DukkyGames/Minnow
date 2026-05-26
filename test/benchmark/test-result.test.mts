@@ -5,11 +5,72 @@ import {
   BENCHMARK_RUN_SIZE_SOFT_CAP,
   buildTestResult,
   prepareBenchmarkRunForPersistence,
+  reportTest,
   truncateTranscriptForPersistence,
   TRANSCRIPT_TOOL_CONTENT_CAP,
 } from '../../src/benchmark/test-result.ts';
-import type { BenchmarkRun, TestResult } from '../../src/benchmark/types.ts';
+import type { BenchmarkRun, BenchmarkRunContext, TestResult } from '../../src/benchmark/types.ts';
 import type { ApiMessage } from '../../src/types.ts';
+
+describe('reportTest', () => {
+  test('appends result and invokes onTestDone in order', () => {
+    const tests: TestResult[] = [];
+    const seen: string[] = [];
+    const ctx: BenchmarkRunContext = {
+      providerId: 'p',
+      modelId: 'm',
+      localServer: true,
+      signal: new AbortController().signal,
+      onTestDone: (r) => {
+        seen.push(r.testId);
+      },
+    };
+
+    reportTest(ctx, tests, {
+      testId: 'a',
+      suite: 'speed',
+      label: 'A',
+      passed: true,
+      skipped: false,
+      durationMs: 1,
+      score: 1,
+    });
+    reportTest(ctx, tests, {
+      testId: 'b',
+      suite: 'speed',
+      label: 'B',
+      passed: false,
+      skipped: false,
+      durationMs: 2,
+      score: 0,
+    });
+
+    assert.equal(tests.length, 2);
+    assert.deepEqual(seen, ['a', 'b']);
+    assert.equal(tests[0]?.testId, 'a');
+    assert.equal(tests[1]?.testId, 'b');
+  });
+
+  test('does not throw when onTestDone is omitted', () => {
+    const tests: TestResult[] = [];
+    const ctx: BenchmarkRunContext = {
+      providerId: 'p',
+      modelId: 'm',
+      localServer: false,
+      signal: new AbortController().signal,
+    };
+    reportTest(ctx, tests, {
+      testId: 'x',
+      suite: 'tools',
+      label: 'X',
+      passed: true,
+      skipped: false,
+      durationMs: 1,
+      score: 1,
+    });
+    assert.equal(tests.length, 1);
+  });
+});
 
 describe('buildTestResult', () => {
   test('maps driver messages to transcript with finishReason meta', () => {

@@ -5,7 +5,7 @@
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { hasNonEmptyCompletion, speedCompletionDetails } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, LlmTurnTiming, SuiteResult, TestResult } from '../types.ts';
 
 /** Fields from runOneShot used to score speed tests (unit-tested without live LLM). */
@@ -66,7 +66,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
       const scored = scoreSpeedCompletion(out.text, out.timing);
       if (scored.ttftSample != null) ttftSamples.push(scored.ttftSample);
       if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `speed-short-${i + 1}`,
@@ -85,7 +85,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
       );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `speed-short-${i + 1}`,
@@ -123,7 +123,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     const durationMs = performance.now() - tLong;
     const scored = scoreSpeedCompletion(out.text, out.timing);
     if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         {
           testId: 'speed-long-1',
@@ -141,7 +141,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         {
           testId: 'speed-long-1',
