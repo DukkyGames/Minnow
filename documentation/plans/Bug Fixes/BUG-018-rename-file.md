@@ -2,7 +2,7 @@
 name: BUG-018 — Rename file does not work
 overview: File tree rename uses window.prompt + move_file; server rename works, but silent UI exits and platform edge cases explain “does not work” reports. Replace prompt with inline/modal rename and harden error feedback.
 source: documentation/bug-hunt-session-2026-05-24.md (BUG-018)
-status: verified
+status: shipped
 severity: major
 linear: MIN-99
 verifiedAt: 2026-05-24

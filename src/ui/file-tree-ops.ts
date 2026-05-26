@@ -144,6 +144,22 @@ async function finishMutation(
   await refreshFileTreeViaBridge();
 }
 
+async function confirmRenameIfDirty(path: string): Promise<boolean> {
+  const viewer = await import('./file-viewer');
+  const openPath = viewer.getOpenViewerPath();
+  const norm = normalizeTreePath(path);
+  if (
+    openPath &&
+    normalizeTreePath(openPath) === norm &&
+    viewer.isFileViewerDirty()
+  ) {
+    return window.confirm(
+      'This file has unsaved changes. Rename anyway? The editor will follow the new path.',
+    );
+  }
+  return true;
+}
+
 async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boolean> {
   const viewer = await import('./file-viewer');
   const openPath = viewer.getOpenViewerPath();
@@ -176,22 +192,38 @@ export async function deletePath(path: string, kind: FileTreeEntryKind): Promise
   return true;
 }
 
-/** Rename via move_file (same parent, new basename). */
-export async function renamePath(path: string, kind: FileTreeEntryKind): Promise<boolean> {
+/** Start inline rename on the matching tree row (context menu / F2). */
+export function renamePath(path: string, kind: FileTreeEntryKind): void {
+  void import('./file-tree-rename').then((m) => m.startInlineRename(path, kind));
+}
+
+/** Apply rename after inline edit (or tests) via move_file. */
+export async function commitRename(
+  path: string,
+  kind: FileTreeEntryKind,
+  nextName: string,
+): Promise<boolean> {
   const currentName = basename(path);
-  const nextName = window.prompt(
-    kind === 'dir' ? 'New folder name:' : 'New file name:',
-    currentName,
-  );
-  if (nextName === null) return false;
-  if (!isValidEntryName(nextName)) {
+  const trimmed = nextName.trim();
+  if (!trimmed) {
+    setStatus('err', 'Name cannot be empty.');
+    return false;
+  }
+  if (!isValidEntryName(trimmed)) {
     setStatus('err', 'Invalid name. Use a single name without / or \\.');
     return false;
   }
-  if (nextName.trim() === currentName) return false;
+  if (trimmed === currentName) {
+    setStatus('idle', 'Name unchanged');
+    return false;
+  }
+  if (!(await confirmRenameIfDirty(path))) {
+    setStatus('idle', 'Rename cancelled');
+    return false;
+  }
 
   const parent = dirname(path);
-  const destination = joinTreePath(parent, nextName.trim());
+  const destination = joinTreePath(parent, trimmed);
   return movePath(path, destination, 'rename');
 }
 

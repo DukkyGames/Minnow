@@ -15,7 +15,10 @@ import {
   getFileTreeClipboard,
   setFileTreeClipboard,
 } from '../../src/ui/file-tree-clipboard.ts';
-import { parseToolResult } from '../../src/ui/file-tree-parse-result.ts';
+import {
+  friendlyFileToolError,
+  parseToolResult,
+} from '../../src/ui/file-tree-parse-result.ts';
 import { pasteTargetDirForPath } from '../../src/ui/file-tree-path.ts';
 
 describe('parseToolResult', () => {
@@ -29,6 +32,21 @@ describe('parseToolResult', () => {
     const r = parseToolResult('Error: path outside workspace');
     assert.equal(r.ok, false);
     assert.match(r.message, /outside workspace/i);
+  });
+
+  test('EBUSY maps to actionable rename message', () => {
+    const r = parseToolResult(
+      "Error: EBUSY: resource busy or locked, rename 'a.ts' -> 'b.ts'",
+    );
+    assert.equal(r.ok, false);
+    assert.match(r.message, /in use/i);
+  });
+
+  test('friendlyFileToolError handles EPERM', () => {
+    assert.match(
+      friendlyFileToolError('EPERM: permission denied'),
+      /permission denied/i,
+    );
   });
 });
 

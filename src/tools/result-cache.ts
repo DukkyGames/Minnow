@@ -364,6 +364,29 @@ export function pathMatchesBustPrefix(cachedPath: string, bustPrefix: string): b
   return c.startsWith(`${b}/`);
 }
 
+/** Parent directory of a normalized relative path (`.` for root-level files). */
+function parentDirOf(normalizedPath: string): string {
+  const slash = normalizedPath.lastIndexOf('/');
+  return slash >= 0 ? normalizedPath.slice(0, slash) : '.';
+}
+
+/**
+ * True when a mutating tool touched a path that would change a list_directory listing.
+ * Inverse of pathMatchesBustPrefix: bust is a file/dir path; cached listing is its parent dir.
+ */
+export function changedPathAffectsDirectoryListing(
+  listingDir: string,
+  changedPath: string,
+): boolean {
+  const dir = normalizePathArg(listingDir || '.');
+  const changed = normalizePathArg(changedPath);
+  if (!changed || changed === '**') return true;
+  if (!dir || dir === '.') return true;
+  if (changed === dir) return true;
+  if (changed.startsWith(`${dir}/`)) return true;
+  return parentDirOf(changed) === dir;
+}
+
 function cachedEntryMatchesBust(
   cachedTool: string,
   cachedArgs: Record<string, unknown>,
@@ -383,9 +406,15 @@ function cachedEntryMatchesBust(
   if (cachedPaths.length === 0) {
     return true;
   }
+  const usesDirectoryListing =
+    cachedTool === 'list_directory' || cachedTool === 'find_files';
+
   for (const cp of cachedPaths) {
     for (const bp of bustPrefixes) {
       if (pathMatchesBustPrefix(cp, bp)) {
+        return true;
+      }
+      if (usesDirectoryListing && changedPathAffectsDirectoryListing(cp, bp)) {
         return true;
       }
     }
