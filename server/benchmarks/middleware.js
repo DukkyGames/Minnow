@@ -5,6 +5,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
+import {
+  abortActiveBenchmarkRun,
+  getActiveBenchmarkSnapshot,
+  loadPersistedActiveBenchmark,
+  startActiveBenchmarkRun,
+} from './active-run-service.js';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const LIST_CAP = 20;
@@ -15,7 +21,7 @@ function benchmarksDir() {
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -137,6 +143,14 @@ async function handlePost(body, res) {
   sendJson(res, 201, { ok: true, id: safe });
 }
 
+let activeRunHydrated = false;
+
+async function ensureActiveRunHydrated() {
+  if (activeRunHydrated) return;
+  activeRunHydrated = true;
+  await loadPersistedActiveBenchmark();
+}
+
 export function createBenchmarksMiddleware() {
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';
@@ -153,6 +167,25 @@ export function createBenchmarksMiddleware() {
     }
 
     try {
+      if (url === '/api/benchmarks/active') {
+        await ensureActiveRunHydrated();
+        if (req.method === 'GET') {
+          sendJson(res, 200, getActiveBenchmarkSnapshot());
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const snapshot = await startActiveBenchmarkRun(body);
+          sendJson(res, 201, snapshot);
+          return;
+        }
+        if (req.method === 'DELETE') {
+          const snapshot = await abortActiveBenchmarkRun();
+          sendJson(res, 200, snapshot);
+          return;
+        }
+      }
+
       if (url === '/api/benchmarks' && req.method === 'GET') {
         await handleGetList(req, res);
         return;
@@ -160,7 +193,12 @@ export function createBenchmarksMiddleware() {
 
       const match = url.match(/^\/api\/benchmarks\/([^/]+)$/);
       if (match && req.method === 'GET') {
-        await handleGetOne(decodeURIComponent(match[1]), res);
+        const segment = decodeURIComponent(match[1]);
+        if (segment === 'active') {
+          sendJson(res, 404, { error: 'Not found' });
+          return;
+        }
+        await handleGetOne(segment, res);
         return;
       }
 

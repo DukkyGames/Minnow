@@ -20,6 +20,7 @@ const BENCHMARK_IDS = [
   'benchmarkSummary',
   'benchmarkHistorySelect',
   'benchmarkCompareToggle',
+  'benchmarkReturnToCurrent',
   'benchmarkSuites',
 ];
 

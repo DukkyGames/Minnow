@@ -256,6 +256,20 @@
   color: var(--mn-fg);
 }
 
+.benchmark-return-to-current {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-accent);
+  cursor: pointer;
+}
+
+.benchmark-return-to-current:hover {
+  background: color-mix(in srgb, var(--mn-accent) 12%, transparent);
+}
+
 /* Suite blocks and test cards */
 .benchmark-suite-block {
   margin-bottom: 28px;

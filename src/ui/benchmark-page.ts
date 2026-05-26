@@ -12,7 +12,13 @@ import {
   resolveTestDescription,
   SUITE_INTROS,
 } from '../benchmark/test-catalog.ts';
+import {
+  abortActiveBenchmarkOnServer,
+  fetchActiveBenchmarkSnapshot,
+  startActiveBenchmarkOnServer,
+} from '../benchmark/active-run-client.ts';
 import { listRuns, loadRun, type BenchmarkRunSummary } from '../benchmark/persistence.ts';
+import { getActiveProvider } from '../providers/store.ts';
 import type {
   BenchmarkPreset,
   BenchmarkRun,
@@ -45,9 +51,16 @@ const SUITE_TOGGLE_ORDER: SuiteId[] = [
 let abortController: AbortController | null = null;
 /** Bumped on Stop or new Run so in-flight `startRun` finally blocks do not fight UI reset. */
 let benchmarkRunGeneration = 0;
+/** Server child process drives the run (survives full page reload). */
+let benchmarkUsesServer = false;
+let benchmarkPollTimer: ReturnType<typeof setInterval> | null = null;
+let benchmarkEventsSeen = 0;
+let activeStartMode: BenchmarkStartMode = 'selected';
 let lastRun: BenchmarkRun | null = null;
 let compareRun: BenchmarkRun | null = null;
 let historySummaries: BenchmarkRunSummary[] = [];
+/** Saved run id shown in the main panel (view mode); cleared when returning to current/last run. */
+let viewingHistoryRunId: string | null = null;
 
 /** Tracks in-flight UI while a run is active. */
 let liveRunActive = false;
@@ -778,10 +791,128 @@ function setRunning(running: boolean): void {
   updateRunStopButton(running);
   setSuiteTogglesDisabled(running);
   root?.classList.toggle('is-running', running);
+  syncBenchmarkTopbarRunning(running);
+}
+
+/** Top-bar chart icon shows activity while a run continues off-page. */
+function syncBenchmarkTopbarRunning(running: boolean): void {
+  document.getElementById('btnBenchmark')?.classList.toggle('is-benchmark-running', running);
 }
 
 function isBenchmarkRunActive(): boolean {
+  if (benchmarkUsesServer) return liveRunActive;
   return abortController != null && !abortController.signal.aborted;
+}
+
+function stopActiveBenchmarkPolling(): void {
+  if (benchmarkPollTimer != null) {
+    clearInterval(benchmarkPollTimer);
+    benchmarkPollTimer = null;
+  }
+}
+
+function applyBenchmarkProgressEvent(
+  event: BenchmarkProgressEvent,
+  compareMap: Map<string, TestResult>,
+): void {
+  onBenchmarkProgress(event, compareMap);
+}
+
+function replayBenchmarkProgressEvents(
+  events: BenchmarkProgressEvent[],
+  compareMap: Map<string, TestResult>,
+  fromIndex = 0,
+): void {
+  for (let i = fromIndex; i < events.length; i += 1) {
+    applyBenchmarkProgressEvent(events[i], compareMap);
+  }
+  benchmarkEventsSeen = events.length;
+}
+
+function startActiveBenchmarkPolling(generation: number, compareMap: Map<string, TestResult>): void {
+  stopActiveBenchmarkPolling();
+  benchmarkPollTimer = setInterval(() => {
+    if (generation !== benchmarkRunGeneration) return;
+    void (async () => {
+      const snap = await fetchActiveBenchmarkSnapshot();
+      if (!snap || generation !== benchmarkRunGeneration) return;
+
+      if (snap.events.length > benchmarkEventsSeen) {
+        replayBenchmarkProgressEvents(snap.events, compareMap, benchmarkEventsSeen);
+      }
+
+      if (snap.status === 'running') return;
+
+      stopActiveBenchmarkPolling();
+      benchmarkUsesServer = false;
+
+      if (snap.status === 'error' && snap.error) {
+        setStatus('err', snap.error);
+      } else if (snap.status === 'complete' && snap.run) {
+        lastRun = snap.run;
+        liveRunDrawerMeta = {
+          preset: lastRun.preset,
+          modelId: lastRun.model.id,
+          startedAt: lastRun.startedAt,
+        };
+        renderSummary(lastRun);
+        renderSuites(lastRun, compareRun);
+        void refreshHistorySelect();
+        setStatus('ok', `Benchmark done · ${formatScore(snap.run.totalScore)}`);
+      }
+
+      if (generation === benchmarkRunGeneration) {
+        setRunning(false);
+        abortController = null;
+      }
+    })();
+  }, 400);
+}
+
+/** Rebuild suite cards from accumulated live state after leaving the page mid-run. */
+function rebuildLiveBenchmarkView(): void {
+  const mount = document.getElementById('benchmarkSuites');
+  if (!mount || !liveRunActive) return;
+
+  mount.innerHTML = '';
+  mount.classList.add('is-live');
+  setProgressVisible(true);
+
+  const summary = document.getElementById('benchmarkSummary');
+  if (summary) {
+    summary.innerHTML =
+      '<p class="benchmark-empty benchmark-empty--live">Scoring the active model…</p>';
+  }
+
+  for (const suiteId of liveSuiteIds) {
+    ensureSuiteSection(suiteId, false);
+  }
+
+  const compareMap = compareMapFromRun(compareRun);
+  for (const result of liveTestResults.values()) {
+    upsertLiveTestCard(result, compareMap);
+  }
+
+  if (liveCurrentTestMeta) {
+    upsertRunningTestCard(
+      liveCurrentTestMeta.suite,
+      liveCurrentTestMeta.testId,
+      liveCurrentTestMeta.label,
+    );
+  }
+
+  updateProgressBar(liveProgressPercent(), 'Benchmark running…');
+}
+
+function renderBenchmarkPanelForCurrentState(): void {
+  if (liveRunActive || isBenchmarkRunActive()) {
+    rebuildLiveBenchmarkView();
+    setRunning(true);
+    return;
+  }
+  renderSummary(lastRun);
+  if (lastRun) renderSuites(lastRun, compareRun);
+  setRunning(false);
 }
 
 function onRunStopClick(): void {
@@ -799,6 +930,50 @@ function syncLiveDrawerMetaFromRun(run: BenchmarkRun): void {
     modelId: run.model.id,
     startedAt: run.startedAt,
   };
+}
+
+function isViewingHistoryRun(): boolean {
+  return viewingHistoryRunId != null;
+}
+
+function canReturnToCurrentRun(): boolean {
+  return liveRunActive || isBenchmarkRunActive();
+}
+
+function syncReturnToCurrentControl(): void {
+  const btn = document.getElementById('benchmarkReturnToCurrent');
+  if (!btn) return;
+  const show =
+    isViewingHistoryRun() && (canReturnToCurrentRun() || lastRun != null);
+  btn.classList.toggle('hidden', !show);
+  if (show) btn.removeAttribute('hidden');
+  else btn.setAttribute('hidden', '');
+}
+
+function returnToCurrentRunView(): void {
+  viewingHistoryRunId = null;
+  const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
+  if (select) select.value = '';
+  syncReturnToCurrentControl();
+
+  if (canReturnToCurrentRun()) {
+    rebuildLiveBenchmarkView();
+    setRunning(true);
+    setStatus('ok', 'Showing current benchmark run.');
+    return;
+  }
+
+  if (lastRun) {
+    syncLiveDrawerMetaFromRun(lastRun);
+    renderSummary(lastRun);
+    renderSuites(lastRun, compareRun);
+    setStatus('ok', 'Showing latest run.');
+    return;
+  }
+
+  renderSummary(null);
+  const mount = document.getElementById('benchmarkSuites');
+  if (mount) mount.innerHTML = '';
 }
 
 async function refreshHistorySelect(): Promise<void> {
@@ -819,10 +994,12 @@ async function refreshHistorySelect(): Promise<void> {
 
   const restoreId =
     (previous && historySummaries.some((h) => h.id === previous) ? previous : null) ??
-    (compareToggle?.checked && compareRun?.id ? compareRun.id : null);
+    (compareToggle?.checked && compareRun?.id ? compareRun.id : null) ??
+    (isViewingHistoryRun() ? viewingHistoryRunId : null);
   if (restoreId) {
     select.value = restoreId;
   }
+  syncReturnToCurrentControl();
 }
 
 /** Load a saved run for viewing, or as the compare baseline when Compare is checked. */
@@ -834,7 +1011,7 @@ async function onHistorySelectChange(): Promise<void> {
   const id = select.value;
   if (!id) {
     compareRun = null;
-    if (lastRun) renderSuites(lastRun, null);
+    returnToCurrentRunView();
     return;
   }
 
@@ -842,12 +1019,20 @@ async function onHistorySelectChange(): Promise<void> {
   if (!loaded) {
     setStatus('err', 'Could not load that benchmark run.');
     compareRun = null;
-    if (lastRun) renderSuites(lastRun, null);
+    viewingHistoryRunId = null;
+    syncReturnToCurrentControl();
+    returnToCurrentRunView();
     return;
   }
 
   if (toggle?.checked) {
     compareRun = loaded;
+    viewingHistoryRunId = null;
+    syncReturnToCurrentControl();
+    if (canReturnToCurrentRun()) {
+      setStatus('ok', 'Comparing current run against saved baseline.');
+      return;
+    }
     if (!lastRun) {
       setStatus('ok', 'Run a benchmark to compare against this saved run.');
       return;
@@ -857,10 +1042,10 @@ async function onHistorySelectChange(): Promise<void> {
   }
 
   compareRun = null;
-  lastRun = loaded;
-  syncLiveDrawerMetaFromRun(loaded);
-  renderSummary(lastRun);
-  renderSuites(lastRun, null);
+  viewingHistoryRunId = id;
+  syncReturnToCurrentControl();
+  renderSummary(loaded);
+  renderSuites(loaded, null);
   setStatus('ok', `Loaded saved run · ${formatScore(loaded.totalScore)}`);
 }
 
@@ -871,6 +1056,7 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
   }
 
   applyStartModeToToggles(mode);
+  activeStartMode = mode;
 
   const selectedSuites = getSelectedSuites();
   if (!selectedSuites.length) {
@@ -880,8 +1066,15 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
 
   const storedPreset = storedPresetForStartMode(mode);
 
+  stopActiveBenchmarkPolling();
   abortController?.abort();
+  if (benchmarkUsesServer) {
+    await abortActiveBenchmarkOnServer();
+  }
+
   const generation = ++benchmarkRunGeneration;
+  benchmarkEventsSeen = 0;
+  benchmarkUsesServer = false;
   abortController = new AbortController();
   const runSignal = abortController.signal;
   setRunning(true);
@@ -890,21 +1083,40 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
   const suiteIds = selectedSuites;
   const compareMap = compareMapFromRun(compareRun);
   const modelId = getActiveModelIdFromDom() ?? 'unknown';
+  const startedAt = new Date().toISOString();
   liveRunDrawerMeta = {
     preset: storedPreset,
     modelId,
-    startedAt: new Date().toISOString(),
+    startedAt,
   };
   initLiveRunUI(mode, suiteIds);
 
   try {
+    const provider = await getActiveProvider();
+    const baseUrl = `${window.location.origin}`;
+    const serverSnap = await startActiveBenchmarkOnServer({
+      baseUrl,
+      preset: storedPreset,
+      suites: selectedSuites,
+      providerId: provider.id,
+      modelId,
+      provider,
+    });
+
+    if (serverSnap?.status === 'running') {
+      benchmarkUsesServer = true;
+      replayBenchmarkProgressEvents(serverSnap.events, compareMap);
+      startActiveBenchmarkPolling(generation, compareMap);
+      return;
+    }
+
     const run = await runBenchmark({
       preset: storedPreset,
       suites: selectedSuites,
       signal: runSignal,
       onProgress: (event) => {
         if (generation !== benchmarkRunGeneration) return;
-        onBenchmarkProgress(event, compareMap);
+        applyBenchmarkProgressEvent(event, compareMap);
         if (event.type === 'run-cancelled') {
           setStatus('ok', 'Benchmark cancelled.');
           return;
@@ -949,15 +1161,21 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
     }
   } finally {
     if (generation !== benchmarkRunGeneration) return;
+    if (benchmarkUsesServer) return;
     setRunning(false);
     abortController = null;
   }
 }
 
 function stopRun(): void {
-  if (!abortController) return;
+  if (!isBenchmarkRunActive() && !abortController) return;
   benchmarkRunGeneration += 1;
-  abortController.abort();
+  stopActiveBenchmarkPolling();
+  if (benchmarkUsesServer) {
+    void abortActiveBenchmarkOnServer();
+    benchmarkUsesServer = false;
+  }
+  abortController?.abort();
   abortController = null;
   finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
   setRunning(false);
@@ -1030,6 +1248,49 @@ export function updateRunStopButtonForTests(running: boolean): void {
   updateRunStopButton(running);
 }
 
+/** Test hook: whether the saved-run panel is showing instead of the current run. */
+export function isViewingHistoryRunForTests(): boolean {
+  return isViewingHistoryRun();
+}
+
+/** Test hook: show or hide the return-to-current control. */
+export function syncReturnToCurrentControlForTests(): void {
+  syncReturnToCurrentControl();
+}
+
+/** Test hook: return from history view to the live or latest run panel. */
+export function returnToCurrentRunViewForTests(): void {
+  returnToCurrentRunView();
+}
+
+/** Test hook: mark that a saved run is displayed in the main panel. */
+export function setViewingHistoryRunIdForTests(id: string | null): void {
+  viewingHistoryRunId = id;
+}
+
+/** Test hook: seed live run UI state for restore tests. */
+export function seedLiveRunUiStateForTests(options: {
+  suiteIds: SuiteId[];
+  results?: TestResult[];
+  current?: { testId: string; suite: SuiteId; label: string } | null;
+}): void {
+  liveRunActive = true;
+  liveSuiteIds = options.suiteIds;
+  liveSuiteIndex = 0;
+  liveTestsInSuite = options.results?.length ?? 0;
+  liveTestResults.clear();
+  for (const result of options.results ?? []) {
+    liveTestResults.set(result.testId, result);
+  }
+  liveCurrentTestMeta = options.current ?? null;
+  liveCurrentTestId = options.current?.testId ?? null;
+}
+
+/** Test hook: rebuild the live suite grid after leaving history view. */
+export function rebuildLiveBenchmarkViewForTests(): void {
+  rebuildLiveBenchmarkView();
+}
+
 export function openBenchmark(): void {
   const root = getBenchmarkRoot();
   const shell = getChatShell();
@@ -1051,8 +1312,7 @@ export function openBenchmark(): void {
   window.location.hash = '#/benchmark';
 
   void refreshHistorySelect();
-  renderSummary(lastRun);
-  if (lastRun) renderSuites(lastRun, compareRun);
+  renderBenchmarkPanelForCurrentState();
 }
 
 export function closeBenchmark(): void {
@@ -1060,7 +1320,6 @@ export function closeBenchmark(): void {
   const shell = getChatShell();
   if (!root || !shell) return;
   closeBenchmarkTranscriptDrawer();
-  stopRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   if (window.location.hash.startsWith('#/benchmark')) {
@@ -1087,6 +1346,39 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
   this.setAttribute('aria-pressed', pressed ? 'false' : 'true');
 }
 
+/** Re-attach UI after reload while a server-side run is still active. */
+async function attachToActiveBenchmarkIfRunning(): Promise<void> {
+  const snap = await fetchActiveBenchmarkSnapshot();
+  if (!snap || snap.status !== 'running' || !snap.config) return;
+
+  benchmarkUsesServer = true;
+  benchmarkEventsSeen = 0;
+  activeStartMode = 'selected';
+  liveRunDrawerMeta = {
+    preset: snap.config.preset,
+    modelId: snap.config.modelId,
+    startedAt: snap.config.startedAt,
+  };
+  liveSuiteIds = snap.config.suites;
+  liveRunActive = true;
+  liveTestResults.clear();
+  liveCurrentTestId = null;
+  liveCurrentTestMeta = null;
+
+  const compareMap = compareMapFromRun(compareRun);
+  replayBenchmarkProgressEvents(snap.events, compareMap);
+  setRunning(true);
+  setStatus('ok', 'Benchmark running…');
+
+  const root = getBenchmarkRoot();
+  if (root?.classList.contains('is-open')) {
+    rebuildLiveBenchmarkView();
+  }
+
+  const generation = benchmarkRunGeneration;
+  startActiveBenchmarkPolling(generation, compareMap);
+}
+
 export function initBenchmarkPage(): void {
   document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => closeBenchmark());
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
@@ -1107,6 +1399,9 @@ export function initBenchmarkPage(): void {
   document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => {
     void onHistorySelectChange();
   });
+  document.getElementById('benchmarkReturnToCurrent')?.addEventListener('click', () => {
+    returnToCurrentRunView();
+  });
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);
@@ -1116,6 +1411,7 @@ export function initBenchmarkPage(): void {
   if (window.location.hash === '#/benchmark') {
     openBenchmark();
   }
+  void attachToActiveBenchmarkIfRunning();
 }
 
 export function openBenchmarkFromTopbar(): void {

@@ -133,4 +133,6 @@ export interface RunBenchmarkOptions {
   preset?: BenchmarkPreset;
   signal?: AbortSignal;
   onProgress?: (event: BenchmarkProgressEvent) => void;
+  /** When set (server worker), skip DOM/model-picker resolution. */
+  binding?: import('./resolve-binding.ts').BenchmarkBinding;
 }
