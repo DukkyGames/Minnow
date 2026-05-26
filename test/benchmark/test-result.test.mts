@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import {
+  announceTestStart,
   BENCHMARK_RUN_SIZE_SOFT_CAP,
   buildTestResult,
   prepareBenchmarkRunForPersistence,
@@ -11,6 +12,33 @@ import {
 } from '../../src/benchmark/test-result.ts';
 import type { BenchmarkRun, BenchmarkRunContext, TestResult } from '../../src/benchmark/types.ts';
 import type { ApiMessage } from '../../src/types.ts';
+
+describe('announceTestStart', () => {
+  test('invokes onTestStart with probe metadata', () => {
+    let meta: { testId: string; label: string } | null = null;
+    const ctx: BenchmarkRunContext = {
+      providerId: 'p',
+      modelId: 'm',
+      localServer: true,
+      signal: new AbortController().signal,
+      onTestStart: (m) => {
+        meta = m;
+      },
+    };
+
+    announceTestStart(ctx, {
+      testId: 'cap-stream',
+      suite: 'capability',
+      label: 'Streaming completion',
+    });
+
+    assert.deepEqual(meta, {
+      testId: 'cap-stream',
+      suite: 'capability',
+      label: 'Streaming completion',
+    });
+  });
+});
 
 describe('reportTest', () => {
   test('appends result and invokes onTestDone in order', () => {

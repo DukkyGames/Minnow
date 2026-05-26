@@ -82,6 +82,15 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
     modelId: binding.modelId,
     localServer,
     signal,
+    onTestStart: (meta) => {
+      if (signal.aborted) return;
+      onProgress?.({
+        type: 'test-start',
+        suiteId: meta.suite,
+        testId: meta.testId,
+        label: meta.label,
+      });
+    },
     onTestDone: (result) => {
       if (signal.aborted) return;
       onProgress?.({ type: 'test-done', result });

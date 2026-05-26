@@ -9,7 +9,7 @@ import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
 import { hasNonEmptyCompletion, streamCompletionTestDetails } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { LmModelRecord } from '../../types.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { scoreMultimodalProbe } from './cap-multimodal.ts';
@@ -46,6 +46,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
 
   // 1 — Provider reachable
   let t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-provider',
+    suite: 'capability',
+    label: 'Provider reachable',
+  });
   try {
     const provider = await getActiveProvider(ctx.providerId);
     reportTest(ctx, tests,
@@ -66,6 +71,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
 
   // 2 — Model resolves
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-model',
+    suite: 'capability',
+    label: 'Active model selected',
+  });
   reportTest(ctx, tests,
     result(
       'cap-model',
@@ -79,6 +89,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 3 — Streaming
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-stream',
+    suite: 'capability',
+    label: 'Streaming completion',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
@@ -119,6 +134,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 4 — Usage chunk (skip if absent)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-usage',
+    suite: 'capability',
+    label: 'Usage metadata',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
@@ -169,6 +189,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 5 — Tool schema accepted
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-tools-schema',
+    suite: 'capability',
+    label: 'Tool schema accepted',
+  });
   try {
     const stream = await runOneShot({
       providerId: ctx.providerId,
@@ -222,6 +247,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 6 — Models list (fetch once; catalog reused for multimodal gate)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-models-list',
+    suite: 'capability',
+    label: 'Models list',
+  });
   try {
     const provider = await getActiveProvider(ctx.providerId);
     catalogModels = await fetchModelsForProvider(provider, ctx.signal);
@@ -250,6 +280,11 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
   // 7 — Multimodal (skip text-only; run image probe for vision models)
   assertNotAborted(ctx.signal);
   t = t0();
+  announceTestStart(ctx, {
+    testId: 'cap-multimodal',
+    suite: 'capability',
+    label: 'Multimodal request',
+  });
   const catalogArg = catalogModels ?? [];
   if (!isVisionModel(ctx.modelId, catalogArg)) {
     reportTest(ctx, tests,

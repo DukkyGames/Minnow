@@ -5,6 +5,7 @@
 import {
   buildClientStats,
   reconcileCompletionStats,
+  extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
@@ -23,6 +24,7 @@ import {
   feedSseEventBuffer,
   flushSseEventBuffer,
 } from '../api/sse-parse';
+import { extractReasoningDelta } from '../api/reasoning.ts';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } from '../types';
@@ -162,11 +164,17 @@ async function streamTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    const beforeText = textAcc.getText().length;
+    const beforeReasoning = reasoningAcc.getText().length;
     reasoningAcc.ingestChunk(chunk);
-    const before = textAcc.getText().length;
     textAcc.ingestChunk(chunk);
-    if (textAcc.getText().length > before && tFirst == null) {
-      tFirst = performance.now();
+    if (tFirst == null) {
+      const firstToken =
+        textAcc.getText().length > beforeText ||
+        reasoningAcc.getText().length > beforeReasoning ||
+        extractStreamDelta(chunk).length > 0 ||
+        extractReasoningDelta(chunk).length > 0;
+      if (firstToken) tFirst = performance.now();
     }
   }
 

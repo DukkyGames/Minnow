@@ -5,7 +5,7 @@
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { hasNonEmptyCompletion, speedCompletionDetails } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, LlmTurnTiming, SuiteResult, TestResult } from '../types.ts';
 
 /** Fields from runOneShot used to score speed tests (unit-tested without live LLM). */
@@ -54,6 +54,11 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
   for (let i = 0; i < 3; i++) {
     assertNotAborted(ctx.signal);
     const t0 = performance.now();
+    announceTestStart(ctx, {
+      testId: `speed-short-${i + 1}`,
+      suite: 'speed',
+      label: `Short run ${i + 1}`,
+    });
     try {
       const out = await runOneShot({
         providerId: ctx.providerId,
@@ -105,6 +110,11 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
 
   assertNotAborted(ctx.signal);
   const tLong = performance.now();
+  announceTestStart(ctx, {
+    testId: 'speed-long-1',
+    suite: 'speed',
+    label: 'Sustained throughput',
+  });
   try {
     const out = await runOneShot({
       providerId: ctx.providerId,

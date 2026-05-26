@@ -42,6 +42,11 @@ export interface BenchmarkRunContext {
   localServer: boolean;
   signal: AbortSignal;
   /**
+   * Set by `runBenchmark` to forward each starting probe to `onProgress` as `{ type: 'test-start' }`.
+   * Suites should call `announceTestStart` immediately before async work on a probe.
+   */
+  onTestStart?: (meta: Pick<TestResult, 'testId' | 'suite' | 'label'>) => void;
+  /**
    * Set by `runBenchmark` to forward each finished probe to `onProgress` as `{ type: 'test-done' }`.
    * Suites should call `reportTest` (or invoke this after each result) so the UI updates per test.
    */
@@ -118,6 +123,7 @@ export interface LlmTurnTiming {
 
 export type BenchmarkProgressEvent =
   | { type: 'suite-start'; suiteId: SuiteId; label: string }
+  | { type: 'test-start'; suiteId: SuiteId; testId: string; label: string }
   | { type: 'test-done'; result: TestResult }
   | { type: 'run-cancelled' }
   | { type: 'run-done'; run: BenchmarkRun };

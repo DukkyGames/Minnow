@@ -29,7 +29,7 @@
     "test:plugins": "node --test test/tools/plugin-scan.test.mjs test/tools/plugin-loader.test.mjs test/plugins/api.test.mjs",
     "test:ui-designer": "tsx --test test/ui-designer/**/*.test.mts && node scripts/step15-smoke.mjs",
     "test:browser": "node --test test/cdp/*.test.js test/browser-cdp.test.mjs",
-    "test:benchmark": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/api/message-content.test.mts test/benchmark/*.test.mts test/ui/benchmark-stop.test.mts test/ui/benchmark-suite-toggles.test.mts test/ui/benchmark-transcript-resolve.test.mts test/ui/transcript-view.test.mts && node --test test/ui/benchmark-page-html.test.mjs",
+    "test:benchmark": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/api/message-content.test.mts test/benchmark/*.test.mts test/ui/benchmark-stop.test.mts test/ui/benchmark-stopped-card.test.mts test/ui/benchmark-suite-toggles.test.mts test/ui/benchmark-transcript-resolve.test.mts test/ui/transcript-view.test.mts && node --test test/ui/benchmark-page-html.test.mjs",
     "test:evals": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/evals/*.test.mts && node --test test/evals/eval-api.test.mjs"
   },
   "dependencies": {

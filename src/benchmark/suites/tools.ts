@@ -7,7 +7,7 @@ import { executeTool } from '../../tools/client';
 import { assertNotAborted, raceWithAbort, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { EMIT_ONLY_TOOL_IDS, getToolFixture } from './tools-fixtures.ts';
 
@@ -18,6 +18,11 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     assertNotAborted(ctx.signal);
     const t0 = performance.now();
     const fixture = getToolFixture(tool);
+    announceTestStart(ctx, {
+      testId: `tool-${tool.id}`,
+      suite: 'tools',
+      label: tool.label,
+    });
 
     if (tool.serverRequired && !ctx.localServer) {
       reportTest(ctx, tests, {

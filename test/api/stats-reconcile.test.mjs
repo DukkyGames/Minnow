@@ -40,6 +40,13 @@ describe('reconcileCompletionStats', () => {
     assert.equal(stats.stop_reason, 'eos');
   });
 
+  test('reconcile caps recomputed tps when client decode window is 1 ms', () => {
+    const client = buildClientStats(0, 45999, 46000, { completion_tokens: 172 }, 'stop');
+    const stats = reconcileCompletionStats(client, {}, { completion_tokens: 172 });
+
+    assert.ok(stats.tokens_per_second <= 2000);
+  });
+
   test('finalizeResponseMeta applies reconciliation', () => {
     const meta = finalizeResponseMeta(
       {

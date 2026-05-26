@@ -416,6 +416,29 @@
   color: var(--mn-danger);
 }
 
+.benchmark-test-card.is-running {
+  border-color: color-mix(in srgb, var(--mn-accent) 50%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-accent) 6%, var(--mn-bg));
+}
+
+.benchmark-test-card.is-running.is-current {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mn-accent) 35%, transparent);
+}
+
+.benchmark-test-card.is-running .benchmark-test-card-status {
+  border-color: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-accent) 14%, var(--mn-bg));
+  color: var(--mn-accent);
+}
+
+.benchmark-test-card.is-running .benchmark-test-card-meta {
+  color: var(--mn-accent);
+}
+
+.benchmark-test-card.is-stopped .benchmark-test-card-meta {
+  color: var(--mn-fg-muted);
+}
+
 .benchmark-test-card.is-skip .benchmark-test-card-status {
   color: var(--mn-fg-muted);
 }

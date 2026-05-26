@@ -5,7 +5,7 @@
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { exactMatch, parseJudgeJson } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 interface CodingCase {
@@ -121,6 +121,11 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
   for (const c of CASES) {
     assertNotAborted(ctx.signal);
     const t0 = performance.now();
+    announceTestStart(ctx, {
+      testId: c.id,
+      suite: 'coding',
+      label: c.label,
+    });
     try {
       const out = await runOneShot({
         providerId: ctx.providerId,

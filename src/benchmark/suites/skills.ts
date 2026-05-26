@@ -7,7 +7,7 @@ import { fetchSkillById } from '../../skills/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { regexMatch } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 const SKILL_TRIGGERS: Record<string, { prompt: string; pattern: RegExp }> = {
@@ -36,6 +36,11 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
   for (const skill of skills) {
     assertNotAborted(ctx.signal);
     const t0 = performance.now();
+    announceTestStart(ctx, {
+      testId: `skill-${skill.id}`,
+      suite: 'skills',
+      label: skill.label,
+    });
     const trigger = SKILL_TRIGGERS[skill.id] ?? {
       prompt: `Follow the ${skill.id} skill instructions. Acknowledge the skill topic briefly.`,
       pattern: new RegExp(skill.label.split(/\s+/)[0]!, 'i'),

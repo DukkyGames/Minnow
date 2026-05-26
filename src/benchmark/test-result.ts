@@ -42,6 +42,14 @@ export function truncateTranscriptForPersistence(messages: ApiMessage[]): ApiMes
   });
 }
 
+/** Notify live progress listeners before a probe begins. */
+export function announceTestStart(
+  ctx: BenchmarkRunContext,
+  meta: Pick<TestResult, 'testId' | 'suite' | 'label'>,
+): void {
+  ctx.onTestStart?.(meta);
+}
+
 /** Append a finished probe to the suite list and notify live progress listeners. */
 export function reportTest(
   ctx: BenchmarkRunContext,

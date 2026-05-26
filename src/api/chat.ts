@@ -64,7 +64,6 @@ import {
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import { postChatCompletions } from '../providers/fetch-chat';
-import { getActiveProvider } from '../providers/store';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -210,6 +209,9 @@ export function mergeStreamMeta(
   return next;
 }
 
+/** Upper bound for believable decode throughput (guards bad provider stats). */
+export const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
+
 /** Client-side TTFT / generation time / TPS when the server omits stats. */
 export function buildClientStats(
   t0: number,
@@ -220,8 +222,11 @@ export function buildClientStats(
 ): Stats {
   if (tFirst == null) return {};
   const ttft = (tFirst - t0) / 1000;
-  const genTime = Math.max((tEnd - tFirst) / 1000, 0.001);
   const completionTokens = usage?.completion_tokens;
+  let genTime = Math.max((tEnd - tFirst) / 1000, 0.001);
+  if (completionTokens != null && completionTokens > 0) {
+    genTime = Math.max(genTime, completionTokens / MAX_PLAUSIBLE_TOKENS_PER_SECOND);
+  }
   const tps = completionTokens != null ? completionTokens / genTime : null;
   const stats: Stats = {
     time_to_first_token: ttft,
@@ -232,8 +237,22 @@ export function buildClientStats(
   return stats;
 }
 
-/** Upper bound for believable decode throughput (guards bad provider stats). */
-const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
+/** Clamp inflated tok/s (e.g. 1 ms decode window when prose arrives in one chunk). */
+function clampPlausibleThroughput(stats: Stats, usage: Usage | undefined): Stats {
+  const tps = stats.tokens_per_second;
+  const completion = usage?.completion_tokens;
+  if (tps == null || !Number.isFinite(tps) || tps <= MAX_PLAUSIBLE_TOKENS_PER_SECOND) {
+    return stats;
+  }
+  const out = { ...stats };
+  if (completion != null && completion > 0) {
+    out.generation_time = completion / MAX_PLAUSIBLE_TOKENS_PER_SECOND;
+    out.tokens_per_second = MAX_PLAUSIBLE_TOKENS_PER_SECOND;
+  } else {
+    out.tokens_per_second = MAX_PLAUSIBLE_TOKENS_PER_SECOND;
+  }
+  return out;
+}
 
 /** Relative error allowed between tps×genTime and completion_tokens. */
 const USAGE_TIMING_TOLERANCE = 0.35;
@@ -283,7 +302,7 @@ export function reconcileCompletionStats(
     serverStats.tokens_per_second != null ||
     serverStats.generation_time != null ||
     serverStats.time_to_first_token != null;
-  if (!hasServerTiming) return out;
+  if (!hasServerTiming) return clampPlausibleThroughput(out, usage);
 
   const trustServer =
     serverTimingMatchesUsage(serverStats, usage) &&
@@ -295,7 +314,7 @@ export function reconcileCompletionStats(
     }
     if (serverStats.generation_time != null) out.generation_time = serverStats.generation_time;
     if (serverStats.tokens_per_second != null) out.tokens_per_second = serverStats.tokens_per_second;
-    return out;
+    return clampPlausibleThroughput(out, usage);
   }
 
   const completion = usage?.completion_tokens;
@@ -303,7 +322,7 @@ export function reconcileCompletionStats(
   if (completion != null && gen != null && gen > 0) {
     out.tokens_per_second = completion / gen;
   }
-  return out;
+  return clampPlausibleThroughput(out, usage);
 }
 
 /** Combine server stream meta with client timing into final stats + usage. */

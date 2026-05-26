@@ -7,7 +7,7 @@ import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
-import { buildTestResult, reportTest } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import type { ModeId } from '../../chat/modes/types';
 
@@ -62,6 +62,11 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     const neg = MODE_NEGATIVE[modeId];
     if (neg) {
       const t0 = performance.now();
+      announceTestStart(ctx, {
+        testId: `mode-${modeId}-negative`,
+        suite: 'modes',
+        label: `${mode.label} denies ${neg.forbiddenTool}`,
+      });
       try {
         const out = await runToolLoop({
           providerId: ctx.providerId,
@@ -115,6 +120,11 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     const pos = MODE_POSITIVE[modeId];
     if (pos) {
       const t0 = performance.now();
+      announceTestStart(ctx, {
+        testId: `mode-${modeId}-positive`,
+        suite: 'modes',
+        label: `${mode.label} emits ${pos.expectedTool}`,
+      });
       if (pos.expectedTool === 'web_search' && !ctx.localServer) {
         reportTest(ctx, tests, {
           testId: `mode-${modeId}-positive`,
