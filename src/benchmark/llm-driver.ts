@@ -176,11 +176,12 @@ async function streamTurn(
 
 /** Single-shot completion with timing capture. */
 export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
+  const messages: ApiMessage[] = [...input.messages];
   const turn = await streamTurn(
     input.providerId,
     {
       model: input.modelId || undefined,
-      messages: input.messages,
+      messages,
       temperature: input.temperature ?? DEFAULT_TEMPERATURE,
       max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
       stream: true,
@@ -189,13 +190,54 @@ export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
     input.signal,
   );
 
+  let text = turn.fullText.trim();
+  let finishReason = turn.finishReason;
+  let toolCalls = turn.toolCalls;
+
+  if (!text) {
+    const { stream: _s, ...fallbackBody } = {
+      model: input.modelId || undefined,
+      messages,
+      temperature: input.temperature ?? DEFAULT_TEMPERATURE,
+      max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
+      stream: true as const,
+      ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
+    };
+    const fallback = await tryNonStreamingFallback(
+      fallbackBody,
+      input.signal,
+      input.providerId,
+    );
+    text = extractStreamDelta(fallback) || fallback.choices?.[0]?.message?.content || '';
+    text = text.trim();
+    finishReason = finishReason || fallback.choices?.[0]?.finish_reason;
+    const fbMessage = fallback.choices?.[0]?.message as
+      | { tool_calls?: ToolCall[] }
+      | undefined;
+    if (fbMessage?.tool_calls?.length) toolCalls = fbMessage.tool_calls;
+  }
+
   return {
-    text: turn.fullText.trim(),
-    toolCalls: turn.toolCalls,
-    finishReason: turn.finishReason,
+    text,
+    toolCalls,
+    finishReason,
     timing: turn.timing,
-    messages: [...input.messages],
+    messages: appendAssistantToMessages(messages, text, toolCalls),
   };
+}
+
+/** Append the assistant turn (unit-tested; shared by one-shot completion). */
+export function appendAssistantToMessages(
+  messages: ApiMessage[],
+  text: string,
+  toolCalls: ToolCall[],
+): ApiMessage[] {
+  messages.push({
+    role: 'assistant',
+    content: text || null,
+    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+  });
+  return messages;
 }
 
 /** Tool loop (max 3 rounds) isolated from session state. */

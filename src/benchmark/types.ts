@@ -2,7 +2,7 @@
  * Bench run types: deterministic battery against the active model.
  */
 
-import type { Stats, Usage } from '../types.ts';
+import type { ApiMessage, Stats, Usage } from '../types.ts';
 
 /** Suite identifiers for the benchmark runner. */
 export type SuiteId =
@@ -55,6 +55,15 @@ export interface TestResult {
   tokPerSec?: number;
   score: number;
   details?: string;
+  /** Optional full conversation for this probe (API message shape). */
+  transcript?: ApiMessage[];
+  /** Structured extras for debugging (not shown in main chat). */
+  transcriptMeta?: {
+    finishReason?: string;
+    error?: string;
+    /** Judge model output for coding suite, etc. */
+    judgeRaw?: string;
+  };
 }
 
 export interface SuiteResult {

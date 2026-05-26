@@ -3,6 +3,7 @@
  */
 
 import { detectLocalServer } from '../tools/client';
+import { prepareBenchmarkRunForPersistence } from './test-result.ts';
 import type { BenchmarkRun } from './types.ts';
 
 const LOCAL_KEY = 'minnow.benchmarks.history';
@@ -36,17 +37,27 @@ function writeLocalRuns(runs: BenchmarkRun[]): void {
 
 /** Persist a completed run. */
 export async function saveRun(run: BenchmarkRun): Promise<void> {
+  const payload = prepareBenchmarkRunForPersistence(run);
   const local = await detectLocalServer();
   if (local) {
     const res = await fetch('/api/benchmarks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(run),
+      body: JSON.stringify(payload),
     });
     if (res.ok) return;
+    if (res.status === 413) {
+      const stripped = prepareBenchmarkRunForPersistence(run);
+      const retry = await fetch('/api/benchmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stripped),
+      });
+      if (retry.ok) return;
+    }
   }
   const existing = readLocalRuns();
-  writeLocalRuns([run, ...existing.filter((r) => r.id !== run.id)]);
+  writeLocalRuns([payload, ...existing.filter((r) => r.id !== run.id)]);
 }
 
 /** List recent runs (summaries). */

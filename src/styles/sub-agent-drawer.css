@@ -285,3 +285,50 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* Shared transcript renderer (sub-agent + benchmark drawers). */
+.transcript-view__system,
+.transcript-view__user,
+.transcript-view__assistant {
+  display: block;
+}
+
+.transcript-view__system {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--mn-bg);
+  border: 1px dashed var(--mn-border);
+  white-space: pre-wrap;
+}
+
+.transcript-view__user {
+  align-self: flex-end;
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface-1));
+  border: 1px solid var(--mn-border);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.transcript-view__assistant {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.benchmark-transcript-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
