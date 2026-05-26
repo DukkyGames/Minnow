@@ -5,9 +5,10 @@
 import { loadModePromptBody, listModes } from '../../chat/modes/registry';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
-import { toolNameMatch } from '../scoring.ts';
+import { computeSuiteResultStats, toolNameMatch } from '../scoring.ts';
+import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
 import { runToolLoop } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import type { ModeId } from '../../chat/modes/types';
 
@@ -62,6 +63,11 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     const neg = MODE_NEGATIVE[modeId];
     if (neg) {
       const t0 = performance.now();
+      announceTestStart(ctx, {
+        testId: `mode-${modeId}-negative`,
+        suite: 'modes',
+        label: `${mode.label} denies ${neg.forbiddenTool}`,
+      });
       try {
         const out = await runToolLoop({
           providerId: ctx.providerId,
@@ -73,11 +79,11 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
             { role: 'user', content: neg.prompt },
           ],
           tools,
-          maxTokens: 256,
           maxToolRounds: 1,
+          executeToolFn: createBenchmarkExecuteToolFn(modeId),
         });
         const calledForbidden = toolNameMatch(out.toolCalls, neg.forbiddenTool);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-negative`,
@@ -94,7 +100,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-negative`,
@@ -116,8 +122,13 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     const pos = MODE_POSITIVE[modeId];
     if (pos) {
       const t0 = performance.now();
+      announceTestStart(ctx, {
+        testId: `mode-${modeId}-positive`,
+        suite: 'modes',
+        label: `${mode.label} emits ${pos.expectedTool}`,
+      });
       if (pos.expectedTool === 'web_search' && !ctx.localServer) {
-        tests.push({
+        reportTest(ctx, tests, {
           testId: `mode-${modeId}-positive`,
           suite: 'modes',
           label: `${mode.label} allows tool`,
@@ -140,11 +151,11 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
             { role: 'user', content: pos.prompt },
           ],
           tools,
-          maxTokens: 256,
           maxToolRounds: 2,
+          executeToolFn: createBenchmarkExecuteToolFn(modeId),
         });
         const ok = toolNameMatch(out.toolCalls, pos.expectedTool);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-positive`,
@@ -161,7 +172,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push(
+        reportTest(ctx, tests,
           buildTestResult(
             {
               testId: `mode-${modeId}-positive`,
@@ -181,19 +192,12 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
     }
   }
 
-  const passed = tests.filter((t) => !t.skipped && t.passed).length;
-  const failed = tests.filter((t) => !t.skipped && !t.passed).length;
-  const skipped = tests.filter((t) => t.skipped).length;
-  const active = tests.filter((t) => !t.skipped);
-  const score = active.length ? passed / active.length : 0;
+  const stats = computeSuiteResultStats(tests);
 
   return {
     id: 'modes',
     label: 'Modes',
-    passed,
-    failed,
-    skipped,
-    score,
+    ...stats,
     tests,
   };
 }

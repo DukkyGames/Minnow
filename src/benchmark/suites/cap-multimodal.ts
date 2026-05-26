@@ -17,5 +17,5 @@ export function scoreMultimodalProbe(text: string, errorMessage?: string): Multi
   if (!hasNonEmptyCompletion(text)) {
     return { passed: false, details: 'empty vision response' };
   }
-  return { passed: true, details: text.trim().slice(0, 80) };
+  return { passed: true, details: text.trim().slice(0, 320) };
 }

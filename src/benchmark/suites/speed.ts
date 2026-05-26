@@ -4,8 +4,9 @@
 
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { hasNonEmptyCompletion, speedCompletionDetails } from '../completion-valid.ts';
+import { computeSuiteResultStats } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
-import { buildTestResult } from '../test-result.ts';
+import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, LlmTurnTiming, SuiteResult, TestResult } from '../types.ts';
 
 /** Fields from runOneShot used to score speed tests (unit-tested without live LLM). */
@@ -54,19 +55,23 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
   for (let i = 0; i < 3; i++) {
     assertNotAborted(ctx.signal);
     const t0 = performance.now();
+    announceTestStart(ctx, {
+      testId: `speed-short-${i + 1}`,
+      suite: 'speed',
+      label: `Short run ${i + 1}`,
+    });
     try {
       const out = await runOneShot({
         providerId: ctx.providerId,
         modelId: ctx.modelId,
         signal: ctx.signal,
         messages: [{ role: 'user', content: SHORT_PROMPT }],
-        maxTokens: 200,
       });
       const durationMs = performance.now() - t0;
       const scored = scoreSpeedCompletion(out.text, out.timing);
       if (scored.ttftSample != null) ttftSamples.push(scored.ttftSample);
       if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `speed-short-${i + 1}`,
@@ -85,7 +90,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
       );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push(
+      reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `speed-short-${i + 1}`,
@@ -106,6 +111,11 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
 
   assertNotAborted(ctx.signal);
   const tLong = performance.now();
+  announceTestStart(ctx, {
+    testId: 'speed-long-1',
+    suite: 'speed',
+    label: 'Sustained throughput',
+  });
   try {
     const out = await runOneShot({
       providerId: ctx.providerId,
@@ -118,12 +128,11 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
             'Explain how transformer attention works in about 400 words. Use clear paragraphs.',
         },
       ],
-      maxTokens: 600,
     });
     const durationMs = performance.now() - tLong;
     const scored = scoreSpeedCompletion(out.text, out.timing);
     if (scored.tpsSample != null) tpsSamples.push(scored.tpsSample);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         {
           testId: 'speed-long-1',
@@ -141,7 +150,7 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
-    tests.push(
+    reportTest(ctx, tests,
       buildTestResult(
         {
           testId: 'speed-long-1',
@@ -159,14 +168,13 @@ export async function runSpeedSuite(ctx: BenchmarkRunContext): Promise<{
     );
   }
 
+  const stats = computeSuiteResultStats(tests);
+
   return {
     suite: {
       id: 'speed',
       label: 'Speed',
-      passed: tests.filter((t) => t.passed).length,
-      failed: tests.filter((t) => !t.passed).length,
-      skipped: 0,
-      score: 1,
+      ...stats,
       tests,
     },
     headlineTtftMs: median(ttftSamples),

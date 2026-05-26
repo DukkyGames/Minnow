@@ -3,15 +3,20 @@
  */
 
 import {
-  buildClientStats,
-  reconcileCompletionStats,
-  extractStreamDelta,
+  finalizeResponseMeta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { applyBenchmarkSystemPrompt } from './completion-messages.ts';
+import {
+  BenchmarkStreamReasoningAccumulator,
+  BenchmarkStreamTextAccumulator,
+  completionTextFromFallback,
+  resolveBenchmarkCompletionText,
+} from './stream-text.ts';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -28,7 +33,6 @@ import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_MAX_TOKENS = 2048;
 
 export interface OneShotInput {
   providerId: string;
@@ -58,6 +62,11 @@ export interface ToolLoopInput extends OneShotInput {
   ) => ReturnType<typeof executeTool>;
 }
 
+/** Retain the last turn that emitted tool calls (final loop turn is often text-only). */
+export function preserveLastToolCalls(previous: ToolCall[], turn: ToolCall[]): ToolCall[] {
+  return turn.length > 0 ? turn : previous;
+}
+
 function parseToolArguments(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) return {};
@@ -78,10 +87,9 @@ function timingFromStream(
   tEnd: number,
   streamMeta: StreamMetaAccumulator,
 ): LlmTurnTiming {
-  const usage = streamMeta.usage ?? {};
-  const serverStats = streamMeta.stats ?? {};
-  const clientStats = buildClientStats(t0, tFirst, tEnd, usage, streamMeta.finish_reason);
-  const stats = reconcileCompletionStats(clientStats, serverStats, usage);
+  const meta = finalizeResponseMeta(streamMeta, t0, tFirst, tEnd);
+  const stats = meta.stats;
+  const usage = meta.usage;
   const ttftMs =
     stats.time_to_first_token != null ? Math.round(stats.time_to_first_token * 1000) : null;
   const tokPerSec = stats.tokens_per_second ?? null;
@@ -102,7 +110,7 @@ async function streamTurn(
     model?: string;
     messages: ApiMessage[];
     temperature: number;
-    max_tokens: number;
+    max_tokens?: number;
     stream: true;
     tools?: OpenAIFunctionDefinition[];
     tool_choice?: 'auto';
@@ -133,7 +141,8 @@ async function streamTurn(
     throw new Error('No response body');
   }
 
-  let fullText = '';
+  const textAcc = new BenchmarkStreamTextAccumulator();
+  const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
 
@@ -149,13 +158,13 @@ async function streamTurn(
   signal.addEventListener('abort', cancelReader, { once: true });
 
   function handleChunk(chunk: ChatCompletionChunk): void {
+    if (tFirst == null && chunk.choices?.length) {
+      tFirst = performance.now();
+    }
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    const delta = extractStreamDelta(chunk);
-    if (delta) {
-      if (tFirst == null) tFirst = performance.now();
-      fullText += delta;
-    }
+    reasoningAcc.ingestChunk(chunk);
+    textAcc.ingestChunk(chunk);
   }
 
   try {
@@ -177,7 +186,7 @@ async function streamTurn(
     (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
   return {
-    fullText,
+    fullText: resolveBenchmarkCompletionText(textAcc.getText(), reasoningAcc.getText()),
     toolCalls,
     finishReason,
     streamMeta,
@@ -185,46 +194,94 @@ async function streamTurn(
   };
 }
 
-async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
-  const messages: ApiMessage[] = [...input.messages];
-  const turn = await streamTurn(
-    input.providerId,
-    {
-      model: input.modelId || undefined,
-      messages,
-      temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
-      stream: true,
-      ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
-    },
-    input.signal,
-  );
+const REASONING_ONLY_RETRY_SYSTEM =
+  'Your previous attempt used only the reasoning channel with no main content. ' +
+  'Reply again with the final answer in main content only.';
 
+type OneShotStreamBody = {
+  model?: string;
+  messages: ApiMessage[];
+  temperature: number;
+  max_tokens?: number;
+  stream: true;
+  tools?: OpenAIFunctionDefinition[];
+  tool_choice?: 'auto';
+};
+
+async function tryBenchmarkNonStreamingFallback(
+  providerId: string,
+  body: OneShotStreamBody,
+  signal: AbortSignal,
+): Promise<{ text: string; finishReason?: string; toolCalls?: ToolCall[] }> {
+  const { stream: _s, ...fallbackBody } = body;
+  const fallback = await tryNonStreamingFallback(
+    fallbackBody as Parameters<typeof tryNonStreamingFallback>[0],
+    signal,
+    providerId,
+  );
+  const fbMessage = fallback.choices?.[0]?.message as
+    | { tool_calls?: ToolCall[] }
+    | undefined;
+  return {
+    text: completionTextFromFallback(fallback),
+    finishReason: fallback.choices?.[0]?.finish_reason ?? undefined,
+    toolCalls: fbMessage?.tool_calls,
+  };
+}
+
+async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
+  const messages = applyBenchmarkSystemPrompt([...input.messages]);
+  const bodyExtras = input.tools?.length
+    ? { tools: input.tools, tool_choice: 'auto' as const }
+    : {};
+
+  const streamBodyFor = (msgs: ApiMessage[]): OneShotStreamBody => ({
+    model: input.modelId || undefined,
+    messages: msgs,
+    temperature: input.temperature ?? DEFAULT_TEMPERATURE,
+    stream: true,
+    ...bodyExtras,
+    ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
+  });
+
+  let turn = await streamTurn(input.providerId, streamBodyFor(messages), input.signal);
   let text = turn.fullText.trim();
   let finishReason = turn.finishReason;
   let toolCalls = turn.toolCalls;
+  let fallbackMessages = messages;
 
   if (!text) {
-    const { stream: _s, ...fallbackBody } = {
-      model: input.modelId || undefined,
-      messages,
-      temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-      max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
-      stream: true as const,
-      ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
-    };
-    const fallback = await tryNonStreamingFallback(
-      fallbackBody,
-      input.signal,
+    const fb = await tryBenchmarkNonStreamingFallback(
       input.providerId,
+      streamBodyFor(messages),
+      input.signal,
     );
-    text = extractStreamDelta(fallback) || fallback.choices?.[0]?.message?.content || '';
-    text = text.trim();
-    finishReason = finishReason || fallback.choices?.[0]?.finish_reason;
-    const fbMessage = fallback.choices?.[0]?.message as
-      | { tool_calls?: ToolCall[] }
-      | undefined;
-    if (fbMessage?.tool_calls?.length) toolCalls = fbMessage.tool_calls;
+    text = fb.text.trim();
+    finishReason = finishReason || fb.finishReason;
+    if (fb.toolCalls?.length) toolCalls = fb.toolCalls;
+  }
+
+  const usedReasoningBudget =
+    !text && (turn.timing.usage?.completion_tokens ?? 0) > 0;
+  if (usedReasoningBudget) {
+    fallbackMessages = applyBenchmarkSystemPrompt([...input.messages], {
+      extraSystem: REASONING_ONLY_RETRY_SYSTEM,
+    });
+    turn = await streamTurn(input.providerId, streamBodyFor(fallbackMessages), input.signal);
+    text = turn.fullText.trim();
+    finishReason = turn.finishReason ?? finishReason;
+    toolCalls = turn.toolCalls.length > 0 ? turn.toolCalls : toolCalls;
+  }
+
+  if (!text) {
+    const fb = await tryBenchmarkNonStreamingFallback(
+      input.providerId,
+      streamBodyFor(fallbackMessages),
+      input.signal,
+    );
+    text = fb.text.trim();
+    finishReason = finishReason || fb.finishReason;
+    if (fb.toolCalls?.length) toolCalls = fb.toolCalls;
   }
 
   return {
@@ -256,8 +313,10 @@ export function appendAssistantToMessages(
 }
 
 async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
-  const messages: ApiMessage[] = [...input.messages];
+  const messages: ApiMessage[] = applyBenchmarkSystemPrompt([...input.messages]);
   const maxRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+  const tokenField =
+    input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {};
   const runExecute =
     input.executeToolFn ??
     ((name, args, ctx) => executeTool(name, args, { ...ctx, modeId: input.modeId }));
@@ -281,8 +340,8 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
         stream: true,
+        ...tokenField,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       },
       input.signal,
@@ -290,10 +349,10 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
 
     lastTiming = turn.timing;
     lastText = turn.fullText.trim();
-    lastToolCalls = turn.toolCalls;
+    lastToolCalls = preserveLastToolCalls(lastToolCalls, turn.toolCalls);
     lastFinish = turn.finishReason;
 
-    if (turn.finishReason === 'tool_calls' && turn.toolCalls.length > 0) {
+    if (turn.toolCalls.length > 0) {
       messages.push({
         role: 'assistant',
         content: turn.fullText || null,
@@ -320,16 +379,16 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         model: input.modelId || undefined,
         messages,
         temperature: input.temperature ?? DEFAULT_TEMPERATURE,
-        max_tokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
         stream: true as const,
+        ...tokenField,
         ...(input.tools?.length ? { tools: input.tools, tool_choice: 'auto' as const } : {}),
       };
       const fallback = await tryNonStreamingFallback(
-        fallbackBody,
+        fallbackBody as Parameters<typeof tryNonStreamingFallback>[0],
         input.signal,
         input.providerId,
       );
-      lastText = extractStreamDelta(fallback) || fallback.choices?.[0]?.message?.content || '';
+      lastText = completionTextFromFallback(fallback);
     }
 
     messages.push({ role: 'assistant', content: lastText });

@@ -41,6 +41,16 @@ export interface BenchmarkRunContext {
   modelId: string;
   localServer: boolean;
   signal: AbortSignal;
+  /**
+   * Set by `runBenchmark` to forward each starting probe to `onProgress` as `{ type: 'test-start' }`.
+   * Suites should call `announceTestStart` immediately before async work on a probe.
+   */
+  onTestStart?: (meta: Pick<TestResult, 'testId' | 'suite' | 'label'>) => void;
+  /**
+   * Set by `runBenchmark` to forward each finished probe to `onProgress` as `{ type: 'test-done' }`.
+   * Suites should call `reportTest` (or invoke this after each result) so the UI updates per test.
+   */
+  onTestDone?: (result: TestResult) => void;
 }
 
 export interface TestResult {
@@ -113,13 +123,25 @@ export interface LlmTurnTiming {
 
 export type BenchmarkProgressEvent =
   | { type: 'suite-start'; suiteId: SuiteId; label: string }
+  | { type: 'test-start'; suiteId: SuiteId; testId: string; label: string }
   | { type: 'test-done'; result: TestResult }
   | { type: 'run-cancelled' }
   | { type: 'run-done'; run: BenchmarkRun };
+
+/** Prior work to merge when resuming after a page reload (suite-level skip). */
+export interface BenchmarkResumeState {
+  runId: string;
+  startedAt: string;
+  priorSuites: SuiteResult[];
+}
 
 export interface RunBenchmarkOptions {
   suites?: SuiteId[];
   preset?: BenchmarkPreset;
   signal?: AbortSignal;
   onProgress?: (event: BenchmarkProgressEvent) => void;
+  /** Reuse run id / startedAt and skip suites already in `priorSuites`. */
+  resume?: BenchmarkResumeState;
+  /** Override generated run id (must match session when resuming). */
+  runId?: string;
 }

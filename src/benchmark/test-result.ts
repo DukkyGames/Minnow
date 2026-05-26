@@ -4,7 +4,7 @@
 
 import type { ApiMessage } from '../types.ts';
 import type { OneShotResult } from './llm-driver.ts';
-import type { TestResult } from './types.ts';
+import type { BenchmarkRunContext, TestResult } from './types.ts';
 
 /** Max persisted length per tool message content. */
 export const TRANSCRIPT_TOOL_CONTENT_CAP = 12_288;
@@ -40,6 +40,24 @@ export function truncateTranscriptForPersistence(messages: ApiMessage[]): ApiMes
     }
     return msg;
   });
+}
+
+/** Notify live progress listeners before a probe begins. */
+export function announceTestStart(
+  ctx: BenchmarkRunContext,
+  meta: Pick<TestResult, 'testId' | 'suite' | 'label'>,
+): void {
+  ctx.onTestStart?.(meta);
+}
+
+/** Append a finished probe to the suite list and notify live progress listeners. */
+export function reportTest(
+  ctx: BenchmarkRunContext,
+  tests: TestResult[],
+  result: TestResult,
+): void {
+  tests.push(result);
+  ctx.onTestDone?.(result);
 }
 
 /** Attach transcript fields from an LLM driver result when present. */
