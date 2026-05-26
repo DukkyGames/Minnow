@@ -9,7 +9,7 @@ import {
   isAbortError,
 } from './abort.ts';
 import { aggregateRunScore } from './scoring.ts';
-import { resolveBenchmarkBinding, type BenchmarkBinding } from './resolve-binding.ts';
+import { resolveBenchmarkBinding } from './resolve-binding.ts';
 import { saveRun } from './persistence.ts';
 import { runCapabilitySuite } from './suites/capability.ts';
 import { runSpeedSuite } from './suites/speed.ts';
@@ -75,7 +75,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
   const signal = options.signal ?? new AbortController().signal;
   const onProgress = options.onProgress;
 
-  const binding: BenchmarkBinding = options.binding ?? (await resolveBenchmarkBinding());
+  const binding = await resolveBenchmarkBinding();
   const localServer = await detectLocalServer();
   const ctx: BenchmarkRunContext = {
     providerId: binding.providerId,

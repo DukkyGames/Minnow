@@ -285,33 +285,6 @@ html[data-theme$='-dark'] .icon-btn .icon-img {
   transition: background 0.25s var(--ease-out);
 }
 
-#btnBenchmark.is-benchmark-running {
-  position: relative;
-}
-
-#btnBenchmark.is-benchmark-running::after {
-  content: '';
-  position: absolute;
-  right: 4px;
-  top: 4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--mn-accent);
-  box-shadow: 0 0 0 2px var(--mn-surface-1);
-  animation: benchmark-topbar-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes benchmark-topbar-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
 .s-dot.ok { background: var(--mn-success); }
 .s-dot.err { background: var(--mn-danger); }
 .s-dot.spin {
