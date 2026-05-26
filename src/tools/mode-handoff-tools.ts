@@ -14,6 +14,7 @@ import {
 } from './ask-question-types';
 
 const HANDOFF_MODES = new Set<ModeId>([
+  'general',
   'plan',
   'build',
   'research',

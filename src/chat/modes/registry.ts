@@ -1,5 +1,5 @@
 /**
- * Operating mode registry — five primary modes and prompt path helpers.
+ * Operating mode registry — six primary modes and prompt path helpers.
  */
 
 import { loadPromptById } from '../prompts/prompt-loader';
@@ -47,6 +47,14 @@ function denyListToolPolicy(denied: string[]): ModeToolPolicy {
 
 const MODE_DEFINITIONS: ModeDefinition[] = [
   {
+    id: 'general',
+    label: 'General',
+    description:
+      'Everyday Q&A and brainstorming; all enabled tools, with approval before each run.',
+    promptId: 'general',
+    toolPolicy: { default: 'allow' },
+  },
+  {
     id: 'build',
     label: 'Build',
     description: 'Default development mode with broad tool access.',
@@ -86,7 +94,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
   },
 ];
 
-/** Fixed five modes in display order. */
+/** Fixed six modes in display order (General first). */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }

@@ -1,9 +1,10 @@
 /**
- * Operating mode types (Build / Plan / Orchestrate / Research / Reef).
+ * Operating mode types (General / Build / Plan / Orchestrate / Research / Reef).
  */
 
 /** Stable ids — do not rename without migration. */
 export type ModeId =
+  | 'general'
   | 'build'
   | 'plan'
   | 'orchestrate'
@@ -14,6 +15,7 @@ export type ModeId =
 export const DEFAULT_MODE_ID: ModeId = 'build';
 
 export const MODE_IDS: readonly ModeId[] = [
+  'general',
   'build',
   'plan',
   'orchestrate',

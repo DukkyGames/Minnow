@@ -36,7 +36,7 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['build', 'plan', 'orchestrate', 'research', 'reef', 'debug'];
+const MODE_IDS = ['general', 'build', 'plan', 'orchestrate', 'research', 'reef', 'debug'];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */

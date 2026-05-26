@@ -1,3 +1,14 @@
 {
-  "ids": ["default", "planner", "orchestrator", "builder", "verifier", "reviewer", "researcher", "ui-designer", "expert-panel"]
+  "ids": [
+    "default",
+    "general",
+    "planner",
+    "orchestrator",
+    "builder",
+    "verifier",
+    "reviewer",
+    "researcher",
+    "ui-designer",
+    "expert-panel"
+  ]
 }

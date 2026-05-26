@@ -72,6 +72,23 @@ describe('composeSystemPrompt mode part', () => {
     assert.match(researchOut, /research full/);
   });
 
+  test('general full includes general marker', async () => {
+    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'general',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: [],
+      infoPresetId: null,
+    });
+    assert.match(out, /MINNOW_MODE_MARKER: general full/);
+    assert.match(out, /Mode handoff/);
+  });
+
   test('reef full includes reef marker', async () => {
     registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
     const out = composeSystemPrompt({

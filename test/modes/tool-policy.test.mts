@@ -38,4 +38,19 @@ describe('filterToolsByMode', () => {
     const filtered = filterToolsByMode([findTool('web_search')], 'research');
     assert.equal(filtered.length, 1);
   });
+
+  test('general includes execute_command and save_file like build', () => {
+    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'general');
+    assert.ok(filtered.some((t) => t.id === 'execute_command'));
+    assert.ok(filtered.some((t) => t.id === 'save_file'));
+    assert.ok(filtered.some((t) => t.id === 'spawn_sub_agent'));
+  });
+
+  test('general includes read_file and web_search when in catalog list', () => {
+    const filtered = filterToolsByMode(
+      [findTool('read_file'), findTool('web_search')],
+      'general',
+    );
+    assert.equal(filtered.length, 2);
+  });
 });
