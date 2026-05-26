@@ -268,13 +268,12 @@ html[data-theme$='-dark'] .icon-btn .icon-img {
   font-size: 12px;
   color: var(--mn-fg-muted);
   white-space: nowrap;
-  flex-shrink: 1;
-  min-width: 0;
+  /* Keep full status copy visible; model picker shrinks first in .model-wrap */
+  flex-shrink: 0;
 }
 
 .status-pill #sText {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .s-dot {
