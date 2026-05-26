@@ -160,7 +160,7 @@ export function createBenchmarksMiddleware() {
 
       const match = url.match(/^\/api\/benchmarks\/([^/]+)$/);
       if (match && req.method === 'GET') {
-        await handleGetOne(match[1], res);
+        await handleGetOne(decodeURIComponent(match[1]), res);
         return;
       }
 

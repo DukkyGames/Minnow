@@ -1,75 +1,132 @@
 /**
- * Skills suite: built-in slash skills compose and respond to trigger prompts.
+ * Skills suite: built-in slash skills with per-skill probes (text regex and/or tool calls).
  */
 
 import builtinManifest from '../../skills/builtin-manifest.json';
-import { fetchSkillById } from '../../skills/client';
+import { fetchSkillById, refreshSkillCatalog } from '../../skills/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
-import { regexMatch } from '../scoring.ts';
-import { runOneShot } from '../llm-driver.ts';
+import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
+import { runOneShot, runToolLoop } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
+import {
+  evaluateSkillProbe,
+  getSkillProbe,
+  resolveSkillProbeSkip,
+  resolveSkillProbeTools,
+} from './skill-probes.ts';
 
-const SKILL_TRIGGERS: Record<string, { prompt: string; pattern: RegExp }> = {
-  'ask-user': {
-    prompt: 'I need to choose between REST and GraphQL for a small API. What should you ask me?',
-    pattern: /question|clarif|option|prefer/i,
+function skillRunDetails(
+  evaluation: { passed: boolean; details: string },
+  extras: {
+    skillLoaded: boolean;
+    systemChars: number;
+    responseChars: number;
   },
-  'explain-code': {
-    prompt: 'Explain what Array.prototype.map does in one paragraph.',
-    pattern: /map|callback|array|element/i,
-  },
-  'debug-error': {
-    prompt: 'Tool failed with Error: ENOENT. How do you debug this?',
-    pattern: /path|file|exist|ENOENT|check/i,
-  },
-  impeccable: {
-    prompt: 'Polish the login button spacing on a settings page.',
-    pattern: /design|UI|spacing|layout|interface/i,
-  },
-};
+): string {
+  const flags = [
+    extras.skillLoaded ? 'skill loaded' : 'skill body missing',
+    `${extras.systemChars} sys chars`,
+    `${extras.responseChars} resp chars`,
+  ].join('; ');
+  return `${evaluation.details} (${flags})`;
+}
 
 export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteResult> {
   const tests: TestResult[] = [];
   const skills = builtinManifest.skills ?? [];
 
+  await refreshSkillCatalog();
+
   for (const skill of skills) {
     assertNotAborted(ctx.signal);
+    const probe = getSkillProbe(skill.id);
     const t0 = performance.now();
     announceTestStart(ctx, {
       testId: `skill-${skill.id}`,
       suite: 'skills',
       label: skill.label,
     });
-    const trigger = SKILL_TRIGGERS[skill.id] ?? {
-      prompt: `Follow the ${skill.id} skill instructions. Acknowledge the skill topic briefly.`,
-      pattern: new RegExp(skill.label.split(/\s+/)[0]!, 'i'),
-    };
+
+    const skipReason = resolveSkillProbeSkip(probe, ctx);
+    if (skipReason) {
+      reportTest(ctx, tests, {
+        testId: `skill-${skill.id}`,
+        suite: 'skills',
+        label: skill.label,
+        passed: false,
+        skipped: true,
+        skipReason,
+        durationMs: performance.now() - t0,
+        score: 0,
+        details: skipReason,
+      });
+      continue;
+    }
 
     try {
       const detail = await fetchSkillById(skill.id);
       const system = detail?.body?.trim() ?? '';
-      const out = await runOneShot({
-        providerId: ctx.providerId,
-        modelId: ctx.modelId,
-        signal: ctx.signal,
-        messages: [
-          ...(system ? [{ role: 'system' as const, content: system }] : []),
-          { role: 'user', content: trigger.prompt },
-        ],
-      });
-      const passed = regexMatch(out.text, trigger.pattern);
+      const skillLoaded = system.length > 0;
+
+      if (!skillLoaded) {
+        reportTest(ctx, tests, {
+          testId: `skill-${skill.id}`,
+          suite: 'skills',
+          label: skill.label,
+          passed: false,
+          skipped: true,
+          skipReason: 'skill body not loaded',
+          durationMs: performance.now() - t0,
+          score: 0,
+          details: 'skill body not loaded',
+        });
+        continue;
+      }
+
+      const messages = [
+        { role: 'system' as const, content: system },
+        { role: 'user' as const, content: probe.prompt },
+      ];
+
+      const tools = resolveSkillProbeTools(probe);
+      const useToolLoop = tools.length > 0;
+
+      const out = useToolLoop
+        ? await runToolLoop({
+            providerId: ctx.providerId,
+            modelId: ctx.modelId,
+            signal: ctx.signal,
+            messages,
+            tools,
+            maxToolRounds: 2,
+            executeToolFn: createBenchmarkExecuteToolFn(),
+          })
+        : await runOneShot({
+            providerId: ctx.providerId,
+            modelId: ctx.modelId,
+            signal: ctx.signal,
+            messages,
+          });
+
+      const evaluation = evaluateSkillProbe(probe, out);
+      const responseChars = out.text.trim().length;
+
       reportTest(ctx, tests,
         buildTestResult(
           {
             testId: `skill-${skill.id}`,
             suite: 'skills',
             label: skill.label,
-            passed,
+            passed: evaluation.passed,
             skipped: false,
             durationMs: performance.now() - t0,
-            score: passed ? 1 : 0,
-            details: out.text.slice(0, 100),
+            score: evaluation.passed ? 1 : 0,
+            details: skillRunDetails(evaluation, {
+              skillLoaded,
+              systemChars: system.length,
+              responseChars,
+            }),
           },
           out,
         ),
@@ -96,14 +153,15 @@ export async function runSkillsSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
   }
 
   const passed = tests.filter((t) => t.passed).length;
-  const failed = tests.length - passed;
+  const skipped = tests.filter((t) => t.skipped).length;
+  const failed = tests.length - passed - skipped;
 
   return {
     id: 'skills',
     label: 'Skills',
     passed,
     failed,
-    skipped: 0,
+    skipped,
     score: tests.length ? passed / tests.length : 0,
     tests,
   };

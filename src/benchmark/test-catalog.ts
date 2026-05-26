@@ -9,6 +9,7 @@ import builtinManifest from '../skills/builtin-manifest.json';
 import { listModes } from '../chat/modes/registry.ts';
 import type { ModeId } from '../chat/modes/types.ts';
 import { BUILT_IN_TOOLS } from '../tools/definitions.ts';
+import { formatSkillPassCriteria, getSkillProbe } from './suites/skill-probes.ts';
 import type { SuiteId } from './types.ts';
 
 export interface BenchmarkTestDescription {
@@ -35,7 +36,7 @@ export const SUITE_INTROS: Record<SuiteId, string> = {
   tools:
     'One serial tool round-trip per built-in tool: model must emit the tool with fixture args; server runs it when required.',
   skills:
-    'Built-in slash skills load into the system prompt; reply must match a topic regex for each skill.',
+    'Built-in slash skills load into the system prompt; each probe checks observable behavior (tool call or skill-specific regex), not acknowledgment only.',
   modes:
     'Composer mode tool policy: forbidden tools must not run on negative probes; expected tools must emit on positive probes.',
   coding:
@@ -213,13 +214,19 @@ function resolveSkillDescription(testId: string, label: string): BenchmarkTestDe
   const skill = (builtinManifest.skills ?? []).find((s) => s.id === skillId);
   if (!skill) return null;
 
+  const probe = getSkillProbe(skillId);
+  const toolNote =
+    probe.toolIds?.length && probe.passKind !== 'regex'
+      ? ` Tool allowlist: ${probe.toolIds.join(', ')}.`
+      : '';
+
   return {
     testId,
     suite: 'skills',
     label,
     purpose: skill.description || `Validates the ${skill.label} built-in skill shapes the reply.`,
-    method: 'Loads skill body into the system prompt, then sends a trigger user message.',
-    passCriteria: 'Assistant reply matches the suite regex for this skill topic.',
+    method: `Loads SKILL.md into the system prompt, then sends the skill-specific probe prompt.${toolNote} Skips when the skill body cannot be loaded.`,
+    passCriteria: formatSkillPassCriteria(probe),
   };
 }
 

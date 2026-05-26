@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { resolveTestResultForCard } from '../../src/ui/benchmark-page.ts';
+import {
+  clearLiveTranscriptStateForTests,
+  resolveTestForTranscript,
+  resolveTestResultForCard,
+  seedLiveTranscriptStateForTests,
+} from '../../src/ui/benchmark-page.ts';
 import type { BenchmarkRun } from '../../src/benchmark/types.ts';
 
 const SAMPLE_RUN: BenchmarkRun = {
@@ -51,5 +56,36 @@ describe('resolveTestResultForCard', () => {
   test('returns null when run or id missing', () => {
     assert.equal(resolveTestResultForCard(null, 'skill-ask-user'), null);
     assert.equal(resolveTestResultForCard(SAMPLE_RUN, 'missing'), null);
+  });
+});
+
+describe('resolveTestForTranscript', () => {
+  test('prefers live results over a previous saved run', () => {
+    seedLiveTranscriptStateForTests({
+      meta: { preset: 'quick', modelId: 'live-model', startedAt: '2026-02-01T00:00:00.000Z' },
+      results: [
+        {
+          testId: 'skill-ask-user',
+          suite: 'skills',
+          label: 'Ask user (live)',
+          passed: true,
+          skipped: false,
+          durationMs: 2,
+          score: 1,
+          transcript: [{ role: 'assistant', content: 'live transcript' }],
+        },
+      ],
+    });
+
+    const found = resolveTestForTranscript('skill-ask-user');
+    assert.equal(found?.label, 'Ask user (live)');
+    assert.equal(found?.transcript?.[0]?.content, 'live transcript');
+
+    clearLiveTranscriptStateForTests();
+  });
+
+  test('returns null when neither live nor saved run has the test', () => {
+    clearLiveTranscriptStateForTests();
+    assert.equal(resolveTestForTranscript('missing'), null);
   });
 });

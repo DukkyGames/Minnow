@@ -6,6 +6,7 @@ import { loadModePromptBody, listModes } from '../../chat/modes/registry';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
+import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -79,6 +80,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           ],
           tools,
           maxToolRounds: 1,
+          executeToolFn: createBenchmarkExecuteToolFn(modeId),
         });
         const calledForbidden = toolNameMatch(out.toolCalls, neg.forbiddenTool);
         reportTest(ctx, tests,
@@ -150,6 +152,7 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           ],
           tools,
           maxToolRounds: 2,
+          executeToolFn: createBenchmarkExecuteToolFn(modeId),
         });
         const ok = toolNameMatch(out.toolCalls, pos.expectedTool);
         reportTest(ctx, tests,

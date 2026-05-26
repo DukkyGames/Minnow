@@ -5,6 +5,7 @@
 import '../styles/benchmark-page.css';
 import '../styles/sub-agent-drawer.css';
 
+import { aggregateRunScore } from '../benchmark/scoring.ts';
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
 import {
   formatTestCardDescription,
@@ -23,6 +24,7 @@ import { getActiveModelIdFromDom } from '../benchmark/resolve-binding.ts';
 import {
   closeBenchmarkTranscriptDrawer,
   openBenchmarkTranscriptDrawer,
+  type BenchmarkTranscriptRunMeta,
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
@@ -49,6 +51,10 @@ let historySummaries: BenchmarkRunSummary[] = [];
 
 /** Tracks in-flight UI while a run is active. */
 let liveRunActive = false;
+/** Finished probes in the current (or last cancelled) run — used for transcript drill-down before `lastRun` is set. */
+const liveTestResults = new Map<string, TestResult>();
+/** Run header for the transcript drawer during an active or partial run. */
+let liveRunDrawerMeta: BenchmarkTranscriptRunMeta | null = null;
 let liveSuiteIds: SuiteId[] = [];
 let liveTestsDone = 0;
 let liveSuiteIndex = 0;
@@ -141,7 +147,8 @@ function renderStoppedTestCard(testId: string, suite: SuiteId, label: string): s
   const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
   const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
 
-  return `<article class="benchmark-test-card is-stopped is-fail" data-test-id="${escapeHtml(testId)}" aria-label="${escapeHtml(label)}, stopped"${labelledBy}${describedBy}>
+  const ariaLabel = `View transcript: ${label}, stopped`;
+  return `<article class="benchmark-test-card is-stopped is-fail" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg('fail')}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
@@ -161,7 +168,8 @@ function renderRunningTestCard(testId: string, suite: SuiteId, label: string): s
   const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
   const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
 
-  return `<article class="benchmark-test-card is-running is-current" data-test-id="${escapeHtml(testId)}" aria-busy="true" aria-label="${escapeHtml(label)}, running"${labelledBy}${describedBy}>
+  const ariaLabel = `View transcript: ${label}, running`;
+  return `<article class="benchmark-test-card is-running is-current" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-busy="true" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg('running')}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
@@ -213,39 +221,151 @@ export function resolveTestResultForCard(
   return null;
 }
 
+function syntheticStoppedResult(testId: string, suite: SuiteId, label: string): TestResult {
+  return {
+    testId,
+    suite,
+    label,
+    passed: false,
+    skipped: false,
+    durationMs: 0,
+    score: 0,
+    details: 'Benchmark run was stopped during this test.',
+    transcriptMeta: {
+      error: 'No transcript — the benchmark was stopped before this test finished.',
+    },
+  };
+}
+
+function syntheticRunningResult(testId: string, suite: SuiteId, label: string): TestResult {
+  return {
+    testId,
+    suite,
+    label,
+    passed: false,
+    skipped: false,
+    durationMs: 0,
+    score: 0,
+    transcriptMeta: {
+      error: 'This test is still running. Open again after it finishes to see the transcript.',
+    },
+  };
+}
+
+/** Resolve a test for transcript drill-down (live map, then saved run). */
+export function resolveTestForTranscript(testId: string): TestResult | null {
+  const live = liveTestResults.get(testId);
+  if (live) return live;
+  return resolveTestResultForCard(lastRun, testId);
+}
+
+function resolveTestFromCard(card: HTMLElement): TestResult | null {
+  const testId = card.dataset.testId;
+  if (!testId) return null;
+
+  const found = resolveTestForTranscript(testId);
+  if (found) return found;
+
+  const suiteEl = card.closest<HTMLElement>('[data-suite]');
+  const suite = suiteEl?.dataset.suite as SuiteId | undefined;
+  const label =
+    card.querySelector('.benchmark-test-card-title')?.textContent?.trim() ?? testId;
+  if (!suite) return null;
+
+  if (card.classList.contains('is-stopped')) {
+    return syntheticStoppedResult(testId, suite, label);
+  }
+  if (card.classList.contains('is-running')) {
+    return syntheticRunningResult(testId, suite, label);
+  }
+  return null;
+}
+
+function transcriptRunMeta(): BenchmarkTranscriptRunMeta | null {
+  if (liveRunDrawerMeta) return liveRunDrawerMeta;
+  if (!lastRun) return null;
+  return {
+    preset: lastRun.preset,
+    modelId: lastRun.model.id,
+    startedAt: lastRun.startedAt,
+  };
+}
+
+function buildPartialBenchmarkRun(
+  meta: BenchmarkTranscriptRunMeta,
+  results: Map<string, TestResult>,
+  suiteIds: SuiteId[],
+): BenchmarkRun {
+  const suites: BenchmarkRun['suites'] = [];
+  for (const suiteId of suiteIds) {
+    const tests = [...results.values()].filter((t) => t.suite === suiteId);
+    if (!tests.length) continue;
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const t of tests) {
+      if (t.skipped) skipped += 1;
+      else if (t.passed) passed += 1;
+      else failed += 1;
+    }
+    const score =
+      tests.length > 0 ? tests.reduce((sum, t) => sum + t.score, 0) / tests.length : 0;
+    suites.push({
+      id: suiteId,
+      label: SUITE_LABELS[suiteId],
+      passed,
+      failed,
+      skipped,
+      score,
+      tests,
+    });
+  }
+
+  return {
+    id: `partial-${meta.startedAt}`,
+    startedAt: meta.startedAt,
+    durationMs: 0,
+    preset: meta.preset,
+    provider: { id: '', baseUrl: '' },
+    model: { id: meta.modelId },
+    totalScore: suites.length ? aggregateRunScore(suites) : 0,
+    headlineTtftMs: 0,
+    headlineTokPerSec: 0,
+    modeMatrixPassed: suites.find((s) => s.id === 'modes')?.passed ?? 0,
+    toolsPassed: suites.find((s) => s.id === 'tools')?.passed ?? 0,
+    skillsPassed: suites.find((s) => s.id === 'skills')?.passed ?? 0,
+    suites,
+  };
+}
+
+function commitPartialRunFromLive(): void {
+  if (!liveRunDrawerMeta || liveTestResults.size === 0) return;
+  lastRun = buildPartialBenchmarkRun(liveRunDrawerMeta, liveTestResults, liveSuiteIds);
+}
+
 function regressionForTest(test: TestResult, compareMap: Map<string, TestResult>): boolean {
   const prev = compareMap.get(test.testId);
   return Boolean(prev?.passed && !test.skipped && !test.passed);
 }
 
 function openTranscriptForCard(card: HTMLElement): void {
-  if (!lastRun || liveRunActive) return;
-  const testId = card.dataset.testId;
-  if (!testId) return;
-  const test = resolveTestResultForCard(lastRun, testId);
-  if (!test) return;
+  const test = resolveTestFromCard(card);
+  const meta = transcriptRunMeta();
+  if (!test || !meta) return;
   const compareMap = compareMapFromRun(compareRun);
-  openBenchmarkTranscriptDrawer(
-    test,
-    {
-      preset: lastRun.preset,
-      modelId: lastRun.model.id,
-      startedAt: lastRun.startedAt,
-    },
-    { regression: regressionForTest(test, compareMap) },
-  );
+  openBenchmarkTranscriptDrawer(test, meta, { regression: regressionForTest(test, compareMap) });
 }
 
 function onBenchmarkTestCardClick(ev: MouseEvent): void {
   const card = (ev.target as HTMLElement).closest<HTMLElement>('.benchmark-test-card');
-  if (!card || liveRunActive) return;
+  if (!card) return;
   openTranscriptForCard(card);
 }
 
 function onBenchmarkTestCardKeydown(ev: KeyboardEvent): void {
   if (ev.key !== 'Enter' && ev.key !== ' ') return;
   const card = (ev.target as HTMLElement).closest<HTMLElement>('.benchmark-test-card');
-  if (!card || liveRunActive) return;
+  if (!card) return;
   ev.preventDefault();
   openTranscriptForCard(card);
 }
@@ -337,6 +457,8 @@ function clearCurrentRunningTestCard(): void {
 function markCurrentTestAsStopped(): void {
   const meta = liveCurrentTestMeta;
   if (!meta) return;
+
+  liveTestResults.set(meta.testId, syntheticStoppedResult(meta.testId, meta.suite, meta.label));
 
   const grid = document.querySelector<HTMLElement>(
     `[data-suite="${meta.suite}"] [data-suite-tests]`,
@@ -439,6 +561,7 @@ function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
   liveTestsInSuite = 0;
   liveCurrentTestId = null;
   liveCurrentTestMeta = null;
+  liveTestResults.clear();
 
   const mount = document.getElementById('benchmarkSuites');
   if (mount) {
@@ -456,9 +579,15 @@ function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
   updateProgressBar(0, progressStartLabel(mode));
 }
 
-function finishLiveRunUI(options?: { markCurrentStopped?: boolean }): void {
+function finishLiveRunUI(options?: {
+  markCurrentStopped?: boolean;
+  commitPartial?: boolean;
+}): void {
   if (options?.markCurrentStopped) {
     markCurrentTestAsStopped();
+  }
+  if (options?.commitPartial) {
+    commitPartialRunFromLive();
   }
   liveRunActive = false;
   liveCurrentTestId = null;
@@ -508,6 +637,7 @@ function onBenchmarkProgress(
   if (event.type === 'test-done') {
     liveTestsDone += 1;
     liveTestsInSuite += 1;
+    liveTestResults.set(event.result.testId, event.result);
     upsertLiveTestCard(event.result, compareMap);
     updateProgressBar(
       liveProgressPercent(),
@@ -517,7 +647,7 @@ function onBenchmarkProgress(
   }
 
   if (event.type === 'run-cancelled') {
-    finishLiveRunUI({ markCurrentStopped: true });
+    finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
     setRunning(false);
     return;
   }
@@ -663,12 +793,22 @@ function onRunStopClick(): void {
   void startRun('selected');
 }
 
+function syncLiveDrawerMetaFromRun(run: BenchmarkRun): void {
+  liveRunDrawerMeta = {
+    preset: run.preset,
+    modelId: run.model.id,
+    startedAt: run.startedAt,
+  };
+}
+
 async function refreshHistorySelect(): Promise<void> {
   const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
   if (!select) return;
+  const previous = select.value;
+  const compareToggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
   historySummaries = await listRuns();
   select.innerHTML =
-    '<option value="">Compare to previous run…</option>' +
+    '<option value="">View or compare a saved run…</option>' +
     historySummaries
       .filter((h) => h.id !== lastRun?.id)
       .map(
@@ -676,6 +816,52 @@ async function refreshHistorySelect(): Promise<void> {
           `<option value="${escapeHtml(h.id)}">${escapeHtml(h.startedAt)} · ${escapeHtml(h.modelId)} · ${formatScore(h.totalScore)}</option>`,
       )
       .join('');
+
+  const restoreId =
+    (previous && historySummaries.some((h) => h.id === previous) ? previous : null) ??
+    (compareToggle?.checked && compareRun?.id ? compareRun.id : null);
+  if (restoreId) {
+    select.value = restoreId;
+  }
+}
+
+/** Load a saved run for viewing, or as the compare baseline when Compare is checked. */
+async function onHistorySelectChange(): Promise<void> {
+  const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
+  const toggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
+  if (!select) return;
+
+  const id = select.value;
+  if (!id) {
+    compareRun = null;
+    if (lastRun) renderSuites(lastRun, null);
+    return;
+  }
+
+  const loaded = await loadRun(id);
+  if (!loaded) {
+    setStatus('err', 'Could not load that benchmark run.');
+    compareRun = null;
+    if (lastRun) renderSuites(lastRun, null);
+    return;
+  }
+
+  if (toggle?.checked) {
+    compareRun = loaded;
+    if (!lastRun) {
+      setStatus('ok', 'Run a benchmark to compare against this saved run.');
+      return;
+    }
+    renderSuites(lastRun, compareRun);
+    return;
+  }
+
+  compareRun = null;
+  lastRun = loaded;
+  syncLiveDrawerMetaFromRun(loaded);
+  renderSummary(lastRun);
+  renderSuites(lastRun, null);
+  setStatus('ok', `Loaded saved run · ${formatScore(loaded.totalScore)}`);
 }
 
 async function startRun(mode: BenchmarkStartMode): Promise<void> {
@@ -703,6 +889,12 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
 
   const suiteIds = selectedSuites;
   const compareMap = compareMapFromRun(compareRun);
+  const modelId = getActiveModelIdFromDom() ?? 'unknown';
+  liveRunDrawerMeta = {
+    preset: storedPreset,
+    modelId,
+    startedAt: new Date().toISOString(),
+  };
   initLiveRunUI(mode, suiteIds);
 
   try {
@@ -719,6 +911,11 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
         }
         if (event.type === 'run-done') {
           lastRun = event.run;
+          liveRunDrawerMeta = {
+            preset: lastRun.preset,
+            modelId: lastRun.model.id,
+            startedAt: lastRun.startedAt,
+          };
           renderSummary(lastRun);
           renderSuites(lastRun, compareRun);
           void refreshHistorySelect();
@@ -735,7 +932,7 @@ async function startRun(mode: BenchmarkStartMode): Promise<void> {
   } catch (err) {
     if (generation !== benchmarkRunGeneration) return;
     const aborted = runSignal.aborted;
-    finishLiveRunUI({ markCurrentStopped: aborted });
+    finishLiveRunUI({ markCurrentStopped: aborted, commitPartial: aborted });
     if (aborted) {
       setStatus('ok', 'Benchmark cancelled.');
       if (lastRun) {
@@ -762,7 +959,7 @@ function stopRun(): void {
   benchmarkRunGeneration += 1;
   abortController.abort();
   abortController = null;
-  finishLiveRunUI({ markCurrentStopped: true });
+  finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
   setRunning(false);
   setStatus('ok', 'Stopping benchmark…');
 }
@@ -795,6 +992,24 @@ export function setLiveCurrentTestMetaForTests(
   liveCurrentTestId = meta?.testId ?? null;
 }
 
+/** Test hook: seed live transcript lookup state. */
+export function seedLiveTranscriptStateForTests(options: {
+  meta: BenchmarkTranscriptRunMeta;
+  results?: TestResult[];
+}): void {
+  liveRunDrawerMeta = options.meta;
+  liveTestResults.clear();
+  for (const result of options.results ?? []) {
+    liveTestResults.set(result.testId, result);
+  }
+}
+
+/** Test hook: clear live transcript lookup state. */
+export function clearLiveTranscriptStateForTests(): void {
+  liveRunDrawerMeta = null;
+  liveTestResults.clear();
+}
+
 /** Test hook: read suite toggle selection. */
 export function getSelectedSuitesForTests(): SuiteId[] {
   return getSelectedSuites();
@@ -815,18 +1030,6 @@ export function updateRunStopButtonForTests(running: boolean): void {
   updateRunStopButton(running);
 }
 
-async function onCompareChange(): Promise<void> {
-  const select = document.getElementById('benchmarkHistorySelect') as HTMLSelectElement | null;
-  const toggle = document.getElementById('benchmarkCompareToggle') as HTMLInputElement | null;
-  if (!select || !toggle?.checked || !select.value) {
-    compareRun = null;
-    if (lastRun) renderSuites(lastRun, null);
-    return;
-  }
-  compareRun = await loadRun(select.value);
-  if (lastRun && compareRun) renderSuites(lastRun, compareRun);
-}
-
 export function openBenchmark(): void {
   const root = getBenchmarkRoot();
   const shell = getChatShell();
@@ -845,7 +1048,6 @@ export function openBenchmark(): void {
 
   root.classList.add('is-open');
   shell.classList.add('hidden');
-  document.querySelector('header.topbar')?.classList.add('hidden');
   window.location.hash = '#/benchmark';
 
   void refreshHistorySelect();
@@ -861,7 +1063,6 @@ export function closeBenchmark(): void {
   stopRun();
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
   if (window.location.hash.startsWith('#/benchmark')) {
     window.location.hash = '#/';
   }
@@ -900,8 +1101,12 @@ export function initBenchmarkPage(): void {
     btn.addEventListener('click', onSuiteToggleClick);
   }
 
-  document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => void onCompareChange());
-  document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => void onCompareChange());
+  document.getElementById('benchmarkHistorySelect')?.addEventListener('change', () => {
+    void onHistorySelectChange();
+  });
+  document.getElementById('benchmarkCompareToggle')?.addEventListener('change', () => {
+    void onHistorySelectChange();
+  });
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);

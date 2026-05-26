@@ -3,9 +3,7 @@
  */
 
 import {
-  buildClientStats,
-  reconcileCompletionStats,
-  extractStreamDelta,
+  finalizeResponseMeta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
@@ -24,7 +22,6 @@ import {
   feedSseEventBuffer,
   flushSseEventBuffer,
 } from '../api/sse-parse';
-import { extractReasoningDelta } from '../api/reasoning.ts';
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } from '../types';
@@ -90,10 +87,9 @@ function timingFromStream(
   tEnd: number,
   streamMeta: StreamMetaAccumulator,
 ): LlmTurnTiming {
-  const usage = streamMeta.usage ?? {};
-  const serverStats = streamMeta.stats ?? {};
-  const clientStats = buildClientStats(t0, tFirst, tEnd, usage, streamMeta.finish_reason);
-  const stats = reconcileCompletionStats(clientStats, serverStats, usage);
+  const meta = finalizeResponseMeta(streamMeta, t0, tFirst, tEnd);
+  const stats = meta.stats;
+  const usage = meta.usage;
   const ttftMs =
     stats.time_to_first_token != null ? Math.round(stats.time_to_first_token * 1000) : null;
   const tokPerSec = stats.tokens_per_second ?? null;
@@ -162,20 +158,13 @@ async function streamTurn(
   signal.addEventListener('abort', cancelReader, { once: true });
 
   function handleChunk(chunk: ChatCompletionChunk): void {
+    if (tFirst == null && chunk.choices?.length) {
+      tFirst = performance.now();
+    }
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    const beforeText = textAcc.getText().length;
-    const beforeReasoning = reasoningAcc.getText().length;
     reasoningAcc.ingestChunk(chunk);
     textAcc.ingestChunk(chunk);
-    if (tFirst == null) {
-      const firstToken =
-        textAcc.getText().length > beforeText ||
-        reasoningAcc.getText().length > beforeReasoning ||
-        extractStreamDelta(chunk).length > 0 ||
-        extractReasoningDelta(chunk).length > 0;
-      if (firstToken) tFirst = performance.now();
-    }
   }
 
   try {

@@ -5,7 +5,8 @@
 .benchmark-page {
   display: none;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
@@ -532,7 +533,7 @@
   display: flex;
   flex-direction: column;
   width: min(480px, 100vw);
-  max-height: 100vh;
+  max-height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top, 0px));
   background: var(--mn-surface-1);
   border-left: 1px solid var(--mn-border);
   box-shadow: -8px 0 24px color-mix(in srgb, var(--mn-bg) 30%, transparent);

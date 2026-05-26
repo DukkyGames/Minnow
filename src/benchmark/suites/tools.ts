@@ -6,6 +6,7 @@ import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { executeTool } from '../../tools/client';
 import { assertNotAborted, raceWithAbort, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
+import { createBenchmarkExecuteToolFn } from '../execute-tool-sandbox.ts';
 import { runToolLoop } from '../llm-driver.ts';
 import { announceTestStart, buildTestResult, reportTest } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
@@ -46,6 +47,7 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
         messages: [{ role: 'user', content: fixture.prompt }],
         tools: [tool.definition],
         maxToolRounds: 2,
+        executeToolFn: createBenchmarkExecuteToolFn(),
       });
 
       const nameOk = toolNameMatch(out.toolCalls, tool.id);
