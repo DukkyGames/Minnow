@@ -23,6 +23,7 @@ import {
 import { normalizeModelPricingRates, normalizeProviderPricing } from '../usage/pricing';
 import type { ProviderPricing } from '../usage/types';
 import { loadProviderSelect } from './settings';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -377,12 +378,10 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   keyField.append(keyHint);
   form.append(keyField);
 
-  const enabledLabel = el('label', 'settings-toggle-row');
-  const enabledInput = document.createElement('input');
-  enabledInput.type = 'checkbox';
-  enabledInput.name = 'enabled';
-  enabledInput.checked = provider.enabled !== false;
-  enabledLabel.append(enabledInput, el('span', undefined, 'Enabled'));
+  const { row: enabledLabel, input: enabledInput } = createSettingsToggleRow('Enabled', {
+    name: 'enabled',
+    checked: provider.enabled !== false,
+  });
   form.append(enabledLabel);
 
   const constrainedField = el('div', 'field');

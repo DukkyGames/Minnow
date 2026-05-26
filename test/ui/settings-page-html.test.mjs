@@ -10,22 +10,22 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 /** Nav section ids must match panels in index.html (settings-page-types SETTINGS_SECTIONS). */
 const SETTINGS_SECTION_IDS = [
   'general',
-  'prompting',
-  'rules',
   'providers',
   'usage',
   'model-routing',
+  'prompting',
+  'rules',
+  'memory',
   'modes',
   'experts',
   'work-agents',
   'agent-packs',
   'sub-agents',
-  'memory',
-  'features',
   'tools',
   'mcp',
   'lsp',
   'skills',
+  'features',
   'evals',
 ];
 

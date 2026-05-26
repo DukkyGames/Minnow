@@ -27,6 +27,7 @@ import type { SamplerPreset } from '../agents/sampler-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { isProvidersApiAvailable, listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }[] = [
@@ -338,10 +339,6 @@ export function mountWorkAgentEditor(
   const modelSel = document.createElement('select');
   modelSel.className = 'settings-select';
 
-  const disabledCb = document.createElement('input');
-  disabledCb.type = 'checkbox';
-  disabledCb.checked = !options.initialDisabled;
-
   const maxInputTokensInput = document.createElement('input');
   maxInputTokensInput.type = 'number';
   maxInputTokensInput.className = 'settings-select settings-kv-input';
@@ -422,9 +419,9 @@ export function mountWorkAgentEditor(
   modelBlock.appendChild(el('label', 'settings-field-label', 'Model'));
   modelBlock.appendChild(modelSel);
 
-  const disabledRow = el('label', 'settings-toggle-row');
-  disabledRow.appendChild(disabledCb);
-  disabledRow.appendChild(el('span', '', 'Disabled'));
+  const { row: disabledRow, input: disabledCb } = createSettingsToggleRow('Disabled', {
+    checked: !!options.initialDisabled,
+  });
   const budgetBlock = el('div', 'settings-model-row');
   budgetBlock.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
   budgetBlock.appendChild(maxInputTokensInput);
@@ -568,10 +565,6 @@ export function mountSubAgentTypeEditor(
   const modelSel = document.createElement('select');
   modelSel.className = 'settings-select';
 
-  const enabledCb = document.createElement('input');
-  enabledCb.type = 'checkbox';
-  enabledCb.checked = initial.enabled;
-
   const maxInput = document.createElement('input');
   maxInput.type = 'number';
   maxInput.className = 'settings-select';
@@ -597,9 +590,9 @@ export function mountSubAgentTypeEditor(
   modelBlock.appendChild(el('label', 'settings-field-label', 'Model'));
   modelBlock.appendChild(modelSel);
 
-  const enabledRow = el('label', 'settings-toggle-row');
-  enabledRow.appendChild(enabledCb);
-  enabledRow.appendChild(el('span', '', `${label} enabled`));
+  const { row: enabledRow, input: enabledCb } = createSettingsToggleRow(`${label} enabled`, {
+    checked: initial.enabled,
+  });
 
   const maxRow = el('label', 'settings-toggle-row');
   maxRow.appendChild(el('span', '', 'Max concurrent'));

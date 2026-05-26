@@ -396,9 +396,15 @@
 }
 
 .prompt-diff-toolbar__compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 13px;
-  cursor: pointer;
   user-select: none;
+}
+
+.prompt-diff-toolbar__compare-label {
+  color: var(--mn-fg);
 }
 
 .prompt-diff-toolbar__layout {

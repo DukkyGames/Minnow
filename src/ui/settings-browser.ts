@@ -10,6 +10,7 @@ import {
   saveBrowserMeta,
   type BrowserMeta,
 } from '../config/browser-meta';
+import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -78,13 +79,10 @@ export async function renderBrowserAllowlistSettings(
     ),
   );
 
-  const allowNavRow = el('div', 'settings-toggle-row');
-  const allowNavLabel = el('span', undefined, 'Allow navigation');
-  const allowNavCb = document.createElement('input');
-  allowNavCb.type = 'checkbox';
-  allowNavCb.id = 'settingsBrowserAllowNavigate';
-  allowNavCb.checked = meta.allowNavigate;
-  allowNavRow.append(allowNavLabel, allowNavCb);
+  const { row: allowNavRow, input: allowNavCb } = createSettingsToggleRow('Allow navigation', {
+    id: 'settingsBrowserAllowNavigate',
+    checked: meta.allowNavigate,
+  });
   section.appendChild(allowNavRow);
 
   const urlRow = el('div', 'field settings-tool-browser-url');

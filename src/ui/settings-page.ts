@@ -23,6 +23,7 @@ import {
   SETTINGS_SECTIONS,
   type SettingsSectionId,
 } from './settings-page-types';
+import { upgradeSettingsCheckboxes } from './settings-switch';
 
 export type { SettingsSectionId } from './settings-page-types';
 
@@ -206,6 +207,7 @@ export function openSettings(section?: SettingsSectionId): void {
   document.querySelector('header.topbar')?.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
 
+  upgradeSettingsCheckboxes();
   bindStaticSections();
   initSettingsPromptEstimate();
   void hydrateStaticFields();
@@ -253,6 +255,8 @@ function onHashChange(): void {
 
 /** Wire nav, back button, and hash routing. */
 export function initSettingsPage(): void {
+  upgradeSettingsCheckboxes();
+
   document
     .getElementById('btnSettingsPageBack')
     ?.addEventListener('click', () => closeSettings());
