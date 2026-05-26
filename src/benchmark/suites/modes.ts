@@ -22,6 +22,10 @@ const MODE_NEGATIVE: Partial<Record<ModeId, { prompt: string; forbiddenTool: str
 };
 
 const MODE_POSITIVE: Partial<Record<ModeId, { prompt: string; expectedTool: string }>> = {
+  general: {
+    prompt: 'Read package.json using read_file. Call the tool.',
+    expectedTool: 'read_file',
+  },
   build: {
     prompt: 'List files in the current directory using list_directory. Call the tool.',
     expectedTool: 'list_directory',

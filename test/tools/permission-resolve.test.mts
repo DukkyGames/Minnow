@@ -167,6 +167,55 @@ describe('resolveEffectivePermission', () => {
     assert.equal(resolved.agentKey, 'sub-agent:shell');
   });
 
+  test('general mode forces ask even when global is full', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'full';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'ask');
+    assert.equal(resolved.matchedPattern, null);
+  });
+
+  test('general mode forces ask even when a pattern would auto-approve', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'ask';
+    config.permissions.patterns.push({
+      id: 'pattern-11111111-1111-1111-1111-111111111111',
+      toolId: 'execute_command',
+      agentScope: '*',
+      argPath: 'command',
+      match: 'startsWith',
+      value: 'git status',
+    });
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'git status' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'ask');
+    assert.equal(resolved.matchedPattern, null);
+  });
+
+  test('general mode keeps global off', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'off';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'off');
+  });
+
   test('global off is hard off', () => {
     const config = cloneConfig(defaultToolConfig());
     config.permissions.default.execute_command = 'off';

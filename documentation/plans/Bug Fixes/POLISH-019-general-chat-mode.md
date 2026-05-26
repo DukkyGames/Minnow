@@ -8,7 +8,7 @@ related:
   - documentation/plans/references/mode-sources.md
   - POLISH-020 — Merge Reef into General + Research (remove Reef as standalone mode)
   - POLISH-018 — Plan mode intent picker (orthogonal)
-status: approved
+status: shipped
 linear: MIN-82
 todos:
   - id: product-naming-order
@@ -43,7 +43,7 @@ isProject: false
 **Tracker:** [documentation/bug-hunt-session-2026-05-24.md](../../bug-hunt-session-2026-05-24.md) — POLISH-019  
 **Type:** Product polish / composer modes  
 **Area:** Operating mode registry, mode prompts, tool policy, composer segmented control, prompt composition, mode handoff tools  
-**Status:** Open (plan only — no implementation in this document)
+**Status:** Shipped (MIN-82 / POLISH-019)
 
 ---
 
@@ -287,15 +287,15 @@ Same vars as other modes: `{{cwd}}`, `{{enabled_tools}}`, `{{mode_label}}`, etc.
 
 ## Acceptance criteria
 
-- [ ] **Picker:** `listModes()` includes **General** with label and description; segmented control shows it and persists `Chat.modeId: general`.
-- [ ] **Prompt:** `loadModePromptBody('general', 'full'|'lite')` non-empty with correct `MINNOW_MODE_MARKER`.
-- [ ] **Tools:** Denied tools are not exposed in `getEnabledToolDefinitionsForMode('general')`; allowed tools work in manual send and benchmark positive probe.
-- [ ] **Negative probe:** Model is not offered (or policy blocks) at least one high-risk tool denied in Build (e.g. `execute_command` or `save_file` per signed-off matrix).
-- [ ] **Handoff:** `set_chat_mode` / `create_chat_with_mode` accept `general`; handoff docs mention switching from General to Build/Plan/Research.
-- [ ] **Work agent:** With `workAgentAuto`, switching to General sets the agreed default agent.
-- [ ] **Server:** Session save/load preserves `general`; server validator accepts id.
-- [ ] **Tests:** Mode test suite green; no regression in `test/modes/run-all.mts`.
-- [ ] **Docs:** context.md + AGENTS.md reflect six modes (or five after 020 if shipped together).
+- [x] **Picker:** `listModes()` includes **General** with label and description; segmented control shows it and persists `Chat.modeId: general`.
+- [x] **Prompt:** `loadModePromptBody('general', 'full'|'lite')` non-empty with correct `MINNOW_MODE_MARKER`.
+- [x] **Tools:** Denied tools are not exposed in `getEnabledToolDefinitionsForMode('general')`; allowed tools work in manual send and benchmark positive probe.
+- [x] **Negative probe:** Model is not offered (or policy blocks) at least one high-risk tool denied in Build (e.g. `execute_command` or `save_file` per signed-off matrix).
+- [x] **Handoff:** `set_chat_mode` / `create_chat_with_mode` accept `general`; handoff docs mention switching from General to Build/Plan/Research.
+- [x] **Work agent:** With `workAgentAuto`, switching to General sets the agreed default agent.
+- [x] **Server:** Session save/load preserves `general`; server validator accepts id.
+- [x] **Tests:** Mode test suite green; no regression in `test/modes/run-all.mts`.
+- [x] **Docs:** context.md + AGENTS.md reflect six modes (or five after 020 if shipped together).
 
 ---
 

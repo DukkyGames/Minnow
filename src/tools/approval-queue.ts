@@ -16,6 +16,8 @@ export interface ToolApprovalContext {
   toolCallId?: string;
   subAgentType?: string;
   workAgentId?: string | null;
+  /** Active composer mode (General always prompts before tool execution). */
+  modeId?: string;
 }
 
 interface Queued {

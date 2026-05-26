@@ -4,7 +4,7 @@
 
 ### Overview
 
-Minnow is a Vite + TypeScript SPA chat client for LM Studio and other OpenAI-compatible local providers. It includes five composer modes (Build / Plan / Orchestrate / Research / Reef) plus a global bug tracker (sidebar **All bugs**, `#/bugs`), 55 built-in tools, sub-agents, `~/.minnow` persistence when `npm start` runs, and a full settings page. See `README.md` for setup/scripts and `documentation/context.md` for architecture details. Gap audit: `documentation/plans/feature-audit-roadmap.md`.
+Minnow is a Vite + TypeScript SPA chat client for LM Studio and other OpenAI-compatible local providers. It includes six composer modes (General / Build / Plan / Orchestrate / Research / Reef) plus a global bug tracker (sidebar **All bugs**, `#/bugs`), 55 built-in tools, sub-agents, `~/.minnow` persistence when `npm start` runs, and a full settings page. See `README.md` for setup/scripts and `documentation/context.md` for architecture details. Gap audit: `documentation/plans/feature-audit-roadmap.md`.
 
 ### Running the app
 
