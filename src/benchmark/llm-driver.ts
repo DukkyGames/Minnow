@@ -23,7 +23,7 @@ import type { ApiMessage, ChatCompletionChunk, ToolCall, ToolCallAccumulator } f
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { ExecuteToolContext } from '../tools/client';
 import { executeTool } from '../tools/client';
-import { assertNotAborted } from './abort.ts';
+import { assertNotAborted, raceWithAbort } from './abort.ts';
 import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
@@ -141,6 +141,13 @@ async function streamTurn(
   const decoder = new TextDecoder();
   const sseBuffer = createSseEventBuffer();
 
+  const cancelReader = (): void => {
+    void reader.cancel().catch(() => {
+      /* stream may already be closed */
+    });
+  };
+  signal.addEventListener('abort', cancelReader, { once: true });
+
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
@@ -151,13 +158,17 @@ async function streamTurn(
     }
   }
 
-  while (true) {
-    assertNotAborted(signal);
-    const { done, value } = await reader.read();
-    if (done) break;
-    feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
+  try {
+    while (true) {
+      assertNotAborted(signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+      feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
+    }
+    flushSseEventBuffer(sseBuffer, handleChunk);
+  } finally {
+    signal.removeEventListener('abort', cancelReader);
   }
-  flushSseEventBuffer(sseBuffer, handleChunk);
 
   const tEnd = performance.now();
   const toolCalls = finalizeToolCalls(toolAcc);
@@ -174,8 +185,7 @@ async function streamTurn(
   };
 }
 
-/** Single-shot completion with timing capture. */
-export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
+async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
   const messages: ApiMessage[] = [...input.messages];
   const turn = await streamTurn(
     input.providerId,
@@ -226,6 +236,11 @@ export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
   };
 }
 
+/** Single-shot completion with timing capture. */
+export async function runOneShot(input: OneShotInput): Promise<OneShotResult> {
+  return raceWithAbort(input.signal, runOneShotInner(input));
+}
+
 /** Append the assistant turn (unit-tested; shared by one-shot completion). */
 export function appendAssistantToMessages(
   messages: ApiMessage[],
@@ -240,8 +255,7 @@ export function appendAssistantToMessages(
   return messages;
 }
 
-/** Tool loop (max 3 rounds) isolated from session state. */
-export async function runToolLoop(input: ToolLoopInput): Promise<OneShotResult> {
+async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
   const messages: ApiMessage[] = [...input.messages];
   const maxRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
   const runExecute =
@@ -329,4 +343,9 @@ export async function runToolLoop(input: ToolLoopInput): Promise<OneShotResult> 
     timing: lastTiming,
     messages,
   };
+}
+
+/** Tool loop (max 3 rounds) isolated from session state. */
+export async function runToolLoop(input: ToolLoopInput): Promise<OneShotResult> {
+  return raceWithAbort(input.signal, runToolLoopInner(input));
 }

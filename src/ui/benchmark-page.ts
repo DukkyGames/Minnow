@@ -22,6 +22,9 @@ import {
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
 
+/** How a benchmark run was started from the run bar. */
+export type BenchmarkStartMode = 'quick' | 'full' | 'selected';
+
 /** Display order for suite toggle buttons in the run bar. */
 const SUITE_TOGGLE_ORDER: SuiteId[] = [
   'capability',
@@ -33,6 +36,8 @@ const SUITE_TOGGLE_ORDER: SuiteId[] = [
 ];
 
 let abortController: AbortController | null = null;
+/** Bumped on Stop or new Run so in-flight `startRun` finally blocks do not fight UI reset. */
+let benchmarkRunGeneration = 0;
 let lastRun: BenchmarkRun | null = null;
 let compareRun: BenchmarkRun | null = null;
 let historySummaries: BenchmarkRunSummary[] = [];
@@ -271,7 +276,32 @@ function upsertLiveTestCard(result: TestResult, compareMap: Map<string, TestResu
   }
 }
 
-function initLiveRunUI(preset: BenchmarkPreset, suiteIds: SuiteId[]): void {
+function progressStartLabel(mode: BenchmarkStartMode): string {
+  if (mode === 'quick') return 'Quick run starting';
+  if (mode === 'full') return 'Full run starting';
+  return 'Benchmark starting';
+}
+
+function runningStatusLabel(mode: BenchmarkStartMode): string {
+  if (mode === 'quick') return 'Benchmark Quick running…';
+  if (mode === 'full') return 'Benchmark Full running…';
+  return 'Benchmark running…';
+}
+
+/** Preset stored on the run record for history and transcript drill-down. */
+export function storedPresetForStartMode(mode: BenchmarkStartMode): BenchmarkPreset {
+  if (mode === 'quick') return 'quick';
+  if (mode === 'full') return 'full';
+  return 'custom';
+}
+
+/** Quick/Full apply preset toggles; selected leaves toggles unchanged. */
+export function applyStartModeToToggles(mode: BenchmarkStartMode): void {
+  if (mode === 'quick') applyPresetToToggles('quick');
+  else if (mode === 'full') applyPresetToToggles('full');
+}
+
+function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
   liveRunActive = true;
   liveSuiteIds = suiteIds;
   liveTestsDone = 0;
@@ -291,7 +321,7 @@ function initLiveRunUI(preset: BenchmarkPreset, suiteIds: SuiteId[]): void {
   }
 
   setProgressVisible(true);
-  updateProgressBar(0, preset === 'quick' ? 'Quick run starting' : 'Full run starting');
+  updateProgressBar(0, progressStartLabel(mode));
 }
 
 function finishLiveRunUI(): void {
@@ -342,6 +372,7 @@ function onBenchmarkProgress(
 
   if (event.type === 'run-cancelled') {
     finishLiveRunUI();
+    setRunning(false);
     return;
   }
 
@@ -366,7 +397,7 @@ function renderSummary(run: BenchmarkRun | null): void {
   if (!root) return;
   if (!run) {
     root.innerHTML =
-      '<p class="benchmark-empty">Run Quick or Full to score the active model.</p>';
+      '<p class="benchmark-empty">Select suites below, then Run — or use Quick / Full presets.</p>';
     return;
   }
   const scoreClass =
@@ -450,16 +481,37 @@ function setSuiteTogglesDisabled(disabled: boolean): void {
   }
 }
 
+function updateRunStopButton(running: boolean): void {
+  const runBtn = document.getElementById('btnBenchmarkRun');
+  if (!runBtn) return;
+  runBtn.textContent = running ? 'Stop' : 'Run';
+  const label = running ? 'Stop benchmark' : 'Run selected suites';
+  runBtn.title = label;
+  runBtn.setAttribute('aria-label', label);
+}
+
 function setRunning(running: boolean): void {
   const quick = document.getElementById('btnBenchmarkQuick');
   const full = document.getElementById('btnBenchmarkFull');
-  const stop = document.getElementById('btnBenchmarkStop');
   const root = getBenchmarkRoot();
   quick?.toggleAttribute('disabled', running);
   full?.toggleAttribute('disabled', running);
-  stop?.toggleAttribute('disabled', !running);
+  updateRunStopButton(running);
   setSuiteTogglesDisabled(running);
   root?.classList.toggle('is-running', running);
+}
+
+function isBenchmarkRunActive(): boolean {
+  return abortController != null && !abortController.signal.aborted;
+}
+
+function onRunStopClick(): void {
+  if (isBenchmarkRunActive()) {
+    stopRun();
+    return;
+  }
+  abortController = null;
+  void startRun('selected');
 }
 
 async function refreshHistorySelect(): Promise<void> {
@@ -477,33 +529,40 @@ async function refreshHistorySelect(): Promise<void> {
       .join('');
 }
 
-async function startRun(preset: 'quick' | 'full'): Promise<void> {
+async function startRun(mode: BenchmarkStartMode): Promise<void> {
   if (!getActiveModelIdFromDom()) {
     setStatus('err', 'Load a model before running Benchmark.');
     return;
   }
 
+  applyStartModeToToggles(mode);
+
   const selectedSuites = getSelectedSuites();
   if (!selectedSuites.length) {
-    setStatus('err', 'Select at least one benchmark suite above, then Quick or Full.');
+    setStatus('err', 'Select at least one benchmark suite, then Run (or Quick / Full).');
     return;
   }
 
+  const storedPreset = storedPresetForStartMode(mode);
+
   abortController?.abort();
+  const generation = ++benchmarkRunGeneration;
   abortController = new AbortController();
+  const runSignal = abortController.signal;
   setRunning(true);
-  setStatus('ok', preset === 'quick' ? 'Benchmark Quick running…' : 'Benchmark Full running…');
+  setStatus('ok', runningStatusLabel(mode));
 
   const suiteIds = selectedSuites;
   const compareMap = compareMapFromRun(compareRun);
-  initLiveRunUI(preset, suiteIds);
+  initLiveRunUI(mode, suiteIds);
 
   try {
     const run = await runBenchmark({
-      preset,
+      preset: storedPreset,
       suites: selectedSuites,
-      signal: abortController.signal,
+      signal: runSignal,
       onProgress: (event) => {
+        if (generation !== benchmarkRunGeneration) return;
         onBenchmarkProgress(event, compareMap);
         if (event.type === 'run-cancelled') {
           setStatus('ok', 'Benchmark cancelled.');
@@ -517,14 +576,17 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
         }
       },
     });
+    if (generation !== benchmarkRunGeneration) return;
     lastRun = run;
     renderSummary(run);
     renderSuites(run, compareRun);
     await refreshHistorySelect();
+    if (generation !== benchmarkRunGeneration) return;
     setStatus('ok', `Benchmark done · ${formatScore(run.totalScore)}`);
   } catch (err) {
+    if (generation !== benchmarkRunGeneration) return;
     finishLiveRunUI();
-    if (abortController.signal.aborted) {
+    if (runSignal.aborted) {
       setStatus('ok', 'Benchmark cancelled.');
       if (lastRun) {
         renderSummary(lastRun);
@@ -544,6 +606,7 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
       }
     }
   } finally {
+    if (generation !== benchmarkRunGeneration) return;
     setRunning(false);
     abortController = null;
   }
@@ -551,11 +614,12 @@ async function startRun(preset: 'quick' | 'full'): Promise<void> {
 
 function stopRun(): void {
   if (!abortController) return;
+  benchmarkRunGeneration += 1;
   abortController.abort();
-  if (liveRunActive) {
-    setStatus('ok', 'Stopping benchmark…');
-    updateProgressBar(liveProgressPercent(), 'Cancelling…');
-  }
+  abortController = null;
+  finishLiveRunUI();
+  setRunning(false);
+  setStatus('ok', 'Stopping benchmark…');
 }
 
 /** Test hook: abort controller for the in-flight benchmark run. */
@@ -566,6 +630,11 @@ export function getBenchmarkAbortControllerForTests(): AbortController | null {
 /** Test hook: wire abort controller without starting a full run. */
 export function setBenchmarkAbortControllerForTests(controller: AbortController | null): void {
   abortController = controller;
+}
+
+/** Test hook: invoke Stop handler. */
+export function stopRunForTests(): void {
+  stopRun();
 }
 
 /** Test hook: read suite toggle selection. */
@@ -581,6 +650,11 @@ export function applyPresetToTogglesForTests(preset: BenchmarkPreset): void {
 /** Test hook: suite ids used for toggle button order. */
 export function getSuiteToggleOrderForTests(): readonly SuiteId[] {
   return SUITE_TOGGLE_ORDER;
+}
+
+/** Test hook: sync Run/Stop combined button label. */
+export function updateRunStopButtonForTests(running: boolean): void {
+  updateRunStopButton(running);
 }
 
 async function onCompareChange(): Promise<void> {
@@ -657,14 +731,12 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
 export function initBenchmarkPage(): void {
   document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => closeBenchmark());
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
-    applyPresetToToggles('quick');
     void startRun('quick');
   });
   document.getElementById('btnBenchmarkFull')?.addEventListener('click', () => {
-    applyPresetToToggles('full');
     void startRun('full');
   });
-  document.getElementById('btnBenchmarkStop')?.addEventListener('click', () => stopRun());
+  document.getElementById('btnBenchmarkRun')?.addEventListener('click', onRunStopClick);
 
   for (const btn of getSuiteToggleButtons()) {
     btn.addEventListener('click', onSuiteToggleClick);

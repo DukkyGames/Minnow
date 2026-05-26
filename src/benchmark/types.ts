@@ -13,7 +13,8 @@ export type SuiteId =
   | 'modes'
   | 'coding';
 
-export type BenchmarkPreset = 'quick' | 'full';
+/** quick/full = preset runs; custom = user-selected suite subset via Run. */
+export type BenchmarkPreset = 'quick' | 'full' | 'custom';
 
 /** How a single test case is scored. */
 export type ScoringKind =
