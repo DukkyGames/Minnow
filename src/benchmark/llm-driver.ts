@@ -63,6 +63,11 @@ export interface ToolLoopInput extends OneShotInput {
   ) => ReturnType<typeof executeTool>;
 }
 
+/** Retain the last turn that emitted tool calls (final loop turn is often text-only). */
+export function preserveLastToolCalls(previous: ToolCall[], turn: ToolCall[]): ToolCall[] {
+  return turn.length > 0 ? turn : previous;
+}
+
 function parseToolArguments(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) return {};
@@ -347,10 +352,10 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
 
     lastTiming = turn.timing;
     lastText = turn.fullText.trim();
-    lastToolCalls = turn.toolCalls;
+    lastToolCalls = preserveLastToolCalls(lastToolCalls, turn.toolCalls);
     lastFinish = turn.finishReason;
 
-    if (turn.finishReason === 'tool_calls' && turn.toolCalls.length > 0) {
+    if (turn.toolCalls.length > 0) {
       messages.push({
         role: 'assistant',
         content: turn.fullText || null,
