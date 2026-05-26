@@ -91,7 +91,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       maxTokens: 32,
     });
     const streamPassed = hasNonEmptyCompletion(stream.text);
-    tests.push(
     reportTest(ctx, tests,
       buildTestResult(
         result(
