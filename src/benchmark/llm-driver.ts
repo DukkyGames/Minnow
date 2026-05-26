@@ -5,13 +5,16 @@
 import {
   buildClientStats,
   reconcileCompletionStats,
-  extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import {
+  accumulateBenchmarkStreamDelta,
+  completionTextFromFallback,
+} from './stream-text.ts';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -151,7 +154,7 @@ async function streamTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    const delta = extractStreamDelta(chunk);
+    const delta = accumulateBenchmarkStreamDelta(chunk);
     if (delta) {
       if (tFirst == null) tFirst = performance.now();
       fullText += delta;
@@ -218,8 +221,7 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
       input.signal,
       input.providerId,
     );
-    text = extractStreamDelta(fallback) || fallback.choices?.[0]?.message?.content || '';
-    text = text.trim();
+    text = completionTextFromFallback(fallback);
     finishReason = finishReason || fallback.choices?.[0]?.finish_reason;
     const fbMessage = fallback.choices?.[0]?.message as
       | { tool_calls?: ToolCall[] }
@@ -329,7 +331,7 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
         input.signal,
         input.providerId,
       );
-      lastText = extractStreamDelta(fallback) || fallback.choices?.[0]?.message?.content || '';
+      lastText = completionTextFromFallback(fallback);
     }
 
     messages.push({ role: 'assistant', content: lastText });
