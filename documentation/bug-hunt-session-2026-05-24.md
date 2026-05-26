@@ -801,7 +801,7 @@ False positive or over-broad validation — chart rules applied to non-chart wid
 | POLISH-012 | Bug tracker | Categories + file/code links on bugs | **Requested** |
 | POLISH-013 | Editor + file tree | Right-click **Report bug** (pre-fill from selection/file) | **Requested** |
 | POLISH-014 | Bug view layout | File sidebar + viewer visible while on `#/bugs` | Verified — [MIN-93](https://linear.app/minnowai/issue/MIN-93/polish-014-file-panel-on-bug-view) |
-| POLISH-015 | Bug view layout | Keep main **top bar** visible on bug tracker | **Requested** |
+| POLISH-015 | Bug view layout | Keep main **top bar** visible on bug tracker | **Done** (MIN-92) |
 | POLISH-016 | Onboarding / shell | First launch → **workspace select** home (Cursor-style) | **Requested** |
 | POLISH-017 | Chat sidebar | **Pin chats** to top of session list | **Requested** |
 | POLISH-018 | Plan mode | Intent picker: preset buttons + preprompt + user input | **Planned** |
@@ -1108,6 +1108,8 @@ The **main top bar** (brand, model picker, workspace, benchmark, settings, etc.)
 **Notes**
 
 - Pairs with **POLISH-014** (file panel + bugs layout). Related **BUG-001**.
+
+**Status:** **Done** 2026-05-26 — `openGlobalBugs` / `closeGlobalBugs` no longer toggle `header.topbar`; `#globalBugsView` uses `flex: 1` below topbar. Linear [MIN-92](https://linear.app/minnowai/issue/MIN-92/polish-015-top-bar-on-bug-view).
 
 ### POLISH-016 — Workspace select screen on first open (Cursor-style)
 
