@@ -718,50 +718,68 @@
     <button class="icon-btn" type="button" id="btnBenchmarkPageBack" aria-label="Back to chat">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
-    <h1>Benchmark</h1>
+    <div class="benchmark-page-heading">
+      <h1>Benchmark</h1>
+      <p class="benchmark-page-lede">Integration battery for the active model</p>
+    </div>
   </header>
   <div class="benchmark-page-body">
-    <div class="benchmark-run-bar">
-      <div class="benchmark-run-actions">
-        <button type="button" id="btnBenchmarkQuick">Quick</button>
-        <button type="button" id="btnBenchmarkFull">Full</button>
-        <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
+    <div class="benchmark-page-inner">
+      <section class="benchmark-deck" aria-label="Run configuration">
+        <div class="benchmark-deck-grid">
+          <div class="benchmark-deck-field benchmark-deck-field--presets">
+            <span class="benchmark-field-label" id="benchmarkPresetLabel">Preset</span>
+            <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
+              <button type="button" id="btnBenchmarkQuick">Quick</button>
+              <button type="button" id="btnBenchmarkFull">Full</button>
+              <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
+            </div>
+          </div>
+          <div class="benchmark-deck-field benchmark-deck-field--suites">
+            <span class="benchmark-field-label" id="benchmarkSuitesLabel">Suites</span>
+            <div
+              id="benchmarkSuiteToggles"
+              class="benchmark-suite-toggles"
+              role="group"
+              aria-labelledby="benchmarkSuitesLabel"
+            >
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
+              <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div id="benchmarkProgress" class="benchmark-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Benchmark progress">
+        <div class="benchmark-progress-meta">
+          <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting…</span>
+          <span id="benchmarkProgressPct" class="benchmark-progress-pct" aria-hidden="true">0%</span>
+        </div>
+        <div class="benchmark-progress-track">
+          <div id="benchmarkProgressFill" class="benchmark-progress-fill"></div>
+        </div>
       </div>
-      <div
-        id="benchmarkSuiteToggles"
-        class="benchmark-suite-toggles"
-        role="group"
-        aria-label="Benchmark suites to run"
-      >
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
-        <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+      <div id="benchmarkSummary" class="benchmark-summary" aria-live="polite">
+        <p class="benchmark-empty">Choose suites in the deck above, then Run. Quick and Full apply a preset first.</p>
       </div>
-    </div>
-    <div id="benchmarkProgress" class="benchmark-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Benchmark progress">
-      <div class="benchmark-progress-meta">
-        <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting…</span>
-        <span id="benchmarkProgressPct" class="benchmark-progress-pct" aria-hidden="true">0%</span>
+      <div class="benchmark-history-bar">
+        <label class="benchmark-history-field" for="benchmarkHistorySelect">
+          <span class="benchmark-field-label">History</span>
+          <select id="benchmarkHistorySelect" aria-label="Previous benchmark run"></select>
+        </label>
+        <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden>
+          Current run
+        </button>
+        <label class="benchmark-history-compare">
+          <input type="checkbox" id="benchmarkCompareToggle" />
+          <span>Compare to selected run</span>
+        </label>
       </div>
-      <div class="benchmark-progress-track">
-        <div id="benchmarkProgressFill" class="benchmark-progress-fill"></div>
-      </div>
+      <div id="benchmarkSuites" class="benchmark-suites-mount"></div>
     </div>
-    <div id="benchmarkSummary" class="benchmark-summary">
-      <p class="benchmark-empty">Select suites below, then Run — or use Quick / Full presets.</p>
-    </div>
-    <div class="benchmark-history-row">
-      <label for="benchmarkHistorySelect">History</label>
-      <select id="benchmarkHistorySelect" aria-label="Previous benchmark run"></select>
-      <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden>
-        Current run
-      </button>
-      <label><input type="checkbox" id="benchmarkCompareToggle" /> Compare</label>
-    </div>
-    <div id="benchmarkSuites"></div>
   </div>
 </main>
 

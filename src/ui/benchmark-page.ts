@@ -169,8 +169,8 @@ function renderStoppedTestCard(testId: string, suite: SuiteId, label: string): s
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
       ${descriptionHtml}
-      <p class="benchmark-test-card-meta">Stopped</p>
     </div>
+    <p class="benchmark-test-card-meta">Stopped</p>
   </article>`;
 }
 
@@ -190,8 +190,8 @@ function renderRunningTestCard(testId: string, suite: SuiteId, label: string): s
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
       ${descriptionHtml}
-      <p class="benchmark-test-card-meta">Running…</p>
     </div>
+    <p class="benchmark-test-card-meta">Running…</p>
   </article>`;
 }
 
@@ -213,14 +213,18 @@ function renderTestCard(result: TestResult, regression: boolean, animate = false
   const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
   const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
 
+  const detailsHtml = details
+    ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>`
+    : '';
+
   return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg(icon)}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(result.label)}</h3>
       ${descriptionHtml}
-      <p class="benchmark-test-card-meta">${escapeHtml(meta)}</p>
-      ${details ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>` : ''}
+      ${detailsHtml}
     </div>
+    <p class="benchmark-test-card-meta">${escapeHtml(meta)}</p>
   </article>`;
 }
 
@@ -749,27 +753,29 @@ function renderSummary(run: BenchmarkRun | null): void {
   if (!root) return;
   if (!run) {
     root.innerHTML =
-      '<p class="benchmark-empty">Select suites below, then Run — or use Quick / Full presets.</p>';
+      '<p class="benchmark-empty">Choose suites in the deck above, then Run. Quick and Full apply a preset first.</p>';
     return;
   }
   const scoreClass =
     run.totalScore >= 0.85 ? 'is-good' : run.totalScore >= 0.6 ? 'is-warn' : 'is-bad';
   root.innerHTML = `
-    <div class="benchmark-metric">
-      <span class="benchmark-metric-label">Score</span>
-      <span class="benchmark-metric-value ${scoreClass}">${formatScore(run.totalScore)}</span>
-    </div>
-    <div class="benchmark-metric">
-      <span class="benchmark-metric-label">TTFT (median)</span>
-      <span class="benchmark-metric-value">${formatDurationMs(run.headlineTtftMs)}</span>
-    </div>
-    <div class="benchmark-metric">
-      <span class="benchmark-metric-label">Tok/s (median)</span>
-      <span class="benchmark-metric-value">${formatMetric(run.headlineTokPerSec)}</span>
-    </div>
-    <div class="benchmark-metric">
-      <span class="benchmark-metric-label">Duration</span>
-      <span class="benchmark-metric-value">${formatDurationMs(run.durationMs)}</span>
+    <div class="benchmark-results-strip" role="group" aria-label="Run summary">
+      <div class="benchmark-stat-cell">
+        <span class="benchmark-stat-name">Score</span>
+        <span class="benchmark-stat-val ${scoreClass}">${formatScore(run.totalScore)}</span>
+      </div>
+      <div class="benchmark-stat-cell">
+        <span class="benchmark-stat-name">TTFT (median)</span>
+        <span class="benchmark-stat-val">${formatDurationMs(run.headlineTtftMs)}</span>
+      </div>
+      <div class="benchmark-stat-cell">
+        <span class="benchmark-stat-name">Tok/s (median)</span>
+        <span class="benchmark-stat-val">${formatMetric(run.headlineTokPerSec)}</span>
+      </div>
+      <div class="benchmark-stat-cell">
+        <span class="benchmark-stat-name">Duration</span>
+        <span class="benchmark-stat-val">${formatDurationMs(run.durationMs)}</span>
+      </div>
     </div>
   `;
 }
