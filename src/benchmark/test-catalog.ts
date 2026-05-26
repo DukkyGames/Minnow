@@ -93,28 +93,29 @@ const SPEED_LONG_DESCRIPTION: Omit<BenchmarkTestDescription, 'testId' | 'suite'>
 const CODING_DESCRIPTIONS: Record<string, Omit<BenchmarkTestDescription, 'testId' | 'suite'>> = {
   'code-fizzbuzz': {
     purpose: 'Checks multi-step reasoning on a classic FizzBuzz line output.',
-    method: 'Single user prompt asking for 1–15 as a comma-separated line.',
-    passCriteria: 'Output includes 1 and 15 and mentions Fizz.',
+    method: 'Model emits a Node script; benchmark runs it via run_javascript and checks stdout.',
+    passCriteria:
+      'Fifteen comma-separated tokens from 1 through FizzBuzz on stdout (15 is FizzBuzz).',
   },
   'code-reverse': {
     purpose: 'Validates exact string manipulation without extra prose.',
-    method: 'Reverse the literal string "minnow".',
-    passCriteria: 'Reply matches "wonnim" exactly (after trim).',
+    method: 'Model script reverses "minnow"; stdout must be wonnim.',
+    passCriteria: 'Executed stdout matches "wonnim" exactly (after trim).',
   },
   'code-fib': {
     purpose: 'Tests numeric recall for a standard Fibonacci index.',
-    method: 'Ask for the 10th Fibonacci number (0-indexed definition).',
-    passCriteria: 'Answer contains 55.',
+    method: 'Model script prints F(10); benchmark runs and reads stdout.',
+    passCriteria: 'Stdout is or contains 55.',
   },
   'code-json': {
     purpose: 'Checks JSON-shaped output and key reordering.',
-    method: 'Swap keys in a small JSON object; model must return JSON only.',
-    passCriteria: 'Parsable JSON (or object-shaped text) containing both "a" and "b".',
+    method: 'Model script prints swapped JSON; stdout is parsed.',
+    passCriteria: 'Stdout is JSON with both "a" and "b" keys.',
   },
   'code-regex': {
     purpose: 'Extracts a structured substring with regex-friendly output.',
-    method: 'Find the first email in a short sentence.',
-    passCriteria: 'Reply includes team@minnow.dev.',
+    method: 'Model script extracts email; stdout is checked.',
+    passCriteria: 'Stdout includes team@minnow.dev.',
   },
   'code-sql': {
     purpose: 'Produces a minimal SQL filter query.',
@@ -123,8 +124,8 @@ const CODING_DESCRIPTIONS: Record<string, Omit<BenchmarkTestDescription, 'testId
   },
   'code-bug': {
     purpose: 'Spots and fixes an obvious arithmetic bug in a function.',
-    method: 'Function returns a-b instead of a+b; reply should be the fixed function.',
-    passCriteria: 'Fixed body uses addition (a+b).',
+    method: 'Model script defines fixed add and prints add(2,3); benchmark runs it.',
+    passCriteria: 'Stdout is 5.',
   },
   'code-type': {
     purpose: 'Explains a TypeScript generic type parameter in plain language.',
