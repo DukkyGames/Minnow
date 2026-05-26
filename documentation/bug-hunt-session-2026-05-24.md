@@ -36,7 +36,7 @@ Manual QA session. Bugs are logged here as reported; not yet triaged into the in
 | BUG-012 | Major | Impeccable skill | `load_impeccable_context` fails: missing `.impeccable\design.json` | Open |
 | BUG-013 | Major | File editor / viewer | Syntax/code highlighting broken in editor | Open (verified 2026-05-24 — Vite prebundle; [MIN-100](https://linear.app/minnowai/issue/MIN-100/bug-013-editor-syntax-highlighting-broken)) |
 | BUG-014 | Minor | Chat sidebar (collapsed rail) | **Thinking** spins whole chat icon, not just status ring | Fixed — [MIN-60](https://linear.app/minnowai/issue/MIN-60) |
-| BUG-018 | Major | File panel | **Rename file** does not work | Verified — [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
+| BUG-018 | Major | File panel | **Rename file** does not work | Fixed — inline rename + F2 in editor ([MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work)) |
 | BUG-019 | Major | Context / tokens UI | Context usage not live during tools + thinking | Verified — [MIN-75](https://linear.app/minnowai/issue/MIN-75) |
 | BUG-020 | Major | Orchestrate / streaming | Stuck retrying; stream close **Unexpected end of JSON input** | Verified — [MIN-84](https://linear.app/minnowai/issue/MIN-84/bug-020-orchestrator-stuck-retrying-stream) |
 | BUG-021 | Major | Reef widgets | Non-chart widgets (e.g. Calculator) fail with chart/toExponential error | Open |
@@ -640,7 +640,7 @@ Label **truncated** with ellipsis; full name not readable without opening menu (
 |-------|-------|
 | **Severity** | Major |
 | **Area** | File sidebar / file tree — rename action |
-| **Status** | Verified (partial) — plan + Linear |
+| **Status** | Fixed (2026-05-26) |
 | **Plan** | [`documentation/plans/Bug Fixes/BUG-018-rename-file.md`](plans/Bug%20Fixes/BUG-018-rename-file.md) |
 | **Linear** | [MIN-99](https://linear.app/minnowai/issue/MIN-99/bug-018-rename-file-does-not-work) |
 
@@ -648,11 +648,11 @@ Label **truncated** with ellipsis; full name not readable without opening menu (
 
 **Renaming a file** in the file panel (context menu, inline rename, or equivalent) **does not work** — name unchanged, error, or UI no-op.
 
-**Verification (2026-05-24)**
+**Fix (2026-05-26)**
 
-- **Partially confirmed:** `move_file` via `POST /api/tools` renames on disk; browser `renamePath` succeeds when `window.prompt` returns a new name.
-- **Likely “no-op” causes:** prompt cancel or same basename → `renamePath` returns `false` with **no status message**; **F2** ignored while CodeMirror focused; Rename disabled when tool server offline; Windows **EBUSY** when file is locked (error only in status bar).
-- **Deferred:** full manual context-menu / F2 session (~25 min).
+- Inline rename on tree row (`file-tree-rename.ts`) replaces `window.prompt`; cancel/unchanged names show status text.
+- **F2** works with CodeMirror focused when a file is open in the viewer.
+- Unsaved-open-file guard before rename; `EBUSY`/`EPERM` mapped to actionable messages (client + server).
 
 **Steps to reproduce**
 

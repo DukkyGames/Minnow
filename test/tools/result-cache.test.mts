@@ -13,6 +13,7 @@ import {
   invalidateAfterTool,
   isErrorToolResult,
   normalizeToolArgs,
+  changedPathAffectsDirectoryListing,
   pathMatchesBustPrefix,
   bindWorkspacePathForToolCache,
   getCacheScope,
@@ -110,6 +111,32 @@ describe('invalidation', () => {
     assert.equal(getCachedResult(scope, key), undefined);
   });
 
+  test('move_file busts list_directory for parent folders', () => {
+    const policy = getCachePolicyForTool('list_directory');
+    const srcListingKey = buildCacheKey(
+      'list_directory',
+      normalizeToolArgs('list_directory', { path: 'src' }),
+    );
+    const rootListingKey = buildCacheKey(
+      'list_directory',
+      normalizeToolArgs('list_directory', { path: '.' }),
+    );
+
+    const scope = testScope();
+    setCachedResult(scope, srcListingKey, { content: 'dirs: \nfiles: a.ts' }, policy);
+    setCachedResult(scope, rootListingKey, { content: 'dirs: src\nfiles: ' }, policy);
+
+    invalidateAfterTool(
+      scope,
+      'move_file',
+      { source: 'src/a.ts', destination: 'src/b.ts' },
+      { content: 'moved' },
+    );
+
+    assert.equal(getCachedResult(scope, srcListingKey), undefined);
+    assert.equal(getCachedResult(scope, rootListingKey), undefined);
+  });
+
   test('move_file busts read_file for source and destination', () => {
     const policy = getCachePolicyForTool('read_file');
     const srcKey = buildCacheKey(
@@ -158,6 +185,17 @@ describe('TTL and scope clear', () => {
     setCachedResult(scope, key, { content: 'x' }, policy);
     clearCacheScope(scope);
     assert.equal(getCachedResult(scope, key), undefined);
+  });
+});
+
+describe('changedPathAffectsDirectoryListing', () => {
+  test('parent listing invalidates when child file changes', () => {
+    assert.equal(changedPathAffectsDirectoryListing('src', 'src/foo.ts'), true);
+    assert.equal(changedPathAffectsDirectoryListing('src', 'lib/foo.ts'), false);
+  });
+
+  test('root listing invalidates for top-level file changes', () => {
+    assert.equal(changedPathAffectsDirectoryListing('.', 'readme.md'), true);
   });
 });
 
