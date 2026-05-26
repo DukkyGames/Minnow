@@ -5,7 +5,7 @@
 | **ID** | POLISH-005 |
 | **Type** | Polish / discoverability (debugging aid) |
 | **Route** | `#/benchmark` |
-| **Status** | Planned (no implementation in this doc) |
+| **Status** | Shipped |
 | **Source** | [`documentation/bug-hunt-session-2026-05-24.md`](../../bug-hunt-session-2026-05-24.md) — requested while investigating **BUG-009** (skills), applies to all suites |
 | **Related bugs** | BUG-002 (streaming), BUG-008 (modes / expected tool), BUG-009 (skills), BUG-005 (stop — partial runs may lack transcript for in-flight tests) |
 

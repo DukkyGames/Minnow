@@ -7,6 +7,7 @@ import { executeTool } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
+import { buildTestResult } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { EMIT_ONLY_TOOL_IDS, getToolFixture } from './tools-fixtures.ts';
 
@@ -73,28 +74,39 @@ export async function runToolsSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
       }
 
       const passed = nameOk && argsOk && execOk;
-      tests.push({
-        testId: `tool-${tool.id}`,
-        suite: 'tools',
-        label: tool.label,
-        passed,
-        skipped: false,
-        durationMs: performance.now() - t0,
-        score: passed ? 1 : 0,
-        details: details || (nameOk ? 'tool call ok' : 'no matching tool call'),
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: `tool-${tool.id}`,
+            suite: 'tools',
+            label: tool.label,
+            passed,
+            skipped: false,
+            durationMs: performance.now() - t0,
+            score: passed ? 1 : 0,
+            details: details || (nameOk ? 'tool call ok' : 'no matching tool call'),
+          },
+          out,
+        ),
+      );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push({
-        testId: `tool-${tool.id}`,
-        suite: 'tools',
-        label: tool.label,
-        passed: false,
-        skipped: false,
-        durationMs: performance.now() - t0,
-        score: 0,
-        details: err instanceof Error ? err.message : String(err),
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: `tool-${tool.id}`,
+            suite: 'tools',
+            label: tool.label,
+            passed: false,
+            skipped: false,
+            durationMs: performance.now() - t0,
+            score: 0,
+            details: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          { error: err instanceof Error ? err.message : String(err) },
+        ),
+      );
     }
   }
 

@@ -7,6 +7,7 @@ import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { toolNameMatch } from '../scoring.ts';
 import { runToolLoop } from '../llm-driver.ts';
+import { buildTestResult } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import type { ModeId } from '../../chat/modes/types';
 
@@ -76,28 +77,39 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           maxToolRounds: 1,
         });
         const calledForbidden = toolNameMatch(out.toolCalls, neg.forbiddenTool);
-        tests.push({
-          testId: `mode-${modeId}-negative`,
-          suite: 'modes',
-          label: `${mode.label} denies ${neg.forbiddenTool}`,
-          passed: !calledForbidden,
-          skipped: false,
-          durationMs: performance.now() - t0,
-          score: calledForbidden ? 0 : 1,
-          details: calledForbidden ? 'forbidden tool was called' : 'no forbidden tool',
-        });
+        tests.push(
+          buildTestResult(
+            {
+              testId: `mode-${modeId}-negative`,
+              suite: 'modes',
+              label: `${mode.label} denies ${neg.forbiddenTool}`,
+              passed: !calledForbidden,
+              skipped: false,
+              durationMs: performance.now() - t0,
+              score: calledForbidden ? 0 : 1,
+              details: calledForbidden ? 'forbidden tool was called' : 'no forbidden tool',
+            },
+            out,
+          ),
+        );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push({
-          testId: `mode-${modeId}-negative`,
-          suite: 'modes',
-          label: `${mode.label} policy negative`,
-          passed: false,
-          skipped: false,
-          durationMs: performance.now() - t0,
-          score: 0,
-          details: err instanceof Error ? err.message : String(err),
-        });
+        tests.push(
+          buildTestResult(
+            {
+              testId: `mode-${modeId}-negative`,
+              suite: 'modes',
+              label: `${mode.label} policy negative`,
+              passed: false,
+              skipped: false,
+              durationMs: performance.now() - t0,
+              score: 0,
+              details: err instanceof Error ? err.message : String(err),
+            },
+            null,
+            { error: err instanceof Error ? err.message : String(err) },
+          ),
+        );
       }
     }
 
@@ -132,28 +144,39 @@ export async function runModesSuite(ctx: BenchmarkRunContext): Promise<SuiteResu
           maxToolRounds: 2,
         });
         const ok = toolNameMatch(out.toolCalls, pos.expectedTool);
-        tests.push({
-          testId: `mode-${modeId}-positive`,
-          suite: 'modes',
-          label: `${mode.label} emits ${pos.expectedTool}`,
-          passed: ok,
-          skipped: false,
-          durationMs: performance.now() - t0,
-          score: ok ? 1 : 0,
-          details: ok ? 'tool emitted' : 'expected tool missing',
-        });
+        tests.push(
+          buildTestResult(
+            {
+              testId: `mode-${modeId}-positive`,
+              suite: 'modes',
+              label: `${mode.label} emits ${pos.expectedTool}`,
+              passed: ok,
+              skipped: false,
+              durationMs: performance.now() - t0,
+              score: ok ? 1 : 0,
+              details: ok ? 'tool emitted' : 'expected tool missing',
+            },
+            out,
+          ),
+        );
       } catch (err) {
         rethrowIfAborted(err, ctx.signal);
-        tests.push({
-          testId: `mode-${modeId}-positive`,
-          suite: 'modes',
-          label: `${mode.label} positive probe`,
-          passed: false,
-          skipped: false,
-          durationMs: performance.now() - t0,
-          score: 0,
-          details: err instanceof Error ? err.message : String(err),
-        });
+        tests.push(
+          buildTestResult(
+            {
+              testId: `mode-${modeId}-positive`,
+              suite: 'modes',
+              label: `${mode.label} positive probe`,
+              passed: false,
+              skipped: false,
+              durationMs: performance.now() - t0,
+              score: 0,
+              details: err instanceof Error ? err.message : String(err),
+            },
+            null,
+            { error: err instanceof Error ? err.message : String(err) },
+          ),
+        );
       }
     }
   }

@@ -5,6 +5,7 @@
 import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { exactMatch, parseJudgeJson } from '../scoring.ts';
 import { runOneShot } from '../llm-driver.ts';
+import { buildTestResult } from '../test-result.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 
 interface CodingCase {
@@ -93,7 +94,7 @@ async function runJudge(
   ctx: BenchmarkRunContext,
   task: string,
   answer: string,
-): Promise<{ pass: boolean; reason: string }> {
+): Promise<{ pass: boolean; reason: string; raw: string }> {
   const out = await runOneShot({
     providerId: ctx.providerId,
     modelId: ctx.modelId,
@@ -111,7 +112,8 @@ async function runJudge(
     ],
     maxTokens: 128,
   });
-  return parseJudgeJson(out.text);
+  const verdict = parseJudgeJson(out.text);
+  return { ...verdict, raw: out.text };
 }
 
 export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteResult> {
@@ -131,36 +133,50 @@ export async function runCodingSuite(ctx: BenchmarkRunContext): Promise<SuiteRes
 
       let passed = c.score(out.text);
       let details = out.text.slice(0, 120);
+      let judgeRaw: string | undefined;
       if (c.judge) {
         const verdict = await runJudge(ctx, c.prompt, out.text);
         passed = verdict.pass;
         details = verdict.reason;
+        judgeRaw = verdict.raw;
       }
 
-      tests.push({
-        testId: c.id,
-        suite: 'coding',
-        label: c.label,
-        passed,
-        skipped: false,
-        judged: Boolean(c.judge),
-        durationMs: performance.now() - t0,
-        score: passed ? 1 : 0,
-        details,
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: c.id,
+            suite: 'coding',
+            label: c.label,
+            passed,
+            skipped: false,
+            judged: Boolean(c.judge),
+            durationMs: performance.now() - t0,
+            score: passed ? 1 : 0,
+            details,
+          },
+          out,
+          judgeRaw ? { judgeRaw } : undefined,
+        ),
+      );
     } catch (err) {
       rethrowIfAborted(err, ctx.signal);
-      tests.push({
-        testId: c.id,
-        suite: 'coding',
-        label: c.label,
-        passed: false,
-        skipped: false,
-        judged: Boolean(c.judge),
-        durationMs: performance.now() - t0,
-        score: 0,
-        details: err instanceof Error ? err.message : String(err),
-      });
+      tests.push(
+        buildTestResult(
+          {
+            testId: c.id,
+            suite: 'coding',
+            label: c.label,
+            passed: false,
+            skipped: false,
+            judged: Boolean(c.judge),
+            durationMs: performance.now() - t0,
+            score: 0,
+            details: err instanceof Error ? err.message : String(err),
+          },
+          null,
+          { error: err instanceof Error ? err.message : String(err) },
+        ),
+      );
     }
   }
 

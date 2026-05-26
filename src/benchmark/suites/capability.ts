@@ -9,6 +9,7 @@ import { assertNotAborted, rethrowIfAborted } from '../abort.ts';
 import { buildMultimodalProbeMessages } from '../fixtures/multimodal-probe.ts';
 import { hasNonEmptyCompletion } from '../completion-valid.ts';
 import { runOneShot } from '../llm-driver.ts';
+import { buildTestResult } from '../test-result.ts';
 import type { LmModelRecord } from '../../types.ts';
 import type { BenchmarkRunContext, SuiteResult, TestResult } from '../types.ts';
 import { scoreMultimodalProbe } from './cap-multimodal.ts';
@@ -90,23 +91,30 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       maxTokens: 32,
     });
     tests.push(
-      result(
-        'cap-stream',
-        'Streaming completion',
-        hasNonEmptyCompletion(stream.text),
-        performance.now() - t,
-        stream.text.slice(0, 80),
+      buildTestResult(
+        result(
+          'cap-stream',
+          'Streaming completion',
+          hasNonEmptyCompletion(stream.text),
+          performance.now() - t,
+          stream.text.slice(0, 80),
+        ),
+        stream,
       ),
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
     tests.push(
-      result(
-        'cap-stream',
-        'Streaming completion',
-        false,
-        performance.now() - t,
-        err instanceof Error ? err.message : String(err),
+      buildTestResult(
+        result(
+          'cap-stream',
+          'Streaming completion',
+          false,
+          performance.now() - t,
+          err instanceof Error ? err.message : String(err),
+        ),
+        null,
+        { error: err instanceof Error ? err.message : String(err) },
       ),
     );
   }
@@ -138,17 +146,26 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         ),
       );
     } else {
-      tests.push(result('cap-usage', 'Usage metadata', true, performance.now() - t));
+      tests.push(
+        buildTestResult(
+          result('cap-usage', 'Usage metadata', true, performance.now() - t),
+          stream,
+        ),
+      );
     }
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
     tests.push(
-      result(
-        'cap-usage',
-        'Usage metadata',
-        false,
-        performance.now() - t,
-        err instanceof Error ? err.message : String(err),
+      buildTestResult(
+        result(
+          'cap-usage',
+          'Usage metadata',
+          false,
+          performance.now() - t,
+          err instanceof Error ? err.message : String(err),
+        ),
+        null,
+        { error: err instanceof Error ? err.message : String(err) },
       ),
     );
   }
@@ -179,23 +196,30 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       maxTokens: 128,
     });
     tests.push(
-      result(
-        'cap-tools-schema',
-        'Tool schema accepted',
-        true,
-        performance.now() - t,
-        stream.finishReason ?? 'ok',
+      buildTestResult(
+        result(
+          'cap-tools-schema',
+          'Tool schema accepted',
+          true,
+          performance.now() - t,
+          stream.finishReason ?? 'ok',
+        ),
+        stream,
       ),
     );
   } catch (err) {
     rethrowIfAborted(err, ctx.signal);
     tests.push(
-      result(
-        'cap-tools-schema',
-        'Tool schema accepted',
-        false,
-        performance.now() - t,
-        err instanceof Error ? err.message : String(err),
+      buildTestResult(
+        result(
+          'cap-tools-schema',
+          'Tool schema accepted',
+          false,
+          performance.now() - t,
+          err instanceof Error ? err.message : String(err),
+        ),
+        null,
+        { error: err instanceof Error ? err.message : String(err) },
       ),
     );
   }
@@ -255,12 +279,15 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
       });
       const scored = scoreMultimodalProbe(stream.text);
       tests.push(
-        result(
-          'cap-multimodal',
-          'Multimodal request',
-          scored.passed,
-          performance.now() - t,
-          scored.details,
+        buildTestResult(
+          result(
+            'cap-multimodal',
+            'Multimodal request',
+            scored.passed,
+            performance.now() - t,
+            scored.details,
+          ),
+          stream,
         ),
       );
     } catch (err) {
@@ -270,12 +297,16 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
         err instanceof Error ? err.message : String(err),
       );
       tests.push(
-        result(
-          'cap-multimodal',
-          'Multimodal request',
-          scored.passed,
-          performance.now() - t,
-          scored.details,
+        buildTestResult(
+          result(
+            'cap-multimodal',
+            'Multimodal request',
+            scored.passed,
+            performance.now() - t,
+            scored.details,
+          ),
+          null,
+          { error: err instanceof Error ? err.message : String(err) },
         ),
       );
     }
