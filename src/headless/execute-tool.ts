@@ -23,6 +23,9 @@ import {
 } from './approval';
 import { headlessApiUrl } from './server-context';
 
+/** Browser-catalog tools that run on the server when the tool server is up (BUG-011). */
+const SERVER_PROXY_BROWSER_TOOLS = new Set(['fetch_web_content', 'rag_web_content']);
+
 const BROWSER_ONLY_TOOLS = new Set([
   'get_datetime',
   'calculate',
@@ -54,7 +57,9 @@ function isBrowserOnlyTool(name: string): boolean {
 export function getHeadlessToolDefinitions(modeId: ModeId): OpenAIFunctionDefinition[] {
   const catalog = BUILT_IN_TOOLS.filter((tool) => {
     if (!isToolEnabled(tool.id)) return false;
-    if (!tool.serverRequired && isBrowserOnlyTool(tool.definition.function.name)) {
+    const fn = tool.definition.function.name;
+    if (SERVER_PROXY_BROWSER_TOOLS.has(fn)) return true;
+    if (!tool.serverRequired && isBrowserOnlyTool(fn)) {
       return false;
     }
     if (!tool.serverRequired) return false;
@@ -152,6 +157,10 @@ export async function executeHeadlessTool(
   const planWriteBlock = blockPlanModeWrite(modeId, name, args);
   if (planWriteBlock) {
     return { content: planWriteBlock };
+  }
+
+  if (SERVER_PROXY_BROWSER_TOOLS.has(name)) {
+    return postServerTool(name, args, modeId);
   }
 
   if (!tool?.serverRequired) {

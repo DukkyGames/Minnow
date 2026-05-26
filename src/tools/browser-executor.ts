@@ -5,12 +5,19 @@
  * web_search: uses Brave when `api_key` is present; without a key, returns a message
  * so the client router (SA-5) can fall back to server `web_search_ddg`.
  *
+ * fetch_web_content / rag_web_content: client routes to the server when `npm start`
+ * is up (BUG-011); this executor is the browser fallback (CORS-bound).
+ *
  * Full browser automation (navigate, snapshot, screenshot) lives in server CDP tools
  * (`browser_*` via `npm start` / POST /api/tools) — not in this executor.
  */
 
-/** Max plain-text bytes returned from fetched web pages. */
-const WEB_TEXT_MAX_BYTES = 8192;
+import {
+  fetchUrlText,
+  rankSentencesByQuery,
+  truncateUtf8,
+  WEB_TEXT_MAX_BYTES,
+} from '../lib/fetch-web-content.mjs';
 
 /** Allowed characters for safe math evaluation (digits, operators, whitespace, commas). */
 const SAFE_CALC_CHARS = /^[0-9+\-*/().%\s,]+$/;
@@ -237,14 +244,14 @@ async function toolWikipediaSearch(args: Record<string, unknown>): Promise<strin
   return `Wikipedia results for "${query}":\n\n${blocks.join('\n\n')}`;
 }
 
-/** Fetches a URL, strips HTML, caps output at ~8KB. Subject to browser CORS. */
+/** Fetches a URL, strips HTML, caps output at ~8KB. Browser fallback when server is down (CORS). */
 async function toolFetchWebContent(args: Record<string, unknown>): Promise<string> {
   const url = stringArg(args, 'url');
   if (!url) {
     return 'Error: "url" is required';
   }
 
-  const fetchResult = await fetchUrlText(url);
+  const fetchResult = await fetchUrlText(url, { suggestNpmStart: true });
   if (fetchResult.startsWith('Error:')) {
     return fetchResult;
   }
@@ -264,7 +271,7 @@ async function toolRagWebContent(args: Record<string, unknown>): Promise<string>
     return 'Error: "query" is required';
   }
 
-  const fetchResult = await fetchUrlText(url);
+  const fetchResult = await fetchUrlText(url, { suggestNpmStart: true });
   if (fetchResult.startsWith('Error:')) {
     return fetchResult;
   }
@@ -345,101 +352,6 @@ function toolGetSystemInfo(): string {
   };
 
   return JSON.stringify(info, null, 2);
-}
-
-/** Fetches http(s) URL and returns stripped plain text or an error string. */
-async function fetchUrlText(urlString: string): Promise<string> {
-  let parsed: URL;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    return `Error: invalid URL "${urlString}"`;
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return 'Error: only http and https URLs are supported';
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(parsed.toString());
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error: fetch failed (${message}). The site may block cross-origin requests (CORS).`;
-  }
-
-  if (!response.ok) {
-    return `Error: HTTP ${response.status} ${response.statusText} for ${parsed.toString()}`;
-  }
-
-  const contentType = response.headers.get('content-type') ?? '';
-  const body = await response.text();
-
-  if (contentType.includes('text/html') || body.trimStart().startsWith('<')) {
-    return stripHtmlToText(body);
-  }
-
-  return body;
-}
-
-/** Removes scripts/styles and collapses HTML to plain text. */
-function stripHtmlToText(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  doc.querySelectorAll('script, style, noscript').forEach((el) => el.remove());
-  const text = doc.body?.textContent ?? '';
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-/** Truncates UTF-8 text to maxBytes without splitting multibyte code points. */
-function truncateUtf8(text: string, maxBytes: number): string {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(text);
-  if (bytes.length <= maxBytes) {
-    return text;
-  }
-
-  const decoder = new TextDecoder();
-  let end = maxBytes;
-  while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
-    end -= 1;
-  }
-
-  const truncated = decoder.decode(bytes.slice(0, end));
-  return `${truncated}\n\n[truncated to ${maxBytes} bytes]`;
-}
-
-/** Scores sentences by query term overlap and returns the top matches. */
-function rankSentencesByQuery(text: string, query: string, limit: number): string[] {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((t) => t.replace(/[^\w]/g, ''))
-    .filter((t) => t.length > 1);
-
-  if (terms.length === 0) {
-    return [];
-  }
-
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 20);
-
-  const scored = sentences
-    .map((sentence) => {
-      const lower = sentence.toLowerCase();
-      let score = 0;
-      for (const term of terms) {
-        if (lower.includes(term)) {
-          score += 1;
-        }
-      }
-      return { sentence, score };
-    })
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, limit).map((row) => row.sentence);
 }
 
 /** Reads a trimmed string argument or returns empty string if missing/invalid. */

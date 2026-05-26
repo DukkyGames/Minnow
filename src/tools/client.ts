@@ -342,6 +342,30 @@ async function executeToolInner(
     });
   }
 
+  if (
+    (name === 'fetch_web_content' || name === 'rag_web_content') &&
+    isLocalServerAvailable()
+  ) {
+    const webFetchTool = findToolByFunctionName(name);
+    if (!webFetchTool) {
+      return { content: `Error: unknown tool "${name}"` };
+    }
+    const blocked = await maybeBlockToolForUserApproval(
+      webFetchTool.id,
+      enrichedArgs,
+      context,
+      name,
+    );
+    if (blocked) return blocked;
+    const planWriteBlock = blockPlanModeWrite(context.modeId, name, enrichedArgs);
+    if (planWriteBlock) {
+      return { content: planWriteBlock };
+    }
+    return executeWithResultCache(name, enrichedArgs, context, () =>
+      executeServerTool(name, enrichedArgs, context.modeId),
+    );
+  }
+
   const tool = findToolByFunctionName(name);
   if (!tool) {
     return { content: `Error: unknown tool "${name}"` };
