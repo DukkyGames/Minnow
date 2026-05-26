@@ -286,12 +286,17 @@
 
 .benchmark-suite-block-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--mn-border);
+}
+
+.benchmark-suite-block-heading {
+  flex: 1;
+  min-width: 0;
 }
 
 .benchmark-suite-block-header h2 {
@@ -301,7 +306,16 @@
   letter-spacing: 0.02em;
 }
 
+.benchmark-suite-block-intro {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  max-width: 52rem;
+}
+
 .benchmark-suite-block-score {
+  flex-shrink: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -435,6 +449,17 @@
   line-height: 1.35;
 }
 
+.benchmark-test-card-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
 .benchmark-test-card-meta {
   margin: 4px 0 0;
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -445,9 +470,11 @@
 
 .benchmark-test-card-details {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--mn-fg-muted);
   line-height: 1.4;
+  opacity: 0.92;
 }
 
 .benchmark-empty {

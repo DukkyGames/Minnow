@@ -207,6 +207,7 @@ Full-page **Benchmark** at `#/benchmark` (top-bar chart icon before workspace). 
 | Piece | Location |
 |-------|----------|
 | Runner + suites | `src/benchmark/` (`runner.ts`, `llm-driver.ts`, `suites/*`) |
+| Per-test descriptions (POLISH-004 / MIN-94) | `src/benchmark/test-catalog.ts` — `resolveTestDescription()` + `listExpectedTestsForSuites()`; static copy for capability/speed/coding, templates for `tool-*`, `skill-*`, `mode-*`. Cards render `.benchmark-test-card-desc` (distinct from runtime `details`); suite headers show `SUITE_INTROS`. Coverage: `test/benchmark/catalog-coverage.test.mts`. Plan: [`documentation/plans/Bug Fixes/POLISH-004-benchmark-test-descriptions.md`](plans/Bug%20Fixes/POLISH-004-benchmark-test-descriptions.md). |
 | UI | `src/ui/benchmark-page.ts`, `src/styles/benchmark-page.css` — live progress bar, responsive per-test card grid (pass checkmark animation), suite sections updated from `onProgress` |
 | Persistence | `GET/POST /api/benchmarks`, `GET /api/benchmarks/:id` → `~/.minnow/benchmarks/`; `localStorage` fallback (`minnow.benchmarks.history`, cap 5) when `npm run dev` only |
 | Transcript drill-down (POLISH-005) | Click a finished test card → `benchmark-transcript-drawer.ts` (read-only messages/tools; reuses `transcript-view.ts`). `TestResult.transcript` / `transcriptMeta` captured via `buildTestResult` in suites; `prepareBenchmarkRunForPersistence` trims oversized JSON before POST. Old runs without `transcript` show empty-state + `details`. |
