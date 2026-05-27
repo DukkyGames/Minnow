@@ -3,24 +3,10 @@
  */
 
 import { appendChunk, markComplete, markError, markStreaming } from './store.js';
-
-/** Abort when no upstream bytes arrive for this long (slow models may pause between tokens). */
-const UPSTREAM_IDLE_TIMEOUT_MS = 500_000;
-/** Hard cap on wall-clock generation time regardless of stream activity. */
-const UPSTREAM_MAX_DURATION_MS = 60 * 60_000;
-
-/**
- * @param {'idle' | 'max'} kind
- * @returns {string}
- */
-function upstreamTimeoutMessage(kind) {
-  if (kind === 'idle') {
-    const min = Math.round(UPSTREAM_IDLE_TIMEOUT_MS / 60_000);
-    return `The model stopped sending data for ${min} minutes. Try again, shorten context, or use a faster model.`;
-  }
-  const min = Math.round(UPSTREAM_MAX_DURATION_MS / 60_000);
-  return `Generation reached the ${min}-minute server limit. Try again with a shorter prompt or smaller max tokens.`;
-}
+import {
+  generationTimeoutMessage,
+  readGenerationUpstreamTimeouts,
+} from './timeouts.js';
 
 /**
  * Start pumping an upstream chat/completions response into state chunks.
@@ -38,6 +24,7 @@ export function pumpUpstream({ state, url, headers }) {
  * @param {{ state: import('./store.js').GenerationState, url: string, headers: Record<string, string> }} params
  */
 async function pumpUpstreamAsync({ state, url, headers }) {
+  const { idleMs, maxMs } = await readGenerationUpstreamTimeouts();
   const controller = new AbortController();
   state.upstreamController = controller;
 
@@ -50,13 +37,13 @@ async function pumpUpstreamAsync({ state, url, headers }) {
     idleTimer = setTimeout(() => {
       timeoutKind = 'idle';
       controller.abort();
-    }, UPSTREAM_IDLE_TIMEOUT_MS);
+    }, idleMs);
   };
 
   const maxTimer = setTimeout(() => {
     timeoutKind = 'max';
     controller.abort();
-  }, UPSTREAM_MAX_DURATION_MS);
+  }, maxMs);
 
   armIdleTimeout();
 
@@ -121,7 +108,7 @@ async function pumpUpstreamAsync({ state, url, headers }) {
       return;
     }
     if (timeoutKind) {
-      markError(state, upstreamTimeoutMessage(timeoutKind));
+      markError(state, generationTimeoutMessage({ idleMs, maxMs }, timeoutKind));
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
