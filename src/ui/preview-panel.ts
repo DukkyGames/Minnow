@@ -18,10 +18,14 @@ import { dismissFileViewerForPreview } from './file-viewer';
 const HTTP_URL_RE = /^https?:\/\//i;
 const PREVIEW_FILE_API = '/api/preview/file/';
 const FRAME_BLOCKED_TIMEOUT_MS = 4000;
+const MIN_RELOAD_INTERVAL_MS = 1000;
+const DEFERRED_PREVIEW_LOAD_MS = 800;
 
 let controlsBound = false;
 let frameBlockedTimer: ReturnType<typeof setTimeout> | null = null;
 let autoReloadDebounce: ReturnType<typeof setTimeout> | null = null;
+let deferredPreviewLoadTimer: ReturnType<typeof setTimeout> | null = null;
+let lastReloadAt = 0;
 
 function getFrame(): HTMLIFrameElement | null {
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
@@ -108,6 +112,23 @@ function scheduleFrameBlockedCheck(): void {
   }, FRAME_BLOCKED_TIMEOUT_MS);
 }
 
+function sourcesEqual(a: PreviewSource | null, b: PreviewSource | null): boolean {
+  if (!a || !b) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'url' && b.kind === 'url') return a.url === b.url;
+  if (a.kind === 'workspace' && b.kind === 'workspace') {
+    return normalizeWorkspacePath(a.path) === normalizeWorkspacePath(b.path);
+  }
+  return false;
+}
+
+function clearPreviewFrame(): void {
+  const frame = getFrame();
+  if (!frame) return;
+  frame.removeAttribute('src');
+  frame.src = 'about:blank';
+}
+
 function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
   const frame = getFrame();
   const input = getUrlInput();
@@ -130,8 +151,11 @@ function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
 
 /** Load the given source into the preview iframe and persist state. */
 export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?: boolean }): void {
+  const state = getFilePanelState();
   const bust = options?.cacheBust ? Date.now() : undefined;
-  patchFilePanelState({ previewSource: source });
+  if (!sourcesEqual(state.previewSource, source)) {
+    patchFilePanelState({ previewSource: source });
+  }
   applySourceToFrame(source, bust);
 }
 
@@ -146,8 +170,7 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
   } else {
     const input = getUrlInput();
     if (input) input.value = '';
-    const frame = getFrame();
-    if (frame) frame.removeAttribute('src');
+    clearPreviewFrame();
     hidePreviewStatus();
   }
   syncPreviewChromeFromState();
@@ -155,8 +178,10 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
 
 /** Close the preview panel. */
 export function closePreviewPanel(): void {
+  cancelDeferredPreviewLoad();
   hidePreviewSplit();
   clearFrameBlockedTimer();
+  clearPreviewFrame();
   hidePreviewStatus();
 }
 
@@ -171,6 +196,10 @@ export function togglePreviewPanel(): void {
 }
 
 function reloadPreview(): void {
+  const now = Date.now();
+  if (now - lastReloadAt < MIN_RELOAD_INTERVAL_MS) return;
+  lastReloadAt = now;
+
   const state = getFilePanelState();
   if (!state.previewSource) {
     const input = getUrlInput();
@@ -263,12 +292,60 @@ function bindPreviewControls(): void {
   onFileSaved(onWorkspaceFileSaved);
 }
 
+function cancelDeferredPreviewLoad(): void {
+  if (deferredPreviewLoadTimer) {
+    clearTimeout(deferredPreviewLoadTimer);
+    deferredPreviewLoadTimer = null;
+  }
+}
+
+/** Wait until the shell has finished loading before hitting preview routes (avoids socket storms in cloud). */
+function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
+  cancelDeferredPreviewLoad();
+  const run = (): void => {
+    deferredPreviewLoadTimer = null;
+    if (getFilePanelState().rightPaneMode !== 'preview') return;
+    if (source) {
+      loadPreviewSource(source);
+    } else {
+      clearPreviewFrame();
+    }
+  };
+
+  const defer = (): void => {
+    deferredPreviewLoadTimer = setTimeout(run, DEFERRED_PREVIEW_LOAD_MS);
+  };
+
+  if (document.readyState === 'complete') {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(defer, { timeout: 4000 });
+    } else {
+      defer();
+    }
+    return;
+  }
+
+  window.addEventListener('load', defer, { once: true });
+}
+
+/** Restore preview chrome without loading the iframe until the app shell is idle. */
+function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
+  if (!dismissFileViewerForPreview()) return;
+  showPreviewSplit();
+  syncPreviewChromeFromState();
+  const input = getUrlInput();
+  if (source && input) {
+    input.value = sourceToAddressBar(source);
+  }
+  scheduleDeferredPreviewLoad(source);
+}
+
 /** Wire preview UI after file panel boot. */
 export function initPreviewPanel(): void {
   bindPreviewControls();
   const state = getFilePanelState();
   if (state.rightPaneMode === 'preview') {
-    openPreviewPanel(state.previewSource);
+    restorePreviewPanelFromPrefs(state.previewSource);
   }
 }
 

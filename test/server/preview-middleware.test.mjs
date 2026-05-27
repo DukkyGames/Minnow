@@ -114,4 +114,14 @@ describe('preview middleware', () => {
     assert.equal(res.status, 400);
     assert.match(res.json.error, /outside|workspace/i);
   });
+
+  test('blocks node_modules paths', async () => {
+    const res = await httpRequest(
+      baseUrl,
+      'GET',
+      '/api/preview/file/node_modules/foo/index.js',
+    );
+    assert.equal(res.status, 403);
+    assert.match(res.json.error, /blocked/i);
+  });
 });

@@ -10,6 +10,28 @@ import { contentTypeForPreviewPath } from './mime-types.js';
 
 const PREVIEW_FILE_PREFIX = '/api/preview/file/';
 
+/** Heavy trees — block early so HTML cannot fan out thousands of preview requests. */
+const BLOCKED_PATH_SEGMENTS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  '.minnow',
+  '.vite',
+]);
+
+/** Cap concurrent preview streams (cloud browsers exhaust sockets easily). */
+const MAX_CONCURRENT_PREVIEW_STREAMS = 24;
+let activePreviewStreams = 0;
+
+/**
+ * @param {string} relativePath
+ * @returns {boolean}
+ */
+function isBlockedPreviewPath(relativePath) {
+  const parts = relativePath.replace(/\\/g, '/').split('/');
+  return parts.some((segment) => BLOCKED_PATH_SEGMENTS.has(segment));
+}
+
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -77,6 +99,19 @@ export async function handlePreviewRequest(req, res, pathname, deps) {
     return false;
   }
 
+  if (isBlockedPreviewPath(relativePath)) {
+    sendJson(res, 403, {
+      error:
+        'Preview blocked for dependency/build paths (node_modules, dist, .git, .vite, .minnow).',
+    });
+    return true;
+  }
+
+  if (activePreviewStreams >= MAX_CONCURRENT_PREVIEW_STREAMS) {
+    sendJson(res, 503, { error: 'Too many preview requests; try again shortly.' });
+    return true;
+  }
+
   try {
     const absPath = await deps.runWithPathAccess(async () => deps.resolveSafePath(relativePath));
     const stat = await fsp.stat(absPath);
@@ -85,10 +120,19 @@ export async function handlePreviewRequest(req, res, pathname, deps) {
       return true;
     }
 
+    activePreviewStreams += 1;
     res.statusCode = 200;
     res.setHeader('Content-Type', contentTypeForPreviewPath(absPath));
     res.setHeader('Cache-Control', 'no-store');
     const stream = createReadStream(absPath);
+    let slotReleased = false;
+    const releaseSlot = () => {
+      if (slotReleased) return;
+      slotReleased = true;
+      activePreviewStreams = Math.max(0, activePreviewStreams - 1);
+    };
+    res.on('close', releaseSlot);
+    res.on('finish', releaseSlot);
     stream.on('error', () => {
       if (!res.headersSent) {
         sendJson(res, 500, { error: 'Failed to read file' });
