@@ -40,6 +40,23 @@ async function pumpUpstreamAsync({ state, url, headers }) {
       signal: controller.signal,
     });
 
+    if (!upstream.ok) {
+      let detail = '';
+      try {
+        detail = (await upstream.text()).replace(/\s+/g, ' ').trim().slice(0, 240);
+      } catch {
+        /* ignore */
+      }
+      const html = detail.toLowerCase().includes('<!doctype') || detail.toLowerCase().includes('<html');
+      const suffix = detail
+        ? html
+          ? ' (provider returned an HTML error page — check LM Studio / provider logs)'
+          : `: ${detail}`
+        : '';
+      markError(state, `Upstream HTTP ${upstream.status}${suffix}`);
+      return;
+    }
+
     if (!upstream.body) {
       const text = await upstream.text();
       if (text) {

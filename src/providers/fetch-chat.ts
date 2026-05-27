@@ -55,7 +55,15 @@ export async function postChatCompletions(
             if (closed) return;
             controller.enqueue(new TextEncoder().encode(text));
           },
-          onEnd: (_event?: GenerationEndEvent) => {
+          onEnd: (event?: GenerationEndEvent) => {
+            if (event?.status === 'error') {
+              if (closed) return;
+              closed = true;
+              controller.error(
+                new Error(event.errorMessage ?? 'Generation failed'),
+              );
+              return;
+            }
             closeStream();
           },
           onTransportError: (err) => {

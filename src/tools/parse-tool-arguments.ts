@@ -5,6 +5,9 @@
 export const TOOL_ARGUMENTS_INVALID_JSON =
   'Tool arguments were not valid JSON.';
 
+export const TOOL_ARGUMENTS_EMPTY =
+  'Tool arguments were empty. Retry the tool call with a complete JSON object for all required fields.';
+
 export interface ParseToolArgumentsOptions {
   /** When true, invalid JSON yields a user-visible error instead of silent `{}`. */
   constrained?: boolean;
@@ -25,6 +28,9 @@ export function parseToolArguments(
 ): ParseToolArgumentsResult {
   const trimmed = raw.trim();
   if (!trimmed) {
+    if (options.constrained) {
+      return { args: {}, parseError: TOOL_ARGUMENTS_EMPTY };
+    }
     return { args: {} };
   }
   try {

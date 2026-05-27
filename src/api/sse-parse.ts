@@ -11,6 +11,16 @@ export function normalizeSseText(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
+/** Detect Express/Vite-style HTML error pages mistaken for JSON/SSE bodies. */
+export function looksLikeHtmlErrorPage(text: string): boolean {
+  const head = text.trim().slice(0, 256).toLowerCase();
+  return (
+    head.startsWith('<!doctype html') ||
+    head.startsWith('<html') ||
+    head.includes('<pre>internal server error</pre>')
+  );
+}
+
 /**
  * Parse the first complete JSON value in a string (handles `{}{}` glued payloads).
  * Returns null when no valid object/array starts at offset zero.
@@ -185,6 +195,11 @@ export function parseCompletionResponseBody(text: string): ChatCompletionChunk {
   if (!normalized) {
     throw new Error('Empty completion response');
   }
+  if (looksLikeHtmlErrorPage(normalized)) {
+    throw new Error(
+      'Provider returned an HTML error page instead of JSON (check LM Studio / provider is running and the model is loaded)',
+    );
+  }
 
   if (normalized.startsWith('{') || normalized.startsWith('[')) {
     const tryParseChunk = (slice: string): ChatCompletionChunk | null => {
@@ -230,7 +245,11 @@ export function parseCompletionResponseBody(text: string): ChatCompletionChunk {
   });
 
   if (last) return last;
-  throw new Error('Could not parse completion response');
+  const preview =
+    normalized.length > 200 ? `${normalized.slice(0, 200)}…` : normalized;
+  throw new Error(
+    `Could not parse completion response (body preview: ${preview.replace(/\s+/g, ' ').trim()})`,
+  );
 }
 
 /** Legacy line-based parser (single-line `data:` rows). Kept for tests and small snippets. */

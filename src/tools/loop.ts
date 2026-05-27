@@ -522,7 +522,13 @@ async function streamCompletionTurn(
         signal,
         onStreamOpen: onStreamConnected,
         onChunk: handleChunk,
-        onEnd: () => {
+        onEnd: (event) => {
+          if (event?.status === 'error') {
+            finish(() =>
+              reject(new Error(event.errorMessage ?? 'Generation failed')),
+            );
+            return;
+          }
           finish(resolve);
         },
         onTransportError: (err) => {
