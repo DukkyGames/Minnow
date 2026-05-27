@@ -11,6 +11,11 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import {
+  createSseEventBuffer,
+  feedSseEventBuffer,
+  flushSseEventBuffer,
+} from '../api/sse-parse';
 import { readProviderCapabilities } from '../providers/capability-probe';
 import {
   applyConstrainedToolCallsToBody,
