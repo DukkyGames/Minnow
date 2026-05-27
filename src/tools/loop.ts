@@ -144,6 +144,7 @@ import {
   cancelGeneration,
   createGeneration,
   GenerationNotFoundError,
+  formatGenerationErrorMessage,
   GENERATION_LOST_ON_RESTART_MESSAGE,
   subscribeToGeneration,
 } from '../api/generations';
@@ -1535,7 +1536,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const lost =
         e.message === GENERATION_LOST_ON_RESTART_MESSAGE
           ? GENERATION_LOST_ON_RESTART_MESSAGE
-          : `Could not complete this reply: ${e.message ?? 'Unknown error'}`;
+          : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
       setAssistantErrorBubble(bubble, lost);
       const msg = e.message ?? '';
       const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;

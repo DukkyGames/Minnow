@@ -35,6 +35,7 @@ import type {
   ToolCallAccumulator,
   Usage,
 } from '../types';
+import { formatGenerationErrorMessage } from './generations';
 import { markChatStalledForUi } from '../agents/supervisor/state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
@@ -676,7 +677,7 @@ export async function sendMessage(): Promise<void> {
     revealProse();
     setAssistantErrorBubble(
       bubble,
-      `Could not complete this reply: ${e.message ?? 'Unknown error'}`,
+      `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`,
     );
     const msg = e.message ?? '';
     const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
