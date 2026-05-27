@@ -77,6 +77,26 @@ export function legacyOutcomeFromSummary(summary: string): SubAgentStructuredOut
   return { summary: text, findings: [], artifacts: [] };
 }
 
+/**
+ * When the work turn already returned valid outcome JSON in assistant prose, accept it
+ * and skip a separate finalization completion (avoids empty final-turn provider quirks).
+ */
+export function tryParseStructuredOutcomeFromAssistantProse(
+  text: string,
+  schemaId: string | undefined | null,
+): SubAgentStructuredOutcome | null {
+  const trimmed = text.trim();
+  if (!trimmed || !trimmed.includes('{') || !trimmed.includes('summary')) {
+    return null;
+  }
+  try {
+    const parsed = parseStructuredOutcomeJson(trimmed);
+    return validateStructuredOutcome(parsed, schemaId);
+  } catch {
+    return null;
+  }
+}
+
 /** Instruction appended on the final non-tool turn. */
 export function buildSubAgentFinalizationPrompt(schemaId: string | undefined | null): string {
   const preset = resolveSummarySchemaPreset(schemaId);
