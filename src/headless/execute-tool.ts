@@ -22,6 +22,7 @@ import {
   type HeadlessApprovalOptions,
 } from './approval';
 import { headlessApiUrl } from './server-context';
+import { validateToolRequiredArgs } from '../tools/validate-tool-required-args';
 
 /** Browser-catalog tools that run on the server when the tool server is up (BUG-011). */
 const SERVER_PROXY_BROWSER_TOOLS = new Set(['fetch_web_content', 'rag_web_content']);
@@ -157,6 +158,11 @@ export async function executeHeadlessTool(
   const planWriteBlock = blockPlanModeWrite(modeId, name, args);
   if (planWriteBlock) {
     return { content: planWriteBlock };
+  }
+
+  const requiredArgsError = validateToolRequiredArgs(name, args);
+  if (requiredArgsError) {
+    return { content: requiredArgsError };
   }
 
   if (SERVER_PROXY_BROWSER_TOOLS.has(name)) {

@@ -43,6 +43,7 @@ import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeReportOrchestratorStatus } from '../agents/supervisor/report-tool.ts';
 import { recordParentToolResult } from '../agents/supervisor/progress.ts';
 import { executeWithResultCache } from './result-cache';
+import { validateToolRequiredArgs } from './validate-tool-required-args';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -383,6 +384,11 @@ async function executeToolInner(
   const planWriteBlock = blockPlanModeWrite(context.modeId, name, enrichedArgs);
   if (planWriteBlock) {
     return { content: planWriteBlock };
+  }
+
+  const requiredArgsError = validateToolRequiredArgs(name, enrichedArgs);
+  if (requiredArgsError) {
+    return { content: requiredArgsError };
   }
 
   return executeWithResultCache(name, enrichedArgs, context, () =>

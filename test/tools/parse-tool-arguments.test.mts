@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseToolArguments,
+  TOOL_ARGUMENTS_EMPTY,
   TOOL_ARGUMENTS_INVALID_JSON,
 } from '../../src/tools/parse-tool-arguments.ts';
 
@@ -28,5 +29,11 @@ describe('parseToolArguments', () => {
     const { args, parseError } = parseToolArguments('{bad', { constrained: true });
     assert.deepEqual(args, {});
     assert.equal(parseError, TOOL_ARGUMENTS_INVALID_JSON);
+  });
+
+  it('constrained mode surfaces error on blank arguments', () => {
+    const { args, parseError } = parseToolArguments('  ', { constrained: true });
+    assert.deepEqual(args, {});
+    assert.equal(parseError, TOOL_ARGUMENTS_EMPTY);
   });
 });

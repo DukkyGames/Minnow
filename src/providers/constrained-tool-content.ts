@@ -81,12 +81,70 @@ export function tryParseToolCallsFromAssistantContent(text: string): ToolCall[] 
   return out;
 }
 
-/**
- * Prefer streamed `tool_calls`; when empty, recover tool calls embedded in assistant text.
- */
-export function mergeContentJsonToolCalls(fullText: string, streamed: ToolCall[]): ToolCall[] {
-  if (streamed.length > 0) {
+/** True when serialized tool arguments carry no usable fields (e.g. `{}` or blank). */
+export function isEmptyToolArgumentsJson(argumentsRaw: string): boolean {
+  const trimmed = argumentsRaw.trim();
+  if (!trimmed) return true;
+  if (trimmed === '{}') return true;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return true;
+    }
+    return Object.keys(parsed).length === 0;
+  } catch {
+    return false;
+  }
+}
+
+function pickRicherToolArguments(streamedRaw: string, contentRaw: string): string {
+  const streamEmpty = isEmptyToolArgumentsJson(streamedRaw);
+  const contentEmpty = isEmptyToolArgumentsJson(contentRaw);
+  if (streamEmpty && !contentEmpty) return contentRaw;
+  if (!streamEmpty) return streamedRaw;
+  return contentRaw;
+}
+
+function mergeStreamedWithContentToolCalls(
+  streamed: ToolCall[],
+  fromContent: ToolCall[],
+): ToolCall[] {
+  if (fromContent.length === 0) {
     return streamed;
   }
-  return tryParseToolCallsFromAssistantContent(fullText);
+
+  return streamed.map((tc, index) => {
+    const byName = fromContent.find((c) => c.function.name === tc.function.name);
+    const contentMatch = byName ?? fromContent[index];
+    if (!contentMatch) {
+      return tc;
+    }
+    const argumentsJson = pickRicherToolArguments(
+      tc.function.arguments,
+      contentMatch.function.arguments,
+    );
+    if (argumentsJson === tc.function.arguments) {
+      return tc;
+    }
+    return {
+      ...tc,
+      function: {
+        ...tc.function,
+        arguments: argumentsJson,
+      },
+    };
+  });
+}
+
+/**
+ * Prefer streamed `tool_calls`; when empty, recover tool calls embedded in assistant text.
+ * When both exist (common with constrained decoding), keep streamed ids but prefer
+ * non-empty `arguments` from assistant JSON when SSE only delivered `{}`.
+ */
+export function mergeContentJsonToolCalls(fullText: string, streamed: ToolCall[]): ToolCall[] {
+  const fromContent = tryParseToolCallsFromAssistantContent(fullText);
+  if (streamed.length === 0) {
+    return fromContent;
+  }
+  return mergeStreamedWithContentToolCalls(streamed, fromContent);
 }
