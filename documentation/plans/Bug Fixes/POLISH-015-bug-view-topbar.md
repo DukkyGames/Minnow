@@ -44,7 +44,7 @@ isProject: false
 **Tracker:** [documentation/bug-hunt-session-2026-05-24.md](../../bug-hunt-session-2026-05-24.md) — POLISH-015  
 **Type:** Layout / UX polish  
 **Area:** Global bugs screen (`#/bugs`), `header.topbar`, `src/ui/global-bugs-page.ts`  
-**Status:** Open (plan only — no implementation in this document)
+**Status:** Shipped 2026-05-26 (MIN-92)
 
 ---
 
