@@ -418,15 +418,18 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   appendPricingFields(form, provider.pricing);
 
   const probeRow = el('div', 'settings-providers-form-actions');
-  const probeBtn = el('button', 'settings-inline-btn', 'Probe capabilities');
-  probeBtn.type = 'button';
-  probeBtn.dataset.providerProbe = provider.id;
-  probeRow.append(probeBtn);
+  const modelProbeBtn = el('button', 'settings-inline-btn', 'Probe models');
+  modelProbeBtn.type = 'button';
+  modelProbeBtn.dataset.providerModelProbe = provider.id;
+  const structuredProbeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
+  structuredProbeBtn.type = 'button';
+  structuredProbeBtn.dataset.providerStructuredProbe = provider.id;
+  probeRow.append(modelProbeBtn, structuredProbeBtn);
   form.append(
     el(
       'p',
       'field-hint',
-      'Runs model capability checks (vision, tools, streaming) and structured-output detection. Not run automatically on refresh.',
+      'Model probe checks vision, tools, and streaming (up to 8 models). Structured-output probe tests JSON Schema response_format for constrained tool calls. Neither runs on refresh.',
     ),
   );
   form.append(probeRow);
@@ -734,19 +737,34 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
 
-    const probeId = target.dataset.providerProbe;
-    if (probeId) {
+    const modelProbeId = target.dataset.providerModelProbe;
+    if (modelProbeId) {
       void (async () => {
         try {
-          setStatus('spin', `Probing capabilities for ${probeId}…`);
+          setStatus('spin', `Probing models for ${modelProbeId}…`);
           const { runCapabilityProbeForProvider } = await import(
             '../providers/model-capabilities'
           );
-          await runCapabilityProbeForProvider(probeId);
-          await probeProviderCapabilities(probeId);
-          setStatus('ok', `Capabilities probed for ${probeId}`);
+          await runCapabilityProbeForProvider(modelProbeId);
+          setStatus('ok', `Model capabilities probed for ${modelProbeId}`);
           await renderProvidersSettingsSection();
           await fetchModels();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setStatus('err', msg);
+        }
+      })();
+      return;
+    }
+
+    const structuredProbeId = target.dataset.providerStructuredProbe;
+    if (structuredProbeId) {
+      void (async () => {
+        try {
+          setStatus('spin', `Probing structured output for ${structuredProbeId}…`);
+          await probeProviderCapabilities(structuredProbeId);
+          setStatus('ok', `Structured output probed for ${structuredProbeId}`);
+          await renderProvidersSettingsSection();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setStatus('err', msg);

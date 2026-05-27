@@ -196,7 +196,7 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Capability probes run per provider.',
+      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Use Probe structured output (and optionally Probe models) under Settings → Providers.',
     ),
   );
   const probeLink = linkToSettingsSection('Open Providers →', 'providers');

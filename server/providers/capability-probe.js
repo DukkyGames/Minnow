@@ -1,6 +1,8 @@
 /**
- * Provider capability probes: per-model matrix (MIN-48) + structured output (#10).
- * Persists to ~/.minnow/providers/<id>/capabilities.json via capabilities-store.
+ * Provider capability probes (separate entry points, shared capabilities.json):
+ * - runCapabilityProbe — per-model matrix (MIN-48): vision, tools, streaming
+ * - probeProviderCapabilities — structured output (#10): response_format / json_schema
+ * Persists via capabilities-store.
  */
 
 import { getProviderRuntime } from './store.js';
