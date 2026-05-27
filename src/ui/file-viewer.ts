@@ -10,6 +10,7 @@ import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
 import { patchFilePanelState } from '../state/file-panel';
 import {
+  hideViewerPaneDom,
   hideViewerSplit,
   showViewerSplit,
 } from './file-layout';
@@ -381,6 +382,8 @@ export async function saveCurrentFile(): Promise<boolean> {
       void notifyLspDocument(currentPath, 'change', content);
     }
     await refreshFileTreeViaBridge();
+    const { emitFileSaved } = await import('../state/preview-events');
+    emitFileSaved(currentPath);
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -568,7 +571,7 @@ export async function openFileInViewer(
   }
 }
 
-function resetViewerPane(): void {
+function resetViewerPane(options?: { closeSplit?: boolean }): void {
   currentPath = null;
   originalContent = '';
   isDirty = false;
@@ -585,7 +588,11 @@ function resetViewerPane(): void {
   }
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
-  hideViewerSplit();
+  if (options?.closeSplit !== false) {
+    hideViewerSplit();
+  } else {
+    hideViewerPaneDom();
+  }
   renderFileTreeViaBridge();
 }
 
@@ -596,6 +603,16 @@ export function closeFileViewer(): void {
     if (!proceed) return;
   }
   resetViewerPane();
+}
+
+/** Dismiss file viewer when switching to preview (keeps right split open). */
+export function dismissFileViewerForPreview(): boolean {
+  if (isDirty) {
+    const proceed = window.confirm('You have unsaved changes. Close without saving?');
+    if (!proceed) return false;
+  }
+  resetViewerPane({ closeSplit: false });
+  return true;
 }
 
 /** Close viewer without unsaved prompt (path already removed on disk). */

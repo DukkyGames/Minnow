@@ -24,6 +24,7 @@ import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/composer-controls.css';
 import './styles/file-panel.css';
+import './styles/preview-panel.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';
 import './styles/composer-tools-popover.css';
@@ -178,6 +179,9 @@ function registerWindowHandlers(): void {
   window.toggleFileSidebarLayout = toggleFileSidebarLayout;
   window.toggleFileSidebarCollapsed = toggleFileSidebarCollapsed;
   window.closeMobileFileSidebar = closeMobileFileSidebar;
+  window.togglePreviewFromTopbar = () => {
+    void import('./ui/preview-panel').then((m) => m.togglePreviewPanel());
+  };
 }
 
 /** Register PWA service worker (shell cache); failures are ignored. */

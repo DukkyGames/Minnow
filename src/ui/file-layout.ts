@@ -36,17 +36,23 @@ export function openMobileFileSidebar(): void {
   }
 }
 
+function isRightSplitOpen(): boolean {
+  const state = getFilePanelState();
+  return state.rightPaneMode !== null || state.viewerOpen;
+}
+
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   const side = document.getElementById('fileSidebar');
   const btn = document.getElementById('btnFileSidebarCollapse');
   const state = getFilePanelState();
   const split = document.getElementById('workspaceSplit');
+  const splitOpen = isRightSplitOpen();
 
   if (split) {
-    split.classList.toggle('viewer-open', state.viewerOpen);
+    split.classList.toggle('viewer-open', splitOpen);
     split.style.setProperty('--split-ratio', String(state.splitRatio));
-    syncStatsStripLayoutForViewer(state.viewerOpen);
+    syncStatsStripLayoutForViewer(splitOpen);
   }
 
   if (!side || !btn) return;
@@ -100,22 +106,54 @@ export function toggleFileSidebarCollapsed(): void {
   applyFileSidebarVisuals();
 }
 
-/** Show split viewer pane and resizer. */
+/** Hide preview pane DOM only (does not change persisted split state). */
+export function hidePreviewPaneDom(): void {
+  const previewPane = document.getElementById('previewPane');
+  if (previewPane) previewPane.classList.add('hidden');
+}
+
+/** Hide file viewer pane DOM only (does not change persisted split state). */
+export function hideViewerPaneDom(): void {
+  const pane = document.getElementById('fileViewerPane');
+  if (pane) pane.classList.add('hidden');
+}
+
+/** Show split viewer pane and resizer; closes preview if open. */
 export function showViewerSplit(): void {
+  hidePreviewPaneDom();
   const pane = document.getElementById('fileViewerPane');
   const resizer = document.getElementById('splitResizer');
   if (pane) pane.classList.remove('hidden');
   if (resizer) resizer.classList.remove('hidden');
-  patchFilePanelState({ viewerOpen: true });
+  patchFilePanelState({ rightPaneMode: 'viewer', viewerOpen: true });
   applyFileSidebarVisuals();
 }
 
 /** Hide split viewer pane and resizer. */
 export function hideViewerSplit(): void {
-  const pane = document.getElementById('fileViewerPane');
+  hideViewerPaneDom();
   const resizer = document.getElementById('splitResizer');
-  if (pane) pane.classList.add('hidden');
   if (resizer) resizer.classList.add('hidden');
-  patchFilePanelState({ viewerOpen: false });
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+  applyFileSidebarVisuals();
+}
+
+/** Show preview pane and resizer; closes file viewer if open. */
+export function showPreviewSplit(): void {
+  hideViewerPaneDom();
+  const previewPane = document.getElementById('previewPane');
+  const resizer = document.getElementById('splitResizer');
+  if (previewPane) previewPane.classList.remove('hidden');
+  if (resizer) resizer.classList.remove('hidden');
+  patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
+  applyFileSidebarVisuals();
+}
+
+/** Hide preview pane and resizer. */
+export function hidePreviewSplit(): void {
+  hidePreviewPaneDom();
+  const resizer = document.getElementById('splitResizer');
+  if (resizer) resizer.classList.add('hidden');
+  patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });
   applyFileSidebarVisuals();
 }

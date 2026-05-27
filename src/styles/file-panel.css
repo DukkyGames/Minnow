@@ -43,7 +43,8 @@
   overflow: hidden;
 }
 
-.workspace-split.viewer-open .file-viewer-pane {
+.workspace-split.viewer-open .file-viewer-pane,
+.workspace-split.viewer-open .preview-pane:not(.hidden) {
   flex: calc(1 - var(--split-ratio, 0.55)) 1 0;
   min-width: var(--viewer-min-w);
 }
@@ -648,7 +649,8 @@
   }
 
   .workspace-split.viewer-open .main-column,
-  .workspace-split.viewer-open .file-viewer-pane {
+  .workspace-split.viewer-open .file-viewer-pane,
+  .workspace-split.viewer-open .preview-pane:not(.hidden) {
     flex: 1 1 auto;
     min-width: 0;
   }
