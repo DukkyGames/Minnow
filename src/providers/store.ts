@@ -101,15 +101,26 @@ export async function listProviders(): Promise<ProviderListResponse> {
   }
 }
 
-/** Active provider for model fetch and chat (respects per-chat override when set). */
-export async function getActiveProvider(chatProviderId?: string): Promise<ProviderPublic> {
-  const { providers, activeProviderId } = await listProviders();
+/**
+ * Resolve which provider record to use for chat, benchmarks, and generations.
+ * Ignores persisted `activeProviderId` — routing is driven by explicit `chat.providerId`
+ * or the first enabled provider in registry order.
+ */
+export async function resolveProvider(chatProviderId?: string): Promise<ProviderPublic> {
+  const { providers } = await listProviders();
   const enabled = providers.filter((p) => p.enabled !== false);
-  const targetId = chatProviderId || activeProviderId;
-  const found = enabled.find((p) => p.id === targetId);
-  if (found) return found;
+  const want = chatProviderId?.trim();
+  if (want) {
+    const found = enabled.find((p) => p.id === want);
+    if (found) return found;
+  }
   if (enabled.length > 0) return enabled[0];
   return getViteOnlyFallbackProvider();
+}
+
+/** @deprecated Use resolveProvider — kept for call-site compatibility; no longer reads activeProviderId. */
+export async function getActiveProvider(chatProviderId?: string): Promise<ProviderPublic> {
+  return resolveProvider(chatProviderId);
 }
 
 /** POST set-active on server; no-op in Vite-only mode. */

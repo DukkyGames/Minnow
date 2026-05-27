@@ -12,6 +12,7 @@ import {
   findBugById,
   updateBug,
 } from '../../state/bug-board-store.ts';
+import { decodeModelSelectKey } from '../../lib/model-select-key.ts';
 import {
   createEmptyChatObject,
   findChatById,
@@ -83,8 +84,11 @@ function ensureInvestigationChat(bug: BugCard): Chat | null {
   if (!sessionState) return null;
 
   const modelSelect = document.getElementById('modelSelect') as HTMLSelectElement | null;
-  const modelId = modelSelect?.value?.trim() || '';
+  const rawSel = modelSelect?.value?.trim() ?? '';
+  const parsed = decodeModelSelectKey(rawSel);
+  const modelId = parsed?.modelId ?? rawSel;
   const chat = createEmptyChatObject(modelId, bug.workspacePath);
+  if (parsed) chat.providerId = parsed.providerId;
   chat.name = `Bug: ${bug.title.slice(0, 48)}`;
   chat.modeId = 'build';
 

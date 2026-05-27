@@ -37,7 +37,7 @@ const BRAND_PREFIXES = [
 ] as const;
 
 /** Escape text for HTML attribute and element text contexts. */
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -149,4 +149,34 @@ export function buildModelOptionHtml(m: ModelLabelInput): string {
   const escapedTitle = escapeHtml(title);
   const escapedText = escapeHtml(optionText);
   return `<option value="${escapedId}" title="${escapedTitle}">${escapedText}</option>`;
+}
+
+/** Parameters for a top-bar option (multi-provider): composite value + provider label suffix. */
+export interface TopBarModelOptionInput {
+  /** Encoded value for <option value> (e.g. providerId + SEP + modelId). */
+  value: string;
+  model: ModelLabelInput;
+  /** Shown after an em dash in option text and appended to the native title. */
+  providerLabel: string;
+  /** Stored on the element for diagnostics and DOM-based reads. */
+  providerId: string;
+  /** Whether this provider exposes LM Studio-style load/unload (for button state without extra fetches). */
+  supportsModelLoadUnload: boolean;
+}
+
+/**
+ * Build one escaped <option> for the main model picker: human-readable label,
+ * composite value, data-provider-id, and title including provider name.
+ */
+export function buildTopBarModelOptionHtml(input: TopBarModelOptionInput): string {
+  const { optionText, title } = formatModelLabel(input.model);
+  const pl = input.providerLabel.trim() || input.providerId;
+  const displayText = pl ? `${optionText} — ${pl}` : optionText;
+  const fullTitle = pl ? `${title} · ${pl}` : title;
+  const escapedValue = escapeHtml(input.value);
+  const escapedTitle = escapeHtml(fullTitle);
+  const escapedText = escapeHtml(displayText);
+  const escapedPid = escapeHtml(input.providerId);
+  const loadAttr = input.supportsModelLoadUnload ? ' data-supports-load-unload="1"' : '';
+  return `<option value="${escapedValue}" title="${escapedTitle}" data-provider-id="${escapedPid}"${loadAttr}>${escapedText}</option>`;
 }

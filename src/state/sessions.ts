@@ -8,6 +8,7 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
@@ -614,12 +615,15 @@ export function ensureExpertLabChat(modelId = ''): Chat {
   const state = requireSessionState();
   let chat = state.chats.find((c) => isExpertLabChat(c));
   if (!chat) {
-    const resolvedModel =
+    const rawModel =
       modelId ||
       (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value ||
       state.chats.find((c) => !isExpertLabChat(c))?.modelId ||
       '';
+    const parsed = decodeModelSelectKey(rawModel);
+    const resolvedModel = (parsed?.modelId ?? rawModel).trim();
     chat = createEmptyChatObject(resolvedModel, getWorkspacePath());
+    if (parsed?.providerId) chat.providerId = parsed.providerId;
     chat.id = EXPERT_LAB_CHAT_ID;
     chat.kind = 'expert-lab';
     chat.name = 'Expert Lab';

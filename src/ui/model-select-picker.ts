@@ -1,8 +1,10 @@
 /**
  * Custom model picker list: load-state dots in menu + trigger synced to #modelSelect.
+ * Supports <optgroup> rows from the multi-provider model catalog.
  */
 
 import { modelCache } from '../app-state';
+import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   formatCapabilityBadges,
   formatCapabilityTooltip,
@@ -57,6 +59,78 @@ function pickModel(modelId: string): void {
   sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+/** Canonical model id for capability tooltip lines (strip composite select encoding). */
+function tooltipModelIdForOptionValue(value: string): string {
+  return decodeModelSelectKey(value)?.modelId ?? value;
+}
+
+/** Append one selectable row for an <option> (shared by flat options and optgroup children). */
+function appendModelOptionRow(
+  menu: HTMLUListElement,
+  opt: HTMLOptionElement,
+  selectedValue: string,
+): void {
+  const id = opt.value.trim();
+  if (!id) return;
+
+  const cached = modelCache.get(id);
+  const loadState = cached ? resolveModelState(cached) : 'unknown';
+
+  const li = document.createElement('li');
+  li.className = 'model-select-option';
+  if (id === selectedValue) {
+    li.classList.add('model-select-option--selected');
+    li.setAttribute('aria-selected', 'true');
+  } else {
+    li.setAttribute('aria-selected', 'false');
+  }
+  li.setAttribute('role', 'option');
+  li.dataset.value = id;
+
+  const caps = cached?.capabilities;
+  const probedAt = getLastCapabilitiesProbedAt();
+  const tipId = tooltipModelIdForOptionValue(id);
+  const rowTitle = caps
+    ? formatCapabilityTooltip(tipId, caps, probedAt)
+    : opt.title?.trim() || tipId;
+  li.title = rowTitle;
+
+  const dot = document.createElement('span');
+  dot.className = 'model-load-dot';
+  dot.setAttribute('aria-hidden', 'true');
+  dot.dataset.loadState = loadState;
+
+  const label = document.createElement('span');
+  label.className = 'model-select-option-label';
+  label.textContent = opt.text;
+  label.title = rowTitle;
+
+  const badges = formatCapabilityBadges(caps);
+  if (badges.length > 0) {
+    const badgeSpan = document.createElement('span');
+    badgeSpan.className = 'model-cap-badges';
+    badgeSpan.setAttribute('aria-hidden', 'true');
+    for (const text of badges) {
+      const chip = document.createElement('span');
+      chip.className = 'model-cap-badge';
+      chip.textContent = text;
+      badgeSpan.appendChild(chip);
+    }
+    li.appendChild(dot);
+    li.appendChild(label);
+    li.appendChild(badgeSpan);
+  } else {
+    li.appendChild(dot);
+    li.appendChild(label);
+  }
+  li.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    pickModel(id);
+  });
+
+  menu.appendChild(li);
+}
+
 /** Rebuild menu rows and trigger label from the native select + model cache. */
 export function syncModelSelectPicker(): void {
   const { sel, trigger, triggerText, menu } = getElements();
@@ -77,65 +151,21 @@ export function syncModelSelectPicker(): void {
   trigger.disabled = !hasSelectable;
 
   menu.innerHTML = '';
-  for (const opt of sel.options) {
-    const id = opt.value.trim();
-    if (!id) continue;
-
-    const cached = modelCache.get(id);
-    const loadState = cached ? resolveModelState(cached) : 'unknown';
-
-    const li = document.createElement('li');
-    li.className = 'model-select-option';
-    if (id === selectedValue) {
-      li.classList.add('model-select-option--selected');
-      li.setAttribute('aria-selected', 'true');
-    } else {
-      li.setAttribute('aria-selected', 'false');
-    }
-    li.setAttribute('role', 'option');
-    li.dataset.value = id;
-
-    const caps = cached?.capabilities;
-    const probedAt = getLastCapabilitiesProbedAt();
-    const rowTitle = caps
-      ? formatCapabilityTooltip(id, caps, probedAt)
-      : opt.title?.trim() || id;
-    li.title = rowTitle;
-
-    const dot = document.createElement('span');
-    dot.className = 'model-load-dot';
-    dot.setAttribute('aria-hidden', 'true');
-    dot.dataset.loadState = loadState;
-
-    const label = document.createElement('span');
-    label.className = 'model-select-option-label';
-    label.textContent = opt.text;
-    label.title = rowTitle;
-
-    const badges = formatCapabilityBadges(caps);
-    if (badges.length > 0) {
-      const badgeSpan = document.createElement('span');
-      badgeSpan.className = 'model-cap-badges';
-      badgeSpan.setAttribute('aria-hidden', 'true');
-      for (const text of badges) {
-        const chip = document.createElement('span');
-        chip.className = 'model-cap-badge';
-        chip.textContent = text;
-        badgeSpan.appendChild(chip);
+  for (const child of [...sel.children]) {
+    if (child instanceof HTMLOptGroupElement) {
+      const header = document.createElement('li');
+      header.className = 'model-select-optgroup-label';
+      header.textContent = child.label || '';
+      header.setAttribute('role', 'presentation');
+      menu.appendChild(header);
+      for (const el of [...child.children]) {
+        if (el instanceof HTMLOptionElement) {
+          appendModelOptionRow(menu, el, selectedValue);
+        }
       }
-      li.appendChild(dot);
-      li.appendChild(label);
-      li.appendChild(badgeSpan);
-    } else {
-      li.appendChild(dot);
-      li.appendChild(label);
+    } else if (child instanceof HTMLOptionElement) {
+      appendModelOptionRow(menu, child, selectedValue);
     }
-    li.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      pickModel(id);
-    });
-
-    menu.appendChild(li);
   }
 }
 

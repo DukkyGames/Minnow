@@ -1,4 +1,5 @@
-﻿import { isChatStreaming } from '../chat/streaming-state';
+﻿import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+import { isChatStreaming } from '../chat/streaming-state';
 import { syncComposerFromStreamingState } from './composer-send';
 import {
   createEmptyChatObject,
@@ -47,24 +48,52 @@ import {
   syncChatItemDotsInDom,
 } from './chat-item-dot';
 
+/** Read canonical model id + optional provider from the top-bar composite select value. */
+function readTopBarModelBinding(): { modelId: string; providerId?: string } {
+  const raw = (document.getElementById('modelSelect') as HTMLSelectElement)?.value ?? '';
+  const parsed = decodeModelSelectKey(raw);
+  const modelId = (parsed?.modelId ?? raw).trim();
+  return { modelId, providerId: parsed?.providerId };
+}
+
 /** Keep model picker aligned with the active chat's stored model id. */
 export function syncModelSelectForActiveChat(): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
   const chat = getActiveChat();
   if (!sel || !sel.options.length) return;
-  const opts = [...sel.options].map((o) => o.value);
-  if (chat.modelId && opts.includes(chat.modelId)) sel.value = chat.modelId;
+  const opts = [...sel.options];
+  const values = opts.map((o) => o.value);
+  const pid = chat.providerId?.trim();
+  const mid = chat.modelId?.trim();
+  if (pid && mid) {
+    const want = encodeModelSelectKey(pid, mid);
+    if (values.includes(want)) sel.value = want;
+  }
+  if (!sel.value && mid) {
+    const match = opts.find(
+      (o) => decodeModelSelectKey(o.value)?.modelId === mid || o.value === mid,
+    );
+    if (match) sel.value = match.value;
+  }
   updateModelStateDot(sel.value);
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
 }
 
 export function onModelSelectChange(): void {
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
   const chat = getActiveChat();
-  chat.modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const raw = sel.value;
+  const decoded = decodeModelSelectKey(raw);
+  if (decoded) {
+    chat.providerId = decoded.providerId;
+    chat.modelId = decoded.modelId;
+  } else {
+    chat.modelId = raw;
+  }
   touchChat(chat);
   scheduleSaveSessions();
-  updateModelStateDot(chat.modelId);
+  updateModelStateDot(sel.value);
   updateModelLoadUnloadButtons();
   syncModelSelectPicker();
   showCachedModelInfo();
@@ -292,9 +321,9 @@ export function deleteChat(chatId: string, evt?: Event): void {
   const victimWorkspace = victim.workspacePath ?? '';
   let mainNeedsRefresh = wasActive;
   if (sessionState!.chats.length === 0) {
-    const modelId =
-      (document.getElementById('modelSelect') as HTMLSelectElement).value || '';
+    const { modelId, providerId } = readTopBarModelBinding();
     const fresh = createEmptyChatObject(modelId, victimWorkspace);
+    if (providerId) fresh.providerId = providerId;
     sessionState!.chats.push(fresh);
     sessionState!.activeId = fresh.id;
     touchChat(fresh);
@@ -304,9 +333,9 @@ export function deleteChat(chatId: string, evt?: Event): void {
     if (inWorkspace.length) {
       sessionState!.activeId = inWorkspace[0].id;
     } else {
-      const modelId =
-        (document.getElementById('modelSelect') as HTMLSelectElement).value || '';
+      const { modelId, providerId } = readTopBarModelBinding();
       const fresh = createEmptyChatObject(modelId, victimWorkspace);
+      if (providerId) fresh.providerId = providerId;
       sessionState!.chats.push(fresh);
       sessionState!.activeId = fresh.id;
       touchChat(fresh);
@@ -382,9 +411,9 @@ export function createChatWithMode(
   options: CreateChatWithModeOptions,
 ): CreateChatWithModeResult {
   const modeId = normalizeModeId(options.modeId);
-  const modelId =
-    (document.getElementById('modelSelect') as HTMLSelectElement)?.value || '';
+  const { modelId, providerId } = readTopBarModelBinding();
   const chat = createEmptyChatObject(modelId);
+  if (providerId) chat.providerId = providerId;
   chat.modeId = modeId;
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(modeId);

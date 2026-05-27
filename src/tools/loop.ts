@@ -5,7 +5,6 @@
 
 import {
   chatFetchAbort,
-  modelCache,
   setChatFetchAbort,
   setStreaming,
 } from '../app-state';
@@ -156,6 +155,7 @@ import {
   stripResponseFormatFromBody,
 } from '../providers/constrained-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
+import { decodeModelSelectKey } from '../lib/model-select-key';
 import { getActiveProvider } from '../providers/store';
 import { isVisionModel } from '../providers/vision-model.ts';
 import {
@@ -610,7 +610,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
 
   try {
-  const domModelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const domRaw = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const parsedSelect = decodeModelSelectKey(domRaw);
+  const domModelId = parsedSelect?.modelId ?? domRaw;
+  if (parsedSelect) {
+    chat.providerId = parsedSelect.providerId;
+    chat.modelId = parsedSelect.modelId;
+  }
   const domTemp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const domMaxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
   const modelId = replaySnapshot?.modelId ?? domModelId;
@@ -1392,8 +1398,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const thinkingDurationMs = thinkingTracker?.finalize() ?? 0;
       chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
-      chat.modelId =
-        (document.getElementById('modelSelect') as HTMLSelectElement).value || chat.modelId;
+      const selVal = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+      const parsedVal = decodeModelSelectKey(selVal);
+      chat.modelId = parsedVal?.modelId ?? selVal;
+      if (parsedVal) chat.providerId = parsedVal.providerId;
 
       if (hasMeaningfulProse) {
         if (isStreamDomVisible(chat.id)) {
@@ -1668,7 +1676,14 @@ export async function sendMessageWithTools(): Promise<void> {
   if (!rawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
 
-  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const rawModelSelect = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const parsedOrchestrate = decodeModelSelectKey(rawModelSelect);
+  const modelId = parsedOrchestrate?.modelId ?? rawModelSelect;
+  if (parsedOrchestrate) {
+    chat.providerId = parsedOrchestrate.providerId;
+    chat.modelId = parsedOrchestrate.modelId;
+    touchChat(chat);
+  }
   const temp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const maxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
   const legacySysPrompt = (

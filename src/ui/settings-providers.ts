@@ -1,8 +1,9 @@
 /**
- * Settings → Providers: list, set active, add, edit, and remove LLM backends.
+ * Settings → Providers: list, add, edit, and remove LLM backends.
  */
 
 import { isServerStorageMode } from '../config/storage-mode';
+import { fetchModels } from '../api/models';
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
@@ -16,13 +17,11 @@ import {
   deleteProvider,
   isProvidersApiAvailable,
   listProviders,
-  setActiveProvider,
   updateProvider,
   updateProviderSecrets,
 } from '../providers/store';
 import { normalizeModelPricingRates, normalizeProviderPricing } from '../usage/pricing';
 import type { ProviderPricing } from '../usage/types';
-import { loadProviderSelect } from './settings';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -456,7 +455,6 @@ function formatStructuredOutputBadge(caps: ProviderCapabilities | null): string 
 /** Build one provider row in the settings list. */
 function createProviderSettingsRow(
   provider: ProviderPublic,
-  activeProviderId: string,
   canRemove: boolean,
   capabilities: ProviderCapabilities | null,
 ): HTMLElement {
@@ -485,16 +483,6 @@ function createProviderSettingsRow(
       formatStructuredOutputBadge(capabilities),
     ),
   );
-
-  if (provider.id === activeProviderId) {
-    head.append(el('span', 'settings-badge', 'Active'));
-  } else if (provider.enabled !== false) {
-    const activeBtn = el('button', 'settings-inline-btn', 'Set active');
-    activeBtn.type = 'button';
-    activeBtn.dataset.providerSetActive = provider.id;
-    activeBtn.setAttribute('aria-label', `Set ${provider.label} as active provider`);
-    head.append(activeBtn);
-  }
 
   if (canRemove) {
     const removeBtn = el('button', 'settings-inline-btn settings-providers-remove', 'Remove');
@@ -634,7 +622,7 @@ function bindProvidersAddForm(): void {
       if (errEl) errEl.classList.add('hidden');
       clearProvidersAddForm();
       setStatus('ok', `Added provider ${result.provider.label}`);
-      await loadProviderSelect();
+      await fetchModels();
       await renderProvidersSettingsSection();
     })();
   });
@@ -718,18 +706,18 @@ async function handleProviderEditSubmit(form: HTMLFormElement): Promise<void> {
       errEl.classList.remove('hidden');
     }
     setStatus('err', secretResult.error);
-    await loadProviderSelect();
+    await fetchModels();
     await renderProvidersSettingsSection();
     return;
   }
 
   if (errEl) errEl.classList.add('hidden');
   setStatus('ok', `Updated provider ${result.provider.label}`);
-  await loadProviderSelect();
+  await fetchModels();
   await renderProvidersSettingsSection();
 }
 
-/** Delegate set-active, remove, and edit-form submit on the provider list. */
+/** Delegate remove, edit-form submit, and capability probe on the provider list. */
 function bindProvidersListActions(listEl: HTMLElement): void {
   if (providersListActionsBound) return;
   providersListActionsBound = true;
@@ -746,21 +734,6 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
 
-    const activeId = target.dataset.providerSetActive;
-    if (activeId) {
-      void (async () => {
-        try {
-          await setActiveProvider(activeId);
-          await loadProviderSelect();
-          setStatus('ok', `Active provider: ${activeId}`);
-          await renderProvidersSettingsSection();
-        } catch {
-          setStatus('err', 'Could not switch provider');
-        }
-      })();
-      return;
-    }
-
     const probeId = target.dataset.providerProbe;
     if (probeId) {
       void (async () => {
@@ -773,8 +746,7 @@ function bindProvidersListActions(listEl: HTMLElement): void {
           await probeProviderCapabilities(probeId);
           setStatus('ok', `Capabilities probed for ${probeId}`);
           await renderProvidersSettingsSection();
-          const { syncModelSelectPicker } = await import('./model-select-picker');
-          syncModelSelectPicker();
+          await fetchModels();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setStatus('err', msg);
@@ -796,7 +768,7 @@ function bindProvidersListActions(listEl: HTMLElement): void {
         return;
       }
       setStatus('ok', `Removed provider ${removeId}`);
-      await loadProviderSelect();
+      await fetchModels();
       await renderProvidersSettingsSection();
     })();
   });
@@ -828,7 +800,7 @@ export async function renderProvidersSettingsSection(): Promise<void> {
     return;
   }
 
-  const { providers, activeProviderId } = await listProviders();
+  const { providers } = await listProviders();
   const canRemove = providers.length > 1;
 
   if (providers.length === 0) {
@@ -838,8 +810,6 @@ export async function renderProvidersSettingsSection(): Promise<void> {
 
   for (const provider of providers) {
     const caps = await readProviderCapabilities(provider.id);
-    listEl.appendChild(
-      createProviderSettingsRow(provider, activeProviderId, canRemove, caps),
-    );
+    listEl.appendChild(createProviderSettingsRow(provider, canRemove, caps));
   }
 }

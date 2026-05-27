@@ -2,7 +2,7 @@
  * Shared vision-model detection (catalog type + optional capabilities matrix).
  */
 
-import { modelCache } from '../app-state';
+import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import type { LmModelRecord } from '../types';
 
 /** Best-effort id heuristic when catalog and cache lack a row (benchmark fallback only). */
@@ -24,7 +24,7 @@ function visionFromRow(row: LmModelRecord): boolean | null {
 export function isVisionModel(modelId: string | undefined, catalog?: LmModelRecord[]): boolean {
   if (!modelId) return false;
 
-  const cached = modelCache.get(modelId);
+  const cached = getModelRowForSelectOrCanonicalId(modelId);
   if (cached) {
     const fromCache = visionFromRow(cached);
     if (fromCache !== null) return fromCache;

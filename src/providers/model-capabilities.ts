@@ -5,6 +5,7 @@
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
+import { decodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
 import type { LmModelRecord, ModelCapabilities } from '../types';
 
 export type { CapabilitySource, ModelCapabilities } from '../types';
@@ -41,8 +42,12 @@ export function getCachedProviderCapabilities(
 export function applyProviderCapabilities(file: ProviderCapabilitiesFile): void {
   providerCapabilitiesCache.set(file.providerId, file);
   for (const [modelId, caps] of Object.entries(file.models)) {
-    const row = modelCache.get(modelId);
-    if (row) {
+    for (const [cacheKey, row] of modelCache.entries()) {
+      const decoded = decodeModelSelectKey(cacheKey);
+      const logicalId = decoded?.modelId ?? cacheKey;
+      const rowProvider = decoded?.providerId;
+      if (rowProvider !== undefined && rowProvider !== file.providerId) continue;
+      if (logicalId !== modelId) continue;
       row.capabilities = mergeModelCapabilities(row, caps);
     }
   }
@@ -119,8 +124,11 @@ export function mergeModelCapabilities(
 export function mergeCapabilitiesIntoModelCache(file: ProviderCapabilitiesFile): void {
   lastAppliedCapabilities = file;
   applyProviderCapabilities(file);
-  for (const [modelId, row] of modelCache.entries()) {
-    const fromFile = file.models[modelId];
+  for (const [cacheKey, row] of modelCache.entries()) {
+    const decoded = decodeModelSelectKey(cacheKey);
+    const logicalId = decoded?.modelId ?? cacheKey;
+    if (decoded && decoded.providerId !== file.providerId) continue;
+    const fromFile = file.models[logicalId];
     row.capabilities = mergeModelCapabilities(row, fromFile);
   }
 }
@@ -183,13 +191,16 @@ export function prioritizeModelIdsForProbe(
   modelIds: string[],
   selectedModelId?: string,
 ): string[] {
+  const selectedCanonical = selectedModelId
+    ? decodeModelSelectKey(selectedModelId)?.modelId ?? selectedModelId
+    : undefined;
   const loaded = new Set(
     [...modelCache.entries()]
       .filter(([, row]) => row.state === 'loaded')
-      .map(([id]) => id),
+      .map(([id]) => decodeModelSelectKey(id)?.modelId ?? id),
   );
   const score = (id: string) => {
-    if (selectedModelId && id === selectedModelId) return 0;
+    if (selectedCanonical && id === selectedCanonical) return 0;
     if (loaded.has(id)) return 1;
     return 2;
   };
@@ -241,7 +252,11 @@ export async function runCapabilityProbeForProvider(
 /** Whether merged capabilities indicate vision / VLM support. */
 export function modelSupportsVision(modelId: string | undefined): boolean {
   if (!modelId) return false;
-  const row = modelCache.get(modelId);
+  let row = modelCache.get(modelId);
+  if (!row) {
+    const key = findFirstSelectKeyForCanonicalModelId(modelCache.keys(), modelId);
+    if (key) row = modelCache.get(key);
+  }
   if (!row) return false;
   const caps = row.capabilities ?? catalogCapabilitiesFromRow(row);
   if (caps.vision === true) return true;

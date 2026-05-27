@@ -92,8 +92,6 @@ import {
   onDrawerKeydown,
   onSystemPromptInput,
   onSystemPromptPresetChange,
-  loadProviderSelect,
-  registerProviderHandlers,
   registerToolHandlers,
   toggleDrawer,
 } from './ui/settings';
@@ -252,8 +250,6 @@ export async function initApp(): Promise<void> {
   applySidebarVisuals();
   renderSidebar();
   await refreshTerminalHistoryForActiveChat();
-  await loadProviderSelect();
-  registerProviderHandlers();
   const settingsPage = await import('./ui/settings-page');
   settingsPage.initSettingsPage();
   const benchmarkPage = await import('./ui/benchmark-page');

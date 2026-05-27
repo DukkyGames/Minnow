@@ -47,6 +47,7 @@ import {
 } from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { listProviders } from '../providers/store';
+import { getActiveChat } from '../state/sessions';
 import { renderProvidersSettingsSection } from './settings-providers';
 import { renderUsageSettingsSection } from './settings-usage';
 import {
@@ -62,7 +63,6 @@ import { renderSkillsSettingsSection } from './settings-skills';
 import { renderSupervisorSettingsSection } from './settings-supervisor';
 import {
   fillToolsSection,
-  loadProviderSelect,
   refreshProvidersBanner,
   registerToolHandlers,
 } from './settings';
@@ -243,13 +243,16 @@ async function renderGeneralSection(): Promise<void> {
   );
   await appendTerminalControls(chat);
 
-  const { providers, activeProviderId } = await listProviders();
-  const active = providers.find((p) => p.id === activeProviderId) ?? providers[0];
+  const { providers } = await listProviders();
+  const enabled = providers.filter((p) => p.enabled !== false);
+  const activeChat = getActiveChat();
+  const chatProv =
+    enabled.find((p) => p.id === activeChat.providerId?.trim()) ?? null;
 
   const connection = appendSettingsGroup(
     mount,
     'Connection summary',
-    'Quick readout of the active LLM backend. Edit backends under Providers.',
+    'Registered LLM backends. Choose a model and provider in the top bar; edit profiles under Providers.',
   );
 
   const summary = el('dl', 'settings-kv');
@@ -260,8 +263,11 @@ async function renderGeneralSection(): Promise<void> {
     summary.appendChild(dd);
   };
 
-  addRow('Active provider', active?.label ?? '—');
-  addRow('Base URL', active?.baseUrl ?? '—');
+  addRow('Enabled providers', String(enabled.length));
+  addRow(
+    'This chat’s provider',
+    chatProv ? `${chatProv.label} (${chatProv.id})` : '—',
+  );
   addRow('Storage', serverUp ? '~/.minnow' : 'Browser (localStorage)');
   connection.appendChild(summary);
 

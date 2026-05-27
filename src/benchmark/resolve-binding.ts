@@ -2,7 +2,9 @@
  * Resolve provider + model for benchmark runs (same source as composer send).
  */
 
-import { getActiveProvider } from '../providers/store.ts';
+import { decodeModelSelectKey } from '../lib/model-select-key';
+import { resolveProvider } from '../providers/store.ts';
+import { getActiveChat } from '../state/sessions';
 import type { ProviderPublic } from '../providers/types.ts';
 
 export interface BenchmarkBinding {
@@ -19,11 +21,15 @@ export function getActiveModelIdFromDom(): string {
 
 /** Provider + model used for the next benchmark completion. */
 export async function resolveBenchmarkBinding(): Promise<BenchmarkBinding> {
-  const provider = await getActiveProvider();
-  const modelId = getActiveModelIdFromDom();
+  const chat = getActiveChat();
+  const raw = getActiveModelIdFromDom();
+  const parsed = decodeModelSelectKey(raw);
+  const modelId = parsed?.modelId ?? raw;
+  const providerId = parsed?.providerId ?? chat.providerId?.trim();
   if (!modelId) {
     throw new Error('No model selected. Load a model in the top bar before running Benchmark.');
   }
+  const provider = await resolveProvider(providerId || undefined);
   return {
     providerId: provider.id,
     modelId,

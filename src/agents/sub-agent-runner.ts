@@ -24,13 +24,13 @@ import {
 } from '../providers/constrained-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { postChatCompletions } from '../providers/fetch-chat';
-import { modelCache } from '../app-state';
 import {
   getToolCallsMetaSync,
   isConstrainedDecodingEnabledForProvider,
   loadToolCallsMeta,
 } from '../config/tool-calls-meta';
-import { getActiveProvider } from '../providers/store';
+import { getModelRowForSelectOrCanonicalId } from '../api/models';
+import { resolveProvider } from '../providers/store';
 import { parseToolArguments } from '../tools/parse-tool-arguments';
 import {
   applyContextBudget,
@@ -66,7 +66,7 @@ export const MAX_SUB_AGENT_TOOL_TURNS = 12;
 function resolveSubAgentModelContextLimit(modelId: string): number | null {
   const id = modelId.trim();
   if (!id) return null;
-  const cached = modelCache.get(id);
+  const cached = getModelRowForSelectOrCanonicalId(id);
   if (!cached) return null;
   return contextLengthFromModelRow(cached);
 }
@@ -108,7 +108,7 @@ async function streamSubAgentTurn(
   tFirst: number | null;
   tEnd: number;
 }> {
-  const provider = await getActiveProvider(providerId);
+  const provider = await resolveProvider(providerId);
   const res = await postChatCompletions(provider, body, signal);
 
   if (!res.ok) {
@@ -226,7 +226,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     emitProgress(undefined, true);
 
     await loadToolCallsMeta();
-    const provider = await getActiveProvider(input.providerId);
+    const provider = await resolveProvider(input.providerId);
     const providerCapabilities = await readProviderCapabilities(input.providerId);
     const toolCallsMeta = getToolCallsMetaSync();
     const constrainedUserEnabled = isConstrainedDecodingEnabledForProvider(
