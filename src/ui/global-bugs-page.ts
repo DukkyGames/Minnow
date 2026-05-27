@@ -119,7 +119,6 @@ export function closeGlobalBugs(): void {
   if (!root || !shell) return;
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
   unmountGlobalBugKanban();
   const mount = document.getElementById('globalBugsList');
   if (mount) mount.innerHTML = '';
@@ -144,7 +143,6 @@ export function openGlobalBugs(): void {
   });
   root.classList.add('is-open');
   shell.classList.add('hidden');
-  document.querySelector('header.topbar')?.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
 
   syncFilterControls();

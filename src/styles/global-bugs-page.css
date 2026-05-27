@@ -5,7 +5,8 @@
 .global-bugs-page {
   display: none;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   background: var(--mn-bg);
   color: var(--mn-fg);
   font-family: var(--font-ui);
@@ -20,9 +21,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: var(--topbar-h);
+  min-height: 44px;
   padding: 0 16px;
   border-bottom: 1px solid var(--mn-border);
+  flex-shrink: 0;
 }
 
 .global-bugs-page-header h1 {
