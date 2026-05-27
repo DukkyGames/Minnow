@@ -83,17 +83,39 @@ export async function readProviderCapabilities(
   }
 }
 
+export interface StructuredOutputProbeOptions {
+  /** Canonical model id; must be loaded on the provider. */
+  modelId?: string;
+  /** Prefer this id when resolving a loaded model server-side. */
+  selectedModelId?: string;
+}
+
 /** Run server-side probe and refresh cache. */
 export async function probeProviderCapabilities(
   providerId: string,
+  options: StructuredOutputProbeOptions = {},
 ): Promise<ProviderCapabilities> {
   const res = await fetch(
     `/api/providers/${encodeURIComponent(providerId)}/probe-capabilities`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelId: options.modelId,
+        selectedModelId: options.selectedModelId,
+      }),
+    },
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Probe failed HTTP ${res.status}: ${text}`);
+    let message = `Probe failed HTTP ${res.status}`;
+    try {
+      const errJson = JSON.parse(text) as { error?: string };
+      if (errJson.error) message = errJson.error;
+    } catch {
+      if (text.trim()) message = text.slice(0, 300);
+    }
+    throw new Error(message);
   }
   const json = (await res.json()) as unknown;
   const parsed = normalizeCapabilities(json, providerId);
@@ -144,4 +166,25 @@ export function isConstrainedToolCallsAvailable(
   if (modelEntry?.denyReason) return false;
   if (modelEntry?.structuredOutput === false) return false;
   return capabilities.structuredOutputWithTools === true || capabilities.structuredOutput === true;
+}
+
+/**
+ * Whether the provider may receive `response_format` for the sub-agent final JSON outcome
+ * (no tools on that turn). Gated by probe + per-model deny; does not require constrained
+ * tool-call user setting.
+ */
+export function isStructuredOutcomeResponseFormatAvailable(
+  modelId: string,
+  capabilities: ProviderCapabilities | null,
+): boolean {
+  if (!modelId.trim()) return false;
+  if (isHarmonyDeniedModel(modelId)) return false;
+  if (!capabilities) return false;
+  if (!capabilities.structuredOutput && !capabilities.structuredOutputWithTools) {
+    return false;
+  }
+  const modelEntry = capabilities.models?.[modelId];
+  if (modelEntry?.denyReason) return false;
+  if (modelEntry?.structuredOutput === false) return false;
+  return true;
 }

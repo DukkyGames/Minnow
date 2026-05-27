@@ -154,6 +154,7 @@ import {
   logConstrainedDebug,
   stripResponseFormatFromBody,
 } from '../providers/constrained-tool-calls';
+import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import { getActiveProvider } from '../providers/store';
@@ -560,8 +561,9 @@ async function streamCompletionTurn(
   thoughtController?.endReasoningPhase();
 
   const tEnd = performance.now();
-  const finishReason = streamMeta.finish_reason;
-  const toolCalls = finalizeToolCalls(toolAcc);
+  const toolCalls = mergeContentJsonToolCalls(fullText, finalizeToolCalls(toolAcc));
+  const finishReason =
+    streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
   return {
     fullText,
@@ -1077,7 +1079,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         logTurnDebug({ event: 'empty_tool_calls_after_finalize', turn });
       }
 
-      if (finishReason === 'tool_calls' && turnResult.toolCalls.length > 0) {
+      if (turnResult.toolCalls.length > 0) {
         void recordMainChatTurnUsage(chat, {
           providerId: sendProviderId,
           modelId: sendModelId,

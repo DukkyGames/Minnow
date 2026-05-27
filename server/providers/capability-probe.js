@@ -317,6 +317,52 @@ export async function runCapabilityProbe(providerId, options = {}) {
 }
 
 /**
+ * @param {{ state?: string }} row
+ */
+function isCatalogModelLoaded(row) {
+  return typeof row.state === 'string' && row.state.trim().toLowerCase() === 'loaded';
+}
+
+/**
+ * Pick a loaded model id for structured-output probes (LM Studio requires a loaded model).
+ *
+ * @param {string} providerId
+ * @param {{ modelId?: string, selectedModelId?: string }} [options]
+ */
+export async function resolveStructuredProbeModelId(providerId, options = {}) {
+  const modelsResponse = await proxyModels(providerId);
+  const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
+  const loadedIds = catalog.filter(isCatalogModelLoaded).map((m) => m.id);
+
+  const explicit =
+    typeof options.modelId === 'string' && options.modelId.trim()
+      ? options.modelId.trim()
+      : undefined;
+
+  if (explicit) {
+    if (!loadedIds.includes(explicit)) {
+      throw new Error(
+        `Model "${explicit}" is not loaded. Load it in your backend, then run the structured-output probe again.`,
+      );
+    }
+    return explicit;
+  }
+
+  const selected =
+    typeof options.selectedModelId === 'string' && options.selectedModelId.trim()
+      ? options.selectedModelId.trim()
+      : undefined;
+
+  const pick = prioritizeModelIds(loadedIds, selected, catalog)[0];
+  if (!pick) {
+    throw new Error(
+      'No loaded model found. Load a model in LM Studio (or your backend), then run the structured-output probe again.',
+    );
+  }
+  return pick;
+}
+
+/**
  * Read capabilities for structured-output UI (#10). Returns null when never probed.
  *
  * @param {string} id
@@ -334,18 +380,16 @@ export async function readProviderCapabilitiesFile(id) {
 
 /**
  * Structured-output probe (response_format / json_schema). Merges into capabilities.json.
+ * Requires a loaded model (resolved from catalog when modelId is omitted).
  *
  * @param {string} id
- * @param {{ modelId?: string }} [options]
+ * @param {{ modelId?: string, selectedModelId?: string }} [options]
  */
 export async function probeProviderCapabilities(id, options = {}) {
   validateProviderId(id);
   const runtime = await getProviderRuntime(id);
   const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
-  const modelId =
-    typeof options.modelId === 'string' && options.modelId.trim()
-      ? options.modelId.trim()
-      : undefined;
+  const modelId = await resolveStructuredProbeModelId(id, options);
 
   const baseMessages = [{ role: 'user', content: 'Reply with JSON: {"ok":true}' }];
   const responseFormat = {

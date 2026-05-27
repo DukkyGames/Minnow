@@ -11,6 +11,7 @@ import {
   getCachePolicyForTool,
   getCachedResult,
   invalidateAfterTool,
+  invalidateCachedDirectoryListings,
   isErrorToolResult,
   normalizeToolArgs,
   changedPathAffectsDirectoryListing,
@@ -137,6 +138,29 @@ describe('invalidation', () => {
     assert.equal(getCachedResult(scope, rootListingKey), undefined);
   });
 
+  test('save_file in chat scope busts list_directory in __no_chat__ scope', () => {
+    const policy = getCachePolicyForTool('list_directory');
+    const listingKey = buildCacheKey(
+      'list_directory',
+      normalizeToolArgs('list_directory', { path: '.' }),
+    );
+
+    const chatScope = '/test-workspace:chat-abc';
+    const treeScope = '/test-workspace:__no_chat__';
+    setCachedResult(treeScope, listingKey, { content: 'dirs: \nfiles: old.ts' }, policy);
+    setCachedResult(chatScope, listingKey, { content: 'dirs: \nfiles: old.ts' }, policy);
+
+    invalidateAfterTool(
+      chatScope,
+      'save_file',
+      { path: 'new.ts' },
+      { content: 'saved' },
+    );
+
+    assert.equal(getCachedResult(treeScope, listingKey), undefined);
+    assert.equal(getCachedResult(chatScope, listingKey), undefined);
+  });
+
   test('move_file busts read_file for source and destination', () => {
     const policy = getCachePolicyForTool('read_file');
     const srcKey = buildCacheKey(
@@ -161,6 +185,41 @@ describe('invalidation', () => {
 
     assert.equal(getCachedResult(scope, srcKey), undefined);
     assert.equal(getCachedResult(scope, destKey), undefined);
+  });
+});
+
+describe('invalidateCachedDirectoryListings', () => {
+  test('removes list_directory and find_files in one workspace only', () => {
+    const listPolicy = getCachePolicyForTool('list_directory');
+    const findPolicy = getCachePolicyForTool('find_files');
+    const readPolicy = getCachePolicyForTool('read_file');
+
+    const scopeA = '/ws-a:__no_chat__';
+    const scopeB = '/ws-b:__no_chat__';
+    const listKey = buildCacheKey(
+      'list_directory',
+      normalizeToolArgs('list_directory', { path: '.' }),
+    );
+    const findKey = buildCacheKey(
+      'find_files',
+      normalizeToolArgs('find_files', { path: '.', pattern: '*.ts' }),
+    );
+    const readKey = buildCacheKey(
+      'read_file',
+      normalizeToolArgs('read_file', { path: 'a.ts' }),
+    );
+
+    setCachedResult(scopeA, listKey, { content: 'listing' }, listPolicy);
+    setCachedResult(scopeA, findKey, { content: 'found' }, findPolicy);
+    setCachedResult(scopeA, readKey, { content: 'body' }, readPolicy);
+    setCachedResult(scopeB, listKey, { content: 'other ws' }, listPolicy);
+
+    invalidateCachedDirectoryListings('/ws-a');
+
+    assert.equal(getCachedResult(scopeA, listKey), undefined);
+    assert.equal(getCachedResult(scopeA, findKey), undefined);
+    assert.equal(getCachedResult(scopeA, readKey)?.content, 'body');
+    assert.equal(getCachedResult(scopeB, listKey)?.content, 'other ws');
   });
 });
 

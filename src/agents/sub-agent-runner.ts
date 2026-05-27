@@ -16,13 +16,17 @@ import {
   feedSseEventBuffer,
   flushSseEventBuffer,
 } from '../api/sse-parse';
-import { readProviderCapabilities } from '../providers/capability-probe';
+import {
+  isStructuredOutcomeResponseFormatAvailable,
+  readProviderCapabilities,
+} from '../providers/capability-probe';
 import {
   applyConstrainedToolCallsToBody,
   isResponseFormatRejectionError,
   stripResponseFormatFromBody,
 } from '../providers/constrained-tool-calls';
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
+import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import { postChatCompletions } from '../providers/fetch-chat';
 import {
   getToolCallsMetaSync,
@@ -38,6 +42,7 @@ import {
   resolveContextBudget,
 } from '../chat/context-budget';
 import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome';
+import { buildSubAgentOutcomeResponseFormat } from './sub-agent-outcome-response-format';
 import {
   buildSubAgentFinalizationPrompt,
   parseStructuredOutcomeJson,
@@ -54,6 +59,7 @@ import { looksLikeProseStructuredQuestion } from '../tools/prose-question-detect
 import {
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
 } from '../tools/turn-continuation';
 import { getSubAgentTypeConfig } from './sub-agent-config';
 import { resolveSamplerPreset } from './resolve-sampler';
@@ -62,6 +68,17 @@ import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
 export const MAX_SUB_AGENT_TOOL_TURNS = 12;
+
+/** Dev-only logging when `localStorage.minnowDebugSubAgent === '1'`. */
+function logSubAgentDebug(event: string, detail?: Record<string, unknown>): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem('minnowDebugSubAgent') !== '1') return;
+  } catch {
+    return;
+  }
+  console.info('[sub-agent]', event, detail ?? '');
+}
 
 function resolveSubAgentModelContextLimit(modelId: string): number | null {
   const id = modelId.trim();
@@ -145,16 +162,17 @@ async function streamSubAgentTurn(
 
   flushSseEventBuffer(sseBuffer, handleChunk);
 
+  const streamedToolCalls = finalizeToolCalls(toolAcc);
+  const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls);
   const finishReason =
-    streamMeta.finish_reason ||
-    (Object.keys(toolAcc).length > 0 ? 'tool_calls' : undefined);
+    streamMeta.finish_reason || (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
   const tEnd = performance.now();
 
   return {
     fullText,
     finishReason,
-    toolCalls: finalizeToolCalls(toolAcc),
+    toolCalls,
     streamMeta,
     t0,
     tFirst,
@@ -277,7 +295,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         });
       }
 
-      const body = applySamplerToBody(
+      let body = applySamplerToBody(
         {
           model: input.modelId || undefined,
           messages: finalMessages,
@@ -287,11 +305,37 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
 
-      const turnResult = await streamSubAgentTurn(
-        input.providerId,
-        body,
-        input.signal,
-      );
+      let usedOutcomeResponseFormat = false;
+      const outcomeFormat = buildSubAgentOutcomeResponseFormat(summarySchema);
+      if (
+        outcomeFormat &&
+        isStructuredOutcomeResponseFormatAvailable(input.modelId, providerCapabilities)
+      ) {
+        body = { ...body, response_format: outcomeFormat };
+        usedOutcomeResponseFormat = true;
+      }
+
+      let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
+      try {
+        turnResult = await streamSubAgentTurn(
+          input.providerId,
+          body,
+          input.signal,
+        );
+      } catch (streamErr) {
+        if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
+          usedOutcomeResponseFormat = false;
+          body = stripResponseFormatFromBody(body);
+          turnResult = await streamSubAgentTurn(
+            input.providerId,
+            body,
+            input.signal,
+          );
+        } else {
+          throw streamErr;
+        }
+      }
+
       await ledgerSubAgentTurn(input, turnResult);
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
@@ -312,13 +356,41 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         rawText = extractMessageText(fallback.choices?.[0]?.message).trim();
       }
 
+      logSubAgentDebug('finalization_turn', {
+        repair,
+        usedOutcomeResponseFormat,
+        finishReason: turnResult.finishReason ?? null,
+        rawLen: rawText.length,
+        preview: rawText ? `${rawText.slice(0, 200)}${rawText.length > 200 ? '…' : ''}` : '',
+      });
+
+      if (!rawText) {
+        return {
+          ok: false,
+          parseError: 'Empty response from provider on final turn',
+          rawText: '',
+        };
+      }
+
       try {
         const parsed = parseStructuredOutcomeJson(rawText);
         const outcome = validateStructuredOutcome(parsed, summarySchema);
         if (outcome) return { ok: true, outcome, rawText };
-        return { ok: false, parseError: 'JSON did not match summary schema', rawText };
+        const preview =
+          rawText.length > 200 ? `${rawText.slice(0, 200)}…` : rawText;
+        return {
+          ok: false,
+          parseError: `JSON did not match summary schema (preview: ${JSON.stringify(preview)})`,
+          rawText,
+        };
       } catch {
-        return { ok: false, parseError: 'Invalid JSON in final response', rawText };
+        const preview =
+          rawText.length > 200 ? `${rawText.slice(0, 200)}…` : rawText;
+        return {
+          ok: false,
+          parseError: `Invalid JSON in final response (preview: ${JSON.stringify(preview)})`,
+          rawText,
+        };
       }
     };
 
@@ -393,10 +465,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         statsSegments.push({ stats: turnStats, usage: turnUsage });
       }
 
-      if (
-        turnResult.finishReason === 'tool_calls' &&
-        turnResult.toolCalls.length > 0
-      ) {
+      logSubAgentDebug('work_turn', {
+        turn,
+        toolTurns,
+        finishReason: turnResult.finishReason ?? null,
+        toolCallCount: turnResult.toolCalls.length,
+        proseLen: turnResult.fullText.length,
+      });
+
+      if (turnResult.toolCalls.length > 0) {
         toolTurns += 1;
         messages.push({
           role: 'assistant',
@@ -454,6 +531,16 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       ) {
         proseQuestionRetries += 1;
         messages.push({ role: 'user', content: PROSE_QUESTION_RETRY_INSTRUCTION });
+        emitProgress(undefined, true);
+        continue;
+      }
+
+      if (
+        input.tools.length > 0 &&
+        toolTurns === 0 &&
+        turn < maxToolTurns - 1
+      ) {
+        messages.push({ role: 'user', content: SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION });
         emitProgress(undefined, true);
         continue;
       }

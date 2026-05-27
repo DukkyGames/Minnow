@@ -61,7 +61,7 @@ describe('sub-agent runner maxToolTurns', () => {
     assert.match(out.summary, /maximum tool turns \(3\)/);
   });
 
-  test('orchestrator uses custom limit via runner input (16 vs 12)', async () => {
+  test('orchestrator passes merged global maxToolTurns to runner', async () => {
     const limits: number[] = [];
     setSubAgentRunnerFactory(() => ({
       async run(input) {
@@ -77,9 +77,8 @@ describe('sub-agent runner maxToolTurns', () => {
     const { spawnSubAgent, resetSubAgentOrchestrator } = await import(
       '../../src/agents/orchestrator.ts'
     );
-    const { resetSubAgentConfigCache } = await import(
-      '../../src/agents/sub-agent-config.ts'
-    );
+    const { getSubAgentsMaxToolTurns, loadSubAgentConfig, resetSubAgentConfigCache } =
+      await import('../../src/agents/sub-agent-config.ts');
     const { resetSubAgentRunIdFactory, setSubAgentRunIdFactory } = await import(
       '../../src/agents/sub-agent-run-id.ts'
     );
@@ -90,6 +89,9 @@ describe('sub-agent runner maxToolTurns', () => {
     resetSubAgentRunIdFactory();
     setSubAgentRunIdFactory(() => FIXED_RUN_ID);
 
+    const cfg = await loadSubAgentConfig();
+    const expectedMax = getSubAgentsMaxToolTurns(cfg);
+
     await spawnSubAgent({
       type: 'generalPurpose',
       task: 'multi-step',
@@ -98,7 +100,7 @@ describe('sub-agent runner maxToolTurns', () => {
       modeId: 'orchestrate',
     });
 
-    assert.deepEqual(limits, [16]);
+    assert.deepEqual(limits, [expectedMax]);
 
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();

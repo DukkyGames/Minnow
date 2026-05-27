@@ -422,6 +422,42 @@ function cachedEntryMatchesBust(
   return false;
 }
 
+const DIRECTORY_LISTING_CACHE_TOOLS = new Set(['list_directory', 'find_files']);
+
+/** Scope ids sharing the same workspace (all chat buckets + __no_chat__). */
+function getScopeIdsForWorkspace(scopeId: string): string[] {
+  const colon = scopeId.lastIndexOf(':');
+  if (colon < 0) {
+    return scopeStores.has(scopeId) ? [scopeId] : [];
+  }
+  const prefix = scopeId.slice(0, colon + 1);
+  const matching = [...scopeStores.keys()].filter((id) => id.startsWith(prefix));
+  return matching.length > 0 ? matching : scopeStores.has(scopeId) ? [scopeId] : [];
+}
+
+function invalidateScopeEntries(
+  scopeId: string,
+  rule: InvalidationRule,
+  bustPrefixes: string[],
+): number {
+  const scope = scopeStores.get(scopeId);
+  if (!scope) return 0;
+
+  let removed = 0;
+  for (const key of [...scope.keys()]) {
+    const parsed = parseCacheKey(key);
+    if (!parsed) continue;
+    if (cachedEntryMatchesBust(parsed.name, parsed.args, rule, bustPrefixes)) {
+      scope.delete(key);
+      removed += 1;
+    }
+  }
+  if (scope.size === 0) {
+    scopeStores.delete(scopeId);
+  }
+  return removed;
+}
+
 /** Remove cache entries invalidated by a successful mutating tool. */
 export function invalidateAfterTool(
   scopeId: string,
@@ -438,23 +474,56 @@ export function invalidateAfterTool(
   if (!rule) return;
 
   const bustPrefixes = rule.pathFromArgs(name, args);
-  const scope = scopeStores.get(scopeId);
-  if (!scope) return;
-
-  let removed = 0;
-  for (const key of [...scope.keys()]) {
-    const parsed = parseCacheKey(key);
-    if (!parsed) continue;
-    if (
-      cachedEntryMatchesBust(parsed.name, parsed.args, rule, bustPrefixes)
-    ) {
-      scope.delete(key);
-      removed += 1;
+  for (const sid of getScopeIdsForWorkspace(scopeId)) {
+    const removed = invalidateScopeEntries(sid, rule, bustPrefixes);
+    if (removed > 0) {
+      logCacheDebug('bust', sid, `${name} (${removed})`);
     }
   }
-  if (removed > 0) {
-    logCacheDebug('bust', scopeId, `${name} (${removed})`);
+}
+
+/**
+ * Drop cached list_directory / find_files results (e.g. manual file-tree refresh).
+ * When workspacePath is omitted, clears those tools in every scope.
+ */
+export function invalidateCachedDirectoryListings(workspacePath?: string): void {
+  const prefix = workspacePath
+    ? `${normalizeWorkspacePath(workspacePath)}:`
+    : null;
+
+  for (const scopeId of [...scopeStores.keys()]) {
+    if (prefix && !scopeId.startsWith(prefix)) {
+      continue;
+    }
+    const scope = scopeStores.get(scopeId);
+    if (!scope) continue;
+
+    let removed = 0;
+    for (const key of [...scope.keys()]) {
+      const parsed = parseCacheKey(key);
+      if (!parsed) continue;
+      if (DIRECTORY_LISTING_CACHE_TOOLS.has(parsed.name)) {
+        scope.delete(key);
+        removed += 1;
+      }
+    }
+    if (scope.size === 0) {
+      scopeStores.delete(scopeId);
+    }
+    if (removed > 0) {
+      logCacheDebug('bust-listings', scopeId, String(removed));
+    }
   }
+}
+
+/** Bust directory listing cache for the bound workspace (file tree refresh). */
+export function invalidateCachedDirectoryListingsForCurrentWorkspace(): void {
+  const workspace = normalizeWorkspacePath(readWorkspacePathForCache());
+  if (!workspace) {
+    invalidateCachedDirectoryListings();
+    return;
+  }
+  invalidateCachedDirectoryListings(workspace);
 }
 
 /** Drop all entries for one scope id. */

@@ -24,7 +24,7 @@ import {
   agentContextBudgetFromSubAgentType,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
 } from '../chat/context-budget';
-import { cloneSubAgentMessages, getSubAgentRunner } from './sub-agent-runner';
+import { cloneSubAgentMessages, defaultSubAgentRunner, getSubAgentRunner } from './sub-agent-runner';
 import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import { resolveSubAgentTools } from './sub-agent-tools';
 import { observeSubAgentToolCall } from './self-healing/controller';
@@ -315,6 +315,18 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 
     const parentChat = run.parentChatId ? findChatById(run.parentChatId) : undefined;
     const { providerId, modelId } = resolveSubAgentModelBinding(typeConfig, parentChat);
+    if (
+      !modelId.trim() &&
+      getSubAgentRunner() === defaultSubAgentRunner
+    ) {
+      settleRun(
+        internals,
+        'failed',
+        '',
+        'No model selected for sub-agent (configure type or parent chat model)',
+      );
+      return;
+    }
     run.providerId = providerId;
     run.modelId = modelId;
     emitSubAgentRunUpdated(run);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isConstrainedToolCallsAvailable,
   isHarmonyDeniedModel,
+  isStructuredOutcomeResponseFormatAvailable,
   setProviderCapabilitiesForTests,
   resetCapabilitiesCache,
   type ProviderCapabilities,
@@ -51,5 +52,24 @@ describe('capability-probe', () => {
       isConstrainedToolCallsAvailable('p1', 'llama-3', true, weak),
       false,
     );
+  });
+
+  it('isStructuredOutcomeResponseFormatAvailable does not require user toggle', () => {
+    const weakTools: ProviderCapabilities = {
+      ...CAPS,
+      structuredOutputWithTools: false,
+      structuredOutput: true,
+    };
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('llama-3', weakTools), true);
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('', weakTools), false);
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('gpt-oss', weakTools), false);
+  });
+
+  it('isStructuredOutcomeResponseFormatAvailable respects model deny', () => {
+    const caps: ProviderCapabilities = {
+      ...CAPS,
+      models: { 'bad-model': { structuredOutput: false, denyReason: 'unsupported' } },
+    };
+    assert.equal(isStructuredOutcomeResponseFormatAvailable('bad-model', caps), false);
   });
 });
