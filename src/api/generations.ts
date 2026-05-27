@@ -23,6 +23,24 @@ export class GenerationNotFoundError extends Error {
 export const GENERATION_LOST_ON_RESTART_MESSAGE =
   'This reply was lost when the server restarted.';
 
+/**
+ * Replace opaque fetch-abort copy with an actionable message (timeouts, stale tabs).
+ */
+export function formatGenerationErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return 'Unknown error';
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === 'this operation was aborted' ||
+    lower === 'the operation was aborted' ||
+    lower === 'aborted' ||
+    lower.includes('operation was aborted')
+  ) {
+    return 'The connection to the model was interrupted (timeout or server restart). Try again.';
+  }
+  return trimmed;
+}
+
 export interface CreateGenerationOptions {
   /** When true, generation state survives 5 minutes after terminal (main chat). */
   persist?: boolean;

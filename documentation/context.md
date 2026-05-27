@@ -1167,7 +1167,7 @@ Server buffers upstream chat/completions streams so clients can attach, detach, 
 | Module | Role |
 |--------|------|
 | [`server/generations/store.js`](../server/generations/store.js) | In-memory `Map`; 16 MiB cap; eviction 30s (default) or 5 min (`persist: true`) |
-| [`server/generations/upstream.js`](../server/generations/upstream.js) | Fire-and-forget `fetch` POST to provider chat path |
+| [`server/generations/upstream.js`](../server/generations/upstream.js) | Fire-and-forget `fetch` POST to provider chat path; **idle timeout** 3 min (reset per chunk) + **max duration** 60 min (replaces former 2 min wall-clock cap that surfaced as *This operation was aborted*) |
 | [`server/generations/routes.js`](../server/generations/routes.js) | Vite middleware |
 
 **Semantics:** Subscriber `req` `close` only removes that SSE client — upstream keeps running. `addSubscriber` registers before replay; `writeToSubscriber` must not drop clients on `res.write` backpressure. Process `exit` calls `deleteGenerationsForProviderShutdown()` (cancel all). Status flow: `pending` → `streaming` → `complete` \| `error` \| `cancelled`.

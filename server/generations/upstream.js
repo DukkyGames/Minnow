@@ -4,7 +4,23 @@
 
 import { appendChunk, markComplete, markError, markStreaming } from './store.js';
 
-const CHAT_TIMEOUT_MS = 120_000;
+/** Abort when no upstream bytes arrive for this long (slow models may pause between tokens). */
+const UPSTREAM_IDLE_TIMEOUT_MS = 500_000;
+/** Hard cap on wall-clock generation time regardless of stream activity. */
+const UPSTREAM_MAX_DURATION_MS = 60 * 60_000;
+
+/**
+ * @param {'idle' | 'max'} kind
+ * @returns {string}
+ */
+function upstreamTimeoutMessage(kind) {
+  if (kind === 'idle') {
+    const min = Math.round(UPSTREAM_IDLE_TIMEOUT_MS / 60_000);
+    return `The model stopped sending data for ${min} minutes. Try again, shorten context, or use a faster model.`;
+  }
+  const min = Math.round(UPSTREAM_MAX_DURATION_MS / 60_000);
+  return `Generation reached the ${min}-minute server limit. Try again with a shorter prompt or smaller max tokens.`;
+}
 
 /**
  * Start pumping an upstream chat/completions response into state chunks.
@@ -24,7 +40,25 @@ export function pumpUpstream({ state, url, headers }) {
 async function pumpUpstreamAsync({ state, url, headers }) {
   const controller = new AbortController();
   state.upstreamController = controller;
-  const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
+
+  /** @type {'idle' | 'max' | null} */
+  let timeoutKind = null;
+  let idleTimer = null;
+
+  const armIdleTimeout = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timeoutKind = 'idle';
+      controller.abort();
+    }, UPSTREAM_IDLE_TIMEOUT_MS);
+  };
+
+  const maxTimer = setTimeout(() => {
+    timeoutKind = 'max';
+    controller.abort();
+  }, UPSTREAM_MAX_DURATION_MS);
+
+  armIdleTimeout();
 
   try {
     markStreaming(state);
@@ -72,6 +106,7 @@ async function pumpUpstreamAsync({ state, url, headers }) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      armIdleTimeout();
       appendChunk(state, Buffer.from(value));
       if (state.status === 'error' || state.status === 'cancelled') {
         return;
@@ -85,9 +120,14 @@ async function pumpUpstreamAsync({ state, url, headers }) {
     if (state.status === 'cancelled') {
       return;
     }
+    if (timeoutKind) {
+      markError(state, upstreamTimeoutMessage(timeoutKind));
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     markError(state, message);
   } finally {
-    clearTimeout(timer);
+    if (idleTimer) clearTimeout(idleTimer);
+    clearTimeout(maxTimer);
   }
 }
