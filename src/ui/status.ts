@@ -4,7 +4,7 @@ import { closeMobileSidebar } from './layout';
 import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 
-/** Legacy settings field; Vite-only fallback when /api/providers is unavailable. */
+/** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
 export function serverUrl(): string {
   const el = document.getElementById('serverUrl') as HTMLInputElement | null;
   if (!el) return 'http://localhost:1234';

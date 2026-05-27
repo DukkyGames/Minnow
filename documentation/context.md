@@ -83,7 +83,7 @@ Minnow/
 │   ├── agents/             # Sub-agent orchestrator, runner, work agents, UI Designer
 │   ├── providers/          # Multi-provider store, fetch-models, resolve
 │   ├── state/sessions.ts   # Sessions API + ~/.minnow mirror
-│   ├── api/models.ts       # fetchModels, modelCache, resolveModelInfo; friendly #modelSelect labels
+│   ├── api/models.ts       # fetchModels (multi-provider), modelCache, resolveModelInfo, composite select keys
 │   ├── api/reasoning.ts    # extractReasoningDelta, splitThinkingSegments (LM Studio)
 │   ├── api/chat.ts         # SSE/stream helpers, mergeToolCallDelta, sendMessagePlain
 │   ├── api/generations.ts  # Backend-owned generations client (POST/subscribe/cancel)
@@ -98,7 +98,8 @@ Minnow/
 │   ├── ui/                 # sidebar, theme.ts (Appearance), settings, stats, messages, tool-approval-modal, question-cards-modal, …
 │   ├── state/file-panel.ts # file sidebar + viewer prefs
 │   ├── lib/
-│   │   ├── format-model-label.ts  # Epic A2: humanize model ids for top-bar picker
+│   │   ├── format-model-label.ts  # Epic A2: humanize model ids; top-bar option HTML + provider suffix
+│   │   ├── model-select-key.ts    # Composite #modelSelect value encode/decode (multi-provider)
 │   │   ├── context-length.ts      # loaded vs max context from model rows
 │   │   └── list-directory-parse.ts
 │   ├── skills/               # Step 13: SKILL.md pack, client, builtin-manifest.json
@@ -1147,9 +1148,9 @@ Registration in [`src/main.ts`](../src/main.ts): `navigator.serviceWorker.regist
 
 ## API usage (providers)
 
-- **Models:** `fetchModels()` → active provider (or per-chat `chat.providerId`) → `fetchModelsForProvider()` → `GET /api/providers/:id/models` (server proxies upstream with secrets). Top-bar `#modelSelect` (native, visually hidden) shows **human-readable labels** via [`formatModelLabel`](../src/lib/format-model-label.ts) (`buildModelOptionHtml`); visible picker is [`model-select-picker.ts`](../src/ui/model-select-picker.ts) with per-row load dots. `option value` and `chat.modelId` remain the canonical LM Studio `id`; each option `title` shows full id + quant + load state. After list refresh: `setReadyStatus()` + `updateModelStateDot()` + `syncModelSelectPicker()`. Load/unload: [`src/api/models.ts`](../src/api/models.ts) (`toggleSelectedModelLoad` → `loadSelectedModel` / `unloadSelectedModel`) when LM Studio v0 provider is active; single `#btnModelLoadUnload` shows **Load** or **Unload** from selection state; inline `onclick` requires `window.toggleSelectedModelLoad` in [`main.ts`](../src/main.ts) `registerWindowHandlers()`.
+- **Models:** `fetchModels()` loads **every enabled provider** in parallel via [`fetchModelsForAllProviders`](../src/providers/fetch-all-models.ts) → per-provider `fetchModelsForProvider()` → `GET /api/providers/:id/models`. The top-bar `#modelSelect` uses `<optgroup>` per provider and a **composite** `<option value>` (`providerId` + ASCII unit separator + canonical model id) from [`encodeModelSelectKey`](../src/lib/model-select-key.ts) so duplicate upstream ids across backends do not collide. Labels append the provider name (`buildTopBarModelOptionHtml` in [`format-model-label.ts`](../src/lib/format-model-label.ts)); `data-provider-id` and `data-supports-load-unload` drive the Load/Unload affordance per row. `modelCache` keys match those composite values; [`getModelRowForSelectOrCanonicalId`](../src/api/models.ts) resolves stats / vision / context UI from either the select value or a bare model id + `chat.providerId`. Changing the picker sets both `chat.providerId` and `chat.modelId` ([`sidebar.ts`](../src/ui/sidebar.ts)). After refresh: `setReadyStatus()` + `updateModelStateDot()` + `syncModelSelectPicker()`. Load/unload: [`src/api/models.ts`](../src/api/models.ts) targets the **selected** provider when it supports LM Studio v0 load/unload (`toggleSelectedModelLoad`).
 - **Chat:** Main turns use [`streamCompletionTurn`](../src/tools/loop.ts) → `POST /api/generations` + `GET .../stream`. Headless callers use `postChatCompletions()` → same generations API with `persist: false`. Streaming SSE; when tools enabled, request includes `tools` + `tool_choice: 'auto'` from `getEnabledToolDefinitionsForMode(chat.modeId)`. Reasoning-capable models may emit `delta.reasoning` / `delta.reasoning_content` when the LM Studio developer option is enabled; the client surfaces those separately from assistant prose.
-- **Settings UI:** Top bar `#providerSelect` switches active provider (`POST .../set-active`); `#serverUrl` shows active base URL (read-only when providers API is up). Full registry CRUD is under **Settings → Providers** (see above).
+- **Settings UI:** There is no drawer-level “active provider” switch; pick the model (with provider) in the **top bar**. Full registry CRUD stays under **Settings → Providers**. [`resolveProvider`](../src/providers/store.ts) (alias `getActiveProvider`) picks an explicit `providerId` when set, else the **first enabled** provider in `GET /api/providers` order — it does **not** read `config.json` `activeProviderId` for routing (that field remains on disk for backward compatibility). Vite-only mode still uses [`serverUrl()`](../src/ui/status.ts) (defaults to `http://localhost:1234` when `#serverUrl` is absent).
 
 ## Backend-owned generations (Phase 1)
 
@@ -1305,8 +1306,7 @@ Order in `initApp()`:
 6. `fillToolsSection()` + `registerToolHandlers()`; `initAttachments()`; `initModeSelector()`; `initWorkAgentDevUi()`.
 7. `await detectLocalServer()` → `loadToolConfigIntoDrawer()` (server-required rows depend on ping).
 8. `applySidebarVisuals()` + `renderSidebar()`.
-9. `await loadProviderSelect()` + `registerProviderHandlers()`.
-10. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
+9. `await fetchModels()` → `syncModelSelectForActiveChat()`, `renderChatFromHistory()`, `renderStatsForChat()`, `renderSidebar()` again.
 
 ## Hardening (production edge cases)
 

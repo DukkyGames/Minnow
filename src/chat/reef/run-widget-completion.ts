@@ -2,14 +2,14 @@
  * Headless LLM completion for reef widget callLLM bridge (no tools).
  */
 
-import { extractStreamDelta } from '../../api/chat.ts';
+import { extractStreamDelta, mergeStreamMeta, type StreamMetaAccumulator } from '../../api/chat.ts';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
   flushSseEventBuffer,
 } from '../../api/sse-parse.ts';
 import { postChatCompletions } from '../../providers/fetch-chat.ts';
-import { getActiveProvider } from '../../providers/store.ts';
+import { resolveProvider } from '../../providers/store.ts';
 import type { ApiMessage, ChatCompletionChunk, Usage } from '../../types.ts';
 
 export interface WidgetCompletionInput {
@@ -29,7 +29,7 @@ export interface WidgetCompletionResult {
 export async function runWidgetCompletion(
   input: WidgetCompletionInput,
 ): Promise<WidgetCompletionResult> {
-  const provider = await getActiveProvider(input.providerId);
+  const provider = await resolveProvider(input.providerId);
   const body = {
     model: input.modelId || undefined,
     messages: input.messages,
@@ -88,7 +88,7 @@ export async function resolveWidgetLlmBinding(chat: {
   const providerId =
     chat.reefWidgetProviderId?.trim() ||
     chat.providerId?.trim() ||
-    (await getActiveProvider()).id;
+    (await resolveProvider()).id;
   const modelId = chat.reefWidgetModelId?.trim() || chat.modelId?.trim() || '';
   return { providerId, modelId };
 }

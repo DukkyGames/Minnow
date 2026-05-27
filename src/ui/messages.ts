@@ -1,7 +1,6 @@
 import { EMPTY_STATE_HTML } from '../constants';
 import { normalizeModeId } from '../chat/modes/types';
-import { contextLengthFromModelRow } from '../lib/context-length';
-import { modelCache } from '../app-state';
+import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import {
@@ -77,27 +76,7 @@ function isAssistantToolCallMessage(msg: Message): msg is AssistantToolCallMessa
   );
 }
 
-export function resolveModelInfo(
-  modelId: string,
-  fromResponse: ModelInfo | undefined
-): ModelInfo {
-  const cached = modelCache.get(modelId);
-  const fromCache = cached
-    ? {
-        arch: cached.arch,
-        quant: cached.quantization,
-        context_length: contextLengthFromModelRow(cached),
-      }
-    : {};
-  return { ...fromCache, ...(fromResponse || {}) };
-}
-
-/** Refresh arch/quant/context on the strip from the model list cache. */
-export function showCachedModelInfo(): void {
-  const modelId = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-  if (!modelId) return;
-  updateStrip({}, {}, resolveModelInfo(modelId, undefined));
-}
+export { resolveModelInfo, showCachedModelInfo } from '../api/models';
 
 export function renderStatsForChat(chat: Chat): void {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;

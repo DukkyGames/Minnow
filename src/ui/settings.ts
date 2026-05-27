@@ -1,16 +1,9 @@
 import { PRESET_STORAGE_KEY, SYSTEM_PROMPT_PRESETS } from '../constants';
 import { getSystemPrompt, putSystemPrompt } from '../config/api-client';
 import { defaultSystemPromptSettings } from '../config/defaults';
-import { fetchModels } from '../api/models';
 import { isServerStorageMode } from '../config/storage-mode';
-import {
-  getActiveProvider,
-  invalidateProviderCache,
-  isProvidersApiAvailable,
-  listProviders,
-  setActiveProvider,
-} from '../providers/store';
-import { setActiveProviderBaseUrl, setStatus } from './status';
+import { isProvidersApiAvailable } from '../providers/store';
+import { setStatus } from './status';
 import type { SystemPromptSettings } from '../types';
 export { fillToolsSection, registerToolHandlers } from './tools-list';
 import {
@@ -24,7 +17,6 @@ const DRAWER_FOCUSABLE =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 let drawerReturnFocus: HTMLElement | null = null;
-let providerHandlersRegistered = false;
 
 function systemPromptPresetById(id: string) {
   return SYSTEM_PROMPT_PRESETS.find((p) => p.id === id);
@@ -159,73 +151,6 @@ export function refreshProvidersBanner(): void {
   if (!banner) return;
   const hide = isServerStorageMode() && isProvidersApiAvailable();
   banner.classList.toggle('hidden', hide);
-}
-
-/** Populate provider select from /api/providers. */
-export async function loadProviderSelect(): Promise<void> {
-  const sel = document.getElementById('providerSelect') as HTMLSelectElement | null;
-  if (!sel) return;
-
-  const { providers, activeProviderId } = await listProviders();
-  const enabled = providers.filter((p) => p.enabled !== false);
-  sel.replaceChildren();
-
-  for (const p of enabled) {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.label;
-    sel.appendChild(opt);
-  }
-
-  if (enabled.some((p) => p.id === activeProviderId)) {
-    sel.value = activeProviderId;
-  } else if (enabled.length > 0) {
-    sel.value = enabled[0].id;
-  }
-
-  const active = await getActiveProvider();
-  setActiveProviderBaseUrl(active.baseUrl);
-
-  const urlInput = document.getElementById('serverUrl') as HTMLInputElement | null;
-  if (urlInput) {
-    const serverMode = isServerStorageMode() && isProvidersApiAvailable();
-    urlInput.readOnly = serverMode;
-    if (!serverMode) {
-      urlInput.removeAttribute('readonly');
-    }
-  }
-
-  refreshProvidersBanner();
-}
-
-/** Wire provider select change → set active + refresh models. */
-export function registerProviderHandlers(): void {
-  if (providerHandlersRegistered) return;
-  providerHandlersRegistered = true;
-
-  const sel = document.getElementById('providerSelect');
-  if (!sel) return;
-
-  sel.addEventListener('change', () => {
-    void onProviderSelectChange();
-  });
-}
-
-async function onProviderSelectChange(): Promise<void> {
-  const sel = document.getElementById('providerSelect') as HTMLSelectElement;
-  const id = sel.value;
-  if (!id) return;
-
-  try {
-    await setActiveProvider(id);
-    invalidateProviderCache();
-    const active = await getActiveProvider(id);
-    setActiveProviderBaseUrl(active.baseUrl);
-    await fetchModels();
-    setStatus('ok', `Active provider: ${active.label}`);
-  } catch {
-    setStatus('err', 'Could not switch provider');
-  }
 }
 
 export function onSystemPromptInput(): void {

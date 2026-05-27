@@ -246,11 +246,13 @@ async function renderRunPanel(body: HTMLElement): Promise<void> {
   });
   body.appendChild(addTarget);
 
-  const { providers, activeProviderId } = await listProviders();
+  const { providers } = await listProviders();
+  const enabledProviders = providers.filter((p) => p.enabled !== false);
+  const firstProviderId = enabledProviders[0]?.id ?? '';
   const quickAdd = el('button', 'settings-action-btn', 'Add from provider list');
   quickAdd.type = 'button';
   quickAdd.addEventListener('click', () => {
-    const pid = activeProviderId || providers[0]?.id || '';
+    const pid = firstProviderId;
     if (!pid) return;
     selectedTargets.push({ providerId: pid, modelId: '', label: pid });
     redrawTargets();
@@ -298,7 +300,7 @@ async function renderRunPanel(body: HTMLElement): Promise<void> {
             workspacePath: getWorkspacePath(),
             modeId: 'build',
           },
-          fallbackProviderId: chat?.providerId ?? activeProviderId ?? '',
+          fallbackProviderId: chat?.providerId ?? firstProviderId,
           fallbackModelId: chat?.modelId ?? '',
           defaultWorkspacePath: getWorkspacePath(),
         });

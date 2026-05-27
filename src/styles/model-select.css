@@ -78,6 +78,20 @@
   display: none;
 }
 
+/* Non-interactive provider group heading in the custom picker (native <optgroup> mirror). */
+.model-select-optgroup-label {
+  padding: 6px 12px 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  list-style: none;
+  cursor: default;
+  user-select: none;
+}
+
 .model-select-option {
   display: flex;
   align-items: center;

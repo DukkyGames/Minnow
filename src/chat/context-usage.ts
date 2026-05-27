@@ -2,9 +2,9 @@
  * Live chat context window budget (MIN-13): estimate used tokens vs model limit.
  */
 
-import { modelCache } from '../app-state';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { formatModelLabel } from '../lib/format-model-label';
+import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { getActiveChat } from '../state/sessions';
 import type { Attachment } from '../attachments/types';
 import type { Chat } from '../types';
@@ -111,7 +111,7 @@ function sumBreakdownTokens(sections: ContextUsageSection[]): number {
 }
 
 function resolveModelDisplayName(modelId: string): string {
-  const cached = modelCache.get(modelId);
+  const cached = getModelRowForSelectOrCanonicalId(modelId);
   if (cached) {
     return formatModelLabel({
       id: cached.id,
@@ -132,7 +132,7 @@ export function resolveContextLimit(modelId: string, chat: Chat): number | null 
     return fromChat;
   }
 
-  const cached = modelCache.get(modelId);
+  const cached = getModelRowForSelectOrCanonicalId(modelId);
   if (cached) {
     const fromRow = contextLengthFromModelRow(cached);
     if (fromRow != null) return fromRow;
