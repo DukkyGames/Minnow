@@ -4,13 +4,14 @@
 
 import {
   extractMessageText,
-  extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { StreamingContentAccumulator } from '../api/message-content';
+import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
@@ -47,6 +48,7 @@ import {
   buildSubAgentFinalizationPrompt,
   parseStructuredOutcomeJson,
   SUB_AGENT_STRUCTURED_OUTCOME_REPAIR_PROMPT,
+  tryParseStructuredOutcomeFromAssistantProse,
   validateStructuredOutcome,
 } from './sub-agent-structured-outcome';
 import type { SubAgentBudgetEvent, SubAgentStructuredOutcome } from './sub-agent-structured-outcome';
@@ -68,6 +70,33 @@ import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
 export const MAX_SUB_AGENT_TOOL_TURNS = 12;
+
+/** Prefer main `content`; some reasoning models only emit JSON on the reasoning channel. */
+function resolveStreamedCompletionText(content: string, reasoning: string): string {
+  const prose = content.trim();
+  if (prose) return prose;
+  return reasoning.trim();
+}
+
+/** Merge streamed assistant text with a non-streaming fallback when SSE yielded no body. */
+async function completionTextForTurn(
+  turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>,
+  body: SubAgentCompletionBody,
+  providerId: string,
+  signal: AbortSignal,
+): Promise<string> {
+  let text = resolveStreamedCompletionText(turnResult.fullText, turnResult.reasoningText);
+  if (text.trim()) return text.trim();
+
+  const { stream: _stream, ...fallbackBody } = body;
+  const fallback = await tryNonStreamingFallback(fallbackBody, signal, providerId);
+  const message = fallback.choices?.[0]?.message;
+  text = resolveStreamedCompletionText(
+    extractMessageText(message).trim(),
+    extractReasoningMessage(message).trim(),
+  );
+  return text.trim();
+}
 
 /** Dev-only logging when `localStorage.minnowDebugSubAgent === '1'`. */
 function logSubAgentDebug(event: string, detail?: Record<string, unknown>): void {
@@ -118,6 +147,7 @@ async function streamSubAgentTurn(
   onDelta?: (delta: string) => void,
 ): Promise<{
   fullText: string;
+  reasoningText: string;
   finishReason: string | undefined;
   toolCalls: ReturnType<typeof finalizeToolCalls>;
   streamMeta: StreamMetaAccumulator;
@@ -133,7 +163,8 @@ async function streamSubAgentTurn(
     throw new Error(`HTTP ${res.status}: ${err}`);
   }
 
-  let fullText = '';
+  const contentAcc = new StreamingContentAccumulator();
+  let reasoningText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
   const t0 = performance.now();
@@ -146,12 +177,16 @@ async function streamSubAgentTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    const delta = extractStreamDelta(chunk);
-    if (delta) {
-      if (tFirst == null) tFirst = performance.now();
-      fullText += delta;
-      onDelta?.(delta);
+    contentAcc.ingestChoice(chunk.choices?.[0]);
+    const reasoningDelta = extractReasoningDelta(chunk);
+    if (reasoningDelta) {
+      reasoningText += reasoningDelta;
     }
+    const delta = contentAcc.getText();
+    if (delta && tFirst == null) {
+      tFirst = performance.now();
+    }
+    onDelta?.(delta);
   }
 
   while (true) {
@@ -162,6 +197,7 @@ async function streamSubAgentTurn(
 
   flushSseEventBuffer(sseBuffer, handleChunk);
 
+  const fullText = contentAcc.getText();
   const streamedToolCalls = finalizeToolCalls(toolAcc);
   const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls);
   const finishReason =
@@ -171,6 +207,7 @@ async function streamSubAgentTurn(
 
   return {
     fullText,
+    reasoningText,
     finishReason,
     toolCalls,
     streamMeta,
@@ -315,27 +352,25 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         usedOutcomeResponseFormat = true;
       }
 
-      let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
-      try {
-        turnResult = await streamSubAgentTurn(
-          input.providerId,
-          body,
-          input.signal,
-        );
-      } catch (streamErr) {
-        if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
-          usedOutcomeResponseFormat = false;
-          body = stripResponseFormatFromBody(body);
-          turnResult = await streamSubAgentTurn(
-            input.providerId,
-            body,
-            input.signal,
-          );
-        } else {
+      const runFinalizationStream = async (
+        attemptBody: SubAgentCompletionBody,
+      ): Promise<Awaited<ReturnType<typeof streamSubAgentTurn>>> => {
+        try {
+          return await streamSubAgentTurn(input.providerId, attemptBody, input.signal);
+        } catch (streamErr) {
+          if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
+            usedOutcomeResponseFormat = false;
+            return streamSubAgentTurn(
+              input.providerId,
+              stripResponseFormatFromBody(attemptBody),
+              input.signal,
+            );
+          }
           throw streamErr;
         }
-      }
+      };
 
+      let turnResult = await runFinalizationStream(body);
       await ledgerSubAgentTurn(input, turnResult);
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
@@ -345,15 +380,24 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         statsSegments.push({ stats: turnStats, usage: turnUsage });
       }
 
-      let rawText = turnResult.fullText.trim();
-      if (!rawText) {
-        const { stream: _stream, ...fallbackBody } = body;
-        const fallback = await tryNonStreamingFallback(
-          fallbackBody,
-          input.signal,
+      let rawText = await completionTextForTurn(
+        turnResult,
+        body,
+        input.providerId,
+        input.signal,
+      );
+
+      if (!rawText && usedOutcomeResponseFormat) {
+        usedOutcomeResponseFormat = false;
+        body = stripResponseFormatFromBody(body);
+        turnResult = await runFinalizationStream(body);
+        await ledgerSubAgentTurn(input, turnResult);
+        rawText = await completionTextForTurn(
+          turnResult,
+          body,
           input.providerId,
+          input.signal,
         );
-        rawText = extractMessageText(fallback.choices?.[0]?.message).trim();
       }
 
       logSubAgentDebug('finalization_turn', {
@@ -437,8 +481,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       let streamingAssistant = '';
       const runSubTurn = (turnBody: SubAgentCompletionBody) =>
-        streamSubAgentTurn(input.providerId, turnBody, input.signal, (delta) => {
-          streamingAssistant += delta;
+        streamSubAgentTurn(input.providerId, turnBody, input.signal, (fullSoFar) => {
+          streamingAssistant = fullSoFar;
           emitProgress(streamingAssistant);
         });
 
@@ -475,9 +519,13 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       if (turnResult.toolCalls.length > 0) {
         toolTurns += 1;
+        const assistantContent = resolveStreamedCompletionText(
+          turnResult.fullText,
+          turnResult.reasoningText,
+        );
         messages.push({
           role: 'assistant',
-          content: turnResult.fullText || null,
+          content: assistantContent || null,
           tool_calls: turnResult.toolCalls,
         });
         emitProgress(undefined, true);
@@ -512,16 +560,12 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         continue;
       }
 
-      let prose = turnResult.fullText.trim();
-      if (!prose) {
-        const { stream: _stream, ...fallbackBody } = body;
-        const fallback = await tryNonStreamingFallback(
-          fallbackBody,
-          input.signal,
-          input.providerId,
-        );
-        prose = extractMessageText(fallback.choices?.[0]?.message).trim();
-      }
+      let prose = await completionTextForTurn(
+        turnResult,
+        body,
+        input.providerId,
+        input.signal,
+      );
 
       if (
         hasAskQuestionTool &&
@@ -552,6 +596,21 @@ export const defaultSubAgentRunner: SubAgentRunner = {
           messages,
           contextBudgetExhausted: true,
           budgetEvents,
+          usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
+          stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
+        };
+      }
+
+      const proseOutcome = tryParseStructuredOutcomeFromAssistantProse(prose, summarySchema);
+      if (proseOutcome) {
+        messages.push({ role: 'assistant', content: prose });
+        emitProgress(undefined, true);
+        return {
+          summary: proseOutcome.summary,
+          structuredOutcome: proseOutcome,
+          toolTurns,
+          messages,
+          budgetEvents: budgetEvents.length ? budgetEvents : undefined,
           usage: usageSegments.length ? sumUsageSegments(usageSegments) : undefined,
           stats: statsSegments.length ? averageStatsSegments(statsSegments) : undefined,
         };

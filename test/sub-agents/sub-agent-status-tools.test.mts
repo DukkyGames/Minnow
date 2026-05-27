@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
-import { resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
+import {
+  buildSubAgentStatusPayload,
+  resetSubAgentOrchestrator,
+} from '../../src/agents/orchestrator.ts';
+import type { SubAgentRun } from '../../src/agents/types.ts';
 import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
 import {
   resetSubAgentRunIdFactory,
@@ -22,6 +26,34 @@ import {
 } from './test-helpers.mts';
 
 describe('sub-agent status tools', () => {
+  test('buildSubAgentStatusPayload omits legacy outcome while run is active', () => {
+    const run: SubAgentRun = {
+      runId: FIXED_RUN_ID,
+      type: 'explore',
+      task: 'in progress',
+      status: 'running',
+      parentChatId: 'chat-1',
+      parentToolCallId: null,
+      parentTurnId: 'turn-live',
+      summary: '',
+      error: null,
+      startedAt: '2026-05-19T12:00:00.000Z',
+      endedAt: null,
+      toolTurns: 1,
+      maxToolTurns: 12,
+      cancelled: false,
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: 'task' },
+        { role: 'assistant', content: 'Still working on the file list.' },
+      ],
+    };
+    const payload = buildSubAgentStatusPayload(run);
+    assert.equal(payload.outcome, undefined);
+    assert.equal(payload.summary, 'Still working on the file list.');
+    assert.notEqual(payload.summary, 'Sub-agent completed with no text output.');
+  });
+
   beforeEach(() => {
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();

@@ -13,6 +13,7 @@ import { getSubAgentsMaxToolTurns } from './sub-agent-config';
 import {
   isContextBudgetFailure,
   isMaxToolTurnFailure,
+  isSubAgentRunTerminal,
   SUB_AGENT_CONTEXT_BUDGET_ERROR,
   SUB_AGENT_MAX_TOOL_TURNS_ERROR,
 } from './sub-agent-outcome';
@@ -58,9 +59,11 @@ export function deriveSubAgentTerminalReason(
   return 'success';
 }
 
-/** Parent-facing outcome (structured or legacy prose fallback). */
-function outcomeForRun(run: SubAgentRun): SubAgentStructuredOutcome {
-  return run.structuredOutcome ?? legacyOutcomeFromSummary(run.summary);
+/** Parent-facing outcome (structured or legacy prose fallback on settled runs only). */
+function outcomeForRun(run: SubAgentRun): SubAgentStructuredOutcome | null {
+  if (run.structuredOutcome) return run.structuredOutcome;
+  if (!isSubAgentRunTerminal(run.status)) return null;
+  return legacyOutcomeFromSummary(run.summary);
 }
 
 /** Cap finding detail and counts before serializing to parent JSON (~32 KB). */
@@ -182,7 +185,9 @@ export function formatAggregateResult(result: AggregateResult): string {
 
 /** Build aggregate payload from a settled run. */
 export function buildAggregateResult(run: SubAgentRun): AggregateResult {
-  const outcome = trimOutcomeForAggregate(outcomeForRun(run));
+  const outcome = trimOutcomeForAggregate(
+    outcomeForRun(run) ?? legacyOutcomeFromSummary(run.summary),
+  );
   const out: AggregateResult = {
     runId: run.runId,
     type: run.type,
@@ -794,13 +799,14 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   const success =
     run.status === 'completed' && !isMaxToolTurnFailure(run.summary, run.error);
   const outcome = outcomeForRun(run);
+  const preview = lastNonSystemPreview(run.messages);
   const payload: Record<string, unknown> = {
     runId: run.runId,
     type: run.type,
     status: run.status,
     success,
-    summary: outcome.summary,
-    outcome,
+    summary: outcome?.summary ?? preview,
+    ...(outcome ? { outcome } : {}),
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     toolTurns: run.toolTurns,

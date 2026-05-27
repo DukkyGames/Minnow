@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   extractJsonTextFromAssistantBody,
   parseStructuredOutcomeJson,
+  tryParseStructuredOutcomeFromAssistantProse,
   validateStructuredOutcome,
 } from '../../src/agents/sub-agent-structured-outcome.ts';
 
@@ -46,5 +47,21 @@ describe('sub-agent structured outcome', () => {
 
   test('invalid JSON returns null on validate after parse failure', () => {
     assert.throws(() => parseStructuredOutcomeJson('not json'));
+  });
+
+  test('tryParseStructuredOutcomeFromAssistantProse accepts work-turn JSON', () => {
+    const outcome = tryParseStructuredOutcomeFromAssistantProse(
+      VALID_OUTCOME_JSON,
+      'minnow.sub-agent.v1',
+    );
+    assert.ok(outcome);
+    assert.equal(outcome.summary, 'Explored auth module.');
+  });
+
+  test('tryParseStructuredOutcomeFromAssistantProse rejects plain prose', () => {
+    assert.equal(
+      tryParseStructuredOutcomeFromAssistantProse('All done, no JSON here.', 'minnow.sub-agent.v1'),
+      null,
+    );
   });
 });

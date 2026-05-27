@@ -31,3 +31,8 @@ export function isSubAgentRunSuccessful(run: SubAgentRun): boolean {
   if (run.status !== 'completed') return false;
   return !isMaxToolTurnFailure(run.summary, run.error);
 }
+
+/** True when a sub-agent run has reached a terminal status (settled). */
+export function isSubAgentRunTerminal(status: SubAgentRun['status']): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
+}
