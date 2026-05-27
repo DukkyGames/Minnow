@@ -2,6 +2,7 @@
  * Per-model capability matrix: fetch, merge with catalog, probe trigger.
  */
 
+import { isModelLoaded } from '../api/model-loaded-state';
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
@@ -182,6 +183,29 @@ export async function runCapabilityProbe(
     throw new Error(message);
   }
   return (await res.json()) as ProviderCapabilitiesFile;
+}
+
+/**
+ * First loaded model id for a provider (selected chat model preferred when loaded).
+ */
+export function findLoadedModelIdForProvider(
+  providerId: string,
+  selectedModelId?: string,
+): string | null {
+  const pid = providerId.trim();
+  if (!pid) return null;
+
+  const loaded: string[] = [];
+  for (const [key, row] of modelCache.entries()) {
+    const decoded = decodeModelSelectKey(key);
+    if (!decoded || decoded.providerId !== pid) continue;
+    if (!isModelLoaded(row.state)) continue;
+    loaded.push(decoded.modelId);
+  }
+
+  if (loaded.length === 0) return null;
+  const [first] = prioritizeModelIdsForProbe(loaded, selectedModelId);
+  return first ?? null;
 }
 
 /**

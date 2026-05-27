@@ -4,6 +4,7 @@
 
 import { isServerStorageMode } from '../config/storage-mode';
 import { fetchModels } from '../api/models';
+import { findLoadedModelIdForProvider } from '../providers/model-capabilities';
 import { getDefaultPaths, pathsForProvider } from '../providers/paths';
 import type { ApiKind, AuthStyle, ProviderPublic } from '../providers/types';
 import {
@@ -44,6 +45,24 @@ function parseAuthStyle(select: HTMLSelectElement | null): AuthStyle {
   if (select?.value === 'api-key') return 'api-key';
   if (select?.value === 'x-api-key') return 'x-api-key';
   return 'bearer';
+}
+
+const NO_LOADED_MODEL_PROBE_MSG =
+  'No model is loaded for this provider. Load a model in LM Studio (or your backend), then refresh models from the chat bar before probing structured output.';
+
+/** Show or hide the provider edit form error line (probe / save failures). */
+function setProviderEditFormError(providerId: string, message: string | null): void {
+  const errEl = document.querySelector(
+    `[data-provider-edit-error="${providerId}"]`,
+  );
+  if (!(errEl instanceof HTMLElement)) return;
+  if (!message) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+    return;
+  }
+  errEl.textContent = message;
+  errEl.classList.remove('hidden');
 }
 
 /** Read models/chat paths from a provider form; paths must start with /. */
@@ -417,6 +436,8 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   appendPricingFields(form, provider.pricing);
 
+  const loadedModelId = findLoadedModelIdForProvider(provider.id);
+
   const probeRow = el('div', 'settings-providers-form-actions');
   const modelProbeBtn = el('button', 'settings-inline-btn', 'Probe models');
   modelProbeBtn.type = 'button';
@@ -424,15 +445,26 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   const structuredProbeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
   structuredProbeBtn.type = 'button';
   structuredProbeBtn.dataset.providerStructuredProbe = provider.id;
+  structuredProbeBtn.disabled = !loadedModelId;
+  if (!loadedModelId) {
+    structuredProbeBtn.title = NO_LOADED_MODEL_PROBE_MSG;
+  }
   probeRow.append(modelProbeBtn, structuredProbeBtn);
   form.append(
     el(
       'p',
       'field-hint',
-      'Model probe checks vision, tools, and streaming (up to 8 models). Structured-output probe tests JSON Schema response_format for constrained tool calls. Neither runs on refresh.',
+      'Model probe checks vision, tools, and streaming (up to 8 models). Structured-output probe requires a loaded model and tests JSON Schema response_format. Neither runs on refresh.',
     ),
   );
   form.append(probeRow);
+  if (!loadedModelId) {
+    const noLoadedNotice = el('p', 'settings-providers-probe-notice');
+    noLoadedNotice.setAttribute('role', 'status');
+    noLoadedNotice.dataset.providerStructuredProbeNotice = provider.id;
+    noLoadedNotice.textContent = NO_LOADED_MODEL_PROBE_MSG;
+    form.append(noLoadedNotice);
+  }
 
   const err = el('p', 'settings-providers-form-error hidden');
   err.setAttribute('role', 'alert');
@@ -761,12 +793,32 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     if (structuredProbeId) {
       void (async () => {
         try {
-          setStatus('spin', `Probing structured output for ${structuredProbeId}…`);
-          await probeProviderCapabilities(structuredProbeId);
+          const { getActiveChat } = await import('../state/sessions');
+          const chat = getActiveChat();
+          let selectedModelId: string | undefined;
+          if (chat.providerId?.trim() === structuredProbeId && chat.modelId?.trim()) {
+            selectedModelId = chat.modelId.trim();
+          }
+          const modelId = findLoadedModelIdForProvider(structuredProbeId, selectedModelId);
+          if (!modelId) {
+            setProviderEditFormError(structuredProbeId, NO_LOADED_MODEL_PROBE_MSG);
+            setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
+            return;
+          }
+          setProviderEditFormError(structuredProbeId, null);
+          setStatus(
+            'spin',
+            `Probing structured output for ${structuredProbeId} (${modelId})…`,
+          );
+          await probeProviderCapabilities(structuredProbeId, {
+            modelId,
+            selectedModelId,
+          });
           setStatus('ok', `Structured output probed for ${structuredProbeId}`);
           await renderProvidersSettingsSection();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          setProviderEditFormError(structuredProbeId, msg);
           setStatus('err', msg);
         }
       })();
@@ -816,6 +868,12 @@ export async function renderProvidersSettingsSection(): Promise<void> {
       ),
     );
     return;
+  }
+
+  try {
+    await fetchModels();
+  } catch {
+    /* model cache may be partial; probe notices fall back to empty cache */
   }
 
   const { providers } = await listProviders();

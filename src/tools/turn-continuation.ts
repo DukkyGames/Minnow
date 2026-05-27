@@ -22,6 +22,13 @@ export const MAX_PROSE_QUESTION_RETRIES = 1;
 export const PROSE_QUESTION_RETRY_INSTRUCTION =
   'You asked the user to choose among options in plain text. Do not list choices in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.';
 
+/**
+ * Injected when the sub-agent has tools enabled but the first model reply did not call any
+ * tool (prose-only). Forces another tool round before structured JSON finalization.
+ */
+export const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION =
+  'You must use the available tools to complete the task. Do not answer with prose only — call the appropriate tool(s) now, then summarize after you have tool results.';
+
 export type TurnContinuation = 'continueTools' | 'finalize' | 'retryEmpty';
 
 /** True when dev turn logging is enabled (`localStorage.minnowDebugTurns === '1'`). */

@@ -4,6 +4,7 @@
 
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
+import { invalidateCachedDirectoryListingsForCurrentWorkspace } from '../tools/result-cache';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { isFileTreeServerAvailable } from './file-tree-server';
 import {
@@ -77,6 +78,8 @@ function setExpanded(path: string, open: boolean): void {
 export function invalidateFileTreeCache(): void {
   listingCache.clear();
   invalidateFileTreeIndex();
+  // File tree uses executeTool without chatId; bust listing cache in every scope.
+  invalidateCachedDirectoryListingsForCurrentWorkspace();
 }
 
 let filterRenderGeneration = 0;

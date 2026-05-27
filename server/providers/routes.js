@@ -207,10 +207,38 @@ export async function handleProviderRequest(req, res, pathname) {
         sendJson(res, 404, { error: 'Provider not found' });
         return true;
       }
-      const body = await readJsonBody(req);
+      let body = {};
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        body = {};
+      }
       const modelId =
         body && typeof body.modelId === 'string' ? body.modelId.trim() : undefined;
-      sendJson(res, 200, await probeProviderCapabilities(id, { modelId: modelId || undefined }));
+      const selectedModelId =
+        body && typeof body.selectedModelId === 'string'
+          ? body.selectedModelId.trim()
+          : undefined;
+      try {
+        sendJson(
+          res,
+          200,
+          await probeProviderCapabilities(id, {
+            modelId: modelId || undefined,
+            selectedModelId: selectedModelId || undefined,
+          }),
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (
+          message.includes('not loaded') ||
+          message.includes('No loaded model')
+        ) {
+          sendJson(res, 400, { error: message });
+          return true;
+        }
+        throw err;
+      }
       return true;
     }
 

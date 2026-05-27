@@ -1359,6 +1359,13 @@
   color: var(--mn-danger);
 }
 
+.settings-providers-probe-notice {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-warning);
+}
+
 .settings-providers-offline.hidden {
   display: none;
 }

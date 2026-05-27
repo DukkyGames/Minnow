@@ -113,5 +113,49 @@ describe('probe-capabilities route', () => {
     );
     assert.equal(getRes.status, 200);
     assert.equal(getRes.json.structuredOutputWithTools, true);
+
+    assert.ok(probeBodies.length >= 1);
+    for (const { body } of probeBodies) {
+      assert.equal(body.model, 'mock-model');
+    }
+  });
+
+  it('returns 400 when no model is loaded', async () => {
+    const unloadedMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/api/v0/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: [{ id: 'idle-model', type: 'llm', state: 'not-loaded' }],
+          }),
+        );
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => unloadedMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (unloadedMock.address()).port;
+    const unloadedBaseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-unloaded',
+        label: 'Unloaded',
+        baseUrl: unloadedBaseUrl,
+        apiKind: 'lm-studio-v0',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-unloaded/probe-capabilities',
+        {},
+      );
+      assert.equal(res.status, 400);
+      assert.match(res.json.error, /No loaded model/i);
+    } finally {
+      await new Promise((resolve) => unloadedMock.close(resolve));
+    }
   });
 });
