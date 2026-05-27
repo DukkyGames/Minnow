@@ -5,6 +5,12 @@
 import { ALL_TOOL_IDS } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
+import {
+  clampGenerationIdleTimeoutMs,
+  clampGenerationMaxDurationMs,
+  DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
+  DEFAULT_GENERATION_MAX_DURATION_MS,
+} from '../generations/timeouts.js';
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
@@ -868,17 +874,43 @@ export function mergeConfigMeta(existing, patch) {
     const existingChat =
       base.chat && typeof base.chat === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.chat) }
-        : { maxToolTurns: 8 };
+        : {
+            maxToolTurns: 8,
+            generationIdleTimeoutMs: DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
+            generationMaxDurationMs: DEFAULT_GENERATION_MAX_DURATION_MS,
+          };
     let maxToolTurns =
       typeof existingChat.maxToolTurns === 'number' && Number.isFinite(existingChat.maxToolTurns)
         ? Math.round(existingChat.maxToolTurns)
         : 8;
     maxToolTurns = Math.min(64, Math.max(1, maxToolTurns));
+    let generationIdleTimeoutMs = clampGenerationIdleTimeoutMs(
+      existingChat.generationIdleTimeoutMs,
+    );
+    let generationMaxDurationMs = clampGenerationMaxDurationMs(
+      existingChat.generationMaxDurationMs,
+    );
     const c = /** @type {Record<string, unknown>} */ (p.chat);
     if (typeof c.maxToolTurns === 'number' && Number.isFinite(c.maxToolTurns)) {
       maxToolTurns = Math.min(64, Math.max(1, Math.round(c.maxToolTurns)));
     }
-    base.chat = { maxToolTurns };
+    if (
+      typeof c.generationIdleTimeoutMs === 'number' &&
+      Number.isFinite(c.generationIdleTimeoutMs)
+    ) {
+      generationIdleTimeoutMs = clampGenerationIdleTimeoutMs(c.generationIdleTimeoutMs);
+    }
+    if (
+      typeof c.generationMaxDurationMs === 'number' &&
+      Number.isFinite(c.generationMaxDurationMs)
+    ) {
+      generationMaxDurationMs = clampGenerationMaxDurationMs(c.generationMaxDurationMs);
+    }
+    base.chat = {
+      maxToolTurns,
+      generationIdleTimeoutMs,
+      generationMaxDurationMs,
+    };
   }
 
   if (p.toolCalls && typeof p.toolCalls === 'object') {

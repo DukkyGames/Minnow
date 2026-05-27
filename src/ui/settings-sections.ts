@@ -115,7 +115,11 @@ import {
   saveTerminalMeta,
 } from '../config/terminal-meta';
 import {
+  clampGenerationIdleTimeoutMs,
+  clampGenerationMaxDurationMs,
   clampMaxToolTurns,
+  generationTimeoutMinutesToMs,
+  generationTimeoutMsToMinutes,
   getChatMetaSync,
   loadChatMeta,
   saveChatMeta,
@@ -1023,6 +1027,73 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
       const fresh = await loadSubAgentConfig();
       const ok = await saveSubAgentConfigToServer({ ...fresh, maxToolTurns: value });
       setStatus(ok ? 'ok' : 'err', ok ? 'Sub-agent tool turn limit updated' : 'Save failed — use npm start');
+    })();
+  });
+
+  const timeoutSection = appendSettingsGroup(
+    mount,
+    'Generation timeouts',
+    'Server-side limits while streaming from the model (main chat and sub-agents). Idle timeout resets when new tokens arrive. Restart is not required — applies to the next generation.',
+  );
+
+  const idleRow = el('label', 'settings-toggle-row');
+  idleRow.appendChild(el('span', '', 'Idle timeout (minutes)'));
+  const idleInput = document.createElement('input');
+  idleInput.type = 'number';
+  idleInput.className = 'settings-select';
+  idleInput.min = '1';
+  idleInput.max = '30';
+  idleInput.step = '1';
+  idleInput.value = String(
+    generationTimeoutMsToMinutes(getChatMetaSync().generationIdleTimeoutMs),
+  );
+  idleInput.setAttribute(
+    'aria-label',
+    'Minutes without model stream data before aborting',
+  );
+  idleRow.appendChild(idleInput);
+  timeoutSection.appendChild(idleRow);
+
+  const maxRow = el('label', 'settings-toggle-row');
+  maxRow.appendChild(el('span', '', 'Max duration (minutes)'));
+  const maxInput = document.createElement('input');
+  maxInput.type = 'number';
+  maxInput.className = 'settings-select';
+  maxInput.min = '1';
+  maxInput.max = '240';
+  maxInput.step = '1';
+  maxInput.value = String(
+    generationTimeoutMsToMinutes(getChatMetaSync().generationMaxDurationMs),
+  );
+  maxInput.setAttribute('aria-label', 'Maximum wall-clock minutes per generation');
+  maxRow.appendChild(maxInput);
+  timeoutSection.appendChild(maxRow);
+
+  idleInput.addEventListener('change', () => {
+    void (async () => {
+      const minutes = Math.min(30, Math.max(1, Math.floor(Number(idleInput.value) || 1)));
+      idleInput.value = String(minutes);
+      const ms = clampGenerationIdleTimeoutMs(generationTimeoutMinutesToMs(minutes));
+      try {
+        await saveChatMeta({ generationIdleTimeoutMs: ms });
+        setStatus('ok', 'Generation idle timeout updated');
+      } catch {
+        setStatus('err', 'Could not save generation idle timeout');
+      }
+    })();
+  });
+
+  maxInput.addEventListener('change', () => {
+    void (async () => {
+      const minutes = Math.min(240, Math.max(1, Math.floor(Number(maxInput.value) || 1)));
+      maxInput.value = String(minutes);
+      const ms = clampGenerationMaxDurationMs(generationTimeoutMinutesToMs(minutes));
+      try {
+        await saveChatMeta({ generationMaxDurationMs: ms });
+        setStatus('ok', 'Generation max duration updated');
+      } catch {
+        setStatus('err', 'Could not save generation max duration');
+      }
     })();
   });
 

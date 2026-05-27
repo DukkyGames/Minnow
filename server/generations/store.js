@@ -33,6 +33,29 @@ const EVICT_MS_PERSIST = 5 * 60_000;
 const generations = new Map();
 
 /**
+ * Per-subscriber outbound queue. When `res.write` returns false the chunk is
+ * already in Node's buffer — dequeue it and wait on one `drain` before more writes.
+ *
+ * @typedef {{ queue: Buffer[], draining: boolean, endAfterFlush?: boolean }} SubscriberWriteState
+ */
+
+/** @type {WeakMap<ServerResponse, SubscriberWriteState>} */
+const subscriberWrites = new WeakMap();
+
+/**
+ * @param {ServerResponse} res
+ * @returns {SubscriberWriteState}
+ */
+function getWriteState(res) {
+  let w = subscriberWrites.get(res);
+  if (!w) {
+    w = { queue: [], draining: false };
+    subscriberWrites.set(res, w);
+  }
+  return w;
+}
+
+/**
  * @param {GenerationStatus} status
  * @returns {boolean}
  */
@@ -67,6 +90,7 @@ function canWriteToSubscriber(res) {
  */
 function detachSubscriber(state, res) {
   state.subscribers.delete(res);
+  subscriberWrites.delete(res);
   if (!res.writableEnded && !res.destroyed) {
     try {
       res.destroy();
@@ -76,24 +100,92 @@ function detachSubscriber(state, res) {
   }
 }
 
-function writeToSubscriber(state, res, buf) {
+/**
+ * Drain queued buffers to one SSE client. Never re-writes a chunk that
+ * already returned false from `res.write` (Node has it in the internal buffer).
+ *
+ * @param {GenerationState} state
+ * @param {ServerResponse} res
+ * @param {{ terminal?: boolean }} [opts] — terminal flush after subscriber removed
+ */
+function flushSubscriberQueue(state, res, opts = {}) {
+  if (!canWriteToSubscriber(res)) {
+    if (!opts.terminal) {
+      detachSubscriber(state, res);
+    } else {
+      subscriberWrites.delete(res);
+    }
+    return;
+  }
+
+  const w = getWriteState(res);
+  const requireSubscriber = !opts.terminal;
+
+  while (w.queue.length > 0) {
+    if (requireSubscriber && !state.subscribers.has(res)) {
+      subscriberWrites.delete(res);
+      return;
+    }
+
+    const buf = w.queue.shift();
+    try {
+      const ok = res.write(buf);
+      if (!ok) {
+        if (!w.draining) {
+          w.draining = true;
+          res.once('drain', () => {
+            w.draining = false;
+            flushSubscriberQueue(state, res, opts);
+          });
+        }
+        return;
+      }
+    } catch {
+      if (!opts.terminal) {
+        detachSubscriber(state, res);
+      } else {
+        subscriberWrites.delete(res);
+      }
+      return;
+    }
+  }
+
+  if (w.endAfterFlush) {
+    subscriberWrites.delete(res);
+    try {
+      if (!res.writableEnded && !res.destroyed) {
+        res.end();
+      }
+    } catch {
+      try {
+        res.destroy();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/**
+ * @param {GenerationState} state
+ * @param {ServerResponse} res
+ * @param {Buffer} buf
+ */
+function enqueueToSubscriber(state, res, buf) {
   if (!canWriteToSubscriber(res)) {
     detachSubscriber(state, res);
     return;
   }
-  try {
-    const ok = res.write(buf);
-    if (!ok) {
-      res.once('drain', () => {
-        if (!state.subscribers.has(res)) {
-          return;
-        }
-        writeToSubscriber(state, res, buf);
-      });
-    }
-  } catch {
-    detachSubscriber(state, res);
+  if (!state.subscribers.has(res)) {
+    return;
   }
+  const w = getWriteState(res);
+  w.queue.push(buf);
+  flushSubscriberQueue(state, res);
+}
+
+function writeToSubscriber(state, res, buf) {
+  enqueueToSubscriber(state, res, buf);
 }
 
 /**
@@ -108,8 +200,10 @@ function broadcastTerminalEvent(state) {
     state.subscribers.delete(res);
     try {
       if (canWriteToSubscriber(res)) {
-        res.write(buf);
-        res.end();
+        const w = getWriteState(res);
+        w.queue.push(buf);
+        w.endAfterFlush = true;
+        flushSubscriberQueue(state, res, { terminal: true });
       } else {
         res.destroy();
       }
@@ -220,8 +314,10 @@ export function addSubscriber(state, res) {
     const line = `\n\nevent: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
     try {
       if (canWriteToSubscriber(res)) {
-        res.write(Buffer.from(line, 'utf8'));
-        res.end();
+        const w = getWriteState(res);
+        w.queue.push(Buffer.from(line, 'utf8'));
+        w.endAfterFlush = true;
+        flushSubscriberQueue(state, res, { terminal: true });
       }
     } catch {
       /* subscriber may already be closed */
