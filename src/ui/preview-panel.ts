@@ -14,10 +14,11 @@ import {
   showPreviewSplit,
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
+import { detectEmbedBlockedFrame } from './preview-embed-detect';
 
 const HTTP_URL_RE = /^https?:\/\//i;
 const PREVIEW_FILE_API = '/api/preview/file/';
-const FRAME_BLOCKED_TIMEOUT_MS = 4000;
+const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
 
@@ -26,6 +27,7 @@ let frameBlockedTimer: ReturnType<typeof setTimeout> | null = null;
 let autoReloadDebounce: ReturnType<typeof setTimeout> | null = null;
 let deferredPreviewLoadTimer: ReturnType<typeof setTimeout> | null = null;
 let lastReloadAt = 0;
+let embedBlockedActive = false;
 
 function getFrame(): HTMLIFrameElement | null {
   return document.getElementById('previewFrame') as HTMLIFrameElement | null;
@@ -37,6 +39,18 @@ function getUrlInput(): HTMLInputElement | null {
 
 function getStatusEl(): HTMLElement | null {
   return document.getElementById('previewStatus');
+}
+
+function getStatusMessageEl(): HTMLElement | null {
+  return document.getElementById('previewStatusMessage');
+}
+
+function getOpenExternalLink(): HTMLAnchorElement | null {
+  return document.getElementById('previewOpenExternal') as HTMLAnchorElement | null;
+}
+
+function getPreviewBody(): HTMLElement | null {
+  return document.getElementById('previewBody');
 }
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
@@ -78,37 +92,99 @@ function clearFrameBlockedTimer(): void {
   }
 }
 
+const EMBED_BLOCKED_MESSAGE =
+  'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
+
+function readFrameEmbedSignals(frame: HTMLIFrameElement): {
+  href: string;
+  bodyText: string;
+} {
+  try {
+    const href = frame.contentWindow?.location.href ?? '';
+    const bodyText = frame.contentDocument?.body?.innerText ?? '';
+    return { href, bodyText };
+  } catch {
+    return { href: '', bodyText: '' };
+  }
+}
+
+function isExternalUrlBlockedInFrame(frame: HTMLIFrameElement): boolean {
+  const { href, bodyText } = readFrameEmbedSignals(frame);
+  return detectEmbedBlockedFrame(href, bodyText, { externalUrlMode: true });
+}
+
+function showEmbedBlockedNotice(externalUrl: string): void {
+  const status = getStatusEl();
+  const message = getStatusMessageEl();
+  const link = getOpenExternalLink();
+  const body = getPreviewBody();
+  if (!status || !message) return;
+
+  embedBlockedActive = true;
+  message.textContent = EMBED_BLOCKED_MESSAGE;
+  if (link) {
+    link.href = externalUrl;
+    link.classList.remove('hidden');
+  }
+  body?.classList.add('is-embed-blocked');
+  status.hidden = false;
+}
+
+function hideEmbedBlockedNotice(): void {
+  const status = getStatusEl();
+  const link = getOpenExternalLink();
+  const body = getPreviewBody();
+  embedBlockedActive = false;
+  if (status) status.hidden = true;
+  if (link) {
+    link.classList.add('hidden');
+    link.removeAttribute('href');
+  }
+  body?.classList.remove('is-embed-blocked');
+}
+
 function showPreviewStatus(message: string): void {
-  const el = getStatusEl();
-  if (!el) return;
-  el.textContent = message;
-  el.hidden = false;
+  const status = getStatusEl();
+  const msg = getStatusMessageEl();
+  if (!status || !msg) return;
+  msg.textContent = message;
+  getOpenExternalLink()?.classList.add('hidden');
+  getPreviewBody()?.classList.remove('is-embed-blocked');
+  status.hidden = false;
 }
 
 function hidePreviewStatus(): void {
-  const el = getStatusEl();
-  if (!el) return;
-  el.hidden = true;
-  el.textContent = '';
+  hideEmbedBlockedNotice();
+}
+
+function checkExternalUrlEmbedAfterLoad(): void {
+  const frame = getFrame();
+  const source = getFilePanelState().previewSource;
+  if (!frame || source?.kind !== 'url') return;
+
+  if (isExternalUrlBlockedInFrame(frame)) {
+    showEmbedBlockedNotice(source.url);
+    return;
+  }
+
+  try {
+    const doc = frame.contentDocument;
+    if (doc && doc.body && doc.body.childElementCount === 0) {
+      showEmbedBlockedNotice(source.url);
+      return;
+    }
+  } catch {
+    // Cross-origin embed allowed — cannot read document; treat as success.
+  }
+
+  hideEmbedBlockedNotice();
 }
 
 function scheduleFrameBlockedCheck(): void {
   clearFrameBlockedTimer();
   frameBlockedTimer = setTimeout(() => {
     frameBlockedTimer = null;
-    try {
-      const frame = getFrame();
-      if (!frame) return;
-      const doc = frame.contentDocument;
-      if (!doc || !doc.body) {
-        showPreviewStatus(
-          'This site refused to load in the preview (X-Frame-Options or CSP frame-ancestors).',
-        );
-      }
-    } catch {
-      // Cross-origin loads throw on contentDocument — treat as successful navigation.
-      hidePreviewStatus();
-    }
+    checkExternalUrlEmbedAfterLoad();
   }, FRAME_BLOCKED_TIMEOUT_MS);
 }
 
@@ -134,7 +210,8 @@ function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
   const input = getUrlInput();
   if (!frame) return;
 
-  hidePreviewStatus();
+  embedBlockedActive = false;
+  hideEmbedBlockedNotice();
   clearFrameBlockedTimer();
 
   if (source.kind === 'url') {
@@ -275,17 +352,17 @@ function bindPreviewControls(): void {
   const frame = getFrame();
   frame?.addEventListener('load', () => {
     clearFrameBlockedTimer();
-    try {
-      const doc = frame.contentDocument;
-      if (doc?.body?.childElementCount === 0 && getFilePanelState().previewSource?.kind === 'url') {
-        showPreviewStatus(
-          'This site refused to load in the preview (X-Frame-Options or CSP frame-ancestors).',
-        );
-        return;
-      }
-      hidePreviewStatus();
-    } catch {
-      hidePreviewStatus();
+    const source = getFilePanelState().previewSource;
+    if (source?.kind !== 'url') {
+      hideEmbedBlockedNotice();
+      return;
+    }
+    if (embedBlockedActive) return;
+    const { href } = readFrameEmbedSignals(frame);
+    if (href === 'about:blank') return;
+    checkExternalUrlEmbedAfterLoad();
+    if (!embedBlockedActive) {
+      scheduleFrameBlockedCheck();
     }
   });
 

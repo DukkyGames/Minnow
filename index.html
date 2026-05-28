@@ -1133,11 +1133,15 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </header>
-    <div class="preview-body">
+    <div class="preview-body" id="previewBody">
       <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
               title="Workspace preview"></iframe>
     </div>
-    <div class="preview-status" id="previewStatus" hidden></div>
+    <div class="preview-status" id="previewStatus" hidden role="status">
+      <p class="preview-status__message" id="previewStatusMessage"></p>
+      <a class="preview-status__open-external hidden" id="previewOpenExternal" target="_blank"
+         rel="noopener noreferrer">Open in new tab</a>
+    </div>
   </section>
   </div>
 
