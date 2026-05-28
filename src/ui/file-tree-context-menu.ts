@@ -106,6 +106,7 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   const disabled = offline;
   const pasteDisabled = offline || !hasClipboard;
   const isMarkdown = isMarkdownFilePath(ctx.path);
+  const isHtml = ctx.kind === 'file' && /\.html?$/i.test(ctx.path);
 
   const openItems: MenuItemDef[] = isMarkdown
     ? [
@@ -133,8 +134,20 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
         },
       ];
 
+  const previewItem: MenuItemDef[] = isHtml
+    ? [
+        {
+          label: 'Open in preview',
+          disabled: offline,
+          action: () =>
+            void import('./preview-panel').then((m) => m.openWorkspacePathInPreview(ctx.path)),
+        },
+      ]
+    : [];
+
   return [
     ...openItems,
+    ...previewItem,
     {
       label: 'Cut',
       disabled,

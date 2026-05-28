@@ -4,10 +4,22 @@
 
 import { detectConfigServer } from '../config/storage-mode';
 
+/** Workspace file or arbitrary URL shown in the preview panel. */
+export type PreviewSource =
+  | { kind: 'workspace'; path: string }
+  | { kind: 'url'; url: string };
+
+/** Which pane occupies the right split (null = closed). */
+export type RightPaneMode = 'viewer' | 'preview' | null;
+
 /** Persisted + in-memory file explorer / viewer preferences. */
 export interface FilePanelState {
   fileSidebarCollapsed: boolean;
+  /** @deprecated Use rightPaneMode; kept in sync for older persisted configs. */
   viewerOpen: boolean;
+  rightPaneMode: RightPaneMode;
+  previewSource: PreviewSource | null;
+  previewAutoReload: boolean;
   splitRatio: number;
   expandedDirs: string[];
   selectedPath: string | null;
@@ -17,6 +29,9 @@ export interface FilePanelState {
 export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   fileSidebarCollapsed: false,
   viewerOpen: false,
+  rightPaneMode: null,
+  previewSource: null,
+  previewAutoReload: true,
   splitRatio: 0.55,
   expandedDirs: [],
   selectedPath: null,
@@ -35,6 +50,24 @@ function clampSplitRatio(value: number): number {
   return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, value));
 }
 
+function normalizePreviewSource(raw: unknown): PreviewSource | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (row.kind === 'workspace' && typeof row.path === 'string' && row.path.trim()) {
+    return { kind: 'workspace', path: row.path };
+  }
+  if (row.kind === 'url' && typeof row.url === 'string' && row.url.trim()) {
+    return { kind: 'url', url: row.url };
+  }
+  return null;
+}
+
+function normalizeRightPaneMode(raw: unknown, viewerOpen: boolean): RightPaneMode {
+  if (raw === 'viewer' || raw === 'preview') return raw;
+  if (viewerOpen) return 'viewer';
+  return null;
+}
+
 function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_FILE_PANEL_STATE };
@@ -43,9 +76,15 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   const expandedDirs = Array.isArray(row.expandedDirs)
     ? row.expandedDirs.filter((p): p is string => typeof p === 'string')
     : [];
+  const viewerOpenLegacy = row.viewerOpen === true;
+  const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy);
+  const viewerOpen = rightPaneMode !== null;
   return {
     fileSidebarCollapsed: row.fileSidebarCollapsed === true,
-    viewerOpen: row.viewerOpen === true,
+    viewerOpen,
+    rightPaneMode,
+    previewSource: normalizePreviewSource(row.previewSource),
+    previewAutoReload: row.previewAutoReload !== false,
     splitRatio: clampSplitRatio(
       typeof row.splitRatio === 'number' ? row.splitRatio : DEFAULT_FILE_PANEL_STATE.splitRatio,
     ),
@@ -71,8 +110,11 @@ export function getFilePanelState(): FilePanelState {
 
 /** Replace in-memory state (e.g. after load). */
 export function setFilePanelState(next: FilePanelState): void {
+  const rightPaneMode = next.rightPaneMode ?? (next.viewerOpen ? 'viewer' : null);
   panelState = {
     ...next,
+    rightPaneMode,
+    viewerOpen: rightPaneMode !== null,
     splitRatio: clampSplitRatio(next.splitRatio),
     expandedDirs: [...next.expandedDirs],
   };
@@ -80,7 +122,7 @@ export function setFilePanelState(next: FilePanelState): void {
 
 /** Merge partial state and schedule persistence. */
 export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanelState {
-  panelState = {
+  const merged = {
     ...panelState,
     ...partial,
     splitRatio:
@@ -91,6 +133,21 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.expandedDirs !== undefined
         ? [...partial.expandedDirs]
         : panelState.expandedDirs,
+  };
+  const rightPaneMode =
+    partial.rightPaneMode !== undefined
+      ? partial.rightPaneMode
+      : partial.viewerOpen === true
+        ? merged.rightPaneMode === 'preview'
+          ? 'preview'
+          : 'viewer'
+        : partial.viewerOpen === false
+          ? null
+          : merged.rightPaneMode;
+  panelState = {
+    ...merged,
+    rightPaneMode,
+    viewerOpen: rightPaneMode !== null,
   };
   scheduleSaveFilePanelPrefs();
   return panelState;

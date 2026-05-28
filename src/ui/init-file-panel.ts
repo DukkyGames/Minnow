@@ -135,8 +135,13 @@ export async function initFilePanel(): Promise<void> {
   }
   applyFileSidebarVisuals();
 
+  const { initPreviewPanel } = await import('./preview-panel');
+  initPreviewPanel();
+
   const state = getFilePanelState();
-  if (state.viewerOpen && state.selectedPath) {
+  if (state.rightPaneMode === 'preview') {
+    // Restored by initPreviewPanel from persisted previewSource.
+  } else if (state.viewerOpen && state.selectedPath) {
     await openFileInViewer(state.selectedPath);
   }
 

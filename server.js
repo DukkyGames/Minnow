@@ -54,6 +54,7 @@ import { createPluginsMiddleware, initPluginsApi } from './server/tools/middlewa
 import { getAppRoot, getWorkspaceRoot, initWorkspaceRoot } from './server/workspace/root.js';
 import { isResolvedPathUnderRoot } from './server/workspace/safe-path.js';
 import { createWorkspaceMiddleware } from './server/workspace/middleware.js';
+import { createPreviewMiddleware } from './server/preview/middleware.js';
 import { getFilesystemAccessFromConfig } from './server/config/tool-security.js';
 import {
   getHomeReefModulesDir,
@@ -870,6 +871,15 @@ async function main() {
           server.middlewares.use(createBenchmarksMiddleware());
           server.middlewares.use(createEvalsMiddleware());
           server.middlewares.use(createWorkspaceMiddleware());
+          server.middlewares.use(
+            createPreviewMiddleware({
+              resolveSafePath,
+              runWithPathAccess: async (fn) => {
+                const fsAccess = await getFilesystemAccessFromConfig();
+                return pathAccessStore.run({ allowOutsideWorkspace: fsAccess === 'full' }, fn);
+              },
+            }),
+          );
           server.middlewares.use(createMemoryMiddleware());
           server.middlewares.use(createReefMiddleware());
           server.middlewares.use(createLspMiddleware(() => getWorkspaceRoot()));
@@ -921,6 +931,7 @@ async function main() {
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
+  console.log(`Preview API: ${localUrl.replace(/\/$/, '')}/api/preview/ping`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
   process.on('exit', () => {

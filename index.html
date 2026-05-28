@@ -237,6 +237,9 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       </button>
     </div>
+    <button class="icon-btn" type="button" id="btnPreviewToggle" aria-label="Preview browser" title="Preview browser" onclick="togglePreviewFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    </button>
     <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
@@ -1112,6 +1115,33 @@
       </button>
     </header>
     <div class="file-viewer-body" id="fileViewerHost"></div>
+  </section>
+
+  <section class="preview-pane hidden" id="previewPane" aria-label="Preview browser">
+    <header class="preview-header">
+      <button type="button" class="icon-btn" id="btnPreviewReload" title="Reload" aria-label="Reload preview">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v4h-4"/><path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/><path d="M4 20v-4h4"/><path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/></svg>
+      </button>
+      <input id="previewUrlInput" class="preview-url" type="text"
+             placeholder="index.html or https://…" autocomplete="off"
+             aria-label="Preview URL or workspace path" />
+      <button type="button" class="preview-go" id="btnPreviewGo">Go</button>
+      <label class="preview-autoreload">
+        <input type="checkbox" id="previewAutoReload" checked /> Auto-reload
+      </label>
+      <button type="button" class="icon-btn" id="btnPreviewClose" aria-label="Close preview" title="Close preview">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="preview-body" id="previewBody">
+      <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
+              title="Workspace preview"></iframe>
+    </div>
+    <div class="preview-status" id="previewStatus" hidden role="status">
+      <p class="preview-status__message" id="previewStatusMessage"></p>
+      <a class="preview-status__open-external hidden" id="previewOpenExternal" target="_blank"
+         rel="noopener noreferrer">Open in new tab</a>
+    </div>
   </section>
   </div>
 
