@@ -44,7 +44,7 @@ When **`hasDesignJson`** is true, read **`designJson`** from the tool payload fo
 
 | Path | Use for | How in Minnow |
 |------|---------|----------------|
-| **Harness** | `teach`, `audit`, `shape`, `craft`, `polish`, `critique`, `document`, `extract`, … | `/impeccable <cmd>` — loads `reference/<cmd>.md` (auto-injected in chat) |
+| **Harness** | `teach`, `audit`, `shape`, `craft`, `polish`, `critique`, `document`, `extract`, … | `/impeccable <cmd>` — loads `reference/<cmd>.md` (auto-injected in chat; `/impeccable craft` also injects `shape.md`) |
 | **CLI** | `detect` | `npm run impeccable:detect` or `run_impeccable` with `command: detect` |
 | **Scripts** | `live` | `run_impeccable` with `command: live` |
 
@@ -79,9 +79,10 @@ npm run impeccable:detect
 
 ## Tools
 
-- Read-only: `read_file`, `list_directory` on paths above.
+- **`load_impeccable_context`** — PRODUCT.md, DESIGN.md, optional `.impeccable/design.json` (required before UI edits).
+- **`run_impeccable`** — spawnable commands only: **`detect`** (CLI anti-pattern scan) and **`live`** (bundled HMR script). Harness commands (`teach`, `audit`, `shape`, `craft`, …) are **not** valid here; use `/impeccable <cmd>` so references are injected into this skill body.
+- Read/write: `read_file`, `list_directory`, and other Minnow file tools for implementation.
 - Optional: Minnow browser CDP tools for visual QA (Step 12).
-- CLI: `npx impeccable detect …` via `npm run impeccable:detect`.
 
 ## Maintenance
 

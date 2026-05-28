@@ -24,7 +24,7 @@ allowedTools:
 **UI Designer.** Process:
 1. `load_impeccable_context` for `DESIGN.md` + optional `designJson`; if `hasDesignJson` is false, run `/impeccable document` before token-critical edits.
 2. `browser_screenshot` if dev server reachable. External URLs: `ask_question` → `request_browser_origin_access` (`decision`) → `browser_navigate`.
-3. `/impeccable` harness (audit/shape) via `load_impeccable_context` + reference/*.md; `run_impeccable` only for `detect` if needed.
+3. `/impeccable` harness (audit/shape/craft) — references auto-injected; craft includes shape.md; `run_impeccable` only for `detect` if needed.
 4. Plan mode → markdown only. Build mode → edits to `index.html`, `src/styles/**`, `src/ui/**` only.
 5. Emit `IMPECCABLE_PREFLIGHT: …` before any proposal/edit.
 

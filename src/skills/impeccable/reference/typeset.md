@@ -109,7 +109,7 @@ Build a clear type scale:
 - **Performance**: Are web fonts loading efficiently without layout shift?
 - **Accessibility**: Does text meet WCAG contrast ratios? Is it zoomable to 200%?
 
-When the type carries the hierarchy on its own, hand off to `{{command_prefix}}impeccable polish` for the final pass.
+When the type carries the hierarchy on its own, hand off to `/impeccable polish` for the final pass.
 
 ## Live-mode signature params
 

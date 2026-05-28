@@ -299,4 +299,4 @@ Test that delight actually delights:
 - **Appropriate**: Matches brand and context
 - **Accessible**: Works with reduced motion, screen readers
 
-When the moments feel earned, hand off to `{{command_prefix}}impeccable polish` for the final pass.
+When the moments feel earned, hand off to `/impeccable polish` for the final pass.

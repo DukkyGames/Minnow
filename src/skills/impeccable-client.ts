@@ -8,6 +8,11 @@ export const IMPECCABLE_SKILL_ID = 'impeccable';
 
 const IMPECCABLE_COMMANDS = new Set(Object.keys(commandMetadata as Record<string, unknown>));
 
+/** Harness references injected alongside the primary slash command. */
+export const HARNESS_PREREQUISITE_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+  craft: ['shape'],
+};
+
 const COMMAND_WORD_RE = /^([a-z][a-z0-9-]*)\b/i;
 
 export interface ParsedImpeccableSubcommand {
@@ -78,6 +83,34 @@ export async function fetchImpeccableReference(command: string): Promise<string 
   }
 }
 
+function formatActiveCommandSection(command: string, content: string): string {
+  return `---
+## Active Impeccable command: ${command}
+(follow this workflow; do not run \`npx impeccable ${command}\` or \`run_impeccable\` for this command)
+${content}`;
+}
+
+function formatPrerequisiteSection(command: string, content: string): string {
+  return `---
+## Prerequisite workflow: ${command}
+(required by the active command above; follow in chat — do not call \`run_impeccable\` or \`npx impeccable ${command}\`)
+${content}`;
+}
+
+/** Commands to load for a slash send: primary first, then prerequisites (deduped). */
+export function commandsForImpeccableAugment(primaryCommand: string): string[] {
+  const primary = primaryCommand.trim().toLowerCase();
+  const prereqs = HARNESS_PREREQUISITE_COMMANDS[primary] ?? [];
+  const ordered: string[] = [primary];
+  for (const prereq of prereqs) {
+    const cmd = prereq.trim().toLowerCase();
+    if (cmd && cmd !== primary && !ordered.includes(cmd)) {
+      ordered.push(cmd);
+    }
+  }
+  return ordered;
+}
+
 /** Append active-command reference workflow to the skill body when a sub-command is present. */
 export async function augmentImpeccableSkillBody(
   skillBody: string,
@@ -88,14 +121,25 @@ export async function augmentImpeccableSkillBody(
     return skillBody;
   }
 
-  const content = await fetchImpeccableReference(command);
-  if (!content) {
+  const sections: string[] = [];
+  for (const cmd of commandsForImpeccableAugment(command)) {
+    const content = await fetchImpeccableReference(cmd);
+    if (!content) {
+      if (cmd === command) {
+        return skillBody;
+      }
+      continue;
+    }
+    sections.push(
+      cmd === command
+        ? formatActiveCommandSection(cmd, content)
+        : formatPrerequisiteSection(cmd, content),
+    );
+  }
+
+  if (sections.length === 0) {
     return skillBody;
   }
 
-  return `${skillBody.trim()}
----
-## Active Impeccable command: ${command}
-(follow this workflow; do not run \`npx impeccable ${command}\`)
-${content}`;
+  return `${skillBody.trim()}\n${sections.join('\n')}`;
 }
