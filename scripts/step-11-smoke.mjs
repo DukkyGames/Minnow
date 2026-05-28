@@ -52,6 +52,7 @@ try {
   record('P4', html.includes('id="fileSidebar"'), 'file sidebar markup');
   record('P5', html.includes('id="fileViewerPane"'), 'file viewer pane markup');
   record('P6', html.includes('id="btnFileSidebarCollapse"'), 'file sidebar toggle');
+  record('P7', html.includes('id="previewPane"'), 'preview pane markup');
 
   for (const c of checks) {
     console.log(`${c.pass ? 'PASS' : 'FAIL'} ${c.id}${c.detail ? `: ${c.detail}` : ''}`);

@@ -1,0 +1,166 @@
+/**
+ * Workspace file preview routes for the in-app browser panel.
+ * GET /api/preview/ping — health
+ * GET /api/preview/file/* — stream a workspace file with safe path resolution
+ */
+
+import fsp from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { contentTypeForPreviewPath } from './mime-types.js';
+
+const PREVIEW_FILE_PREFIX = '/api/preview/file/';
+
+/** Heavy trees — block early so HTML cannot fan out thousands of preview requests. */
+const BLOCKED_PATH_SEGMENTS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  '.minnow',
+  '.vite',
+]);
+
+/** Cap concurrent preview streams (cloud browsers exhaust sockets easily). */
+const MAX_CONCURRENT_PREVIEW_STREAMS = 24;
+let activePreviewStreams = 0;
+
+/**
+ * @param {string} relativePath
+ * @returns {boolean}
+ */
+function isBlockedPreviewPath(relativePath) {
+  const parts = relativePath.replace(/\\/g, '/').split('/');
+  return parts.some((segment) => BLOCKED_PATH_SEGMENTS.has(segment));
+}
+
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(JSON.stringify(payload));
+}
+
+/**
+ * Decode the path segment after /api/preview/file/ (may contain slashes).
+ * @param {string} pathname
+ * @returns {string | null}
+ */
+function decodePreviewRelativePath(pathname) {
+  if (!pathname.startsWith(PREVIEW_FILE_PREFIX)) return null;
+  const encoded = pathname.slice(PREVIEW_FILE_PREFIX.length);
+  if (!encoded) return null;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {string} pathname
+ * @param {{ resolveSafePath: (userPath: string) => string, runWithPathAccess: <T>(fn: () => Promise<T>) => Promise<T> }} deps
+ * @returns {Promise<boolean>}
+ */
+export async function handlePreviewRequest(req, res, pathname, deps) {
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+
+  if (req.method !== 'GET') {
+    if (pathname.startsWith('/api/preview')) {
+      sendJson(res, 405, { error: 'Method not allowed' });
+      return true;
+    }
+    return false;
+  }
+
+  if (pathname === '/api/preview/ping') {
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  const relativePath = decodePreviewRelativePath(pathname);
+  if (relativePath === null) {
+    if (pathname.startsWith('/api/preview')) {
+      sendJson(res, 404, { error: 'Not found' });
+      return true;
+    }
+    return false;
+  }
+
+  if (isBlockedPreviewPath(relativePath)) {
+    sendJson(res, 403, {
+      error:
+        'Preview blocked for dependency/build paths (node_modules, dist, .git, .vite, .minnow).',
+    });
+    return true;
+  }
+
+  if (activePreviewStreams >= MAX_CONCURRENT_PREVIEW_STREAMS) {
+    sendJson(res, 503, { error: 'Too many preview requests; try again shortly.' });
+    return true;
+  }
+
+  try {
+    const absPath = await deps.runWithPathAccess(async () => deps.resolveSafePath(relativePath));
+    const stat = await fsp.stat(absPath);
+    if (!stat.isFile()) {
+      sendJson(res, 404, { error: 'Not a file' });
+      return true;
+    }
+
+    activePreviewStreams += 1;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', contentTypeForPreviewPath(absPath));
+    res.setHeader('Cache-Control', 'no-store');
+    const stream = createReadStream(absPath);
+    let slotReleased = false;
+    const releaseSlot = () => {
+      if (slotReleased) return;
+      slotReleased = true;
+      activePreviewStreams = Math.max(0, activePreviewStreams - 1);
+    };
+    res.on('close', releaseSlot);
+    res.on('finish', releaseSlot);
+    stream.on('error', () => {
+      if (!res.headersSent) {
+        sendJson(res, 500, { error: 'Failed to read file' });
+      } else {
+        res.destroy();
+      }
+    });
+    stream.pipe(res);
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    sendJson(res, 400, { error: message });
+    return true;
+  }
+}
+
+/**
+ * @param {{ resolveSafePath: (userPath: string) => string, runWithPathAccess: <T>(fn: () => Promise<T>) => Promise<T> }} deps
+ */
+export function createPreviewMiddleware(deps) {
+  return async (req, res, next) => {
+    const rawUrl = req.url ?? '/';
+    const parsed = new URL(rawUrl, 'http://127.0.0.1');
+    if (!parsed.pathname.startsWith('/api/preview')) {
+      next();
+      return;
+    }
+    const handled = await handlePreviewRequest(req, res, parsed.pathname, deps);
+    if (!handled) next();
+  };
+}
