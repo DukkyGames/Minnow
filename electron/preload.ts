@@ -39,6 +39,24 @@ const preview = {
       ipcRenderer.removeListener(channels.PREVIEW_NAVIGATION, handler);
     };
   },
+  onLoading: (callback: (loading: boolean) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, loading: boolean) => {
+      callback(loading);
+    };
+    ipcRenderer.on(channels.PREVIEW_LOADING, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.PREVIEW_LOADING, handler);
+    };
+  },
+  onPageTitle: (callback: (title: string) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, title: string) => {
+      callback(title);
+    };
+    ipcRenderer.on(channels.PREVIEW_PAGE_TITLE, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.PREVIEW_PAGE_TITLE, handler);
+    };
+  },
   onLoadFailed: (callback: (detail: PreviewLoadFailedDetail) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, detail: PreviewLoadFailedDetail) => {
       callback(detail);

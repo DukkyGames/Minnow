@@ -73,17 +73,24 @@
   background: var(--mn-surface-0);
 }
 
-.preview-body iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: #fff;
+.preview-loading {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--mn-border);
+  border-top-color: var(--mn-accent);
+  animation: preview-loading-spin 0.7s linear infinite;
 }
 
-.preview-body.is-embed-blocked iframe {
-  visibility: hidden;
-  pointer-events: none;
+.preview-loading.hidden {
+  display: none;
+}
+
+@keyframes preview-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .preview-status {

@@ -11,6 +11,10 @@ import {
   shell,
 } from 'electron';
 import * as channels from './ipc-channels.js';
+import {
+  destroyAllPreviewHosts,
+  registerPreviewHostIpc,
+} from './preview-host.js';
 import { importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
@@ -24,37 +28,9 @@ const devUrl = `http://localhost:${devPort}/`;
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 
-/** Register stub preview IPC handlers until MIN-112 wires WebContentsView. */
+/** Register app + preview IPC handlers. */
 function registerIpcHandlers(): void {
-  ipcMain.handle(channels.PREVIEW_SHOW, async () => {
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_HIDE, async () => {
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_LOAD_URL, async (_event, url: string) => {
-    void url;
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_RELOAD, async () => {
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_STOP, async () => {
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_GO_BACK, async () => {
-    /* stub */
-  });
-  ipcMain.handle(channels.PREVIEW_GO_FORWARD, async () => {
-    /* stub */
-  });
-  ipcMain.handle(
-    channels.PREVIEW_SET_BOUNDS,
-    async (_event, bounds: { x: number; y: number; width: number; height: number }) => {
-      void bounds;
-      /* stub */
-    },
-  );
+  registerPreviewHostIpc();
   ipcMain.handle(channels.APP_OPEN_EXTERNAL, async (_event, url: string) => {
     if (typeof url === 'string' && url.trim()) {
       await shell.openExternal(url);
@@ -64,6 +40,7 @@ function registerIpcHandlers(): void {
 
 /** Tear down PTY sessions, generations, and in-process HTTP server. */
 async function shutdownRuntime(): Promise<void> {
+  destroyAllPreviewHosts();
   const [ptyHost, generationsStore] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
     importServerModule<{ deleteGenerationsForProviderShutdown: () => void }>(

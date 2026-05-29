@@ -1119,9 +1119,16 @@
 
   <section class="preview-pane hidden" id="previewPane" aria-label="Preview browser">
     <header class="preview-header">
+      <button type="button" class="icon-btn" id="btnPreviewBack" title="Back" aria-label="Preview back" disabled>
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="btnPreviewForward" title="Forward" aria-label="Preview forward" disabled>
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
       <button type="button" class="icon-btn" id="btnPreviewReload" title="Reload" aria-label="Reload preview">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v4h-4"/><path d="M17.5 6.5a8 8 0 1 1-11.3 11.3"/><path d="M4 20v-4h4"/><path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/></svg>
       </button>
+      <span class="preview-loading hidden" id="previewLoading" aria-live="polite" aria-label="Preview loading"></span>
       <input id="previewUrlInput" class="preview-url" type="text"
              placeholder="index.html or https://…" autocomplete="off"
              aria-label="Preview URL or workspace path" />
@@ -1133,10 +1140,7 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </header>
-    <div class="preview-body" id="previewBody">
-      <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
-              title="Workspace preview"></iframe>
-    </div>
+    <div class="preview-body" id="previewBody" aria-label="Preview content area"></div>
     <div class="preview-status" id="previewStatus" hidden role="status">
       <p class="preview-status__message" id="previewStatusMessage"></p>
       <a class="preview-status__open-external hidden" id="previewOpenExternal" target="_blank"

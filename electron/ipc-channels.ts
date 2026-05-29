@@ -1,6 +1,5 @@
 /**
  * Shared IPC channel names for Electron main ↔ preload ↔ renderer.
- * Handlers may be stubs until MIN-112 (WebContentsView preview).
  */
 
 export const PREVIEW_SHOW = 'minnow:preview:show';
@@ -13,6 +12,10 @@ export const PREVIEW_GO_FORWARD = 'minnow:preview:go-forward';
 export const PREVIEW_SET_BOUNDS = 'minnow:preview:set-bounds';
 /** Main → renderer: navigation occurred in preview host. */
 export const PREVIEW_NAVIGATION = 'minnow:preview:navigation';
+/** Main → renderer: preview guest loading state changed. */
+export const PREVIEW_LOADING = 'minnow:preview:loading';
+/** Main → renderer: preview guest document title changed. */
+export const PREVIEW_PAGE_TITLE = 'minnow:preview:page-title';
 /** Main → renderer: preview load failed. */
 export const PREVIEW_LOAD_FAILED = 'minnow:preview:load-failed';
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';

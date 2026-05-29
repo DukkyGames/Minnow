@@ -25,6 +25,8 @@ export interface MinnowPreviewApi {
   goForward(): Promise<void>;
   setBounds(bounds: MinnowPreviewBounds): Promise<void>;
   onNavigation(callback: (url: string) => void): () => void;
+  onLoading(callback: (loading: boolean) => void): () => void;
+  onPageTitle(callback: (title: string) => void): () => void;
   onLoadFailed(callback: (detail: MinnowPreviewLoadFailedDetail) => void): () => void;
 }
 

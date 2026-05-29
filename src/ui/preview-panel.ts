@@ -1,7 +1,10 @@
 /**
  * In-app browser preview panel (workspace files + arbitrary URLs).
+ * Electron: WebContentsView via window.minnow.preview (MIN-112).
+ * Browser dev: IPC is a no-op; chrome and persisted state still work.
  */
 
+import type { MinnowPreviewApi } from '../electron';
 import {
   getFilePanelState,
   patchFilePanelState,
@@ -14,23 +17,24 @@ import {
   showPreviewSplit,
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
-import { detectEmbedBlockedFrame } from './preview-embed-detect';
 
 const HTTP_URL_RE = /^https?:\/\//i;
 const PREVIEW_FILE_API = '/api/preview/file/';
-const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
 
 let controlsBound = false;
-let frameBlockedTimer: ReturnType<typeof setTimeout> | null = null;
+let boundsObserver: ResizeObserver | null = null;
+let boundsRaf = 0;
 let autoReloadDebounce: ReturnType<typeof setTimeout> | null = null;
 let deferredPreviewLoadTimer: ReturnType<typeof setTimeout> | null = null;
 let lastReloadAt = 0;
-let embedBlockedActive = false;
+let unsubscribeNavigation: (() => void) | null = null;
+let unsubscribeLoading: (() => void) | null = null;
+let unsubscribeLoadFailed: (() => void) | null = null;
 
-function getFrame(): HTMLIFrameElement | null {
-  return document.getElementById('previewFrame') as HTMLIFrameElement | null;
+function getPreviewApi(): MinnowPreviewApi | undefined {
+  return window.minnow?.preview;
 }
 
 function getUrlInput(): HTMLInputElement | null {
@@ -57,11 +61,23 @@ function getAutoReloadCheckbox(): HTMLInputElement | null {
   return document.getElementById('previewAutoReload') as HTMLInputElement | null;
 }
 
+function getBackButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewBack') as HTMLButtonElement | null;
+}
+
+function getForwardButton(): HTMLButtonElement | null {
+  return document.getElementById('btnPreviewForward') as HTMLButtonElement | null;
+}
+
+function getLoadingIndicator(): HTMLElement | null {
+  return document.getElementById('previewLoading');
+}
+
 function normalizeWorkspacePath(input: string): string {
   return input.replace(/^\/+/, '').trim();
 }
 
-/** Build iframe src for a workspace-relative path. */
+/** Build preview URL for a workspace-relative path (path only; use resolvePreviewLoadUrl for absolute). */
 export function workspacePreviewUrl(relativePath: string, cacheBust?: number): string {
   const normalized = normalizeWorkspacePath(relativePath);
   const encoded = normalized.split('/').map((segment) => encodeURIComponent(segment)).join('/');
@@ -69,6 +85,13 @@ export function workspacePreviewUrl(relativePath: string, cacheBust?: number): s
   if (cacheBust === undefined) return base;
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}v=${cacheBust}`;
+}
+
+/** Absolute URL passed to the preview guest (Electron or future browser host). */
+export function resolvePreviewLoadUrl(source: PreviewSource, cacheBust?: number): string {
+  if (source.kind === 'url') return source.url;
+  const path = workspacePreviewUrl(source.path, cacheBust);
+  return `${window.location.origin}${path}`;
 }
 
 function sourceToAddressBar(source: PreviewSource): string {
@@ -85,109 +108,6 @@ function parseAddressInput(raw: string): PreviewSource | null {
   return { kind: 'workspace', path: normalizeWorkspacePath(trimmed) };
 }
 
-function clearFrameBlockedTimer(): void {
-  if (frameBlockedTimer) {
-    clearTimeout(frameBlockedTimer);
-    frameBlockedTimer = null;
-  }
-}
-
-const EMBED_BLOCKED_MESSAGE =
-  'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
-
-function readFrameEmbedSignals(frame: HTMLIFrameElement): {
-  href: string;
-  bodyText: string;
-} {
-  try {
-    const href = frame.contentWindow?.location.href ?? '';
-    const bodyText = frame.contentDocument?.body?.innerText ?? '';
-    return { href, bodyText };
-  } catch {
-    return { href: '', bodyText: '' };
-  }
-}
-
-function isExternalUrlBlockedInFrame(frame: HTMLIFrameElement): boolean {
-  const { href, bodyText } = readFrameEmbedSignals(frame);
-  return detectEmbedBlockedFrame(href, bodyText, { externalUrlMode: true });
-}
-
-function showEmbedBlockedNotice(externalUrl: string): void {
-  const status = getStatusEl();
-  const message = getStatusMessageEl();
-  const link = getOpenExternalLink();
-  const body = getPreviewBody();
-  if (!status || !message) return;
-
-  embedBlockedActive = true;
-  message.textContent = EMBED_BLOCKED_MESSAGE;
-  if (link) {
-    link.href = externalUrl;
-    link.classList.remove('hidden');
-  }
-  body?.classList.add('is-embed-blocked');
-  status.hidden = false;
-}
-
-function hideEmbedBlockedNotice(): void {
-  const status = getStatusEl();
-  const link = getOpenExternalLink();
-  const body = getPreviewBody();
-  embedBlockedActive = false;
-  if (status) status.hidden = true;
-  if (link) {
-    link.classList.add('hidden');
-    link.removeAttribute('href');
-  }
-  body?.classList.remove('is-embed-blocked');
-}
-
-function showPreviewStatus(message: string): void {
-  const status = getStatusEl();
-  const msg = getStatusMessageEl();
-  if (!status || !msg) return;
-  msg.textContent = message;
-  getOpenExternalLink()?.classList.add('hidden');
-  getPreviewBody()?.classList.remove('is-embed-blocked');
-  status.hidden = false;
-}
-
-function hidePreviewStatus(): void {
-  hideEmbedBlockedNotice();
-}
-
-function checkExternalUrlEmbedAfterLoad(): void {
-  const frame = getFrame();
-  const source = getFilePanelState().previewSource;
-  if (!frame || source?.kind !== 'url') return;
-
-  if (isExternalUrlBlockedInFrame(frame)) {
-    showEmbedBlockedNotice(source.url);
-    return;
-  }
-
-  try {
-    const doc = frame.contentDocument;
-    if (doc && doc.body && doc.body.childElementCount === 0) {
-      showEmbedBlockedNotice(source.url);
-      return;
-    }
-  } catch {
-    // Cross-origin embed allowed — cannot read document; treat as success.
-  }
-
-  hideEmbedBlockedNotice();
-}
-
-function scheduleFrameBlockedCheck(): void {
-  clearFrameBlockedTimer();
-  frameBlockedTimer = setTimeout(() => {
-    frameBlockedTimer = null;
-    checkExternalUrlEmbedAfterLoad();
-  }, FRAME_BLOCKED_TIMEOUT_MS);
-}
-
 function sourcesEqual(a: PreviewSource | null, b: PreviewSource | null): boolean {
   if (!a || !b) return false;
   if (a.kind !== b.kind) return false;
@@ -198,48 +118,170 @@ function sourcesEqual(a: PreviewSource | null, b: PreviewSource | null): boolean
   return false;
 }
 
-function clearPreviewFrame(): void {
-  const frame = getFrame();
-  if (!frame) return;
-  frame.removeAttribute('src');
-  frame.src = 'about:blank';
+function showPreviewStatus(message: string, externalUrl?: string): void {
+  const status = getStatusEl();
+  const msg = getStatusMessageEl();
+  const link = getOpenExternalLink();
+  if (!status || !msg) return;
+  msg.textContent = message;
+  if (link && externalUrl) {
+    link.href = externalUrl;
+    link.classList.remove('hidden');
+  } else {
+    link?.classList.add('hidden');
+    link?.removeAttribute('href');
+  }
+  status.hidden = false;
 }
 
-function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
-  const frame = getFrame();
+function hidePreviewStatus(): void {
+  const status = getStatusEl();
+  const link = getOpenExternalLink();
+  if (status) status.hidden = true;
+  if (link) {
+    link.classList.add('hidden');
+    link.removeAttribute('href');
+  }
+}
+
+function setPreviewLoading(loading: boolean): void {
+  const el = getLoadingIndicator();
+  if (!el) return;
+  el.classList.toggle('hidden', !loading);
+  el.classList.toggle('is-active', loading);
+}
+
+function syncAddressBarFromNavigation(url: string): void {
   const input = getUrlInput();
-  if (!frame) return;
+  if (!input) return;
+  if (!url || url === 'about:blank') return;
 
-  embedBlockedActive = false;
-  hideEmbedBlockedNotice();
-  clearFrameBlockedTimer();
+  const state = getFilePanelState();
+  if (state.previewSource?.kind === 'workspace') {
+    try {
+      const parsed = new URL(url);
+      const prefix = `${window.location.origin}${PREVIEW_FILE_API}`;
+      if (parsed.origin === window.location.origin && parsed.pathname.startsWith(PREVIEW_FILE_API)) {
+        const encoded = parsed.pathname.slice(PREVIEW_FILE_API.length);
+        const path = decodeURIComponent(encoded).replace(/^\/+/, '');
+        input.value = path;
+        return;
+      }
+    } catch {
+      /* keep generic URL below */
+    }
+  }
 
-  if (source.kind === 'url') {
-    frame.src = source.url;
-    if (input) input.value = source.url;
-    scheduleFrameBlockedCheck();
+  input.value = url;
+}
+
+function onPreviewNavigation(url: string): void {
+  syncAddressBarFromNavigation(url);
+  if (url && url !== 'about:blank') {
+    hidePreviewStatus();
+  }
+}
+
+function onPreviewLoadFailed(detail: {
+  errorCode: number;
+  errorDescription: string;
+  url?: string;
+}): void {
+  setPreviewLoading(false);
+  const message =
+    detail.errorDescription?.trim() ||
+    `Preview failed to load (error ${detail.errorCode}).`;
+  showPreviewStatus(message, detail.url);
+}
+
+function scheduleSyncPreviewBounds(): void {
+  if (boundsRaf) return;
+  boundsRaf = requestAnimationFrame(() => {
+    boundsRaf = 0;
+    void syncPreviewBounds();
+  });
+}
+
+async function syncPreviewBounds(): Promise<void> {
+  const api = getPreviewApi();
+  const body = getPreviewBody();
+  if (!api || !body) return;
+  const rect = body.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  await api.setBounds({
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
+function startBoundsObserver(): void {
+  const body = getPreviewBody();
+  if (!body || boundsObserver) return;
+  boundsObserver = new ResizeObserver(() => {
+    scheduleSyncPreviewBounds();
+  });
+  boundsObserver.observe(body);
+  window.addEventListener('resize', scheduleSyncPreviewBounds);
+  scheduleSyncPreviewBounds();
+}
+
+async function showPreviewHost(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api) return;
+  await api.show();
+  scheduleSyncPreviewBounds();
+}
+
+async function hidePreviewHost(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api) return;
+  await api.hide();
+}
+
+async function loadUrlInPreview(url: string): Promise<void> {
+  const api = getPreviewApi();
+  if (!api) return;
+  setPreviewLoading(true);
+  await api.loadURL(url);
+}
+
+function applySourceToPreview(source: PreviewSource, cacheBust?: number): void {
+  const input = getUrlInput();
+  const url = resolvePreviewLoadUrl(source, cacheBust);
+
+  hidePreviewStatus();
+  if (input) input.value = sourceToAddressBar(source);
+
+  const api = getPreviewApi();
+  if (api) {
+    void loadUrlInPreview(url);
     return;
   }
 
-  const src = workspacePreviewUrl(source.path, cacheBust);
-  frame.src = src;
-  if (input) input.value = source.path;
+  setPreviewLoading(false);
+  showPreviewStatus(
+    'Embedded preview runs in the Minnow desktop app (npm run electron:dev). Workspace paths and URLs are still saved.',
+    source.kind === 'url' ? source.url : url,
+  );
 }
 
-/** Load the given source into the preview iframe and persist state. */
+/** Load the given source into the preview host and persist state. */
 export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?: boolean }): void {
   const state = getFilePanelState();
   const bust = options?.cacheBust ? Date.now() : undefined;
   if (!sourcesEqual(state.previewSource, source)) {
     patchFilePanelState({ previewSource: source });
   }
-  applySourceToFrame(source, bust);
+  applySourceToPreview(source, bust);
 }
 
 /** Open the preview panel with an optional initial source. */
 export function openPreviewPanel(source?: PreviewSource | null): void {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
+  void showPreviewHost();
   const state = getFilePanelState();
   const resolved = source ?? state.previewSource;
   if (resolved) {
@@ -247,8 +289,8 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
   } else {
     const input = getUrlInput();
     if (input) input.value = '';
-    clearPreviewFrame();
     hidePreviewStatus();
+    void getPreviewApi()?.stop();
   }
   syncPreviewChromeFromState();
 }
@@ -256,10 +298,10 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
 /** Close the preview panel. */
 export function closePreviewPanel(): void {
   cancelDeferredPreviewLoad();
+  void hidePreviewHost();
   hidePreviewSplit();
-  clearFrameBlockedTimer();
-  clearPreviewFrame();
   hidePreviewStatus();
+  setPreviewLoading(false);
 }
 
 /** Toggle preview panel using last source or empty address bar. */
@@ -277,6 +319,7 @@ function reloadPreview(): void {
   if (now - lastReloadAt < MIN_RELOAD_INTERVAL_MS) return;
   lastReloadAt = now;
 
+  const api = getPreviewApi();
   const state = getFilePanelState();
   if (!state.previewSource) {
     const input = getUrlInput();
@@ -286,6 +329,18 @@ function reloadPreview(): void {
     }
     return;
   }
+
+  if (api && state.previewSource.kind === 'workspace') {
+    loadPreviewSource(state.previewSource, { cacheBust: true });
+    return;
+  }
+
+  if (api) {
+    setPreviewLoading(true);
+    void api.reload();
+    return;
+  }
+
   loadPreviewSource(state.previewSource, { cacheBust: true });
 }
 
@@ -325,14 +380,39 @@ function onWorkspaceFileSaved(path: string): void {
   if (autoReloadDebounce) clearTimeout(autoReloadDebounce);
   autoReloadDebounce = setTimeout(() => {
     autoReloadDebounce = null;
+    const api = getPreviewApi();
+    if (api) {
+      setPreviewLoading(true);
+      void api.reload();
+      return;
+    }
     reloadPreview();
   }, 250);
+}
+
+function bindPreviewIpcListeners(): void {
+  const api = getPreviewApi();
+  if (!api) return;
+
+  unsubscribeNavigation?.();
+  unsubscribeLoading?.();
+  unsubscribeLoadFailed?.();
+
+  unsubscribeNavigation = api.onNavigation(onPreviewNavigation);
+  unsubscribeLoading = api.onLoading(setPreviewLoading);
+  unsubscribeLoadFailed = api.onLoadFailed(onPreviewLoadFailed);
 }
 
 function bindPreviewControls(): void {
   if (controlsBound) return;
   controlsBound = true;
 
+  document.getElementById('btnPreviewBack')?.addEventListener('click', () => {
+    void getPreviewApi()?.goBack();
+  });
+  document.getElementById('btnPreviewForward')?.addEventListener('click', () => {
+    void getPreviewApi()?.goForward();
+  });
   document.getElementById('btnPreviewReload')?.addEventListener('click', () => reloadPreview());
   document.getElementById('btnPreviewGo')?.addEventListener('click', () => navigateFromAddressBar());
   document.getElementById('btnPreviewClose')?.addEventListener('click', () => closePreviewPanel());
@@ -349,24 +429,25 @@ function bindPreviewControls(): void {
     patchFilePanelState({ previewAutoReload: checked });
   });
 
-  const frame = getFrame();
-  frame?.addEventListener('load', () => {
-    clearFrameBlockedTimer();
-    const source = getFilePanelState().previewSource;
-    if (source?.kind !== 'url') {
-      hideEmbedBlockedNotice();
-      return;
-    }
-    if (embedBlockedActive) return;
-    const { href } = readFrameEmbedSignals(frame);
-    if (href === 'about:blank') return;
-    checkExternalUrlEmbedAfterLoad();
-    if (!embedBlockedActive) {
-      scheduleFrameBlockedCheck();
+  getOpenExternalLink()?.addEventListener('click', (e) => {
+    const href = getOpenExternalLink()?.href;
+    if (!href) return;
+    if (window.minnow?.app.openExternal) {
+      e.preventDefault();
+      void window.minnow.app.openExternal(href);
     }
   });
 
   onFileSaved(onWorkspaceFileSaved);
+  bindPreviewIpcListeners();
+  startBoundsObserver();
+
+  if (getPreviewApi()) {
+    const back = getBackButton();
+    const forward = getForwardButton();
+    if (back) back.disabled = false;
+    if (forward) forward.disabled = false;
+  }
 }
 
 function cancelDeferredPreviewLoad(): void {
@@ -384,8 +465,6 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
     if (getFilePanelState().rightPaneMode !== 'preview') return;
     if (source) {
       loadPreviewSource(source);
-    } else {
-      clearPreviewFrame();
     }
   };
 
@@ -405,10 +484,11 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
   window.addEventListener('load', defer, { once: true });
 }
 
-/** Restore preview chrome without loading the iframe until the app shell is idle. */
+/** Restore preview chrome without loading the guest until the app shell is idle. */
 function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
+  void showPreviewHost();
   syncPreviewChromeFromState();
   const input = getUrlInput();
   if (source && input) {
