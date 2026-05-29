@@ -42,7 +42,7 @@ Default: Astro for brand briefs, the project's existing framework for product br
 
 ## Step 1: Shape the Design
 
-Run {{command_prefix}}impeccable shape, passing along whatever feature description the user provided. Shape is **required** for craft; it is what produces a confirmed direction.
+Follow the **Shape workflow** section below (`## Prerequisite workflow: shape`). Run that discovery interview in chat using the user's feature description. Do not call `run_impeccable` or `npx impeccable shape`. Shape is **required** for craft; it is what produces a confirmed direction.
 
 Present the shape output and stop. Wait for the user to confirm, override, or course-correct before writing code.
 

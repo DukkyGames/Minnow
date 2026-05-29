@@ -35,7 +35,7 @@ Understand the current state and goals before touching anything:
    - Loading and transition smoothness
    - Information architecture and flow drift (does this feature reveal complexity the way neighboring features do?)
 
-4. **Pull in any prior critique** (optional signal): If `{{command_prefix}}impeccable critique` has been run on the same target, its priority issues are a useful prior for what to address first. Resolve the target to a file path or URL, then:
+4. **Pull in any prior critique** (optional signal): If `/impeccable critique` has been run on the same target, its priority issues are a useful prior for what to address first. Resolve the target to a file path or URL, then:
    ```bash
    slug=$(node {{scripts_path}}/critique-storage.mjs slug "<resolved>")
    node {{scripts_path}}/critique-storage.mjs latest "$slug"

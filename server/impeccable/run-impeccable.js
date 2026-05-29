@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  harnessCommandGuidance,
+  harnessCommandGuidanceWithReference,
   isCliCommand,
   isHarnessCommand,
   isScriptCommand,
@@ -26,17 +26,25 @@ const MAX_STDOUT_CHARS = 32_000;
  * @param {string} projectRoot Active workspace
  */
 export function toolRunImpeccable(args, appRoot, projectRoot) {
-  const command = typeof args?.command === 'string' ? args.command.trim() : '';
+  const command = typeof args?.command === 'string' ? args.command.trim().toLowerCase() : '';
   const accepted = listAcceptedRunImpeccableCommands();
 
-  if (!command || !accepted.includes(command)) {
+  if (!command) {
     return Promise.resolve({
       result: `Error: run_impeccable command must be one of: ${accepted.join(', ')}`,
     });
   }
 
   if (isHarnessCommand(command) && !isScriptCommand(command)) {
-    return Promise.resolve({ result: harnessCommandGuidance(command) });
+    return Promise.resolve({
+      result: harnessCommandGuidanceWithReference(appRoot, command),
+    });
+  }
+
+  if (!accepted.includes(command)) {
+    return Promise.resolve({
+      result: `Error: run_impeccable command must be one of: ${accepted.join(', ')}. Harness commands (teach, audit, shape, craft, …) use /impeccable <cmd> in the composer.`,
+    });
   }
 
   const target = typeof args?.target === 'string' ? args.target.trim() : '';

@@ -26,7 +26,7 @@ Decision tree:
 
 Never silently overwrite an existing file. Always confirm first.
 
-If teach was invoked as a setup blocker by another command, such as `{{command_prefix}}impeccable craft landing page`, pause that command here. Complete teach, re-run the loader, then resume the original command with the freshly loaded context. For craft, resume into shape next; teach creates project context, but it is not a substitute for the task-specific shape interview and confirmed design brief.
+If teach was invoked as a setup blocker by another command, such as `/impeccable craft landing page`, pause that command here. Complete teach, re-run the loader, then resume the original command with the freshly loaded context. For craft, resume into shape next; teach creates project context, but it is not a substitute for the task-specific shape interview and confirmed design brief.
 
 ## Step 2: Explore the codebase
 

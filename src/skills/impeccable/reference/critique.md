@@ -186,7 +186,7 @@ Codex Run Notes are final-chat only. Do not include this section in the persiste
 
 ### Persist the Snapshot
 
-Once the report above is finalized, write it to `.impeccable/critique/` so the user can refer back, and so `{{command_prefix}}impeccable polish` can pick up the priority issues without a copy-paste.
+Once the report above is finalized, write it to `.impeccable/critique/` so the user can refer back, and so `/impeccable polish` can pick up the priority issues without a copy-paste.
 
 Skip this step if the Setup slug was null (vague or root-level target).
 
@@ -252,8 +252,8 @@ Codex final-question gate: The user-visible response must either include the tar
 
 List recommended commands in priority order, based on the user's answers:
 
-1. **`{{command_prefix}}command-name`**: Brief description of what to fix (specific context from critique findings)
-2. **`{{command_prefix}}command-name`**: Brief description (specific context)
+1. **`/command-name`**: Brief description of what to fix (specific context from critique findings)
+2. **`/command-name`**: Brief description (specific context)
 ...
 
 **Rules for recommendations**:
@@ -264,10 +264,10 @@ List recommended commands in priority order, based on the user's answers:
 - Skip commands that would address zero issues
 - If the user chose a limited scope, only include items within that scope
 - If the user marked areas as off-limits, exclude commands that would touch those areas
-- End with `{{command_prefix}}impeccable polish` as the final step if any fixes were recommended
+- End with `/impeccable polish` as the final step if any fixes were recommended
 
 After presenting the summary, tell the user:
 
 > You can ask me to run these one at a time, all at once, or in any order you prefer.
 >
-> Re-run `{{command_prefix}}impeccable critique` after fixes to see your score improve.
+> Re-run `/impeccable critique` after fixes to see your score improve.
