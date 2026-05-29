@@ -291,9 +291,9 @@ Ultra-compressed reply mode from [juliusbrussee/caveman](https://github.com/Juli
 | npm scripts | `impeccable:sync`, `impeccable:update`, `impeccable:detect` |
 | Design context (read-only for skill) | `PRODUCT.md`, `DESIGN.md`, optional `.impeccable/design.json` (`load_impeccable_context` returns `hasDesignJson`; soft success when sidecar absent — [BUG-012 plan](plans/Bug%20Fixes/BUG-012-impeccable-design-json.md)) |
 
-**Harness vs CLI:** Sub-commands such as `teach`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` injects `reference/<cmd>.md` (see `## Active Impeccable command` in the augmented skill body). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable teach`. **`run_impeccable`** is limited to **`detect`** (CLI) and **`live`** (bundled script); other commands return harness guidance without spawning `npx`.
+**Harness vs CLI:** Sub-commands such as `teach`, `audit`, and `shape` are harness workflows — `/impeccable <cmd>` injects `reference/<cmd>.md` (see `## Active Impeccable command` in the augmented skill body). **`/impeccable craft`** also injects **`shape.md`** as `## Prerequisite workflow: shape` (`HARNESS_PREREQUISITE_COMMANDS` in `impeccable-client.ts`). The upstream npm CLI only exposes `detect` and `skills`; do not run `npx impeccable teach`. **`run_impeccable`** accepts only **`detect`** (CLI) and **`live`** (bundled script). Mistaken harness calls return guidance plus the full reference markdown (`harnessCommandGuidanceWithReference`).
 
-`npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Override built-in: `~/.minnow/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
+`npm install` runs `postinstall` sync (non-strict by default; set `IMPECCABLE_SYNC_STRICT=1` in CI). Post-sync patches: `scripts/impeccable-preserves/apply-minnow-patches.mjs` (`{{command_prefix}}` → `/`, craft Step 1). Override built-in: `~/.minnow/skills/impeccable/SKILL.md` (user wins on duplicate `name`).
 
 **Tests:** `npm run test:skills-impeccable`, `npm run test:impeccable`. Plan: [`documentation/plans/fix-impeccable-harness-routing.md`](plans/fix-impeccable-harness-routing.md). Verification: [`documentation/plans/verification/step-14.md`](plans/verification/step-14.md).
 

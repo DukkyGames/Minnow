@@ -172,4 +172,4 @@ Test animations thoroughly:
 - **Doesn't block**: Users can interact during/after animations
 - **Adds value**: Makes interface clearer or more delightful
 
-When the motion clarifies state instead of decorating it, hand off to `{{command_prefix}}impeccable polish` for the final pass.
+When the motion clarifies state instead of decorating it, hand off to `/impeccable polish` for the final pass.

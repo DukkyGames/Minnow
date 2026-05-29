@@ -96,4 +96,4 @@ Ensure refinement maintains quality:
 - **Better reading**: Is text easier to read for extended periods?
 - **Restrained, not absent**: Does the POV survive the cuts?
 
-When the result feels right, hand off to `{{command_prefix}}impeccable polish` for the final pass.
+When the result feels right, hand off to `/impeccable polish` for the final pass.

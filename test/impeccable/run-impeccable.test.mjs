@@ -5,12 +5,17 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+import { listAcceptedRunImpeccableCommands } from '../../server/impeccable/command-routing.js';
 import { toolRunImpeccable } from '../../server/impeccable/run-impeccable.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 describe('toolRunImpeccable', () => {
+  it('accepts only detect and live for spawnable commands', () => {
+    assert.deepEqual(listAcceptedRunImpeccableCommands(), ['detect', 'live']);
+  });
+
   it('returns harness guidance for teach without spawning CLI', async () => {
     const out = await toolRunImpeccable(
       { command: 'teach' },
@@ -20,7 +25,20 @@ describe('toolRunImpeccable', () => {
     const text = String(out.result ?? '');
     assert.match(text, /harness command/i);
     assert.match(text, /reference\/teach\.md/);
+    assert.match(text, /# Teach Flow|Teach Flow|teach/i);
     assert.doesNotMatch(text, /failed to spawn npx impeccable/i);
+  });
+
+  it('returns shape reference body when shape is passed mistakenly', async () => {
+    const out = await toolRunImpeccable(
+      { command: 'shape', target: 'landing page' },
+      PROJECT_ROOT,
+      PROJECT_ROOT,
+    );
+    const text = String(out.result ?? '');
+    assert.match(text, /harness command/i);
+    assert.match(text, /reference\/shape\.md/);
+    assert.match(text, /Discovery Interview|design brief/i);
   });
 
   it('returns harness guidance for audit', async () => {

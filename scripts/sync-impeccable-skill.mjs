@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applyMinnowImpeccablePatches } from './impeccable-preserves/apply-minnow-patches.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -150,6 +151,7 @@ function main() {
   }
 
   syncFromUpstream(upstream);
+  applyMinnowImpeccablePatches(TARGET_DIR);
   console.log(
     `[impeccable:sync] Synced reference/ and scripts/ → ${path.relative(PROJECT_ROOT, TARGET_DIR)}`,
   );
