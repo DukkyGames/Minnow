@@ -42,8 +42,11 @@
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Browser + Vite (unchanged) |
+| `npm run electron:build` | `tsc -p electron/tsconfig.json` → `electron/dist/` |
 | `npm run electron:dev` | Vite + Electron window (HMR) |
-| `npm run electron:prod` | Built `dist/` + in-process server |
-| `npm run package` | Windows installer under `release/` |
+| `npm run electron:prod` | Built `dist/` + in-process server (requires MIN-111 `server-host`) |
+| `npm run package` | Windows installer under `release/` (MIN-113) |
+
+Layout: `electron/main.ts`, `preload.ts`, `ipc-channels.ts`, `window-state.ts`, `server-import.ts`, stubs `server-host.ts` / `preview-host.ts`; renderer types in `src/electron.d.ts`.
 
 Env: `MINNOW_ELECTRON=1` (suppress browser auto-open), `MINNOW_ELECTRON_DEV=1` (skip in-process server, use :5173).
