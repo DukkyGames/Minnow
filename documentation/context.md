@@ -581,7 +581,7 @@ The **workspace** is the directory where file/git/terminal tools and the file tr
 
 **Menu UX:** Click `#btnWorkspace` → popover (right-aligned to the button, opens left) lists up to 10 recent paths (checkmark on current, muted + **Remove** when folder missing); selecting an existing path `PUT`s without the picker; divider then **Open new workspace…** opens the centered folder browser (current folder pinned at top with **This folder**, indented subfolders with › chevrons, **Folders** section label, Up, double-click to drill down, **Open folder** / Cancel, Escape / overlay dismiss). Starts at the current workspace when set; browse roots show Home (+ drive letters on Windows). Offline (`npm run dev`): same error as before (no menu). `applyWorkspaceSwitch()` refreshes label, file tree, and calls `applyWorkspaceScopedSession()` when B2 workspace-scoped chats are enabled.
 
-**Server wiring:** `server.js` `resolveSafePath` (canonical boundary via [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `fs.realpathSync`), git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()`).
+**Server wiring:** `server/runtime/path-access.js` `resolveSafePath` (canonical boundary via [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `fs.realpathSync`), git, `execute_command`, terminal default cwd, and LSP path checks use `getWorkspaceRoot()`. Vite and built-in skills/prompts still resolve from the Minnow app root (`getAppRoot()` / `setAppRoot()` for packaged hosts).
 
 **Tests:** `test/workspace/workspace-api.test.js`, `test/workspace/safe-path.test.js`, `test/ui/workspace-recent-menu.test.mjs`. Verification: [`documentation/plans/verification/feature-04.md`](plans/verification/feature-04.md).
 
@@ -825,7 +825,7 @@ Before `POST /api/tools` or browser tools run, [`executeTool`](../src/tools/clie
 
 ### Path policy (server)
 
-- **Workspace-only (default):** [`server.js`](../server.js) `resolveSafePath()` keeps paths under `getWorkspaceRoot()` using `path.resolve` plus [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `realpath` prefix checks (blocks symlink escapes). Full access when **`toolSecurity.filesystemAccess`** in `config.json` is **`full`** or **`TOOLS_ALLOW_ALL_PATHS=1`** (automation escape hatch). Read from disk per tool request via [`server/config/tool-security.js`](../server/config/tool-security.js) and `AsyncLocalStorage` so nested calls stay scoped.
+- **Workspace-only (default):** [`server/runtime/path-access.js`](../server/runtime/path-access.js) `resolveSafePath()` keeps paths under `getWorkspaceRoot()` using `path.resolve` plus [`server/workspace/safe-path.js`](../server/workspace/safe-path.js) `realpath` prefix checks (blocks symlink escapes). Full access when **`toolSecurity.filesystemAccess`** in `config.json` is **`full`** or **`TOOLS_ALLOW_ALL_PATHS=1`** (automation escape hatch). Read from disk per tool request via [`server/config/tool-security.js`](../server/config/tool-security.js) and `AsyncLocalStorage` so nested calls stay scoped.
 
 ## Persisted message types (`chat.history`)
 
@@ -969,7 +969,7 @@ Browser (same origin :5173)
     └─§ Vite SPA (index.html, /src/*, hashed assets)
 ```
 
-`node server.js` uses Vite™s programmatic API (`createServer` + [`vite.config.ts`](../vite.config.ts)), registers **`configureServer`** middleware **before** the SPA handler, listens on **`PORT`** (default **5173**), logs the URL, and opens the default browser (`start` / `open` / `xdg-open`).
+`node server.js` uses Vite™s programmatic API (`createServer` + [`vite.config.ts`](../vite.config.ts)), registers **`configureServer`** middleware **before** the SPA handler via [`server/runtime/middlewares.js`](../server/runtime/middlewares.js) (`applyMinnowMiddlewares`), runs [`server/runtime/bootstrap.js`](../server/runtime/bootstrap.js) (`bootstrapMinnowRuntime`) before listen, listens on **`PORT`** (default **5173**), logs the URL, and opens the default browser (`start` / `open` / `xdg-open`) unless `BROWSER=none`, `MINNOW_HEADLESS=1`, or `MINNOW_ELECTRON=1`. Path guard and tools dispatch: [`server/runtime/path-access.js`](../server/runtime/path-access.js), [`server/runtime/tools-middleware.js`](../server/runtime/tools-middleware.js). App install root: `getAppRoot()` / `setAppRoot()` in [`server/workspace/root.js`](../server/workspace/root.js).
 
 | Route | Method | Response |
 |-------|--------|----------|

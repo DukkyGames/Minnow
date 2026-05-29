@@ -9,13 +9,18 @@ import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
 
-/** Directory where `npm start` was launched (Minnow install). */
-const APP_ROOT = path.resolve(process.cwd());
+/** Directory where `npm start` was launched (Minnow install); overridable for packaged Electron. */
+let APP_ROOT = path.resolve(process.cwd());
 
 /** Max MRU workspace folders stored in config.json. */
 export const MAX_RECENT_WORKSPACES = 10;
 
 let workspaceRoot = APP_ROOT;
+
+/** Set Minnow app root (e.g. Electron resources path). */
+export function setAppRoot(dir) {
+  APP_ROOT = path.resolve(dir);
+}
 
 /** Minnow install root (Vite, built-in skills/prompts). */
 export function getAppRoot() {
@@ -205,7 +210,7 @@ export async function initWorkspaceRoot() {
     }
   }
 
-  workspaceRoot = APP_ROOT;
+  workspaceRoot = getAppRoot();
   return workspaceRoot;
 }
 
@@ -235,6 +240,6 @@ export function getWorkspaceInfo() {
   return {
     path: workspaceRoot,
     label: workspaceLabel(workspaceRoot),
-    isDefault: path.resolve(workspaceRoot) === APP_ROOT,
+    isDefault: path.resolve(workspaceRoot) === getAppRoot(),
   };
 }
