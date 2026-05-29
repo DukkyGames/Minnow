@@ -158,6 +158,7 @@ Machine-readable output and exit codes are documented in [`documentation/context
 | `npm run test:attachments` | Workspace reference tests |
 | `npm run test:ui-designer` | UI Designer agent smoke |
 | `npm run impeccable:sync` | Re-vendor Impeccable into `src/skills/impeccable/` |
+| `npm run caveman:sync` | Refresh upstream caveman `SKILL.md` into `src/skills/caveman/` |
 | `npm run impeccable:update` | Update upstream Impeccable + re-sync |
 | `npm run impeccable:detect` | Anti-pattern scan on `src/` and `index.html` |
 | `npm run test:skills-impeccable` | `/impeccable` built-in tests |

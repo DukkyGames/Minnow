@@ -4,6 +4,7 @@
  */
 
 import type { ModeId } from './chat/modes/types';
+import type { PinnedSkillState } from './skills/types';
 import type { ChatTokenLedger } from './usage/types';
 import type {
   SubAgentBudgetEvent,
@@ -450,6 +451,8 @@ export interface Chat {
   runs?: TurnRunRecord[];
   /** forkHistoryIndex (string) → active branchId for the materialized transcript. */
   activeBranchByFork?: Record<string, string>;
+  /** Sticky slash skill for this chat (persists until cleared or replaced). */
+  pinnedSkill?: PinnedSkillState | null;
   /** Pending user edits from Reef widgets; consumed on next send. */
   pendingReefArtifactEdits?: ReefArtifactEditEvent[];
   /** Artifact ids bound to this chat (sidebar / history hints). */

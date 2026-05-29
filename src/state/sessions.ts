@@ -20,6 +20,7 @@ import {
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
+import { ensurePinnedSkill } from '../skills/pinned-skill';
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -548,6 +549,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
   if (raw.modeId === 'debug' && viewMode === 'board') {
     viewMode = 'chat';
   }
+  const pinnedSkill = ensurePinnedSkill(raw.pinnedSkill);
   const chat: Chat = {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newChatId(),
     name:
@@ -598,6 +600,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       ? { tokenLedger: raw.tokenLedger }
       : {}),
     ...(raw.kind === 'expert-lab' ? { kind: 'expert-lab' as const } : {}),
+    ...(pinnedSkill ? { pinnedSkill } : {}),
   };
   ensureTokenLedger(chat);
   return chat;

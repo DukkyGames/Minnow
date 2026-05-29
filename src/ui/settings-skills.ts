@@ -8,11 +8,14 @@ import {
   refreshSkillCatalog,
 } from '../skills/client';
 import {
-  getSkillConfig,
+  getCavemanSettings,
   isSkillEnabled,
+  listCavemanIntensityOptions,
   loadSkillConfigFromStorage,
+  saveCavemanSettings,
   setSkillEnabled,
 } from '../skills/config';
+import { isCavemanIntensity } from '../skills/caveman-client';
 import { createCustomSkill, saveSkillContent } from '../skills/skill-settings-api';
 import type { SkillListItem, SkillSource } from '../skills/types';
 import { isLocalServerAvailable } from '../tools/config';
@@ -148,7 +151,56 @@ function buildSkillRow(
 
   item.appendChild(head);
   item.appendChild(details);
+
+  if (skill.id === 'caveman') {
+    item.appendChild(buildCavemanDefaultsPanel());
+  }
+
   return item;
+}
+
+function buildCavemanDefaultsPanel(): HTMLDivElement {
+  const panel = el('div', 'settings-skill-card__caveman-defaults');
+  const caveman = getCavemanSettings();
+
+  const pinRow = el('div', 'settings-skill-card__caveman-row');
+  const pinLabel = document.createElement('label');
+  const pinCheckbox = document.createElement('input');
+  pinCheckbox.type = 'checkbox';
+  pinCheckbox.checked = caveman.pinByDefault;
+  pinLabel.appendChild(pinCheckbox);
+  pinLabel.append(' Pin caveman on new chats');
+  pinRow.appendChild(pinLabel);
+
+  const intensityRow = el('div', 'settings-skill-card__caveman-row');
+  const intensityLabel = document.createElement('label');
+  intensityLabel.textContent = 'Default intensity';
+  const intensitySelect = document.createElement('select');
+  for (const level of listCavemanIntensityOptions()) {
+    const opt = document.createElement('option');
+    opt.value = level;
+    opt.textContent = level;
+    intensitySelect.appendChild(opt);
+  }
+  intensitySelect.value = caveman.defaultIntensity;
+  intensityLabel.appendChild(intensitySelect);
+  intensityRow.appendChild(intensityLabel);
+
+  pinCheckbox.addEventListener('change', () => {
+    saveCavemanSettings({ pinByDefault: pinCheckbox.checked });
+    setStatus('ok', pinCheckbox.checked ? 'New chats will pin caveman' : 'Caveman pin default off');
+  });
+
+  intensitySelect.addEventListener('change', () => {
+    const value = intensitySelect.value;
+    if (!isCavemanIntensity(value)) return;
+    saveCavemanSettings({ defaultIntensity: value });
+    setStatus('ok', `Default caveman intensity: ${value}`);
+  });
+
+  panel.appendChild(pinRow);
+  panel.appendChild(intensityRow);
+  return panel;
 }
 
 function promptNewSkillId(): string | null {
