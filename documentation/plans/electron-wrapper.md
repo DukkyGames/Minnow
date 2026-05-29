@@ -14,7 +14,7 @@
 |-------|--------|---------|
 | **0** | [MIN-109](https://linear.app/minnowai/issue/MIN-109) | Extract `server/runtime/*` (middlewares, bootstrap, path-access, tools); `setAppRoot`; `MINNOW_ELECTRON` auto-open gate |
 | **1** | [MIN-110](https://linear.app/minnowai/issue/MIN-110) | `electron/` shell: main, preload, `electron:dev` / `electron:prod` scripts |
-| **2** | [MIN-111](https://linear.app/minnowai/issue/MIN-111) | `electron/server-host.ts` — Connect + `sirv` + PTY WS on dynamic port |
+| **2** | [MIN-111](https://linear.app/minnowai/issue/MIN-111) | `electron/server-host.ts` — Connect + `sirv` + PTY WS on dynamic port (shipped) |
 | **3** | [MIN-112](https://linear.app/minnowai/issue/MIN-112) | `WebContentsView` preview; delete `preview-embed-detect`; rewrite `preview-panel.ts` |
 | **4** | [MIN-113](https://linear.app/minnowai/issue/MIN-113) | `electron-builder` Windows NSIS; `asarUnpack` for `@lydell/node-pty` |
 | **5** | [MIN-114](https://linear.app/minnowai/issue/MIN-114) | Optional polish: native folder picker, menu, tray, `minnow://`, updater, frameless titlebar |
