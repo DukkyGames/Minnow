@@ -25,3 +25,10 @@ export interface ActiveSkill {
   body: string;
   label: string;
 }
+
+/** Sticky slash skill pinned on a chat thread. */
+export interface PinnedSkillState {
+  id: string;
+  /** Caveman-only: active compression level. */
+  intensity?: string;
+}

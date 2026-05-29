@@ -255,9 +255,26 @@ Cursor-compatible **SKILL.md** skills: YAML front matter + markdown body. Invoke
 | `GET /api/skills/impeccable/reference/:command` | `{ content }` — vendored `reference/<command>.md` for client auto-injection |
 | `POST /api/skills` | Create user skill from `_template/SKILL.md` (`{ id, label? }`) |
 | `PUT /api/skills/:id` | Save SKILL.md (`{ content }`; user override path) |
-| `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean> }` |
+| `GET/PUT /api/config/skills` | `{ enabled: Record<string, boolean>, caveman?: { pinByDefault, defaultIntensity } }` |
 
-**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15).
+**Built-in ids (v1):** `git-commit`, `code-review`, `write-tests`, `explain-code`, `debug-error`, `docs-update`, `refactor-safe`, `security-review`, `browser-automation`, `ask-user` (Feature 31), `impeccable` (Step 14), `ui-designer` (Step 15), `caveman`.
+
+### Skills → Caveman built-in
+
+Ultra-compressed reply mode from [juliusbrussee/caveman](https://github.com/JuliusBrussee/caveman) (MIT). Invoke with **`/caveman`** or **`/caveman <intensity>`** (`lite`, `full`, `ultra`, `wenyan-lite`, `wenyan-full`, `wenyan-ultra`). Stays pinned per chat until dismiss (composer chip), **`stop caveman`**, or **`normal mode`**.
+
+| Concern | Location |
+|---------|----------|
+| Built-in skill | `src/skills/caveman/SKILL.md` (`name: caveman` → `/caveman`) |
+| Upstream snapshot | `src/skills/caveman/SKILL.upstream.md` (optional; `npm run caveman:sync`) |
+| Client augment | `src/skills/caveman-client.ts` — appends `## Active intensity` in `loop.ts` |
+| Sticky pin resolver | `src/skills/pinned-skill.ts` — slash vs `chat.pinnedSkill`, stop phrases |
+| Session field | `Chat.pinnedSkill` in `src/types.ts`, persisted in `src/state/sessions.ts` |
+| Composer chip | `src/ui/composer-pinned-skill.ts` — intensity select + unpin |
+| Settings defaults | Skills card → pin on new chats + default intensity (`src/skills/config.ts`, `~/.minnow/skills.json`) |
+| Sync script | `scripts/sync-caveman-skill.mjs` — `npm run caveman:sync` (manual; not postinstall) |
+
+**Tests:** `npm run test:skills` (includes `test/skills/caveman-client.test.mts`, `test/skills/pinned-skill.test.mts`). Benchmark probe: `caveman` in `src/benchmark/suites/skill-probes.ts`. Plan: [`documentation/plans/add-caveman-skill.md`](plans/add-caveman-skill.md).
 
 ### Skills → Impeccable built-in (Step 14)
 

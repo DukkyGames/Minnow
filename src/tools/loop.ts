@@ -211,11 +211,17 @@ import { setSubAgentExecutorContext } from './sub-agent-executor';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   augmentImpeccableSkillBody,
+  augmentCavemanSkillBody,
+  CAVEMAN_SKILL_ID,
   formatHistoryWithSkillTag,
   IMPECCABLE_SKILL_ID,
+  isSkillEnabled,
+  normalizeCavemanUserText,
   parseSlashCommand,
   resolveActiveSkill,
+  resolveTurnSkill,
 } from '../skills';
+import { syncComposerPinnedSkillFromActiveChat } from '../ui/composer-pinned-skill';
 import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   hasPostToolTail,
@@ -865,6 +871,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
   if (skillBody && skillId === IMPECCABLE_SKILL_ID && !presetSkillBody) {
     skillBody = await augmentImpeccableSkillBody(skillBody, userText);
+  }
+  if (skillBody && skillId === CAVEMAN_SKILL_ID && !presetSkillBody) {
+    skillBody = augmentCavemanSkillBody(skillBody, {
+      userText,
+      pinnedIntensity: chat.pinnedSkill?.intensity,
+    });
   }
   if (skillBody && uiDesignerCtx.active) {
     skillBody = augmentSkillBodyForUiDesigner(skillBody, uiDesignerCtx);
@@ -1680,7 +1692,16 @@ export async function sendMessageWithTools(): Promise<void> {
     chat.orchestratePlanPath,
     rawText,
   );
-  const { skillId, userText } = parseSlashCommand(slashInput);
+  const { skillId: slashSkillId, userText: slashUserText } = parseSlashCommand(slashInput);
+  const turnSkill = resolveTurnSkill({
+    slashSkillId,
+    userText: slashUserText,
+    pinned: chat.pinnedSkill,
+    isSkillEnabled,
+  });
+  chat.pinnedSkill = turnSkill.nextPinned;
+  const skillId = turnSkill.skillId;
+  let userText = normalizeCavemanUserText(skillId, slashSkillId, slashUserText);
   const hasUserText = Boolean(userText.trim());
   if (!rawText && pendingWithoutErrors.length === 0 && !slashInput.trim()) return;
   if (!skillId && !hasUserText && pendingWithoutErrors.length === 0) return;
@@ -1724,6 +1745,12 @@ export async function sendMessageWithTools(): Promise<void> {
     if (skillId === IMPECCABLE_SKILL_ID) {
       skillBody = await augmentImpeccableSkillBody(skillBody, userText);
     }
+    if (skillId === CAVEMAN_SKILL_ID) {
+      skillBody = augmentCavemanSkillBody(skillBody, {
+        userText,
+        pinnedIntensity: chat.pinnedSkill?.intensity,
+      });
+    }
   }
 
   const uiDesignerCtx = prepareUiDesignerTurn(chat, {
@@ -1765,6 +1792,9 @@ export async function sendMessageWithTools(): Promise<void> {
   const historyContent = buildHistoryUserContent(displayText, validAttachments);
   const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
+
+  syncComposerPinnedSkillFromActiveChat();
+  scheduleSaveSessions();
 
   await runChatTurn({
     chat,

@@ -88,6 +88,14 @@ export const SKILL_PROBES: Record<string, SkillProbe> = {
     toolIds: ['browser_list'],
     requiresLocalServer: true,
   },
+  caveman: {
+    skillId: 'caveman',
+    prompt:
+      'Why does a React component re-render when an inline object is passed as a prop? Answer in caveman full mode: short fragments, no filler, no pleasantries.',
+    passKind: 'regex',
+    pattern:
+      /re-?render|ref|useMemo|object|prop|inline|memo/i,
+  },
   'code-review': {
     skillId: 'code-review',
     prompt: `Review this snippet and respond using the skill output format (Summary plus at least one findings section):

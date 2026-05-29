@@ -35,6 +35,7 @@ import './styles/question-cards.css';
 import './styles/reef-widgets.css';
 import './styles/sub-agent-drawer.css';
 import './styles/orchestrate-plan-selector.css';
+import './styles/composer-pinned-skill.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/bug-board.css';
@@ -112,6 +113,7 @@ import { initOrchestrateStatsLiveRefresh } from './chat/orchestrate/stats-live';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { initReefBridge } from './chat/reef/index.ts';
+import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
 import {
   initOrchestratePlanSelector,
   syncOrchestratePlanStripFromActiveChat,
@@ -276,6 +278,7 @@ export async function initApp(): Promise<void> {
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
+  syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
   renderSidebar();
   bootstrapActiveChatOpenedTimestamp();
