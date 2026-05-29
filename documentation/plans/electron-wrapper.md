@@ -44,6 +44,7 @@
 | `npm run dev` | Browser + Vite (unchanged) |
 | `npm run electron:build` | `tsc -p electron/tsconfig.json` → `electron/dist/` |
 | `npm run electron:dev` | Vite + Electron window (HMR) |
+| `npm run package:clean` | Kill `Minnow.exe` / `electron.exe` and remove `release/win-unpacked` before repackaging (fixes Windows `app.asar` lock) |
 | `npm run electron:prod` | Built `dist/` + in-process server (requires MIN-111 `server-host`) |
 | `npm run package` | Full Windows NSIS installer under `release/` (MIN-113) |
 | `npm run package:dir` | Unpacked `release/win-unpacked/` only (faster packaging smoke test) |
