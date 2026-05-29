@@ -15,7 +15,7 @@ import {
   destroyAllPreviewHosts,
   registerPreviewHostIpc,
 } from './preview-host.js';
-import { importServerModule } from './server-import.js';
+import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import { loadWindowState, trackWindowState } from './window-state.js';
 
@@ -98,6 +98,14 @@ async function createMainWindow(): Promise<BrowserWindow> {
   return win;
 }
 
+/** Packaged app: resources dir with bundled dist/. Unpackaged electron:prod: repo root. */
+function resolveElectronAppRoot(): string {
+  if (app.isPackaged) {
+    return app.getAppPath();
+  }
+  return getProjectRoot();
+}
+
 async function resolveLoadUrl(): Promise<string> {
   if (isDev) {
     return devUrl;
@@ -113,8 +121,7 @@ async function resolveLoadUrl(): Promise<string> {
       reefSyncCount: number;
     }>;
   }>('runtime/bootstrap.js');
-  // Packaged app: Vite dist and built-in assets live under the install path.
-  setAppRoot(app.getAppPath());
+  setAppRoot(resolveElectronAppRoot());
   const { workspacePath, homePath, reefSyncCount } = await bootstrapMinnowRuntime();
   if (reefSyncCount > 0) {
     console.log(`Reef widgets: synced ${reefSyncCount} template(s)`);
