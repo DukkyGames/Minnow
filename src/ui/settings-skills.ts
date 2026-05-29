@@ -9,6 +9,7 @@ import {
 } from '../skills/client';
 import {
   getCavemanSettings,
+  getSkillConfig,
   isSkillEnabled,
   listCavemanIntensityOptions,
   loadSkillConfigFromStorage,

@@ -75,13 +75,18 @@ Env: `MINNOW_ELECTRON=1` (suppress browser auto-open), `MINNOW_ELECTRON_DEV=1` (
 | `extraResources` | `documentation/` → `resources/documentation` |
 | `win.target` | `nsis` |
 | `win.icon` | `build/icon.ico` |
+| `nsis.artifactName` | `${productName}-Setup-${version}.${ext}` (avoids spaces in NSIS output path on Windows) |
 
-**Icon:** `build/icon.ico` must include at least a **256×256** bitmap (electron-builder error otherwise). Replace the placeholder with a branded multi-size `.ico` before release.
+**Icon:** `build/icon.ico` must include at least a **256×256** bitmap (electron-builder rejects smaller `.ico` files). Regenerate from the repo logo when updating branding:
+
+```bash
+npx png-to-ico public/logos/minnow-logo/minnow/png/minnow-256.png > build/icon.ico
+```
 
 **Output (gitignored):**
 
 - `release/win-unpacked/` — runnable `Minnow.exe` (dir target).
-- `release/Minnow Setup <version>.exe` — NSIS installer (`npm run package`).
+- `release/Minnow-Setup-<version>.exe` — NSIS installer (`npm run package`; artifact name avoids spaces in the default NSIS output path).
 
 **Verification:** Close any running `Minnow.exe` / `electron.exe` from a prior unpack before re-packaging (Windows file locks on `app.asar.unpacked` / PTY). `npm run build` and `npm run electron:build` must pass first (`tsc` + Vite).
 
