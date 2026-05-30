@@ -3,8 +3,9 @@
  */
 
 import { fetchModels } from '../api/models';
-import { listProviders } from '../providers/store';
 import type { ForkOverrides } from '../chat/fork-from-run';
+import { readGlobalSamplerForSend } from '../config/sampler-meta';
+import { listProviders } from '../providers/store';
 
 export interface ForkModelDialogResult {
   providerId: string;
@@ -14,13 +15,10 @@ export interface ForkModelDialogResult {
 }
 
 function readSamplerFromDom(): { temperature: number; maxTokens: number } {
-  const tempEl = document.getElementById('temperature') as HTMLInputElement | null;
-  const maxEl = document.getElementById('maxTokens') as HTMLInputElement | null;
-  const temperature = tempEl ? parseFloat(tempEl.value) : 0.7;
-  const maxTokens = maxEl ? parseInt(maxEl.value, 10) : 4096;
+  const global = readGlobalSamplerForSend();
   return {
-    temperature: Number.isFinite(temperature) ? temperature : 0.7,
-    maxTokens: Number.isFinite(maxTokens) ? maxTokens : 4096,
+    temperature: global.preset.temperature ?? 0.7,
+    maxTokens: global.maxTokens,
   };
 }
 

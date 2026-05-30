@@ -23,8 +23,6 @@ import {
 import { mountPromptDiffControls } from './prompt-diff-panel';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
-import type { SamplerPreset } from '../agents/sampler-types';
-import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { isProvidersApiAvailable, listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
 import { createSettingsToggleRow } from './settings-switch';
@@ -47,72 +45,6 @@ function buildSummarySchemaSelect(initial: string): HTMLSelectElement {
   }
   sel.value = initial;
   return sel;
-}
-
-interface SamplerFieldInputs {
-  root: HTMLElement;
-  readPatch: () => SamplerPreset | null;
-}
-
-/** Numeric inputs for per-agent sampler overrides (empty = inherit role default). */
-function buildSamplerFieldInputs(initial: SamplerPreset | null | undefined): SamplerFieldInputs {
-  const root = el('div', 'settings-model-row settings-sampler-row');
-  const fields: Array<{
-    key: keyof SamplerPreset;
-    label: string;
-    step: string;
-    min: string;
-    max: string;
-  }> = [
-    { key: 'temperature', label: 'Temperature', step: '0.05', min: '0', max: '2' },
-    { key: 'topP', label: 'Top P', step: '0.05', min: '0', max: '1' },
-    { key: 'topK', label: 'Top K', step: '1', min: '1', max: '200' },
-    { key: 'minP', label: 'Min P', step: '0.01', min: '0', max: '1' },
-    {
-      key: 'repetitionPenalty',
-      label: 'Repeat penalty',
-      step: '0.01',
-      min: '1',
-      max: '2',
-    },
-  ];
-
-  const inputs = new Map<keyof SamplerPreset, HTMLInputElement>();
-
-  for (const field of fields) {
-    root.appendChild(el('label', 'settings-field-label', field.label));
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.className = 'settings-select settings-kv-input';
-    input.step = field.step;
-    input.min = field.min;
-    input.max = field.max;
-    input.placeholder = 'Inherit';
-    const value = initial?.[field.key];
-    if (value !== undefined && Number.isFinite(value)) {
-      input.value = String(value);
-    }
-    inputs.set(field.key, input);
-    root.appendChild(input);
-  }
-
-  const readPatch = (): SamplerPreset | null => {
-    const patch: SamplerPreset = {};
-    for (const [key, input] of inputs) {
-      const raw = input.value.trim();
-      if (!raw) continue;
-      const n = Number(raw);
-      if (!Number.isFinite(n)) continue;
-      if (key === 'temperature') patch.temperature = n;
-      else if (key === 'topP') patch.topP = n;
-      else if (key === 'topK') patch.topK = n;
-      else if (key === 'minP') patch.minP = n;
-      else if (key === 'repetitionPenalty') patch.repetitionPenalty = n;
-    }
-    return Object.keys(patch).length > 0 ? patch : null;
-  };
-
-  return { root, readPatch };
 }
 
 function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelectElement {
@@ -312,7 +244,6 @@ interface WorkAgentEditorOptions {
   initialDisabled: boolean;
   initialMaxInputTokens: number | null;
   initialContextPolicy: ContextEnforcementPolicy;
-  initialSampler?: SamplerPreset | null;
   onModelSaved?: () => void;
 }
 
@@ -349,9 +280,6 @@ export function mountWorkAgentEditor(
     options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
 
   const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
-  const samplerFields = buildSamplerFieldInputs(
-    options.initialSampler ?? getUserWorkAgentOverride(options.agentId)?.sampler,
-  );
 
   const reloadBaseline = async () => {
     builtinBaseline = await resolveWorkAgentBuiltinBaselineText(
@@ -430,13 +358,6 @@ export function mountWorkAgentEditor(
 
   container.appendChild(modelBlock);
   container.appendChild(budgetBlock);
-  const samplerHint = el(
-    'p',
-    'settings-field-hint',
-    'Sampler: leave fields empty to inherit the role default; global drawer temperature applies when unset.',
-  );
-  container.appendChild(samplerHint);
-  container.appendChild(samplerFields.root);
   container.appendChild(disabledRow);
 
   const meta = el('p', 'settings-field-hint');
@@ -489,7 +410,6 @@ export function mountWorkAgentEditor(
         disabled: !disabledCb.checked,
         maxInputTokens,
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
-        sampler: samplerFields.readPatch(),
       });
       if (!agent) {
         setStatus('err', 'Could not save binding');
@@ -542,7 +462,6 @@ export function mountSubAgentTypeEditor(
     maxInputTokens: number | null;
     contextEnforcementPolicy: ContextEnforcementPolicy;
     summarySchema: string;
-    sampler?: SamplerPreset | null;
   },
   onSaveConfig: (
     patch: Partial<{
@@ -553,7 +472,6 @@ export function mountSubAgentTypeEditor(
       maxInputTokens: number | null;
       contextEnforcementPolicy: ContextEnforcementPolicy;
       summarySchema: string;
-      sampler: SamplerPreset | null;
     }>,
   ) => Promise<boolean>,
 ): void {
@@ -582,7 +500,6 @@ export function mountSubAgentTypeEditor(
 
   const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy);
   const summarySchemaSel = buildSummarySchemaSelect(initial.summarySchema);
-  const samplerFields = buildSamplerFieldInputs(initial.sampler);
 
   const modelBlock = el('div','settings-model-row');
   modelBlock.appendChild(el('label', 'settings-field-label', 'Provider'));
@@ -610,14 +527,6 @@ export function mountSubAgentTypeEditor(
   budgetRow.appendChild(summarySchemaSel);
 
   extra.appendChild(budgetRow);
-  extra.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Sampler applies to this sub-agent type only (not the main chat drawer).',
-    ),
-  );
-  extra.appendChild(samplerFields.root);
 
   const saveCfgBtn = el('button', 'settings-action-btn', 'Save type settings');
   saveCfgBtn.type = 'button';
@@ -634,7 +543,6 @@ export function mountSubAgentTypeEditor(
             : Math.max(1, Math.floor(Number(maxInputTokensInput.value) || 0)),
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
         summarySchema: summarySchemaSel.value,
-        sampler: samplerFields.readPatch(),
       });
       setStatus(ok ? 'ok' : 'err', ok ? `${label} settings saved` : 'Save failed');
     })();

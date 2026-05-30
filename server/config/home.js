@@ -103,6 +103,10 @@ const DEFAULT_META = {
     maxTokens: 24,
     temperature: 0.3,
   },
+  sampler: {
+    temperature: 0.7,
+    maxTokens: 32768,
+  },
   terminal: {
     open: false,
     heightPx: 240,

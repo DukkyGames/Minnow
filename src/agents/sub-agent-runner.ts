@@ -248,7 +248,8 @@ export const defaultSubAgentRunner: SubAgentRunner = {
     const resolvedSampler = resolveSamplerPreset({
       kind: 'sub-agent',
       agentKey: input.type,
-      global: { temperature: 0.4, maxTokens: 2048 },
+      global: { maxTokens: 2048, preset: {} },
+      subAgentMaxTokensFallback: 2048,
       subAgentType: typeConfig,
     });
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);

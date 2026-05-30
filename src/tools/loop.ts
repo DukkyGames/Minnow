@@ -196,6 +196,7 @@ import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
+import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
 import {
   cancelAllForParentTurn,
@@ -632,11 +633,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
-  const domTemp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
-  const domMaxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
   const modelId = replaySnapshot?.modelId ?? domModelId;
-  const temp = replaySnapshot?.temperature ?? domTemp;
-  const maxTok = replaySnapshot?.maxTokens ?? domMaxTok;
+  const globalSampler = readGlobalSamplerForSend(
+    replaySnapshot
+      ? {
+          temperature: replaySnapshot.temperature,
+          maxTokens: replaySnapshot.maxTokens,
+        }
+      : undefined,
+  );
   const legacySysPrompt = (
     document.getElementById('systemPrompt') as HTMLTextAreaElement
   ).value.trim();
@@ -698,7 +703,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const resolvedSampler = resolveSamplerPreset({
     kind: 'work-agent',
     agentKey: activeWorkAgent?.id ?? null,
-    global: { temperature: temp, maxTokens: maxTok },
+    global: globalSampler,
   });
   let sendModelId = modelId || chat.modelId;
   let sendProviderId = chat.providerId;
@@ -924,7 +929,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         maxToolTurns: maxToolTurnsCap,
         providerId: sendProviderId,
         modelId: sendModelId,
-        temperature: resolvedSampler.preset.temperature ?? temp,
+        temperature:
+          resolvedSampler.preset.temperature ??
+          globalSampler.preset.temperature ??
+          0.7,
         maxTokens: resolvedSampler.maxTokens,
         skillId,
         userContent,

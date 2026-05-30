@@ -850,6 +850,41 @@ export function mergeConfigMeta(existing, patch) {
     base.titles = existingTitles;
   }
 
+  if (p.sampler !== undefined) {
+    if (p.sampler === null) {
+      base.sampler = {
+        temperature: 0.7,
+        maxTokens: 32768,
+      };
+    } else if (typeof p.sampler === 'object') {
+      const normalized = normalizeSamplerPreset(p.sampler);
+      const existingSampler =
+        base.sampler && typeof base.sampler === 'object'
+          ? { .../** @type {Record<string, number>} */ (base.sampler) }
+          : { temperature: 0.7, maxTokens: 32768 };
+      if (normalized) {
+        if (normalized.temperature !== undefined) {
+          existingSampler.temperature = normalized.temperature;
+        }
+        if (normalized.topP !== undefined) existingSampler.topP = normalized.topP;
+        if (normalized.topK !== undefined) existingSampler.topK = normalized.topK;
+        if (normalized.minP !== undefined) existingSampler.minP = normalized.minP;
+        if (normalized.repetitionPenalty !== undefined) {
+          existingSampler.repetitionPenalty = normalized.repetitionPenalty;
+        }
+        if (normalized.maxTokens !== undefined) {
+          existingSampler.maxTokens = normalized.maxTokens;
+        }
+      }
+      const s = /** @type {Record<string, unknown>} */ (p.sampler);
+      if (typeof s.maxTokens === 'number' && Number.isFinite(s.maxTokens)) {
+        const mt = Math.min(131072, Math.max(1, Math.floor(s.maxTokens)));
+        existingSampler.maxTokens = mt;
+      }
+      base.sampler = existingSampler;
+    }
+  }
+
   if (p.terminal && typeof p.terminal === 'object') {
     const existingTerminal =
       base.terminal && typeof base.terminal === 'object'

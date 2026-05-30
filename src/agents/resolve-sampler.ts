@@ -11,6 +11,7 @@ import {
   mergeSamplerLayers,
   type SamplerPreset,
 } from './sampler-types';
+import type { GlobalSamplerForSend } from '../config/sampler-meta';
 import type { SubAgentTypeConfig } from './types';
 
 export type SamplerResolveKind = 'work-agent' | 'sub-agent';
@@ -19,7 +20,10 @@ export interface ResolveSamplerInput {
   /** Work agent id or sub-agent type id; null for passthrough main chat. */
   agentKey: string | null;
   kind: SamplerResolveKind;
-  global: { temperature: number; maxTokens: number };
+  /** Main chat: persisted global defaults (+ optional drawer overrides for temp/max). */
+  global: GlobalSamplerForSend;
+  /** Sub-agent runs: legacy max token hint when type omits maxTokens. */
+  subAgentMaxTokensFallback?: number;
   /** Sub-agent merged type row (includes shipped + user sampler). */
   subAgentType?: SubAgentTypeConfig | null;
 }
@@ -43,10 +47,7 @@ function builtinSubAgentSampler(typeId: string): SamplerPreset {
 }
 
 function globalLayer(input: ResolveSamplerInput): SamplerPreset {
-  const temp = Number(input.global.temperature);
-  const layer: SamplerPreset = {};
-  if (Number.isFinite(temp)) layer.temperature = temp;
-  return layer;
+  return { ...input.global.preset };
 }
 
 function userWorkAgentSampler(agentId: string | null): SamplerPreset {
@@ -81,10 +82,12 @@ export function resolveSamplerPreset(input: ResolveSamplerInput): ResolvedSample
     );
   }
 
-  let maxTokens = input.global.maxTokens;
-  if (input.kind === 'sub-agent') {
-    maxTokens = merged.maxTokens ?? DEFAULT_SUB_AGENT_MAX_TOKENS;
-  }
+  let maxTokens =
+    input.kind === 'sub-agent'
+      ? merged.maxTokens ??
+        input.subAgentMaxTokensFallback ??
+        DEFAULT_SUB_AGENT_MAX_TOKENS
+      : input.global.maxTokens;
   if (!Number.isFinite(maxTokens) || maxTokens < 1) {
     maxTokens =
       input.kind === 'sub-agent' ? DEFAULT_SUB_AGENT_MAX_TOKENS : 32768;

@@ -1,0 +1,12 @@
+- new file / folder does not work
+- no way to drag a file out of a folder
+- images open up as code instead of images (all file types)
+- Support Pdf, Excel, word, etc
+- Add an open folder in the prompt settings
+- make research mode build and present nice HTML pages for data
+- Always allow and full permissions not working correctly
+- dispay when the sub agents are currently generating something so we dont think they are stuck.
+- links in chat should be openable in the app (open in preview/browser)
+- add the ability to pass the current orchistrator board to another agent orchestrator agent 
+- build should use an internal todo system to keep track of its progress. Todos should just be .md files that can be stopped or resumed by any agent. can have a link to a plan or just a prompt. Agents should build out their todo list before working. 
+- context pruning
