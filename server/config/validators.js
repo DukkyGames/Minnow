@@ -1128,6 +1128,12 @@ export function normalizeSubAgentsConfig(body) {
   if (typeof base.defaultTimeoutMs !== 'number' || base.defaultTimeoutMs < 1000) {
     base.defaultTimeoutMs = 300000;
   }
+  if (typeof base.checkInNudgeMs === 'number' && Number.isFinite(base.checkInNudgeMs)) {
+    const rounded = Math.round(base.checkInNudgeMs);
+    base.checkInNudgeMs = rounded <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, rounded));
+  } else {
+    base.checkInNudgeMs = 120_000;
+  }
   let maxToolTurns = 12;
   if (typeof base.maxToolTurns === 'number' && Number.isFinite(base.maxToolTurns)) {
     maxToolTurns = Math.min(64, Math.max(1, Math.round(base.maxToolTurns)));

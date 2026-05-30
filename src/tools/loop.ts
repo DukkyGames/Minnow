@@ -16,7 +16,9 @@ import {
 import {
   isActiveChatStreaming,
   isBackgroundStreamBlockingSend,
+  isChatStreaming,
   isStreamDomVisible,
+  notifyChatStreamEnded,
 } from '../chat/streaming-state';
 import {
   clearPendingSteer,
@@ -377,6 +379,8 @@ export interface RunChatTurnOptions {
   forkOverrides?: ForkOverrides;
   /** When set, replaces composed system prompt (Expert Lab expert full body). */
   composedSystemPromptOverride?: string;
+  /** Push user text to history without showing a user bubble (sub-agent completion resume). */
+  suppressUserEcho?: boolean;
 }
 
 /**
@@ -615,6 +619,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     parentRunId,
     forkOverrides,
     composedSystemPromptOverride,
+    suppressUserEcho = false,
   } = options;
 
   if (!beginChatTurnSetup(chat.id)) {
@@ -625,16 +630,21 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunStatus: 'completed' | 'stopped' | 'failed' = 'completed';
 
   try {
-  const domRaw = (document.getElementById('modelSelect') as HTMLSelectElement).value;
-  const parsedSelect = decodeModelSelectKey(domRaw);
+  const useActiveChatDom = chat.id === getActiveChat().id;
+  const domRaw = useActiveChatDom
+    ? (document.getElementById('modelSelect') as HTMLSelectElement).value
+    : '';
+  const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  if (parsedSelect) {
+  if (parsedSelect && useActiveChatDom) {
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
   const domTemp = parseFloat((document.getElementById('temperature') as HTMLInputElement).value);
   const domMaxTok = parseInt((document.getElementById('maxTokens') as HTMLInputElement).value, 10);
-  const modelId = replaySnapshot?.modelId ?? domModelId;
+  const modelId =
+    replaySnapshot?.modelId ??
+    (useActiveChatDom ? domModelId : chat.modelId?.trim() || domModelId);
   const temp = replaySnapshot?.temperature ?? domTemp;
   const maxTok = replaySnapshot?.maxTokens ?? domMaxTok;
   const legacySysPrompt = (
@@ -671,27 +681,29 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     chat.history.push({ role: 'user', content: modelUserContent });
     recordChatMessage(chat);
     scheduleSaveSessions();
-    renderSidebar();
-    const userIdx = chat.history.length - 1;
-    const { wrap: userWrap } = appendBubble(
-      'user',
-      historyContent,
-      {
+    if (!suppressUserEcho) {
+      renderSidebar();
+      const userIdx = chat.history.length - 1;
+      const { wrap: userWrap } = appendBubble(
+        'user',
+        historyContent,
+        {
+          historyIndex: userIdx,
+          turnKind: 'user',
+          chatId: chat.id,
+        },
+        { liveAttachments: validAttachments },
+      );
+      const { attachMessageActions } = await import('../ui/message-actions');
+      attachMessageActions(userWrap, {
+        chatId: chat.id,
         historyIndex: userIdx,
         turnKind: 'user',
-        chatId: chat.id,
-      },
-      { liveAttachments: validAttachments },
-    );
-    const { attachMessageActions } = await import('../ui/message-actions');
-    attachMessageActions(userWrap, {
-      chatId: chat.id,
-      historyIndex: userIdx,
-      turnKind: 'user',
-    });
-    const input = document.getElementById('msgInput') as HTMLTextAreaElement;
-    input.value = '';
-    input.style.height = 'auto';
+      });
+      const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+      input.value = '';
+      input.style.height = 'auto';
+    }
   }
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
@@ -1068,7 +1080,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       try {
         turnResult = await runStreamTurn(body);
       } catch (streamErr) {
-        if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
+        const streamMessage =
+          streamErr instanceof Error ? streamErr.message : String(streamErr);
+        const transientFetch =
+          streamErr instanceof TypeError && streamMessage.includes('Failed to fetch');
+        if (transientFetch) {
+          await new Promise((r) => setTimeout(r, 400));
+          turnResult = await runStreamTurn(body);
+        } else if (usedConstrained && isResponseFormatRejectionError(streamErr)) {
           logConstrainedDebug('strip_retry', { providerId: provider.id });
           usedConstrained = false;
           turnResult = await runStreamTurn(stripResponseFormatFromBody(body));
@@ -1579,6 +1598,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     clearMainTurnActivity(chat.id);
     if (ownsGlobalStreaming) {
+      notifyChatStreamEnded(chat.id);
       setStreaming(false);
       setSidebarStreamPhase(null);
       syncChatItemDotsInDom();
@@ -1621,6 +1641,37 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   } finally {
     endChatTurnSetup(chat.id);
   }
+}
+
+export interface ResumeParentChatOptions {
+  suppressUserEcho?: boolean;
+}
+
+/**
+ * Programmatic parent turn (e.g. sub-agent completion push). Uses the chat's stored model when
+ * it is not the active sidebar chat.
+ */
+export async function resumeParentChatWithMessage(
+  chat: Chat,
+  message: string,
+  options: ResumeParentChatOptions = {},
+): Promise<void> {
+  if (isChatStreaming(chat.id)) return;
+  if (isChatTurnSetupPending(chat.id)) return;
+  if (!chat.modelId?.trim()) return;
+
+  await runChatTurn({
+    chat,
+    pushUser: true,
+    suppressUserEcho: options.suppressUserEcho ?? false,
+    rawText: message,
+    userText: message,
+    skillId: null,
+    displayText: message,
+    historyContent: message,
+    validAttachments: [],
+    ownsGlobalStreaming: chat.id === getActiveChat().id,
+  });
 }
 
 /** Send the composer text with tool calling (SSE loop; max rounds from Settings → Tools / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */

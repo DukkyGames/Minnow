@@ -15,6 +15,18 @@ describe('sub-agent config', () => {
     setRuntimeSubAgentOverrides(null);
   });
 
+  test('shipped defaults include checkInNudgeMs', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    assert.equal(merged.checkInNudgeMs, 120_000);
+  });
+
+  test('user checkInNudgeMs clamped and zero disables', () => {
+    const disabled = mergeSubAgentConfig(DEFAULTS as never, { checkInNudgeMs: 0 });
+    assert.equal(disabled.checkInNudgeMs, 0);
+    const high = mergeSubAgentConfig(DEFAULTS as never, { checkInNudgeMs: 9_999_999 });
+    assert.equal(high.checkInNudgeMs, 1_800_000);
+  });
+
   test('merge defaults with user overrides', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       globalMaxConcurrent: 1,

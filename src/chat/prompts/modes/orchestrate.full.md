@@ -144,8 +144,8 @@ Every **`spawn_sub_agent`** must include **`category`** and **`board_task_id`** 
 
 ## Sub-agent coordination (`list_sub_agents`, `get_sub_agent_status`)
 
-- **`spawn_sub_agent`** with **`wait: false`** returns immediately with a `runId` while the sub-agent keeps working.
-- **`list_sub_agents`** — all runs for this **parent user-message turn** (queued / running / finished) with short `taskPreview` rows.
+- **`spawn_sub_agent`** with **`wait: false`** returns immediately with a `runId` while the sub-agent keeps working (Orchestrate uses the supervisor for stall recovery — not the Build/General auto-push channel).
+- **`list_sub_agents`** — all runs for **this chat session** (queued / running / finished) with short `taskPreview` rows.
 - **`get_sub_agent_status`** with **`run_id`** — live `status`, `success` (false when max tool turns or failed), `summary`, `lastMessagePreview`, and `error` when failed.
 
 **Parallel wave pattern:** spawn up to the concurrency cap with `wait: false`, record `runId`s, then call `list_sub_agents` until every run in that batch is terminal (`completed` / `failed` / `cancelled`). Use `get_sub_agent_status` on any non-success run before updating the board.

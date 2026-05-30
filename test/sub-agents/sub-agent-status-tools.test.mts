@@ -65,9 +65,9 @@ describe('sub-agent status tools', () => {
     setSubAgentExecutorContext(null);
   });
 
-  test('list_sub_agents requires parent turn context', async () => {
+  test('list_sub_agents requires parent chat context', async () => {
     const out = await executeSubAgentTool('list_sub_agents', {});
-    assert.match(out, /Error: list_sub_agents requires an active parent chat turn/);
+    assert.match(out, /Error: list_sub_agents requires an active parent chat/);
   });
 
   test('list_sub_agents returns runs for current parent turn', async () => {
@@ -121,10 +121,11 @@ describe('sub-agent status tools', () => {
     assert.ok(body.lastMessagePreview.length > 0);
   });
 
-  test('get_sub_agent_status rejects run from another parent turn', async () => {
+  test('get_sub_agent_status allows run from an earlier parent turn in the same chat', async () => {
     setSubAgentExecutorContext({
       parentTurnId: 'turn-a',
-      modeId: 'orchestrate',
+      modeId: 'build',
+      parentChatId: 'chat-session-1',
     });
     const first = await executeSubAgentTool('spawn_sub_agent', {
       type: 'explore',
@@ -135,12 +136,39 @@ describe('sub-agent status tools', () => {
 
     setSubAgentExecutorContext({
       parentTurnId: 'turn-b',
-      modeId: 'orchestrate',
+      modeId: 'build',
+      parentChatId: 'chat-session-1',
+    });
+    const statusOut = await executeSubAgentTool('get_sub_agent_status', {
+      run_id: FIXED_RUN_ID,
+    });
+    const body = JSON.parse(statusOut) as { runId: string; status: string };
+    assert.equal(body.runId, FIXED_RUN_ID);
+    assert.equal(body.status, 'completed');
+  });
+
+  test('get_sub_agent_status rejects run from another chat', async () => {
+    setSubAgentExecutorContext({
+      parentTurnId: 'turn-a',
+      modeId: 'build',
+      parentChatId: 'chat-a',
+    });
+    const first = await executeSubAgentTool('spawn_sub_agent', {
+      type: 'explore',
+      task: 'task a',
+      wait: true,
+    });
+    assert.ok(first.includes(FIXED_RUN_ID));
+
+    setSubAgentExecutorContext({
+      parentTurnId: 'turn-b',
+      modeId: 'build',
+      parentChatId: 'chat-b',
     });
     const denied = await executeSubAgentTool('get_sub_agent_status', {
       run_id: FIXED_RUN_ID,
     });
-    assert.match(denied, /not visible from this parent turn/);
+    assert.match(denied, /not visible from this chat/);
   });
 
   test('list_sub_agents shows queued run while another blocks the slot', async () => {
@@ -153,6 +181,7 @@ describe('sub-agent status tools', () => {
     setSubAgentExecutorContext({
       parentTurnId: 'turn-parallel',
       modeId: 'orchestrate',
+      parentChatId: 'chat-parallel',
     });
 
     const r1 = await executeSubAgentTool('spawn_sub_agent', {

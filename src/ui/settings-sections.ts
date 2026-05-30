@@ -855,7 +855,10 @@ async function renderSubAgentsSection(): Promise<void> {
 
   const persistGlobal = async (
     patch: Partial<
-      Pick<typeof config, 'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs'>
+      Pick<
+        typeof config,
+        'enabled' | 'globalMaxConcurrent' | 'defaultTimeoutMs' | 'checkInNudgeMs'
+      >
     >,
   ): Promise<void> => {
     const fresh = await loadSubAgentConfig();
@@ -903,7 +906,30 @@ async function renderSubAgentsSection(): Promise<void> {
   timeoutWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
   timeoutDd.appendChild(timeoutWrap);
 
+  const nudgeDd = addTerm('Check-in nudge');
+  const nudgeWrap = el('span', 'settings-kv-input-wrap');
+  const nudgeInput = document.createElement('input');
+  nudgeInput.type = 'number';
+  nudgeInput.className = 'settings-select settings-kv-input';
+  nudgeInput.min = '0';
+  nudgeInput.step = '1000';
+  nudgeInput.value = String(config.checkInNudgeMs ?? 120_000);
+  nudgeInput.setAttribute(
+    'aria-label',
+    'Sub-agent check-in nudge interval in milliseconds (0 disables)',
+  );
+  nudgeWrap.appendChild(nudgeInput);
+  nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+  nudgeDd.appendChild(nudgeWrap);
+
   mount.appendChild(summary);
+  mount.appendChild(
+    el(
+      'p',
+      'settings-field-hint',
+      'Check-in nudge: while a sub-agent is still running, the parent gets one gentle reminder after this interval (Build/General/Research; not Orchestrate). Set 0 to disable.',
+    ),
+  );
 
   mount.appendChild(
     el(
@@ -966,6 +992,13 @@ async function renderSubAgentsSection(): Promise<void> {
     const value = Math.max(1000, Math.floor(Number(timeoutInput.value) || 1000));
     timeoutInput.value = String(value);
     void persistGlobal({ defaultTimeoutMs: value });
+  });
+
+  nudgeInput.addEventListener('change', () => {
+    const raw = Math.floor(Number(nudgeInput.value) || 0);
+    const value = raw <= 0 ? 0 : Math.min(1_800_000, Math.max(10_000, raw));
+    nudgeInput.value = String(value);
+    void persistGlobal({ checkInNudgeMs: value });
   });
 
 }

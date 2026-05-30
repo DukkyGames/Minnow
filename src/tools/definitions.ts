@@ -726,7 +726,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'spawn_sub_agent',
     label: 'Spawn sub-agent',
     description:
-      'Starts an isolated sub-agent with its own model, tools, and context; returns a JSON summary.',
+      'Starts an isolated sub-agent with its own model, tools, and context. By default returns immediately; the summary is delivered automatically when the run finishes.',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
@@ -741,7 +741,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         task: { type: 'string', description: 'Task description for the sub-agent' },
         wait: {
           type: 'boolean',
-          description: 'If true (default), block until the sub-agent finishes',
+          description:
+            'If true, block until the sub-agent finishes and return the aggregate JSON in this tool result. Default false — you do not need to poll; completion is pushed as a new turn.',
         },
         category: {
           type: 'string',
@@ -962,12 +963,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'list_sub_agents',
     label: 'List sub-agents',
     description:
-      'Lists sub-agent runs spawned during the current parent user message turn (queued, running, or finished).',
+      'Lists sub-agent runs for this chat session (queued, running, or finished), including prior parent turns.',
     category: 'agents',
     serverRequired: false,
     definition: toolSchema(
       'list_sub_agents',
-      'Return run ids, types, status, and short task previews for this turn.',
+      'Return run ids, types, status, and short task previews for this chat session.',
       {},
       [],
     ),
@@ -981,7 +982,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: false,
     definition: toolSchema(
       'get_sub_agent_status',
-      'Inspect one sub-agent run created in this parent turn.',
+      'Inspect one sub-agent run in this chat session (any parent turn).',
       {
         run_id: { type: 'string', description: 'Run id from spawn_sub_agent or list_sub_agents' },
       },

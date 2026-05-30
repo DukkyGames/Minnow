@@ -3,6 +3,7 @@
   "enabled": true,
   "globalMaxConcurrent": 3,
   "defaultTimeoutMs": 300000,
+  "checkInNudgeMs": 120000,
   "maxToolTurns": 12,
   "defaultMaxInputTokens": null,
   "defaultContextEnforcementPolicy": "slide",
