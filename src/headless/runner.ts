@@ -239,7 +239,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     const resolvedSampler = resolveSamplerPreset({
       kind: 'work-agent',
       agentKey: activeWorkAgent?.id ?? null,
-      global: { temperature: 0.7, maxTokens: 4096 },
+      global: { maxTokens: 4096, preset: { temperature: 0.7 } },
     });
 
     let enabledTools = getHeadlessToolDefinitions(modeId);

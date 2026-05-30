@@ -13,6 +13,7 @@ const SETTINGS_SECTION_IDS = [
   'providers',
   'usage',
   'model-routing',
+  'sampler',
   'prompting',
   'rules',
   'memory',
@@ -33,6 +34,7 @@ const SETTINGS_SECTION_IDS = [
 const DYNAMIC_SECTION_BODY_IDS = [
   'settingsGeneralBody',
   'settingsModelRoutingBody',
+  'settingsSamplerBody',
   'settingsModesBody',
   'settingsExpertsBody',
   'settingsWorkAgentsBody',

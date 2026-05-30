@@ -30,7 +30,7 @@ describe('sampler preset merge', () => {
     const resolved = resolveSamplerPreset({
       kind: 'work-agent',
       agentKey: 'builder',
-      global: { temperature: 0.7, maxTokens: 8192 },
+      global: { maxTokens: 8192, preset: { temperature: 0.7 } },
     });
     assert.equal(resolved.preset.temperature, 0.1);
     assert.equal(resolved.preset.topP, 0.95);
@@ -41,7 +41,7 @@ describe('sampler preset merge', () => {
     const resolved = resolveSamplerPreset({
       kind: 'work-agent',
       agentKey: 'default',
-      global: { temperature: 0.7, maxTokens: 4096 },
+      global: { maxTokens: 4096, preset: { temperature: 0.7 } },
     });
     assert.equal(resolved.preset.temperature, 0.7);
     assert.equal(resolved.preset.topP, undefined);
@@ -53,7 +53,8 @@ describe('sampler preset merge', () => {
     const resolved = resolveSamplerPreset({
       kind: 'sub-agent',
       agentKey: 'shell',
-      global: { temperature: 0.99, maxTokens: 9999 },
+      global: { maxTokens: 9999, preset: { temperature: 0.99 } },
+      subAgentMaxTokensFallback: 2048,
       subAgentType: shell,
     });
     assert.equal(resolved.preset.temperature, 0.15);

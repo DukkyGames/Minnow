@@ -3,7 +3,6 @@
  */
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
-import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import {
   clampSubAgentMaxToolTurns,
   getSubAgentsMaxToolTurns,
@@ -110,6 +109,7 @@ import {
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
 import { renderModelRoutingSection } from './settings-model-routing';
+import { renderSamplerSettingsSection } from './settings-sampler';
 import {
   loadTerminalMeta,
   saveTerminalMeta,
@@ -793,6 +793,14 @@ async function renderModelRoutingSettingsSection(): Promise<void> {
   if (isAsyncSectionRenderStale('model-routing', generation)) return;
 }
 
+async function renderSamplerSettingsSectionWrapper(): Promise<void> {
+  const mount = clearMount('settingsSamplerBody');
+  if (!mount) return;
+  const generation = beginAsyncSectionRender('sampler');
+  await renderSamplerSettingsSection(mount);
+  if (isAsyncSectionRenderStale('sampler', generation)) return;
+}
+
 async function renderWorkAgentsSection(): Promise<void> {
   const mount = clearMount('settingsWorkAgentsBody');
   if (!mount) return;
@@ -813,7 +821,7 @@ async function renderWorkAgentsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json. See Settings → Model routing for all role bindings in one place.',
+      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json. See Settings → Model routing and Sampler for consolidated overrides.',
     ),
   );
 
@@ -836,7 +844,6 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialDisabled: agent.disabled === true,
         initialMaxInputTokens: agent.maxInputTokens ?? null,
         initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
-        initialSampler: getUserWorkAgentOverride(id)?.sampler ?? null,
         onModelSaved: () => {
           void renderWorkAgentsSection();
         },
@@ -909,7 +916,7 @@ async function renderSubAgentsSection(): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Expand a sub-agent type to edit its system prompt and model binding. See Settings → Model routing for all role bindings in one place.',
+      'Expand a sub-agent type to edit its system prompt and model binding. See Settings → Model routing and Sampler for consolidated overrides.',
     ),
   );
 
@@ -945,7 +952,6 @@ async function renderSubAgentsSection(): Promise<void> {
           maxInputTokens: type.maxInputTokens ?? null,
           contextEnforcementPolicy: type.contextEnforcementPolicy ?? 'slide',
           summarySchema: type.summarySchema ?? 'minnow.sub-agent.v1',
-          sampler: type.sampler ?? null,
         },
         (patch) => saveTypePatch(id, patch),
       );
@@ -2001,6 +2007,9 @@ export async function refreshSettingsSection(
       break;
     case 'model-routing':
       await renderModelRoutingSettingsSection();
+      break;
+    case 'sampler':
+      await renderSamplerSettingsSectionWrapper();
       break;
     case 'prompting':
       await renderPromptingSection();
