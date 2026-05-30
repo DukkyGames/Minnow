@@ -1016,20 +1016,15 @@ export function mergeConfigMeta(existing, patch) {
         ? { .../** @type {Record<string, unknown>} */ (base.browser) }
         : {
             enabled: true,
-            defaultUrl: 'http://127.0.0.1:9222',
             allowNavigate: true,
             allowedOriginPatterns: [
               'http://localhost:*',
               'http://127.0.0.1:*',
               'https://localhost:*',
             ],
-            screenshotDir: 'screenshots',
           };
     const b = /** @type {Record<string, unknown>} */ (p.browser);
     if (typeof b.enabled === 'boolean') existingBrowser.enabled = b.enabled;
-    if (typeof b.defaultUrl === 'string' && b.defaultUrl.trim()) {
-      existingBrowser.defaultUrl = b.defaultUrl.trim();
-    }
     if (typeof b.allowNavigate === 'boolean') {
       existingBrowser.allowNavigate = b.allowNavigate;
     }
@@ -1037,9 +1032,6 @@ export function mergeConfigMeta(existing, patch) {
       existingBrowser.allowedOriginPatterns = b.allowedOriginPatterns.filter(
         (row) => typeof row === 'string' && row.trim(),
       );
-    }
-    if (typeof b.screenshotDir === 'string' && b.screenshotDir.trim()) {
-      existingBrowser.screenshotDir = b.screenshotDir.trim();
     }
     base.browser = existingBrowser;
   }

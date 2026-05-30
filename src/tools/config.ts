@@ -498,6 +498,9 @@ export function getEligibleToolIds(ids: string[]): string[] {
   return ids.filter((id) => {
     const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
     if (!tool) return false;
+    if (tool.previewRequired) {
+      return typeof window !== 'undefined' && Boolean(window.minnow?.preview);
+    }
     return !tool.serverRequired || localServerAvailable;
   });
 }
@@ -537,6 +540,11 @@ export function setToolsEnabled(
   for (const id of ids) {
     const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
     if (!tool) continue;
+
+    if (enabled && tool.previewRequired && typeof window !== 'undefined' && !window.minnow?.preview) {
+      skipped += 1;
+      continue;
+    }
 
     if (enabled && tool.serverRequired && !localServerAvailable) {
       skipped += 1;
@@ -633,6 +641,12 @@ export function setToolPermission(
 ): void {
   const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
   if (!tool) return;
+
+  if (mode !== 'off' && tool.previewRequired && typeof window !== 'undefined' && !window.minnow?.preview) {
+    setStatus('err', 'Browser tools require the Minnow desktop shell (Electron).');
+    refreshAllToolListUis(root);
+    return;
+  }
 
   if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
     setStatus('err', 'Start with npm start to use file/git tools.');

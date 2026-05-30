@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T23:53:31.759Z",
+  "generatedAt": "2026-05-30T19:57:40.347Z",
   "skills": [
     {
       "id": "ask-user",
@@ -10,7 +10,7 @@
     {
       "id": "browser-automation",
       "label": "Browser Automation",
-      "description": "Drive Chrome via CDP for login flows, SPAs, and screenshots. Use when fetch tools are insufficient or the user mentions browser automation.",
+      "description": "Drive the built-in Minnow preview browser for login flows, SPAs, and screenshots. Use when fetch tools are insufficient or the user mentions browser automation.",
       "source": "builtin"
     },
     {

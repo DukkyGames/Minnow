@@ -1039,23 +1039,23 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 
 ## Built-in tools (56)
 
-Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — **21** `serverRequired: false` (browser-routed: web, utility, `ask_question`, `request_browser_origin_access`, mode handoff, sub-agent/board orchestration), **35** `serverRequired: true` (Node, including **7** CDP `browser_*`, memory, LSP, Impeccable). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, or `executeServerTool`.
+Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — browser-routed tools (web, utility, `ask_question`, mode handoff, sub-agent/board orchestration), server-required tools (Node: memory, LSP, Impeccable, file/git/code), and **7** `previewRequired` `browser_*` tools (Electron only). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, `executeBrowserPreviewTool`, or `executeServerTool`.
 
-### Browser CDP (7 server + 1 client, Step 12)
+### Built-in preview browser (7 renderer + 1 client, Step 12)
 
-Requires Chrome with `--remote-debugging-port` (default `9222`). Optional env: `MINNOW_BROWSER_URL`. Config: `~/.minnow/config.json` → `browser` (`enabled`, `defaultUrl`, `allowNavigate`, `allowedOriginPatterns`). **Settings → Tools → Browser navigation allowlist** edits patterns via [`src/ui/settings-browser.ts`](../src/ui/settings-browser.ts) and `PUT /api/config/meta`. Agents are taught via [`src/chat/prompts/tool-usage/browser-allowlist.md`](../src/chat/prompts/tool-usage/browser-allowlist.md) (appended when CDP browser tools are enabled): **`ask_question`** with options `once` / `persist` / `deny`, then **`request_browser_origin_access`** with `decision`, then **`browser_navigate`**. Blocked navigations also trigger the same **`ask_question`** cards ([`src/tools/browser-navigation-gate.ts`](../src/tools/browser-navigation-gate.ts)). Handlers: [`server/cdp/`](../server/cdp/). **In-app browser panel (approved POLISH-011, not implemented):** CDP screencast mirror architecture — [`documentation/plans/Bug Fixes/POLISH-011-in-app-browser-view.md`](plans/Bug%20Fixes/POLISH-011-in-app-browser-view.md); Linear [MIN-69](https://linear.app/minnowai/issue/MIN-69/polish-011-in-app-browser-view) (CDP screencast mirror UI; distinct from Reef iframes and workspace folder picker).
+Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel). Plain `npm start` in an external browser tab hides `browser_*` tools; if invoked without the shell they return a clear desktop-shell error. Config: `~/.minnow/config.json` → `browser` (`enabled`, `allowNavigate`, `allowedOriginPatterns`). **Settings → Tools → Built-in browser automation** edits patterns via [`src/ui/settings-browser.ts`](../src/ui/settings-browser.ts) and `PUT /api/config/meta`. Agents are taught via [`src/chat/prompts/tool-usage/browser-allowlist.md`](../src/chat/prompts/tool-usage/browser-allowlist.md) (appended when preview browser tools are enabled): **`ask_question`** with options `once` / `persist` / `deny`, then **`request_browser_origin_access`** with `decision`, then **`browser_navigate`**. Blocked navigations also trigger the same **`ask_question`** cards ([`src/tools/browser-navigation-gate.ts`](../src/tools/browser-navigation-gate.ts)). Automation IPC: [`electron/preview-host.ts`](../electron/preview-host.ts) + [`src/tools/browser-preview-tools.ts`](../src/tools/browser-preview-tools.ts) (`window.minnow.preview.execJs`, `capturePage`, `navigateAndWait`, …). Allowlist + screenshot storage remain server-side under [`server/cdp/allowlist.js`](../server/cdp/allowlist.js) and [`server/cdp/paths.js`](../server/cdp/paths.js).
 
 | id | Purpose |
 |----|---------|
-| `browser_list` | List page targets |
-| `browser_navigate` | Navigate (origin allowlist; in-chat approval when blocked) |
+| `browser_list` | Active preview URL/title |
+| `browser_navigate` | Navigate shared preview (auto-opens panel; origin allowlist) |
 | `request_browser_origin_access` | Ask user to allow an origin before/at navigate (client) |
-| `browser_snapshot` | A11y tree + uid cache |
+| `browser_snapshot` | DOM tree + `data-mn-uid` markers |
 | `browser_click` / `browser_fill` | Act on snapshot uid |
-| `browser_eval` | `Runtime.evaluate` in page |
+| `browser_eval` | JS in preview page context |
 | `browser_screenshot` | PNG + `attachments` for chat UI |
 
-**Routes:** `GET /api/browser/screenshot/:id` (PNG); `GET /api/browser/allowlist/check?url=`; `POST /api/browser/allowlist/approve` `{ url, mode: "once" \| "persist" }`.
+**Routes:** `POST /api/browser/screenshot` `{ dataBase64 }`; `GET /api/browser/screenshot/:id` (PNG); `GET /api/browser/allowlist/check?url=`; `POST /api/browser/allowlist/approve` `{ url, mode: "once" \| "persist" }`; `POST /api/browser/allowlist/consume` `{ url }` (one-time grants).
 
 ### Web (4 browser)
 

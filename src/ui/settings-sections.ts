@@ -1235,7 +1235,7 @@ async function renderToolsSection(): Promise<void> {
   const browserGroup = appendSettingsGroup(
     mount,
     'Browser automation',
-    'Allowlisted origins for CDP browser tools when the browser server is enabled.',
+    'Allowlisted origins for built-in preview browser tools when automation is enabled.',
   );
   const browserMount = el('div', 'settings-tool-browser-mount');
   browserGroup.appendChild(browserMount);

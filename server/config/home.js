@@ -110,14 +110,12 @@ const DEFAULT_META = {
   },
   browser: {
     enabled: true,
-    defaultUrl: 'http://127.0.0.1:9222',
     allowNavigate: true,
     allowedOriginPatterns: [
       'http://localhost:*',
       'http://127.0.0.1:*',
       'https://localhost:*',
     ],
-    screenshotDir: 'screenshots',
   },
   uiDesigner: {
     providerId: '',

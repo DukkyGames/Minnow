@@ -5,15 +5,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
-import { loadBrowserConfig } from './browser-config.js';
-
 /**
  * Directory for saved PNG screenshots.
  * @returns {Promise<string>}
  */
 export async function getScreenshotsDir() {
-  const cfg = await loadBrowserConfig();
-  const dir = path.join(getMinnowHome(), cfg.screenshotDir || 'screenshots');
+  const dir = path.join(getMinnowHome(), 'screenshots');
   await fs.mkdir(dir, { recursive: true });
   return dir;
 }

@@ -60,6 +60,7 @@ export function getHeadlessToolDefinitions(modeId: ModeId): OpenAIFunctionDefini
     if (!isToolEnabled(tool.id)) return false;
     const fn = tool.definition.function.name;
     if (SERVER_PROXY_BROWSER_TOOLS.has(fn)) return true;
+    if (tool.previewRequired) return false;
     if (!tool.serverRequired && isBrowserOnlyTool(fn)) {
       return false;
     }
@@ -139,7 +140,7 @@ export async function executeHeadlessTool(
     }
   }
 
-  if (isBrowserOnlyTool(name) && (!tool || !tool.serverRequired)) {
+  if (isBrowserOnlyTool(name) && (!tool || tool.previewRequired || !tool.serverRequired)) {
     return {
       content: `Error: tool "${name}" requires the Minnow browser UI and cannot run in headless mode.`,
     };

@@ -33,6 +33,10 @@ import {
   executeRequestBrowserOriginAccess,
 } from './browser-navigation-gate';
 import {
+  executeBrowserPreviewTool,
+  isElectronPreviewAvailable,
+} from './browser-preview-tools';
+import {
   executeCreateChatWithMode,
   executeProposeModeSwitch,
   executeSetChatMode,
@@ -403,6 +407,24 @@ async function executeToolBodyAfterGates(
   context: ExecuteToolContext,
   tool: ToolDefinition,
 ): Promise<ToolExecutionResult> {
+  if (tool.previewRequired) {
+    if (!isElectronPreviewAvailable()) {
+      return {
+        content:
+          'Error: Browser automation runs in the Minnow desktop shell. Run npm run electron:dev or the packaged app.',
+      };
+    }
+    if (name === 'browser_navigate') {
+      return executeBrowserNavigateWithGate(
+        enrichedArgs,
+        (navArgs) => executeBrowserPreviewTool('browser_navigate', navArgs),
+        context,
+        context.modeId,
+      );
+    }
+    return executeBrowserPreviewTool(name, enrichedArgs);
+  }
+
   if (tool.serverRequired) {
     if (!isLocalServerAvailable()) {
       return {
@@ -419,14 +441,6 @@ async function executeToolBodyAfterGates(
         content: await executeStreamingCodeTool(name, enrichedArgs, context),
       };
     }
-    if (name === 'browser_navigate') {
-      return executeBrowserNavigateWithGate(
-        enrichedArgs,
-        executeServerTool,
-        context,
-        context.modeId,
-      );
-    }
     return executeServerTool(name, enrichedArgs, context.modeId);
   }
 
@@ -437,6 +451,9 @@ async function executeToolBodyAfterGates(
 export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
     if (!isToolEnabled(tool.id)) {
+      return false;
+    }
+    if (tool.previewRequired && !isElectronPreviewAvailable()) {
       return false;
     }
     if (tool.serverRequired && !isLocalServerAvailable()) {

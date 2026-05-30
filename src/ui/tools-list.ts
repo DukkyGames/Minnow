@@ -29,7 +29,7 @@ const TOOL_CATEGORY_ORDER: ToolCategory[] = [
 const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   web: 'Web',
   utility: 'Utility',
-  browser: 'Browser (CDP)',
+  browser: 'Built-in browser',
   agents: 'Sub-agents',
   files: 'Files',
   git: 'Git',
@@ -153,7 +153,7 @@ export function fillToolsSection(
       const hint = document.createElement('p');
       hint.className = 'tool-group-hint';
       hint.textContent =
-        'Requires Chrome with --remote-debugging-port and npm start.';
+        'Requires the Minnow desktop shell (Electron) and npm start for allowlist config.';
       group.appendChild(hint);
     }
 

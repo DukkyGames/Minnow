@@ -26,6 +26,20 @@ export interface PreviewLoadSourcePayload {
   cacheBust?: number;
 }
 
+export interface PreviewNavigateAwaitResult {
+  ok: boolean;
+  url: string;
+  title: string;
+  errorCode?: number;
+  errorDescription?: string;
+}
+
+export interface PreviewGuestInfo {
+  url: string;
+  title: string;
+  loading: boolean;
+}
+
 const preview = {
   show: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_SHOW),
   hide: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_HIDE),
@@ -39,6 +53,14 @@ const preview = {
   goForward: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_GO_FORWARD),
   setBounds: (bounds: PreviewBounds): Promise<void> =>
     ipcRenderer.invoke(channels.PREVIEW_SET_BOUNDS, bounds),
+  execJs: (code: string): Promise<unknown> =>
+    ipcRenderer.invoke(channels.PREVIEW_EXEC_JS, code),
+  capturePage: (): Promise<string> =>
+    ipcRenderer.invoke(channels.PREVIEW_CAPTURE_PAGE),
+  getInfo: (): Promise<PreviewGuestInfo> =>
+    ipcRenderer.invoke(channels.PREVIEW_GET_INFO),
+  navigateAndWait: (url: string): Promise<PreviewNavigateAwaitResult> =>
+    ipcRenderer.invoke(channels.PREVIEW_NAVIGATE_AWAIT, url),
   onNavigation: (callback: (url: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, url: string) => {
       callback(url);

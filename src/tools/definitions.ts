@@ -19,19 +19,6 @@ export type ToolCategory =
   | 'browser'
   | 'lsp';
 
-/** Shared CDP tool parameters (browser_url, target_id). */
-const BROWSER_CDP_PROPERTIES: Record<string, unknown> = {
-  browser_url: {
-    type: 'string',
-    description:
-      'CDP HTTP endpoint (e.g. http://127.0.0.1:9222). Omit to use MINNOW_BROWSER_URL or ~/.minnow config.',
-  },
-  target_id: {
-    type: 'string',
-    description: 'Tab target id from browser_list; omit for the first page target.',
-  },
-};
-
 /** OpenAI-compatible function tool schema sent to chat completions. */
 export interface OpenAIFunctionDefinition {
   type: 'function';
@@ -53,6 +40,8 @@ export interface ToolDefinition {
   description: string;
   category: ToolCategory;
   serverRequired: boolean;
+  /** Requires Electron desktop shell with embedded preview WebContentsView. */
+  previewRequired?: boolean;
   requiresKey?: boolean;
   keyId?: string;
   definition: OpenAIFunctionDefinition;
@@ -988,30 +977,31 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['run_id'],
     ),
   },
-  // --- Browser CDP (server; Chrome --remote-debugging-port) ---
+  // --- Built-in preview browser (Electron WebContentsView) ---
   {
     id: 'browser_list',
     label: 'Browser list tabs',
-    description: 'Lists open page targets via Chrome DevTools Protocol.',
+    description: 'Shows the active built-in preview panel URL and title.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_list',
-      'List page targets from a CDP browser endpoint.',
-      { ...BROWSER_CDP_PROPERTIES },
+      'List the shared built-in preview browser (single visible panel).',
+      {},
     ),
   },
   {
     id: 'browser_navigate',
     label: 'Browser navigate',
-    description: 'Navigate the selected tab (allowlist enforced).',
+    description: 'Navigate the built-in preview panel (allowlist enforced).',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_navigate',
-      'Navigate a CDP page target to a URL.',
+      'Navigate the built-in preview browser to a URL (opens the panel).',
       {
-        ...BROWSER_CDP_PROPERTIES,
         url: { type: 'string', description: 'URL to navigate to' },
       },
       ['url'],
@@ -1046,13 +1036,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'browser_snapshot',
     label: 'Browser snapshot',
-    description: 'Accessibility tree snapshot with [uid] markers for click/fill.',
+    description: 'DOM snapshot with [uid] markers for click/fill.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_snapshot',
-      'Capture an accessibility snapshot of the page (required before click/fill).',
-      { ...BROWSER_CDP_PROPERTIES },
+      'Capture a DOM snapshot of the preview page (required before click/fill).',
+      {},
     ),
   },
   {
@@ -1060,12 +1051,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Browser click',
     description: 'Click an element by snapshot uid.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_click',
       'Click an element identified by uid from browser_snapshot.',
       {
-        ...BROWSER_CDP_PROPERTIES,
         uid: { type: 'number', description: 'Element uid from snapshot' },
       },
       ['uid'],
@@ -1076,12 +1067,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Browser fill',
     description: 'Fill an input by snapshot uid.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_fill',
       'Fill an input identified by uid from browser_snapshot.',
       {
-        ...BROWSER_CDP_PROPERTIES,
         uid: { type: 'number', description: 'Element uid from snapshot' },
         value: { type: 'string', description: 'Text to enter' },
       },
@@ -1093,12 +1084,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     label: 'Browser eval',
     description: 'Evaluate JavaScript in the page context.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_eval',
-      'Run JavaScript in the connected page (full page context).',
+      'Run JavaScript in the built-in preview page (full page context).',
       {
-        ...BROWSER_CDP_PROPERTIES,
         expression: { type: 'string', description: 'JavaScript expression to evaluate' },
       },
       ['expression'],
@@ -1107,13 +1098,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'browser_screenshot',
     label: 'Browser screenshot',
-    description: 'Capture a PNG screenshot of the page.',
+    description: 'Capture a PNG screenshot of the preview panel.',
     category: 'browser',
-    serverRequired: true,
+    serverRequired: false,
+    previewRequired: true,
     definition: toolSchema(
       'browser_screenshot',
-      'Capture a PNG screenshot via CDP.',
-      { ...BROWSER_CDP_PROPERTIES },
+      'Capture a PNG screenshot of the built-in preview browser.',
+      {},
     ),
   },
   {

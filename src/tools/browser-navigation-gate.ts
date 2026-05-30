@@ -39,7 +39,7 @@ export async function maybeBlockBrowserNavigation(
   const meta = await loadBrowserMeta();
   if (!meta.enabled) {
     return {
-      content: 'Error: browser automation is disabled in Settings → Tools → Browser (CDP).',
+      content: 'Error: browser automation is disabled in Settings → Tools → Browser.',
     };
   }
   if (!meta.allowNavigate) {
@@ -63,7 +63,7 @@ export async function maybeBlockBrowserNavigation(
       questions: [
         {
           id: ALLOWLIST_QUESTION_ID,
-          prompt: `Allow CDP browser navigation to ${check.origin}?`,
+          prompt: `Allow browser navigation to ${check.origin}?`,
           options: [
             {
               id: DECISION_ONCE,
@@ -160,13 +160,9 @@ export async function applyBrowserOriginDecision(
  */
 export async function executeBrowserNavigateWithGate(
   args: Record<string, unknown>,
-  executeServerTool: (
-    name: string,
-    args: Record<string, unknown>,
-    modeId?: string,
-  ) => Promise<ToolExecutionResult>,
+  executeNavigate: (args: Record<string, unknown>) => Promise<ToolExecutionResult>,
   context: ToolApprovalContext = {},
-  modeId?: string,
+  _modeId?: string,
 ): Promise<ToolExecutionResult> {
   const url = args.url;
   if (typeof url !== 'string' || !url.trim()) {
@@ -176,7 +172,7 @@ export async function executeBrowserNavigateWithGate(
   const blocked = await maybeBlockBrowserNavigation(url.trim(), context);
   if (blocked) return blocked;
 
-  return executeServerTool('browser_navigate', args, modeId);
+  return executeNavigate(args);
 }
 
 /**

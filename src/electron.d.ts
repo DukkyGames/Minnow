@@ -22,6 +22,20 @@ export interface MinnowPreviewLoadSourcePayload {
   cacheBust?: number;
 }
 
+export interface MinnowPreviewNavigateAwaitResult {
+  ok: boolean;
+  url: string;
+  title: string;
+  errorCode?: number;
+  errorDescription?: string;
+}
+
+export interface MinnowPreviewGuestInfo {
+  url: string;
+  title: string;
+  loading: boolean;
+}
+
 export interface MinnowPreviewApi {
   show(): Promise<void>;
   hide(): Promise<void>;
@@ -32,6 +46,10 @@ export interface MinnowPreviewApi {
   goBack(): Promise<void>;
   goForward(): Promise<void>;
   setBounds(bounds: MinnowPreviewBounds): Promise<void>;
+  execJs(code: string): Promise<unknown>;
+  capturePage(): Promise<string>;
+  getInfo(): Promise<MinnowPreviewGuestInfo>;
+  navigateAndWait(url: string): Promise<MinnowPreviewNavigateAwaitResult>;
   onNavigation(callback: (url: string) => void): () => void;
   onLoading(callback: (loading: boolean) => void): () => void;
   onPageTitle(callback: (title: string) => void): () => void;
