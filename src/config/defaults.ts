@@ -43,7 +43,8 @@ export function defaultToolConfig(): ToolConfig {
   return {
     enabled,
     permissions,
-    keys: { braveApiKey: '' },
+    keys: { braveApiKey: '', tavilyApiKey: '' },
+    webSearchProvider: 'duckduckgo',
     toolCache: { enabled: true },
   };
 }

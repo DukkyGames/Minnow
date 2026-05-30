@@ -46,6 +46,11 @@ import { executeReportOrchestratorStatus } from '../agents/supervisor/report-too
 import { recordParentToolResult } from '../agents/supervisor/progress.ts';
 import { executeWithResultCache } from './result-cache';
 import { validateToolRequiredArgs } from './validate-tool-required-args';
+import {
+  hasBraveApiKey,
+  normalizeWebSearchProvider,
+  resolveWebSearchExecution,
+} from './web-search-routing';
 
 /** Ping timeout for local dev server detection (ms). */
 const PING_TIMEOUT_MS = 800;
@@ -327,7 +332,7 @@ async function executeToolInner(
   const config = loadToolConfig();
   const enrichedArgs = mergeConfigKeysIntoArgs(name, args, config);
 
-  if (name === 'web_search' && !hasBraveApiKey(enrichedArgs, config)) {
+  if (name === 'web_search') {
     const blocked = await maybeBlockToolForUserApproval(
       'web_search',
       enrichedArgs,
@@ -335,13 +340,28 @@ async function executeToolInner(
       'web_search',
     );
     if (blocked) return blocked;
+
+    const route = resolveWebSearchExecution(
+      config,
+      enrichedArgs,
+      isLocalServerAvailable(),
+    );
+    if (route.kind === 'error') {
+      return { content: route.message };
+    }
+
     return executeWithResultCache('web_search', enrichedArgs, context, async () => {
-      if (isLocalServerAvailable()) {
-        return executeServerTool('web_search_ddg', {
+      if (route.kind === 'brave') {
+        return { content: await executeBrowserTool(name, enrichedArgs) };
+      }
+      if (route.kind === 'tavily') {
+        return executeServerTool('web_search_tavily', {
           query: enrichedArgs.query,
         });
       }
-      return { content: await executeBrowserTool(name, enrichedArgs) };
+      return executeServerTool('web_search_ddg', {
+        query: enrichedArgs.query,
+      });
     });
   }
 
@@ -374,7 +394,8 @@ async function executeToolInner(
     return { content: `Error: unknown tool "${name}"` };
   }
 
-  const permissionId = name === 'web_search_ddg' ? 'web_search' : tool.id;
+  const permissionId =
+    name === 'web_search_ddg' || name === 'web_search_tavily' ? 'web_search' : tool.id;
   const blocked = await maybeBlockToolForUserApproval(
     permissionId,
     enrichedArgs,
@@ -627,19 +648,6 @@ function findToolByFunctionName(name: string): ToolDefinition | undefined {
   return BUILT_IN_TOOLS.find((tool) => tool.definition.function.name === name);
 }
 
-/** True when Brave search can run in the browser (arg or saved key). */
-function hasBraveApiKey(
-  args: Record<string, unknown>,
-  config: ReturnType<typeof loadToolConfig>,
-): boolean {
-  const fromArgs =
-    (typeof args.api_key === 'string' && args.api_key.trim()) ||
-    (typeof args.braveApiKey === 'string' && args.braveApiKey.trim()) ||
-    '';
-  const fromConfig = config.keys.braveApiKey?.trim() ?? '';
-  return Boolean(fromArgs || fromConfig);
-}
-
 /** Injects saved Brave API key into web_search args when the model did not pass one. */
 function mergeConfigKeysIntoArgs(
   name: string,
@@ -647,6 +655,9 @@ function mergeConfigKeysIntoArgs(
   config: ReturnType<typeof loadToolConfig>,
 ): Record<string, unknown> {
   if (name !== 'web_search') {
+    return args;
+  }
+  if (normalizeWebSearchProvider(config.webSearchProvider) !== 'brave') {
     return args;
   }
   if (hasBraveApiKey(args, config)) {

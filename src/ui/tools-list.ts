@@ -4,7 +4,7 @@
 
 import {
   isToolPermissionMode,
-  saveBraveApiKeyFromDrawer,
+  saveWebSearchSettingsFromDrawer,
   setToolPermission,
   setToolsEnabled,
   getToolIdsForCategory,
@@ -233,9 +233,11 @@ export function registerToolHandlers(): void {
     bindToolsListChange(composerList);
   }
 
-  const braveInput = document.getElementById('braveApiKey');
-  if (braveInput) {
-    braveInput.addEventListener('input', saveBraveApiKeyFromDrawer);
-    braveInput.addEventListener('change', saveBraveApiKeyFromDrawer);
+  const webSearchFields = ['braveApiKey', 'tavilyApiKey', 'webSearchProvider'];
+  for (const id of webSearchFields) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('input', saveWebSearchSettingsFromDrawer);
+    el.addEventListener('change', saveWebSearchSettingsFromDrawer);
   }
 }

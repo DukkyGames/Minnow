@@ -23,6 +23,8 @@ import {
 } from './approval';
 import { headlessApiUrl } from './server-context';
 import { validateToolRequiredArgs } from '../tools/validate-tool-required-args';
+import { resolveWebSearchExecution } from '../tools/web-search-routing';
+import { isLocalServerAvailable } from '../tools/config';
 
 /** Browser-catalog tools that run on the server when the tool server is up (BUG-011). */
 const SERVER_PROXY_BROWSER_TOOLS = new Set(['fetch_web_content', 'rag_web_content']);
@@ -146,7 +148,34 @@ export async function executeHeadlessTool(
     };
   }
 
-  const permissionId = name === 'web_search_ddg' ? 'web_search' : (tool?.id ?? name);
+  if (name === 'web_search') {
+    const config = loadToolConfig();
+    const route = resolveWebSearchExecution(config, args, isLocalServerAvailable());
+    if (route.kind === 'error') {
+      return { content: route.message };
+    }
+    if (route.kind === 'brave') {
+      return {
+        content:
+          'Error: Brave web search requires the Minnow browser UI. Select Tavily or DuckDuckGo in Settings → Tools for headless mode.',
+      };
+    }
+    const serverTool = route.kind === 'tavily' ? 'web_search_tavily' : 'web_search_ddg';
+    const blockedWeb = maybeBlockHeadlessToolApproval(
+      'web_search',
+      args,
+      { ...context, modeId },
+      options,
+      name,
+    );
+    if (blockedWeb) return blockedWeb;
+    return postServerTool(serverTool, { query: args.query }, modeId);
+  }
+
+  const permissionId =
+    name === 'web_search_ddg' || name === 'web_search_tavily'
+      ? 'web_search'
+      : (tool?.id ?? name);
   const blocked = maybeBlockHeadlessToolApproval(
     permissionId,
     args,

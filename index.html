@@ -302,9 +302,22 @@
       <p id="toolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window (from <code>npm start</code>), not a separate browser tab.</p>
       <div id="toolsList" class="tools-list"></div>
       <div class="tool-key-row field">
+        <label for="webSearchProvider">Web search provider</label>
+        <select id="webSearchProvider" aria-label="Web search provider">
+          <option value="duckduckgo">DuckDuckGo (local server)</option>
+          <option value="brave">Brave Search API</option>
+          <option value="tavily">Tavily API</option>
+        </select>
+        <p class="field-hint">Preferred provider and API keys control the web_search tool. No silent fallback when the selected provider cannot run.</p>
+      </div>
+      <div class="tool-key-row field">
         <label for="braveApiKey">Brave Search API key</label>
-        <input type="password" id="braveApiKey" autocomplete="off" spellcheck="false" placeholder="Optional — for web_search">
-        <p class="field-hint">When set, web search uses Brave; otherwise DuckDuckGo via the local server.</p>
+        <input type="password" id="braveApiKey" autocomplete="off" spellcheck="false" placeholder="Required when Brave is selected">
+      </div>
+      <div class="tool-key-row field">
+        <label for="tavilyApiKey">Tavily API key</label>
+        <input type="password" id="tavilyApiKey" autocomplete="off" spellcheck="false" placeholder="Required when Tavily is selected">
+        <p class="field-hint">Get a key at <a href="https://docs.tavily.com/welcome" target="_blank" rel="noopener noreferrer">docs.tavily.com</a>. Stored in ~/.minnow/tools.json when npm start is running.</p>
       </div>
     </section>
     <button class="drawer-clear-btn" type="button" onclick="clearChat()">

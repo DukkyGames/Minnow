@@ -20,6 +20,14 @@ import {
   toolFetchWebContent,
   toolRagWebContent,
 } from '../tools/fetch-web-content.js';
+import { readConfigJson } from '../config/store.js';
+import { normalizeToolConfig } from '../config/validators.js';
+import {
+  classifyDdgHtml,
+  DDG_BOT_CHALLENGE_MESSAGE,
+  parseDdgHtmlResults,
+} from '../tools/web-search-ddg.js';
+import { runTavilySearch } from '../tools/web-search-tavily.js';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
 import { callMcpTool, isMcpToolName } from '../mcp/registry.js';
 import { callPluginTool, isPluginToolName } from '../tools/loader.js';
@@ -40,7 +48,6 @@ import { pathAccessStore, resolveSafePath } from './path-access.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
-const DDG_MAX_SNIPPETS = 8;
 
 /** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
@@ -62,19 +69,6 @@ function toRelativePath(absPath) {
   }
   const rel = path.relative(getWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
-}
-
-/** Strip HTML tags and decode common entities for search snippets. */
-function stripHtml(html) {
-  return html
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /** Run git with arguments in the project root. */
@@ -115,7 +109,14 @@ function globToRegExp(globPattern) {
 
 // --- Web tools ---
 
-/** DuckDuckGo HTML search (no API key); parses result titles and snippets. */
+/** Read Tavily API key from persisted tools.json (server-side only). */
+async function readTavilyApiKeyFromConfig() {
+  const raw = (await readConfigJson('tools.json')) ?? {};
+  const config = normalizeToolConfig(raw);
+  return config.keys?.tavilyApiKey?.trim() ?? '';
+}
+
+/** DuckDuckGo HTML search (no API key); detects bot challenges before parsing. */
 async function toolWebSearchDdg(args) {
   const query = args?.query;
   if (!query || typeof query !== 'string') {
@@ -131,32 +132,38 @@ async function toolWebSearchDdg(args) {
     },
   });
 
+  const html = await response.text();
+  const classification = classifyDdgHtml(response.status, html);
+
+  if (classification === 'challenge') {
+    return DDG_BOT_CHALLENGE_MESSAGE;
+  }
+
   if (!response.ok) {
     return `Error: DuckDuckGo returned HTTP ${response.status}`;
   }
 
-  const html = await response.text();
-  const blocks = html.split(/class="result\s/);
-  const results = [];
-
-  for (let i = 1; i < blocks.length && results.length < DDG_MAX_SNIPPETS; i += 1) {
-    const block = blocks[i];
-    const titleMatch = block.match(/class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (!titleMatch) {
-      continue;
-    }
-    const href = titleMatch[1];
-    const title = stripHtml(titleMatch[2]);
-    const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i);
-    const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : '';
-    results.push(`${results.length + 1}. ${title}\n   ${href}\n   ${snippet}`);
-  }
-
+  const results = parseDdgHtmlResults(html, query);
   if (results.length === 0) {
     return `No DuckDuckGo results found for: ${query}`;
   }
 
   return `DuckDuckGo results for "${query}":\n\n${results.join('\n\n')}`;
+}
+
+/** Tavily Search API (requires tavilyApiKey in tools.json). */
+async function toolWebSearchTavily(args) {
+  const query = args?.query;
+  if (!query || typeof query !== 'string') {
+    return 'Error: query is required';
+  }
+
+  const apiKey = await readTavilyApiKeyFromConfig();
+  if (!apiKey) {
+    return 'Error: Tavily API key not configured. Add one in Settings → Tools.';
+  }
+
+  return runTavilySearch(query, apiKey);
 }
 
 // --- File tools ---
@@ -568,9 +575,10 @@ async function toolSendNotification(args) {
   }
 }
 
-/** Map tool name -> handler (serverRequired tools + web_search_ddg, send_notification). */
+/** Map tool name -> handler (serverRequired tools + web search backends, send_notification). */
 const SERVER_TOOL_HANDLERS = {
   web_search_ddg: toolWebSearchDdg,
+  web_search_tavily: toolWebSearchTavily,
   fetch_web_content: toolFetchWebContent,
   rag_web_content: toolRagWebContent,
   list_directory: toolListDirectory,

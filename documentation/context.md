@@ -153,7 +153,7 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
 ~/.minnow/
   config.json              # schemaVersion, activeProviderId, toolSecurity.filesystemAccess, …
   sessions/state.json      # full SessionState blob (all chats — canonical)
-  tools.json               # ToolConfig (permissions, mirrored enabled, braveApiKey)
+  tools.json               # ToolConfig (permissions, mirrored enabled, webSearchProvider, API keys)
   system-prompt.json       # { presetId, text }
   rules.json               # global user rules { version, enabled, text } (Feature 24)
   memory/                  # scaffold (Step 16)
@@ -808,8 +808,10 @@ Server URL remains in the settings drawer DOM (not in the session blob). **Tempe
     ]
   },
   "keys": {
-    "braveApiKey": ""
-  }
+    "braveApiKey": "",
+    "tavilyApiKey": ""
+  },
+  "webSearchProvider": "duckduckgo"
 }
 ```
 
@@ -1029,7 +1031,8 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 
 | Name | Purpose |
 |------|---------|
-| `web_search_ddg` | DuckDuckGo HTML snippets when Brave key missing (`web_search` routes here via [`client.ts`](../src/tools/client.ts)) |
+| `web_search_ddg` | DuckDuckGo HTML search when `webSearchProvider` is `duckduckgo` ([`web-search-ddg.js`](../server/tools/web-search-ddg.js); bot challenges return an actionable error) |
+| `web_search_tavily` | Tavily Search API when `webSearchProvider` is `tavily` ([`web-search-tavily.js`](../server/tools/web-search-tavily.js); reads `keys.tavilyApiKey` from `tools.json`) |
 | `send_notification` | OS notification / dialog |
 | `read_document` | PDF + office attachment text extraction (base64 in `args.content`, max **10MB** decoded) |
 
@@ -1066,7 +1069,7 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 
 | id | Runs on |
 |----|---------|
-| `web_search` | Browser (Brave API if `braveApiKey` / `api_key`; else client routes to `web_search_ddg` when server up) |
+| `web_search` | User-selected provider ([`web-search-routing.ts`](../src/tools/web-search-routing.ts)): **Brave** in browser (`braveApiKey` / `api_key`), **Tavily** via `web_search_tavily`, **DuckDuckGo** via `web_search_ddg`; no silent fallback |
 | `wikipedia_search` | Browser |
 | `fetch_web_content` | Server when `npm start` (Node HTTP fetch + strip, ~8KB); browser fallback (CORS limits) |
 | `rag_web_content` | Server when `npm start` (same fetch + sentence scoring); browser fallback |
@@ -1128,7 +1131,7 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 ### Tool loop and client
 
 - **`detectLocalServer()`** — `GET /api/tools/ping`, **800 ms** timeout ([`src/tools/client.ts`](../src/tools/client.ts)).
-- **`executeTool(name, args, context?)`** — returns `{ content, attachments? }`; browser executor, terminal stream for code tools, or `POST /api/tools`; merges saved `braveApiKey` into `web_search`. **Session result cache** ([`src/tools/result-cache.ts`](../src/tools/result-cache.ts)): after approval/plan guards, read-mostly tools memoize on `(name, normalized-args)` per workspace + `chatId`; mutating tools bust matching entries in **all chat scopes for that workspace** (so agent writes invalidate the file tree’s `__no_chat__` listings); manual tree refresh calls `invalidateCachedDirectoryListingsForCurrentWorkspace()`; cleared on workspace switch; toggle in Settings → Tools (`toolCache.enabled`, default on). Debug: `localStorage.minnowDebugToolCache = '1'`.
+- **`executeTool(name, args, context?)`** — returns `{ content, attachments? }`; browser executor, terminal stream for code tools, or `POST /api/tools`; `web_search` uses Settings → Tools `webSearchProvider` + API keys ([`resolveWebSearchExecution`](../src/tools/web-search-routing.ts)). **Session result cache** ([`src/tools/result-cache.ts`](../src/tools/result-cache.ts)): after approval/plan guards, read-mostly tools memoize on `(name, normalized-args)` per workspace + `chatId`; mutating tools bust matching entries in **all chat scopes for that workspace** (so agent writes invalidate the file tree’s `__no_chat__` listings); manual tree refresh calls `invalidateCachedDirectoryListingsForCurrentWorkspace()`; cleared on workspace switch; toggle in Settings → Tools (`toolCache.enabled`, default on). Debug: `localStorage.minnowDebugToolCache = '1'`.
 - **`sendMessageWithTools()`** — tool loop capped by **`chat.maxToolTurns`** (default **8**, range 1-64; **Settings → Tools**, persisted in `config.json` via [`src/config/chat-meta.ts`](../src/config/chat-meta.ts)); upstream stream timeouts **`chat.generationIdleTimeoutMs`** (default **3 min**, 30 s–30 min) and **`chat.generationMaxDurationMs`** (default **60 min**, 1–240 min) in the same block (**Generation timeouts** on Settings → Tools). Sub-agents and evals use **`sub-agents.json` `maxToolTurns`** (default **12**). streams SSE, `mergeToolCallDelta` / `finalizeToolCalls`, runs enabled tools, appends assistant + tool messages ([`src/tools/loop.ts`](../src/tools/loop.ts)). `MAX_TOOL_TURNS` in code is the default constant only.
 - **Post-tool empty completion** — if the model returns `stop` with no prose after tool rows, the loop may run **one** extra round with an ephemeral API user line (`EMPTY_POST_TOOL_CONTINUE_INSTRUCTION` in [`src/tools/turn-continuation.ts`](../src/tools/turn-continuation.ts)); otherwise it **always** commits a final `assistant` row (prose, thinking-only, or `'The model returned no text.'`) and sets status **Ready**. Dev logging: `localStorage.minnowDebugTurns = '1'`.
 - **Orphan tool tail recovery** — reload when history ends with `tool` (no final assistant): [`hasOrphanToolTailAwaitingReply`](../src/chat/turn-recovery.ts) + retry banner ([`src/ui/pending-turn-recovery.ts`](../src/ui/pending-turn-recovery.ts)); resend via [`resendFromIndex`](../src/chat/resend-from-index.ts).

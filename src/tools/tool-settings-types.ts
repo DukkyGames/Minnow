@@ -43,6 +43,9 @@ export interface ToolCacheConfig {
   enabled: boolean;
 }
 
+/** Preferred backend for the built-in `web_search` tool. */
+export type WebSearchProvider = 'brave' | 'tavily' | 'duckduckgo';
+
 /** Persisted tool settings: permissions (source of truth), mirrored `enabled`, and keys. */
 export interface ToolConfig {
   /** Mirrored from permissions.default: true when mode is not `off` (backward-compatible JSON). */
@@ -51,7 +54,10 @@ export interface ToolConfig {
   permissions: ToolPermissionsConfig;
   keys: {
     braveApiKey: string;
+    tavilyApiKey: string;
   };
+  /** Preferred web_search backend when credentials and server allow it. */
+  webSearchProvider: WebSearchProvider;
   /** Optional session cache for repeated read-only tool invocations. */
   toolCache?: ToolCacheConfig;
 }

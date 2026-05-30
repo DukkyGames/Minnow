@@ -24,6 +24,7 @@ const VALID_CATEGORIES = new Set([
 const RESERVED_FUNCTION_NAMES = new Set([
   ...ALL_TOOL_IDS,
   'web_search_ddg',
+  'web_search_tavily',
 ]);
 
 /**

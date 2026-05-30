@@ -186,7 +186,7 @@ When you run `npm start`, the browser uses the same origin for tools and config:
 | `/api/browser/screenshot/:id` | GET | PNG from `~/.minnow/screenshots/` |
 
 - **Path safety:** File/git tools resolve under the **workspace root** unless `TOOLS_ALLOW_ALL_PATHS=1`.
-- **Brave Search:** Optional API key in Settings → Tools for `web_search`; without it, DuckDuckGo fallback when the server is up.
+- **Web search:** Settings → Tools — choose **Brave**, **Tavily**, or **DuckDuckGo** (`webSearchProvider`); add the matching API key for Brave/Tavily. DuckDuckGo uses the local server (`npm start`). No silent fallback when the selected provider cannot run.
 - **Timeouts:** `execute_command`, `run_javascript`, and `run_python` time out after **30 seconds**.
 
 Browser-routed tools (`get_datetime`, `calculate`, `ask_question`, sub-agent spawn/status, board tools, mode handoff, etc.) run in the page. Calling pure browser tools via `POST /api/tools` returns "Not implemented".
@@ -207,7 +207,7 @@ In a plain browser tab (no Electron), `browser_*` tools are hidden from the cata
 
 | Setting | Storage key / notes |
 |---------|---------------------|
-| Tool toggles & Brave key | `minnow.tools` |
+| Tool toggles & web search keys | `minnow.tools` |
 | Legacy sessions (dev-only) | `minnow-sessions-v1` |
 | User rules mirror | `minnow.userRules` |
 
