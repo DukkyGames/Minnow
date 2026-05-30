@@ -8,6 +8,7 @@ import {
   StateField,
   type Extension,
   type EditorState,
+  type Transaction,
 } from '@codemirror/state';
 import {
   Decoration,
@@ -40,16 +41,46 @@ interface AiGhostValue {
 
 const setAiGhost = StateEffect.define<AiGhostValue | null>();
 
-const aiGhostField = StateField.define<AiGhostValue | null>({
-  create: () => null,
+/** Resolve ghost value for a transaction (effects + doc/selection invalidation). */
+function resolveGhostAfterTransaction(
+  tr: Transaction,
+  startGhost: AiGhostValue | null,
+): AiGhostValue | null {
+  let ghost = startGhost;
+  for (const effect of tr.effects) {
+    if (effect.is(setAiGhost)) ghost = effect.value;
+  }
+  if (tr.docChanged) return null;
+  if (!tr.state.selection.eq(tr.startState.selection)) return null;
+  return ghost;
+}
+
+function buildGhostDecorations(ghost: AiGhostValue | null): DecorationSet {
+  if (!ghost?.text) return Decoration.none;
+  const mark = Decoration.widget({
+    widget: new GhostTextWidget(ghost.text),
+    side: 1,
+  });
+  return Decoration.set([mark.range(ghost.pos)]);
+}
+
+/**
+ * Single field for ghost value + decorations so effect updates always repaint
+ * (separate fields can miss decorations when read order races in one transaction).
+ */
+const aiGhostField = StateField.define<{
+  ghost: AiGhostValue | null;
+  decorations: DecorationSet;
+}>({
+  create: () => ({ ghost: null, decorations: Decoration.none }),
   update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setAiGhost)) return effect.value;
-    }
-    if (tr.docChanged) return null;
-    if (tr.selection && !tr.selection.eq(tr.startState.selection)) return null;
-    return value;
+    const ghost = resolveGhostAfterTransaction(tr, value.ghost);
+    return {
+      ghost,
+      decorations: buildGhostDecorations(ghost),
+    };
   },
+  provide: (field) => EditorView.decorations.from(field, (v) => v.decorations),
 });
 
 class GhostTextWidget extends WidgetType {
@@ -77,29 +108,16 @@ class GhostTextWidget extends WidgetType {
   }
 }
 
-const aiGhostDecorations = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update(_prev, tr) {
-    const ghost = tr.state.field(aiGhostField);
-    if (!ghost?.text) return Decoration.none;
-    const mark = Decoration.widget({
-      widget: new GhostTextWidget(ghost.text),
-      side: 1,
-    });
-    return Decoration.set([mark.range(ghost.pos)]);
-  },
-  provide: (field) => EditorView.decorations.from(field),
-});
-
 /** True when a ghost suggestion is visible. */
 export function hasEditorAiGhost(state: EditorState): boolean {
-  const ghost = state.field(aiGhostField, false);
-  return Boolean(ghost?.text);
+  const row = state.field(aiGhostField, false);
+  return Boolean(row?.ghost?.text);
 }
 
 /** Insert the active ghost at its anchor and clear suggestion state. */
 export function acceptEditorAiGhost(view: EditorView): boolean {
-  const ghost = view.state.field(aiGhostField, false);
+  const row = view.state.field(aiGhostField, false);
+  const ghost = row?.ghost;
   if (!ghost?.text) return false;
   const insertPos = ghost.pos;
   view.dispatch({
@@ -150,7 +168,7 @@ class EditorAiCompletionPlugin {
 
   update(update: ViewUpdate): void {
     if (!update.docChanged && !update.selectionSet) return;
-    this.cancelInFlight();
+    this.cancelInFlight(update.docChanged);
     if (update.state.readOnly) return;
     if (!this.opts.canRequest()) {
       this.opts.onStatus?.('AI completion unavailable (start npm start and configure a provider).');
@@ -158,16 +176,16 @@ class EditorAiCompletionPlugin {
     }
     this.opts.onStatus?.(null);
 
-    const pos = update.state.selection.main.head;
     if (update.selectionSet && !update.docChanged) {
       return;
     }
 
+    const pos = update.state.selection.main.head;
     this.schedule(pos);
   }
 
   destroy(): void {
-    this.cancelInFlight();
+    this.cancelInFlight(false);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
   }
 
@@ -180,7 +198,8 @@ class EditorAiCompletionPlugin {
     }, delay);
   }
 
-  private cancelInFlight(): void {
+  /** Abort in-flight completion; optionally clear visible ghost. */
+  private cancelInFlight(clearGhost: boolean): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
@@ -189,6 +208,20 @@ class EditorAiCompletionPlugin {
       this.abortController.abort();
       this.abortController = null;
     }
+    if (clearGhost && hasEditorAiGhost(this.view.state)) {
+      this.view.dispatch({ effects: setAiGhost.of(null) });
+    }
+  }
+
+  private showGhostAt(pos: number, text: string): void {
+    if (!text) {
+      this.view.dispatch({ effects: setAiGhost.of(null) });
+      return;
+    }
+    if (this.view.state.selection.main.head !== pos) return;
+    this.view.dispatch({
+      effects: setAiGhost.of({ text, pos }),
+    });
   }
 
   private async requestCompletion(pos: number): Promise<void> {
@@ -196,7 +229,6 @@ class EditorAiCompletionPlugin {
     if (state.readOnly) return;
     if (state.selection.main.head !== pos) return;
 
-    this.cancelInFlight();
     const controller = new AbortController();
     this.abortController = controller;
     this.requestPos = pos;
@@ -209,20 +241,19 @@ class EditorAiCompletionPlugin {
       config: this.opts.config,
       binding,
       signal: controller.signal,
+      onPartial: (partial) => {
+        if (controller.signal.aborted) return;
+        if (this.requestPos !== pos) return;
+        this.showGhostAt(pos, partial);
+      },
     });
 
     if (controller.signal.aborted) return;
     if (this.view.state.selection.main.head !== pos) return;
     if (this.requestPos !== pos) return;
 
-    if (!text) {
-      this.view.dispatch({ effects: setAiGhost.of(null) });
-      return;
-    }
-
-    this.view.dispatch({
-      effects: setAiGhost.of({ text, pos }),
-    });
+    this.abortController = null;
+    this.showGhostAt(pos, text ?? '');
   }
 }
 
@@ -232,7 +263,6 @@ export function editorAiCompletionExtensions(
 ): Extension[] {
   return [
     aiGhostField,
-    aiGhostDecorations,
     ViewPlugin.define((view) => new EditorAiCompletionPlugin(view, opts)),
     keymap.of([editorAiTabBinding, editorAiEscapeBinding]),
   ];

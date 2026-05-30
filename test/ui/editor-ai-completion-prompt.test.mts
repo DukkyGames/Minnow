@@ -66,6 +66,10 @@ describe('editor AI completion prompt', () => {
     assert.equal(sanitizeCompletionText(raw), 'const y = 2;');
   });
 
+  test('sanitizeCompletionText strips duplicate doc prefix', () => {
+    assert.equal(sanitizeCompletionText('const x = 1', 'const x = '), '1');
+  });
+
   test('sanitizeCompletionText handles binary-safe paths in user content', () => {
     const path = 'docs/weird-name_%.md';
     const doc = '# Title\n';

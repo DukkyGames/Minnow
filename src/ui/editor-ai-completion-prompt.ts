@@ -110,9 +110,12 @@ export function buildEditorAiCompletionMessages(
   return { messages, prefix, suffix };
 }
 
-/** Normalize model output for inline insertion (strip fences / chatter). */
-export function sanitizeCompletionText(raw: string): string {
-  let text = raw.trim();
+/**
+ * Normalize model output for inline insertion (strip fences / chatter).
+ * When `docPrefix` is set, drop a leading copy of text already before the cursor.
+ */
+export function sanitizeCompletionText(raw: string, docPrefix?: string): string {
+  let text = raw.replace(/^\s+/, '');
   if (!text) return '';
 
   if (text.startsWith('```')) {
@@ -135,5 +138,17 @@ export function sanitizeCompletionText(raw: string): string {
     text = text.slice(0, explainIdx);
   }
 
-  return text.replace(/\r\n/g, '\n');
+  text = text.replace(/\r\n/g, '\n');
+
+  if (docPrefix && docPrefix.length > 0) {
+    const tailLen = Math.min(docPrefix.length, 200);
+    const tail = docPrefix.slice(-tailLen);
+    if (text.startsWith(docPrefix)) {
+      text = text.slice(docPrefix.length);
+    } else if (tail.length > 0 && text.startsWith(tail)) {
+      text = text.slice(tail.length);
+    }
+  }
+
+  return text.trimEnd();
 }

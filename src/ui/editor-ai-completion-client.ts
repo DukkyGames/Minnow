@@ -2,12 +2,13 @@
  * Debounced LLM client for editor inline completions (POLISH-006).
  */
 
-import { extractStreamDelta, mergeStreamMeta, type StreamMetaAccumulator } from '../api/chat';
+import { mergeStreamMeta, type StreamMetaAccumulator } from '../api/chat';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
   flushSseEventBuffer,
 } from '../api/sse-parse';
+import { StreamingContentAccumulator } from '../api/message-content';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { getActiveChat } from '../state/sessions';
 import { postChatCompletions } from '../providers/fetch-chat';
@@ -52,13 +53,15 @@ export async function resolveEditorAiBinding(
 export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   binding: EditorAiBinding;
   signal: AbortSignal;
+  /** Called as streamed text arrives (already sanitized). */
+  onPartial?: (text: string) => void;
 }
 
 /** Stream a single inline completion; returns null on failure or empty result. */
 export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<string | null> {
-  const { messages } = buildEditorAiCompletionMessages(input);
+  const { messages, prefix } = buildEditorAiCompletionMessages(input);
   const provider = await resolveProvider(input.binding.providerId);
   const body = {
     model: input.binding.modelId || undefined,
@@ -71,22 +74,29 @@ export async function fetchEditorAiCompletion(
   let res: Response;
   try {
     res = await postChatCompletions(provider, body, input.signal);
-  } catch {
-    return null;
+  } catch (err) {
+    if (input.signal.aborted) return null;
+    throw err;
   }
 
   if (!res.ok || !res.body) return null;
 
-  let fullText = '';
+  const contentAcc = new StreamingContentAccumulator();
   let streamMeta: StreamMetaAccumulator = {};
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   const sseBuffer = createSseEventBuffer();
 
+  const emitPartial = (): void => {
+    const raw = contentAcc.getText();
+    const cleaned = sanitizeCompletionText(raw, prefix);
+    if (cleaned) input.onPartial?.(cleaned);
+  };
+
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
-    const delta = extractStreamDelta(chunk);
-    if (delta) fullText += delta;
+    contentAcc.ingestChoice(chunk.choices?.[0]);
+    emitPartial();
   }
 
   try {
@@ -96,13 +106,14 @@ export async function fetchEditorAiCompletion(
       feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
     }
     flushSseEventBuffer(sseBuffer, handleChunk);
-  } catch {
-    return null;
+  } catch (err) {
+    if (input.signal.aborted) return null;
+    throw err;
   } finally {
     void streamMeta;
   }
 
-  const cleaned = sanitizeCompletionText(fullText);
+  const cleaned = sanitizeCompletionText(contentAcc.getText(), prefix);
   return cleaned.length > 0 ? cleaned : null;
 }
 
