@@ -22,9 +22,11 @@ import {
   refreshFileTreeViaBridge,
   renderFileTreeViaBridge,
 } from './file-tree-refresh-bridge';
+import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
+import { editorAiCompletionExtensions } from './file-editor-ai-extensions';
 
 export const LARGE_FILE_BYTES = 512_000;
 const RANGE_LINE_COUNT = 2000;
@@ -47,6 +49,7 @@ let viewerControlsBound = false;
 let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
+let editorAiStatusEl: HTMLElement | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
 export function parseReadFileRangeBody(raw: string): string {
@@ -242,15 +245,40 @@ function mountEditor(content: string, path: string): void {
   editorMount.className = 'file-viewer-editor-mount';
   host.appendChild(editorMount);
 
+  const aiStatus = document.createElement('p');
+  aiStatus.className = 'file-viewer-ai-status field-hint';
+  aiStatus.hidden = true;
+  host.appendChild(aiStatus);
+  editorAiStatusEl = aiStatus;
+
   void (async () => {
-    const [langExts, useLsp] = await Promise.all([
+    const [langExts, useLsp, editorAiConfig] = await Promise.all([
       loadLanguageExtension(path),
       isLspEnabledForViewer(),
+      loadEditorAiCompletionConfig(),
     ]);
     const readOnlyExts: Extension[] = readOnlyExcerpt
       ? [EditorView.editable.of(false), EditorState.readOnly.of(true)]
       : [];
     const lspExts = useLsp ? lspEditorExtensions(path) : [];
+    const useEditorAi =
+      editorAiConfig.enabled && !readOnlyExcerpt && getLocalServerAvailable();
+    const aiExts = useEditorAi
+      ? editorAiCompletionExtensions({
+          filePath: path,
+          config: editorAiConfig,
+          canRequest: () => getLocalServerAvailable(),
+          onStatus: (message) => {
+            if (!editorAiStatusEl) return;
+            if (message) {
+              editorAiStatusEl.textContent = message;
+              editorAiStatusEl.hidden = false;
+            } else {
+              editorAiStatusEl.hidden = true;
+            }
+          },
+        })
+      : [];
 
     const state = EditorState.create({
       doc: content,
@@ -271,6 +299,7 @@ function mountEditor(content: string, path: string): void {
           }
         }),
         ...fileEditorKeymapExtensions(),
+        ...aiExts,
         keymap.of([
           {
             key: 'Mod-s',

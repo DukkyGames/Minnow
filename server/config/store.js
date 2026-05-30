@@ -134,6 +134,9 @@ export async function readResource(resource) {
     if (!data?.browser) {
       patch.browser = DEFAULT_META.browser;
     }
+    if (!data?.editorAiCompletion) {
+      patch.editorAiCompletion = DEFAULT_META.editorAiCompletion;
+    }
     if (Object.keys(patch).length > 0) {
       return mergeConfigMeta(data ?? {}, patch);
     }

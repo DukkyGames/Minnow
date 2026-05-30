@@ -154,6 +154,21 @@
   height: 100%;
 }
 
+.file-viewer-ai-status {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-ai-ghost-text {
+  color: var(--mn-fg-muted);
+  opacity: 0.55;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
 .file-viewer-body .cm-editor {
   height: 100%;
   background: var(--mn-surface-1);

@@ -64,7 +64,7 @@ isProject: false
 **Tracker:** [documentation/bug-hunt-session-2026-05-24.md](../../bug-hunt-session-2026-05-24.md) — POLISH-006  
 **Type:** Polish / feature request (not a defect)  
 **Area:** File panel — CodeMirror editor (`src/ui/file-viewer.ts`, `file-editor-*`, `file-panel`)  
-**Status:** Open (plan only — **no implementation** in this document)
+**Status:** Built (MIN-104) — see `src/ui/file-editor-ai-extensions.ts` and `documentation/context.md` LSP section.
 
 ---
 
