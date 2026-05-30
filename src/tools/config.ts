@@ -227,7 +227,7 @@ export function getToolPermissionForId(
   const raw = config.permissions.default[id];
   if (isToolPermissionMode(raw)) return raw;
   if (id.startsWith('mcp__') || id.startsWith('plugin__')) return 'ask';
-  if (id === 'web_search_ddg') {
+  if (id === 'web_search_ddg' || id === 'web_search_tavily') {
     return getToolPermissionForId(config, 'web_search');
   }
   const tool = BUILT_IN_TOOLS.find((t) => t.id === id);
@@ -257,6 +257,7 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     keys?: unknown;
     permissions?: unknown;
     toolCache?: unknown;
+    webSearchProvider?: unknown;
   };
   if (stored.enabled && typeof stored.enabled === 'object') {
     const enabledMap = stored.enabled as Record<string, unknown>;
@@ -301,6 +302,17 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+    if (typeof keysMap.tavilyApiKey === 'string') {
+      config.keys.tavilyApiKey = keysMap.tavilyApiKey;
+    }
+  }
+
+  if (
+    stored.webSearchProvider === 'brave' ||
+    stored.webSearchProvider === 'tavily' ||
+    stored.webSearchProvider === 'duckduckgo'
+  ) {
+    config.webSearchProvider = stored.webSearchProvider;
   }
 
   if (stored.toolCache && typeof stored.toolCache === 'object') {
@@ -488,6 +500,18 @@ export function loadToolConfigIntoDrawer(
   const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
   if (braveInput) {
     braveInput.value = config.keys.braveApiKey;
+  }
+
+  const tavilyInput = document.getElementById('tavilyApiKey') as HTMLInputElement | null;
+  if (tavilyInput) {
+    tavilyInput.value = config.keys.tavilyApiKey;
+  }
+
+  const providerSelect = document.getElementById(
+    'webSearchProvider',
+  ) as HTMLSelectElement | null;
+  if (providerSelect) {
+    providerSelect.value = config.webSearchProvider;
   }
 
   refreshServerToolDisabledState();
@@ -793,12 +817,32 @@ export function refreshServerToolDisabledState(): void {
   syncToolSelectAllControls(document);
 }
 
-/** Persist Brave API key from the settings drawer (call on input/blur). */
-export function saveBraveApiKeyFromDrawer(): void {
-  const input = document.getElementById('braveApiKey') as HTMLInputElement | null;
-  if (!input) return;
+/** Persist web search provider and API keys from the settings drawer. */
+export function saveWebSearchSettingsFromDrawer(): void {
+  const braveInput = document.getElementById('braveApiKey') as HTMLInputElement | null;
+  const tavilyInput = document.getElementById('tavilyApiKey') as HTMLInputElement | null;
+  const providerSelect = document.getElementById(
+    'webSearchProvider',
+  ) as HTMLSelectElement | null;
+  if (!braveInput && !tavilyInput && !providerSelect) return;
 
   const config = loadToolConfig();
-  config.keys.braveApiKey = input.value.trim();
+  if (braveInput) {
+    config.keys.braveApiKey = braveInput.value.trim();
+  }
+  if (tavilyInput) {
+    config.keys.tavilyApiKey = tavilyInput.value.trim();
+  }
+  if (providerSelect) {
+    const value = providerSelect.value;
+    if (value === 'brave' || value === 'tavily' || value === 'duckduckgo') {
+      config.webSearchProvider = value;
+    }
+  }
   saveToolConfig(config);
+}
+
+/** @deprecated Use {@link saveWebSearchSettingsFromDrawer}. */
+export function saveBraveApiKeyFromDrawer(): void {
+  saveWebSearchSettingsFromDrawer();
 }

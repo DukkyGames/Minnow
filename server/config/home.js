@@ -218,7 +218,8 @@ function defaultToolsJson() {
   return {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
-    keys: { braveApiKey: '' },
+    keys: { braveApiKey: '', tavilyApiKey: '' },
+    webSearchProvider: 'duckduckgo',
     plugins: {},
   };
 }

@@ -1326,27 +1326,69 @@ async function renderToolsSection(): Promise<void> {
   list.id = 'settingsToolsList';
   list.className = 'tools-list settings-tools-list';
 
-  const keyRow = el('div', 'settings-tool-key-row field');
-  const keyLabel = document.createElement('label');
-  keyLabel.htmlFor = 'settingsBraveApiKey';
-  keyLabel.textContent = 'Brave Search API key';
-  const keyInput = document.createElement('input');
-  keyInput.type = 'password';
-  keyInput.id = 'settingsBraveApiKey';
-  keyInput.autocomplete = 'off';
-  keyInput.spellcheck = false;
-  keyInput.placeholder = 'Optional — for web_search';
-  keyRow.appendChild(keyLabel);
-  keyRow.appendChild(keyInput);
-  keyRow.appendChild(
+  const providerRow = el('div', 'settings-tool-key-row field');
+  const providerLabel = document.createElement('label');
+  providerLabel.htmlFor = 'settingsWebSearchProvider';
+  providerLabel.textContent = 'Web search provider';
+  const providerSelect = document.createElement('select');
+  providerSelect.id = 'settingsWebSearchProvider';
+  providerSelect.setAttribute('aria-label', 'Web search provider');
+  for (const [value, label] of [
+    ['duckduckgo', 'DuckDuckGo (local server)'],
+    ['brave', 'Brave Search API'],
+    ['tavily', 'Tavily API'],
+  ] as const) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    providerSelect.appendChild(option);
+  }
+  providerRow.appendChild(providerLabel);
+  providerRow.appendChild(providerSelect);
+  providerRow.appendChild(
     el(
       'p',
       'settings-field-hint settings-tool-key-hint',
-      'Stored in ~/.minnow/tools.json when npm start is running.',
+      'Preferred provider and API keys control web_search. No silent fallback when the selected provider cannot run.',
     ),
   );
 
-  /** One hairline-framed block for the permission list and Brave key (matches bench-instrument settings). */
+  const braveKeyRow = el('div', 'settings-tool-key-row field');
+  const braveKeyLabel = document.createElement('label');
+  braveKeyLabel.htmlFor = 'settingsBraveApiKey';
+  braveKeyLabel.textContent = 'Brave Search API key';
+  const braveKeyInput = document.createElement('input');
+  braveKeyInput.type = 'password';
+  braveKeyInput.id = 'settingsBraveApiKey';
+  braveKeyInput.autocomplete = 'off';
+  braveKeyInput.spellcheck = false;
+  braveKeyInput.placeholder = 'Required when Brave is selected';
+  braveKeyRow.appendChild(braveKeyLabel);
+  braveKeyRow.appendChild(braveKeyInput);
+
+  const tavilyKeyRow = el('div', 'settings-tool-key-row field');
+  const tavilyKeyLabel = document.createElement('label');
+  tavilyKeyLabel.htmlFor = 'settingsTavilyApiKey';
+  tavilyKeyLabel.textContent = 'Tavily API key';
+  const tavilyKeyInput = document.createElement('input');
+  tavilyKeyInput.type = 'password';
+  tavilyKeyInput.id = 'settingsTavilyApiKey';
+  tavilyKeyInput.autocomplete = 'off';
+  tavilyKeyInput.spellcheck = false;
+  tavilyKeyInput.placeholder = 'Required when Tavily is selected';
+  tavilyKeyRow.appendChild(tavilyKeyLabel);
+  tavilyKeyRow.appendChild(tavilyKeyInput);
+  const tavilyHint = document.createElement('p');
+  tavilyHint.className = 'settings-field-hint settings-tool-key-hint';
+  const tavilyLink = document.createElement('a');
+  tavilyLink.href = 'https://docs.tavily.com/welcome';
+  tavilyLink.target = '_blank';
+  tavilyLink.rel = 'noopener noreferrer';
+  tavilyLink.textContent = 'Get a Tavily API key';
+  tavilyHint.append('Keys are stored in ~/.minnow/tools.json when npm start is running. ', tavilyLink, '.');
+  tavilyKeyRow.appendChild(tavilyHint);
+
+  /** One hairline-framed block for the permission list and web search keys. */
   const catalog = appendSettingsGroup(
     mount,
     'Tool catalog',
@@ -1355,7 +1397,9 @@ async function renderToolsSection(): Promise<void> {
 
   const toolsPanel = el('div', 'settings-tools-panel');
   toolsPanel.appendChild(list);
-  toolsPanel.appendChild(keyRow);
+  toolsPanel.appendChild(providerRow);
+  toolsPanel.appendChild(braveKeyRow);
+  toolsPanel.appendChild(tavilyKeyRow);
   catalog.appendChild(toolsPanel);
 
   mountToolApprovalRulesSection(catalog);
@@ -1381,13 +1425,15 @@ async function renderToolsSection(): Promise<void> {
 
   resetDefaultsBtn.addEventListener('click', () => {
     const ok = window.confirm(
-      'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings. Your Brave API key will be kept.',
+      'Reset all tool permissions to defaults?\n\nBuilt-in tools will return to factory on/off and ask settings. Your web search provider and API keys will be kept.',
     );
     if (!ok) return;
     void (async () => {
       try {
         await resetBuiltInToolPermissionsToDefaults(list);
-        keyInput.value = getToolConfig().keys.braveApiKey;
+        braveKeyInput.value = getToolConfig().keys.braveApiKey;
+        tavilyKeyInput.value = getToolConfig().keys.tavilyApiKey;
+        providerSelect.value = getToolConfig().webSearchProvider;
         setStatus('ok', 'Tool permissions reset to defaults');
       } catch {
         setStatus('err', 'Could not save — use npm start');
@@ -1402,13 +1448,21 @@ async function renderToolsSection(): Promise<void> {
 
   // Re-bind every time this section mounts: clearMount removes the previous input node,
   // so listeners must not be one-shot behind toolsSectionInitialized.
-  const persistBraveKey = (): void => {
+  const persistWebSearchSettings = (): void => {
     const config = getToolConfig();
-    config.keys.braveApiKey = keyInput.value.trim();
+    config.keys.braveApiKey = braveKeyInput.value.trim();
+    config.keys.tavilyApiKey = tavilyKeyInput.value.trim();
+    const provider = providerSelect.value;
+    if (provider === 'brave' || provider === 'tavily' || provider === 'duckduckgo') {
+      config.webSearchProvider = provider;
+    }
     saveToolConfig(config);
   };
-  keyInput.addEventListener('input', persistBraveKey);
-  keyInput.addEventListener('change', persistBraveKey);
+  providerSelect.addEventListener('change', persistWebSearchSettings);
+  braveKeyInput.addEventListener('input', persistWebSearchSettings);
+  braveKeyInput.addEventListener('change', persistWebSearchSettings);
+  tavilyKeyInput.addEventListener('input', persistWebSearchSettings);
+  tavilyKeyInput.addEventListener('change', persistWebSearchSettings);
 
   const persistToolCache = (): void => {
     const config = getToolConfig();
@@ -1421,7 +1475,9 @@ async function renderToolsSection(): Promise<void> {
 
   const config = getToolConfig();
   cacheCheckbox.checked = config.toolCache?.enabled !== false;
-  keyInput.value = config.keys.braveApiKey;
+  braveKeyInput.value = config.keys.braveApiKey;
+  tavilyKeyInput.value = config.keys.tavilyApiKey;
+  providerSelect.value = config.webSearchProvider;
   loadToolConfigIntoDrawer(list);
 
   banner.classList.toggle('hidden', isLocalServerAvailable());

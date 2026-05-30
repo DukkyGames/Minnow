@@ -533,7 +533,8 @@ export function normalizeToolConfig(raw) {
   const config = {
     enabled,
     permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
-    keys: { braveApiKey: '' },
+    keys: { braveApiKey: '', tavilyApiKey: '' },
+    webSearchProvider: 'duckduckgo',
     toolCache: { enabled: true },
     plugins: {},
   };
@@ -585,6 +586,17 @@ export function normalizeToolConfig(raw) {
     if (typeof keysMap.braveApiKey === 'string') {
       config.keys.braveApiKey = keysMap.braveApiKey;
     }
+    if (typeof keysMap.tavilyApiKey === 'string') {
+      config.keys.tavilyApiKey = keysMap.tavilyApiKey;
+    }
+  }
+
+  if (
+    stored.webSearchProvider === 'brave' ||
+    stored.webSearchProvider === 'tavily' ||
+    stored.webSearchProvider === 'duckduckgo'
+  ) {
+    config.webSearchProvider = stored.webSearchProvider;
   }
 
   if (stored.toolCache && typeof stored.toolCache === 'object') {

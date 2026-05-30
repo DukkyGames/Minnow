@@ -144,6 +144,7 @@ const CACHE_POLICY: Record<string, CachePolicy> = {
   load_impeccable_context: { cacheable: true, ttlMs: 300_000 },
   web_search: { cacheable: true, ttlMs: 120_000 },
   web_search_ddg: { cacheable: true, ttlMs: 120_000 },
+  web_search_tavily: { cacheable: true, ttlMs: 120_000 },
   fetch_web_content: { cacheable: true, ttlMs: 120_000 },
   rag_web_content: { cacheable: true, ttlMs: 120_000 },
   read_document: { cacheable: true, ttlMs: 0 },

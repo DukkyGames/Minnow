@@ -126,19 +126,19 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'web_search',
     label: 'Web search',
-    description: 'Search the web via Brave API when a key is set; otherwise uses DuckDuckGo on the server.',
+    description:
+      'Search the web using the provider selected in Settings (Brave, Tavily, or DuckDuckGo).',
     category: 'web',
     serverRequired: false,
-    requiresKey: true,
-    keyId: 'braveApiKey',
+    requiresKey: false,
     definition: toolSchema(
       'web_search',
-      'Search the web for up-to-date information. Uses Brave Search when api_key is provided.',
+      'Search the web for up-to-date information. Provider is configured in Settings → Tools (Brave API, Tavily API, or DuckDuckGo via local server).',
       {
         query: { type: 'string', description: 'Search query' },
         api_key: {
           type: 'string',
-          description: 'Optional Brave Search API key (overrides saved key)',
+          description: 'Optional Brave Search API key (overrides saved key when Brave is selected)',
         },
       },
       ['query'],
