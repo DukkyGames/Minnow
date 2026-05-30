@@ -152,11 +152,7 @@ export function showPreviewSplit(): void {
 /** Hide preview pane and resizer. */
 export function hidePreviewSplit(): void {
   hidePreviewPaneDom();
-  const frame = document.getElementById('previewFrame');
-  if (frame instanceof HTMLIFrameElement) {
-    frame.removeAttribute('src');
-    frame.src = 'about:blank';
-  }
+  void window.minnow?.preview.hide();
   const resizer = document.getElementById('splitResizer');
   if (resizer) resizer.classList.add('hidden');
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });

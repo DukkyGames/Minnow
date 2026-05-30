@@ -2,7 +2,10 @@
   "name": "minnow",
   "private": true,
   "version": "1.0.0",
+  "description": "Local-first AI chat client for LM Studio and OpenAI-compatible providers",
+  "author": "Grim Media",
   "type": "module",
+  "main": "electron/dist/main.js",
   "bin": {
     "minnow": "./bin/minnow.mjs"
   },
@@ -20,6 +23,15 @@
     "test:skills-impeccable": "node --test test/skills-impeccable.test.mjs",
     "test:impeccable": "node --test test/impeccable/*.test.mjs && tsx --test test/skills/impeccable-client.test.mts",
     "preview": "vite preview",
+    "electron:build": "tsc -p electron/tsconfig.json && node scripts/rename-preload-mjs.mjs",
+    "electron:dev": "concurrently -k -n vite,electron \"cross-env BROWSER=none MINNOW_ELECTRON=1 npm run dev\" \"node scripts/electron-dev.mjs\"",
+    "desktop": "npm run electron:dev",
+    "electron:prod": "npm run build && npm run electron:build && cross-env MINNOW_ELECTRON=1 electron electron/dist/main.js",
+    "package:clean": "node scripts/clean-release.mjs",
+    "prepackage": "node scripts/clean-release.mjs",
+    "prepackage:dir": "node scripts/clean-release.mjs",
+    "package": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs",
+    "package:dir": "npm run build && npm run electron:build && node scripts/electron-builder-run.mjs --dir",
     "start": "node server.js",
     "minnow:run": "node bin/minnow.mjs run",
     "test": "node --test test/config/*.test.js test/providers/*.test.js test/providers/*.test.mts test/api/*.test.mjs test/profiles/*.test.mjs test/prompts/*.test.js test/cdp/*.test.js test/browser-cdp.test.mjs test/skills-impeccable.test.mjs test/memory/*.test.mjs test/lsp/*.test.mjs test/mcp/*.test.mjs test/server/*.test.mjs test/server/**/*.test.mjs test/workspace/*.test.js test/terminal/shell-profiles.test.mjs test/terminal/pty-protocol.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/sessions/*.test.mts test/state/*.test.mts test/api/models-load-unload.test.mts test/file/*.test.mjs test/file/*.test.mts test/lib/*.test.mts test/supervisor/**/*.test.mts test/ui-designer/**/*.test.mts test/ui/stream-status.test.mjs test/ui/chat-item-dot.test.mjs test/ui/thinking-duration.test.mjs test/ui/messages-stream-row.test.mjs test/ui/empty-assistant-bubble.test.mjs test/ui/message-actions.test.mjs test/ui/composer-send.test.mjs test/ui/composer-steer.test.mjs test/ui/composer-auto-resize.test.mjs test/ui/composer-stream-hint.test.mjs test/ui/sidebar-streaming-switch.test.mjs test/ui/settings-sections.test.mjs test/ui/prompt-diff-panel.test.mjs test/ui/settings-page-html.test.mjs test/ui/settings-model-routing.test.mjs test/settings/model-routing-catalog.test.mts test/ui/benchmark-page-html.test.mjs test/ui/global-bugs-page.test.mjs test/ui/benchmark-suite-toggles.test.mts test/ui/memory-tags-parse.test.mjs test/benchmark/*.test.mts test/ui/topbar-layout.test.mjs test/ui/model-state-dot.test.mts test/ui/model-select-picker.test.mts test/ui/theme-resolve.test.mts test/ui/thought-bubbles.test.mjs test/ui/chat-scroll.test.mjs test/ui/stats-split-layout.test.mjs test/ui/file-sidebar-toggle.test.mjs test/ui/workspace-recent-menu.test.mjs test/ui/sub-agent-cards.test.mts test/ui/view-mode-toggle.test.mjs test/ui/orchestrate-board-live-update.test.mjs test/ui/orchestrate-plan-picker.test.mjs test/ui/orchestrate-board-onboarding.test.mjs test/ui/terminal-tabs.test.mjs test/prompts/*.test.mjs test/titles/*.test.mjs test/usage/*.test.mjs test/modes/*.test.mts test/experts/**/*.test.mjs test/work-agents/**/*.test.mjs test/sub-agents/**/*.test.mts test/tools/**/*.test.mts test/tools/tools-list-sync.test.mjs test/tools/fetch-web-content.test.mjs test/agents/pack-loader.test.mts test/chat/*.test.mts test/chat/streaming-state.test.mjs test/chat/reef/*.test.mjs test/chat/reef/*.test.mts test/orchestrate/**/*.test.mts test/skills-loader.test.ts test/workspace-ref.test.ts && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/headless/*.test.mts test/evals/*.test.mts && node --test test/evals/eval-api.test.mjs",
@@ -45,6 +57,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
+    "connect": "^3.7.0",
     "@lydell/node-pty": "^1.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/addon-fit": "^0.10.0",
@@ -55,22 +68,62 @@
     "highlight.js": "^11.10.0",
     "marked": "^12.0.2",
     "recharts": "^3.8.1",
+    "sirv": "^3.0.2",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-types": "^3.17.5",
     "ws": "^8.20.1"
   },
   "devDependencies": {
+    "@types/connect": "^3.4.38",
     "@types/dompurify": "^3.0.5",
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
     "happy-dom": "^15.11.7",
     "impeccable": "^2.1.9",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "wait-on": "^8.0.1"
   },
   "optionalDependencies": {
     "mammoth": "^1.9.0",
     "officeparser": "^5.1.1",
     "pdf-parse": "^1.1.4",
     "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "org.grimmedia.minnow",
+    "productName": "Minnow",
+    "directories": {
+      "output": "release/pkg"
+    },
+    "files": [
+      "dist/**",
+      "electron/dist/**",
+      "server/**",
+      "scripts/generate-skills-manifest.mjs",
+      "package.json",
+      "skills-lock.json",
+      "!**/*.map"
+    ],
+    "asarUnpack": [
+      "node_modules/@lydell/node-pty/**"
+    ],
+    "extraResources": [
+      {
+        "from": "documentation",
+        "to": "documentation"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    }
   }
 }
