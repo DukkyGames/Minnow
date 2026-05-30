@@ -1199,6 +1199,14 @@ async function renderToolsSection(): Promise<void> {
   banner.textContent = 'Server tools need npm start (not npm run dev).';
   mount.appendChild(banner);
 
+  const previewBanner = document.createElement('p');
+  previewBanner.id = 'settingsToolsPreviewBanner';
+  previewBanner.className = 'settings-server-banner hidden';
+  previewBanner.setAttribute('role', 'status');
+  previewBanner.textContent =
+    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.';
+  mount.appendChild(previewBanner);
+
   const permissions = appendSettingsGroup(
     mount,
     'Permissions & cache',
@@ -1274,7 +1282,7 @@ async function renderToolsSection(): Promise<void> {
   const browserGroup = appendSettingsGroup(
     mount,
     'Browser automation',
-    'Allowlisted origins for CDP browser tools when the browser server is enabled.',
+    'Allowlisted origins for built-in preview browser tools when automation is enabled.',
   );
   const browserMount = el('div', 'settings-tool-browser-mount');
   browserGroup.appendChild(browserMount);

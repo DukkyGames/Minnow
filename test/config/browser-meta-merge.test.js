@@ -27,10 +27,8 @@ test('mergeConfigMeta preserves existing browser fields when patching allowNavig
     {
       browser: {
         enabled: true,
-        defaultUrl: 'http://127.0.0.1:9222',
         allowNavigate: true,
         allowedOriginPatterns: ['http://localhost:*'],
-        screenshotDir: 'screenshots',
       },
     },
     { browser: { allowNavigate: false } },

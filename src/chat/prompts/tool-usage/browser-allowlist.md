@@ -4,7 +4,7 @@ kind: tool-usage
 label: Browser navigation allowlist
 version: 1
 part: tool-usage
-description: CDP browser_navigate origin allowlist and ask_question consent flow.
+description: Built-in browser_navigate origin allowlist and ask_question consent flow.
 ---
 
 ## Browser navigation allowlist
@@ -25,7 +25,7 @@ Use exactly these option ids so the host can apply the choice:
   "questions": [
     {
       "id": "browser_allow_origin",
-      "prompt": "Allow CDP browser navigation to https://example.com?",
+      "prompt": "Allow browser navigation to https://example.com?",
       "options": [
         {
           "id": "once",

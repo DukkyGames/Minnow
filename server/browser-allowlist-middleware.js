@@ -3,6 +3,7 @@
  */
 
 import {
+  consumeEphemeralNavigation,
   grantEphemeralNavigation,
   isNavigationAllowed,
   originFromUrl,
@@ -79,6 +80,25 @@ export function createBrowserAllowlistMiddleware() {
           suggestedPattern: suggestAllowlistPattern(target),
           origin: originFromUrl(target),
         });
+        return;
+      }
+
+      if (pathname === '/api/browser/allowlist/consume' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const targetUrl = typeof body.url === 'string' ? body.url.trim() : '';
+        if (!targetUrl) {
+          sendJson(res, 400, { error: 'url is required' });
+          return;
+        }
+        let origin;
+        try {
+          origin = originFromUrl(targetUrl);
+        } catch {
+          sendJson(res, 400, { error: 'invalid url' });
+          return;
+        }
+        const consumed = consumeEphemeralNavigation(origin);
+        sendJson(res, 200, { ok: true, consumed, origin });
         return;
       }
 

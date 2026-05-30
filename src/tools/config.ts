@@ -8,6 +8,7 @@ import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults'
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
+import { isMinnowElectronShell } from './minnow-shell';
 import {
   createEmptyToolPermissionsConfig,
   type ApprovalPattern,
@@ -498,6 +499,9 @@ export function getEligibleToolIds(ids: string[]): string[] {
   return ids.filter((id) => {
     const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
     if (!tool) return false;
+    if (tool.previewRequired) {
+      return isMinnowElectronShell();
+    }
     return !tool.serverRequired || localServerAvailable;
   });
 }
@@ -537,6 +541,11 @@ export function setToolsEnabled(
   for (const id of ids) {
     const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
     if (!tool) continue;
+
+    if (enabled && tool.previewRequired && !isMinnowElectronShell()) {
+      skipped += 1;
+      continue;
+    }
 
     if (enabled && tool.serverRequired && !localServerAvailable) {
       skipped += 1;
@@ -634,6 +643,15 @@ export function setToolPermission(
   const tool = BUILT_IN_TOOLS.find((entry) => entry.id === id);
   if (!tool) return;
 
+  if (mode !== 'off' && tool.previewRequired && !isMinnowElectronShell()) {
+    setStatus(
+      'err',
+      'Browser tools require the Minnow desktop app window (not a separate browser tab).',
+    );
+    refreshAllToolListUis(root);
+    return;
+  }
+
   if (mode !== 'off' && tool.serverRequired && !localServerAvailable) {
     setStatus('err', 'Start with npm start to use file/git tools.');
     refreshAllToolListUis(root);
@@ -699,21 +717,37 @@ export function onToolToggle(id: string): void {
 export function refreshServerToolDisabledState(): void {
   if (typeof document === 'undefined') return;
 
-  const unavailable = !localServerAvailable;
+  const serverUnavailable = !localServerAvailable;
+  const previewUnavailable = !isMinnowElectronShell();
 
   const banner = document.getElementById('toolsServerBanner');
   if (banner) {
-    banner.classList.toggle('hidden', !unavailable);
+    banner.classList.toggle('hidden', !serverUnavailable);
   }
 
   const settingsBanner = document.getElementById('settingsToolsServerBanner');
   if (settingsBanner) {
-    settingsBanner.classList.toggle('hidden', !unavailable);
+    settingsBanner.classList.toggle('hidden', !serverUnavailable);
   }
 
   const composerBanner = document.getElementById('composerToolsServerBanner');
   if (composerBanner) {
-    composerBanner.classList.toggle('hidden', !unavailable);
+    composerBanner.classList.toggle('hidden', !serverUnavailable);
+  }
+
+  const composerPreviewBanner = document.getElementById('composerToolsPreviewBanner');
+  if (composerPreviewBanner) {
+    composerPreviewBanner.classList.toggle('hidden', !previewUnavailable);
+  }
+
+  const previewBanner = document.getElementById('toolsPreviewBanner');
+  if (previewBanner) {
+    previewBanner.classList.toggle('hidden', !previewUnavailable);
+  }
+
+  const settingsPreviewBanner = document.getElementById('settingsToolsPreviewBanner');
+  if (settingsPreviewBanner) {
+    settingsPreviewBanner.classList.toggle('hidden', !previewUnavailable);
   }
 
   const serverRows = document.querySelectorAll<HTMLElement>(
@@ -721,11 +755,11 @@ export function refreshServerToolDisabledState(): void {
   );
 
   for (const row of serverRows) {
-    row.classList.toggle('is-server-unavailable', unavailable);
+    row.classList.toggle('is-server-unavailable', serverUnavailable);
     const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
     if (select) {
-      select.disabled = unavailable;
-      if (unavailable) {
+      select.disabled = serverUnavailable;
+      if (serverUnavailable) {
         select.setAttribute(
           'title',
           'Requires npm start — local tool server is not running',
@@ -733,6 +767,26 @@ export function refreshServerToolDisabledState(): void {
       } else {
         select.removeAttribute('title');
       }
+    }
+  }
+
+  const previewRows = document.querySelectorAll<HTMLElement>(
+    '.tool-row[data-preview-required], [data-tool-id][data-preview-required]',
+  );
+
+  for (const row of previewRows) {
+    row.classList.toggle('is-preview-unavailable', previewUnavailable);
+    const select = row.querySelector<HTMLSelectElement>('select.tool-permission-select');
+    if (!select) continue;
+    if (previewUnavailable) {
+      select.disabled = true;
+      select.setAttribute(
+        'title',
+        'Requires the Minnow desktop app window — open via npm start, not a separate browser tab',
+      );
+    } else if (!row.hasAttribute('data-server-required') || !serverUnavailable) {
+      select.disabled = false;
+      select.removeAttribute('title');
     }
   }
 

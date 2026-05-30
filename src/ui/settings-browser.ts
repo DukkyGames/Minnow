@@ -1,5 +1,5 @@
 /**
- * Settings UI for browser CDP navigation allowlist (`config.json` → `browser`).
+ * Settings UI for built-in preview browser navigation allowlist (`config.json` → `browser`).
  */
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
@@ -69,13 +69,13 @@ export async function renderBrowserAllowlistSettings(
   const meta = initialMeta ?? (await loadBrowserMeta());
 
   const section = el('section', 'settings-tool-browser');
-  const heading = el('h3', 'settings-subheading', 'Browser navigation allowlist');
+  const heading = el('h3', 'settings-subheading', 'Built-in browser automation');
   section.appendChild(heading);
   section.appendChild(
     el(
       'p',
       'settings-field-hint',
-      'CDP browser_navigate only opens URLs matching these glob-like origin patterns (* = any characters). Localhost dev hosts are included by default.',
+      'The built-in preview panel (Electron desktop shell) is used for browser_* tools. browser_navigate only opens URLs matching these glob-like origin patterns (* = any characters). Localhost dev hosts are included by default.',
     ),
   );
 
@@ -84,18 +84,6 @@ export async function renderBrowserAllowlistSettings(
     checked: meta.allowNavigate,
   });
   section.appendChild(allowNavRow);
-
-  const urlRow = el('div', 'field settings-tool-browser-url');
-  const urlLabel = document.createElement('label');
-  urlLabel.htmlFor = 'settingsBrowserDefaultUrl';
-  urlLabel.textContent = 'CDP endpoint URL';
-  const urlInput = document.createElement('input');
-  urlInput.type = 'url';
-  urlInput.id = 'settingsBrowserDefaultUrl';
-  urlInput.value = meta.defaultUrl;
-  urlInput.placeholder = 'http://127.0.0.1:9222';
-  urlRow.append(urlLabel, urlInput);
-  section.appendChild(urlRow);
 
   const patternsRow = el('div', 'field settings-tool-browser-patterns');
   const patternsLabel = document.createElement('label');
@@ -129,19 +117,6 @@ export async function renderBrowserAllowlistSettings(
     })();
   });
 
-  urlInput.addEventListener('change', () => {
-    const v = urlInput.value.trim();
-    if (!v) return;
-    void (async () => {
-      try {
-        await saveBrowserMeta({ defaultUrl: v });
-        setStatus('ok', 'CDP URL saved');
-      } catch {
-        setStatus('err', 'Could not save CDP URL');
-      }
-    })();
-  });
-
   saveBtn.addEventListener('click', () => {
     void (async () => {
       const patterns = parsePatternsText(patternsArea.value);
@@ -152,7 +127,6 @@ export async function renderBrowserAllowlistSettings(
       try {
         await saveBrowserMeta({
           allowNavigate: allowNavCb.checked,
-          defaultUrl: urlInput.value.trim() || meta.defaultUrl,
           allowedOriginPatterns: patterns,
         });
         invalidateBrowserMetaCache();
