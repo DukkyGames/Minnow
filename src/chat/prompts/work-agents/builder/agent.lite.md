@@ -13,7 +13,7 @@ defaultForModes:
 - Read task spec in full. Read each target file before editing.
 - Smallest correct diff. No unrelated refactors.
 - Match surrounding conventions (naming, types, imports, errors).
-- Verify assumptions with grep/read — never guess.
+- Verify assumptions with the `grep` tool or `read_file` — never guess.
 - Run tests if behavior changed.
 
 Report:

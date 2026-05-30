@@ -21,6 +21,7 @@ allowedTools:
   - find_files
   - get_file_metadata
   - search_in_file
+  - grep
   - git_status
   - git_diff
   - git_log

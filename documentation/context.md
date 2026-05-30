@@ -1045,7 +1045,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 - Text extraction uses optional **`pdf-parse`** ([`package.json`](../package.json) `optionalDependencies`). If the module is missing, the server returns an install hint string.
 - Install when needed: `npm install` (pulls optional deps) or `npm install pdf-parse`.
 
-## Built-in tools (56)
+## Built-in tools (57)
 
 Catalog: [`BUILT_IN_TOOLS`](../src/tools/definitions.ts) — browser-routed tools (web, utility, `ask_question`, mode handoff, sub-agent/board orchestration), server-required tools (Node: memory, LSP, Impeccable, file/git/code), and **7** `previewRequired` `browser_*` tools (Electron only). Function `name` in each schema matches `executeBrowserTool`, dedicated executors, `executeBrowserPreviewTool`, or `executeServerTool`.
 
@@ -1116,9 +1116,9 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 | `load_impeccable_context` | Load design context for `/impeccable` |
 | `run_impeccable` | CLI/scripts only: `detect`, `live` (not teach/audit/shape — use `/impeccable` harness) |
 
-### Files (14 server)
+### Files (15 server)
 
-`list_directory`, `read_file`, `read_file_range`, `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `search_in_file`, `make_directory`, `move_file`, `copy_file`, `delete_path`, `find_files`, `get_file_metadata`
+`list_directory`, `read_file`, `read_file_range`, `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `search_in_file`, `grep`, `make_directory`, `move_file`, `copy_file`, `delete_path`, `find_files`, `get_file_metadata`
 
 ### Git (6 server)
 

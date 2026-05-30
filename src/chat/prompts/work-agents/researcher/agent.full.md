@@ -18,6 +18,7 @@ allowedTools:
   - find_files
   - get_file_metadata
   - search_in_file
+  - grep
   - web_search
   - wikipedia_search
   - fetch_web_content

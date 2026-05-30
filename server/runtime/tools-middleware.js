@@ -43,6 +43,7 @@ import {
   tryResolveReefArtifactsFindRoot,
 } from '../reef/artifact-paths.js';
 import { appendArtifactVersionFromSave } from '../reef/artifact-store.js';
+import { runGrepSearch } from '../tools/grep.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
 import { pathAccessStore, resolveSafePath } from './path-access.js';
 
@@ -282,6 +283,14 @@ async function toolSearchInFile(args) {
     }
   });
   return matches.length ? matches.join('\n') : `No matches in ${toRelativePath(filePath)}`;
+}
+
+async function toolGrep(args) {
+  return runGrepSearch(args, {
+    resolveSafePath,
+    toRelativePath,
+    getWorkspaceRoot,
+  });
 }
 
 async function toolMakeDirectory(args) {
@@ -589,6 +598,7 @@ const SERVER_TOOL_HANDLERS = {
   insert_at_line: toolInsertAtLine,
   replace_text_in_file: toolReplaceTextInFile,
   search_in_file: toolSearchInFile,
+  grep: toolGrep,
   make_directory: toolMakeDirectory,
   move_file: toolMoveFile,
   copy_file: toolCopyFile,
