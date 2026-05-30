@@ -8,7 +8,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
 import { executeCommandBlocking } from '../terminal-runner.js';
-import { BROWSER_TOOL_HANDLERS } from '../cdp/browser-tools.js';
 import { toolRunImpeccable } from '../impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from '../impeccable/load-impeccable-context.js';
 import {
@@ -611,7 +610,6 @@ const SERVER_TOOL_HANDLERS = {
     return JSON.stringify(await listLspServers(), null, 2);
   },
   save_memory: toolSaveMemory,
-  ...BROWSER_TOOL_HANDLERS,
 };
 
 /**

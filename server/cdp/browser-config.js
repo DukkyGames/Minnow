@@ -10,22 +10,18 @@ import { mergeConfigMeta } from '../config/validators.js';
 
 /** @typedef {object} BrowserConfig
  * @property {boolean} enabled
- * @property {string} defaultUrl
  * @property {boolean} allowNavigate
  * @property {string[]} allowedOriginPatterns
- * @property {string} screenshotDir
  */
 
 export const DEFAULT_BROWSER_CONFIG = {
   enabled: true,
-  defaultUrl: 'http://127.0.0.1:9222',
   allowNavigate: true,
   allowedOriginPatterns: [
     'http://localhost:*',
     'http://127.0.0.1:*',
     'https://localhost:*',
   ],
-  screenshotDir: 'screenshots',
 };
 
 let cachedConfig = null;
@@ -36,19 +32,16 @@ let cachedMtime = 0;
  * @returns {BrowserConfig}
  */
 function mergeBrowserConfig(raw) {
-  const base = { ...DEFAULT_BROWSER_CONFIG, allowedOriginPatterns: [...DEFAULT_BROWSER_CONFIG.allowedOriginPatterns] };
+  const base = {
+    ...DEFAULT_BROWSER_CONFIG,
+    allowedOriginPatterns: [...DEFAULT_BROWSER_CONFIG.allowedOriginPatterns],
+  };
   if (!raw || typeof raw !== 'object') return base;
   const row = /** @type {Record<string, unknown>} */ (raw);
   if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
-  if (typeof row.defaultUrl === 'string' && row.defaultUrl.trim()) {
-    base.defaultUrl = row.defaultUrl.trim();
-  }
   if (typeof row.allowNavigate === 'boolean') base.allowNavigate = row.allowNavigate;
   if (Array.isArray(row.allowedOriginPatterns)) {
     base.allowedOriginPatterns = row.allowedOriginPatterns.filter((p) => typeof p === 'string');
-  }
-  if (typeof row.screenshotDir === 'string' && row.screenshotDir.trim()) {
-    base.screenshotDir = row.screenshotDir.trim();
   }
   return base;
 }
@@ -103,28 +96,6 @@ export async function appendBrowserAllowlistPattern(pattern) {
   await writeConfigJson('config.json', merged);
   resetBrowserConfigCache();
   return true;
-}
-
-/**
- * Resolve CDP HTTP endpoint: arg → env → config → default.
- * @param {Record<string, unknown>} [args]
- */
-export async function resolveBrowserUrl(args = {}) {
-  const fromArg =
-    typeof args.browser_url === 'string' && args.browser_url.trim()
-      ? args.browser_url.trim()
-      : '';
-  if (fromArg) return fromArg;
-
-  const fromEnv =
-    typeof process.env.MINNOW_BROWSER_URL === 'string' &&
-    process.env.MINNOW_BROWSER_URL.trim()
-      ? process.env.MINNOW_BROWSER_URL.trim()
-      : '';
-  if (fromEnv) return fromEnv;
-
-  const cfg = await loadBrowserConfig();
-  return cfg.defaultUrl;
 }
 
 /**

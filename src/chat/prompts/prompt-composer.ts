@@ -40,8 +40,8 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'reef',
 ]);
 
-/** Tool ids that imply CDP browser automation (navigation allowlist rules apply). */
-const BROWSER_CDP_TOOL_IDS = new Set([
+/** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */
+const BROWSER_PREVIEW_TOOL_IDS = new Set([
   'browser_list',
   'browser_navigate',
   'browser_snapshot',
@@ -52,9 +52,9 @@ const BROWSER_CDP_TOOL_IDS = new Set([
   'request_browser_origin_access',
 ]);
 
-function contextHasBrowserCdpTools(ctx: ComposeContext): boolean {
+function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
-  return ids.some((id) => BROWSER_CDP_TOOL_IDS.has(id));
+  return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
 }
 
 /** Lite truncation caps when no lite template exists. */
@@ -199,9 +199,9 @@ function resolveModeHandoffBody(ctx: ComposeContext, profile: PromptProfile): st
   return loaded?.body?.trim() ?? '';
 }
 
-/** Browser navigation allowlist + ask_question flow when CDP tools are enabled. */
+/** Browser navigation allowlist + ask_question flow when preview browser tools are enabled. */
 function resolveBrowserAllowlistBody(ctx: ComposeContext, profile: PromptProfile): string {
-  if (!contextHasBrowserCdpTools(ctx)) {
+  if (!contextHasBrowserPreviewTools(ctx)) {
     return '';
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';

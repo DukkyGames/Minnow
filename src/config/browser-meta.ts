@@ -1,25 +1,21 @@
 /**
- * Browser CDP settings from config.json → `browser` (navigation allowlist, CDP URL).
+ * Built-in preview browser settings from config.json → `browser` (navigation allowlist).
  */
 
 export interface BrowserMeta {
   enabled: boolean;
-  defaultUrl: string;
   allowNavigate: boolean;
   allowedOriginPatterns: string[];
-  screenshotDir: string;
 }
 
 export const DEFAULT_BROWSER_META: BrowserMeta = {
   enabled: true,
-  defaultUrl: 'http://127.0.0.1:9222',
   allowNavigate: true,
   allowedOriginPatterns: [
     'http://localhost:*',
     'http://127.0.0.1:*',
     'https://localhost:*',
   ],
-  screenshotDir: 'screenshots',
 };
 
 let cached: BrowserMeta | null = null;
@@ -40,17 +36,11 @@ export function normalizeBrowserMeta(raw: unknown): BrowserMeta {
     allowedOriginPatterns: [...DEFAULT_BROWSER_META.allowedOriginPatterns],
   };
   if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
-  if (typeof row.defaultUrl === 'string' && row.defaultUrl.trim()) {
-    base.defaultUrl = row.defaultUrl.trim();
-  }
   if (typeof row.allowNavigate === 'boolean') base.allowNavigate = row.allowNavigate;
   if (Array.isArray(row.allowedOriginPatterns)) {
     base.allowedOriginPatterns = row.allowedOriginPatterns.filter(
       (p): p is string => typeof p === 'string' && p.trim().length > 0,
     );
-  }
-  if (typeof row.screenshotDir === 'string' && row.screenshotDir.trim()) {
-    base.screenshotDir = row.screenshotDir.trim();
   }
   return base;
 }
@@ -87,11 +77,9 @@ export async function saveBrowserMeta(patch: Partial<BrowserMeta>): Promise<void
   const current = await loadBrowserMeta();
   const next: BrowserMeta = {
     enabled: patch.enabled ?? current.enabled,
-    defaultUrl: patch.defaultUrl ?? current.defaultUrl,
     allowNavigate: patch.allowNavigate ?? current.allowNavigate,
     allowedOriginPatterns:
       patch.allowedOriginPatterns ?? [...current.allowedOriginPatterns],
-    screenshotDir: patch.screenshotDir ?? current.screenshotDir,
   };
   cached = next;
   await fetch('/api/config/meta', {

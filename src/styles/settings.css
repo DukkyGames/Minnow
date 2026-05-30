@@ -264,16 +264,19 @@
   border-color: var(--mn-border);
 }
 
-.tool-row:hover:not(.is-server-unavailable) {
+.tool-row:hover:not(.is-server-unavailable):not(.is-preview-unavailable) {
   background: var(--mn-bg);
 }
 
-.tool-row.is-server-unavailable {
+.tool-row.is-server-unavailable,
+.tool-row.is-preview-unavailable {
   opacity: 0.55;
 }
 
 .tool-row.is-server-unavailable .tool-toggle:disabled,
-.tool-row.is-server-unavailable .tool-toggle-wrap {
+.tool-row.is-server-unavailable .tool-toggle-wrap,
+.tool-row.is-preview-unavailable .tool-toggle:disabled,
+.tool-row.is-preview-unavailable .tool-toggle-wrap {
   cursor: not-allowed;
 }
 
@@ -343,7 +346,8 @@
   border-color: var(--mn-border);
 }
 
-.tool-row.is-server-unavailable .tool-permission-select:disabled {
+.tool-row.is-server-unavailable .tool-permission-select:disabled,
+.tool-row.is-preview-unavailable .tool-permission-select:disabled {
   cursor: not-allowed;
 }
 

@@ -8,7 +8,7 @@
  * fetch_web_content / rag_web_content: client routes to the server when `npm start`
  * is up (BUG-011); this executor is the browser fallback (CORS-bound).
  *
- * Full browser automation (navigate, snapshot, screenshot) lives in server CDP tools
+ * Full browser automation (navigate, snapshot, screenshot) lives in Electron preview tools
  * (`browser_*` via `npm start` / POST /api/tools) — not in this executor.
  */
 

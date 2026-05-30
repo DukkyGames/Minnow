@@ -11,6 +11,14 @@ export const PREVIEW_STOP = 'minnow:preview:stop';
 export const PREVIEW_GO_BACK = 'minnow:preview:go-back';
 export const PREVIEW_GO_FORWARD = 'minnow:preview:go-forward';
 export const PREVIEW_SET_BOUNDS = 'minnow:preview:set-bounds';
+/** Renderer → main: run JS in the preview guest page context. */
+export const PREVIEW_EXEC_JS = 'minnow:preview:exec-js';
+/** Renderer → main: capture the preview guest as a base64 PNG. */
+export const PREVIEW_CAPTURE_PAGE = 'minnow:preview:capture-page';
+/** Renderer → main: current preview guest URL/title/loading. */
+export const PREVIEW_GET_INFO = 'minnow:preview:get-info';
+/** Renderer → main: load URL and await main-frame finish or fail. */
+export const PREVIEW_NAVIGATE_AWAIT = 'minnow:preview:navigate-await';
 /** Main → renderer: navigation occurred in preview host. */
 export const PREVIEW_NAVIGATION = 'minnow:preview:navigation';
 /** Main → renderer: preview guest loading state changed. */

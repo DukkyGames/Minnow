@@ -12,6 +12,12 @@ import {
   type WebContents,
 } from 'electron';
 import * as channels from './ipc-channels.js';
+import {
+  previewCapturePageBase64,
+  previewExecJs,
+  previewGetGuestInfo,
+  previewNavigateAwait,
+} from './preview-guest-actions.js';
 import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
 
 export interface PreviewBounds {
@@ -284,6 +290,46 @@ export function registerPreviewHostIpc(): void {
       width: Math.max(0, Math.round(width)),
       height: Math.max(0, Math.round(height)),
     });
+  });
+
+  ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry || typeof code !== 'string') {
+      throw new Error('Preview guest is not available');
+    }
+    return previewExecJs(entry.view.webContents, code);
+  });
+
+  ipcMain.handle(channels.PREVIEW_CAPTURE_PAGE, async (event) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry) {
+      throw new Error('Preview guest is not available');
+    }
+    return previewCapturePageBase64(entry.view.webContents);
+  });
+
+  ipcMain.handle(channels.PREVIEW_GET_INFO, (event) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry) {
+      return { url: '', title: '', loading: false };
+    }
+    return previewGetGuestInfo(entry.view.webContents);
+  });
+
+  ipcMain.handle(channels.PREVIEW_NAVIGATE_AWAIT, async (event, url: string) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry) {
+      return {
+        ok: false,
+        url: typeof url === 'string' ? url : '',
+        title: '',
+        errorDescription: 'Preview guest is not available',
+      };
+    }
+    if (typeof url !== 'string') {
+      return previewNavigateAwait(entry.view.webContents, '');
+    }
+    return previewNavigateAwait(entry.view.webContents, url);
   });
 }
 

@@ -188,6 +188,15 @@ function syncAddressBarFromNavigation(url: string): void {
 }
 
 function onPreviewNavigation(url: string): void {
+  if (
+    usesElectronPreview() &&
+    getFilePanelState().rightPaneMode !== 'preview' &&
+    url &&
+    HTTP_URL_RE.test(url)
+  ) {
+    revealPreviewPanelForAgentNavigation(url);
+  }
+
   syncAddressBarFromNavigation(url);
   if (!url || url === 'about:blank' || url.startsWith('chrome-error:')) return;
   hidePreviewStatus();
@@ -444,6 +453,28 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
     patchFilePanelState({ previewSource: source });
   }
   applySourceToPreview(source, bust);
+}
+
+/**
+ * Show the preview split + Electron guest when browser_navigate runs.
+ * Does not load the URL — caller uses navigateAndWait (avoids double fetch).
+ */
+export function revealPreviewPanelForAgentNavigation(url: string): void {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  if (!dismissFileViewerForPreview()) return;
+
+  showPreviewSplit();
+  patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+  hidePreviewStatus();
+  setPreviewLoading(true);
+
+  const input = getUrlInput();
+  if (input) input.value = trimmed;
+
+  if (usesElectronPreview()) {
+    void showPreviewHost();
+  }
 }
 
 /** Open the preview panel with an optional initial source. */

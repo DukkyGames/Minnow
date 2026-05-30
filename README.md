@@ -17,7 +17,7 @@ Built with **Vite + TypeScript**. The UI is a single-page app; a **Node dev serv
 
 ### Agent capabilities
 
-- **55 built-in tools** — OpenAI-style function calling; **20** routed in the browser (web, utilities, mode handoff, sub-agent/board orchestration UI), **35** on the Node tool server (files, git, code, CDP browser, memory, LSP, Impeccable)
+- **55 built-in tools** — OpenAI-style function calling; browser-routed tools (web, utilities, mode handoff, sub-agent/board orchestration, Electron preview `browser_*`), plus Node tool server (files, git, code, memory, LSP, Impeccable)
 - **Operating modes** — **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (sandboxed inline widgets via `reef-widget` fences)
 - **Orchestrate board** — kanban view tied to plans under `documentation/plans/`; `board_*` tools + sub-agent cards and drawer
 - **Sub-agents** — `spawn_sub_agent`, concurrency limits, live cards, transcript drawer, persisted runs on the chat
@@ -65,7 +65,7 @@ npm install
 
 **Impeccable (UI design skill):** `postinstall` vendors the [Impeccable](https://impeccable.style) skill into `src/skills/impeccable/`. With `npm start`, use **`/impeccable`** in the composer for design critique, polish, and related commands — context comes from [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md), and [`.impeccable/design.json`](.impeccable/design.json). Docs: https://impeccable.style/docs. Before UI-heavy PRs: `npm run impeccable:detect` (exit code `2` = issues found). Re-sync: `npm run impeccable:sync`; update upstream: `npm run impeccable:update`.
 
-**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** work agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, run Chrome with remote debugging (`--remote-debugging-port=9222`) and prefer a **vision-capable** model; optional binding in `~/.minnow/config.json` under `uiDesigner`.
+**UI Designer:** Use **`/ui-designer plan`** or **`/ui-designer implement`** (or select the **UI Designer** work agent) for an Impeccable-guided audit → screenshot → shape → plan or UI edits. For screenshots, use the Minnow desktop shell (`browser_screenshot` on the built-in preview) and prefer a **vision-capable** model; optional binding in `~/.minnow/config.json` under `uiDesigner`.
 
 Optional: PDF text extraction uses `pdf-parse` (`optionalDependencies`). If PDF attachments fail:
 
@@ -191,21 +191,13 @@ When you run `npm start`, the browser uses the same origin for tools and config:
 
 Browser-routed tools (`get_datetime`, `calculate`, `ask_question`, sub-agent spawn/status, board tools, mode handoff, etc.) run in the page. Calling pure browser tools via `POST /api/tools` returns "Not implemented".
 
-### Browser automation (CDP, optional)
+### Browser automation (built-in preview, optional)
 
-Enable **Browser (CDP)** tools in Settings. Start Chrome with remote debugging:
+Enable **built-in browser** tools in Settings. They require the **Minnow desktop shell** (`npm start` launches Electron by default, or `npm run electron:dev`). The agent drives the same **preview panel** you see in the UI (`browser_navigate` auto-opens it).
 
-```bash
-# Windows (typical)
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). Edit patterns in **Settings → Tools → Built-in browser automation**, or approve when the agent is blocked in chat. `browser_eval` runs full page JavaScript in the preview guest — use only on trusted pages.
 
-# macOS / Linux
-google-chrome --remote-debugging-port=9222
-```
-
-Optional: `MINNOW_BROWSER_URL=http://127.0.0.1:9222` or `browser.defaultUrl` in `~/.minnow/config.json`.
-
-Navigation is restricted by `browser.allowedOriginPatterns` (localhost dev hosts by default). Edit patterns in **Settings → Tools → Browser navigation allowlist**, or approve when the agent is blocked in chat. `browser_eval` runs full page JavaScript — use only on trusted pages.
+In a plain browser tab (no Electron), `browser_*` tools are hidden from the catalog.
 
 ---
 
@@ -245,8 +237,8 @@ Override home for tests: `MINNOW_HOME=<temp-dir>`.
 | “Server tools need npm start” | Stop `npm run dev`; run `npm start` instead. |
 | Tool can’t read a file outside the repo | Expected unless `TOOLS_ALLOW_ALL_PATHS=1`. |
 | PDF attachment fails | Run `npm start`; install `pdf-parse` if prompted. |
-| CORS / fetch errors on web tools | Run `npm start` so **Fetch page** uses server-side HTTP; for login/SPA pages use CDP `browser_navigate` + `browser_snapshot`. |
-| CDP browser tools fail | Chrome with `--remote-debugging-port=9222`? `npm start`? Tools enabled? |
+| CORS / fetch errors on web tools | Run `npm start` so **Fetch page** uses server-side HTTP; for login/SPA pages use `browser_navigate` + `browser_snapshot` in the desktop shell. |
+| Browser tools missing or failing | Use the Electron desktop app (`npm start` / `npm run electron:dev`)? Tools enabled in Settings? Allowlist patterns include your origin? |
 | Context ring shows no limit | Model may not report `context_length`; check loaded model in LM Studio. |
 | Port already in use | Set `PORT` and open the printed URL. |
 | `[providers] fetch failed` on startup | Normal without LM Studio; add a provider when the server is up. |
