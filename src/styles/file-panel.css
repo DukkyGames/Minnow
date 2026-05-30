@@ -180,6 +180,16 @@
 
 .file-viewer-body .cm-content {
   color: var(--mn-fg);
+  /* Native caret — auto is often too dark on dark themes */
+  caret-color: var(--mn-fg);
+}
+
+/* drawSelection cursors (if enabled) */
+.file-viewer-editor-mount .cm-cursor,
+.file-viewer-editor-mount .cm-cursor-primary,
+.file-viewer-body .cm-editor .cm-cursor,
+.file-viewer-body .cm-editor .cm-cursor-primary {
+  border-left-color: var(--mn-fg);
 }
 
 .file-viewer-markdown-preview {
