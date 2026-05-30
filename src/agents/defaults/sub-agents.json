@@ -27,10 +27,11 @@
       "contextEnforcementPolicy": "slide",
       "summarySchema": "minnow.sub-agent.v1",
       "sampler": {
-        "temperature": 0.4,
+        "temperature": 0.35,
         "topP": 0.9,
         "topK": 40,
-        "repetitionPenalty": 1.05
+        "minP": 0.05,
+        "repetitionPenalty": 1.08
       }
     },
     "explore": {
@@ -65,10 +66,11 @@
       "contextEnforcementPolicy": "slide",
       "summarySchema": "minnow.sub-agent.explore",
       "sampler": {
-        "temperature": 0.45,
+        "temperature": 0.4,
         "topP": 0.92,
         "topK": 40,
-        "repetitionPenalty": 1
+        "minP": 0.05,
+        "repetitionPenalty": 1.08
       }
     },
     "researcher": {
@@ -110,10 +112,11 @@
       ],
       "systemPromptPath": null,
       "sampler": {
-        "temperature": 0.5,
-        "topP": 0.92,
+        "temperature": 0.55,
+        "topP": 0.95,
         "topK": 50,
-        "repetitionPenalty": 1
+        "minP": 0.04,
+        "repetitionPenalty": 1.05
       }
     },
     "shell": {
@@ -142,6 +145,7 @@
         "temperature": 0.15,
         "topP": 0.85,
         "topK": 20,
+        "minP": 0.05,
         "repetitionPenalty": 1.1
       }
     },
@@ -164,7 +168,8 @@
         "temperature": 0.35,
         "topP": 0.9,
         "topK": 35,
-        "repetitionPenalty": 1
+        "minP": 0.05,
+        "repetitionPenalty": 1.08
       }
     },
     "debugger": {
@@ -206,9 +211,10 @@
       "summarySchema": "minnow.sub-agent.v1",
       "sampler": {
         "temperature": 0.25,
-        "topP": 0.88,
+        "topP": 0.9,
         "topK": 30,
-        "repetitionPenalty": 1.05
+        "minP": 0.05,
+        "repetitionPenalty": 1.08
       }
     },
     "bug-planner": {
@@ -227,10 +233,11 @@
       "systemPromptPath": null,
       "summarySchema": "minnow.sub-agent.v1",
       "sampler": {
-        "temperature": 0.55,
+        "temperature": 0.5,
         "topP": 0.92,
-        "topK": 50,
-        "repetitionPenalty": 1
+        "topK": 40,
+        "minP": 0.05,
+        "repetitionPenalty": 1.05
       }
     },
     "reef-widget": {
@@ -272,8 +279,9 @@
       "sampler": {
         "temperature": 0.35,
         "topP": 0.9,
-        "topK": 35,
-        "repetitionPenalty": 1
+        "topK": 40,
+        "minP": 0.05,
+        "repetitionPenalty": 1.05
       }
     }
   },

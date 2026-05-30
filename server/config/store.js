@@ -125,6 +125,9 @@ export async function readResource(resource) {
     if (!data?.titles) {
       patch.titles = DEFAULT_META.titles;
     }
+    if (!data?.sampler) {
+      patch.sampler = DEFAULT_META.sampler;
+    }
     if (!data?.chat) {
       patch.chat = DEFAULT_META.chat;
     }

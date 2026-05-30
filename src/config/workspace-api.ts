@@ -50,6 +50,13 @@ export async function fetchWorkspace(): Promise<WorkspaceInfo | null> {
   }
 }
 
+export interface WorkspaceMkdirResult {
+  ok?: boolean;
+  path: string;
+  name: string;
+  error?: string;
+}
+
 /** List directories for the in-app workspace folder picker. */
 export async function browseWorkspaceFolders(
   browsePath = '',
@@ -59,6 +66,23 @@ export async function browseWorkspaceFolders(
     : '';
   const res = await fetch(`/api/workspace/browse${query}`, { cache: 'no-store' });
   const json = (await res.json()) as WorkspaceBrowseResult & { error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `HTTP ${res.status}`);
+  }
+  return json;
+}
+
+/** Create a subfolder under parentPath for the in-app workspace folder picker. */
+export async function createWorkspaceSubfolder(
+  parentPath: string,
+  name: string,
+): Promise<WorkspaceMkdirResult> {
+  const res = await fetch('/api/workspace/mkdir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentPath, name }),
+  });
+  const json = (await res.json()) as WorkspaceMkdirResult & { error?: string };
   if (!res.ok) {
     throw new Error(json.error ?? `HTTP ${res.status}`);
   }

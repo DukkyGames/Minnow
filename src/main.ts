@@ -65,6 +65,7 @@ import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
+import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
 import {
   getActiveChat,
   loadSessionsFromStorage,
@@ -246,6 +247,9 @@ export async function initApp(): Promise<void> {
   await loadToolSecurityMeta().catch(() => undefined);
   await loadBrowserMeta().catch(() => undefined);
   await loadChatMeta().catch(() => undefined);
+  await loadSamplerMeta()
+    .then(applySamplerMetaToDrawer)
+    .catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
   initStatsStrip();
