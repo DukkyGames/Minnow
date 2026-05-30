@@ -164,6 +164,9 @@ export function fillToolsSection(
       if (tool.serverRequired) {
         row.setAttribute('data-server-required', '');
       }
+      if (tool.previewRequired) {
+        row.setAttribute('data-preview-required', '');
+      }
 
       const controlWrap = document.createElement('div');
       controlWrap.className = 'tool-permission-wrap';

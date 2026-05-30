@@ -299,6 +299,7 @@
       <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
       <p class="field-hint tools-section-hint">Enable function calling for the model. Server tools require <code>npm start</code> (local tool server).</p>
       <p id="toolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+      <p id="toolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window (from <code>npm start</code>), not a separate browser tab.</p>
       <div id="toolsList" class="tools-list"></div>
       <div class="tool-key-row field">
         <label for="braveApiKey">Brave Search API key</label>
@@ -951,6 +952,7 @@
             </button>
             <div id="composerToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
               <p id="composerToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+              <p id="composerToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
               <div id="composerToolsList" class="tools-list tools-list--composer"></div>
               <footer class="composer-tools-popover__footer">
                 <button type="button" class="composer-tools-popover__link" id="composerToolsOpenSettings">Settings → Tools</button>

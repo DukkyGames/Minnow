@@ -1160,6 +1160,14 @@ async function renderToolsSection(): Promise<void> {
   banner.textContent = 'Server tools need npm start (not npm run dev).';
   mount.appendChild(banner);
 
+  const previewBanner = document.createElement('p');
+  previewBanner.id = 'settingsToolsPreviewBanner';
+  previewBanner.className = 'settings-server-banner hidden';
+  previewBanner.setAttribute('role', 'status');
+  previewBanner.textContent =
+    'Browser tools only work in the Minnow desktop app window (from npm start), not in a separate browser tab.';
+  mount.appendChild(previewBanner);
+
   const permissions = appendSettingsGroup(
     mount,
     'Permissions & cache',

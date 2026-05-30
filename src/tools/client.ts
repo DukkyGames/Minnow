@@ -32,10 +32,8 @@ import {
   executeBrowserNavigateWithGate,
   executeRequestBrowserOriginAccess,
 } from './browser-navigation-gate';
-import {
-  executeBrowserPreviewTool,
-  isElectronPreviewAvailable,
-} from './browser-preview-tools';
+import { executeBrowserPreviewTool } from './browser-preview-tools';
+import { isElectronPreviewAvailable } from './minnow-shell';
 import {
   executeCreateChatWithMode,
   executeProposeModeSwitch,
@@ -411,7 +409,7 @@ async function executeToolBodyAfterGates(
     if (!isElectronPreviewAvailable()) {
       return {
         content:
-          'Error: Browser automation runs in the Minnow desktop shell. Run npm run electron:dev or the packaged app.',
+          'Error: Browser automation runs in the Minnow desktop shell. Use the Minnow app window from npm start or npm run electron:dev — not a separate browser tab.',
       };
     }
     if (name === 'browser_navigate') {

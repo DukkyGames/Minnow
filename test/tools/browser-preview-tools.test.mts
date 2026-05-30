@@ -40,8 +40,8 @@ describe('browser-preview-tools', () => {
       configurable: true,
       writable: true,
     });
-    const mod = await import('../../src/tools/browser-preview-tools.ts');
-    assert.equal(mod.isElectronPreviewAvailable(), false);
+    const shell = await import('../../src/tools/minnow-shell.ts');
+    assert.equal(shell.isElectronPreviewAvailable(), false);
   });
 
   test('executeBrowserPreviewTool returns desktop shell message outside Electron', async () => {
@@ -79,6 +79,7 @@ describe('browser-preview-tools', () => {
     Object.defineProperty(globalThis, 'window', {
       value: {
         minnow: {
+          app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
           preview: {
             execJs: async () => ({ missing: true }),
             getInfo: async () => ({ url: '', title: '', loading: false }),
@@ -91,6 +92,9 @@ describe('browser-preview-tools', () => {
       configurable: true,
       writable: true,
     });
+
+    const shell = await import('../../src/tools/minnow-shell.ts');
+    assert.equal(shell.isElectronPreviewAvailable(), true);
 
     const mod = await import('../../src/tools/browser-preview-tools.ts');
     const result = await mod.executeBrowserPreviewTool('browser_click', { uid: 9 });
@@ -126,6 +130,7 @@ describe('browser-preview-tools', () => {
     Object.defineProperty(globalThis, 'window', {
       value: {
         minnow: {
+          app: { isElectron: true, platform: 'linux', openExternal: async () => {} },
           preview: {
             execJs: async () => ({}),
             capturePage: async () => Buffer.from('png').toString('base64'),

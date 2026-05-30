@@ -9,21 +9,28 @@ import {
   renderPreviewSnapshotTree,
   type PreviewSnapshotNode,
 } from './browser-preview-snapshot';
+import {
+  isElectronPreviewAvailable,
+  isMinnowElectronShell,
+  isPreviewAutomationReady,
+} from './minnow-shell';
+
+export { isElectronPreviewAvailable } from './minnow-shell';
 
 const DESKTOP_SHELL_MESSAGE =
-  'Error: Browser automation runs in the Minnow desktop shell. Run npm run electron:dev or the packaged app.';
+  'Error: Browser automation runs in the Minnow desktop shell. Use the Minnow app window from npm start or npm run electron:dev — not a separate browser tab.';
 
-/** True when the Electron preload exposed the preview IPC bridge. */
-export function isElectronPreviewAvailable(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.minnow?.preview?.execJs);
-}
+const STALE_SHELL_MESSAGE =
+  'Error: Browser automation IPC is missing. Quit the app, run npm run electron:build, then restart the desktop shell.';
 
 function previewApi(): NonNullable<Window['minnow']>['preview'] {
-  const api = window.minnow?.preview;
-  if (!api?.execJs) {
+  if (!isMinnowElectronShell()) {
     throw new Error(DESKTOP_SHELL_MESSAGE.replace(/^Error: /, ''));
   }
-  return api;
+  if (!isPreviewAutomationReady()) {
+    throw new Error(STALE_SHELL_MESSAGE.replace(/^Error: /, ''));
+  }
+  return window.minnow!.preview;
 }
 
 async function assertBrowserAutomationEnabled(): Promise<string | null> {
