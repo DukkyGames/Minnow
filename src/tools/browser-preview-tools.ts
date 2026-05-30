@@ -14,6 +14,7 @@ import {
   isMinnowElectronShell,
   isPreviewAutomationReady,
 } from './minnow-shell';
+import { revealPreviewPanelForAgentNavigation } from '../ui/preview-panel';
 
 export { isElectronPreviewAvailable } from './minnow-shell';
 
@@ -99,8 +100,8 @@ export async function browserPreviewNavigate(url: string): Promise<string> {
     return 'Error: navigation is disabled in settings';
   }
 
+  revealPreviewPanelForAgentNavigation(url);
   const api = previewApi();
-  await api.show();
   const result = await api.navigateAndWait(url);
   if (!result.ok) {
     const detail = result.errorDescription ?? 'navigation failed';

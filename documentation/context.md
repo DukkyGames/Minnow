@@ -1048,7 +1048,7 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 | id | Purpose |
 |----|---------|
 | `browser_list` | Active preview URL/title |
-| `browser_navigate` | Navigate shared preview (auto-opens panel; origin allowlist) |
+| `browser_navigate` | Navigate shared preview; opens the right-hand preview split + Electron guest (`revealPreviewPanelForAgentNavigation`); origin allowlist) |
 | `request_browser_origin_access` | Ask user to allow an origin before/at navigate (client) |
 | `browser_snapshot` | DOM tree + `data-mn-uid` markers |
 | `browser_click` / `browser_fill` | Act on snapshot uid |
