@@ -95,6 +95,7 @@ interface RunInternals {
   run: SubAgentRun;
   abort: AbortController;
   timeoutId: ReturnType<typeof setTimeout> | null;
+  nudgeTimeoutId: ReturnType<typeof setTimeout> | null;
   toolCallLog: Array<{ name: string; args: string }>;
   queued: boolean;
   /** True after this run consumed a global/type concurrency slot (see acquireConcurrencySlot). */
@@ -103,6 +104,7 @@ interface RunInternals {
 
 const runs = new Map<string, RunInternals>();
 const parentTurnRuns = new Map<string, Set<string>>();
+const parentChatRuns = new Map<string, Set<string>>();
 const globalQueue: QueuedItem[] = [];
 
 let activeGlobal = 0;
@@ -159,10 +161,24 @@ function associateParentTurn(parentTurnId: string | null | undefined, runId: str
   set.add(runId);
 }
 
+function associateParentChat(parentChatId: string | null | undefined, runId: string): void {
+  if (!parentChatId) return;
+  let set = parentChatRuns.get(parentChatId);
+  if (!set) {
+    set = new Set();
+    parentChatRuns.set(parentChatId, set);
+  }
+  set.add(runId);
+}
+
 function clearTimeoutFor(internals: RunInternals): void {
   if (internals.timeoutId) {
     clearTimeout(internals.timeoutId);
     internals.timeoutId = null;
+  }
+  if (internals.nudgeTimeoutId) {
+    clearTimeout(internals.nudgeTimeoutId);
+    internals.nudgeTimeoutId = null;
   }
 }
 
@@ -531,6 +547,7 @@ async function spawnSubAgentInternal(
     run,
     abort,
     timeoutId: null,
+    nudgeTimeoutId: null,
     toolCallLog: [],
     queued: true,
     holdsConcurrencySlot: false,
@@ -538,11 +555,21 @@ async function spawnSubAgentInternal(
 
   runs.set(runId, internals);
   associateParentTurn(input.parentTurnId, runId);
+  associateParentChat(input.parentChatId, runId);
 
   const timeoutMs = typeConfig.timeoutMs || config.defaultTimeoutMs;
   internals.timeoutId = setTimeout(() => {
     cancelSubAgent(runId, 'timeout');
   }, timeoutMs);
+
+  const checkInMs = config.checkInNudgeMs ?? 0;
+  if (checkInMs > 0) {
+    internals.nudgeTimeoutId = setTimeout(() => {
+      void import('./sub-agent-completion-push.js').then((mod) => {
+        mod.fireSubAgentCheckInNudge(runId);
+      });
+    }, checkInMs);
+  }
 
   const typeMax = typeConfig.maxConcurrent ?? 1;
   if (canStart(input.type, config.globalMaxConcurrent, typeMax)) {
@@ -565,7 +592,7 @@ async function spawnSubAgentInternal(
 export async function spawnSubAgent(
   input: SpawnSubAgentInput,
 ): Promise<SpawnSubAgentResult | AggregateResult> {
-  const wait = input.wait !== false;
+  const wait = input.wait === true;
   const result = await spawnSubAgentInternal(input);
 
   if (!wait) return result;
@@ -779,6 +806,23 @@ export function listSubAgentRunsForParentTurn(
   );
 }
 
+/** Active or settled runs for a parent chat session (any parent turn). */
+export function listSubAgentRunsForParentChat(
+  parentChatId: string | null | undefined,
+): SubAgentRun[] {
+  if (!parentChatId) return [];
+  const set = parentChatRuns.get(parentChatId);
+  if (!set || set.size === 0) return [];
+  const out: SubAgentRun[] = [];
+  for (const id of set) {
+    const row = runs.get(id)?.run;
+    if (row) out.push(row);
+  }
+  return out.sort((a, b) =>
+    String(a.startedAt ?? '').localeCompare(String(b.startedAt ?? '')),
+  );
+}
+
 /** JSON body for the `list_sub_agents` parent tool. */
 export function formatSubAgentListToolResult(parentTurnId: string | null | undefined): string {
   const rows = listSubAgentRunsForParentTurn(parentTurnId).map((r) => ({
@@ -791,6 +835,40 @@ export function formatSubAgentListToolResult(parentTurnId: string | null | undef
     maxToolTurns: r.maxToolTurns,
     liveNestedToolCalls: r.liveNestedToolCalls,
   }));
+  return JSON.stringify({ runs: rows }, null, 2);
+}
+
+/** JSON body for session-scoped `list_sub_agents` (live + optional persisted rows). */
+export function formatSubAgentListToolResultForChat(
+  parentChatId: string,
+  persisted: import('../types').PersistedSubAgentRun[] | undefined,
+): string {
+  const live = listSubAgentRunsForParentChat(parentChatId);
+  const liveIds = new Set(live.map((r) => r.runId));
+  const rows = live.map((r) => ({
+    runId: r.runId,
+    type: r.type,
+    status: r.status,
+    taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
+    startedAt: r.startedAt,
+    toolTurns: r.toolTurns,
+    maxToolTurns: r.maxToolTurns,
+    liveNestedToolCalls: r.liveNestedToolCalls,
+  }));
+  for (const p of persisted ?? []) {
+    if (liveIds.has(p.runId)) continue;
+    rows.push({
+      runId: p.runId,
+      type: p.type,
+      status: p.status,
+      taskPreview: p.task.length > 120 ? `${p.task.slice(0, 120)}…` : p.task,
+      startedAt: p.startedAt ?? null,
+      toolTurns: p.toolTurns,
+      maxToolTurns: 0,
+      liveNestedToolCalls: undefined,
+    });
+  }
+  rows.sort((a, b) => String(a.startedAt ?? '').localeCompare(String(b.startedAt ?? '')));
   return JSON.stringify({ runs: rows }, null, 2);
 }
 
@@ -828,20 +906,16 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
 }
 
 /**
- * Ensures a run id is tied to the current parent tool context (turn + optional chat),
- * then returns the live run row.
+ * Ensures a run id belongs to the parent chat session, then returns the run row.
  */
 export function assertSubAgentRunReadableByParent(
   run: SubAgentRun | undefined,
-  ctx: { parentTurnId: string; parentChatId?: string },
+  ctx: { parentChatId: string; parentTurnId?: string },
 ): SubAgentRun {
   if (!run) {
     throw new Error('Error: unknown sub-agent run');
   }
-  if (run.parentTurnId !== ctx.parentTurnId) {
-    throw new Error('Error: sub-agent run is not visible from this parent turn');
-  }
-  if (ctx.parentChatId && run.parentChatId && run.parentChatId !== ctx.parentChatId) {
+  if (!run.parentChatId || run.parentChatId !== ctx.parentChatId) {
     throw new Error('Error: sub-agent run is not visible from this chat');
   }
   return run;
@@ -856,6 +930,7 @@ export function resetSubAgentOrchestrator(): void {
   }
   runs.clear();
   parentTurnRuns.clear();
+  parentChatRuns.clear();
   globalQueue.length = 0;
   activeGlobal = 0;
   activeByType.clear();

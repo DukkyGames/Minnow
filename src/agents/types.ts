@@ -52,6 +52,11 @@ export interface SubAgentsFile {
   enabled: boolean;
   globalMaxConcurrent: number;
   defaultTimeoutMs: number;
+  /**
+   * One-shot parent check-in nudge while a sub-agent is still running (ms).
+   * `0` disables. Default 120_000 from shipped defaults.
+   */
+  checkInNudgeMs?: number;
   /** Max tool rounds for all sub-agent types (Settings → Tools). */
   maxToolTurns?: number;
   /** @deprecated Use `maxToolTurns`. Migrated on load. */

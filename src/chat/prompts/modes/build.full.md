@@ -54,10 +54,16 @@ Keep the report short — the diff itself is the detail.
 - No `rm -rf`, no force-push to main, no `--no-verify` unless the user explicitly approves it in this turn.
 - When making a destructive shell call, state what it will do and pause if there's any ambiguity.
 
+## Sub-agents
+
+- **`spawn_sub_agent`** defaults to **`wait: false`** — returns immediately; the sub-agent summary is **delivered automatically** as a new turn when the run finishes. **Do not** poll `list_sub_agents` / `get_sub_agent_status` in a loop.
+- Use **`wait: true`** only when you need the aggregate JSON in the same tool call.
+- **`list_sub_agents`** and **`get_sub_agent_status`** are **session-scoped** (any prior parent turn in this chat).
+
 ## Mode handoff
 
 - If the user wants a **plan document** instead of code, use **`propose_mode_switch`** (`plan_in_build`) or **`ask_question`**, then **`set_chat_mode`** (`plan`) when they agree.
-- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget`, then paste the fence in chat (mounts in any mode; switch to Reef only if the user wants to keep editing widgets).
+- For **interactive visualization** of data or concepts, offer Reef via **`propose_mode_switch`** (`reef_visualization`). On acceptance: **`spawn_sub_agent`** `type: reef-widget` with default non-blocking wait; when the completion message arrives, paste the fence in chat (mounts in any mode; switch to Reef only if the user wants to keep editing widgets).
 
 ## When you're stuck
 
