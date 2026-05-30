@@ -1,7 +1,7 @@
 /**
  * In-app browser preview panel (workspace files + arbitrary URLs).
  * Electron: WebContentsView via window.minnow.preview (MIN-112).
- * Browser dev: IPC is a no-op; chrome and persisted state still work.
+ * Browser (npm start): same-origin iframe in #previewFrame (MIN-105).
  */
 
 import type { MinnowPreviewApi } from '../electron';
@@ -12,29 +12,45 @@ import {
 } from '../state/file-panel';
 import { onFileSaved } from '../state/preview-events';
 import {
-  applyFileSidebarVisuals,
   hidePreviewSplit,
   showPreviewSplit,
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
+import { detectEmbedBlockedFrame } from './preview-embed-detect';
+import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 
-const HTTP_URL_RE = /^https?:\/\//i;
+const BROWSER_PREVIEW_HINT =
+  'Full Chromium preview (any website or local file) runs in the Minnow desktop shell. Run npm start — Electron opens by default — or npm run electron:dev.';
 const PREVIEW_FILE_API = '/api/preview/file/';
+const FRAME_BLOCKED_TIMEOUT_MS = 1500;
 const MIN_RELOAD_INTERVAL_MS = 1000;
 const DEFERRED_PREVIEW_LOAD_MS = 800;
+
+const EMBED_BLOCKED_MESSAGE =
+  'This site blocks embedded previews (X-Frame-Options or CSP frame-ancestors). Sites like Google, GitHub, and most login pages cannot load inside an iframe. Preview workspace HTML files instead, or open this URL in a new tab.';
 
 let controlsBound = false;
 let boundsObserver: ResizeObserver | null = null;
 let boundsRaf = 0;
 let autoReloadDebounce: ReturnType<typeof setTimeout> | null = null;
 let deferredPreviewLoadTimer: ReturnType<typeof setTimeout> | null = null;
+let frameBlockedTimer: ReturnType<typeof setTimeout> | null = null;
 let lastReloadAt = 0;
+let embedBlockedActive = false;
 let unsubscribeNavigation: (() => void) | null = null;
 let unsubscribeLoading: (() => void) | null = null;
 let unsubscribeLoadFailed: (() => void) | null = null;
 
+function usesElectronPreview(): boolean {
+  return Boolean(getPreviewApi());
+}
+
 function getPreviewApi(): MinnowPreviewApi | undefined {
   return window.minnow?.preview;
+}
+
+function getFrame(): HTMLIFrameElement | null {
+  return document.getElementById('previewFrame') as HTMLIFrameElement | null;
 }
 
 function getUrlInput(): HTMLInputElement | null {
@@ -87,7 +103,7 @@ export function workspacePreviewUrl(relativePath: string, cacheBust?: number): s
   return `${base}${sep}v=${cacheBust}`;
 }
 
-/** Absolute URL passed to the preview guest (Electron or future browser host). */
+/** Absolute URL passed to the preview guest (Electron or iframe with full origin). */
 export function resolvePreviewLoadUrl(source: PreviewSource, cacheBust?: number): string {
   if (source.kind === 'url') return source.url;
   const path = workspacePreviewUrl(source.path, cacheBust);
@@ -100,12 +116,7 @@ function sourceToAddressBar(source: PreviewSource): string {
 }
 
 function parseAddressInput(raw: string): PreviewSource | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (HTTP_URL_RE.test(trimmed)) {
-    return { kind: 'url', url: trimmed };
-  }
-  return { kind: 'workspace', path: normalizeWorkspacePath(trimmed) };
+  return parsePreviewAddress(raw, { allowLocalFiles: usesElectronPreview() });
 }
 
 function sourcesEqual(a: PreviewSource | null, b: PreviewSource | null): boolean {
@@ -135,6 +146,7 @@ function showPreviewStatus(message: string, externalUrl?: string): void {
 }
 
 function hidePreviewStatus(): void {
+  hideEmbedBlockedNotice();
   const status = getStatusEl();
   const link = getOpenExternalLink();
   if (status) status.hidden = true;
@@ -177,8 +189,24 @@ function syncAddressBarFromNavigation(url: string): void {
 
 function onPreviewNavigation(url: string): void {
   syncAddressBarFromNavigation(url);
-  if (url && url !== 'about:blank') {
-    hidePreviewStatus();
+  if (!url || url === 'about:blank' || url.startsWith('chrome-error:')) return;
+  hidePreviewStatus();
+
+  if (url.startsWith('file://') || HTTP_URL_RE.test(url)) {
+    patchFilePanelState({ previewSource: { kind: 'url', url } });
+    return;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const prefix = `${window.location.origin}${PREVIEW_FILE_API}`;
+    if (parsed.origin === window.location.origin && parsed.pathname.startsWith(PREVIEW_FILE_API)) {
+      const encoded = parsed.pathname.slice(PREVIEW_FILE_API.length);
+      const path = decodeURIComponent(encoded).replace(/^\/+/, '');
+      patchFilePanelState({ previewSource: { kind: 'workspace', path } });
+    }
+  } catch {
+    /* ignore malformed URLs */
   }
 }
 
@@ -188,10 +216,21 @@ function onPreviewLoadFailed(detail: {
   url?: string;
 }): void {
   setPreviewLoading(false);
-  const message =
+  let message =
     detail.errorDescription?.trim() ||
     `Preview failed to load (error ${detail.errorCode}).`;
-  showPreviewStatus(message, detail.url);
+  if (detail.errorCode === -27 || /ERR_BLOCKED_BY_RESPONSE/i.test(message)) {
+    message =
+      'This site refused to load in the embedded browser. Use Open in new tab, or try again after restarting Minnow.';
+  }
+  const previewSource = getFilePanelState().previewSource;
+  const externalUrl =
+    detail.url && (detail.url.startsWith('http') || detail.url.startsWith('file:'))
+      ? detail.url
+      : previewSource?.kind === 'url'
+        ? previewSource.url
+        : undefined;
+  showPreviewStatus(message, externalUrl);
 }
 
 function scheduleSyncPreviewBounds(): void {
@@ -218,7 +257,7 @@ async function syncPreviewBounds(): Promise<void> {
 
 function startBoundsObserver(): void {
   const body = getPreviewBody();
-  if (!body || boundsObserver) return;
+  if (!body || boundsObserver || !usesElectronPreview()) return;
   boundsObserver = new ResizeObserver(() => {
     scheduleSyncPreviewBounds();
   });
@@ -227,11 +266,20 @@ function startBoundsObserver(): void {
   scheduleSyncPreviewBounds();
 }
 
+function markPreviewHostMode(): void {
+  const body = getPreviewBody();
+  if (!body) return;
+  body.classList.toggle('preview-body--electron', usesElectronPreview());
+}
+
 async function showPreviewHost(): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
   await api.show();
   scheduleSyncPreviewBounds();
+  requestAnimationFrame(() => {
+    scheduleSyncPreviewBounds();
+  });
 }
 
 async function hidePreviewHost(): Promise<void> {
@@ -240,31 +288,152 @@ async function hidePreviewHost(): Promise<void> {
   await api.hide();
 }
 
-async function loadUrlInPreview(url: string): Promise<void> {
+async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): Promise<void> {
   const api = getPreviewApi();
   if (!api) return;
   setPreviewLoading(true);
+  // Workspace files go through /api/preview/file/ on the renderer's server so the
+  // server's workspaceRoot (not the Electron main process's process.cwd) is the resolver.
+  const url =
+    source.kind === 'workspace'
+      ? resolvePreviewLoadUrl(source, cacheBust)
+      : source.url;
+  if (api.loadSource) {
+    await api.loadSource({ kind: 'url', url, cacheBust });
+    return;
+  }
   await api.loadURL(url);
 }
 
-function applySourceToPreview(source: PreviewSource, cacheBust?: number): void {
-  const input = getUrlInput();
-  const url = resolvePreviewLoadUrl(source, cacheBust);
+function clearFrameBlockedTimer(): void {
+  if (frameBlockedTimer) {
+    clearTimeout(frameBlockedTimer);
+    frameBlockedTimer = null;
+  }
+}
 
-  hidePreviewStatus();
-  if (input) input.value = sourceToAddressBar(source);
+function readFrameEmbedSignals(frame: HTMLIFrameElement): {
+  href: string;
+  bodyText: string;
+} {
+  try {
+    const href = frame.contentWindow?.location.href ?? '';
+    const bodyText = frame.contentDocument?.body?.innerText ?? '';
+    return { href, bodyText };
+  } catch {
+    return { href: '', bodyText: '' };
+  }
+}
 
-  const api = getPreviewApi();
-  if (api) {
-    void loadUrlInPreview(url);
+function isExternalUrlBlockedInFrame(frame: HTMLIFrameElement): boolean {
+  const { href, bodyText } = readFrameEmbedSignals(frame);
+  return detectEmbedBlockedFrame(href, bodyText, { externalUrlMode: true });
+}
+
+function showEmbedBlockedNotice(externalUrl: string): void {
+  const status = getStatusEl();
+  const message = getStatusMessageEl();
+  const link = getOpenExternalLink();
+  const body = getPreviewBody();
+  if (!status || !message) return;
+
+  embedBlockedActive = true;
+  message.textContent = EMBED_BLOCKED_MESSAGE;
+  if (link) {
+    link.href = externalUrl;
+    link.classList.remove('hidden');
+  }
+  body?.classList.add('is-embed-blocked');
+  status.hidden = false;
+}
+
+function hideEmbedBlockedNotice(): void {
+  const status = getStatusEl();
+  const link = getOpenExternalLink();
+  const body = getPreviewBody();
+  embedBlockedActive = false;
+  if (status) status.hidden = true;
+  if (link) {
+    link.classList.add('hidden');
+    link.removeAttribute('href');
+  }
+  body?.classList.remove('is-embed-blocked');
+}
+
+function checkExternalUrlEmbedAfterLoad(): void {
+  const frame = getFrame();
+  const source = getFilePanelState().previewSource;
+  if (!frame || source?.kind !== 'url') return;
+
+  if (isExternalUrlBlockedInFrame(frame)) {
+    showEmbedBlockedNotice(source.url);
     return;
   }
 
-  setPreviewLoading(false);
-  showPreviewStatus(
-    'Embedded preview runs in the Minnow desktop app (npm run electron:dev). Workspace paths and URLs are still saved.',
-    source.kind === 'url' ? source.url : url,
-  );
+  try {
+    const doc = frame.contentDocument;
+    if (doc && doc.body && doc.body.childElementCount === 0) {
+      showEmbedBlockedNotice(source.url);
+      return;
+    }
+  } catch {
+    // Cross-origin embed allowed — cannot read document; treat as success.
+  }
+
+  hideEmbedBlockedNotice();
+}
+
+function scheduleFrameBlockedCheck(): void {
+  clearFrameBlockedTimer();
+  frameBlockedTimer = setTimeout(() => {
+    frameBlockedTimer = null;
+    checkExternalUrlEmbedAfterLoad();
+  }, FRAME_BLOCKED_TIMEOUT_MS);
+}
+
+function clearPreviewFrame(): void {
+  const frame = getFrame();
+  if (!frame) return;
+  frame.removeAttribute('src');
+  frame.src = 'about:blank';
+}
+
+function applySourceToFrame(source: PreviewSource, cacheBust?: number): void {
+  const frame = getFrame();
+  const input = getUrlInput();
+  if (!frame) return;
+
+  embedBlockedActive = false;
+  hideEmbedBlockedNotice();
+  clearFrameBlockedTimer();
+  hidePreviewStatus();
+
+  if (input) input.value = sourceToAddressBar(source);
+
+  if (source.kind === 'url') {
+    frame.src = source.url;
+    scheduleFrameBlockedCheck();
+    return;
+  }
+
+  frame.src = workspacePreviewUrl(source.path, cacheBust);
+}
+
+function applySourceToPreview(source: PreviewSource, cacheBust?: number): void {
+  if (usesElectronPreview()) {
+    hidePreviewStatus();
+    const input = getUrlInput();
+    if (input) input.value = sourceToAddressBar(source);
+    void loadSourceInPreview(source, cacheBust);
+    return;
+  }
+
+  if (source.kind === 'url') {
+    showPreviewStatus(BROWSER_PREVIEW_HINT, source.url);
+  } else {
+    hidePreviewStatus();
+  }
+  applySourceToFrame(source, cacheBust);
 }
 
 /** Load the given source into the preview host and persist state. */
@@ -281,7 +450,9 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
 export function openPreviewPanel(source?: PreviewSource | null): void {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
-  void showPreviewHost();
+  if (usesElectronPreview()) {
+    void showPreviewHost();
+  }
   const state = getFilePanelState();
   const resolved = source ?? state.previewSource;
   if (resolved) {
@@ -290,7 +461,11 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
     const input = getUrlInput();
     if (input) input.value = '';
     hidePreviewStatus();
-    void getPreviewApi()?.stop();
+    if (usesElectronPreview()) {
+      void getPreviewApi()?.stop();
+    } else {
+      clearPreviewFrame();
+    }
   }
   syncPreviewChromeFromState();
 }
@@ -298,7 +473,12 @@ export function openPreviewPanel(source?: PreviewSource | null): void {
 /** Close the preview panel. */
 export function closePreviewPanel(): void {
   cancelDeferredPreviewLoad();
-  void hidePreviewHost();
+  if (usesElectronPreview()) {
+    void hidePreviewHost();
+  } else {
+    clearFrameBlockedTimer();
+    clearPreviewFrame();
+  }
   hidePreviewSplit();
   hidePreviewStatus();
   setPreviewLoading(false);
@@ -403,15 +583,43 @@ function bindPreviewIpcListeners(): void {
   unsubscribeLoadFailed = api.onLoadFailed(onPreviewLoadFailed);
 }
 
+function goBackInFrame(): void {
+  const frame = getFrame();
+  try {
+    frame?.contentWindow?.history.back();
+  } catch {
+    /* cross-origin history may be inaccessible */
+  }
+}
+
+function goForwardInFrame(): void {
+  const frame = getFrame();
+  try {
+    frame?.contentWindow?.history.forward();
+  } catch {
+    /* cross-origin history may be inaccessible */
+  }
+}
+
 function bindPreviewControls(): void {
   if (controlsBound) return;
   controlsBound = true;
 
+  markPreviewHostMode();
+
   document.getElementById('btnPreviewBack')?.addEventListener('click', () => {
-    void getPreviewApi()?.goBack();
+    if (usesElectronPreview()) {
+      void getPreviewApi()?.goBack();
+    } else {
+      goBackInFrame();
+    }
   });
   document.getElementById('btnPreviewForward')?.addEventListener('click', () => {
-    void getPreviewApi()?.goForward();
+    if (usesElectronPreview()) {
+      void getPreviewApi()?.goForward();
+    } else {
+      goForwardInFrame();
+    }
   });
   document.getElementById('btnPreviewReload')?.addEventListener('click', () => reloadPreview());
   document.getElementById('btnPreviewGo')?.addEventListener('click', () => navigateFromAddressBar());
@@ -438,16 +646,32 @@ function bindPreviewControls(): void {
     }
   });
 
+  const frame = getFrame();
+  frame?.addEventListener('load', () => {
+    if (usesElectronPreview()) return;
+    clearFrameBlockedTimer();
+    const source = getFilePanelState().previewSource;
+    if (source?.kind !== 'url') {
+      hideEmbedBlockedNotice();
+      return;
+    }
+    if (embedBlockedActive) return;
+    const { href } = readFrameEmbedSignals(frame);
+    if (href === 'about:blank') return;
+    checkExternalUrlEmbedAfterLoad();
+    if (!embedBlockedActive) {
+      scheduleFrameBlockedCheck();
+    }
+  });
+
   onFileSaved(onWorkspaceFileSaved);
   bindPreviewIpcListeners();
   startBoundsObserver();
 
-  if (getPreviewApi()) {
-    const back = getBackButton();
-    const forward = getForwardButton();
-    if (back) back.disabled = false;
-    if (forward) forward.disabled = false;
-  }
+  const back = getBackButton();
+  const forward = getForwardButton();
+  if (back) back.disabled = false;
+  if (forward) forward.disabled = false;
 }
 
 function cancelDeferredPreviewLoad(): void {
@@ -465,6 +689,8 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
     if (getFilePanelState().rightPaneMode !== 'preview') return;
     if (source) {
       loadPreviewSource(source);
+    } else if (!usesElectronPreview()) {
+      clearPreviewFrame();
     }
   };
 
@@ -488,7 +714,9 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
 function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
-  void showPreviewHost();
+  if (usesElectronPreview()) {
+    void showPreviewHost();
+  }
   syncPreviewChromeFromState();
   const input = getUrlInput();
   if (source && input) {

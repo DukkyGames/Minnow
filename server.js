@@ -16,6 +16,7 @@ import {
   resolveSafePath,
   runWithPathAccess,
 } from './server/runtime/path-access.js';
+import { spawnElectronShell } from './scripts/spawn-electron.mjs';
 
 const PORT = Number(process.env.PORT) || 5173;
 
@@ -92,15 +93,26 @@ async function main() {
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   });
-  // Skip auto-open for CI / headless CLI / Electron host.
-  if (
-    process.env.BROWSER !== 'none' &&
-    process.env.MINNOW_HEADLESS !== '1' &&
-    process.env.MINNOW_ELECTRON !== '1'
-  ) {
+  // Skip auto-open for CI / headless CLI / when Electron is already the host.
+  if (process.env.MINNOW_HEADLESS === '1') {
+    console.log('Headless: UI auto-open skipped (MINNOW_HEADLESS=1)');
+  } else if (process.env.BROWSER === 'none' || process.env.MINNOW_ELECTRON === '1') {
+    /* explicit no UI */
+  } else if (process.env.MINNOW_BROWSER === '1') {
     openBrowser(localUrl);
-  } else if (process.env.MINNOW_HEADLESS === '1') {
-    console.log('Headless: browser auto-open skipped (MINNOW_HEADLESS=1)');
+    console.log('Opened in system browser (MINNOW_BROWSER=1). Built-in Chromium preview uses the Electron shell by default.');
+  } else {
+    const port = new URL(localUrl).port || String(PORT);
+    void spawnElectronShell({ port, dev: true, foreground: false })
+      .then(() => {
+        console.log('Minnow desktop: Electron shell launched (Chromium in-app browser).');
+        console.log('Use MINNOW_BROWSER=1 to open the system browser instead.');
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
+        openBrowser(localUrl);
+      });
   }
 }
 

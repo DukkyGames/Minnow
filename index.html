@@ -1140,7 +1140,10 @@
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </header>
-    <div class="preview-body" id="previewBody" aria-label="Preview content area"></div>
+    <div class="preview-body" id="previewBody" aria-label="Preview content area">
+      <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-forms allow-popups allow-modals"
+              title="Workspace preview"></iframe>
+    </div>
     <div class="preview-status" id="previewStatus" hidden role="status">
       <p class="preview-status__message" id="previewStatusMessage"></p>
       <a class="preview-status__open-external hidden" id="previewOpenExternal" target="_blank"

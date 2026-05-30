@@ -19,11 +19,20 @@ export interface PreviewLoadFailedDetail {
   url?: string;
 }
 
+export interface PreviewLoadSourcePayload {
+  kind: 'workspace' | 'url';
+  path?: string;
+  url?: string;
+  cacheBust?: number;
+}
+
 const preview = {
   show: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_SHOW),
   hide: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_HIDE),
   loadURL: (url: string): Promise<void> =>
     ipcRenderer.invoke(channels.PREVIEW_LOAD_URL, url),
+  loadSource: (payload: PreviewLoadSourcePayload): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_LOAD_SOURCE, payload),
   reload: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_RELOAD),
   stop: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_STOP),
   goBack: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_GO_BACK),

@@ -36,6 +36,32 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+}
+
+/**
+ * Ensure relative asset URLs resolve under /api/preview/file/… (not Vite SPA routes).
+ * @param {string} html
+ * @param {string} relativePath workspace-relative file path
+ * @param {string} origin e.g. http://localhost:5173
+ */
+function injectPreviewBaseHref(html, relativePath, origin) {
+  if (/<base\s/i.test(html)) return html;
+  const dir = relativePath.replace(/\\/g, '/').replace(/[^/]+$/, '');
+  const encodedDir = dir
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const basePath = encodedDir
+    ? `${PREVIEW_FILE_PREFIX}${encodedDir}/`
+    : PREVIEW_FILE_PREFIX;
+  const baseTag = `<base href="${origin}${basePath}">`;
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch) {
+    return html.replace(headMatch[0], `${headMatch[0]}${baseTag}`);
+  }
+  return `${baseTag}${html}`;
 }
 
 function sendJson(res, status, payload) {
@@ -120,9 +146,31 @@ export async function handlePreviewRequest(req, res, pathname, deps) {
       return true;
     }
 
+    const contentType = contentTypeForPreviewPath(absPath);
+    const isHtml =
+      contentType.startsWith('text/html') &&
+      (relativePath.endsWith('.html') || relativePath.endsWith('.htm'));
+
+    if (isHtml) {
+      const host = req.headers.host ?? '127.0.0.1';
+      const proto =
+        req.headers['x-forwarded-proto'] === 'https' || req.headers.origin?.startsWith('https')
+          ? 'https'
+          : 'http';
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : `${proto}://${host}`;
+      let html = await fsp.readFile(absPath, 'utf8');
+      html = injectPreviewBaseHref(html, relativePath, origin);
+      res.statusCode = 200;
+      setCorsHeaders(res);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(html);
+      return true;
+    }
+
     activePreviewStreams += 1;
     res.statusCode = 200;
-    res.setHeader('Content-Type', contentTypeForPreviewPath(absPath));
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     const stream = createReadStream(absPath);
     let slotReleased = false;

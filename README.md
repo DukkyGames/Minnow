@@ -93,9 +93,9 @@ This runs `node server.js`, which:
 - Serves the Minnow UI
 - Exposes **`GET /api/tools/ping`**, **`POST /api/tools`**, **`/api/config/*`**, **`/api/generations`**, providers, skills, MCP, memory, and related APIs
 - Logs **`Minnow data: <path>`** for your `~/.minnow` (or `%USERPROFILE%\.minnow` on Windows)
-- Opens your default browser to the app URL
+- Launches the **Electron desktop shell** (Chromium) for the UI — same model as Cursor’s built-in browser. Set **`MINNOW_BROWSER=1`** to open your system browser tab instead.
 
-> **Important:** Use `npm start`, not `npm run dev`, when you want file/git tools, session persistence, PDFs, terminal PTY, or server-side tool execution. `npm run dev` is Vite-only.
+> **Important:** Use `npm start`, not `npm run dev`, when you want file/git tools, session persistence, PDFs, terminal PTY, server-side tool execution, or the **in-app Chromium preview** (Files → preview pane). `npm run dev` is Vite-only. **`npm run desktop`** is an alias for `npm run electron:dev` (HMR + Electron).
 
 Custom port:
 
@@ -111,7 +111,7 @@ $env:PORT=3000; npm start
 
 ### 4. Use the app
 
-1. Open the URL printed in the terminal (usually **http://localhost:5173**).
+1. Use the **Minnow desktop window** that opens automatically (or the URL in the terminal if you set `MINNOW_BROWSER=1`).
 2. Open **Settings** (gear icon) — full-page sections at `#/settings/<section>` (providers, modes, tools, skills, memory, MCP, LSP, sub-agents, work agents, rules, …).
 3. Verify the active **provider** and **LM Studio server URL** (default `http://localhost:1234`).
 4. Pick a **model** from the top bar; use refresh if the list is empty.
@@ -143,7 +143,9 @@ Machine-readable output and exit codes are documented in [`documentation/context
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | **Recommended** — Vite + tool server + `~/.minnow` APIs |
+| `npm start` | **Recommended** — Vite + tool server + `~/.minnow` APIs + Electron desktop (Chromium preview) |
+| `npm run desktop` | Alias for `electron:dev` — Vite HMR + Electron window |
+| `npm run electron:dev` | Same as `desktop` |
 | `npm run minnow:run` | Headless CLI (`minnow run …`) — requires `npm start` (or `--start-server`) |
 | `minnow run --help` | Full flags for CI / scripts (see [Headless CLI](documentation/context.md#headless-cli-feature-18)) |
 | `npm run dev` | Vite only (UI/HMR; most server features unavailable) |

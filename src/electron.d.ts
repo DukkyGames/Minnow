@@ -15,10 +15,18 @@ export interface MinnowPreviewLoadFailedDetail {
   url?: string;
 }
 
+export interface MinnowPreviewLoadSourcePayload {
+  kind: 'workspace' | 'url';
+  path?: string;
+  url?: string;
+  cacheBust?: number;
+}
+
 export interface MinnowPreviewApi {
   show(): Promise<void>;
   hide(): Promise<void>;
   loadURL(url: string): Promise<void>;
+  loadSource(payload: MinnowPreviewLoadSourcePayload): Promise<void>;
   reload(): Promise<void>;
   stop(): Promise<void>;
   goBack(): Promise<void>;

@@ -1,22 +1,32 @@
 /**
- * WebContentsView preview host (MIN-112): one embedded browser per BrowserWindow.
+ * WebContentsView preview host (MIN-112): Chromium guest for any URL or workspace file.
  */
 
 import {
   BrowserWindow,
   WebContentsView,
   ipcMain,
+  session,
   shell,
   type IpcMainInvokeEvent,
   type WebContents,
 } from 'electron';
 import * as channels from './ipc-channels.js';
+import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
 
 export interface PreviewBounds {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+/** Payload from renderer for PREVIEW_LOAD_SOURCE. */
+export interface PreviewLoadSourcePayload {
+  kind: 'workspace' | 'url';
+  path?: string;
+  url?: string;
+  cacheBust?: number;
 }
 
 interface PreviewHostEntry {
@@ -26,7 +36,9 @@ interface PreviewHostEntry {
 
 const hostsByWindowId = new Map<number, PreviewHostEntry>();
 
-const PREVIEW_PARTITION = 'persist:minnow-preview';
+function ensurePreviewSession(): void {
+  configurePreviewSession(session.fromPartition(PREVIEW_SESSION_PARTITION));
+}
 
 /** Resolve the BrowserWindow that owns an IPC invoke from the renderer. */
 function windowFromInvoke(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -57,17 +69,23 @@ function attachPermissionHandler(wc: WebContents): void {
 
 /** Forward guest navigation / load lifecycle to the Minnow renderer. */
 function wirePreviewGuestEvents(win: BrowserWindow, wc: WebContents): void {
+  let suppressNavigationUntilFailHandled = false;
+
   const emitNavigation = (url: string): void => {
+    if (suppressNavigationUntilFailHandled) return;
     sendToRenderer(win, channels.PREVIEW_NAVIGATION, url);
   };
 
   wc.on('did-start-loading', () => {
+    suppressNavigationUntilFailHandled = false;
     sendToRenderer(win, channels.PREVIEW_LOADING, true);
   });
 
   wc.on('did-stop-loading', () => {
     sendToRenderer(win, channels.PREVIEW_LOADING, false);
-    emitNavigation(wc.getURL());
+    if (!suppressNavigationUntilFailHandled) {
+      emitNavigation(wc.getURL());
+    }
   });
 
   wc.on('did-navigate', (_event, url) => {
@@ -87,6 +105,8 @@ function wirePreviewGuestEvents(win: BrowserWindow, wc: WebContents): void {
     (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame) return;
       if (errorCode === -3) return; // ERR_ABORTED — navigation superseded
+      suppressNavigationUntilFailHandled = true;
+      sendToRenderer(win, channels.PREVIEW_LOADING, false);
       sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, {
         errorCode,
         errorDescription,
@@ -119,20 +139,37 @@ function destroyHostForWindow(win: BrowserWindow): void {
   }
 }
 
+async function loadSourceInGuest(
+  wc: WebContents,
+  payload: PreviewLoadSourcePayload,
+): Promise<void> {
+  // Workspace files are resolved by the renderer into a /api/preview/file/ URL so
+  // the server's workspaceRoot is the resolver; the Electron main process never
+  // knows the user's workspace path and would resolve against the wrong root.
+  const url = payload.url?.trim();
+  if (!url) return;
+  await wc.loadURL(url);
+}
+
 /** Create (or return) the preview WebContentsView for a window. */
 function getOrCreateHost(win: BrowserWindow): PreviewHostEntry {
   const existing = hostsByWindowId.get(win.id);
   if (existing) return existing;
 
+  ensurePreviewSession();
+
   const view = new WebContentsView({
     webPreferences: {
-      partition: PREVIEW_PARTITION,
+      partition: PREVIEW_SESSION_PARTITION,
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      // Guest must load cross-origin subresources (CDNs, APIs) like a normal browser tab.
+      webSecurity: false,
     },
   });
 
+  view.setBackgroundColor('#ffffff');
   view.setVisible(false);
   win.contentView.addChildView(view);
 
@@ -158,8 +195,15 @@ function getHostFromInvoke(event: IpcMainInvokeEvent): PreviewHostEntry | null {
 /** Register preview IPC handlers (replaces main.ts stubs). */
 export function registerPreviewHostIpc(): void {
   ipcMain.handle(channels.PREVIEW_SHOW, (event) => {
+    const win = windowFromInvoke(event);
     const entry = getHostFromInvoke(event);
-    if (!entry) return;
+    if (!entry || !win) return;
+    try {
+      win.contentView.removeChildView(entry.view);
+    } catch {
+      /* not attached yet */
+    }
+    win.contentView.addChildView(entry.view);
     entry.visible = true;
     entry.view.setVisible(true);
   });
@@ -169,6 +213,21 @@ export function registerPreviewHostIpc(): void {
     if (!entry) return;
     entry.visible = false;
     entry.view.setVisible(false);
+  });
+
+  ipcMain.handle(channels.PREVIEW_LOAD_SOURCE, (event, payload: PreviewLoadSourcePayload) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry || !payload || typeof payload !== 'object') return;
+    void loadSourceInGuest(entry.view.webContents, payload).catch((err) => {
+      const win = windowFromInvoke(event);
+      if (!win) return;
+      const message = err instanceof Error ? err.message : String(err);
+      sendToRenderer(win, channels.PREVIEW_LOAD_FAILED, {
+        errorCode: -2,
+        errorDescription: message,
+        url: payload.kind === 'url' ? payload.url : payload.path,
+      });
+    });
   });
 
   ipcMain.handle(channels.PREVIEW_LOAD_URL, (event, url: string) => {
@@ -235,3 +294,4 @@ export function destroyAllPreviewHosts(): void {
   }
   hostsByWindowId.clear();
 }
+

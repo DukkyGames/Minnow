@@ -8,8 +8,10 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  session,
   shell,
 } from 'electron';
+import { configurePreviewSession } from './preview-session.js';
 import * as channels from './ipc-channels.js';
 import {
   destroyAllPreviewHosts,
@@ -67,7 +69,9 @@ function focusMainWindow(): void {
 
 async function createMainWindow(): Promise<BrowserWindow> {
   const saved = await loadWindowState();
-  const preloadPath = path.join(__dirname, 'preload.js');
+  // Preload is renamed to .mjs by scripts/rename-preload-mjs.mjs because Electron
+  // loads .js preloads as CommonJS regardless of package.json "type": "module".
+  const preloadPath = path.join(__dirname, 'preload.mjs');
 
   const win = new BrowserWindow({
     width: saved.width,
@@ -78,7 +82,9 @@ async function createMainWindow(): Promise<BrowserWindow> {
     backgroundColor: '#0e0e10',
     webPreferences: {
       preload: preloadPath,
-      sandbox: true,
+      // ESM preload (.mjs) requires sandbox: false; contextIsolation + no node integration
+      // still prevent the renderer from escalating.
+      sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
@@ -135,6 +141,7 @@ async function resolveLoadUrl(): Promise<string> {
 
 async function bootstrap(): Promise<void> {
   app.setName('Minnow');
+  configurePreviewSession(session.fromPartition('persist:minnow-preview'));
   registerIpcHandlers();
 
   mainWindow = await createMainWindow();
