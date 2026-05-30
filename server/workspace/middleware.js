@@ -9,7 +9,7 @@ import {
   setWorkspaceRoot,
   validateWorkspacePath,
 } from './root.js';
-import { browseWorkspaceFolders } from './browse.js';
+import { browseWorkspaceFolders, createWorkspaceSubfolder } from './browse.js';
 import { pickWorkspaceFolder } from './pick-folder.js';
 
 function setCorsHeaders(res) {
@@ -61,6 +61,23 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       const browsePath = searchParams.get('path') ?? '';
       const listing = await browseWorkspaceFolders(browsePath);
       sendJson(res, 200, { ok: true, ...listing });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/mkdir' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const parentPath = body?.parentPath;
+      const name = body?.name;
+      if (typeof parentPath !== 'string' || !parentPath.trim()) {
+        sendJson(res, 400, { error: 'parentPath is required' });
+        return true;
+      }
+      if (typeof name !== 'string' || !name.trim()) {
+        sendJson(res, 400, { error: 'name is required' });
+        return true;
+      }
+      const created = await createWorkspaceSubfolder(parentPath, name);
+      sendJson(res, 201, { ok: true, ...created });
       return true;
     }
 
