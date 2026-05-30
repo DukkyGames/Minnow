@@ -7,10 +7,11 @@ import {
   buildSubAgentStatusPayload,
   cancelSubAgent,
   formatAggregateResult,
-  formatSubAgentListToolResult,
-  getSubAgentRun,
+  formatSubAgentListToolResultForChat,
   spawnSubAgent,
 } from '../agents/orchestrator';
+import { resolveSubAgentRunForParentSession } from '../agents/sub-agent-completion-push';
+import { findChatById } from '../state/sessions';
 import type { BoardCategory } from '../types';
 import type { SubAgentExecutorContext } from '../agents/types';
 
@@ -33,7 +34,7 @@ export async function executeSubAgentTool(
   if (name === 'spawn_sub_agent') {
     const type = typeof args.type === 'string' ? args.type.trim() : '';
     const task = typeof args.task === 'string' ? args.task.trim() : '';
-    const wait = args.wait !== false;
+    const wait = args.wait === true;
 
     if (!type) return 'Error: spawn_sub_agent requires "type"';
     if (!task) return 'Error: spawn_sub_agent requires "task"';
@@ -92,17 +93,18 @@ export async function executeSubAgentTool(
   }
 
   if (name === 'list_sub_agents') {
-    const parentTurnId = executorContext?.parentTurnId;
-    if (!parentTurnId) {
-      return 'Error: list_sub_agents requires an active parent chat turn';
+    const parentChatId = executorContext?.parentChatId?.trim();
+    if (!parentChatId) {
+      return 'Error: list_sub_agents requires an active parent chat';
     }
-    return formatSubAgentListToolResult(parentTurnId);
+    const chat = findChatById(parentChatId);
+    return formatSubAgentListToolResultForChat(parentChatId, chat?.subAgentRuns);
   }
 
   if (name === 'get_sub_agent_status') {
-    const parentTurnId = executorContext?.parentTurnId;
-    if (!parentTurnId) {
-      return 'Error: get_sub_agent_status requires an active parent chat turn';
+    const parentChatId = executorContext?.parentChatId?.trim();
+    if (!parentChatId) {
+      return 'Error: get_sub_agent_status requires an active parent chat';
     }
     const runId =
       typeof args.run_id === 'string'
@@ -113,10 +115,10 @@ export async function executeSubAgentTool(
     if (!runId) return 'Error: get_sub_agent_status requires "run_id"';
 
     try {
-      const run = assertSubAgentRunReadableByParent(getSubAgentRun(runId), {
-        parentTurnId,
-        parentChatId: executorContext?.parentChatId,
-      });
+      const run = assertSubAgentRunReadableByParent(
+        resolveSubAgentRunForParentSession(runId, parentChatId),
+        { parentChatId, parentTurnId: executorContext?.parentTurnId },
+      );
       return JSON.stringify(buildSubAgentStatusPayload(run), null, 2);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

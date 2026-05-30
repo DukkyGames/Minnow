@@ -17,6 +17,15 @@ export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 12;
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
 
+/** Coerce check-in nudge interval: 0 = disabled, else [10s, 30m]. */
+export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  if (rounded <= 0) return 0;
+  return Math.min(1_800_000, Math.max(10_000, rounded));
+}
+
 /** Coerce sub-agent max tool turns to [1, 64]. */
 export function clampSubAgentMaxToolTurns(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -63,6 +72,10 @@ export function mergeSubAgentConfig(
     enabled: user?.enabled ?? defaults.enabled,
     globalMaxConcurrent: user?.globalMaxConcurrent ?? defaults.globalMaxConcurrent,
     defaultTimeoutMs: user?.defaultTimeoutMs ?? defaults.defaultTimeoutMs,
+    checkInNudgeMs: clampSubAgentCheckInNudgeMs(
+      user?.checkInNudgeMs ?? defaults.checkInNudgeMs,
+      clampSubAgentCheckInNudgeMs(defaults.checkInNudgeMs),
+    ),
     maxToolTurns,
     defaultMaxInputTokens: user?.defaultMaxInputTokens ?? defaults.defaultMaxInputTokens,
     defaultContextEnforcementPolicy:

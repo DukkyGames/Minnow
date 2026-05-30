@@ -6,6 +6,29 @@ import { streaming, streamingChatId } from '../app-state';
 import { normalizeModeId } from '../chat/modes/types';
 import { getActiveChat, isExpertLabChat } from '../state/sessions';
 
+type ChatStreamEndListener = (chatId: string) => void;
+const streamEndListeners = new Set<ChatStreamEndListener>();
+
+/** Register for parent stream end (e.g. sub-agent completion flush). */
+export function subscribeChatStreamEnd(listener: ChatStreamEndListener): () => void {
+  streamEndListeners.add(listener);
+  return () => {
+    streamEndListeners.delete(listener);
+  };
+}
+
+/** Notify subscribers that a chat finished streaming (call before clearing streaming flags). */
+export function notifyChatStreamEnded(chatId: string): void {
+  if (!chatId) return;
+  for (const fn of streamEndListeners) {
+    try {
+      fn(chatId);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Chat id driving the global streaming flag, or null when idle. */
 export function getStreamingChatId(): string | null {
   if (!streaming) return null;
