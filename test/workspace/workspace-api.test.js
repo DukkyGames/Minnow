@@ -283,4 +283,61 @@ describe('workspace API', () => {
     assert.equal(status, 400);
     assert.match(json.error, /does not exist/i);
   });
+
+  test('POST mkdir creates subfolder under parent', async () => {
+    const newName = 'mkdir-test-folder';
+    const expectedPath = path.join(workspaceDir, newName);
+    try {
+      await fs.rm(expectedPath, { recursive: true, force: true });
+    } catch {
+      /* absent */
+    }
+
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/mkdir', {
+      parentPath: workspaceDir,
+      name: newName,
+    });
+    assert.equal(status, 201);
+    assert.equal(json.ok, true);
+    assert.equal(json.name, newName);
+    assert.equal(path.resolve(json.path), path.resolve(expectedPath));
+
+    const stat = await fs.stat(expectedPath);
+    assert.ok(stat.isDirectory());
+
+    const q = `?path=${encodeURIComponent(workspaceDir)}`;
+    const browse = await httpRequest(baseUrl, 'GET', `/api/workspace/browse${q}`);
+    assert.ok(browse.json.entries.some((e) => e.name === newName));
+  });
+
+  test('POST mkdir rejects duplicate folder', async () => {
+    const dupName = 'mkdir-dup-folder';
+    const dupPath = path.join(workspaceDir, dupName);
+    await fs.mkdir(dupPath, { recursive: true });
+
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/mkdir', {
+      parentPath: workspaceDir,
+      name: dupName,
+    });
+    assert.equal(status, 400);
+    assert.match(json.error, /already exists/i);
+  });
+
+  test('POST mkdir rejects invalid name', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/mkdir', {
+      parentPath: workspaceDir,
+      name: 'bad/name',
+    });
+    assert.equal(status, 400);
+    assert.match(json.error, /invalid characters/i);
+  });
+
+  test('POST mkdir rejects empty parentPath', async () => {
+    const { status, json } = await httpRequest(baseUrl, 'POST', '/api/workspace/mkdir', {
+      parentPath: '',
+      name: 'orphan',
+    });
+    assert.equal(status, 400);
+    assert.match(json.error, /parentPath is required/i);
+  });
 });

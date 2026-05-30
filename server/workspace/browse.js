@@ -112,3 +112,62 @@ export async function browseWorkspaceFolders(userPath) {
     entries: await listChildDirectories(resolved),
   };
 }
+
+/**
+ * Characters illegal in folder names on common desktop OSes.
+ * @param {string} name
+ */
+function assertValidFolderName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) {
+    throw new Error('Folder name is required');
+  }
+  if (trimmed === '.' || trimmed === '..') {
+    throw new Error('Invalid folder name');
+  }
+  if (/[\\/:*?"<>|]/.test(trimmed)) {
+    throw new Error('Folder name contains invalid characters');
+  }
+  if (process.platform === 'win32' && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(trimmed)) {
+    throw new Error('Invalid folder name');
+  }
+  return trimmed;
+}
+
+/**
+ * Create a subfolder under an existing directory (workspace picker "New folder").
+ * @param {string} parentPath Absolute path of the parent directory.
+ * @param {string} folderName Single segment name (no slashes).
+ * @returns {Promise<{ path: string, name: string }>}
+ */
+export async function createWorkspaceSubfolder(parentPath, folderName) {
+  const trimmedParent = typeof parentPath === 'string' ? parentPath.trim() : '';
+  if (!trimmedParent) {
+    throw new Error('Open a folder before creating a subfolder');
+  }
+
+  const name = assertValidFolderName(folderName);
+  const resolvedParent = path.resolve(trimmedParent);
+  let stat;
+  try {
+    stat = await fs.stat(resolvedParent);
+  } catch {
+    throw new Error(`Folder does not exist: ${resolvedParent}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new Error('Parent path must be a directory');
+  }
+
+  const newPath = path.join(resolvedParent, name);
+  try {
+    await fs.mkdir(newPath);
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : '';
+    if (code === 'EEXIST') {
+      throw new Error(`A folder named "${name}" already exists`);
+    }
+    throw err;
+  }
+
+  return { path: newPath, name };
+}

@@ -4,6 +4,7 @@
 
 import {
   browseWorkspaceFolders,
+  createWorkspaceSubfolder,
   type WorkspaceBrowseEntry,
 } from '../config/workspace-api';
 
@@ -20,9 +21,16 @@ let dialogEl: HTMLDivElement | null = null;
 let pathEl: HTMLElement | null = null;
 let listEl: HTMLUListElement | null = null;
 let upBtn: HTMLButtonElement | null = null;
+let newFolderBtn: HTMLButtonElement | null = null;
+let newFolderPanel: HTMLDivElement | null = null;
+let newFolderInput: HTMLInputElement | null = null;
+let newFolderCreateBtn: HTMLButtonElement | null = null;
+let newFolderCancelBtn: HTMLButtonElement | null = null;
+let errorEl: HTMLElement | null = null;
 let openBtn: HTMLButtonElement | null = null;
 let cancelBtn: HTMLButtonElement | null = null;
 let emptyEl: HTMLElement | null = null;
+let creatingFolder = false;
 
 let currentPath = '';
 let currentParent: string | null = null;
@@ -210,6 +218,12 @@ function ensureShell(): void {
     pathEl = existing.querySelector('[data-ws-picker-path]');
     listEl = existing.querySelector('[data-ws-picker-list]');
     upBtn = existing.querySelector('[data-ws-picker-up]');
+    newFolderBtn = existing.querySelector('[data-ws-picker-new-folder]');
+    newFolderPanel = existing.querySelector('[data-ws-picker-new-folder-panel]');
+    newFolderInput = existing.querySelector('[data-ws-picker-new-folder-input]');
+    newFolderCreateBtn = existing.querySelector('[data-ws-picker-new-folder-create]');
+    newFolderCancelBtn = existing.querySelector('[data-ws-picker-new-folder-cancel]');
+    errorEl = existing.querySelector('[data-ws-picker-error]');
     openBtn = existing.querySelector('[data-ws-picker-open]');
     cancelBtn = existing.querySelector('[data-ws-picker-cancel]');
     emptyEl = existing.querySelector('[data-ws-picker-empty]');
@@ -235,7 +249,41 @@ function ensureShell(): void {
       <p class="workspace-picker__path" data-ws-picker-path></p>
       <div class="workspace-picker__toolbar">
         <button type="button" class="workspace-picker__up" data-ws-picker-up>Up</button>
+        <button type="button" class="workspace-picker__new-folder" data-ws-picker-new-folder>
+          New folder
+        </button>
       </div>
+      <div class="workspace-picker__new-folder-panel hidden" data-ws-picker-new-folder-panel hidden>
+        <label class="workspace-picker__new-folder-label" for="workspacePickerNewFolderInput">
+          Folder name
+        </label>
+        <div class="workspace-picker__new-folder-row">
+          <input
+            id="workspacePickerNewFolderInput"
+            type="text"
+            class="workspace-picker__new-folder-input"
+            data-ws-picker-new-folder-input
+            autocomplete="off"
+            spellcheck="false"
+            maxlength="255"
+          />
+          <button
+            type="button"
+            class="workspace-picker__btn workspace-picker__btn--primary workspace-picker__new-folder-create"
+            data-ws-picker-new-folder-create
+          >
+            Create
+          </button>
+          <button
+            type="button"
+            class="workspace-picker__btn"
+            data-ws-picker-new-folder-cancel
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+      <p class="workspace-picker__error hidden" data-ws-picker-error role="alert" hidden></p>
       <ul class="workspace-picker__list" data-ws-picker-list role="listbox" aria-label="Folders"></ul>
       <p class="workspace-picker__empty hidden" data-ws-picker-empty hidden>No subfolders</p>
       <div class="workspace-picker__footer">
@@ -252,6 +300,12 @@ function ensureShell(): void {
   pathEl = overlayEl.querySelector('[data-ws-picker-path]');
   listEl = overlayEl.querySelector('[data-ws-picker-list]');
   upBtn = overlayEl.querySelector('[data-ws-picker-up]');
+  newFolderBtn = overlayEl.querySelector('[data-ws-picker-new-folder]');
+  newFolderPanel = overlayEl.querySelector('[data-ws-picker-new-folder-panel]');
+  newFolderInput = overlayEl.querySelector('[data-ws-picker-new-folder-input]');
+  newFolderCreateBtn = overlayEl.querySelector('[data-ws-picker-new-folder-create]');
+  newFolderCancelBtn = overlayEl.querySelector('[data-ws-picker-new-folder-cancel]');
+  errorEl = overlayEl.querySelector('[data-ws-picker-error]');
   openBtn = overlayEl.querySelector('[data-ws-picker-open]');
   cancelBtn = overlayEl.querySelector('[data-ws-picker-cancel]');
   emptyEl = overlayEl.querySelector('[data-ws-picker-empty]');
@@ -275,12 +329,120 @@ function ensureShell(): void {
   });
 
   upBtn?.addEventListener('click', () => {
+    hideNewFolderPanel();
     if (!currentParent) {
       void loadListing('');
       return;
     }
     void loadListing(currentParent);
   });
+
+  newFolderBtn?.addEventListener('click', () => {
+    showNewFolderPanel();
+  });
+
+  newFolderCancelBtn?.addEventListener('click', () => {
+    hideNewFolderPanel();
+  });
+
+  newFolderCreateBtn?.addEventListener('click', () => {
+    void submitNewFolder();
+  });
+
+  newFolderInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void submitNewFolder();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      hideNewFolderPanel();
+    }
+  });
+}
+
+function clearPickerError(): void {
+  if (!errorEl) {
+    return;
+  }
+  errorEl.textContent = '';
+  errorEl.hidden = true;
+  errorEl.classList.add('hidden');
+}
+
+function showPickerError(message: string): void {
+  if (!errorEl) {
+    return;
+  }
+  errorEl.textContent = message;
+  errorEl.hidden = false;
+  errorEl.classList.remove('hidden');
+}
+
+function showNewFolderPanel(): void {
+  if (!newFolderPanel || !newFolderInput || !currentPath.trim()) {
+    return;
+  }
+  clearPickerError();
+  newFolderPanel.hidden = false;
+  newFolderPanel.classList.remove('hidden');
+  newFolderInput.value = 'New folder';
+  newFolderInput.focus();
+  newFolderInput.select();
+}
+
+function hideNewFolderPanel(): void {
+  if (!newFolderPanel || !newFolderInput) {
+    return;
+  }
+  newFolderPanel.hidden = true;
+  newFolderPanel.classList.add('hidden');
+  newFolderInput.value = '';
+  clearPickerError();
+}
+
+async function submitNewFolder(): Promise<void> {
+  if (creatingFolder || !newFolderInput || !currentPath.trim()) {
+    return;
+  }
+  const name = newFolderInput.value.trim();
+  if (!name) {
+    showPickerError('Enter a folder name');
+    newFolderInput.focus();
+    return;
+  }
+
+  creatingFolder = true;
+  if (newFolderCreateBtn) {
+    newFolderCreateBtn.disabled = true;
+  }
+  clearPickerError();
+
+  try {
+    const created = await createWorkspaceSubfolder(currentPath, name);
+    hideNewFolderPanel();
+    await loadListing(currentPath);
+    selectedEntryPath = created.path;
+    if (listEl) {
+      clearRowSelection();
+      for (const row of listEl.querySelectorAll('.workspace-picker__row')) {
+        if (row instanceof HTMLButtonElement && row.title === created.path) {
+          row.setAttribute('aria-selected', 'true');
+          break;
+        }
+      }
+    }
+    updateToolbar();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    showPickerError(message);
+    newFolderInput.focus();
+  } finally {
+    creatingFolder = false;
+    if (newFolderCreateBtn) {
+      newFolderCreateBtn.disabled = false;
+    }
+  }
 }
 
 function updatePathLabel(): void {
@@ -302,6 +464,9 @@ function updateToolbar(): void {
   }
   const atRoots = !currentPath.trim();
   upBtn.disabled = atRoots && currentParent === null;
+  if (newFolderBtn) {
+    newFolderBtn.disabled = atRoots || creatingFolder;
+  }
   const canOpen = Boolean(currentPath.trim() || selectedEntryPath);
   openBtn.disabled = !canOpen;
 }
@@ -364,6 +529,7 @@ function renderEntries(entries: WorkspaceBrowseEntry[]): void {
 }
 
 async function loadListing(browsePath: string): Promise<void> {
+  hideNewFolderPanel();
   const listing = await browseWorkspaceFolders(browsePath);
   currentPath = listing.path ?? '';
   currentParent = listing.parent ?? null;
@@ -398,6 +564,7 @@ function hideOverlay(): void {
 
 function finishPicker(result: WorkspaceFolderPickerResult): void {
   detachEscape();
+  hideNewFolderPanel();
   hideOverlay();
   const resolve = resolvePicker;
   resolvePicker = null;
