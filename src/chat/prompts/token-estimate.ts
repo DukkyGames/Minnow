@@ -31,6 +31,7 @@ export {
   estimateToolsTokens,
   formatTokenEstimateLabel,
   serializeMessageContentForEstimate,
+  serializeThinkingForEstimate,
   TOKEN_ESTIMATE_TOOLTIP,
   type OutboundPromptEstimate,
 } from './token-estimate-core';

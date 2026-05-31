@@ -132,8 +132,10 @@ import {
   revealAssistantProseBubble,
   setAssistantErrorBubble,
 } from '../ui/messages';
+import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
@@ -485,6 +487,7 @@ async function streamCompletionTurn(
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
   onStreamConnected?: () => void,
+  onStreamContextActivity?: () => void,
   turnRunId?: TurnRunId,
 ): Promise<StreamTurnResult> {
   let generationId = resumeGenerationId;
@@ -510,6 +513,7 @@ async function streamCompletionTurn(
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
       thoughtController?.appendReasoningDelta(reasoning);
+      onStreamContextActivity?.();
     }
     const delta = extractStreamDelta(chunk);
     if (delta) {
@@ -518,6 +522,7 @@ async function streamCompletionTurn(
       if (tFirst == null) tFirst = performance.now();
       fullText += delta;
       onPartialText?.(fullText);
+      onStreamContextActivity?.();
       if (domVisible) {
         scheduleAssistantBubbleRender(bubble, fullText, cursor);
       }
@@ -608,6 +613,29 @@ function trackRunHistoryPush(chat: Chat, turnRunId: TurnRunId | undefined): void
   noteRunOutputIndex(chat, turnRunId, chat.history.length - 1);
 }
 
+/** Push in-flight stream snapshot into context ring estimate (BUG-019). */
+function syncTurnContextUsage(
+  chatId: string,
+  livePartialText: string,
+  thoughtController: ThoughtBubbleController | null,
+  pendingToolCallsJson?: string,
+): void {
+  const partial = livePartialText.trim();
+  const thinkingText = thoughtController?.getSegments().join('\n\n').trim() ?? '';
+  const hasOverlay = Boolean(partial || thinkingText || pendingToolCallsJson);
+  setContextInFlightOverlay(
+    hasOverlay
+      ? {
+          chatId,
+          ...(partial ? { partialAssistantText: partial } : {}),
+          ...(thinkingText ? { thinkingText } : {}),
+          ...(pendingToolCallsJson ? { pendingToolCallsJson } : {}),
+        }
+      : null,
+  );
+  scheduleContextUsageRefresh();
+}
+
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const {
     chat,
@@ -692,6 +720,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     chat.history.push({ role: 'user', content: modelUserContent });
     recordChatMessage(chat);
     scheduleSaveSessions();
+    syncTurnContextUsage(chat.id, '', null);
     if (!suppressUserEcho) {
       renderSidebar();
       const userIdx = chat.history.length - 1;
@@ -1106,6 +1135,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             }
           },
           undefined,
+          () => {
+            syncTurnContextUsage(chat.id, livePartialText, thoughtController);
+          },
           turnRunId,
         );
 
@@ -1174,7 +1206,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           content: toolProse || null,
           tool_calls: turnResult.toolCalls,
         };
+        syncTurnContextUsage(
+          chat.id,
+          livePartialText,
+          thoughtController,
+          JSON.stringify(turnResult.toolCalls),
+        );
         chat.history.push(assistantToolMsg);
+        syncTurnContextUsage(chat.id, livePartialText, thoughtController);
         trackRunHistoryPush(chat, turnRunId);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
@@ -1207,6 +1246,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 content: STOPPED_TOOL_MSG,
               });
               trackRunHistoryPush(chat, turnRunId);
+              syncTurnContextUsage(chat.id, livePartialText, thoughtController);
             }
             recordChatMessage(chat);
             scheduleSaveSessions();
@@ -1236,6 +1276,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               content: parseError,
             });
             trackRunHistoryPush(chat, turnRunId);
+            syncTurnContextUsage(chat.id, livePartialText, thoughtController);
             recordChatMessage(chat);
             scheduleSaveSessions();
             continue;
@@ -1295,6 +1336,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               : {}),
           });
           trackRunHistoryPush(chat, turnRunId);
+          syncTurnContextUsage(chat.id, livePartialText, thoughtController);
           if (paintToolCallsInChat) {
             scrollChatIfPinned();
           }
@@ -1504,6 +1546,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
         chat.history.push(assistantMsg);
         trackRunHistoryPush(chat, turnRunId);
+        syncTurnContextUsage(chat.id, '', thoughtController);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         if (isExpertLabChat(chat)) {
@@ -1579,6 +1622,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
         chat.history.push(assistantMsg);
         trackRunHistoryPush(chat, turnRunId);
+        syncTurnContextUsage(chat.id, '', thoughtController);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
         scheduleSaveSessions();
@@ -1615,6 +1659,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('err', statusMsg + attachHint);
     }
   } finally {
+    setContextInFlightOverlay(null);
+    scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
     if (uiDesignerCtx.active) {
       chat.workAgentId = savedWorkAgentId;

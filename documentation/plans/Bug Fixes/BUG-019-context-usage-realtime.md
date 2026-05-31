@@ -16,19 +16,19 @@ todos:
     status: pending
   - id: hook-stream-refresh
     content: scheduleContextUsageRefresh (debounced) on SSE deltas, tool history pushes, turn finally
-    status: pending
+    status: completed
   - id: in-flight-estimate
     content: Extend getContextBudget overlay — livePartialText, thought segments, unfinalized tool_calls JSON
-    status: pending
+    status: completed
   - id: thinking-in-history-estimate
     content: Include assistant thinking in serializeMessageContentForEstimate when persisted
-    status: pending
+    status: completed
   - id: tests
     content: Unit test estimate overlay + optional loop refresh call sites (mock history push)
-    status: pending
+    status: completed
   - id: docs-context
     content: Fix context.md MIN-13 refresh triggers; mark BUG-019 verified/resolved in bug-hunt doc
-    status: pending
+    status: completed
 isProject: false
 ---
 
