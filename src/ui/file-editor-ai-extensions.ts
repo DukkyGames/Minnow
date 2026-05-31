@@ -150,17 +150,33 @@ export function setEditorAiGhostForTest(
   view.dispatch({ effects: setAiGhost.of({ text, pos }) });
 }
 
-/** Tab accepts ghost when present; otherwise returns false for indent. */
-export const editorAiTabBinding: KeyBinding = {
-  key: 'Tab',
-  run: (view) => acceptEditorAiGhost(view),
-};
+/**
+ * Tab/Esc when ghost is active — Prec.highest + preventDefault so LSP autocomplete
+ * and the desktop shell do not steal Tab (focus) or Esc (blur) first.
+ */
+export const editorAiGhostKeymapBindings: KeyBinding[] = [
+  {
+    key: 'Tab',
+    preventDefault: true,
+    run: (view) => {
+      if (!hasEditorAiGhost(view.state)) return false;
+      return acceptEditorAiGhost(view);
+    },
+  },
+  {
+    key: 'Escape',
+    preventDefault: true,
+    run: (view) => {
+      if (!hasEditorAiGhost(view.state)) return false;
+      return dismissEditorAiGhost(view);
+    },
+  },
+];
 
-/** Escape dismisses ghost when present; otherwise returns false for blur. */
-export const editorAiEscapeBinding: KeyBinding = {
-  key: 'Escape',
-  run: (view) => dismissEditorAiGhost(view),
-};
+/** @deprecated Use editorAiGhostKeymapBindings */
+export const editorAiTabBinding = editorAiGhostKeymapBindings[0];
+/** @deprecated Use editorAiGhostKeymapBindings */
+export const editorAiEscapeBinding = editorAiGhostKeymapBindings[1];
 
 class EditorAiCompletionPlugin {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -280,6 +296,6 @@ export function editorAiCompletionExtensions(
   return [
     Prec.high(aiGhostField),
     ViewPlugin.define((view) => new EditorAiCompletionPlugin(view, opts)),
-    Prec.high(keymap.of([editorAiTabBinding, editorAiEscapeBinding])),
+    Prec.highest(keymap.of(editorAiGhostKeymapBindings)),
   ];
 }

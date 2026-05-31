@@ -23,8 +23,7 @@ import {
   acceptEditorAiGhost,
   dismissEditorAiGhost,
   editorAiCompletionExtensions,
-  editorAiEscapeBinding,
-  editorAiTabBinding,
+  editorAiGhostKeymapBindings,
   hasEditorAiGhost,
   setEditorAiGhostForTest,
 } from '../../src/ui/file-editor-ai-extensions.ts';
@@ -66,7 +65,7 @@ describe('file editor AI keymap', () => {
     setEditorAiGhostForTest(view, 'x = 1;', pos);
     assert.equal(hasEditorAiGhost(view.state), true);
 
-    const handled = editorAiTabBinding.run!(view);
+    const handled = editorAiGhostKeymapBindings[0].run!(view);
     assert.equal(handled, true);
     assert.equal(view.state.doc.toString(), 'const x = 1;');
     assert.equal(hasEditorAiGhost(view.state), false);
@@ -76,30 +75,29 @@ describe('file editor AI keymap', () => {
     setupDom();
     const view = mountEditorWithAi('line');
     view.focus();
-    const aiHandled = editorAiTabBinding.run!(view);
+    const aiHandled = editorAiGhostKeymapBindings[0].run!(view);
     assert.equal(aiHandled, false);
     const indentHandled = indentWithTab.run(view);
     assert.equal(indentHandled, true);
     assert.equal(view.state.doc.toString(), '  line');
   });
 
-  test('Escape dismisses ghost before blur', () => {
+  test('Escape dismisses ghost (preventDefault binding)', () => {
     setupDom();
     const view = mountEditorWithAi('abc');
     setEditorAiGhostForTest(view, 'ghost', 3);
-    let blurCalled = false;
-    view.dom.blur = () => {
-      blurCalled = true;
-    };
 
-    const dismissed = editorAiEscapeBinding.run!(view);
+    const dismissed = editorAiGhostKeymapBindings[1].run!(view);
     assert.equal(dismissed, true);
     assert.equal(hasEditorAiGhost(view.state), false);
-    assert.equal(blurCalled, false);
+    assert.equal(editorAiGhostKeymapBindings[1].preventDefault, true);
+  });
 
-    const blurred = fileEditorEscapeBlurBinding.run!(view);
-    assert.equal(blurred, true);
-    assert.equal(blurCalled, true);
+  test('ghost Escape binding returns false when no ghost', () => {
+    setupDom();
+    const view = mountEditorWithAi('abc');
+    const handled = editorAiGhostKeymapBindings[1].run!(view);
+    assert.equal(handled, false);
   });
 
   test('acceptEditorAiGhost and dismissEditorAiGhost helpers', () => {
