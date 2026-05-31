@@ -393,6 +393,9 @@ export function closeExpertLab(): void {
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   document.querySelector('header.topbar')?.classList.remove('hidden');
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
   setExpertLabStreamListener(null);
   restoreQuestionHost();
 
@@ -430,6 +433,9 @@ export function openExpertLab(): void {
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 
   setStep('pick');
   void refreshExpertLabEnabledState();

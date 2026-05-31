@@ -1,0 +1,11 @@
+{
+  "default": "inherit",
+  "builder": "inherit",
+  "planner": "on",
+  "orchestrator": "inherit",
+  "verifier": "on",
+  "reviewer": "on",
+  "researcher": "on",
+  "ui-designer": "off",
+  "expert-panel": "inherit"
+}

@@ -110,6 +110,7 @@ import {
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
 import { renderModelRoutingSection } from './settings-model-routing';
 import { renderSamplerSettingsSection } from './settings-sampler';
+import { renderThinkingSettingsSection } from './settings-thinking';
 import {
   loadTerminalMeta,
   saveTerminalMeta,
@@ -791,6 +792,14 @@ async function renderModelRoutingSettingsSection(): Promise<void> {
   const generation = beginAsyncSectionRender('model-routing');
   await renderModelRoutingSection(mount);
   if (isAsyncSectionRenderStale('model-routing', generation)) return;
+}
+
+async function renderThinkingSettingsSectionWrapper(): Promise<void> {
+  const mount = document.getElementById('settingsThinkingBody');
+  if (!mount) return;
+  const generation = beginAsyncSectionRender('thinking');
+  await renderThinkingSettingsSection(mount);
+  if (isAsyncSectionRenderStale('thinking', generation)) return;
 }
 
 async function renderSamplerSettingsSectionWrapper(): Promise<void> {
@@ -2107,6 +2116,9 @@ export async function refreshSettingsSection(
       break;
     case 'sampler':
       await renderSamplerSettingsSectionWrapper();
+      break;
+    case 'thinking':
+      await renderThinkingSettingsSectionWrapper();
       break;
     case 'prompting':
       await renderPromptingSection();

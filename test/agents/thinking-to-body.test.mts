@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { thinkingToCompletionBody } from '../../src/agents/thinking-to-body.ts';
+
+describe('thinkingToCompletionBody', () => {
+  test('openai-v1 on includes reasoning_effort medium', () => {
+    const { body } = thinkingToCompletionBody('on', 'openai-v1', {
+      vision: false,
+      tools: null,
+      streaming: null,
+      grammar: null,
+      reasoning: true,
+      contextLength: null,
+      loadState: null,
+    });
+    assert.equal(body.reasoning_effort, 'medium');
+    assert.deepEqual(body.reasoning, { effort: 'medium' });
+    assert.equal(body.enable_thinking, true);
+  });
+
+  test('lm-studio-v0 off includes none effort and best-effort hint', () => {
+    const patch = thinkingToCompletionBody('off', 'lm-studio-v0', {
+      vision: false,
+      tools: null,
+      streaming: null,
+      grammar: null,
+      reasoning: true,
+      contextLength: null,
+      loadState: null,
+    });
+    assert.equal(patch.body.reasoning_effort, 'none');
+    assert.equal(patch.hint?.bestEffort, true);
+  });
+
+  test('respects reasoningAllowedOptions', () => {
+    const { body } = thinkingToCompletionBody('on', 'openai-v1', {
+      vision: false,
+      tools: null,
+      streaming: null,
+      grammar: null,
+      reasoning: true,
+      reasoningAllowedOptions: ['off'],
+      contextLength: null,
+      loadState: null,
+    });
+    assert.deepEqual(body, {});
+  });
+});

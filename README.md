@@ -47,7 +47,7 @@ For architecture, APIs, and file layout, see [`documentation/context.md`](docume
 
 | Requirement | Notes |
 |-------------|--------|
-| **Node.js** | 18+ recommended (ES modules, Vite 5) |
+| **Node.js** | 18+ recommended (ES modules, Vite 6) |
 | **npm** | Comes with Node |
 | **LM Studio** | Running locally with at least one model loaded; enable the local server (default port **1234**) |
 

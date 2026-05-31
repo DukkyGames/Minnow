@@ -107,6 +107,9 @@ const DEFAULT_META = {
     temperature: 0.7,
     maxTokens: 32768,
   },
+  thinking: {
+    defaultMode: 'on',
+  },
   terminal: {
     open: false,
     heightPx: 240,

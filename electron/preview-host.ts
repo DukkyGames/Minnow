@@ -275,6 +275,7 @@ export function registerPreviewHostIpc(): void {
   ipcMain.handle(channels.PREVIEW_SET_BOUNDS, (event, bounds: PreviewBounds) => {
     const entry = getHostFromInvoke(event);
     if (!entry || !bounds) return;
+    if (!entry.visible) return;
     const { x, y, width, height } = bounds;
     if (
       !Number.isFinite(x) ||
@@ -284,11 +285,17 @@ export function registerPreviewHostIpc(): void {
     ) {
       return;
     }
+    const w = Math.max(0, Math.round(width));
+    const h = Math.max(0, Math.round(height));
+    if (w <= 0 || h <= 0) {
+      entry.view.setVisible(false);
+      return;
+    }
     entry.view.setBounds({
       x: Math.round(x),
       y: Math.round(y),
-      width: Math.max(0, Math.round(width)),
-      height: Math.max(0, Math.round(height)),
+      width: w,
+      height: h,
     });
   });
 

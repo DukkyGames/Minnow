@@ -92,6 +92,7 @@ export async function patchWorkAgentOverride(
     minRecentTurns?: number;
     summaryReserveTokens?: number;
     sampler?: import('./sampler-types').SamplerPreset | null;
+    thinkingMode?: import('./thinking-types').ThinkingTriState | null;
   },
 ): Promise<import('./work-agent-types').WorkAgentDefinition | null> {
   try {

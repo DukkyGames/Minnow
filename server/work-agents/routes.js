@@ -17,6 +17,7 @@ import {
   writeWorkAgentPromptOverride,
 } from './registry.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
+import { normalizeThinkingTriState } from '../agents/thinking.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -112,6 +113,10 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
           body.sampler === null
             ? null
             : normalizeSamplerPreset(body.sampler);
+      }
+      if ('thinkingMode' in body) {
+        patch.thinkingMode =
+          body.thinkingMode === null ? null : normalizeThinkingTriState(body.thinkingMode);
       }
       await patchWorkAgentOverride(agentId, patch);
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);

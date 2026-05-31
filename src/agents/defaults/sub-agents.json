@@ -11,6 +11,7 @@
   "types": {
     "generalPurpose": {
       "label": "General purpose",
+      "thinkingMode": "inherit",
       "enabled": true,
       "providerId": "lm-studio-local",
       "modelId": "",
@@ -36,6 +37,7 @@
     },
     "explore": {
       "label": "Explore",
+      "thinkingMode": "off",
       "enabled": true,
       "providerId": "lm-studio-local",
       "modelId": "",
@@ -123,6 +125,7 @@
     },
     "shell": {
       "label": "Shell",
+      "thinkingMode": "off",
       "enabled": true,
       "providerId": "lm-studio-local",
       "modelId": "",

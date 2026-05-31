@@ -6,6 +6,10 @@ import { ALL_TOOL_IDS } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
+  normalizeThinkingGlobalDefault,
+  normalizeThinkingTriState,
+} from '../agents/thinking.js';
+import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
   DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
@@ -862,6 +866,17 @@ export function mergeConfigMeta(existing, patch) {
     base.titles = existingTitles;
   }
 
+  if (p.thinking && typeof p.thinking === 'object') {
+    const existingThinking =
+      base.thinking && typeof base.thinking === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.thinking) }
+        : { defaultMode: 'on' };
+    const t = /** @type {Record<string, unknown>} */ (p.thinking);
+    const mode = normalizeThinkingGlobalDefault(t.defaultMode);
+    if (mode) existingThinking.defaultMode = mode;
+    base.thinking = existingThinking;
+  }
+
   if (p.sampler !== undefined) {
     if (p.sampler === null) {
       base.sampler = {
@@ -1306,6 +1321,15 @@ export function normalizeSubAgentsConfig(body) {
         delete row.sampler;
       } else {
         row.sampler = normalized;
+      }
+    }
+
+    if (row.thinkingMode !== undefined) {
+      const normalized = normalizeThinkingTriState(row.thinkingMode);
+      if (!normalized) {
+        delete row.thinkingMode;
+      } else {
+        row.thinkingMode = normalized;
       }
     }
 

@@ -121,6 +121,7 @@ export function hideViewerPaneDom(): void {
 /** Show split viewer pane and resizer; closes preview if open. */
 export function showViewerSplit(): void {
   hidePreviewPaneDom();
+  void window.minnow?.preview.hide();
   const pane = document.getElementById('fileViewerPane');
   const resizer = document.getElementById('splitResizer');
   if (pane) pane.classList.remove('hidden');

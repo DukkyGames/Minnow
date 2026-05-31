@@ -28,6 +28,7 @@ import {
 } from './messages';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
+import { syncThinkingControlFromActiveChat } from './composer-thinking';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
@@ -110,6 +111,7 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
     renderChatFromHistory(activeChat);
     renderStatsForChat(activeChat);
     syncModeSelectorFromActiveChat();
+    syncThinkingControlFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
     syncViewModeToggleFromActiveChat();
@@ -381,6 +383,7 @@ export function switchChat(id: string): void {
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
+  syncThinkingControlFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
@@ -449,6 +452,7 @@ export function createChatWithMode(
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
+  syncThinkingControlFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();

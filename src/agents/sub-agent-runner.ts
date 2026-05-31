@@ -64,8 +64,14 @@ import {
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
 } from '../tools/turn-continuation';
 import { getSubAgentTypeConfig } from './sub-agent-config';
+import { mergeThinkingIntoCompletionBody } from './merge-thinking-body';
+import { resolveThinkingMode } from './resolve-thinking';
 import { resolveSamplerPreset } from './resolve-sampler';
 import { applySamplerToBody } from './sampler-types';
+import { findChatById } from '../state/sessions';
+import { modelCache } from '../app-state';
+import { encodeModelSelectKey } from '../lib/model-select-key';
+import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
@@ -252,6 +258,19 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       subAgentMaxTokensFallback: 2048,
       subAgentType: typeConfig,
     });
+    const parentChat = input.parentChatId ? findChatById(input.parentChatId) : undefined;
+    const resolvedThinking = resolveThinkingMode({
+      kind: 'sub-agent',
+      agentKey: input.type,
+      chatThinkingMode: parentChat?.thinkingMode,
+      subAgentType: typeConfig,
+    });
+    const modelRow = modelCache.get(
+      encodeModelSelectKey(input.providerId, input.modelId),
+    );
+    const sendCaps =
+      modelRow?.capabilities ??
+      (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
     const maxToolTurns = Math.max(1, Math.floor(input.maxToolTurns) || MAX_SUB_AGENT_TOOL_TURNS);
     const contextBudget = input.contextBudget ?? {
       maxInputTokens: null,
@@ -342,6 +361,12 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.preset,
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
+      mergeThinkingIntoCompletionBody(
+        body as Record<string, unknown>,
+        resolvedThinking.mode,
+        provider,
+        sendCaps,
+      );
 
       let usedOutcomeResponseFormat = false;
       const outcomeFormat = buildSubAgentOutcomeResponseFormat(summarySchema);
@@ -461,6 +486,12 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.preset,
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
+      mergeThinkingIntoCompletionBody(
+        body as Record<string, unknown>,
+        resolvedThinking.mode,
+        provider,
+        sendCaps,
+      );
 
       if (input.tools.length > 0) {
         body.tools = input.tools;

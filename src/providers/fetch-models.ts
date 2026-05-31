@@ -22,6 +22,7 @@ export function normalizeModelsForUi(
     quantization: m.quantization,
     max_context_length: m.max_context_length,
     loaded_context_length: m.loaded_context_length,
+    ...(m.reasoning ? { reasoning: m.reasoning } : {}),
   }));
 }
 

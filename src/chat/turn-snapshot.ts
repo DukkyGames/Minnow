@@ -4,6 +4,7 @@
 
 import { normalizeModeId } from './modes/types';
 import { indexOfLastUserMessage } from './history-truncate-core';
+import type { ThinkingResolvedMode } from '../agents/thinking-types';
 import type { Chat, TurnSnapshot } from '../types';
 import type { ExpertSelection } from '../types';
 
@@ -18,6 +19,7 @@ export interface BuildTurnSnapshotParams {
   modelId: string;
   temperature: number;
   maxTokens: number;
+  thinkingMode: ThinkingResolvedMode;
   skillId: string | null;
   userContent: string;
 }
@@ -79,6 +81,7 @@ export async function buildTurnSnapshot(
     modelId,
     temperature,
     maxTokens,
+    thinkingMode: params.thinkingMode,
     modeId: normalizeModeId(chat.modeId),
     workAgentId: chat.workAgentId ?? null,
     workAgentAuto: chat.workAgentAuto !== false,
