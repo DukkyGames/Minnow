@@ -41,6 +41,21 @@ describe('estimateHistoryTokens', () => {
     assert.equal(estimateHistoryTokens(history), 2);
   });
 
+  test('assistant thinking segments are included in serialized content', () => {
+    const history: Message[] = [
+      {
+        role: 'assistant',
+        content: 'answer',
+        thinking: ['reason A', 'reason B'],
+      },
+    ];
+    const serialized = serializeMessageContentForEstimate(history[0]);
+    assert.match(serialized, /answer/);
+    assert.match(serialized, /reason A/);
+    assert.match(serialized, /reason B/);
+    assert.ok(estimateHistoryTokens(history) > estimateTokensFromText('answer'));
+  });
+
   test('assistant tool_calls include JSON in serialized content', () => {
     const history: Message[] = [
       {

@@ -9,6 +9,10 @@ import { getActiveChat } from '../state/sessions';
 import type { Attachment } from '../attachments/types';
 import type { Chat } from '../types';
 import {
+  estimateInFlightOverlayTokens,
+  type ContextInFlightOverlay,
+} from './context-in-flight';
+import {
   estimateTokensFromText,
   type OutboundPromptEstimate,
 } from './prompts/token-estimate-core';
@@ -19,6 +23,7 @@ export type ContextUsageSectionKey =
   | 'rules'
   | 'tools'
   | 'history'
+  | 'inFlight'
   | 'composer'
   | 'attachments';
 
@@ -53,6 +58,8 @@ export interface GetContextBudgetOptions {
   pendingComposerText?: string;
   /** Precomputed attachment token estimate. */
   pendingAttachmentTokens?: number;
+  /** Streaming / not-yet-persisted turn content (BUG-019). */
+  inFlight?: Omit<ContextInFlightOverlay, 'chatId'>;
 }
 
 /** Rough token count for queued attachment payloads. */
@@ -82,6 +89,7 @@ export function buildContextUsageBreakdown(
   estimate: OutboundPromptEstimate,
   composerTokens: number,
   attachmentTokens: number,
+  inFlightTokens = 0,
 ): ContextUsageSection[] {
   const rows: ContextUsageSection[] = [
     {
@@ -93,6 +101,13 @@ export function buildContextUsageBreakdown(
     { key: 'tools', label: 'Tools', tokens: estimate.tools },
     { key: 'history', label: 'History', tokens: estimate.history },
   ];
+  if (inFlightTokens > 0) {
+    rows.push({
+      key: 'inFlight',
+      label: 'In progress (estimate)',
+      tokens: inFlightTokens,
+    });
+  }
   if (composerTokens > 0) {
     rows.push({ key: 'composer', label: 'Composer (pending)', tokens: composerTokens });
   }
@@ -157,12 +172,14 @@ export function assembleContextBudget(params: {
   estimate: OutboundPromptEstimate;
   composerTokens: number;
   attachmentTokens: number;
+  inFlightTokens?: number;
   lastTurnPromptTokens: number | null;
 }): ContextBudget {
   const breakdown = buildContextUsageBreakdown(
     params.estimate,
     params.composerTokens,
     params.attachmentTokens,
+    params.inFlightTokens ?? 0,
   );
   const used = sumBreakdownTokens(breakdown);
   const limit = params.limit;
@@ -201,6 +218,7 @@ export async function getContextBudget(
   const estimate = await resolveOutboundPromptEstimate({ chat });
   const composerTokens = estimateTokensFromText(options?.pendingComposerText?.trim() ?? '');
   const attachmentTokens = options?.pendingAttachmentTokens ?? 0;
+  const inFlightTokens = estimateInFlightOverlayTokens(options?.inFlight);
 
   const lastTurnPromptTokens =
     chat.lastStats?.prompt_tokens != null && Number.isFinite(chat.lastStats.prompt_tokens)
@@ -214,6 +232,7 @@ export async function getContextBudget(
     estimate,
     composerTokens,
     attachmentTokens,
+    inFlightTokens,
     lastTurnPromptTokens,
   });
 }
