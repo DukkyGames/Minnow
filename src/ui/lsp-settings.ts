@@ -9,6 +9,7 @@ import {
 } from '../lsp/config-client';
 import { isLocalServerAvailable } from '../tools/config';
 import { createSettingsToggleRow } from './settings-switch';
+import { renderEditorAiSettingsSection } from './editor-ai-settings';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -225,6 +226,7 @@ export async function renderLspSection(): Promise<void> {
 
   if (!online) {
     customMount?.replaceChildren();
+    await renderEditorAiSettingsSection();
     return;
   }
 
@@ -232,6 +234,7 @@ export async function renderLspSection(): Promise<void> {
   if (!config) {
     offline?.classList.remove('hidden');
     addPanel?.classList.add('hidden');
+    await renderEditorAiSettingsSection();
     return;
   }
 
@@ -299,4 +302,6 @@ export async function renderLspSection(): Promise<void> {
       }, removeCustomServer),
     );
   }
+
+  await renderEditorAiSettingsSection();
 }
