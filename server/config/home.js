@@ -184,6 +184,19 @@ const DEFAULT_META = {
     generationIdleTimeoutMs: 180_000,
     generationMaxDurationMs: 3_600_000,
   },
+  editorAiCompletion: {
+    enabled: false,
+    debounceMs: 450,
+    maxPrefixLines: 80,
+    maxSuffixLines: 40,
+    maxPrefixChars: 6000,
+    maxSuffixChars: 2000,
+    temperature: 0.3,
+    maxTokens: 128,
+    useChatModel: true,
+    providerId: '',
+    modelId: '',
+  },
 };
 
 const DEFAULT_SYSTEM_PROMPT = {

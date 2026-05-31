@@ -154,6 +154,22 @@
   height: 100%;
 }
 
+.file-viewer-ai-status {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-ai-ghost-text,
+.file-viewer-body .cm-ai-ghost-text {
+  color: var(--mn-fg-muted);
+  opacity: 0.75;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
 .file-viewer-body .cm-editor {
   height: 100%;
   background: var(--mn-surface-1);
@@ -165,6 +181,16 @@
 
 .file-viewer-body .cm-content {
   color: var(--mn-fg);
+  /* Native caret — auto is often too dark on dark themes */
+  caret-color: var(--mn-fg);
+}
+
+/* drawSelection cursors (if enabled) */
+.file-viewer-editor-mount .cm-cursor,
+.file-viewer-editor-mount .cm-cursor-primary,
+.file-viewer-body .cm-editor .cm-cursor,
+.file-viewer-body .cm-editor .cm-cursor-primary {
+  border-left-color: var(--mn-fg);
 }
 
 .file-viewer-markdown-preview {

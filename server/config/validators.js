@@ -1057,6 +1057,52 @@ export function mergeConfigMeta(existing, patch) {
     base.toolSecurity = existingTs;
   }
 
+  if (p.editorAiCompletion && typeof p.editorAiCompletion === 'object') {
+    const existing =
+      base.editorAiCompletion && typeof base.editorAiCompletion === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.editorAiCompletion) }
+        : {
+            enabled: false,
+            debounceMs: 450,
+            maxPrefixLines: 80,
+            maxSuffixLines: 40,
+            maxPrefixChars: 6000,
+            maxSuffixChars: 2000,
+            temperature: 0.3,
+            maxTokens: 128,
+            useChatModel: true,
+            providerId: '',
+            modelId: '',
+          };
+    const e = /** @type {Record<string, unknown>} */ (p.editorAiCompletion);
+    if (typeof e.enabled === 'boolean') existing.enabled = e.enabled;
+    if (typeof e.debounceMs === 'number' && Number.isFinite(e.debounceMs)) {
+      existing.debounceMs = Math.min(2000, Math.max(200, Math.round(e.debounceMs)));
+    }
+    if (typeof e.maxPrefixLines === 'number' && Number.isFinite(e.maxPrefixLines)) {
+      existing.maxPrefixLines = Math.min(200, Math.max(10, Math.round(e.maxPrefixLines)));
+    }
+    if (typeof e.maxSuffixLines === 'number' && Number.isFinite(e.maxSuffixLines)) {
+      existing.maxSuffixLines = Math.min(100, Math.max(0, Math.round(e.maxSuffixLines)));
+    }
+    if (typeof e.maxPrefixChars === 'number' && Number.isFinite(e.maxPrefixChars)) {
+      existing.maxPrefixChars = Math.min(20_000, Math.max(500, Math.round(e.maxPrefixChars)));
+    }
+    if (typeof e.maxSuffixChars === 'number' && Number.isFinite(e.maxSuffixChars)) {
+      existing.maxSuffixChars = Math.min(10_000, Math.max(0, Math.round(e.maxSuffixChars)));
+    }
+    if (typeof e.temperature === 'number' && Number.isFinite(e.temperature)) {
+      existing.temperature = Math.min(1, Math.max(0, e.temperature));
+    }
+    if (typeof e.maxTokens === 'number' && Number.isFinite(e.maxTokens)) {
+      existing.maxTokens = Math.min(512, Math.max(16, Math.round(e.maxTokens)));
+    }
+    if (typeof e.useChatModel === 'boolean') existing.useChatModel = e.useChatModel;
+    if (typeof e.providerId === 'string') existing.providerId = e.providerId;
+    if (typeof e.modelId === 'string') existing.modelId = e.modelId;
+    base.editorAiCompletion = existing;
+  }
+
   if (p.browser && typeof p.browser === 'object') {
     const existingBrowser =
       base.browser && typeof base.browser === 'object'
