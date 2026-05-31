@@ -18,7 +18,11 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
-import { setAssistantBubbleContent } from '../markdown/renderer';
+import {
+  cancelAssistantBubbleRenderDebounce,
+  scheduleAssistantBubbleRender,
+  setAssistantBubbleContent,
+} from '../markdown/renderer';
 import { closeBenchmark } from './benchmark-page';
 import { closeGlobalBugs } from './global-bugs-page';
 import { closeSettings } from './settings-page';
@@ -43,6 +47,8 @@ let briefText = '';
 let savedActiveChatId: string | null = null;
 let runInFlight = false;
 let tokenCount = 0;
+let outputStreamStarted = false;
+let outputStreamCursor: HTMLDivElement | null = null;
 let clarifyingActive = false;
 let questionHostHome: { parent: HTMLElement; nextSibling: ChildNode | null } | null =
   null;
@@ -104,8 +110,58 @@ function setPhaseStatus(phaseId: PhaseId, status: PhaseStatus): void {
   }
 }
 
+/** Rough word count for the Working-phase progress label. */
+export function estimateExpertLabTokenCount(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
+function ensureOutputStreamCursor(): HTMLDivElement {
+  if (!outputStreamCursor) {
+    outputStreamCursor = document.createElement('div');
+    outputStreamCursor.className = 'cursor cursor--prose';
+    outputStreamCursor.setAttribute('aria-hidden', 'true');
+  }
+  return outputStreamCursor;
+}
+
+/** Live stream into the Output phase (debounced markdown + token count). */
+function updateExpertLabStreamPreview(text: string): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  tokenCount = estimateExpertLabTokenCount(text);
+  const countEl = document.getElementById('expertLabWorkingCount');
+  if (countEl) countEl.textContent = `${tokenCount} tokens`;
+
+  const spinner = document.querySelector(
+    '.expert-lab-phase[data-phase="working"] .expert-lab-spinner',
+  ) as HTMLElement | null;
+  if (spinner) spinner.hidden = true;
+
+  if (!outputStreamStarted) {
+    outputStreamStarted = true;
+    const outputPhase = document.querySelector(
+      '.expert-lab-phase[data-phase="output"]',
+    ) as HTMLElement | null;
+    if (outputPhase) {
+      outputPhase.classList.remove('is-collapsed', 'is-pending');
+    }
+    setPhaseStatus('output', 'active');
+  }
+
+  const bubble = document.getElementById('expertLabOutputBubble');
+  if (!bubble) return;
+  const cursor = ensureOutputStreamCursor();
+  scheduleAssistantBubbleRender(bubble, text, cursor);
+}
+
 function resetTimeline(): void {
   tokenCount = 0;
+  outputStreamStarted = false;
+  outputStreamCursor = null;
+  cancelAssistantBubbleRenderDebounce();
   clarifyingActive = false;
   for (const id of ['understanding', 'clarifying', 'working', 'output'] as PhaseId[]) {
     const el = document.querySelector(
@@ -121,6 +177,10 @@ function resetTimeline(): void {
   if (clarifyingBody) clarifyingBody.replaceChildren();
   const workingCount = document.getElementById('expertLabWorkingCount');
   if (workingCount) workingCount.textContent = '0 tokens';
+  const spinner = document.querySelector(
+    '.expert-lab-phase[data-phase="working"] .expert-lab-spinner',
+  ) as HTMLElement | null;
+  if (spinner) spinner.hidden = false;
   const outputBubble = document.getElementById('expertLabOutputBubble');
   if (outputBubble) outputBubble.replaceChildren();
   restoreQuestionHost();
@@ -318,9 +378,7 @@ function bindStreamListener(): void {
     },
     onPartialText: (chatId, text) => {
       if (chatId !== EXPERT_LAB_CHAT_ID) return;
-      tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
-      const countEl = document.getElementById('expertLabWorkingCount');
-      if (countEl) countEl.textContent = `${tokenCount} tokens`;
+      updateExpertLabStreamPreview(text);
     },
     onToolRound: (chatId, toolName) => {
       if (chatId !== EXPERT_LAB_CHAT_ID || toolName !== 'ask_question') return;
@@ -352,10 +410,12 @@ function bindStreamListener(): void {
       }
       setPhaseStatus('working', 'done');
       setPhaseStatus('output', 'active');
+      cancelAssistantBubbleRenderDebounce();
       const bubble = document.getElementById('expertLabOutputBubble');
       if (bubble) {
         setAssistantBubbleContent(bubble, finalText, { streaming: false });
       }
+      outputStreamCursor = null;
       setPhaseStatus('output', 'done');
     },
     onRunError: () => {
