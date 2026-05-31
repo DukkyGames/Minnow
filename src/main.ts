@@ -124,6 +124,11 @@ import {
   syncViewModeToggleFromActiveChat,
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
+import {
+  initThinkingControl,
+  syncThinkingControlFromActiveChat,
+} from './ui/composer-thinking';
+import { loadThinkingMeta } from './config/thinking-meta';
 import { syncReefWidgetSettingsFromActiveChat } from './ui/reef-widget-settings';
 import { initWorkAgentDevUi, syncWorkAgentDevFromActiveChat } from './ui/work-agent-dev';
 import { initSubAgentUi } from './ui/sub-agent-cards';
@@ -224,6 +229,7 @@ export async function initApp(): Promise<void> {
   initAttachments();
   initContextUsageRing();
   initModeSelector();
+  initThinkingControl();
   initOrchestratePlanSelector();
   initViewModeToggle();
   initReefBridge();
@@ -250,6 +256,7 @@ export async function initApp(): Promise<void> {
   await loadSamplerMeta()
     .then(applySamplerMetaToDrawer)
     .catch(() => undefined);
+  await loadThinkingMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
   initStatsStrip();
@@ -279,6 +286,7 @@ export async function initApp(): Promise<void> {
   renderStatsForChat(getActiveChat());
   refreshContextUsageRing();
   syncModeSelectorFromActiveChat();
+  syncThinkingControlFromActiveChat();
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();

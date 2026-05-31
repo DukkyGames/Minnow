@@ -10,6 +10,7 @@ import type {
   SubAgentStructuredOutcome,
 } from './sub-agent-structured-outcome';
 import type { SamplerPreset } from './sampler-types';
+import type { ThinkingTriState } from './thinking-types';
 
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -44,6 +45,8 @@ export interface SubAgentTypeConfig {
   summarySchema?: string;
   /** Per-type sampler preset (shipped default + user partial override). */
   sampler?: SamplerPreset;
+  /** Per-type thinking tri-state (shipped default + user override). */
+  thinkingMode?: ThinkingTriState;
 }
 
 /** Root sub-agents.json shape (user + merged). */

@@ -54,22 +54,52 @@ export function applyProviderCapabilities(file: ProviderCapabilitiesFile): void 
   }
 }
 
+function reasoningCatalogFromRow(
+  row: LmModelRecord,
+): Pick<ModelCapabilities, 'reasoning' | 'reasoningAllowedOptions' | 'reasoningDefault'> {
+  const block = row.reasoning;
+  if (!block || typeof block !== 'object') {
+    return { reasoning: null };
+  }
+  const allowedRaw = Array.isArray(block.allowed_options)
+    ? block.allowed_options
+    : [];
+  const allowed = allowedRaw.filter(
+    (v): v is 'off' | 'on' => v === 'off' || v === 'on',
+  );
+  const def =
+    block.default === 'off' || block.default === 'on' ? block.default : undefined;
+  const reasoning =
+    allowed.length > 0 ? true : def === 'on' ? true : def === 'off' ? false : null;
+  return {
+    reasoning,
+    ...(allowed.length > 0 ? { reasoningAllowedOptions: allowed } : {}),
+    ...(def ? { reasoningDefault: def } : {}),
+  };
+}
+
 /** Build catalog-derived capabilities from a models-list row. */
 export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilities {
   const contextLength = contextLengthFromModelRow(row) ?? null;
   const isVlm = row.type === 'vlm';
+  const reasoningCaps = reasoningCatalogFromRow(row);
   return {
     vision: isVlm ? true : false,
     tools: null,
     streaming: null,
     grammar: null,
-    reasoning: null,
+    reasoning: reasoningCaps.reasoning ?? null,
+    reasoningAllowedOptions: reasoningCaps.reasoningAllowedOptions,
+    reasoningDefault: reasoningCaps.reasoningDefault,
     contextLength,
     loadState: row.state?.trim() || null,
     sources: {
       vision: 'catalog',
       contextLength: contextLength !== null ? 'catalog' : undefined,
       loadState: 'catalog',
+      ...(reasoningCaps.reasoning !== undefined && reasoningCaps.reasoning !== null
+        ? { reasoning: 'catalog' as const }
+        : {}),
     },
     probeErrors: {},
   };
@@ -107,6 +137,16 @@ export function mergeModelCapabilities(
   preferProbe('streaming', catalog.streaming);
   preferProbe('grammar', catalog.grammar);
   preferProbe('reasoning', catalog.reasoning);
+  if (fromFile.reasoningAllowedOptions?.length) {
+    merged.reasoningAllowedOptions = [...fromFile.reasoningAllowedOptions];
+  } else if (catalog.reasoningAllowedOptions?.length) {
+    merged.reasoningAllowedOptions = [...catalog.reasoningAllowedOptions];
+  }
+  if (fromFile.reasoningDefault) {
+    merged.reasoningDefault = fromFile.reasoningDefault;
+  } else if (catalog.reasoningDefault) {
+    merged.reasoningDefault = catalog.reasoningDefault;
+  }
   preferProbe('contextLength', catalog.contextLength);
   if (fromFile.loadState) {
     merged.loadState = fromFile.loadState;

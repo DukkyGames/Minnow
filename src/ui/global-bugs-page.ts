@@ -119,6 +119,9 @@ export function closeGlobalBugs(): void {
   if (!root || !shell) return;
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
   unmountGlobalBugKanban();
   const mount = document.getElementById('globalBugsList');
   if (mount) mount.innerHTML = '';
@@ -144,6 +147,9 @@ export function openGlobalBugs(): void {
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 
   syncFilterControls();
   renderGlobalBugsList();

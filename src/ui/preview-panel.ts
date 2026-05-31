@@ -17,6 +17,13 @@ import {
 } from './file-layout';
 import { dismissFileViewerForPreview } from './file-viewer';
 import { detectEmbedBlockedFrame } from './preview-embed-detect';
+import {
+  isFullscreenOverlayObscuringWorkspace,
+  isPreviewPaneDomVisible,
+  scheduleElectronPreviewHostVisibilitySync,
+  shouldShowElectronPreviewHost,
+  syncElectronPreviewHostVisibility,
+} from './preview-electron-visibility';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 
 const BROWSER_PREVIEW_HINT =
@@ -190,7 +197,8 @@ function syncAddressBarFromNavigation(url: string): void {
 function onPreviewNavigation(url: string): void {
   if (
     usesElectronPreview() &&
-    getFilePanelState().rightPaneMode !== 'preview' &&
+    !isPreviewPaneDomVisible() &&
+    !isFullscreenOverlayObscuringWorkspace() &&
     url &&
     HTTP_URL_RE.test(url)
   ) {
@@ -254,8 +262,15 @@ async function syncPreviewBounds(): Promise<void> {
   const api = getPreviewApi();
   const body = getPreviewBody();
   if (!api || !body) return;
+  if (!shouldShowElectronPreviewHost()) {
+    await api.hide();
+    return;
+  }
   const rect = body.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return;
+  if (rect.width <= 0 || rect.height <= 0) {
+    await api.hide();
+    return;
+  }
   await api.setBounds({
     x: rect.left,
     y: rect.top,
@@ -268,10 +283,15 @@ function startBoundsObserver(): void {
   const body = getPreviewBody();
   if (!body || boundsObserver || !usesElectronPreview()) return;
   boundsObserver = new ResizeObserver(() => {
+    scheduleElectronPreviewHostVisibilitySync();
     scheduleSyncPreviewBounds();
   });
   boundsObserver.observe(body);
-  window.addEventListener('resize', scheduleSyncPreviewBounds);
+  window.addEventListener('resize', () => {
+    scheduleElectronPreviewHostVisibilitySync();
+    scheduleSyncPreviewBounds();
+  });
+  scheduleElectronPreviewHostVisibilitySync();
   scheduleSyncPreviewBounds();
 }
 
@@ -282,9 +302,7 @@ function markPreviewHostMode(): void {
 }
 
 async function showPreviewHost(): Promise<void> {
-  const api = getPreviewApi();
-  if (!api) return;
-  await api.show();
+  await syncElectronPreviewHostVisibility();
   scheduleSyncPreviewBounds();
   requestAnimationFrame(() => {
     scheduleSyncPreviewBounds();
@@ -292,9 +310,7 @@ async function showPreviewHost(): Promise<void> {
 }
 
 async function hidePreviewHost(): Promise<void> {
-  const api = getPreviewApi();
-  if (!api) return;
-  await api.hide();
+  await syncElectronPreviewHostVisibility();
 }
 
 async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): Promise<void> {
@@ -463,6 +479,18 @@ export function revealPreviewPanelForAgentNavigation(url: string): void {
   const trimmed = url.trim();
   if (!trimmed) return;
   if (!dismissFileViewerForPreview()) return;
+
+  if (isFullscreenOverlayObscuringWorkspace()) {
+    patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });
+    hidePreviewStatus();
+    setPreviewLoading(true);
+    const input = getUrlInput();
+    if (input) input.value = trimmed;
+    if (usesElectronPreview()) {
+      void loadSourceInPreview({ kind: 'url', url: trimmed });
+    }
+    return;
+  }
 
   showPreviewSplit();
   patchFilePanelState({ previewSource: { kind: 'url', url: trimmed } });

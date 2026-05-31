@@ -109,6 +109,7 @@ import {
 } from '../ui/expert-lab-stream';
 import { isExpertLabChat } from '../state/sessions';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
+import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   refreshActiveBoardIfMounted,
@@ -197,9 +198,14 @@ import {
 import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
+import { mergeThinkingIntoCompletionBody } from '../agents/merge-thinking-body';
+import { resolveThinkingMode } from '../agents/resolve-thinking';
 import { resolveSamplerPreset } from '../agents/resolve-sampler';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';
 import { applySamplerToBody } from '../agents/sampler-types';
+import { modelCache } from '../app-state';
+import { encodeModelSelectKey } from '../lib/model-select-key';
+import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import {
   cancelAllForParentTurn,
 } from '../agents/orchestrator';
@@ -717,6 +723,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     agentKey: activeWorkAgent?.id ?? null,
     global: globalSampler,
   });
+  const resolvedThinking = replaySnapshot
+    ? { mode: replaySnapshot.thinkingMode, sourceLabel: 'replay' }
+    : resolveThinkingMode({
+        kind: 'work-agent',
+        agentKey: activeWorkAgent?.id ?? null,
+        chatThinkingMode: chat.thinkingMode,
+      });
   let sendModelId = modelId || chat.modelId;
   let sendProviderId = chat.providerId;
 
@@ -800,6 +813,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
     refreshModeSelectorDisabled();
+    refreshThinkingControlDisabled();
     refreshOrchestratePlanSelectorDisabled();
     refreshBoardOnboardingIfMounted();
     refreshViewModeToggleDisabled();
@@ -946,6 +960,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           globalSampler.preset.temperature ??
           0.7,
         maxTokens: resolvedSampler.maxTokens,
+        thinkingMode: resolvedThinking.mode,
         skillId,
         userContent,
       });
@@ -1029,6 +1044,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         resolvedSampler.preset,
         resolvedSampler.maxTokens,
       ) as ChatCompletionBody;
+      const modelRow = modelCache.get(encodeModelSelectKey(sendProviderId, sendModelId));
+      const sendCaps =
+        modelRow?.capabilities ??
+        (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
+      mergeThinkingIntoCompletionBody(
+        body,
+        replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
+        provider,
+        sendCaps,
+      );
       if (enabledTools.length > 0) {
         body.tools = enabledTools;
         body.tool_choice = 'auto';
@@ -1320,6 +1345,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           resolvedSampler.preset,
           resolvedSampler.maxTokens,
         ) as ChatCompletionBody;
+        mergeThinkingIntoCompletionBody(
+          fallbackBody,
+          replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
+          provider,
+          sendCaps,
+        );
         if (enabledTools.length > 0) {
           fallbackBody.tools = enabledTools;
           fallbackBody.tool_choice = 'auto';
@@ -1611,6 +1642,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null);
       syncChatItemDotsInDom();
       refreshModeSelectorDisabled();
+    refreshThinkingControlDisabled();
       refreshOrchestratePlanSelectorDisabled();
       refreshBoardOnboardingIfMounted();
       syncViewModeToggleFromActiveChat();

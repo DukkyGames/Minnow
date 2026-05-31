@@ -10,6 +10,7 @@ import type {
   SubAgentBudgetEvent,
   SubAgentStructuredOutcome,
 } from './agents/sub-agent-structured-outcome';
+import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 3 as const;
@@ -347,6 +348,8 @@ export interface TurnSnapshot {
   modelId: string;
   temperature: number;
   maxTokens: number;
+  /** Resolved thinking on/off frozen for replay. */
+  thinkingMode: ThinkingResolvedMode;
   modeId: ModeId;
   workAgentId: string | null;
   workAgentAuto: boolean;
@@ -416,6 +419,8 @@ export interface Chat {
   expertSelection?: ExpertSelection;
   /** Last auto-routed expert id (UI hint / debug). */
   lastResolvedExpertId?: string | null;
+  /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
+  thinkingMode?: ThinkingTriState;
   /** Active Work Agent; null = default / auto from mode (Step 08). */
   workAgentId?: string | null;
   /** When true, mode switch picks defaultForModes agent (Step 08). */
@@ -511,6 +516,10 @@ export interface ModelCapabilities {
   streaming: boolean | null;
   grammar: boolean | null;
   reasoning: boolean | null;
+  /** Catalog `reasoning.allowed_options` when upstream exposes tri-state control. */
+  reasoningAllowedOptions?: Array<'off' | 'on'>;
+  /** Catalog default reasoning mode when provided. */
+  reasoningDefault?: 'off' | 'on';
   contextLength: number | null;
   loadState: string | null;
   sources?: Partial<Record<keyof ModelCapabilities | 'loadState', CapabilitySource>>;
@@ -530,6 +539,11 @@ export interface LmModelRecord {
   loaded_context_length?: number;
   /** Merged catalog + probe capabilities (feature #11). */
   capabilities?: ModelCapabilities;
+  /** LM Studio 0.4.8+ catalog reasoning block when present on models list row. */
+  reasoning?: {
+    allowed_options?: string[];
+    default?: string;
+  };
 }
 
 export interface LmModelsListResponse {

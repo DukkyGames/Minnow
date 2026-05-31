@@ -1363,6 +1363,9 @@ export function openBenchmark(): void {
   root.classList.add('is-open');
   shell.classList.add('hidden');
   window.location.hash = '#/benchmark';
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 
   syncBenchmarkPageOnOpen();
 }
@@ -1377,6 +1380,9 @@ export function closeBenchmark(): void {
   if (window.location.hash.startsWith('#/benchmark')) {
     window.location.hash = '#/';
   }
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 }
 
 /** Whether a benchmark is running (including while another page is open). */

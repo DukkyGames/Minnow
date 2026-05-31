@@ -142,12 +142,13 @@ async function extractDocx(buffer, filename) {
  * @returns {Promise<string>}
  */
 async function extractOfficeParser(buffer, filename) {
-  let parseOfficeAsync;
+  let parseOffice;
   try {
     const mod = await import('officeparser');
-    parseOfficeAsync =
-      mod.parseOfficeAsync ??
-      mod.default?.parseOfficeAsync ??
+    parseOffice =
+      mod.parseOffice ??
+      mod.OfficeParser?.parseOffice ??
+      mod.default?.parseOffice ??
       mod.default;
   } catch {
     throw new Error(
@@ -156,11 +157,15 @@ async function extractOfficeParser(buffer, filename) {
     );
   }
 
-  if (typeof parseOfficeAsync !== 'function') {
-    throw new Error('officeparser did not export parseOfficeAsync');
+  if (typeof parseOffice !== 'function') {
+    throw new Error('officeparser did not export parseOffice');
   }
 
-  const text = await parseOfficeAsync(buffer);
+  const ast = await parseOffice(buffer);
+  const text =
+    typeof ast?.toText === 'function'
+      ? ast.toText()
+      : String(ast?.content ?? ast ?? '');
   return formatDocumentResult(filename, String(text ?? ''));
 }
 

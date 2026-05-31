@@ -393,6 +393,7 @@
         <button type="button" data-settings-nav="usage">Usage &amp; cost</button>
         <button type="button" data-settings-nav="model-routing">Model routing</button>
         <button type="button" data-settings-nav="sampler">Sampler</button>
+        <button type="button" data-settings-nav="thinking">Thinking</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
@@ -510,6 +511,11 @@
         <h2>Sampler</h2>
         <p class="settings-lead">Global temperature, nucleus, and penalty defaults for main chat, plus optional per work-agent and sub-agent overrides. Model bindings stay under <strong>Model routing</strong>.</p>
         <div id="settingsSamplerBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-thinking" class="settings-section settings-section--wide">
+        <h2>Thinking</h2>
+        <p class="settings-lead">Control whether models emit separate reasoning streams. Global default is <strong>on</strong>; work agents, sub-agents, and the composer can override per role or per chat.</p>
+        <div id="settingsThinkingBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-prompting" class="settings-section">
         <h2>Prompting</h2>
@@ -942,6 +948,10 @@
       <div class="input-bar-composer">
         <div class="composer-controls" id="composerControls" role="toolbar" aria-label="Composer options">
           <div id="modeSelector" class="mode-segmented" role="radiogroup" aria-label="Operating mode"></div>
+          <div id="composerThinkingWrap" class="composer-control thinking-control-wrap">
+            <div id="composerThinkingControl"></div>
+            <span id="composerThinkingHint" class="composer-thinking-hint hidden" role="status"></span>
+          </div>
           <div id="orchestratePlanStrip" class="composer-control orchestrate-plan-control hidden" aria-live="polite">
             <label class="composer-control-label" for="orchestratePlanSelect">Plan</label>
             <select id="orchestratePlanSelect" aria-label="Orchestrate plan file" disabled>

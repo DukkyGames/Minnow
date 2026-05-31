@@ -6,6 +6,7 @@ import { getSessions, putSessions } from '../config/api-client';
 import { defaultSessionState } from '../config/defaults';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
+import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { decodeModelSelectKey } from '../lib/model-select-key';
@@ -101,6 +102,8 @@ function ensureTurnSnapshot(raw: unknown): TurnSnapshot | null {
     modelId: row.modelId,
     temperature: typeof row.temperature === 'number' ? row.temperature : 0.7,
     maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : 4096,
+    thinkingMode:
+      row.thinkingMode === 'on' || row.thinkingMode === 'off' ? row.thinkingMode : 'on',
     modeId: normalizeModeId(row.modeId),
     workAgentId:
       typeof row.workAgentId === 'string' && row.workAgentId.trim()
@@ -572,6 +575,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
         ? raw.workAgentId.trim()
         : null,
     workAgentAuto: raw.workAgentAuto !== false,
+    ...(raw.thinkingMode !== undefined
+      ? { thinkingMode: normalizeThinkingTriState(raw.thinkingMode) }
+      : {}),
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),

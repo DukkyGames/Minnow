@@ -206,6 +206,9 @@ export function openSettings(section?: SettingsSectionId): void {
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 
   upgradeSettingsCheckboxes();
   bindStaticSections();
@@ -231,6 +234,9 @@ export function closeSettings(): void {
   shell.classList.remove('hidden');
   document.querySelector('header.topbar')?.classList.remove('hidden');
   window.location.hash = '#/';
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
 }
 
 function onHashChange(): void {

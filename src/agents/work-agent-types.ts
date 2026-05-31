@@ -4,6 +4,7 @@
 
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import type { SamplerPreset } from './sampler-types';
+import type { ThinkingTriState } from './thinking-types';
 
 /** Where a work agent definition was loaded from. */
 export type WorkAgentSource = 'builtin' | 'pack' | 'override';
@@ -55,6 +56,8 @@ export interface WorkAgentUserOverride {
   summaryReserveTokens?: number;
   /** Partial sampler override (field-level merge at send time). */
   sampler?: SamplerPreset | null;
+  /** Tri-state thinking override for this work agent. */
+  thinkingMode?: ThinkingTriState | null;
 }
 
 export interface WorkAgentRegistrySnapshot {
