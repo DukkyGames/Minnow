@@ -2,6 +2,7 @@
  * In-chat context window usage ring (MIN-13) — composer stack indicator.
  */
 
+import { getContextInFlightOverlay } from '../chat/context-in-flight';
 import {
   estimateAttachmentTokens,
   getContextBudget,
@@ -92,6 +93,7 @@ async function runRefresh(): Promise<void> {
       modelId,
       pendingComposerText: readPendingComposerText(),
       pendingAttachmentTokens: estimateAttachmentTokens(getPendingAttachments()),
+      inFlight: getContextInFlightOverlay(chat.id),
     });
     lastBudget = budget;
     paintRing(budget);

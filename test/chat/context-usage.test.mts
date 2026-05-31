@@ -5,6 +5,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  estimateInFlightOverlayTokens,
+} from '../../src/chat/context-in-flight.ts';
+import {
   assembleContextBudget,
   buildContextUsageBreakdown,
   computeContextUsagePercent,
@@ -46,7 +49,29 @@ describe('estimateAttachmentTokens', () => {
   });
 });
 
+describe('estimateInFlightOverlayTokens', () => {
+  test('sums partial prose, thinking, and pending tool JSON', () => {
+    const tokens = estimateInFlightOverlayTokens({
+      partialAssistantText: 'abcd',
+      thinkingText: 'efgh',
+      pendingToolCallsJson: '{"name":"read_file"}',
+    });
+    assert.equal(tokens, 7);
+  });
+});
+
 describe('buildContextUsageBreakdown', () => {
+  test('includes in-flight row when non-zero', () => {
+    const estimate = computeOutboundPromptEstimateFromParts({
+      systemText: 'sys',
+      history: [],
+      tools: [],
+    });
+    const rows = buildContextUsageBreakdown(estimate, 0, 0, 12);
+    assert.equal(rows.find((r) => r.key === 'inFlight')?.tokens, 12);
+    assert.equal(rows.find((r) => r.key === 'inFlight')?.label, 'In progress (estimate)');
+  });
+
   test('includes composer and attachments when non-zero', () => {
     const estimate = computeOutboundPromptEstimateFromParts({
       systemText: 'sys',
@@ -156,12 +181,13 @@ describe('assembleContextBudget', () => {
       estimate,
       composerTokens: 10,
       attachmentTokens: 5,
+      inFlightTokens: 7,
       lastTurnPromptTokens: null,
     });
 
     const bucketSum = budget.breakdown.reduce((sum, row) => sum + row.tokens, 0);
     assert.equal(budget.used, bucketSum);
-    assert.equal(budget.used, estimate.total + 10 + 5);
+    assert.equal(budget.used, estimate.total + 10 + 5 + 7);
     assert.equal(budget.remaining, 32_768 - budget.used);
     assert.equal(budget.percent, Math.round((budget.used / 32_768) * 100));
     assert.equal(budget.isEstimate, true);

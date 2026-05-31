@@ -23,17 +23,28 @@ export function formatTokenEstimateLabel(tokens: number): string {
 export const TOKEN_ESTIMATE_TOOLTIP =
   'Approximate size using characters ÷ 4. Real prompt tokens depend on the model tokenizer. Excludes pending composer text and attachments.';
 
+/** Join persisted reasoning segments for token estimate (chars ÷ 4 heuristic). */
+export function serializeThinkingForEstimate(thinking: string[] | undefined): string {
+  if (!thinking?.length) return '';
+  return thinking.join('\n\n');
+}
+
 /** Serialize one history row the same way string API messages count payload size. */
 export function serializeMessageContentForEstimate(m: Message): string {
   if (m.role === 'user') return m.content;
   if (m.role === 'tool') return m.content;
   if (m.role === 'assistant') {
     const withTools = m as AssistantToolCallMessage;
+    const thinkingPart = serializeThinkingForEstimate(
+      'thinking' in m ? (m as { thinking?: string[] }).thinking : undefined,
+    );
     if (withTools.tool_calls?.length) {
       const content = withTools.content ?? '';
-      return content + JSON.stringify(withTools.tool_calls);
+      const base = content + JSON.stringify(withTools.tool_calls);
+      return thinkingPart ? `${base}\n\n${thinkingPart}` : base;
     }
-    return m.content;
+    const prose = m.content ?? '';
+    return thinkingPart ? `${prose}\n\n${thinkingPart}` : prose;
   }
   return '';
 }
