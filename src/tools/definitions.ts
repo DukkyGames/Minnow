@@ -470,6 +470,49 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'grep',
+    label: 'Grep / Search workspace',
+    description:
+      'Search file contents under a directory (ripgrep-style). Respects .gitignore.',
+    category: 'files',
+    serverRequired: true,
+    definition: toolSchema(
+      'grep',
+      'Search file contents under a workspace directory. Returns path:line:snippet lines. Respects .gitignore. Use search_in_file when you already know the file path.',
+      {
+        pattern: {
+          type: 'string',
+          description: 'Regex pattern, or literal string when literal is true',
+        },
+        path: {
+          type: 'string',
+          description: 'Directory or file to search under (default ".")',
+        },
+        glob: {
+          type: 'string',
+          description: 'Optional file glob filter, e.g. "**/*.{ts,tsx}"',
+        },
+        case_insensitive: {
+          type: 'boolean',
+          description: 'Case-insensitive search (default false)',
+        },
+        literal: {
+          type: 'boolean',
+          description: 'Treat pattern as a fixed string, not regex (default false)',
+        },
+        context: {
+          type: 'number',
+          description: 'Lines of context before/after each match (0-5, default 0)',
+        },
+        head_limit: {
+          type: 'number',
+          description: 'Max matching lines to return (default 200, max 500)',
+        },
+      },
+      ['pattern'],
+    ),
+  },
+  {
     id: 'make_directory',
     label: 'Make directory',
     description: 'Creates a directory (and parents if needed).',

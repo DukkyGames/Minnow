@@ -48,6 +48,7 @@
         "read_file_range",
         "find_files",
         "search_in_file",
+        "grep",
         "get_file_metadata",
         "git_status",
         "git_log",
@@ -94,6 +95,7 @@
         "read_file_range",
         "find_files",
         "search_in_file",
+        "grep",
         "list_directory"
       ],
       "deniedTools": [
@@ -186,6 +188,7 @@
         "read_file_range",
         "find_files",
         "search_in_file",
+        "grep",
         "get_file_metadata",
         "git_status",
         "git_log",
@@ -253,6 +256,7 @@
         "read_file_range",
         "find_files",
         "search_in_file",
+        "grep",
         "get_file_metadata",
         "list_directory",
         "web_search",

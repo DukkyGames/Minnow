@@ -18,6 +18,7 @@ export const ALL_TOOL_IDS = [
   'insert_at_line',
   'replace_text_in_file',
   'search_in_file',
+  'grep',
   'make_directory',
   'move_file',
   'copy_file',

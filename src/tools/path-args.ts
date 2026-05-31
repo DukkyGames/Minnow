@@ -14,6 +14,7 @@ const TOOL_PATH_ARG_KEYS: Record<string, readonly string[]> = {
   insert_at_line: ['path'],
   replace_text_in_file: ['path'],
   search_in_file: ['path'],
+  grep: ['path'],
   make_directory: ['path'],
   move_file: ['source', 'destination'],
   copy_file: ['source', 'destination'],

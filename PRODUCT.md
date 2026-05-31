@@ -15,7 +15,7 @@ Fast, lightweight browser client for local OpenAI-compatible chat:
 - **Multi-session chat** with workspace-scoped history and streaming replies
 - **Model picker** with load/unload, friendly labels, and a **context usage** indicator beside Send
 - **Five operating modes** — Build, Plan, Orchestrate (board + plans), Research, Reef (inline widgets)
-- **Agent layer** — 55 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions, and programmatic system prompts (full / lite / custom profiles)
+- **Agent layer** — 57 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions, and programmatic system prompts (full / lite / custom profiles)
 - **Workspace tools** — file tree, terminal, LSP, MCP, memory, optional CDP browser automation
 - Persistent **inference metrics** strip (compact instrumentation, not a marketing dashboard)
 
