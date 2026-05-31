@@ -144,9 +144,11 @@ export function sanitizeCompletionText(raw: string, docPrefix?: string): string 
     const tailLen = Math.min(docPrefix.length, 200);
     const tail = docPrefix.slice(-tailLen);
     if (text.startsWith(docPrefix)) {
-      text = text.slice(docPrefix.length);
+      const stripped = text.slice(docPrefix.length);
+      if (stripped.trim().length > 0) text = stripped;
     } else if (tail.length > 0 && text.startsWith(tail)) {
-      text = text.slice(tail.length);
+      const stripped = text.slice(tail.length);
+      if (stripped.trim().length > 0) text = stripped;
     }
   }
 

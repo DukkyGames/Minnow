@@ -2,16 +2,20 @@
  * Debounced LLM client for editor inline completions (POLISH-006).
  */
 
-import { mergeStreamMeta, type StreamMetaAccumulator } from '../api/chat';
+import { extractMessageText } from '../api/chat';
 import {
-  createSseEventBuffer,
-  feedSseEventBuffer,
-  flushSseEventBuffer,
-} from '../api/sse-parse';
+  cancelGeneration,
+  createGeneration,
+  subscribeToGeneration,
+  type GenerationEndEvent,
+} from '../api/generations';
+import {
+  BenchmarkStreamReasoningAccumulator,
+  resolveBenchmarkCompletionText,
+} from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { getActiveChat } from '../state/sessions';
-import { postChatCompletions } from '../providers/fetch-chat';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
 import {
@@ -57,7 +61,24 @@ export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   onPartial?: (text: string) => void;
 }
 
-/** Stream a single inline completion; returns null on failure or empty result. */
+/** Merge streamed chunks into displayable completion text (content + reasoning fallback). */
+export function resolveEditorCompletionRawText(
+  contentAcc: StreamingContentAccumulator,
+  reasoningAcc: BenchmarkStreamReasoningAccumulator,
+  chunk: ChatCompletionChunk,
+): string {
+  contentAcc.ingestChoice(chunk.choices?.[0]);
+  reasoningAcc.ingestChunk(chunk);
+  const fromStream = resolveBenchmarkCompletionText(
+    contentAcc.getText(),
+    reasoningAcc.getText(),
+  );
+  if (fromStream) return fromStream;
+  const message = chunk.choices?.[0]?.message;
+  return extractMessageText(message).trim();
+}
+
+/** Stream a single inline completion via /api/generations (parsed SSE chunks). */
 export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<string | null> {
@@ -71,50 +92,66 @@ export async function fetchEditorAiCompletion(
     stream: true as const,
   };
 
-  let res: Response;
+  let generationId: string;
   try {
-    res = await postChatCompletions(provider, body, input.signal);
-  } catch (err) {
-    if (input.signal.aborted) return null;
-    throw err;
+    ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
+  } catch {
+    return null;
   }
-
-  if (!res.ok || !res.body) return null;
 
   const contentAcc = new StreamingContentAccumulator();
-  let streamMeta: StreamMetaAccumulator = {};
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  const sseBuffer = createSseEventBuffer();
+  const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
-  const emitPartial = (): void => {
-    const raw = contentAcc.getText();
-    const cleaned = sanitizeCompletionText(raw, prefix);
-    if (cleaned) input.onPartial?.(cleaned);
+  const emitFromAccumulators = (): string => {
+    const raw = resolveBenchmarkCompletionText(
+      contentAcc.getText(),
+      reasoningAcc.getText(),
+    );
+    return sanitizeCompletionText(raw, prefix);
   };
 
-  function handleChunk(chunk: ChatCompletionChunk): void {
-    streamMeta = mergeStreamMeta(streamMeta, chunk);
-    contentAcc.ingestChoice(chunk.choices?.[0]);
-    emitPartial();
-  }
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (text: string | null): void => {
+      if (settled) return;
+      settled = true;
+      resolve(text);
+    };
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      feedSseEventBuffer(sseBuffer, decoder.decode(value, { stream: true }), handleChunk);
-    }
-    flushSseEventBuffer(sseBuffer, handleChunk);
-  } catch (err) {
-    if (input.signal.aborted) return null;
-    throw err;
-  } finally {
-    void streamMeta;
-  }
+    const unsubscribe = subscribeToGeneration(generationId, {
+      signal: input.signal,
+      onChunk: (chunk) => {
+        resolveEditorCompletionRawText(contentAcc, reasoningAcc, chunk);
+        const cleaned = emitFromAccumulators();
+        if (cleaned) input.onPartial?.(cleaned);
+      },
+      onEnd: (event?: GenerationEndEvent) => {
+        unsubscribe();
+        if (event?.status === 'error') {
+          finish(null);
+          return;
+        }
+        const cleaned = emitFromAccumulators();
+        finish(cleaned.length > 0 ? cleaned : null);
+      },
+      onTransportError: () => {
+        unsubscribe();
+        finish(null);
+      },
+    });
 
-  const cleaned = sanitizeCompletionText(contentAcc.getText(), prefix);
-  return cleaned.length > 0 ? cleaned : null;
+    input.signal.addEventListener(
+      'abort',
+      () => {
+        unsubscribe();
+        void cancelGeneration(generationId).catch(() => {
+          /* best-effort */
+        });
+        finish(null);
+      },
+      { once: true },
+    );
+  });
 }
 
 /** Build messages only (exported for tests). */

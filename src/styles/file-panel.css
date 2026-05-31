@@ -162,9 +162,10 @@
   color: var(--mn-fg-muted);
 }
 
-.file-viewer-editor-mount .cm-ai-ghost-text {
+.file-viewer-editor-mount .cm-ai-ghost-text,
+.file-viewer-body .cm-ai-ghost-text {
   color: var(--mn-fg-muted);
-  opacity: 0.55;
+  opacity: 0.75;
   pointer-events: none;
   white-space: pre-wrap;
 }

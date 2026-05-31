@@ -4,6 +4,7 @@
 
 import {
   EditorSelection,
+  Prec,
   StateEffect,
   StateField,
   type Extension,
@@ -47,9 +48,14 @@ function resolveGhostAfterTransaction(
   startGhost: AiGhostValue | null,
 ): AiGhostValue | null {
   let ghost = startGhost;
+  let explicitSet = false;
   for (const effect of tr.effects) {
-    if (effect.is(setAiGhost)) ghost = effect.value;
+    if (effect.is(setAiGhost)) {
+      ghost = effect.value;
+      explicitSet = true;
+    }
   }
+  if (explicitSet) return ghost;
   if (tr.docChanged) return null;
   if (!tr.state.selection.eq(tr.startState.selection)) return null;
   return ghost;
@@ -233,27 +239,37 @@ class EditorAiCompletionPlugin {
     this.abortController = controller;
     this.requestPos = pos;
 
-    const binding = await resolveEditorAiBinding(this.opts.config);
-    const text = await fetchEditorAiCompletion({
-      state,
-      cursorPos: pos,
-      filePath: this.opts.filePath,
-      config: this.opts.config,
-      binding,
-      signal: controller.signal,
-      onPartial: (partial) => {
-        if (controller.signal.aborted) return;
-        if (this.requestPos !== pos) return;
-        this.showGhostAt(pos, partial);
-      },
-    });
+    try {
+      const binding = await resolveEditorAiBinding(this.opts.config);
+      const text = await fetchEditorAiCompletion({
+        state,
+        cursorPos: pos,
+        filePath: this.opts.filePath,
+        config: this.opts.config,
+        binding,
+        signal: controller.signal,
+        onPartial: (partial) => {
+          if (controller.signal.aborted) return;
+          if (this.requestPos !== pos) return;
+          this.showGhostAt(pos, partial);
+        },
+      });
 
-    if (controller.signal.aborted) return;
-    if (this.view.state.selection.main.head !== pos) return;
-    if (this.requestPos !== pos) return;
+      if (controller.signal.aborted) return;
+      if (this.view.state.selection.main.head !== pos) return;
+      if (this.requestPos !== pos) return;
 
-    this.abortController = null;
-    this.showGhostAt(pos, text ?? '');
+      this.showGhostAt(pos, text ?? '');
+      if (text) {
+        this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
+      }
+    } catch {
+      this.opts.onStatus?.('AI completion failed — check provider and model in Settings');
+    } finally {
+      if (this.abortController === controller) {
+        this.abortController = null;
+      }
+    }
   }
 }
 
@@ -262,8 +278,8 @@ export function editorAiCompletionExtensions(
   opts: EditorAiExtensionOptions,
 ): Extension[] {
   return [
-    aiGhostField,
+    Prec.high(aiGhostField),
     ViewPlugin.define((view) => new EditorAiCompletionPlugin(view, opts)),
-    keymap.of([editorAiTabBinding, editorAiEscapeBinding]),
+    Prec.high(keymap.of([editorAiTabBinding, editorAiEscapeBinding])),
   ];
 }
