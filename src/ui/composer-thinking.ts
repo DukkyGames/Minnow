@@ -32,7 +32,6 @@ const LABELS: Record<ThinkingTriState, string> = {
 };
 
 let rootEl: HTMLElement | null = null;
-let hintEl: HTMLElement | null = null;
 
 function effectiveCapabilities(): ReturnType<typeof catalogCapabilitiesFromRow> | undefined {
   const chat = getActiveChat();
@@ -58,27 +57,17 @@ function setChatThinkingMode(mode: ThinkingTriState): void {
 /** Mount segmented thinking control into #composerThinkingControl. */
 export function initThinkingControl(): void {
   rootEl = document.getElementById('composerThinkingControl');
-  hintEl = document.getElementById('composerThinkingHint');
   if (!rootEl) return;
 
   rootEl.innerHTML = '';
-  rootEl.className = 'composer-control thinking-control mode-segmented';
+  rootEl.className = 'mode-segmented thinking-control';
   rootEl.setAttribute('role', 'radiogroup');
   rootEl.setAttribute('aria-label', 'Thinking mode');
-
-  const label = document.createElement('span');
-  label.className = 'composer-control-label';
-  label.textContent = 'Thinking';
-  rootEl.appendChild(label);
-
-  const group = document.createElement('div');
-  group.className = 'thinking-control__segments';
-  group.setAttribute('role', 'presentation');
 
   for (const mode of MODES) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'mode-segmented__btn';
+    btn.className = 'mode-segment';
     btn.dataset.thinkingMode = mode;
     btn.textContent = LABELS[mode];
     btn.setAttribute('role', 'radio');
@@ -86,10 +75,8 @@ export function initThinkingControl(): void {
       if (btn.disabled) return;
       setChatThinkingMode(mode);
     });
-    group.appendChild(btn);
+    rootEl.appendChild(btn);
   }
-
-  rootEl.appendChild(group);
   syncThinkingControlFromActiveChat();
 }
 
@@ -129,12 +116,6 @@ export function syncThinkingControlFromActiveChat(): void {
       btn.title = '';
     }
   });
-
-  if (hintEl) {
-    const hint = formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel);
-    hintEl.textContent = hint;
-    hintEl.classList.toggle('hidden', !hint);
-  }
 }
 
 export function refreshThinkingControlDisabled(): void {

@@ -8,7 +8,7 @@
   gap: 6px;
 }
 
-.composer-control label.composer-control-label {
+.composer-control .composer-control-label {
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--mn-fg-subtle);
@@ -158,22 +158,13 @@
 }
 
 .thinking-control-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 
-.thinking-control__segments {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.composer-thinking-hint {
-  font-size: 0.65rem;
-  color: var(--mn-fg-subtle);
-  line-height: 1.2;
-  padding-left: 2px;
+@media (max-width: 600px) {
+  .thinking-control-wrap {
+    flex: 1 1 100%;
+  }
 }
 
 @media (max-width: 600px) {
