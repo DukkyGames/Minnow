@@ -312,7 +312,7 @@ export async function handleProviderRequest(req, res, pathname) {
         sendJson(res, 200, result);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (message.includes('disabled')) {
+        if (message.includes('disabled') || message.includes('No loaded model')) {
           sendJson(res, 400, { error: message });
           return true;
         }

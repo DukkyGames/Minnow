@@ -3,16 +3,18 @@
  */
 
 import { getModelRowForSelectOrCanonicalId } from '../api/models';
+import { catalogRowHasVision } from './model-capabilities';
 import type { LmModelRecord } from '../types';
 
 /** Best-effort id heuristic when catalog and cache lack a row (benchmark fallback only). */
 const VISION_ID_FALLBACK = /vlm|vision|llava|bakllava|moondream|multimodal/i;
 
 function visionFromRow(row: LmModelRecord): boolean | null {
+  if (catalogRowHasVision(row)) return true;
   const vision = row.capabilities?.vision;
   if (vision === true) return true;
   if (vision === false) return false;
-  if (row.type === 'vlm') return true;
+  if (row.catalogVision === false) return false;
   if (row.type === 'llm') return false;
   return null;
 }

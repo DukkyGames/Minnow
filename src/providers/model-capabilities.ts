@@ -78,13 +78,18 @@ function reasoningCatalogFromRow(
   };
 }
 
+/** True when catalog row indicates multimodal vision (vlm type or LM Studio capabilities.vision). */
+export function catalogRowHasVision(row: LmModelRecord): boolean {
+  return row.type === 'vlm' || row.catalogVision === true;
+}
+
 /** Build catalog-derived capabilities from a models-list row. */
 export function catalogCapabilitiesFromRow(row: LmModelRecord): ModelCapabilities {
   const contextLength = contextLengthFromModelRow(row) ?? null;
-  const isVlm = row.type === 'vlm';
+  const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   return {
-    vision: isVlm ? true : false,
+    vision,
     tools: null,
     streaming: null,
     grammar: null,
@@ -225,15 +230,10 @@ export async function runCapabilityProbe(
   return (await res.json()) as ProviderCapabilitiesFile;
 }
 
-/**
- * First loaded model id for a provider (selected chat model preferred when loaded).
- */
-export function findLoadedModelIdForProvider(
-  providerId: string,
-  selectedModelId?: string,
-): string | null {
+/** All loaded canonical model ids for a provider (from modelCache). */
+export function findLoadedModelIdsForProvider(providerId: string): string[] {
   const pid = providerId.trim();
-  if (!pid) return null;
+  if (!pid) return [];
 
   const loaded: string[] = [];
   for (const [key, row] of modelCache.entries()) {
@@ -242,7 +242,17 @@ export function findLoadedModelIdForProvider(
     if (!isModelLoaded(row.state)) continue;
     loaded.push(decoded.modelId);
   }
+  return [...new Set(loaded)];
+}
 
+/**
+ * First loaded model id for a provider (selected chat model preferred when loaded).
+ */
+export function findLoadedModelIdForProvider(
+  providerId: string,
+  selectedModelId?: string,
+): string | null {
+  const loaded = findLoadedModelIdsForProvider(providerId);
   if (loaded.length === 0) return null;
   const [first] = prioritizeModelIdsForProbe(loaded, selectedModelId);
   return first ?? null;
@@ -278,10 +288,17 @@ export function prioritizeModelIdsForProbe(
     .slice(0, 8);
 }
 
+export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
+  'No loaded model found. Load a model in LM Studio, then run the probe again.';
+
 /** Run capability matrix probe (Settings → Providers button; optional model id filter). */
 export async function runCapabilityProbeForProvider(
   providerId: string,
-  options: { modelIds?: string[]; selectedModelId?: string } = {},
+  options: {
+    modelIds?: string[];
+    selectedModelId?: string;
+    apiKind?: 'lm-studio-v0' | 'openai-v1';
+  } = {},
 ): Promise<void> {
   if (!isServerStorageMode()) return;
 
@@ -290,9 +307,19 @@ export async function runCapabilityProbeForProvider(
   probeAbort = controller;
 
   try {
+    let modelIds = options.modelIds;
+    const apiKind = options.apiKind;
+    if (apiKind === 'lm-studio-v0' && modelIds === undefined) {
+      const loadedIds = findLoadedModelIdsForProvider(providerId);
+      if (loadedIds.length === 0) {
+        throw new Error(NO_LOADED_MODEL_MATRIX_PROBE_MSG);
+      }
+      modelIds = loadedIds;
+    }
+
     const prioritized =
-      options.modelIds !== undefined
-        ? prioritizeModelIdsForProbe(options.modelIds, options.selectedModelId)
+      modelIds !== undefined
+        ? prioritizeModelIdsForProbe(modelIds, options.selectedModelId)
         : undefined;
     const file = await runCapabilityProbe(providerId, {
       modelIds: prioritized,
@@ -325,5 +352,5 @@ export function modelSupportsVision(modelId: string | undefined): boolean {
   const caps = row.capabilities ?? catalogCapabilitiesFromRow(row);
   if (caps.vision === true) return true;
   if (caps.vision === false) return false;
-  return row.type === 'vlm';
+  return catalogRowHasVision(row);
 }

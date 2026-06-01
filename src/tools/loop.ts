@@ -286,6 +286,37 @@ function imageHistoryPlaceholder(name: string): string {
   return `[image: ${name}]`;
 }
 
+const IMAGE_PLACEHOLDER_IN_HISTORY_RE = /\[image:\s*[^\]]+\]/i;
+
+/** User row that should receive pending image_url parts (not a later steer line). */
+function indexOfMultimodalUserMessage(
+  history: Message[],
+  pending: Attachment[],
+): number {
+  const hasPendingImages = pending.some((a) => a.kind === 'image' && a.dataUrl);
+  if (!hasPendingImages) {
+    return indexOfLastUserMessage(history);
+  }
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const m = history[i];
+    if (m.role === 'user' && IMAGE_PLACEHOLDER_IN_HISTORY_RE.test(m.content)) {
+      return i;
+    }
+  }
+  return indexOfLastUserMessage(history);
+}
+
+/** Skip ask_question prose retry when this turn includes image input. */
+function turnHasImageContext(chat: Chat, pending: Attachment[]): boolean {
+  if (pending.some((a) => a.kind === 'image' && a.dataUrl)) return true;
+  for (const m of chat.history) {
+    if (m.role === 'user' && IMAGE_PLACEHOLDER_IN_HISTORY_RE.test(m.content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Inline file block for text/PDF content in string user messages. */
 function fileContentBlock(name: string, body: string): string {
   const safeName = name.replace(/"/g, "'");
@@ -410,15 +441,15 @@ export function buildApiMessages(
   });
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
-  const lastUserIdx = indexOfLastUserMessage(chat.history);
+  const multimodalUserIdx = indexOfMultimodalUserMessage(chat.history, pending);
   const modelId = options?.modelId;
   const vlm = isVisionModel(modelId);
 
   for (let i = 0; i < chat.history.length; i += 1) {
     const m = chat.history[i];
     if (m.role === 'user') {
-      const isLastUser = i === lastUserIdx;
-      if (isLastUser && pending.length > 0) {
+      const isMultimodalUser = i === multimodalUserIdx;
+      if (isMultimodalUser && pending.length > 0) {
         const userText = options?.pendingUserText ?? m.content;
         const content: ApiMessageContent = vlm
           ? buildVlmUserApiContent(userText, pending)
@@ -1452,9 +1483,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const askQuestionToolAvailable =
         enabledTools.some((t) => t.function.name === 'ask_question') &&
         isToolEnabled('ask_question');
+      const pendingForRetry = getPendingAttachments().filter((a) => a.kind !== 'error');
       if (
         askQuestionToolAvailable &&
         fullText.trim() &&
+        !turnHasImageContext(chat, pendingForRetry) &&
         looksLikeProseStructuredQuestion(fullText) &&
         proseQuestionRetries < MAX_PROSE_QUESTION_RETRIES
       ) {

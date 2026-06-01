@@ -7,8 +7,11 @@
 const CHOICE_PHRASE_RE =
   /\b(which (one|option)|please (choose|pick|select)|would you (like|prefer)|pick one|select one|choose one|let me know (which|what)|your preference)\b/i;
 
-/** Lines that look like preset choices (bullets, numbers, or A) B) labels). */
-const OPTION_LINE_RE = /^\s*(?:[-*•]|\d+[.)]|[a-zA-Z][.)])\s+\S/gm;
+/** Numbered lines that look like preset choices (1. foo / 2) bar). */
+const NUMBERED_OPTION_LINE_RE = /^\s*\d+[.)]\s+\S/gm;
+
+/** Dash bullets — only count when a choice phrase is present (descriptive lists are common). */
+const DASH_OPTION_LINE_RE = /^\s*[-*•]\s+\S/gm;
 
 /** Inline lettered options such as "A) foo  B) bar". */
 const LETTER_PAREN_OPTION_RE = /\b[A-D]\)\s+\S/g;
@@ -28,12 +31,22 @@ export function looksLikeProseStructuredQuestion(text: string): boolean {
   const hasChoicePhrase = CHOICE_PHRASE_RE.test(trimmed);
   if (!hasQuestionMark && !hasChoicePhrase) return false;
 
-  const optionLineCount = (trimmed.match(OPTION_LINE_RE) ?? []).length;
+  const numberedOptionCount = (trimmed.match(NUMBERED_OPTION_LINE_RE) ?? []).length;
   const letterParenCount = (trimmed.match(LETTER_PAREN_OPTION_RE) ?? []).length;
   const boldOptionCount = (trimmed.match(BOLD_OPTION_LINE_RE) ?? []).length;
+  const dashOptionCount = hasChoicePhrase
+    ? (trimmed.match(DASH_OPTION_LINE_RE) ?? []).length
+    : 0;
 
-  const optionSignals = optionLineCount + letterParenCount + boldOptionCount;
+  const structuredOptionSignals =
+    numberedOptionCount + letterParenCount + boldOptionCount;
+  const optionSignals = structuredOptionSignals + dashOptionCount;
   if (optionSignals < 2) return false;
+
+  // "What is this?" plus descriptive dash bullets is not a multiple-choice card.
+  if (hasQuestionMark && !hasChoicePhrase && structuredOptionSignals < 2) {
+    return false;
+  }
 
   return true;
 }

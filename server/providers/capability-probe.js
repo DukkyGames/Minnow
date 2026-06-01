@@ -19,6 +19,9 @@ const MAX_MODELS_PER_PROBE = 8;
 const MODEL_PROBE_TIMEOUT_MS = 25_000;
 const STRUCTURED_PROBE_TIMEOUT_MS = 30_000;
 
+export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
+  'No loaded model found. Load a model in LM Studio, then run the probe again.';
+
 /** Minimal JSON Schema for structured-output probe. */
 const PROBE_SCHEMA = {
   type: 'object',
@@ -68,8 +71,12 @@ export function prioritizeModelIds(modelIds, selectedModelId, catalog = []) {
 /**
  * @param {object} row
  */
+function catalogRowHasVision(row) {
+  return row.type === 'vlm' || row.catalogVision === true;
+}
+
 function ingestFromCatalog(row) {
-  const isVlm = row.type === 'vlm';
+  const vision = catalogRowHasVision(row);
   const contextLength =
     typeof row.loaded_context_length === 'number' && row.loaded_context_length > 0
       ? row.loaded_context_length
@@ -81,7 +88,7 @@ function ingestFromCatalog(row) {
     typeof row.state === 'string' && row.state.trim() ? row.state.trim() : 'unknown';
 
   return {
-    vision: isVlm ? true : false,
+    vision,
     tools: null,
     streaming: null,
     grammar: null,
@@ -209,6 +216,11 @@ function applyToolsProbe(cap, result) {
  */
 async function probeModelCapabilities(modelRow, runtime, signal) {
   const cap = ingestFromCatalog(modelRow);
+  const isLmStudio = runtime.profile.apiKind === 'lm-studio-v0';
+  if (isLmStudio && !isCatalogModelLoaded(modelRow)) {
+    return cap;
+  }
+
   const modelId = modelRow.id;
   const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
 
@@ -270,10 +282,19 @@ export async function runCapabilityProbe(providerId, options = {}) {
 
   const modelsResponse = await proxyModels(providerId);
   const catalog = Array.isArray(modelsResponse.data) ? modelsResponse.data : [];
+  const isLmStudio = runtime.profile.apiKind === 'lm-studio-v0';
 
-  const allIds = options.modelIds?.length
-    ? options.modelIds
-    : catalog.map((m) => m.id);
+  let allIds;
+  if (options.modelIds?.length) {
+    allIds = options.modelIds;
+  } else if (isLmStudio) {
+    allIds = catalog.filter(isCatalogModelLoaded).map((m) => m.id);
+    if (allIds.length === 0) {
+      throw new Error(NO_LOADED_MODEL_MATRIX_PROBE_MSG);
+    }
+  } else {
+    allIds = catalog.map((m) => m.id);
+  }
 
   const prioritized = prioritizeModelIds(
     allIds,
