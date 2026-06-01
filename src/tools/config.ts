@@ -607,6 +607,13 @@ export function applyAllBuiltInToolPermissions(
   for (const tool of BUILT_IN_TOOLS) {
     config.permissions.default[tool.id] = mode;
   }
+  if (mode === 'full') {
+    const wildcard = { ...(config.permissions.perAgent['*'] ?? {}) };
+    for (const tool of BUILT_IN_TOOLS) {
+      wildcard[tool.id] = 'full';
+    }
+    config.permissions.perAgent['*'] = wildcard;
+  }
   syncEnabledFromPermissions(config);
   return config;
 }

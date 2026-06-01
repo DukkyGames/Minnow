@@ -11,7 +11,13 @@ description: Built-in browser_navigate origin allowlist and ask_question consent
 
 `browser_navigate` only opens URLs that match **allowed origin patterns** in Settings (localhost dev hosts by default). External sites are blocked until the user approves.
 
+### When the origin is already allowed
+
+If the URL’s origin is already on the allowlist (Settings → Tools → Browser navigation allowlist), call **`browser_navigate` directly**. Do **not** call **`ask_question`** or **`request_browser_origin_access`** first.
+
 ### Before navigating to a new external origin
+
+Only when the origin is **not** already allowlisted (or `browser_navigate` returns an allowlist error):
 
 1. Call **`ask_question`** (structured cards — do not ask only in prose).
 2. If the user chooses **Allow once** or **Add to allowlist**, call **`request_browser_origin_access`** with the same URL and matching **`decision`** (`once` or `persist`).
@@ -60,4 +66,4 @@ When `browser_navigate` or `request_browser_origin_access` returns an allowlist 
 
 - Prefer **`ask_question`** over long chat paragraphs for this decision.
 - `browser_eval` is **not** gated by the navigation allowlist; still use only on trusted pages.
-- Users can edit patterns anytime under **Settings → Tools → Browser navigation allowlist**.
+- Users can edit patterns anytime under **Settings → Tools → Browser navigation allowlist** (one origin glob per line, e.g. `https://example.com` or `http://localhost:*`).

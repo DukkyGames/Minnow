@@ -8,6 +8,7 @@ import {
   checkBrowserNavigationAllowed,
   loadBrowserMeta,
 } from '../config/browser-meta';
+import { isNavigationAllowed } from './browser-allowlist-match';
 import { enqueueAskQuestion } from './ask-question-queue';
 import type { ToolApprovalContext } from './approval-queue';
 import type { AskQuestionToolResult } from './ask-question-types';
@@ -49,9 +50,16 @@ export async function maybeBlockBrowserNavigation(
     };
   }
 
+  if (isNavigationAllowed(url, meta.allowedOriginPatterns)) {
+    return null;
+  }
+
   const check = await checkBrowserNavigationAllowed(url);
   if (!check) {
-    return null;
+    return {
+      content:
+        'Error: Could not verify browser allowlist (is npm start running?). Retry browser_navigate after the server is up.',
+    };
   }
   if (check.allowed) {
     return null;

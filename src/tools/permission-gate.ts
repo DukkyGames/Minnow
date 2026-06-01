@@ -73,7 +73,9 @@ export async function maybeBlockToolForUserApproval(
 
   const pathWarning =
     needsPathAck && fsMeta.filesystemAccess === 'workspace'
-      ? `Paths outside the workspace:\n${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nThe server will reject these unless you enable full filesystem access in Settings.`
+      ? `${
+          perm === 'full' ? 'Tool permission is Full, but these paths are outside the workspace:\n' : 'Paths outside the workspace:\n'
+        }${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nThe server will reject these unless you enable full filesystem access in Settings.`
       : '';
 
   const agentKey = resolveToolAgentKey(context);

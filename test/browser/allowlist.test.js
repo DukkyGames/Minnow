@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   assertNavigationAllowed,
   isNavigationAllowed,
+  normalizeAllowlistPatternLine,
 } from '../../server/cdp/allowlist.js';
 
 const PATTERNS = [
@@ -38,4 +39,21 @@ test('assertNavigationAllowed throws with prefix', () => {
     () => assertNavigationAllowed('https://evil.example', PATTERNS),
     /navigation blocked by allowlist/,
   );
+});
+
+test('allows navigations when pattern is origin-only and url has path', () => {
+  const patterns = ['https://example.com'];
+  assert.equal(
+    isNavigationAllowed('https://example.com/docs/page', patterns),
+    true,
+  );
+});
+
+test('normalizes path-shaped allowlist lines to origin', () => {
+  assert.equal(
+    normalizeAllowlistPatternLine('https://example.com/foo/bar'),
+    'https://example.com',
+  );
+  const patterns = ['https://example.com/foo'];
+  assert.equal(isNavigationAllowed('https://example.com/other', patterns), true);
 });
