@@ -104,7 +104,12 @@ const DEFAULT_META = {
     temperature: 0.3,
   },
   sampler: {
-    temperature: 0.7,
+    temperature: 1.0,
+    topP: 0.95,
+    topK: 20,
+    minP: 0,
+    repetitionPenalty: 1,
+    presencePenalty: 0,
     maxTokens: 32768,
   },
   thinking: {

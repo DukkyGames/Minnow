@@ -5,6 +5,7 @@
 
 import {
   clampSamplerPreset,
+  SAMPLER_NEUTRAL,
   type SamplerPreset,
 } from '../agents/sampler-types';
 import { detectConfigServer } from './storage-mode';
@@ -15,14 +16,14 @@ export interface SamplerGlobalMeta extends SamplerPreset {
 }
 
 export const DEFAULT_SAMPLER_GLOBAL: SamplerGlobalMeta = {
-  // Qwen "thinking mode, general tasks" recommendation: temperature 1.0, top_p 0.95,
-  // top_k 20, with min_p / repetition_penalty / presence_penalty left OFF. In thinking
-  // mode Qwen advises against repetition penalties (they cause language mixing and
-  // quality loss); loop control via presence_penalty is applied per-agent to the
-  // non-thinking workers instead. All values are overridable in Settings → Sampler.
+  // Qwen "thinking mode, general tasks": temperature 1.0, top_p 0.95, top_k 20.
+  // Neutral penalty fields (0 / 1 / 0) populate Settings inputs but are omitted on send.
   temperature: 1.0,
   topP: 0.95,
   topK: 20,
+  minP: SAMPLER_NEUTRAL.minP,
+  repetitionPenalty: SAMPLER_NEUTRAL.repetitionPenalty,
+  presencePenalty: SAMPLER_NEUTRAL.presencePenalty,
   maxTokens: 32768,
 };
 
@@ -44,7 +45,8 @@ function readDrawerMaxTokens(): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function parseSamplerBlock(raw: unknown): SamplerGlobalMeta {
+/** Merge persisted `sampler` with shipped defaults so Settings inputs stay populated. */
+export function parseSamplerGlobalBlock(raw: unknown): SamplerGlobalMeta {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_SAMPLER_GLOBAL };
   }
@@ -57,6 +59,7 @@ function parseSamplerBlock(raw: unknown): SamplerGlobalMeta {
       ? Math.min(131072, Math.floor(maxRaw))
       : DEFAULT_SAMPLER_GLOBAL.maxTokens;
   return {
+    ...DEFAULT_SAMPLER_GLOBAL,
     ...clamped,
     maxTokens,
     temperature:
@@ -68,7 +71,7 @@ function readLocalSamplerMeta(): SamplerGlobalMeta {
   try {
     const raw = localStorage.getItem(SAMPLER_META_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SAMPLER_GLOBAL };
-    return parseSamplerBlock(JSON.parse(raw));
+    return parseSamplerGlobalBlock(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_SAMPLER_GLOBAL };
   }
@@ -82,12 +85,14 @@ async function fetchSamplerFromServer(): Promise<SamplerGlobalMeta> {
   const res = await fetch('/api/config/meta', { cache: 'no-store' });
   if (!res.ok) return readLocalSamplerMeta();
   const meta = (await res.json()) as Record<string, unknown>;
-  return parseSamplerBlock(meta.sampler);
+  return parseSamplerGlobalBlock(meta.sampler);
 }
 
 /** Load global sampler meta (cached until reset). */
 export async function loadSamplerMeta(): Promise<SamplerGlobalMeta> {
-  if (cachedSampler) return cachedSampler;
+  if (cachedSampler) {
+    return parseSamplerGlobalBlock(cachedSampler);
+  }
 
   const serverUp = await detectConfigServer();
   cachedSampler = serverUp ? await fetchSamplerFromServer() : readLocalSamplerMeta();
@@ -97,7 +102,7 @@ export async function loadSamplerMeta(): Promise<SamplerGlobalMeta> {
 
 /** Last loaded value or localStorage fallback before first async load. */
 export function getSamplerMetaSync(): SamplerGlobalMeta {
-  return cachedSampler ?? readLocalSamplerMeta();
+  return parseSamplerGlobalBlock(cachedSampler ?? readLocalSamplerMeta());
 }
 
 /** Clear cache (tests). */
