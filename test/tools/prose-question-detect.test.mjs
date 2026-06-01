@@ -36,4 +36,14 @@ describe('looksLikeProseStructuredQuestion', () => {
   test('ignores short clarifications', () => {
     assert.equal(looksLikeProseStructuredQuestion('Which file should I open?'), false);
   });
+
+  test('ignores descriptive dash bullets with an echoed user question', () => {
+    const text = `The user is asking what is this?
+- Left side: Character sprites
+- Middle sections: Various items and weapons
+- Right side: More items and potions
+This looks like a sprite sheet from a 2D pixel art game.`;
+
+    assert.equal(looksLikeProseStructuredQuestion(text), false);
+  });
 });

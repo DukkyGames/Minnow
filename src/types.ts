@@ -544,6 +544,8 @@ export interface LmModelRecord {
     allowed_options?: string[];
     default?: string;
   };
+  /** Upstream catalog vision flag (`capabilities.vision` or `type: vlm`) before Minnow merge. */
+  catalogVision?: boolean;
 }
 
 export interface LmModelsListResponse {

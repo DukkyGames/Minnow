@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   catalogCapabilitiesFromRow,
+  catalogRowHasVision,
   mergeModelCapabilities,
   prioritizeModelIdsForProbe,
 } from '../../src/providers/model-capabilities.ts';
@@ -52,6 +53,16 @@ describe('catalogCapabilitiesFromRow', () => {
   test('marks vlm as vision', () => {
     const caps = catalogCapabilitiesFromRow({ id: 'v', type: 'vlm' });
     assert.equal(caps.vision, true);
+  });
+
+  test('marks catalogVision on llm type as vision', () => {
+    const caps = catalogCapabilitiesFromRow({
+      id: 'qwen',
+      type: 'llm',
+      catalogVision: true,
+    });
+    assert.equal(caps.vision, true);
+    assert.equal(catalogRowHasVision({ id: 'qwen', type: 'llm', catalogVision: true }), true);
   });
 });
 

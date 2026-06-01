@@ -23,6 +23,7 @@ export function normalizeModelsForUi(
     max_context_length: m.max_context_length,
     loaded_context_length: m.loaded_context_length,
     ...(m.reasoning ? { reasoning: m.reasoning } : {}),
+    ...(m.catalogVision !== undefined ? { catalogVision: m.catalogVision } : {}),
   }));
 }
 

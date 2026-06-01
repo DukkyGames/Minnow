@@ -442,6 +442,10 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   const modelProbeBtn = el('button', 'settings-inline-btn', 'Probe models');
   modelProbeBtn.type = 'button';
   modelProbeBtn.dataset.providerModelProbe = provider.id;
+  modelProbeBtn.disabled = provider.apiKind === 'lm-studio-v0' && !loadedModelId;
+  if (provider.apiKind === 'lm-studio-v0' && !loadedModelId) {
+    modelProbeBtn.title = NO_LOADED_MODEL_PROBE_MSG;
+  }
   const structuredProbeBtn = el('button', 'settings-inline-btn', 'Probe structured output');
   structuredProbeBtn.type = 'button';
   structuredProbeBtn.dataset.providerStructuredProbe = provider.id;
@@ -450,13 +454,11 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
     structuredProbeBtn.title = NO_LOADED_MODEL_PROBE_MSG;
   }
   probeRow.append(modelProbeBtn, structuredProbeBtn);
-  form.append(
-    el(
-      'p',
-      'field-hint',
-      'Model probe checks vision, tools, and streaming (up to 8 models). Structured-output probe requires a loaded model and tests JSON Schema response_format. Neither runs on refresh.',
-    ),
-  );
+  const probeHint =
+    provider.apiKind === 'lm-studio-v0'
+      ? 'On LM Studio, both probes require at least one loaded model. Model probe runs chat checks on up to 8 loaded models (tools/streaming); vision is read from the catalog. Structured-output probe tests JSON Schema response_format. Neither runs on refresh.'
+      : 'Model probe checks tools and streaming (up to 8 models); vision comes from the catalog. Structured-output probe requires a loaded model and tests JSON Schema response_format. Neither runs on refresh.';
+  form.append(el('p', 'field-hint', probeHint));
   form.append(probeRow);
   if (!loadedModelId) {
     const noLoadedNotice = el('p', 'settings-providers-probe-notice');
@@ -773,16 +775,37 @@ function bindProvidersListActions(listEl: HTMLElement): void {
     if (modelProbeId) {
       void (async () => {
         try {
+          const { providers } = await listProviders();
+          const provider = providers.find((p) => p.id === modelProbeId);
+          const { getActiveChat } = await import('../state/sessions');
+          const chat = getActiveChat();
+          let selectedModelId: string | undefined;
+          if (chat.providerId?.trim() === modelProbeId && chat.modelId?.trim()) {
+            selectedModelId = chat.modelId.trim();
+          }
+          if (provider?.apiKind === 'lm-studio-v0') {
+            const modelId = findLoadedModelIdForProvider(modelProbeId, selectedModelId);
+            if (!modelId) {
+              setProviderEditFormError(modelProbeId, NO_LOADED_MODEL_PROBE_MSG);
+              setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
+              return;
+            }
+          }
+          setProviderEditFormError(modelProbeId, null);
           setStatus('spin', `Probing models for ${modelProbeId}…`);
           const { runCapabilityProbeForProvider } = await import(
             '../providers/model-capabilities'
           );
-          await runCapabilityProbeForProvider(modelProbeId);
+          await runCapabilityProbeForProvider(modelProbeId, {
+            selectedModelId,
+            apiKind: provider?.apiKind,
+          });
           setStatus('ok', `Model capabilities probed for ${modelProbeId}`);
           await renderProvidersSettingsSection();
           await fetchModels();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          setProviderEditFormError(modelProbeId, msg);
           setStatus('err', msg);
         }
       })();

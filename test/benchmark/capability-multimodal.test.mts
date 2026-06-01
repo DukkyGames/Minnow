@@ -39,6 +39,15 @@ describe('isVisionModel (BUG-004)', () => {
     assert.equal(isVisionModel('probed-vision'), true);
   });
 
+  test('catalogVision true on llm row is vision', () => {
+    modelCache.set('catalog-vision-llm', {
+      id: 'catalog-vision-llm',
+      type: 'llm',
+      catalogVision: true,
+    });
+    assert.equal(isVisionModel('catalog-vision-llm'), true);
+  });
+
   test('catalog fallback finds vlm row when cache is cold', () => {
     const catalog: LmModelRecord[] = [{ id: VLM_NO_REGEX_ID, type: 'vlm' }];
     assert.equal(isVisionModel(VLM_NO_REGEX_ID, catalog), true);
