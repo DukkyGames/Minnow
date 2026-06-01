@@ -1,9 +1,9 @@
 ---
 id: debug
 kind: mode
-label: Bugs
+label: Debug
 version: 1
-description: Bug tracker — Kanban workflow and agent pipeline.
+description: Bug investigation — Kanban workflow and agent pipeline.
 profileBodies: split
 toolPolicy:
   default: allow

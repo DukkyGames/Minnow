@@ -1,0 +1,61 @@
+/**
+ * Hub DOM lifecycle — composer must survive teardown/remount (mode changes).
+ */
+
+import assert from 'node:assert/strict';
+import { afterEach, describe, test } from 'node:test';
+import { Window } from 'happy-dom';
+
+const { setSessionStateForTests, createEmptyChatObject } = await import(
+  '../../src/state/sessions.ts'
+);
+const { renderHub, teardownHub, isHubMounted, HUB_ROOT_ID } = await import(
+  '../../src/ui/hub.ts'
+);
+
+function setupDom(): void {
+  const window = new Window();
+  globalThis.document = window.document;
+  globalThis.HTMLElement = window.HTMLElement;
+  globalThis.Node = window.Node;
+
+  document.body.innerHTML = `
+    <div id="mainColumn">
+      <div id="chatArea"></div>
+      <div class="input-bar">
+        <textarea id="msgInput"></textarea>
+        <div id="modeSelector"></div>
+      </div>
+    </div>
+  `;
+}
+
+afterEach(() => {
+  teardownHub();
+  setSessionStateForTests(null);
+});
+
+describe('hub teardown', () => {
+  test('remounting hub keeps .input-bar in the document', () => {
+    setupDom();
+    const chat = createEmptyChatObject('test-model');
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      chats: [chat],
+      sidebarCollapsed: false,
+    });
+
+    renderHub(chat);
+    assert.equal(isHubMounted(), true);
+    assert.ok(document.querySelector('.input-bar--hub'));
+
+    renderHub(chat);
+    assert.equal(isHubMounted(), true);
+    assert.ok(document.getElementById('msgInput'), 'composer textarea survives remount');
+    assert.ok(
+      document.getElementById(HUB_ROOT_ID)?.querySelector('.hub-composer-slot .input-bar'),
+      'composer stays inside hub slot after remount',
+    );
+  });
+});

@@ -859,11 +859,13 @@ export function saveSessionsNow(): SaveSessionsResult {
     void putSessions(sessionState).catch(() => {
       setStatus('err', 'Could not save sessions to ~/.minnow');
     });
+    void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   }
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionState));
+    void import('../ui/hub').then((m) => m.refreshHubLiveData());
     return 'ok';
   } catch (e) {
     const err = e as { name?: string };

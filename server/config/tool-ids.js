@@ -32,6 +32,8 @@ export const ALL_TOOL_IDS = [
   'git_commit',
   'git_checkout',
   'execute_command',
+  'start_background_command',
+  'stop_background_command',
   'run_javascript',
   'run_python',
   'spawn_sub_agent',

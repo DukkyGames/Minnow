@@ -3,6 +3,7 @@
  */
 
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from './config/home.js';
@@ -244,6 +245,115 @@ export async function createRun({
 }
 
 /**
+ * Spawn a long-running command (no timeout). Used for dev servers and background tools.
+ * @param {object} params
+ * @param {string} params.command
+ * @param {string[]} [params.args]
+ * @param {string} params.cwd
+ * @param {TerminalSource} [params.source]
+ * @param {string} [params.chatId]
+ * @param {string} [params.toolCallId]
+ * @param {boolean} [params.shell]
+ * @param {string} [params.logSubdir] logs subdirectory under ~/.minnow/logs/
+ * @returns {Promise<{ runId: string, startedAt: number, logPath: string, pid: number | null }>}
+ */
+export async function createBackgroundRun({
+  command,
+  args = [],
+  cwd,
+  shell = false,
+  source = 'agent',
+  chatId,
+  toolCallId,
+  logSubdir = 'terminal',
+}) {
+  const runId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const logDir = path.join(getMinnowHome(), 'logs', logSubdir);
+  const logPath = path.join(logDir, `${runId}.log`);
+  const relLog = `logs/${logSubdir}/${runId}.log`;
+
+  /** @type {(value: string) => void} */
+  let resolveCompletion = () => {};
+  const completion = new Promise((resolve) => {
+    resolveCompletion = resolve;
+  });
+
+  /** @type {RunState} */
+  const state = {
+    runId,
+    command,
+    cwd,
+    source,
+    chatId,
+    toolCallId,
+    startedAt,
+    child: null,
+    stdout: '',
+    stderr: '',
+    bufferBytes: 0,
+    truncated: false,
+    timedOut: false,
+    exitCode: null,
+    finished: false,
+    logPath,
+    listeners: new Set(),
+    completion,
+    resolveCompletion,
+  };
+
+  activeRuns.set(runId, state);
+  emit(state, { type: 'meta', runId, command, cwd });
+
+  const winOneShot =
+    process.platform === 'win32' && args.length === 0 && typeof command === 'string';
+  const execCommand = winOneShot ? 'cmd.exe' : command;
+  const execArgs = winOneShot ? ['/d', '/s', '/c', command] : args;
+  const useShell = winOneShot ? false : shell === true;
+
+  const child = spawn(execCommand, execArgs, {
+    cwd,
+    env: process.env,
+    shell: useShell,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  state.child = child;
+  child.unref();
+
+  child.stdout?.on('data', (chunk) => {
+    const text = chunk.toString();
+    appendBuffer(state, 'stdout', text);
+    emit(state, { type: 'stdout', text });
+    void appendLogFile(logPath, text);
+  });
+
+  child.stderr?.on('data', (chunk) => {
+    const text = chunk.toString();
+    appendBuffer(state, 'stderr', text);
+    emit(state, { type: 'stderr', text });
+    void appendLogFile(logPath, text);
+  });
+
+  child.on('error', (err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    emit(state, { type: 'error', message });
+    void appendLogFile(logPath, `\nError: ${message}\n`);
+    state.exitCode = 1;
+    void finishRun(runId);
+  });
+
+  child.on('close', (code) => {
+    state.exitCode = code;
+    void finishRun(runId);
+  });
+
+  return { runId, startedAt, logPath: relLog, pid: child.pid ?? null };
+}
+
+/**
  * @param {string} runId
  */
 export async function finishRun(runId) {
@@ -354,8 +464,33 @@ export function subscribeRun(runId, listener) {
 export function cancelRun(runId) {
   const state = activeRuns.get(runId);
   if (!state || state.finished || !state.child) return false;
-  state.child.kill('SIGTERM');
+  killProcessTree(state.child);
   return true;
+}
+
+/**
+ * SIGTERM / taskkill the process tree for a spawned child.
+ * @param {import('node:child_process').ChildProcess} child
+ */
+export function killProcessTree(child) {
+  if (!child?.pid) return;
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      }).unref();
+    } catch {
+      child.kill('SIGTERM');
+    }
+    return;
+  }
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    child.kill('SIGTERM');
+  }
 }
 
 /**
@@ -380,7 +515,8 @@ export async function getTerminalHistoryForChat(chatId) {
  * @returns {Promise<string | null>}
  */
 export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
-  const logPath = path.join(terminalLogDir(), `${runId}.log`);
+  const state = activeRuns.get(runId);
+  const logPath = state?.logPath ?? path.join(terminalLogDir(), `${runId}.log`);
   try {
     const stat = await fs.stat(logPath);
     const start = Math.max(0, stat.size - maxBytes);

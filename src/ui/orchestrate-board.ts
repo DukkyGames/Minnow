@@ -54,6 +54,7 @@ import {
   setOrchestrateViewMode,
   syncViewModeToggleFromActiveChat,
 } from './view-mode-toggle';
+import { teardownHub } from './hub';
 
 /** Agent status chip on a kanban task card. */
 export type TaskAgentBadgeVariant = 'active' | 'failed' | 'complete';
@@ -1260,6 +1261,7 @@ export function refreshActiveBoardIfMounted(): void {
 
 /** Render Orchestrate board into #chatArea. */
 export function renderBoardView(chat: Chat): void {
+  teardownHub();
   const area = document.getElementById('chatArea');
   if (!area) return;
 

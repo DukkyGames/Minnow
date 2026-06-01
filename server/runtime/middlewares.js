@@ -21,6 +21,7 @@ import { createReefMiddleware } from '../reef/middleware.js';
 import { createSkillsMiddleware } from '../skills/middleware.js';
 import { createPluginsMiddleware } from '../tools/middleware.js';
 import { createTerminalMiddleware } from '../terminal/middleware.js';
+import { createSystemMiddleware } from '../system/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -35,6 +36,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createBenchmarksMiddleware());
   connectApp.use(createEvalsMiddleware());
   connectApp.use(createWorkspaceMiddleware());
+  connectApp.use(createSystemMiddleware());
   connectApp.use(
     createPreviewMiddleware({
       resolveSafePath,

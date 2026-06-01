@@ -46,6 +46,10 @@ import { appendArtifactVersionFromSave } from '../reef/artifact-store.js';
 import { runGrepSearch } from '../tools/grep.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
 import { pathAccessStore, resolveSafePath } from './path-access.js';
+import {
+  toolStartBackgroundCommand,
+  toolStopBackgroundCommand,
+} from '../dev-server/manager.js';
 
 const execFileAsync = promisify(execFile);
 const FIND_FILES_MAX = 500;
@@ -612,6 +616,8 @@ const SERVER_TOOL_HANDLERS = {
   git_commit: toolGitCommit,
   git_checkout: toolGitCheckout,
   execute_command: toolExecuteCommand,
+  start_background_command: toolStartBackgroundCommand,
+  stop_background_command: toolStopBackgroundCommand,
   run_javascript: toolRunJavascript,
   run_python: toolRunPython,
   send_notification: toolSendNotification,
