@@ -10,6 +10,10 @@
   min-height: 28px;
 }
 
+.composer-controls .context-usage-anchor {
+  flex-shrink: 0;
+}
+
 .mode-segmented {
   display: inline-flex;
   flex-wrap: wrap;

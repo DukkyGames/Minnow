@@ -1,5 +1,5 @@
 /**
- * Composer tri-state thinking control (inherit / on / off).
+ * Composer thinking toggle — brain icon (on / off) with inherit default + user override.
  */
 
 import { resolveThinkingMode } from '../agents/resolve-thinking';
@@ -10,6 +10,7 @@ import {
 } from '../agents/thinking-capabilities';
 import {
   normalizeThinkingTriState,
+  type ThinkingResolvedMode,
   type ThinkingTriState,
 } from '../agents/thinking-types';
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -24,14 +25,18 @@ import {
 } from '../state/sessions';
 import { isComposerRecoveryBlocked } from './composer-send';
 
-const MODES: ThinkingTriState[] = ['inherit', 'on', 'off'];
-const LABELS: Record<ThinkingTriState, string> = {
-  inherit: 'Inherit',
-  on: 'On',
-  off: 'Off',
-};
-
 let rootEl: HTMLElement | null = null;
+let toggleBtn: HTMLButtonElement | null = null;
+
+/** Next tri-state after a composer click: inherit → opposite of resolved → toggle → inherit. */
+export function nextThinkingTriStateOnClick(
+  tri: ThinkingTriState,
+  resolved: ThinkingResolvedMode,
+): ThinkingTriState {
+  if (tri === 'inherit') return resolved === 'on' ? 'off' : 'on';
+  if (tri === 'on') return 'off';
+  return 'inherit';
+}
 
 function effectiveCapabilities(): ReturnType<typeof catalogCapabilitiesFromRow> | undefined {
   const chat = getActiveChat();
@@ -42,7 +47,7 @@ function effectiveCapabilities(): ReturnType<typeof catalogCapabilitiesFromRow> 
   return row?.capabilities ?? (row ? catalogCapabilitiesFromRow(row) : undefined);
 }
 
-function setChatThinkingMode(mode: ThinkingTriState): void {
+function applyChatThinkingMode(mode: ThinkingTriState): void {
   const chat = getActiveChat();
   if (mode === 'inherit') {
     delete chat.thinkingMode;
@@ -54,35 +59,45 @@ function setChatThinkingMode(mode: ThinkingTriState): void {
   syncThinkingControlFromActiveChat();
 }
 
-/** Mount segmented thinking control into #composerThinkingControl. */
+function onToggleClick(): void {
+  if (toggleBtn?.disabled) return;
+  const chat = getActiveChat();
+  const tri = normalizeThinkingTriState(chat.thinkingMode, 'inherit');
+  const agent = resolveActiveWorkAgent(chat);
+  const resolved = resolveThinkingMode({
+    kind: 'work-agent',
+    agentKey: agent?.id ?? null,
+    chatThinkingMode: chat.thinkingMode,
+  });
+  applyChatThinkingMode(nextThinkingTriStateOnClick(tri, resolved.mode));
+}
+
+/** Mount brain thinking toggle into #composerThinkingControl. */
 export function initThinkingControl(): void {
   rootEl = document.getElementById('composerThinkingControl');
   if (!rootEl) return;
 
   rootEl.innerHTML = '';
-  rootEl.className = 'mode-segmented thinking-control';
-  rootEl.setAttribute('role', 'radiogroup');
-  rootEl.setAttribute('aria-label', 'Thinking mode');
+  rootEl.className = 'thinking-toggle-host';
 
-  for (const mode of MODES) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'mode-segment';
-    btn.dataset.thinkingMode = mode;
-    btn.textContent = LABELS[mode];
-    btn.setAttribute('role', 'radio');
-    btn.addEventListener('click', () => {
-      if (btn.disabled) return;
-      setChatThinkingMode(mode);
-    });
-    rootEl.appendChild(btn);
-  }
+  toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'thinking-toggle-btn';
+  toggleBtn.setAttribute('aria-label', 'Thinking mode');
+  toggleBtn.addEventListener('click', onToggleClick);
+
+  const icon = document.createElement('span');
+  icon.className = 'thinking-toggle-icon';
+  icon.setAttribute('aria-hidden', 'true');
+
+  toggleBtn.appendChild(icon);
+  rootEl.appendChild(toggleBtn);
   syncThinkingControlFromActiveChat();
 }
 
-/** Sync thinking segments from active chat and model capabilities. */
+/** Sync brain toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
-  if (!rootEl) return;
+  if (!toggleBtn) return;
   const chat = getActiveChat();
   const tri = normalizeThinkingTriState(chat.thinkingMode, 'inherit');
   const agent = resolveActiveWorkAgent(chat);
@@ -93,29 +108,26 @@ export function syncThinkingControlFromActiveChat(): void {
   });
   const caps = effectiveCapabilities();
   const supports = modelSupportsThinkingControl(caps);
+  const effectiveOn = resolved.mode === 'on';
+  const allowed = supports && modelAllowsThinkingMode(caps, resolved.mode);
 
-  const buttons = rootEl.querySelectorAll<HTMLButtonElement>('[data-thinking-mode]');
-  buttons.forEach((btn) => {
-    const mode = btn.dataset.thinkingMode as ThinkingTriState;
-    const selected = mode === tri;
-    btn.setAttribute('aria-checked', selected ? 'true' : 'false');
-    btn.tabIndex = selected ? 0 : -1;
-    const targetResolved = mode === 'inherit' ? resolved.mode : mode;
-    const allowed = supports && modelAllowsThinkingMode(caps, targetResolved);
-    btn.disabled =
-      !allowed ||
-      isActiveChatStreaming() ||
-      isComposerRecoveryBlocked();
-    if (!supports) {
-      btn.title = 'Effective model does not advertise reasoning support';
-    } else if (!allowed) {
-      btn.title = `Model does not support thinking ${targetResolved}`;
-    } else if (mode === 'inherit') {
-      btn.title = formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel);
-    } else {
-      btn.title = '';
-    }
-  });
+  toggleBtn.setAttribute('aria-pressed', effectiveOn ? 'true' : 'false');
+  toggleBtn.dataset.inherit = tri === 'inherit' ? 'true' : 'false';
+  toggleBtn.dataset.thinkingTri = tri;
+  toggleBtn.disabled =
+    !allowed ||
+    isActiveChatStreaming() ||
+    isComposerRecoveryBlocked();
+
+  if (!supports) {
+    toggleBtn.title = 'Effective model does not advertise reasoning support';
+  } else if (!allowed) {
+    toggleBtn.title = `Model does not support thinking ${resolved.mode}`;
+  } else if (tri === 'inherit') {
+    toggleBtn.title = formatThinkingInheritedLabel(tri, resolved.mode, resolved.sourceLabel);
+  } else {
+    toggleBtn.title = effectiveOn ? 'Thinking on (chat override)' : 'Thinking off (chat override)';
+  }
 }
 
 export function refreshThinkingControlDisabled(): void {

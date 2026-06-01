@@ -69,10 +69,10 @@ function ensureStrip(): HTMLDivElement {
   stripEl.appendChild(dismissBtn);
 
   const host = document.getElementById('composerControls');
-  const anchor = document.getElementById('orchestratePlanStrip');
+  const anchor = document.getElementById('workAgentDev');
   if (host) {
-    if (anchor?.nextSibling) {
-      host.insertBefore(stripEl, anchor.nextSibling);
+    if (anchor) {
+      host.insertBefore(stripEl, anchor);
     } else {
       host.appendChild(stripEl);
     }
