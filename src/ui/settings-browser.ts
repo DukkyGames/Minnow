@@ -10,6 +10,7 @@ import {
   saveBrowserMeta,
   type BrowserMeta,
 } from '../config/browser-meta';
+import { normalizeAllowlistPatterns } from '../tools/browser-allowlist-match';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -119,11 +120,12 @@ export async function renderBrowserAllowlistSettings(
 
   saveBtn.addEventListener('click', () => {
     void (async () => {
-      const patterns = parsePatternsText(patternsArea.value);
+      const patterns = normalizeAllowlistPatterns(parsePatternsText(patternsArea.value));
       if (patterns.length === 0) {
         setStatus('err', 'Add at least one origin pattern');
         return;
       }
+      patternsArea.value = patternsToText(patterns);
       try {
         await saveBrowserMeta({
           allowNavigate: allowNavCb.checked,

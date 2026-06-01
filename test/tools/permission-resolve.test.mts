@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { defaultToolConfig } from '../../src/config/defaults.ts';
 import {
+  applyAllBuiltInToolPermissions,
   isLegacyFlatPermissions,
   normalizePermissionsFromStored,
   normalizeToolConfig,
@@ -165,6 +166,33 @@ describe('resolveEffectivePermission', () => {
     );
     assert.equal(resolved.mode, 'full');
     assert.equal(resolved.agentKey, 'sub-agent:shell');
+  });
+
+  test('build mode honors global full', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.read_file = 'full';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'read_file',
+      { path: 'src/foo.ts' },
+      { modeId: 'build' },
+    );
+    assert.equal(resolved.mode, 'full');
+  });
+
+  test('per-agent wildcard full from bulk all-full', () => {
+    const config = cloneConfig(defaultToolConfig());
+    applyAllBuiltInToolPermissions(config, 'full');
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { subAgentType: 'shell' },
+    );
+    assert.equal(resolved.mode, 'full');
+    assert.equal(config.permissions.perAgent['*']?.execute_command, 'full');
   });
 
   test('general mode forces ask even when global is full', () => {

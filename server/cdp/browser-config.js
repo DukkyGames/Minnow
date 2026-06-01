@@ -7,6 +7,7 @@ import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
+import { normalizeAllowlistPatternLine } from './allowlist.js';
 
 /** @typedef {object} BrowserConfig
  * @property {boolean} enabled
@@ -80,12 +81,16 @@ export function resetBrowserConfigCache() {
  * @returns {Promise<boolean>} true when a new pattern was written
  */
 export async function appendBrowserAllowlistPattern(pattern) {
-  const trimmed = pattern.trim();
+  const trimmed = normalizeAllowlistPatternLine(pattern);
   if (!trimmed) return false;
 
   const meta = (await readConfigJson('config.json')) ?? {};
   const cfg = mergeBrowserConfig(meta?.browser);
-  if (cfg.allowedOriginPatterns.some((p) => p.trim() === trimmed)) {
+  if (
+    cfg.allowedOriginPatterns.some(
+      (p) => normalizeAllowlistPatternLine(p).toLowerCase() === trimmed.toLowerCase(),
+    )
+  ) {
     return false;
   }
 

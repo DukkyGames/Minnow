@@ -55,6 +55,47 @@ export function resetEphemeralNavigation() {
 }
 
 /**
+ * Normalize a user-entered allowlist line to an origin glob (paths stripped).
+ * @param {string} line
+ * @returns {string}
+ */
+export function normalizeAllowlistPatternLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    if (parsed.pathname && parsed.pathname !== '/') {
+      return suggestAllowlistPattern(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    }
+    if (parsed.port) {
+      return `${parsed.protocol}//${parsed.hostname}:*`;
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
+ * Normalize an array of allowlist patterns for persistence.
+ * @param {string[]} patterns
+ * @returns {string[]}
+ */
+export function normalizeAllowlistPatterns(patterns) {
+  const out = [];
+  const seen = new Set();
+  for (const line of patterns) {
+    const normalized = normalizeAllowlistPatternLine(line);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+/**
  * Convert a simple glob pattern to a RegExp (supports * for any chars).
  * @param {string} pattern e.g. "http://localhost:*"
  */
@@ -96,8 +137,19 @@ export function isNavigationAllowed(url, patterns) {
     if (!pattern || typeof pattern !== 'string') continue;
     const trimmed = pattern.trim();
     if (!trimmed) continue;
-    if (patternToRegExp(trimmed).test(originKey) || patternToRegExp(trimmed).test(url)) {
-      return true;
+    const candidates = [trimmed];
+    try {
+      const normalized = normalizeAllowlistPatternLine(trimmed);
+      if (normalized && normalized !== trimmed) {
+        candidates.push(normalized);
+      }
+    } catch {
+      /* keep trimmed only */
+    }
+    for (const candidate of candidates) {
+      if (patternToRegExp(candidate).test(originKey) || patternToRegExp(candidate).test(url)) {
+        return true;
+      }
     }
   }
   return false;

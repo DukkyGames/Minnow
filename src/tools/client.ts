@@ -32,6 +32,7 @@ import {
   executeBrowserNavigateWithGate,
   executeRequestBrowserOriginAccess,
 } from './browser-navigation-gate';
+import { checkBrowserNavigationAllowed } from '../config/browser-meta';
 import { executeBrowserPreviewTool } from './browser-preview-tools';
 import { isElectronPreviewAvailable } from './minnow-shell';
 import {
@@ -267,13 +268,21 @@ async function executeToolInner(
           'Error: tool "request_browser_origin_access" is disabled in Settings (enable it to request browser allowlist changes).',
       };
     }
-    const blocked = await maybeBlockToolForUserApproval(
-      'request_browser_origin_access',
-      args,
-      context,
-      name,
-    );
-    if (blocked) return blocked;
+    const targetUrl =
+      typeof args.url === 'string' && args.url.trim() ? args.url.trim() : '';
+    const allowlistCheck =
+      targetUrl && isLocalServerAvailable()
+        ? await checkBrowserNavigationAllowed(targetUrl)
+        : null;
+    if (!allowlistCheck?.allowed) {
+      const blocked = await maybeBlockToolForUserApproval(
+        'request_browser_origin_access',
+        args,
+        context,
+        name,
+      );
+      if (blocked) return blocked;
+    }
     return { content: await executeRequestBrowserOriginAccess(args, context) };
   }
 

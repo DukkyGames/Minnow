@@ -194,6 +194,10 @@ export async function writeResource(resource, body) {
     const existing = (await readConfigJson(key)) ?? {};
     const merged = mergeConfigMeta(existing, body);
     await writeConfigJson(key, merged);
+    if (body && typeof body === 'object' && 'browser' in /** @type {Record<string, unknown>} */ (body)) {
+      const { resetBrowserConfigCache } = await import('../cdp/browser-config.js');
+      resetBrowserConfigCache();
+    }
     return merged;
   }
   if (resource === 'sub-agents') {
