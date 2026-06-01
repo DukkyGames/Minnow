@@ -3,9 +3,11 @@
  */
 
 import { patchWorkAgentOverride } from '../agents/work-agent-prompt-api';
+import type { ThinkingTriState } from '../agents/thinking-types';
 import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-agent-config';
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
+import { saveSamplerMeta } from '../config/sampler-meta';
 import { isServerStorageMode } from '../config/storage-mode';
 import {
   loadModelRoutingCatalog,
@@ -23,10 +25,12 @@ import {
   fillModelSelect,
   fillProviderSelect,
 } from './settings-model-binding';
+import { buildSamplerFieldInputs } from './settings-sampler-fields';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
+  'main-chat': 'Main chat',
   'work-agents': 'Work agents',
   'sub-agents': 'Sub-agent types',
   background: 'Background jobs',
@@ -34,6 +38,7 @@ const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
 };
 
 const GROUP_ORDER: ModelRoutingGroup[] = [
+  'main-chat',
   'work-agents',
   'sub-agents',
   'background',
@@ -47,6 +52,83 @@ interface RowControls {
   fallbackCb?: HTMLInputElement;
   enabledCb?: HTMLInputElement;
   effectiveEl?: HTMLElement;
+  samplerFields?: ReturnType<typeof buildSamplerFieldInputs>;
+  thinkingSelect?: HTMLSelectElement;
+}
+
+function supportsAdvancedPanel(row: ModelRoutingRow): boolean {
+  return (
+    row.persistKind === 'main-chat' ||
+    row.persistKind === 'work-agent' ||
+    row.persistKind === 'sub-agent'
+  );
+}
+
+function buildThinkingSelect(initial: ThinkingTriState): HTMLSelectElement {
+  const select = el('select', 'settings-select');
+  for (const mode of ['inherit', 'on', 'off'] as const) {
+    const opt = document.createElement('option');
+    opt.value = mode;
+    opt.textContent = mode === 'inherit' ? 'Inherit' : mode === 'on' ? 'On' : 'Off';
+    select.appendChild(opt);
+  }
+  select.value = initial;
+  return select;
+}
+
+async function saveAdvanced(controls: RowControls): Promise<void> {
+  const { row, samplerFields, thinkingSelect } = controls;
+  if (!samplerFields || !thinkingSelect) return;
+
+  switch (row.persistKind) {
+    case 'main-chat': {
+      const patch = samplerFields.readPatch();
+      if (patch) await saveSamplerMeta(patch);
+      const chat = getActiveChat();
+      const mode = thinkingSelect.value as ThinkingTriState;
+      if (mode === 'inherit') delete chat.thinkingMode;
+      else chat.thinkingMode = mode;
+      touchChat(chat);
+      scheduleSaveSessions();
+      setStatus('ok', 'Main chat sampler and thinking saved');
+      void refreshModelRoutingSectionMount();
+      break;
+    }
+    case 'work-agent': {
+      const agent = await patchWorkAgentOverride(row.id, {
+        sampler: samplerFields.readPatch(),
+        thinkingMode: thinkingSelect.value as ThinkingTriState,
+      });
+      setStatus(
+        agent ? 'ok' : 'err',
+        agent ? `${row.label} advanced settings saved` : 'Save failed',
+      );
+      if (agent) void refreshModelRoutingSectionMount();
+      break;
+    }
+    case 'sub-agent': {
+      const config = await loadSubAgentConfig();
+      const existing = config.types[row.id];
+      if (!existing) {
+        setStatus('err', 'Unknown sub-agent type');
+        return;
+      }
+      const ok = await saveSubAgentConfigToServer({
+        types: {
+          [row.id]: {
+            ...existing,
+            sampler: samplerFields.readPatch(),
+            thinkingMode: thinkingSelect.value as ThinkingTriState,
+          },
+        },
+      });
+      setStatus(ok ? 'ok' : 'err', ok ? `${row.label} advanced settings saved` : 'Save failed');
+      if (ok) void refreshModelRoutingSectionMount();
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 let mountedRows: RowControls[] = [];
@@ -168,6 +250,16 @@ async function saveRow(controls: RowControls): Promise<void> {
       syncModelRoutingReefFromActiveChat();
       break;
     }
+    case 'main-chat': {
+      const chat = getActiveChat();
+      chat.providerId = providerId || chat.providerId;
+      chat.modelId = modelId || chat.modelId;
+      touchChat(chat);
+      scheduleSaveSessions();
+      setStatus('ok', 'Main chat model saved for active session');
+      void refreshModelRoutingSectionMount();
+      break;
+    }
     default:
       break;
   }
@@ -232,6 +324,45 @@ function appendRoutingRow(
   effective.appendChild(value);
   controls.effectiveEl = value;
   bindingCell.appendChild(effective);
+
+  if (supportsAdvancedPanel(row)) {
+    const advanced = document.createElement('details');
+    advanced.className = 'settings-routing-advanced';
+    const summary = document.createElement('summary');
+    summary.className = 'settings-routing-advanced__summary';
+    summary.textContent = 'Advanced (sampler · thinking)';
+    advanced.appendChild(summary);
+
+    const panel = el('div', 'settings-routing-advanced__body');
+    const samplerFields = buildSamplerFieldInputs(row.sampler ?? null, {
+      includeMaxTokens: row.persistKind === 'main-chat' || row.persistKind === 'sub-agent',
+      emptyPlaceholder: row.persistKind === 'main-chat' ? '' : 'Inherit',
+    });
+    samplerFields.setValues(row.sampler ?? null);
+    controls.samplerFields = samplerFields;
+    panel.appendChild(samplerFields.root);
+
+    const thinkingRow = el('div', 'settings-field-row');
+    thinkingRow.appendChild(el('label', 'settings-field-label', 'Thinking'));
+    const thinkingInitial =
+      row.persistKind === 'main-chat'
+        ? (row.chatThinkingMode ?? 'inherit')
+        : (row.thinkingMode ?? 'inherit');
+    const thinkingSelect = buildThinkingSelect(thinkingInitial);
+    controls.thinkingSelect = thinkingSelect;
+    thinkingRow.appendChild(thinkingSelect);
+    panel.appendChild(thinkingRow);
+
+    const saveAdvancedBtn = el('button', 'settings-action-btn', 'Save advanced');
+    saveAdvancedBtn.type = 'button';
+    saveAdvancedBtn.addEventListener('click', () => {
+      void saveAdvanced(controls);
+    });
+    panel.appendChild(saveAdvancedBtn);
+    advanced.appendChild(panel);
+    bindingCell.appendChild(advanced);
+  }
+
   tr.appendChild(bindingCell);
 
   const actionsCell = el('td', 'settings-routing-row__actions');
@@ -241,13 +372,6 @@ function appendRoutingRow(
     void saveRow(controls);
   });
   actionsCell.appendChild(saveBtn);
-
-  const advancedBtn = el('button', 'settings-inline-link', 'Advanced');
-  advancedBtn.type = 'button';
-  advancedBtn.addEventListener('click', () => {
-    window.location.hash = row.advancedSettingsHash;
-  });
-  actionsCell.appendChild(advancedBtn);
   tr.appendChild(actionsCell);
 
   tableBody.appendChild(tr);
@@ -260,6 +384,16 @@ function renderGroup(
 ): void {
   const section = el('section', 'settings-routing-group');
   section.appendChild(el('h3', 'settings-routing-group__title', GROUP_LABELS[group]));
+
+  if (group === 'main-chat') {
+    section.appendChild(
+      el(
+        'p',
+        'settings-routing-group__lead',
+        'Matches the top-bar model picker for the active chat. Sampler fields set global defaults used on send.',
+      ),
+    );
+  }
 
   if (group === 'reef') {
     section.appendChild(
@@ -303,7 +437,9 @@ function renderGroup(
     appendRoutingRow(tbody, controls, bindingHost);
     void wireProviderModelSelects(
       controls,
-      row.persistKind === 'reef-chat' || row.persistKind === 'titles',
+      row.persistKind === 'reef-chat' ||
+        row.persistKind === 'titles' ||
+        row.persistKind === 'main-chat',
     );
   }
 
@@ -389,5 +525,8 @@ export async function refreshModelRoutingSectionMount(): Promise<void> {
 /** Called on chat switch when model-routing panel may be visible. */
 export function onModelRoutingActiveChatChanged(chatId: string): void {
   if (chatId === lastCatalogChatId) return;
+  lastCatalogChatId = chatId;
   syncModelRoutingReefFromActiveChat();
+  const mount = document.getElementById('settingsModelRoutingBody');
+  if (mount?.childElementCount) void refreshModelRoutingSectionMount();
 }

@@ -1874,3 +1874,95 @@
   color: var(--mn-fg);
   word-break: break-all;
 }
+
+/* Prompts hub (search + type filters) */
+.settings-prompts-hub-mount {
+  margin-top: 24px;
+}
+
+.settings-prompts-hub__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-prompts-hub__search {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.settings-prompts-hub__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-prompts-hub__chip {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+  background: transparent;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.settings-prompts-hub__chip.is-active {
+  color: var(--mn-fg);
+  border-color: var(--mn-fg);
+  background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+}
+
+.settings-prompts-hub__chip:hover {
+  border-color: var(--mn-border-strong);
+}
+
+.settings-entity-list__badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+}
+
+.settings-entity-list__item--flat {
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg);
+  list-style: none;
+}
+
+.settings-routing-advanced {
+  margin-top: 12px;
+  border-top: 1px solid var(--mn-border);
+  padding-top: 8px;
+}
+
+.settings-routing-advanced__summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-routing-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-routing-advanced__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
