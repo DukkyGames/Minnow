@@ -6,6 +6,8 @@ import '../styles/expert-lab-page.css';
 
 import { getExpert, listExperts } from '../chat/experts/registry';
 import type { ExpertAccent, ExpertMeta } from '../chat/experts/types';
+import { setExpertLabPageOpen } from '../app-state';
+import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import { loadExpertsConfig } from '../config/experts-config';
 import { runChatTurn } from '../tools/loop';
 import {
@@ -18,10 +20,21 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
-import { setAssistantBubbleContent } from '../markdown/renderer';
+import {
+  cancelAssistantBubbleRenderDebounce,
+  scheduleAssistantBubbleRender,
+  setAssistantBubbleContent,
+} from '../markdown/renderer';
+import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { closeBenchmark } from './benchmark-page';
 import { closeGlobalBugs } from './global-bugs-page';
 import { closeSettings } from './settings-page';
+import {
+  renderSidebar,
+  syncModelSelectForActiveChat,
+} from './sidebar';
+import { syncComposerFromStreamingState } from './composer-send';
+import { syncModeSelectorFromActiveChat } from './mode-selector';
 import {
   notifyExpertLabFirstToken,
   notifyExpertLabPartialText,
@@ -43,6 +56,8 @@ let briefText = '';
 let savedActiveChatId: string | null = null;
 let runInFlight = false;
 let tokenCount = 0;
+let outputStreamStarted = false;
+let outputStreamCursor: HTMLDivElement | null = null;
 let clarifyingActive = false;
 let questionHostHome: { parent: HTMLElement; nextSibling: ChildNode | null } | null =
   null;
@@ -84,6 +99,10 @@ function setStep(step: ExpertLabStep): void {
   currentStep = step;
   const root = getRoot();
   if (root) root.dataset.step = step;
+  const openChatBtn = document.getElementById('btnExpertLabOpenChat');
+  if (openChatBtn) {
+    openChatBtn.hidden = step !== 'run';
+  }
 }
 
 function setPhaseStatus(phaseId: PhaseId, status: PhaseStatus): void {
@@ -104,8 +123,58 @@ function setPhaseStatus(phaseId: PhaseId, status: PhaseStatus): void {
   }
 }
 
+/** Rough word count for the Working-phase progress label. */
+export function estimateExpertLabTokenCount(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
+function ensureOutputStreamCursor(): HTMLDivElement {
+  if (!outputStreamCursor) {
+    outputStreamCursor = document.createElement('div');
+    outputStreamCursor.className = 'cursor cursor--prose';
+    outputStreamCursor.setAttribute('aria-hidden', 'true');
+  }
+  return outputStreamCursor;
+}
+
+/** Live stream into the Output phase (debounced markdown + token count). */
+function updateExpertLabStreamPreview(text: string): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  tokenCount = estimateExpertLabTokenCount(text);
+  const countEl = document.getElementById('expertLabWorkingCount');
+  if (countEl) countEl.textContent = `${tokenCount} tokens`;
+
+  const spinner = document.querySelector(
+    '.expert-lab-phase[data-phase="working"] .expert-lab-spinner',
+  ) as HTMLElement | null;
+  if (spinner) spinner.hidden = true;
+
+  if (!outputStreamStarted) {
+    outputStreamStarted = true;
+    const outputPhase = document.querySelector(
+      '.expert-lab-phase[data-phase="output"]',
+    ) as HTMLElement | null;
+    if (outputPhase) {
+      outputPhase.classList.remove('is-collapsed', 'is-pending');
+    }
+    setPhaseStatus('output', 'active');
+  }
+
+  const bubble = document.getElementById('expertLabOutputBubble');
+  if (!bubble) return;
+  const cursor = ensureOutputStreamCursor();
+  scheduleAssistantBubbleRender(bubble, text, cursor);
+}
+
 function resetTimeline(): void {
   tokenCount = 0;
+  outputStreamStarted = false;
+  outputStreamCursor = null;
+  cancelAssistantBubbleRenderDebounce();
   clarifyingActive = false;
   for (const id of ['understanding', 'clarifying', 'working', 'output'] as PhaseId[]) {
     const el = document.querySelector(
@@ -121,6 +190,10 @@ function resetTimeline(): void {
   if (clarifyingBody) clarifyingBody.replaceChildren();
   const workingCount = document.getElementById('expertLabWorkingCount');
   if (workingCount) workingCount.textContent = '0 tokens';
+  const spinner = document.querySelector(
+    '.expert-lab-phase[data-phase="working"] .expert-lab-spinner',
+  ) as HTMLElement | null;
+  if (spinner) spinner.hidden = false;
   const outputBubble = document.getElementById('expertLabOutputBubble');
   if (outputBubble) outputBubble.replaceChildren();
   restoreQuestionHost();
@@ -143,15 +216,22 @@ function restoreQuestionHost(): void {
     parent.appendChild(host);
   }
   host.hidden = true;
+  getRoot()?.classList.remove('expert-lab-page--question-pending');
 }
 
 function mountQuestionHostInClarifying(): void {
   const host = document.getElementById('questionHost');
   const slot = document.getElementById('expertLabClarifyingBody');
+  const clarifyingPhase = document.querySelector(
+    '.expert-lab-phase[data-phase="clarifying"]',
+  ) as HTMLElement | null;
   if (!host || !slot) return;
   rememberQuestionHostHome();
+  if (clarifyingPhase) clarifyingPhase.hidden = false;
   slot.appendChild(host);
   host.hidden = false;
+  getRoot()?.classList.add('expert-lab-page--question-pending');
+  clarifyingPhase?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function watchQuestionHostResolve(onResolved: () => void): void {
@@ -318,9 +398,7 @@ function bindStreamListener(): void {
     },
     onPartialText: (chatId, text) => {
       if (chatId !== EXPERT_LAB_CHAT_ID) return;
-      tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
-      const countEl = document.getElementById('expertLabWorkingCount');
-      if (countEl) countEl.textContent = `${tokenCount} tokens`;
+      updateExpertLabStreamPreview(text);
     },
     onToolRound: (chatId, toolName) => {
       if (chatId !== EXPERT_LAB_CHAT_ID || toolName !== 'ask_question') return;
@@ -352,10 +430,12 @@ function bindStreamListener(): void {
       }
       setPhaseStatus('working', 'done');
       setPhaseStatus('output', 'active');
+      cancelAssistantBubbleRenderDebounce();
       const bubble = document.getElementById('expertLabOutputBubble');
       if (bubble) {
         setAssistantBubbleContent(bubble, finalText, { streaming: false });
       }
+      outputStreamCursor = null;
       setPhaseStatus('output', 'done');
     },
     onRunError: () => {
@@ -384,12 +464,36 @@ export function isExpertLabPageOpen(): boolean {
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
+/** Show the Expert Lab session in the main chat shell (run may continue in background). */
+export function openExpertLabInChatView(): void {
+  const root = getRoot();
+  const shell = getChatShell();
+  if (!root || !shell) return;
+
+  activateExpertLabChat();
+  const chat = ensureExpertLabChat();
+  setExpertLabPageOpen(false);
+  root.classList.remove('is-open');
+  shell.classList.remove('hidden');
+  document.querySelector('header.topbar')?.classList.remove('hidden');
+
+  syncModelSelectForActiveChat();
+  renderChatFromHistory(chat);
+  void bootGenerationResumeForChat(chat);
+  renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncComposerFromStreamingState();
+  renderSidebar();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
+}
+
 /** Close Expert Lab and return to the chat shell. */
 export function closeExpertLab(): void {
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
 
+  setExpertLabPageOpen(false);
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   document.querySelector('header.topbar')?.classList.remove('hidden');
@@ -429,6 +533,7 @@ export function openExpertLab(): void {
     activateExpertLabChat();
   }
 
+  setExpertLabPageOpen(true);
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');
@@ -470,6 +575,10 @@ function bindStaticControls(): void {
 
   document.getElementById('btnExpertLabRun')?.addEventListener('click', () => {
     void startExpertLabRun();
+  });
+
+  document.getElementById('btnExpertLabOpenChat')?.addEventListener('click', () => {
+    openExpertLabInChatView();
   });
 
   document.getElementById('expertLabTimeline')?.addEventListener('click', (e) => {

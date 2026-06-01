@@ -1296,6 +1296,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
           const toolName = tc.function.name;
+          if (isExpertLabChat(chat) && toolName === 'ask_question') {
+            notifyExpertLabToolRound(chat.id, toolName);
+          }
           const toolOut = planBlock
             ? { content: planBlock }
             : await executeTool(toolName, args, {
@@ -1304,7 +1307,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
-          if (isExpertLabChat(chat)) {
+          if (isExpertLabChat(chat) && toolName !== 'ask_question') {
             notifyExpertLabToolRound(chat.id, toolName);
           }
           let toolContent = toolOut.content;

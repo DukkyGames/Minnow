@@ -2,9 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 
 const appState = await import('../../src/app-state.ts');
-const { setSessionStateForTests, createEmptyChatObject } = await import(
-  '../../src/state/sessions.ts'
-);
+const { setSessionStateForTests, createEmptyChatObject, EXPERT_LAB_CHAT_ID } =
+  await import('../../src/state/sessions.ts');
 const {
   getStreamingChatId,
   isActiveChatStreaming,
@@ -32,6 +31,7 @@ function seedTwoChats(activeId) {
 describe('streaming-state helpers', () => {
   afterEach(() => {
     appState.setStreaming(false);
+    appState.setExpertLabPageOpen(false);
     setSessionStateForTests(null);
   });
 
@@ -64,5 +64,22 @@ describe('streaming-state helpers', () => {
     appState.setStreaming(true, 'chat-a');
     assert.equal(isBackgroundStreamBlockingSend(), true);
     assert.equal(isActiveChatStreaming(), false);
+  });
+
+  test('expert lab chat streams in chat shell when Expert Lab page is closed', () => {
+    const lab = createEmptyChatObject('');
+    lab.id = EXPERT_LAB_CHAT_ID;
+    lab.kind = 'expert-lab';
+    setSessionStateForTests({
+      version: 2,
+      activeId: EXPERT_LAB_CHAT_ID,
+      sidebarCollapsed: false,
+      chats: [lab],
+    });
+    appState.setExpertLabPageOpen(true);
+    appState.setStreaming(true, EXPERT_LAB_CHAT_ID);
+    assert.equal(isStreamDomVisible(EXPERT_LAB_CHAT_ID), false);
+    appState.setExpertLabPageOpen(false);
+    assert.equal(isStreamDomVisible(EXPERT_LAB_CHAT_ID), true);
   });
 });
