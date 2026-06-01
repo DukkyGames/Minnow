@@ -19,7 +19,7 @@
     "impeccable:detect": "npx impeccable detect src/ index.html",
     "caveman:sync": "node scripts/sync-caveman-skill.mjs",
     "test:skills": "tsx --test test/skills-loader.test.ts test/skills/caveman-client.test.mts test/skills/pinned-skill.test.mts",
-    "test:attachments": "node --test test/attachments/*.test.mjs test/server/read-document.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/workspace-ref.test.ts test/attachments/reader-routing.test.mts",
+    "test:attachments": "node --test test/attachments/*.test.mjs test/server/read-document.test.mjs && node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --import ./test/test-loader.mjs --test test/workspace-ref.test.ts test/attachments/image-path.test.ts test/attachments/reader-routing.test.mts",
     "test:skills-impeccable": "node --test test/skills-impeccable.test.mjs",
     "test:impeccable": "node --test test/impeccable/*.test.mjs && tsx --test test/skills/impeccable-client.test.mts",
     "preview": "vite preview",

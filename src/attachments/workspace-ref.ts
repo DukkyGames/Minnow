@@ -1,21 +1,29 @@
 /**
  * Workspace file references dragged from the file tree into the composer.
- * File bodies are loaded on send via read_file.
+ * Text files load on send via read_file; images use the preview file API.
  */
 
 import { executeTool } from '../tools/client';
+import { isImageFilePath } from './image-path';
 import {
   getPendingAttachments,
   pushAttachment,
   removeAttachment,
 } from './store';
 import type { Attachment } from './types';
+import {
+  readWorkspaceImage,
+  type WorkspaceImagePayload,
+} from './workspace-image-read';
 
 /** Drag-and-drop MIME type for file-tree → composer transfers. */
 export const WORKSPACE_FILE_MIME = 'application/x-minnow-workspace-file';
 
 /** Loads file text for a workspace path (overridable in tests). */
 export type WorkspaceFileReader = (path: string) => Promise<string>;
+
+/** Loads image bytes as a data URL (overridable in tests). */
+export type WorkspaceImageReader = (path: string) => Promise<WorkspaceImagePayload>;
 
 function basename(path: string): string {
   const normalized = path.replace(/\\/g, '/');
@@ -57,13 +65,18 @@ async function defaultWorkspaceFileReader(path: string): Promise<string> {
   return result.content ?? '';
 }
 
+async function defaultWorkspaceImageReader(path: string): Promise<WorkspaceImagePayload> {
+  return readWorkspaceImage(path);
+}
+
 /**
  * Reads workspace reference files and returns attachments ready for
- * {@link buildHistoryUserContent} (workspace → text, failures → error).
+ * {@link buildHistoryUserContent} (images → kind image, text → kind text, failures → error).
  */
 export async function resolveWorkspaceReferences(
   attachments: Attachment[],
-  readFile: WorkspaceFileReader = defaultWorkspaceFileReader,
+  readText: WorkspaceFileReader = defaultWorkspaceFileReader,
+  readImage: WorkspaceImageReader = defaultWorkspaceImageReader,
 ): Promise<Attachment[]> {
   const resolved: Attachment[] = [];
 
@@ -74,9 +87,22 @@ export async function resolveWorkspaceReferences(
     }
 
     const path = attachment.workspacePath;
+    const name = basename(path);
     try {
-      const name = basename(path);
-      const text = await readFile(path);
+      if (isImageFilePath(path)) {
+        const { dataUrl, mimeType, size } = await readImage(path);
+        resolved.push({
+          ...attachment,
+          kind: 'image',
+          name,
+          mimeType,
+          size,
+          dataUrl,
+        });
+        continue;
+      }
+
+      const text = await readText(path);
       resolved.push({
         ...attachment,
         kind: 'text',

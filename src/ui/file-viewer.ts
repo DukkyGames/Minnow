@@ -4,8 +4,10 @@
 
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { executeTool, getLocalServerAvailable } from '../tools/client';
+import { resolvePreviewLoadUrl } from './preview-panel';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
 import { patchFilePanelState } from '../state/file-panel';
@@ -514,22 +516,25 @@ export function openAttachmentSnapshotInViewer(displayName: string, content: str
   updateViewerChrome();
 }
 
-/** Open an image data URL from a chat attachment in the viewer pane. */
-export function openImageDataUrlInViewer(displayName: string, dataUrl: string): void {
-  const safeName = displayName.replace(/[/\\]/g, '_') || 'image';
-  const path = `.minnow/attachments/${safeName}`;
+interface MountImagePreviewOptions {
+  src: string;
+  displayName: string;
+  bannerText: string;
+  /** Virtual path for selection state (workspace path or attachment snapshot). */
+  statePath: string;
+  onImageError?: () => void;
+}
 
-  if (isDirty && currentPath && currentPath !== path) {
-    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
-    if (!proceed) return;
-  }
+/** Renders a read-only image preview in the file viewer host. */
+function mountImagePreviewInViewer(options: MountImagePreviewOptions): void {
+  const { src, displayName, bannerText, statePath, onImageError } = options;
 
-  currentPath = path;
+  currentPath = statePath;
   originalContent = '';
   isDirty = false;
   readOnlyExcerpt = true;
-  readOnlyBannerText = 'Chat image attachment (read-only preview).';
-  patchFilePanelState({ selectedPath: path });
+  readOnlyBannerText = bannerText;
+  patchFilePanelState({ selectedPath: statePath });
   showViewerSplit();
   closeLspDocument();
 
@@ -553,11 +558,47 @@ export function openImageDataUrlInViewer(displayName: string, dataUrl: string): 
   const figure = document.createElement('figure');
   figure.className = 'file-viewer-image-preview';
   const img = document.createElement('img');
-  img.src = dataUrl;
+  img.src = src;
   img.alt = displayName;
+  if (onImageError) {
+    img.onerror = onImageError;
+  }
   figure.appendChild(img);
   host.appendChild(figure);
   updateViewerChrome();
+}
+
+/** Open a workspace image via the preview file API (binary-safe). */
+export function openWorkspaceImageInViewer(relativePath: string): void {
+  const displayName = relativePath.split(/[/\\]/).pop() ?? relativePath;
+  const src = resolvePreviewLoadUrl({ kind: 'workspace', path: relativePath });
+  mountImagePreviewInViewer({
+    src,
+    displayName,
+    statePath: relativePath,
+    bannerText: 'Workspace image (read-only preview).',
+    onImageError: () => {
+      setViewerError('Could not load image preview. Is the tool server running (npm start)?');
+    },
+  });
+}
+
+/** Open an image data URL from a chat attachment in the viewer pane. */
+export function openImageDataUrlInViewer(displayName: string, dataUrl: string): void {
+  const safeName = displayName.replace(/[/\\]/g, '_') || 'image';
+  const path = `.minnow/attachments/${safeName}`;
+
+  if (isDirty && currentPath && currentPath !== path) {
+    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
+    if (!proceed) return;
+  }
+
+  mountImagePreviewInViewer({
+    src: dataUrl,
+    displayName,
+    statePath: path,
+    bannerText: 'Chat image attachment (read-only preview).',
+  });
 }
 
 /** Open a project file in the split viewer. */
@@ -581,8 +622,14 @@ export async function openFileInViewer(
   readOnlyBannerText = null;
   patchFilePanelState({ selectedPath: relativePath });
   showViewerSplit();
-  setViewerLoading(relativePath);
   renderFileTreeViaBridge();
+
+  if (isImageFilePath(relativePath)) {
+    openWorkspaceImageInViewer(relativePath);
+    return;
+  }
+
+  setViewerLoading(relativePath);
 
   try {
     const loaded = await loadFileContent(relativePath);
