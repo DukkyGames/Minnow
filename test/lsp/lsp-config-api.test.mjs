@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequestNode } from 'node:http';
+import { handleConfigRequest } from '../../server/config/middleware.js';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { createLspMiddleware } from '../../server/lsp/middleware.js';
@@ -109,5 +110,55 @@ describe('GET /api/config/lsp catalog', () => {
     assert.equal(ts.disabled, false);
     assert.equal(ts.hasCommand, true);
     assert.equal(ts.defaultEnabled, true);
+  });
+});
+
+describe('GET /api/config/lsp through config + LSP middleware stack', () => {
+  let homeDir;
+  let server;
+  let baseUrl;
+
+  before(async () => {
+    homeDir = path.join(__dirname, '../fixtures/lsp-config-stack-home');
+    process.env.MINNOW_HOME = homeDir;
+    resetMinnowHomeCache();
+    invalidateLspConfigCache();
+    shutdownAllLsp();
+    await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.mkdir(homeDir, { recursive: true });
+
+    const lspMiddleware = createLspMiddleware(PROJECT_ROOT);
+    server = createServer((req, res) => {
+      const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+      void handleConfigRequest(req, res, pathname).then((configHandled) => {
+        if (configHandled) return;
+        void lspMiddleware(req, res, () => {
+          res.statusCode = 404;
+          res.end('not found');
+        });
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+  });
+
+  after(async () => {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    shutdownAllLsp();
+    delete process.env.MINNOW_HOME;
+    resetMinnowHomeCache();
+    invalidateLspConfigCache();
+    if (homeDir) {
+      await fs.rm(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  test('config middleware does not 404 before LSP handler runs', async () => {
+    const res = await httpGet(baseUrl, '/api/config/lsp');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.json.servers));
+    assert.ok(res.json.servers.length > 0);
   });
 });

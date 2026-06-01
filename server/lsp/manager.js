@@ -19,6 +19,9 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 const processes = new Map();
 
+/** In-flight connect attempts (dedupe parallel spawns for the same server id). */
+const pendingConnections = new Map();
+
 /** Per-fileUri sync state: LSP version + latest full text. */
 const documentSync = new Map();
 
@@ -83,11 +86,62 @@ function normalizeCompletionItems(result) {
   return out;
 }
 
-async function getConnection(serverId, config) {
-  if (processes.has(serverId)) {
-    return processes.get(serverId);
+function formatLspSpawnError(serverId, bin, err) {
+  const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+  if (code === 'ENOENT') {
+    return (
+      `LSP server "${serverId}" not found: "${bin}" is not installed or not on PATH. ` +
+      `Install the language server or disable "${serverId}" under Settings → Language servers.`
+    );
   }
+  const message = err instanceof Error ? err.message : String(err);
+  return `LSP server "${serverId}" failed to start: ${message}`;
+}
 
+/** Wait for spawn success; reject on ENOENT and other spawn failures (avoids unhandled 'error'). */
+function spawnLspChild(bin, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, {
+      cwd: PROJECT_ROOT,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: false,
+      windowsHide: true,
+    });
+    child.once('error', reject);
+    child.once('spawn', () => resolve(child));
+  });
+}
+
+function discardLspState(serverId, state) {
+  processes.delete(serverId);
+  try {
+    state.connection?.dispose?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    state.child?.kill();
+  } catch {
+    /* ignore */
+  }
+}
+
+function bindLspProcessLifecycle(serverId, state) {
+  state.child.on('error', (err) => {
+    console.error(`[lsp] ${serverId}:`, err instanceof Error ? err.message : err);
+    discardLspState(serverId, state);
+  });
+  state.child.on('exit', (code, signal) => {
+    if (code !== 0 && code != null) {
+      console.error(`[lsp] ${serverId} exited with code ${code}`);
+    } else if (signal) {
+      console.error(`[lsp] ${serverId} exited on signal ${signal}`);
+    }
+    discardLspState(serverId, state);
+  });
+}
+
+async function connectLspServer(serverId, config) {
   const command = config.command;
   if (!Array.isArray(command) || command.length === 0) {
     throw new Error(
@@ -96,12 +150,12 @@ async function getConnection(serverId, config) {
   }
 
   const { command: bin, args } = resolveCommand(command);
-  const child = spawn(bin, args, {
-    cwd: PROJECT_ROOT,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    shell: false,
-    windowsHide: true,
-  });
+  let child;
+  try {
+    child = await spawnLspChild(bin, args);
+  } catch (err) {
+    throw new Error(formatLspSpawnError(serverId, bin, err));
+  }
 
   const connection = createMessageConnection(
     new StreamMessageReader(child.stdout),
@@ -121,24 +175,50 @@ async function getConnection(serverId, config) {
     }
   });
 
-  connection.listen();
-  await connection.sendRequest('initialize', {
-    processId: process.pid,
-    rootUri: `file://${PROJECT_ROOT.replace(/\\/g, '/')}`,
-    capabilities: {
-      textDocument: {
-        completion: {
-          completionItem: {
-            snippetSupport: true,
+  bindLspProcessLifecycle(serverId, state);
+
+  try {
+    connection.listen();
+    await connection.sendRequest('initialize', {
+      processId: process.pid,
+      rootUri: `file://${PROJECT_ROOT.replace(/\\/g, '/')}`,
+      capabilities: {
+        textDocument: {
+          completion: {
+            completionItem: {
+              snippetSupport: true,
+            },
           },
         },
       },
-    },
+    });
+    connection.sendNotification('initialized', {});
+    state.ready = true;
+    return state;
+  } catch (err) {
+    discardLspState(serverId, state);
+    throw err;
+  }
+}
+
+async function getConnection(serverId, config) {
+  if (processes.has(serverId)) {
+    return processes.get(serverId);
+  }
+  if (pendingConnections.has(serverId)) {
+    return pendingConnections.get(serverId);
+  }
+
+  const connectPromise = connectLspServer(serverId, config).then((state) => {
+    processes.set(serverId, state);
+    return state;
   });
-  connection.sendNotification('initialized', {});
-  state.ready = true;
-  processes.set(serverId, state);
-  return state;
+  pendingConnections.set(serverId, connectPromise);
+  try {
+    return await connectPromise;
+  } finally {
+    pendingConnections.delete(serverId);
+  }
 }
 
 /**
@@ -353,6 +433,7 @@ export async function listLspServers() {
 }
 
 export function shutdownAllLsp() {
+  pendingConnections.clear();
   for (const [, state] of processes) {
     try {
       state.child.kill();

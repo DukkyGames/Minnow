@@ -414,6 +414,7 @@
         <button type="button" data-settings-nav="tools">Tools</button>
         <button type="button" data-settings-nav="mcp">MCP servers</button>
         <button type="button" data-settings-nav="lsp">Language servers</button>
+        <button type="button" data-settings-nav="editor">Editor</button>
         <button type="button" data-settings-nav="skills">Skills</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
@@ -701,18 +702,13 @@
       </section>
       <section id="settingsSection-lsp" class="settings-section">
         <h2>Language servers</h2>
-        <p class="settings-lead">Used by <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code> when <code>npm start</code> is running. Overrides save to <code>~/.minnow/lsp.json</code>.</p>
-        <p id="settingsLspOffline" class="field-hint settings-lsp-offline hidden">Start with <code>npm start</code> to load and toggle language servers.</p>
-        <label class="settings-toggle-row" id="settingsLspMasterRow">
-          <span>Enable language servers</span>
-          <input type="checkbox" id="settingsLspMasterEnabled" checked>
-        </label>
-        <div id="settingsLspServerList" class="settings-lsp-list" role="list" aria-label="Configured language servers"></div>
-        <details id="settingsLspAddPanel" class="settings-lsp-add-panel">
-          <summary class="settings-lsp-add-summary">Add custom language server</summary>
-          <div id="settingsLspCustomForm" class="settings-lsp-custom-mount"></div>
-        </details>
-        <div id="settingsEditorAiMount" class="settings-editor-ai-mount" aria-label="Editor AI completion"></div>
+        <p class="settings-lead">Diagnostics and editor intelligence for the file viewer and agent tools <code>get_lsp_diagnostics</code> / <code>list_lsp_servers</code>. Requires <code>npm start</code>; overrides persist in <code>~/.minnow/lsp.json</code>.</p>
+        <div id="settingsLspBody" class="settings-section-body" aria-live="polite"></div>
+      </section>
+      <section id="settingsSection-editor" class="settings-section">
+        <h2>Editor</h2>
+        <p class="settings-lead">Copilot-style ghost text in the file viewer. <kbd class="settings-editor-kbd">Tab</kbd> accepts, <kbd class="settings-editor-kbd">Esc</kbd> dismisses. Requires <code>npm start</code> and a configured provider.</p>
+        <div id="settingsEditorBody" class="settings-section-body" aria-live="polite"></div>
       </section>
       <section id="settingsSection-skills" class="settings-section">
         <h2>Skills</h2>

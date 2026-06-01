@@ -1,5 +1,5 @@
 /**
- * LSP settings section: list built-in/custom servers, toggles, add custom server.
+ * Language servers settings page: grouped panels, MCP-style server rows, custom LSP form.
  */
 
 import {
@@ -7,9 +7,10 @@ import {
   saveLspConfig,
   type LspServerStatus,
 } from '../lsp/config-client';
+import { detectLocalServer } from '../tools/client';
 import { isLocalServerAvailable } from '../tools/config';
-import { createSettingsToggleRow } from './settings-switch';
-import { renderEditorAiSettingsSection } from './editor-ai-settings';
+import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { createSettingsSwitch, createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -21,6 +22,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function serverBanner(message: string): HTMLElement {
+  const p = el('p', 'settings-server-banner');
+  p.setAttribute('role', 'status');
+  p.innerHTML = message;
+  return p;
 }
 
 /** Hide test-only fake server from the settings list. */
@@ -35,17 +43,17 @@ function sortServers(servers: LspServerStatus[]): LspServerStatus[] {
   });
 }
 
-/** Format requirements object for settings meta line. */
-function formatRequirementsLine(
+/** Format install requirements for a hint line under the server row. */
+function formatRequirementsHint(
   requirements: LspServerStatus['requirements'],
 ): string | null {
   if (!requirements) return null;
   const bits: string[] = [];
-  if (requirements.package) bits.push(`npm package ${requirements.package}`);
-  if (requirements.binary) bits.push(`binary ${requirements.binary}`);
-  if (requirements.command) bits.push(`command ${requirements.command}`);
+  if (requirements.package) bits.push(`npm: ${requirements.package}`);
+  if (requirements.binary) bits.push(`binary: ${requirements.binary}`);
+  if (requirements.command) bits.push(`command: ${requirements.command}`);
   if (bits.length === 0) return null;
-  return `Requires: ${bits.join(', ')}`;
+  return bits.join(' · ');
 }
 
 function parseCommaList(raw: string): string[] {
@@ -55,112 +63,163 @@ function parseCommaList(raw: string): string[] {
     .filter(Boolean);
 }
 
-function createLspServerRow(
+function appendSummaryKv(
+  mount: HTMLElement,
+  rows: Array<{ term: string; value: string }>,
+): void {
+  const dl = el('dl', 'settings-kv');
+  for (const { term, value } of rows) {
+    dl.append(el('dt', 'settings-kv__term', term), el('dd', 'settings-kv__value', value));
+  }
+  mount.append(dl);
+}
+
+function createLspSettingsRow(
   server: LspServerStatus,
   onToggle: (id: string, enabled: boolean) => void,
   onDelete: (id: string) => void,
 ): HTMLElement {
-  const row = el('div', 'settings-lsp-row');
+  const row = el('article', 'settings-lsp-row');
   row.setAttribute('role', 'listitem');
+  row.dataset.serverId = server.id;
 
   const head = el('div', 'settings-lsp-row-head');
 
-  const { row: labelWrap, input: checkbox } = createSettingsToggleRow(server.label, {
+  const labelWrap = el('div', 'settings-lsp-toggle');
+  const { root: switchRoot, input: checkbox } = createSettingsSwitch({
     checked: !server.disabled,
     ariaLabel: `${server.disabled ? 'Enable' : 'Disable'} ${server.label}`,
     onChange: (enabled) => onToggle(server.id, enabled),
   });
+
+  const title = el('span', 'settings-lsp-name', server.label);
+  labelWrap.append(switchRoot, title);
   head.append(labelWrap);
 
   if (server.builtin) {
-    const badge = el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Built-in');
-    head.append(badge);
+    head.append(el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Built-in'));
   } else {
-    const removeBtn = el('button', 'settings-lsp-remove', 'Remove');
+    const removeBtn = el('button', 'settings-inline-btn settings-lsp-remove', 'Remove');
     removeBtn.type = 'button';
+    removeBtn.setAttribute('aria-label', `Remove ${server.label}`);
     removeBtn.addEventListener('click', () => onDelete(server.id));
     head.append(removeBtn);
   }
 
   row.append(head);
 
-  const meta = el('div', 'settings-lsp-meta');
-  meta.append(el('span', '', server.id));
+  const detail = el('div', 'settings-lsp-detail');
+
+  const idLine = el('p', 'settings-lsp-id');
+  idLine.textContent = server.id;
+  detail.append(idLine);
 
   if (server.extensions.length > 0) {
-    const ext = el('span', 'settings-lsp-extensions', server.extensions.join(' '));
-    meta.append(ext);
+    const ext = el('p', 'settings-lsp-extensions');
+    ext.textContent = server.extensions.join(' ');
+    detail.append(ext);
   }
 
-  const statusBadge = el(
+  const status = el(
     'span',
-    `settings-lsp-badge ${server.running ? 'settings-lsp-badge--running' : 'settings-lsp-badge--idle'}`,
+    `settings-lsp-status ${server.running ? 'settings-lsp-status--ok' : 'settings-lsp-status--idle'}`,
+  );
+  status.setAttribute(
+    'aria-label',
+    server.running ? 'Language server process running' : 'Language server idle',
+  );
+  const statusDot = el('span', 'settings-lsp-status-dot');
+  statusDot.setAttribute('aria-hidden', 'true');
+  const statusText = el(
+    'span',
+    'settings-lsp-status-text',
     server.running ? 'Running' : 'Idle',
   );
-  meta.append(statusBadge);
+  status.append(statusDot, statusText);
+  detail.append(status);
 
-  const reqLine = formatRequirementsLine(server.requirements);
-  if (reqLine) {
-    meta.append(el('span', 'settings-lsp-requirements', reqLine));
+  const reqHint = formatRequirementsHint(server.requirements);
+  if (reqHint) {
+    detail.append(el('p', 'settings-lsp-hint', reqHint));
   }
 
   if (server.disabledReason) {
-    meta.append(el('span', 'settings-lsp-reason', server.disabledReason));
+    detail.append(el('p', 'settings-lsp-warn', server.disabledReason));
   }
 
-  row.append(meta);
+  row.append(detail);
   return row;
 }
 
-function buildCustomServerForm(onAdded: () => void): HTMLElement {
-  const form = el('form', 'settings-lsp-custom-form');
+function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
+  const form = el('form', 'settings-lsp-form');
   form.setAttribute('aria-label', 'Add custom language server');
+  form.noValidate = true;
 
+  const idRow = el('div', 'field-row');
   const idField = el('div', 'field');
   idField.append(el('label', '', 'Server id'));
   const idInput = document.createElement('input');
   idInput.type = 'text';
   idInput.name = 'id';
   idInput.required = true;
+  idInput.autocomplete = 'off';
+  idInput.spellcheck = false;
   idInput.placeholder = 'my-lsp';
   idInput.pattern = '[a-z0-9][a-z0-9._-]*';
   idInput.title = 'Lowercase letters, numbers, dots, hyphens, underscores';
-  idField.append(idInput);
-  form.append(idField);
+  idField.append(
+    idInput,
+    el('p', 'field-hint', 'Lowercase letters, numbers, dots, hyphens, underscores.'),
+  );
+  idRow.append(idField);
 
   const labelField = el('div', 'field');
-  labelField.append(el('label', '', 'Display label'));
+  labelField.append(el('label', '', 'Display name'));
   const labelInput = document.createElement('input');
   labelInput.type = 'text';
   labelInput.name = 'label';
+  labelInput.autocomplete = 'off';
   labelInput.placeholder = 'My Language Server';
   labelField.append(labelInput);
-  form.append(labelField);
+  idRow.append(labelField);
+  form.append(idRow);
 
   const cmdField = el('div', 'field');
-  cmdField.append(el('label', '', 'Command (one argument per token, space-separated)'));
+  cmdField.append(el('label', '', 'Command'));
   const cmdInput = document.createElement('input');
   cmdInput.type = 'text';
   cmdInput.name = 'command';
   cmdInput.required = true;
+  cmdInput.autocomplete = 'off';
+  cmdInput.spellcheck = false;
   cmdInput.placeholder = 'my-lsp-server --stdio';
-  cmdField.append(cmdInput);
+  cmdField.append(
+    cmdInput,
+    el('p', 'field-hint', 'One shell token per word; stdio transport is typical.'),
+  );
   form.append(cmdField);
 
   const extField = el('div', 'field');
-  extField.append(el('label', '', 'File extensions (comma-separated)'));
+  extField.append(el('label', '', 'File extensions'));
   const extInput = document.createElement('input');
   extInput.type = 'text';
   extInput.name = 'extensions';
   extInput.required = true;
   extInput.placeholder = '.foo, .bar';
-  extField.append(extInput);
+  extField.append(
+    extInput,
+    el('p', 'field-hint', 'Comma-separated; leading dots are optional.'),
+  );
   form.append(extField);
 
-  const actions = el('div', 'settings-lsp-custom-actions');
+  const actions = el('div', 'settings-lsp-form-actions');
   const submit = el('button', 'settings-action-btn', 'Add server');
   submit.type = 'submit';
-  actions.append(submit);
+  const resetBtn = el('button', 'settings-inline-btn', 'Clear form');
+  resetBtn.type = 'button';
+  resetBtn.addEventListener('click', () => form.reset());
+  actions.append(submit, resetBtn);
   form.append(actions);
 
   form.addEventListener('submit', (event) => {
@@ -207,70 +266,90 @@ function buildCustomServerForm(onAdded: () => void): HTMLElement {
   return form;
 }
 
-/** Render language server list, toggles, and custom-server form. */
+function appendCustomServerPanel(mount: HTMLElement, onAdded: () => void): void {
+  const details = el('details', 'settings-lsp-add-panel');
+  details.append(el('summary', 'settings-lsp-add-summary', 'Add custom language server'));
+  details.append(buildCustomServerForm(onAdded));
+  mount.append(details);
+}
+
+function appendCrosslinks(mount: HTMLElement): void {
+  const cross = el('div', 'settings-crosslinks');
+  cross.append(el('span', 'settings-crosslinks__label', 'Related'));
+  cross.append(
+    linkToSettingsSection('Editor', 'editor'),
+    linkToSettingsSection('Tools', 'tools'),
+    linkToSettingsSection('MCP servers', 'mcp'),
+  );
+  mount.append(cross);
+}
+
+/** Render the full Language servers settings section into #settingsLspBody. */
 export async function renderLspSection(): Promise<void> {
-  const list = document.getElementById('settingsLspServerList');
-  const offline = document.getElementById('settingsLspOffline');
-  const addPanel = document.getElementById('settingsLspAddPanel');
-  const masterCb = document.getElementById(
-    'settingsLspMasterEnabled',
-  ) as HTMLInputElement | null;
-  const customMount = document.getElementById('settingsLspCustomForm');
-  if (!list) return;
+  const mount = document.getElementById('settingsLspBody');
+  if (!mount) return;
+  mount.replaceChildren();
 
-  list.replaceChildren();
-
+  await detectLocalServer();
   const online = isLocalServerAvailable();
-  offline?.classList.toggle('hidden', online);
-  addPanel?.classList.toggle('hidden', !online);
-
   if (!online) {
-    customMount?.replaceChildren();
-    await renderEditorAiSettingsSection();
+    mount.append(
+      serverBanner(
+        'Start with <code>npm start</code> to load server status, toggle analyzers, and save <code>~/.minnow/lsp.json</code>.',
+      ),
+    );
     return;
   }
 
   const config = await fetchLspConfig();
   if (!config) {
-    offline?.classList.remove('hidden');
-    addPanel?.classList.add('hidden');
-    await renderEditorAiSettingsSection();
+    mount.append(
+      serverBanner('Could not load language server config. Confirm <code>npm start</code> is running.'),
+    );
     return;
   }
 
-  if (masterCb) {
-    masterCb.checked = config.enabled !== false;
-    masterCb.onchange = () => {
-      void saveLspConfig({ enabled: masterCb.checked }).then((ok) => {
+  const servers = sortServers(visibleServers(config.servers));
+  const enabledCount = servers.filter((s) => !s.disabled).length;
+  const runningCount = servers.filter((s) => s.running).length;
+  const masterOn = config.enabled !== false;
+
+  const overview = appendSettingsGroup(
+    mount,
+    'Overview',
+    'Master switch for all LSP processes. Individual servers can still be disabled below.',
+  );
+
+  const { row: masterRow } = createSettingsToggleRow('Enable language servers', {
+    checked: masterOn,
+    ariaLabel: 'Enable all language servers',
+    onChange: (checked) => {
+      void saveLspConfig({ enabled: checked }).then((ok) => {
         setStatus(
           ok ? 'ok' : 'err',
-          ok ? 'LSP master switch saved' : 'Save failed — use npm start',
+          ok ? 'Language servers updated' : 'Save failed — use npm start',
         );
+        if (ok) void renderLspSection();
       });
-    };
-  }
+    },
+  });
+  overview.append(masterRow);
+
+  appendSummaryKv(overview, [
+    { term: 'Configured', value: String(servers.length) },
+    {
+      term: 'Enabled',
+      value: masterOn ? String(enabledCount) : '0 (master off)',
+    },
+    { term: 'Running', value: masterOn ? String(runningCount) : 'none' },
+    { term: 'Storage', value: '~/.minnow/lsp.json' },
+  ]);
+
+  appendCrosslinks(overview);
 
   const refresh = () => {
     void renderLspSection();
   };
-
-  if (customMount && customMount.childElementCount === 0) {
-    customMount.append(buildCustomServerForm(refresh));
-  }
-
-  const servers = sortServers(visibleServers(config.servers));
-  if (servers.length === 0) {
-    list.appendChild(el('p', 'settings-field-hint', 'No language servers configured.'));
-    return;
-  }
-
-  const builtinCount = servers.filter((s) => s.builtin).length;
-  const customCount = servers.length - builtinCount;
-  const countParts = [`${builtinCount} built-in`];
-  if (customCount > 0) countParts.push(`${customCount} custom`);
-  list.appendChild(
-    el('p', 'settings-field-hint settings-lsp-catalog-count', countParts.join(', ')),
-  );
 
   const setServerDisabled = async (id: string, enabled: boolean) => {
     const ok = await saveLspConfig({
@@ -286,6 +365,7 @@ export async function renderLspSection(): Promise<void> {
   };
 
   const removeCustomServer = async (id: string) => {
+    if (!confirm(`Remove language server "${id}"?`)) return;
     const ok = await saveLspConfig({ removeLspIds: [id] });
     if (ok) {
       setStatus('ok', `Removed ${id}`);
@@ -295,13 +375,34 @@ export async function renderLspSection(): Promise<void> {
     setStatus('err', 'Remove failed — use npm start');
   };
 
-  for (const server of servers) {
-    list.appendChild(
-      createLspServerRow(server, (id, enabled) => {
-        void setServerDisabled(id, enabled);
-      }, removeCustomServer),
-    );
+  const catalog = appendSettingsGroup(
+    mount,
+    'Servers',
+    'Built-in analyzers ship with Minnow; custom entries are merged from your home config.',
+  );
+
+  const list = el('div', 'settings-lsp-list');
+  list.setAttribute('role', 'list');
+  list.setAttribute('aria-label', 'Configured language servers');
+
+  if (servers.length === 0) {
+    list.append(el('p', 'settings-field-hint', 'No language servers in defaults or lsp.json.'));
+  } else {
+    for (const server of servers) {
+      list.append(
+        createLspSettingsRow(server, (id, enabled) => {
+          void setServerDisabled(id, enabled);
+        }, removeCustomServer),
+      );
+    }
   }
 
-  await renderEditorAiSettingsSection();
+  catalog.append(list);
+
+  const customGroup = appendSettingsGroup(
+    mount,
+    'Custom server',
+    'Register a stdio language server and the file extensions it owns.',
+  );
+  appendCustomServerPanel(customGroup, refresh);
 }

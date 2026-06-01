@@ -25,6 +25,7 @@ const SETTINGS_SECTION_IDS = [
   'tools',
   'mcp',
   'lsp',
+  'editor',
   'skills',
   'features',
   'evals',
@@ -43,6 +44,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsToolsBody',
   'settingsSkillsBody',
   'settingsUsageBody',
+  'settingsEditorBody',
 ];
 
 describe('settings page HTML', () => {

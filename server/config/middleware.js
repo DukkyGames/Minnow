@@ -272,6 +272,11 @@ export async function handleConfigRequest(req, res, pathname) {
     return true;
   }
 
+  /** LSP catalog read/write is handled by createLspMiddleware later in the Connect stack. */
+  if (pathname === '/api/config/lsp') {
+    return false;
+  }
+
   if (pathname.startsWith('/api/config')) {
     sendJson(res, 404, { error: 'Not found' });
     return true;
