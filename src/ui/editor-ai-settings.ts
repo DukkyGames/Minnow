@@ -5,7 +5,15 @@
 import {
   loadEditorAiCompletionConfig,
   saveEditorAiCompletionConfig,
+  type EditorAiCompletionConfig,
 } from '../config/editor-ai-completion';
+import { getActiveChat } from '../state/sessions';
+import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import {
+  appendProviderModelFields,
+  fillModelSelect,
+  fillProviderSelect,
+} from './settings-model-binding';
 import { isLocalServerAvailable } from '../tools/config';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
@@ -21,106 +29,320 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Render editor AI completion controls inside the LSP settings section. */
-export async function renderEditorAiSettingsSection(): Promise<void> {
-  const mount = document.getElementById('settingsEditorAiMount');
-  if (!mount) return;
-  mount.replaceChildren();
+function serverBanner(message: string): HTMLElement {
+  const p = el('p', 'settings-server-banner');
+  p.setAttribute('role', 'status');
+  p.innerHTML = message;
+  return p;
+}
 
-  const heading = el('h3', 'settings-subheading', 'AI inline completion');
-  mount.append(heading);
+function appendSummaryKv(
+  mount: HTMLElement,
+  rows: Array<{ term: string; value: string | HTMLElement }>,
+): void {
+  const dl = el('dl', 'settings-kv');
+  for (const { term, value } of rows) {
+    dl.append(el('dt', 'settings-kv__term', term));
+    const dd = el('dd', 'settings-kv__value');
+    if (typeof value === 'string') dd.textContent = value;
+    else dd.append(value);
+    dl.append(dd);
+  }
+  mount.append(dl);
+}
 
-  const lead = el(
-    'p',
-    'settings-field-hint',
-    'Copilot-style ghost text in the file editor. Tab accepts, Esc dismisses. Uses the active chat model unless overridden. Disabled for read-only excerpts.',
+function kbdKey(label: string): HTMLElement {
+  return el('kbd', 'settings-editor-kbd', label);
+}
+
+function statusReadout(enabled: boolean): HTMLElement {
+  const wrap = el(
+    'span',
+    `settings-mcp-status ${enabled ? 'settings-mcp-status--ok' : ''}`,
   );
-  mount.append(lead);
+  wrap.setAttribute(
+    'aria-label',
+    enabled ? 'Inline completion enabled' : 'Inline completion disabled',
+  );
+  const dot = el('span', 'settings-mcp-status-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  wrap.append(dot, el('span', 'settings-mcp-status-text', enabled ? 'On' : 'Off'));
+  return wrap;
+}
 
-  const online = isLocalServerAvailable();
+function isPinnedModelSource(config: EditorAiCompletionConfig): boolean {
+  return !config.useChatModel || config.providerId.trim().length > 0;
+}
+
+function formatEffectiveModel(config: EditorAiCompletionConfig): string {
+  if (!isPinnedModelSource(config)) {
+    const chat = getActiveChat();
+    const provider = chat.providerId?.trim() || '—';
+    const model = chat.modelId?.trim() || '—';
+    return `${provider} / ${model}`;
+  }
+  const provider = config.providerId.trim() || '—';
+  const model = config.modelId.trim() || '—';
+  return `${provider} / ${model}`;
+}
+
+function appendCrosslinks(mount: HTMLElement): void {
+  const cross = el('div', 'settings-crosslinks');
+  cross.append(el('span', 'settings-crosslinks__label', 'Related'));
+  cross.append(
+    linkToSettingsSection('Providers', 'providers'),
+    linkToSettingsSection('Language servers', 'lsp'),
+    linkToSettingsSection('Model routing', 'model-routing'),
+  );
+  mount.append(cross);
+}
+
+function mountModelSourceBlock(
+  body: HTMLElement,
+  config: EditorAiCompletionConfig,
+  onRefresh: () => void,
+): void {
+  const chatRadio = el('input') as HTMLInputElement;
+  chatRadio.type = 'radio';
+  chatRadio.name = 'editorAiModelSource';
+  chatRadio.id = 'editorAiModelSourceChat';
+
+  const pinRadio = el('input') as HTMLInputElement;
+  pinRadio.type = 'radio';
+  pinRadio.name = 'editorAiModelSource';
+  pinRadio.id = 'editorAiModelSourcePin';
+
+  const pinned = isPinnedModelSource(config);
+  if (pinned) pinRadio.checked = true;
+  else chatRadio.checked = true;
+
+  const sourceRow = el('div', 'settings-editor-source-radios');
+  const chatLabel = el('label', 'settings-inline-radio');
+  chatLabel.htmlFor = 'editorAiModelSourceChat';
+  chatLabel.append(chatRadio, document.createTextNode(' Follow active chat'));
+  const pinLabel = el('label', 'settings-inline-radio');
+  pinLabel.htmlFor = 'editorAiModelSourcePin';
+  pinLabel.append(pinRadio, document.createTextNode(' Pin provider and model'));
+  sourceRow.append(chatLabel, pinLabel);
+  body.appendChild(sourceRow);
+
+  const overridePanel = el('div', 'settings-editor-model-panel');
+  overridePanel.hidden = !pinned;
+
+  const grid = el('div', 'settings-editor-model-grid settings-routing-row__selects');
+  const { providerSelect, modelSelect } = appendProviderModelFields(
+    grid,
+    { provider: 'settingsEditorProvider', model: 'settingsEditorModel' },
+    { provider: 'Provider', model: 'Model' },
+    'inline',
+  );
+  overridePanel.append(grid);
+  body.appendChild(overridePanel);
+
+  const effective = el('p', 'settings-editor-effective');
+  effective.append(
+    el('span', 'settings-editor-effective__label', 'Effective'),
+    el('code', 'settings-editor-effective__value', formatEffectiveModel(config)),
+  );
+  body.appendChild(effective);
+
+  const effectiveValue = effective.querySelector(
+    '.settings-editor-effective__value',
+  ) as HTMLElement;
+
+  const refreshEffective = (): void => {
+    const next: EditorAiCompletionConfig = {
+      ...config,
+      useChatModel: chatRadio.checked,
+      providerId: providerSelect.value.trim(),
+      modelId: modelSelect.value.trim(),
+    };
+    effectiveValue.textContent = formatEffectiveModel(next);
+  };
+
+  const persistPinned = (): void => {
+    void saveEditorAiCompletionConfig({
+      providerId: providerSelect.value.trim(),
+      modelId: modelSelect.value.trim(),
+      useChatModel: false,
+    }).then(() => {
+      setStatus('ok', 'Pinned model saved');
+      onRefresh();
+    });
+  };
+
+  void (async () => {
+    await fillProviderSelect(providerSelect, config.providerId);
+    await fillModelSelect(
+      modelSelect,
+      config.providerId || providerSelect.value,
+      config.modelId,
+    );
+  })();
+
+  const syncPinnedVisibility = (): void => {
+    overridePanel.hidden = !pinRadio.checked;
+  };
+
+  chatRadio.addEventListener('change', () => {
+    if (!chatRadio.checked) return;
+    void saveEditorAiCompletionConfig({
+      useChatModel: true,
+      providerId: '',
+      modelId: '',
+    }).then(() => {
+      setStatus('ok', 'Using active chat model');
+      onRefresh();
+    });
+  });
+
+  pinRadio.addEventListener('change', () => {
+    if (!pinRadio.checked) return;
+    syncPinnedVisibility();
+    void saveEditorAiCompletionConfig({ useChatModel: false }).then(() => {
+      setStatus('ok', 'Choose a provider and model below');
+      onRefresh();
+    });
+  });
+
+  providerSelect.addEventListener('change', () => {
+    void fillModelSelect(modelSelect, providerSelect.value, '').then(() => {
+      refreshEffective();
+      if (providerSelect.value.trim()) persistPinned();
+    });
+  });
+
+  modelSelect.addEventListener('change', () => {
+    refreshEffective();
+    persistPinned();
+  });
+}
+
+function renderEditorSettingsBody(
+  mount: HTMLElement,
+  config: EditorAiCompletionConfig,
+  online: boolean,
+): void {
+  const refresh = (): void => {
+    void renderEditorSettingsSection();
+  };
+
   if (!online) {
     mount.append(
-      el(
-        'p',
-        'field-hint',
-        'Start with npm start to enable AI completions (requires a configured provider).',
+      serverBanner(
+        'Start with <code>npm start</code> to sync settings to <code>~/.minnow/config.json</code>. Changes below are stored in the browser until then.',
       ),
     );
-    return;
   }
 
-  const config = await loadEditorAiCompletionConfig();
-
-  const { row: enableRow, input: enableCb } = createSettingsToggleRow(
-    'Enable AI inline completion',
-    {
-      checked: config.enabled,
-      ariaLabel: 'Enable AI inline completion in the file editor',
-      onChange: async (enabled) => {
-        await saveEditorAiCompletionConfig({ enabled });
-        setStatus('ok', enabled ? 'AI completion enabled' : 'AI completion disabled');
-      },
-    },
+  const overview = appendSettingsGroup(
+    mount,
+    'Overview',
+    'Inline suggestions in the file viewer. Symbol completion still comes from language servers.',
   );
-  mount.append(enableRow);
 
-  const debounceLabel = el('label', 'settings-field');
-  debounceLabel.append(el('span', 'settings-field-label', 'Debounce (ms)'));
+  appendSummaryKv(overview, [
+    { term: 'Completion', value: statusReadout(config.enabled) },
+    {
+      term: 'Model',
+      value: formatEffectiveModel(config),
+    },
+    {
+      term: 'Debounce',
+      value: `${config.debounceMs} ms`,
+    },
+    {
+      term: 'Storage',
+      value: online ? '~/.minnow/config.json' : 'Browser (until npm start)',
+    },
+  ]);
+  appendCrosslinks(overview);
+
+  const ghost = appendSettingsGroup(mount, 'Ghost text');
+  if (!config.enabled) {
+    ghost.append(
+      el(
+        'p',
+        'settings-group__lead',
+        'Off. Turn on to fetch suggestions after a short pause while you edit.',
+      ),
+    );
+  } else {
+    ghost.append(
+      el(
+        'p',
+        'settings-group__lead',
+        'Shown after you stop typing. Hidden in read-only excerpts and markdown preview.',
+      ),
+    );
+  }
+
+  const { row: enableRow } = createSettingsToggleRow('Enable inline completion', {
+    checked: config.enabled,
+    ariaLabel: 'Enable AI inline completion in the file editor',
+    onChange: async (enabled) => {
+      await saveEditorAiCompletionConfig({ enabled });
+      setStatus('ok', enabled ? 'Inline completion on' : 'Inline completion off');
+      refresh();
+    },
+  });
+  ghost.append(enableRow);
+
+  const shortcuts = el('dl', 'settings-kv settings-editor-shortcuts');
+  shortcuts.append(el('dt', 'settings-kv__term', 'Accept'));
+  const acceptDd = el('dd', 'settings-kv__value');
+  acceptDd.append(kbdKey('Tab'), document.createTextNode(' insert suggestion'));
+  shortcuts.append(acceptDd);
+  shortcuts.append(el('dt', 'settings-kv__term', 'Dismiss'));
+  const dismissDd = el('dd', 'settings-kv__value');
+  dismissDd.append(kbdKey('Esc'), document.createTextNode(' clear ghost text'));
+  shortcuts.append(dismissDd);
+  ghost.append(shortcuts);
+
+  const debounceKv = el('dl', 'settings-kv settings-editor-debounce');
+  debounceKv.append(el('dt', 'settings-kv__term', 'Pause before request'));
+  const debounceDd = el('dd', 'settings-kv__value');
+  const debounceWrap = el('span', 'settings-kv-input-wrap settings-editor-debounce__control');
   const debounceInput = document.createElement('input');
   debounceInput.type = 'number';
+  debounceInput.id = 'settingsEditorDebounceMs';
   debounceInput.min = '200';
   debounceInput.max = '2000';
   debounceInput.step = '50';
   debounceInput.value = String(config.debounceMs);
-  debounceInput.className = 'settings-input settings-input--narrow';
+  debounceInput.className = 'settings-select settings-kv-input';
+  debounceInput.setAttribute('aria-label', 'Debounce milliseconds before requesting a completion');
+  debounceWrap.append(debounceInput, el('span', 'settings-kv-suffix', 'ms'));
+  debounceDd.append(debounceWrap);
+  debounceKv.append(debounceDd);
   debounceInput.addEventListener('change', () => {
-    void saveEditorAiCompletionConfig({ debounceMs: Number(debounceInput.value) }).then(() => {
+    const raw = Number(debounceInput.value);
+    const ms = Number.isFinite(raw)
+      ? Math.min(2000, Math.max(200, Math.round(raw)))
+      : config.debounceMs;
+    debounceInput.value = String(ms);
+    void saveEditorAiCompletionConfig({ debounceMs: ms }).then(() => {
       setStatus('ok', 'Debounce saved');
+      refresh();
     });
   });
-  debounceLabel.append(debounceInput);
-  mount.append(debounceLabel);
+  ghost.append(debounceKv);
 
-  const modelHint = el(
-    'p',
-    'settings-field-hint',
-    config.useChatModel
-      ? 'Model: active chat provider and model.'
-      : 'Model: pinned provider override below.',
+  const modelGroup = appendSettingsGroup(
+    mount,
+    'Model source',
+    'Uses the top-bar provider and model for this chat unless you pin a different pair.',
   );
-  mount.append(modelHint);
+  mountModelSourceBlock(modelGroup, config, refresh);
+}
 
-  const providerLabel = el('label', 'settings-field');
-  providerLabel.append(el('span', 'settings-field-label', 'Provider override (optional)'));
-  const providerInput = document.createElement('input');
-  providerInput.type = 'text';
-  providerInput.className = 'settings-input';
-  providerInput.placeholder = 'Leave empty for chat default';
-  providerInput.value = config.providerId;
-  providerInput.addEventListener('change', () => {
-    void saveEditorAiCompletionConfig({
-      providerId: providerInput.value.trim(),
-      useChatModel: !providerInput.value.trim(),
-    }).then(() => {
-      setStatus('ok', 'Provider override saved');
-      void renderEditorAiSettingsSection();
-    });
-  });
-  providerLabel.append(providerInput);
-  mount.append(providerLabel);
+/** Render the full Editor settings section into #settingsEditorBody. */
+export async function renderEditorSettingsSection(): Promise<void> {
+  const mount = document.getElementById('settingsEditorBody');
+  if (!mount) return;
+  mount.replaceChildren();
 
-  const modelLabel = el('label', 'settings-field');
-  modelLabel.append(el('span', 'settings-field-label', 'Model override (optional)'));
-  const modelInput = document.createElement('input');
-  modelInput.type = 'text';
-  modelInput.className = 'settings-input';
-  modelInput.placeholder = 'Leave empty for chat default';
-  modelInput.value = config.modelId;
-  modelInput.addEventListener('change', () => {
-    void saveEditorAiCompletionConfig({ modelId: modelInput.value.trim() }).then(() => {
-      setStatus('ok', 'Model override saved');
-    });
-  });
-  modelLabel.append(modelInput);
-  mount.append(modelLabel);
+  const online = isLocalServerAvailable();
+  const config = await loadEditorAiCompletionConfig();
+  renderEditorSettingsBody(mount, config, online);
 }

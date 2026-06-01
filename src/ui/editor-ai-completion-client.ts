@@ -9,12 +9,16 @@ import {
   subscribeToGeneration,
   type GenerationEndEvent,
 } from '../api/generations';
+import { modelCache } from '../app-state';
+import { thinkingToCompletionBody } from '../agents/thinking-to-body';
 import {
   BenchmarkStreamReasoningAccumulator,
   resolveBenchmarkCompletionText,
 } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { encodeModelSelectKey } from '../lib/model-select-key';
+import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
@@ -84,13 +88,28 @@ export async function fetchEditorAiCompletion(
 ): Promise<string | null> {
   const { messages, prefix } = buildEditorAiCompletionMessages(input);
   const provider = await resolveProvider(input.binding.providerId);
-  const body = {
+  const body: Record<string, unknown> = {
     model: input.binding.modelId || undefined,
     messages,
     temperature: input.config.temperature,
     max_tokens: input.config.maxTokens,
-    stream: true as const,
+    stream: true,
   };
+
+  const modelId = input.binding.modelId.trim();
+  const modelRow = modelId
+    ? modelCache.get(encodeModelSelectKey(provider.id, modelId))
+    : undefined;
+  const modelCaps =
+    modelRow?.capabilities ??
+    (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
+  // Inline completion always disables thinking (ignores chat/global toggles).
+  const { body: thinkingPatch } = thinkingToCompletionBody(
+    'off',
+    provider.apiKind,
+    modelCaps,
+  );
+  Object.assign(body, thinkingPatch);
 
   let generationId: string;
   try {

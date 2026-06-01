@@ -93,6 +93,7 @@ import {
 import { loadBrowserMeta } from '../config/browser-meta';
 import { renderBrowserAllowlistSettings } from './settings-browser';
 import { renderLspSection } from './lsp-settings';
+import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
@@ -2155,6 +2156,9 @@ export async function refreshSettingsSection(
       break;
     case 'lsp':
       await renderLspSection();
+      break;
+    case 'editor':
+      await renderEditorSection();
       break;
     case 'skills':
       await renderSkillsSection();
