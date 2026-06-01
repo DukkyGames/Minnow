@@ -1,10 +1,9 @@
 /**
- * Composer drag-and-drop: file-tree workspace paths → reference chips.
+ * Composer drag-and-drop: file-tree workspace paths → composer links / image chips.
  */
 
-import { addWorkspaceReference, WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
-import { applyOrchestratePlanFromWorkspacePath } from './orchestrate-plan-selector';
-
+import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import { attachWorkspacePathToComposer } from './workspace-composer-link';
 const DROP_ACTIVE_CLASS = 'composer-drop-active';
 
 function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
@@ -71,9 +70,7 @@ function bindDropTarget(
 
     const path = pathFromDataTransfer(event.dataTransfer!);
     if (path) {
-      if (!applyOrchestratePlanFromWorkspacePath(path)) {
-        addWorkspaceReference(path);
-      }
+      attachWorkspacePathToComposer(path);
     }
   });
 }

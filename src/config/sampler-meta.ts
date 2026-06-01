@@ -15,17 +15,14 @@ export interface SamplerGlobalMeta extends SamplerPreset {
 }
 
 export const DEFAULT_SAMPLER_GLOBAL: SamplerGlobalMeta = {
-  temperature: 0.7,
-  // Balanced nucleus + top-k truncation: a widely-recommended local-model combo
-  // that keeps coherence without starving diversity. Per-agent presets tighten or
-  // loosen these; everything here is overridable in the Settings → Sampler tab.
+  // Qwen "thinking mode, general tasks" recommendation: temperature 1.0, top_p 0.95,
+  // top_k 20, with min_p / repetition_penalty / presence_penalty left OFF. In thinking
+  // mode Qwen advises against repetition penalties (they cause language mixing and
+  // quality loss); loop control via presence_penalty is applied per-agent to the
+  // non-thinking workers instead. All values are overridable in Settings → Sampler.
+  temperature: 1.0,
   topP: 0.95,
-  topK: 40,
-  // Anti-loop defaults: small local models degenerate into thinking/tool loops
-  // without repetition control. min_p trims the degenerate tail; repetition_penalty
-  // discourages verbatim repeats.
-  minP: 0.05,
-  repetitionPenalty: 1.1,
+  topK: 20,
   maxTokens: 32768,
 };
 
@@ -162,6 +159,8 @@ export function readGlobalSamplerForSend(overrides?: {
     minP: meta.minP ?? DEFAULT_SAMPLER_GLOBAL.minP,
     repetitionPenalty:
       meta.repetitionPenalty ?? DEFAULT_SAMPLER_GLOBAL.repetitionPenalty,
+    presencePenalty:
+      meta.presencePenalty ?? DEFAULT_SAMPLER_GLOBAL.presencePenalty,
   });
 
   return { maxTokens, preset };

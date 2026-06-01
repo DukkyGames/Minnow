@@ -275,6 +275,7 @@ interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   top_k?: number;
   min_p?: number;
   repetition_penalty?: number;
+  presence_penalty?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
   tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;

@@ -1,6 +1,7 @@
 /**
- * Workspace file references dragged from the file tree into the composer.
- * Text files load on send via read_file; images use the preview file API.
+ * Workspace file references from the file tree into the composer.
+ * Text paths are inserted into the message (agents use read_file); images stay
+ * as attachment chips and resolve via the preview file API on send.
  */
 
 import { executeTool } from '../tools/client';
@@ -35,7 +36,40 @@ function newWorkspaceAttachmentId(): string {
   return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** Queues a workspace path chip in the composer (deduped by path). */
+/** Inserts a project-relative path into #msgInput (deduped; not an attachment). */
+export function insertWorkspacePathInComposer(workspacePath: string): void {
+  const normalized = workspacePath.trim().replace(/\\/g, '/');
+  if (!normalized) return;
+
+  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  if (!input) return;
+
+  const value = input.value;
+  if (value.includes(normalized)) {
+    input.focus();
+    return;
+  }
+
+  const start = input.selectionStart ?? value.length;
+  const end = input.selectionEnd ?? value.length;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const needsBreakBefore = before.length > 0 && !/\n\s*$/.test(before);
+  const needsBreakAfter = after.length > 0 && !/^\s*\n/.test(after);
+  const insert = `${needsBreakBefore ? '\n' : ''}${normalized}${needsBreakAfter ? '\n' : ''}`;
+  input.value = before + insert + after;
+  const caret = before.length + insert.length;
+  input.selectionStart = caret;
+  input.selectionEnd = caret;
+  input.dispatchEvent(
+    new (input.ownerDocument?.defaultView ?? globalThis).Event('input', {
+      bubbles: true,
+    }),
+  );
+  input.focus();
+}
+
+/** Queues a workspace image path chip in the composer (deduped by path). */
 export function addWorkspaceReference(workspacePath: string): void {
   const path = workspacePath.trim();
   if (!path) return;
@@ -70,8 +104,8 @@ async function defaultWorkspaceImageReader(path: string): Promise<WorkspaceImage
 }
 
 /**
- * Reads workspace reference files and returns attachments ready for
- * {@link buildHistoryUserContent} (images → kind image, text → kind text, failures → error).
+ * Resolves workspace **image** chips for {@link buildHistoryUserContent}.
+ * Legacy text workspace chips still read via read_file; new tree drops use composer paths.
  */
 export async function resolveWorkspaceReferences(
   attachments: Attachment[],

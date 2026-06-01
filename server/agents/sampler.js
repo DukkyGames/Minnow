@@ -10,6 +10,8 @@ const MIN_P_MIN = 0;
 const MIN_P_MAX = 1;
 const REP_MIN = 1;
 const REP_MAX = 2;
+const PRESENCE_MIN = 0;
+const PRESENCE_MAX = 2;
 const TOP_K_MIN = 1;
 const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
@@ -43,6 +45,12 @@ function clampRepetitionPenalty(value) {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n) || n < REP_MIN) return undefined;
   return Math.min(REP_MAX, n);
+}
+
+function clampPresencePenalty(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < PRESENCE_MIN) return undefined;
+  return Math.min(PRESENCE_MAX, n);
 }
 
 function clampMaxTokens(value) {
@@ -81,6 +89,10 @@ export function normalizeSamplerPreset(raw) {
   if ('repetitionPenalty' in src) {
     const v = clampRepetitionPenalty(src.repetitionPenalty);
     if (v !== undefined) out.repetitionPenalty = v;
+  }
+  if ('presencePenalty' in src) {
+    const v = clampPresencePenalty(src.presencePenalty);
+    if (v !== undefined) out.presencePenalty = v;
   }
   if ('maxTokens' in src) {
     const v = clampMaxTokens(src.maxTokens);

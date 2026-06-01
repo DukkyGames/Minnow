@@ -140,6 +140,7 @@ interface SubAgentCompletionBody extends CompletionBodyWithResponseFormat {
   top_k?: number;
   min_p?: number;
   repetition_penalty?: number;
+  presence_penalty?: number;
   stream?: boolean;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';

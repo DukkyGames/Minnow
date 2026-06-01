@@ -899,6 +899,9 @@ export function mergeConfigMeta(existing, patch) {
         if (normalized.repetitionPenalty !== undefined) {
           existingSampler.repetitionPenalty = normalized.repetitionPenalty;
         }
+        if (normalized.presencePenalty !== undefined) {
+          existingSampler.presencePenalty = normalized.presencePenalty;
+        }
         if (normalized.maxTokens !== undefined) {
           existingSampler.maxTokens = normalized.maxTokens;
         }

@@ -57,7 +57,7 @@ describe('sampler preset merge', () => {
       subAgentMaxTokensFallback: 2048,
       subAgentType: shell,
     });
-    assert.equal(resolved.preset.temperature, 0.15);
+    assert.equal(resolved.preset.temperature, 0.7);
     assert.equal(resolved.maxTokens, 2048);
   });
 
@@ -101,5 +101,26 @@ describe('sampler preset merge', () => {
     );
     assert.equal(merged.temperature, 0.2);
     assert.equal(merged.topP, 0.8);
+  });
+
+  test('presence penalty maps to presence_penalty and clamps to [0,2]', () => {
+    const fields = samplerToCompletionFields(
+      { temperature: 0.7, presencePenalty: 1.5 },
+      2048,
+    );
+    assert.equal(fields.presence_penalty, 1.5);
+    assert.equal(clampSamplerPreset({ presencePenalty: 3 }).presencePenalty, 2);
+    assert.equal(
+      clampSamplerPreset({ presencePenalty: -1 }).presencePenalty,
+      undefined,
+    );
+  });
+
+  test('mergeSamplerLayers overrides presence penalty when defined', () => {
+    const merged = mergeSamplerLayers(
+      { presencePenalty: 0 },
+      { presencePenalty: 1.5 },
+    );
+    assert.equal(merged.presencePenalty, 1.5);
   });
 });
