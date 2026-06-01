@@ -1,5 +1,5 @@
 /**
- * Orchestrate mode: plan dropdown inline in composer controls (per-chat persisted path).
+ * Orchestrate mode: plan picker in the composer input row (replaces #msgInput while visible).
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -24,6 +24,59 @@ import {
 let planStripEl: HTMLElement | null = null;
 let planSelectEl: HTMLSelectElement | null = null;
 let planHintEl: HTMLElement | null = null;
+
+const INPUT_BAR_ORCHESTRATE_CLASS = 'input-bar--orchestrate-plan';
+
+/** True when the plan strip should replace the message textarea in the input row. */
+export function shouldMountOrchestratePlanInInputRow(chat: {
+  modeId?: string;
+  orchestrateBoard?: unknown;
+  viewMode?: string;
+}): boolean {
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
+  return !shouldHideComposerPlanStripForOrchestrateBoardOnboarding(chat);
+}
+
+function getInputBar(): HTMLElement | null {
+  return document.querySelector('.input-bar');
+}
+
+function getInputWrap(): HTMLElement | null {
+  return document.querySelector('.input-wrap');
+}
+
+function getComposerControls(): HTMLElement | null {
+  return document.getElementById('composerControls');
+}
+
+/** Home in toolbar: after thinking toggle, before work-agent dev strip. */
+function insertPlanStripInToolbar(strip: HTMLElement): void {
+  const toolbar = getComposerControls();
+  const anchor = document.getElementById('workAgentDev');
+  if (!toolbar) return;
+  if (anchor) {
+    toolbar.insertBefore(strip, anchor);
+  } else {
+    toolbar.appendChild(strip);
+  }
+}
+
+/** Move plan strip into .input-wrap (replaces visible textarea) or back to the toolbar. */
+function applyOrchestratePlanComposerLayout(useInputRow: boolean): void {
+  const strip = getPlanStrip();
+  const inputBar = getInputBar();
+  const inputWrap = getInputWrap();
+  if (!strip || !inputBar) return;
+
+  if (useInputRow && inputWrap) {
+    inputWrap.appendChild(strip);
+    inputBar.classList.add(INPUT_BAR_ORCHESTRATE_CLASS);
+    return;
+  }
+
+  insertPlanStripInToolbar(strip);
+  inputBar.classList.remove(INPUT_BAR_ORCHESTRATE_CLASS);
+}
 
 function getPlanStrip(): HTMLElement | null {
   if (!planStripEl) {
@@ -85,6 +138,8 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
     sel.disabled = true;
     hint.classList.add('hidden');
     hint.textContent = '';
+    applyOrchestratePlanComposerLayout(false);
+    refreshOrchestratePlanSelectorDisabled();
     return;
   }
 
@@ -93,11 +148,13 @@ export async function syncOrchestratePlanStripFromActiveChat(): Promise<void> {
     sel.disabled = true;
     hint.classList.add('hidden');
     hint.textContent = '';
+    applyOrchestratePlanComposerLayout(false);
     refreshOrchestratePlanSelectorDisabled();
     return;
   }
 
   strip.classList.remove('hidden');
+  applyOrchestratePlanComposerLayout(true);
 
   await populateOrchestratePlanSelect(sel, hint, chat, {
     autoSelectSingle: false,

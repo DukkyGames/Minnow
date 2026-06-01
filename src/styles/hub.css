@@ -29,7 +29,7 @@
 
 .hub-inner {
   width: 100%;
-  max-width: 720px;
+  max-width: 840px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -105,14 +105,15 @@
   margin-bottom: 14px;
 }
 
-/* One bordered shell: modes full width, textarea + send/context on one row */
+/* One bordered shell: mode segments hug content; textarea + send/context on one row */
 .main-column.main-column--hub .input-bar.input-bar--hub,
 .input-bar--hub {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   column-gap: 10px;
   row-gap: 8px;
-  align-items: end;
+  align-items: start;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-lg);
   background: var(--mn-surface-1);
@@ -129,16 +130,53 @@
 }
 
 .input-bar--hub .composer-controls {
-  grid-column: 1 / -1;
+  grid-column: 1;
+  grid-row: 1;
   margin-bottom: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.input-bar--hub .composer-controls .mode-segmented {
+  flex: none;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.input-bar--hub .composer-controls .thinking-control-wrap {
+  flex: none;
+}
+
+.input-bar--hub .composer-controls .context-usage-anchor {
+  flex: none;
 }
 
 .input-bar--hub .attach-preview:not(.hidden) {
   grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.input-bar--hub:has(.attach-preview:not(.hidden)) {
+  grid-template-rows: auto auto auto;
+}
+
+.input-bar--hub:has(.attach-preview:not(.hidden)) .composer-controls {
+  grid-row: 2;
+}
+
+.input-bar--hub:has(.attach-preview:not(.hidden)) .input-row {
+  grid-row: 3;
+}
+
+.input-bar--hub:has(.attach-preview:not(.hidden)) .input-bar-send-stack {
+  grid-row: 3;
 }
 
 .input-bar--hub .input-row {
   grid-column: 1;
+  grid-row: 2;
+  align-self: end;
   min-width: 0;
   border: none;
   border-radius: 0;
@@ -146,10 +184,21 @@
   padding: 0;
 }
 
+/* Same grid row as .input-row so send aligns with the message/plan field */
 .input-bar--hub .input-bar-send-stack {
   grid-column: 2;
+  grid-row: 2;
   margin-top: 0;
   align-self: end;
+}
+
+.input-bar--hub .input-bar-send-stack .send-btn {
+  width: 52px;
+  height: 52px;
+}
+
+.input-bar--hub .input-bar-send-stack .view-mode-toggle-btn--to-board {
+  width: 52px;
 }
 
 .input-bar--hub .attach-btn,
@@ -169,6 +218,11 @@
 .input-bar--hub #msgInput {
   font-size: 16px;
   min-height: 52px;
+}
+
+.input-bar--hub.input-bar--orchestrate-plan .input-wrap #orchestratePlanSelect {
+  min-height: 52px;
+  font-size: 16px;
 }
 
 .hub-strip {

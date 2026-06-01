@@ -158,7 +158,71 @@
 }
 
 .thinking-control-wrap {
+  flex-shrink: 0;
   min-width: 0;
+}
+
+.thinking-toggle-host {
+  display: inline-flex;
+}
+
+.thinking-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  cursor: pointer;
+  transition:
+    color 0.2s var(--ease-out),
+    opacity 0.2s var(--ease-out);
+}
+
+.thinking-toggle-btn[aria-pressed='false'] {
+  color: var(--mn-fg-muted);
+}
+
+.thinking-toggle-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  mask-image: url('/icons/thinking-brain.png');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/icons/thinking-brain.png');
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+.thinking-toggle-btn[aria-pressed='false'] .thinking-toggle-icon {
+  opacity: 0.38;
+}
+
+.thinking-toggle-btn[aria-pressed='true'] .thinking-toggle-icon {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .thinking-toggle-btn:hover:not(:disabled) {
+    color: var(--mn-fg);
+  }
+}
+
+.thinking-toggle-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.thinking-toggle-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 @media (max-width: 600px) {

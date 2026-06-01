@@ -1,5 +1,5 @@
 /**
- * Orchestrate plan picker: inline in #composerControls next to mode segments.
+ * Orchestrate plan picker: primary control in .input-wrap (replaces #msgInput when visible).
  */
 
 .orchestrate-plan-control.hidden {
@@ -24,6 +24,34 @@
   transition:
     border-color 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out);
+}
+
+/* Orchestrate: plan select fills the composer input row instead of the textarea */
+.input-bar--orchestrate-plan .input-wrap #msgInput {
+  display: none;
+}
+
+.input-bar--orchestrate-plan .input-wrap .orchestrate-plan-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.input-bar--orchestrate-plan .input-wrap #orchestratePlanSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+  padding: 11px 14px;
+}
+
+.input-bar--orchestrate-plan .input-wrap .orchestrate-plan-hint {
+  flex: 0 1 auto;
+  max-width: 10rem;
 }
 
 @media (hover: hover) and (pointer: fine) {
