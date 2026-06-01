@@ -30,6 +30,21 @@ describe('chat modeId persistence', () => {
     assert.equal(parsed.reefWidgetModelId, 'model-reef');
   });
 
+  test('round-trip preserves debug mode', () => {
+    const raw = {
+      id: '55555555-5555-5555-5555-555555555555',
+      name: 'Debug',
+      modelId: 'm1',
+      modeId: 'debug',
+      history: [],
+      updatedAt: 1710000000000,
+    };
+    const chat = ensureChatShape(raw);
+    assert.equal(chat.modeId, 'debug');
+    const parsed = ensureChatShape(JSON.parse(JSON.stringify(chat)));
+    assert.equal(parsed.modeId, 'debug');
+  });
+
   test('round-trip preserves orchestrate', () => {
     const raw = {
       id: '11111111-1111-1111-1111-111111111111',

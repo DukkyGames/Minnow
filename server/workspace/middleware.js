@@ -11,6 +11,13 @@ import {
 } from './root.js';
 import { browseWorkspaceFolders, createWorkspaceSubfolder } from './browse.js';
 import { pickWorkspaceFolder } from './pick-folder.js';
+import { countWorkspaceLoc } from './loc.js';
+import {
+  getDevServerStatus,
+  readStartupGuide,
+  startDevServer,
+  stopDevServer,
+} from '../dev-server/manager.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -78,6 +85,50 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       }
       const created = await createWorkspaceSubfolder(parentPath, name);
       sendJson(res, 201, { ok: true, ...created });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/loc' && req.method === 'GET') {
+      const result = await countWorkspaceLoc();
+      if (!result.ok) {
+        sendJson(res, 200, { ok: false, lines: null, files: null, error: result.error ?? 'unavailable' });
+        return true;
+      }
+      sendJson(res, 200, { ok: true, lines: result.lines, files: result.files });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/startup' && req.method === 'GET') {
+      const startup = await readStartupGuide();
+      const status = await getDevServerStatus();
+      sendJson(res, 200, {
+        ok: true,
+        exists: startup.exists,
+        parsed: Boolean(startup.guide),
+        guide: startup.guide,
+        parseError: startup.parseError ?? null,
+        status: status.status,
+        runId: status.runId,
+        error: status.error,
+      });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-server/status' && req.method === 'GET') {
+      const status = await getDevServerStatus();
+      sendJson(res, 200, { ok: true, ...status });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-server/start' && req.method === 'POST') {
+      const result = await startDevServer();
+      sendJson(res, result.ok ? 200 : 400, result);
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-server/stop' && req.method === 'POST') {
+      const result = await stopDevServer();
+      sendJson(res, 200, result);
       return true;
     }
 

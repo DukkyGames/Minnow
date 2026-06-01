@@ -1,4 +1,4 @@
-import { EMPTY_STATE_HTML } from '../constants';
+import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
 import { normalizeModeId } from '../chat/modes/types';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
@@ -105,10 +105,13 @@ export function renderStatsForChat(chat: Chat): void {
     updateStrip({}, {}, resolveModelInfo(mid, chat.modelInfo || {}));
   }
   refreshContextUsageRing();
+  if (isHubMounted()) refreshHubLiveData();
 }
 
 export function renderChatFromHistory(chat: Chat): void {
   if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+    // Hub relocates .input-bar into #chatArea; tear down before board replaces children.
+    teardownHub();
     void import('./orchestrate-board').then((m) => {
       m.renderBoardView(chat);
       m.refreshActiveBoardIfMounted();
@@ -117,18 +120,15 @@ export function renderChatFromHistory(chat: Chat): void {
   }
   clearSubAgentCardDomRegistry();
   const area = document.getElementById('chatArea')!;
-  area.innerHTML = '';
   if (!chat.history.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.id = 'emptyState';
-    empty.innerHTML = EMPTY_STATE_HTML;
-    area.appendChild(empty);
+    renderHub(chat);
     renderPersistedSubAgentCardsForChat(chat);
     scrollChatToBottom();
     refreshContextUsageRing();
     return;
   }
+  teardownHub();
+  area.innerHTML = '';
   const toolResultMap = new Map<
     string,
     { content: string; attachments?: ToolResultMessage['attachments'] }
@@ -271,8 +271,12 @@ export function appendBubble(
     const stub = document.createElement('div');
     return { wrap: stub, bubble: stub };
   }
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.remove();
+  if (document.getElementById('emptyState')) {
+    document.getElementById('emptyState')!.remove();
+  }
+  if (isHubMounted()) {
+    teardownHub();
+  }
 
   const wrap = document.createElement('div');
   wrap.className = `msg ${role}`;
@@ -394,8 +398,12 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
       },
     };
   }
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.remove();
+  if (document.getElementById('emptyState')) {
+    document.getElementById('emptyState')!.remove();
+  }
+  if (isHubMounted()) {
+    teardownHub();
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant msg--awaiting-prose';

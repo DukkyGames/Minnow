@@ -72,6 +72,8 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   await refreshFileTreeViaBridge();
 
   setStatus('ok', `Workspace: ${info.label}`);
+  const { refreshHubLiveData } = await import('./hub');
+  refreshHubLiveData();
 }
 
 /** Load workspace from server and refresh top bar + file tree. */

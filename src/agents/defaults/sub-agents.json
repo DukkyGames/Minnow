@@ -129,6 +129,8 @@
       "workAgentId": null,
       "allowedTools": [
         "execute_command",
+        "start_background_command",
+        "stop_background_command",
         "get_datetime",
         "read_file",
         "list_directory"

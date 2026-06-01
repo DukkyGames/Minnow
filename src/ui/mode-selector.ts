@@ -1,5 +1,5 @@
 /**
- * Operating mode segmented control (Build / Plan / Orchestrate / Research).
+ * Operating mode segmented control (General / Build / Plan / Orchestrate / Research / Reef / Debug).
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -100,7 +100,8 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
 
   chat.modeId = normalized;
   if (normalizeModeId(normalized) === 'orchestrate' && !chat.orchestrateBoard) {
-    chat.viewMode = 'board';
+    // Keep the empty-chat hub visible until there is history or a mounted board.
+    chat.viewMode = chat.history.length > 0 ? 'board' : 'chat';
   }
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(normalized);

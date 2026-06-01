@@ -259,6 +259,58 @@ export function openTerminalPanel(): void {
   void refreshTerminalHistoryForActiveChat();
 }
 
+/**
+ * Open the agent console and stream logs for a background dev-server run.
+ */
+export async function attachDevServerConsole(
+  runId: string,
+  label: string,
+  chatId: string,
+): Promise<void> {
+  openTerminalPanel();
+  await switchToAgentTab();
+  beginCommandOutput(label, { clear: true });
+  activeRunId = runId;
+  setActiveHistoryRun(runId);
+
+  let finished = false;
+  await streamTerminalRun(runId, (ev) => {
+    if (ev.type === 'stdout') {
+      appendTerminalOutput(runId, 'stdout', ev.text);
+    } else if (ev.type === 'stderr') {
+      appendTerminalOutput(runId, 'stderr', ev.text);
+    } else if (ev.type === 'exit') {
+      finished = true;
+      appendOutputText(
+        `\n[exit ${ev.code ?? '?'}${ev.timedOut ? ', timed out' : ''}]\n`,
+        'stderr',
+      );
+    } else if (ev.type === 'error') {
+      appendOutputText(`\nError: ${ev.message}\n`, 'stderr');
+    }
+  });
+
+  if (!finished) return;
+
+  const chat = getActiveChat();
+  if (chat?.id === chatId) {
+    upsertChatTerminalRun(chat, {
+      id: runId,
+      command: label,
+      cwd: '.',
+      source: 'agent',
+      startedAt: Date.now(),
+      finishedAt: Date.now(),
+      exitCode: null,
+      timedOut: false,
+      logPath: `logs/dev-server/${runId}.log`,
+    });
+    await refreshTerminalHistoryForActiveChat();
+    scheduleSaveSessions();
+  }
+  activeRunId = null;
+}
+
 export function closeTerminalPanel(): void {
   setPanelOpen(false);
 }

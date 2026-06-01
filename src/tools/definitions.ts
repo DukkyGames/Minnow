@@ -724,6 +724,41 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'start_background_command',
+    label: 'Start background command',
+    description:
+      'Starts a long-running shell command (dev server) with no timeout; returns runId and log path.',
+    category: 'code',
+    serverRequired: true,
+    definition: toolSchema(
+      'start_background_command',
+      'Start a detached background command in the workspace. Use for dev servers (npm run dev, vite, etc.).',
+      {
+        command: { type: 'string', description: 'Shell command to run' },
+        cwd: {
+          type: 'string',
+          description: 'Working directory relative to workspace root (default .)',
+        },
+      },
+      ['command'],
+    ),
+  },
+  {
+    id: 'stop_background_command',
+    label: 'Stop background command',
+    description: 'Stops a background command started with start_background_command.',
+    category: 'code',
+    serverRequired: true,
+    definition: toolSchema(
+      'stop_background_command',
+      'Stop a background command by run_id.',
+      {
+        run_id: { type: 'string', description: 'runId from start_background_command' },
+      },
+      ['run_id'],
+    ),
+  },
+  {
     id: 'run_javascript',
     label: 'Run JavaScript',
     description: 'Runs JavaScript via Node and returns output.',

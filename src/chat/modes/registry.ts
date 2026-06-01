@@ -1,5 +1,5 @@
 /**
- * Operating mode registry — six primary modes and prompt path helpers.
+ * Operating mode registry — seven primary modes and prompt path helpers.
  */
 
 import { loadPromptById } from '../prompts/prompt-loader';
@@ -92,9 +92,17 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     promptId: 'reef',
     toolPolicy: { default: 'allow' },
   },
+  {
+    id: 'debug',
+    label: 'Debug',
+    description:
+      'Investigate bugs and root causes; file and triage via All bugs and bug_* tools.',
+    promptId: 'debug',
+    toolPolicy: { default: 'allow' },
+  },
 ];
 
-/** Fixed six modes in display order (General first). */
+/** Fixed seven modes in display order (General first). */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }

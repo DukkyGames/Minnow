@@ -39,6 +39,7 @@ import './styles/composer-pinned-skill.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/bug-board.css';
+import './styles/hub.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -73,6 +74,7 @@ import {
 } from './state/sessions';
 import { initChatScroll } from './ui/chat-scroll';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
+import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import {
   autoResize,
