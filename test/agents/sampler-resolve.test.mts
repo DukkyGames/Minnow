@@ -82,6 +82,23 @@ describe('sampler preset merge', () => {
     assert.equal(fields.top_p, undefined);
   });
 
+  test('samplerToCompletionFields omits neutral penalty defaults', () => {
+    const fields = samplerToCompletionFields(
+      {
+        temperature: 1,
+        topP: 0.95,
+        topK: 20,
+        minP: 0,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+      },
+      32768,
+    );
+    assert.equal(fields.min_p, undefined);
+    assert.equal(fields.repetition_penalty, undefined);
+    assert.equal(fields.presence_penalty, undefined);
+  });
+
   test('applySamplerToBody spreads mapped keys', () => {
     const body = applySamplerToBody(
       { model: 'test-model', messages: [] },

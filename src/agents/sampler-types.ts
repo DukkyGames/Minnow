@@ -48,6 +48,13 @@ const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
 const MAX_TOKENS_MAX = 131072;
 
+/** Provider-neutral values shown in Settings and omitted from completion bodies. */
+export const SAMPLER_NEUTRAL = {
+  minP: 0,
+  repetitionPenalty: 1,
+  presencePenalty: 0,
+} as const;
+
 /** Field-level merge: later layers override earlier keys when defined. */
 export function mergeSamplerLayers(
   ...layers: Array<SamplerPreset | null | undefined>
@@ -148,11 +155,19 @@ export function samplerToCompletionFields(
   };
   if (preset.topP !== undefined) fields.top_p = preset.topP;
   if (preset.topK !== undefined) fields.top_k = preset.topK;
-  if (preset.minP !== undefined) fields.min_p = preset.minP;
-  if (preset.repetitionPenalty !== undefined) {
+  if (preset.minP !== undefined && preset.minP > SAMPLER_NEUTRAL.minP) {
+    fields.min_p = preset.minP;
+  }
+  if (
+    preset.repetitionPenalty !== undefined &&
+    preset.repetitionPenalty !== SAMPLER_NEUTRAL.repetitionPenalty
+  ) {
     fields.repetition_penalty = preset.repetitionPenalty;
   }
-  if (preset.presencePenalty !== undefined) {
+  if (
+    preset.presencePenalty !== undefined &&
+    preset.presencePenalty !== SAMPLER_NEUTRAL.presencePenalty
+  ) {
     fields.presence_penalty = preset.presencePenalty;
   }
   return fields;

@@ -2,11 +2,7 @@
  * Settings → Sampler — global defaults and per-agent overrides.
  */
 
-import {
-  DEFAULT_SAMPLER_GLOBAL,
-  loadSamplerMeta,
-  saveSamplerMeta,
-} from '../config/sampler-meta';
+import { loadSamplerMeta, saveSamplerMeta } from '../config/sampler-meta';
 import { appendSettingsCrosslinks } from './settings-layout';
 import { buildSamplerFieldInputs } from './settings-sampler-fields';
 import { setStatus } from './status';
@@ -22,7 +18,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function mountGlobalSamplerBlock(mount: HTMLElement): void {
+async function mountGlobalSamplerBlock(mount: HTMLElement): Promise<void> {
   const section = el('section', 'settings-group');
   section.appendChild(el('h3', 'settings-group__title', 'Global defaults'));
   const body = el('div', 'settings-group__body');
@@ -36,13 +32,10 @@ function mountGlobalSamplerBlock(mount: HTMLElement): void {
     ),
   );
 
-  const globalFields = buildSamplerFieldInputs(DEFAULT_SAMPLER_GLOBAL, {
+  const meta = await loadSamplerMeta();
+  const globalFields = buildSamplerFieldInputs(meta, {
     includeMaxTokens: true,
     emptyPlaceholder: '',
-  });
-
-  void loadSamplerMeta().then((meta) => {
-    globalFields.setValues(meta);
   });
 
   body.appendChild(globalFields.root);
@@ -68,6 +61,6 @@ function mountGlobalSamplerBlock(mount: HTMLElement): void {
 /** Render Settings → Sampler section. */
 export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
-  mountGlobalSamplerBlock(mount);
+  await mountGlobalSamplerBlock(mount);
   appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Models', sectionId: 'model-routing' }]);
 }
