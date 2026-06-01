@@ -1,65 +1,47 @@
 {
   "general": {
-    "temperature": 0.6,
+    "temperature": 1.0,
     "topP": 0.95,
-    "topK": 40,
-    "minP": 0.05,
-    "repetitionPenalty": 1.08
+    "topK": 20
   },
   "planner": {
-    "temperature": 0.5,
-    "topP": 0.92,
-    "topK": 40,
-    "minP": 0.05,
-    "repetitionPenalty": 1.05
-  },
-  "orchestrator": {
-    "temperature": 0.2,
-    "topP": 0.9,
-    "topK": 30,
-    "minP": 0.05,
-    "repetitionPenalty": 1.1
-  },
-  "builder": {
-    "temperature": 0.2,
-    "topP": 0.95,
-    "topK": 40,
-    "minP": 0.05,
-    "repetitionPenalty": 1.08
-  },
-  "verifier": {
-    "temperature": 0.15,
-    "topP": 0.9,
-    "topK": 30,
-    "minP": 0.05,
-    "repetitionPenalty": 1.08
-  },
-  "reviewer": {
-    "temperature": 0.2,
-    "topP": 0.9,
-    "topK": 30,
-    "minP": 0.05,
-    "repetitionPenalty": 1.08
-  },
-  "researcher": {
     "temperature": 0.6,
     "topP": 0.95,
-    "topK": 60,
-    "minP": 0.03,
-    "repetitionPenalty": 1.05
+    "topK": 20
+  },
+  "orchestrator": {
+    "temperature": 0.6,
+    "topP": 0.95,
+    "topK": 20
+  },
+  "builder": {
+    "temperature": 0.6,
+    "topP": 0.95,
+    "topK": 20
+  },
+  "verifier": {
+    "temperature": 0.6,
+    "topP": 0.95,
+    "topK": 20
+  },
+  "reviewer": {
+    "temperature": 0.6,
+    "topP": 0.95,
+    "topK": 20
+  },
+  "researcher": {
+    "temperature": 1.0,
+    "topP": 0.95,
+    "topK": 20
   },
   "ui-designer": {
-    "temperature": 0.45,
-    "topP": 0.92,
-    "topK": 50,
-    "minP": 0.04,
-    "repetitionPenalty": 1.05
+    "temperature": 1.0,
+    "topP": 0.95,
+    "topK": 20
   },
   "expert-panel": {
-    "temperature": 0.7,
+    "temperature": 1.0,
     "topP": 0.95,
-    "topK": 60,
-    "minP": 0.03,
-    "repetitionPenalty": 1.05
+    "topK": 20
   }
 }

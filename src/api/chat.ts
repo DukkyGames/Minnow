@@ -96,6 +96,7 @@ export interface ChatCompletionBody {
   top_k?: number;
   min_p?: number;
   repetition_penalty?: number;
+  presence_penalty?: number;
   tools?: OpenAIFunctionDefinition[];
   tool_choice?: 'auto';
   response_format?: {

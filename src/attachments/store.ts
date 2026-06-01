@@ -87,7 +87,7 @@ function createAttachChip(attachment: Attachment): HTMLElement {
 
   if (attachment.kind === 'workspace') {
     chip.classList.add('attach-chip--workspace');
-    chip.title = 'Workspace file — content loads when you send';
+    chip.title = 'Workspace image — loads when you send';
   }
 
   if (attachment.kind === 'error') {

@@ -13,6 +13,11 @@ export interface SamplerPreset {
   minP?: number;
   /** Repeat penalty; 1 = no penalty. */
   repetitionPenalty?: number;
+  /**
+   * Presence penalty (0–2); 0 = no penalty. Qwen's recommended knob for curbing
+   * endless repetitions in non-thinking/instruct mode (~1.5). Omitted when unset.
+   */
+  presencePenalty?: number;
   /** Sub-agent output cap when set on type defaults or user override. */
   maxTokens?: number;
 }
@@ -25,6 +30,7 @@ export interface SamplerCompletionFields {
   top_k?: number;
   min_p?: number;
   repetition_penalty?: number;
+  presence_penalty?: number;
 }
 
 const TEMP_MIN = 0;
@@ -35,6 +41,8 @@ const MIN_P_MIN = 0;
 const MIN_P_MAX = 1;
 const REP_MIN = 1;
 const REP_MAX = 2;
+const PRESENCE_MIN = 0;
+const PRESENCE_MAX = 2;
 const TOP_K_MIN = 1;
 const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
@@ -53,6 +61,9 @@ export function mergeSamplerLayers(
     if (layer.minP !== undefined) out.minP = layer.minP;
     if (layer.repetitionPenalty !== undefined) {
       out.repetitionPenalty = layer.repetitionPenalty;
+    }
+    if (layer.presencePenalty !== undefined) {
+      out.presencePenalty = layer.presencePenalty;
     }
     if (layer.maxTokens !== undefined) out.maxTokens = layer.maxTokens;
   }
@@ -89,6 +100,12 @@ function clampRepetitionPenalty(value: unknown): number | undefined {
   return Math.min(REP_MAX, n);
 }
 
+function clampPresencePenalty(value: unknown): number | undefined {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < PRESENCE_MIN) return undefined;
+  return Math.min(PRESENCE_MAX, n);
+}
+
 function clampMaxTokens(value: unknown): number | undefined {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n) || n < MAX_TOKENS_MIN) return undefined;
@@ -109,6 +126,8 @@ export function clampSamplerPreset(raw: SamplerPreset | null | undefined): Sampl
   if (minP !== undefined) out.minP = minP;
   const repetitionPenalty = clampRepetitionPenalty(raw.repetitionPenalty);
   if (repetitionPenalty !== undefined) out.repetitionPenalty = repetitionPenalty;
+  const presencePenalty = clampPresencePenalty(raw.presencePenalty);
+  if (presencePenalty !== undefined) out.presencePenalty = presencePenalty;
   const maxTokens = clampMaxTokens(raw.maxTokens);
   if (maxTokens !== undefined) out.maxTokens = maxTokens;
   return out;
@@ -132,6 +151,9 @@ export function samplerToCompletionFields(
   if (preset.minP !== undefined) fields.min_p = preset.minP;
   if (preset.repetitionPenalty !== undefined) {
     fields.repetition_penalty = preset.repetitionPenalty;
+  }
+  if (preset.presencePenalty !== undefined) {
+    fields.presence_penalty = preset.presencePenalty;
   }
   return fields;
 }

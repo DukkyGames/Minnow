@@ -55,6 +55,13 @@ export function buildSamplerFieldInputs(
       min: '1',
       max: '2',
     },
+    {
+      key: 'presencePenalty',
+      label: 'Presence penalty',
+      step: '0.1',
+      min: '0',
+      max: '2',
+    },
   ];
 
   if (options.includeMaxTokens) {
@@ -104,6 +111,7 @@ export function buildSamplerFieldInputs(
       else if (key === 'topK') patch.topK = n;
       else if (key === 'minP') patch.minP = n;
       else if (key === 'repetitionPenalty') patch.repetitionPenalty = n;
+      else if (key === 'presencePenalty') patch.presencePenalty = n;
       else if (key === 'maxTokens') patch.maxTokens = n;
     }
     return Object.keys(patch).length > 0 ? patch : null;
