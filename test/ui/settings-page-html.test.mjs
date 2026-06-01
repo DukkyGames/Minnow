@@ -93,6 +93,11 @@ describe('settings page HTML', () => {
     assert.match(html, /class="settings-prompt-estimate"/);
   });
 
+  test('prompts hub mount exists in index.html', () => {
+    assert.match(html, /id="settingsPromptsHubMount"/);
+    assert.match(html, /class="settings-prompts-hub-mount"/);
+  });
+
   test('user rules section controls exist in index.html', () => {
     assert.match(html, /id="settingsSection-rules"/);
     assert.match(html, /id="settingsRulesEnabled"/);

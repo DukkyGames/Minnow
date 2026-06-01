@@ -12,7 +12,17 @@ describe('settings model routing HTML', () => {
     assert.match(html, /id="settingsSection-model-routing"/);
     assert.match(html, /id="settingsModelRoutingBody"/);
     assert.match(html, /data-settings-nav="model-routing"/);
-    assert.match(html, />Model routing</);
+    assert.match(html, />Models</);
+    assert.match(html, /<h2>Models<\/h2>/);
+  });
+});
+
+describe('settings model routing catalog', () => {
+  test('catalog source defines main-chat row', () => {
+    const source = readFileSync(join(root, 'src/settings/model-routing-catalog.ts'), 'utf8');
+    assert.match(source, /id: 'main-chat'/);
+    assert.match(source, /group: 'main-chat'/);
+    assert.match(source, /persistKind: 'main-chat'/);
   });
 });
 
@@ -23,6 +33,7 @@ describe('settings model routing types', () => {
     const providersIdx = SETTINGS_SECTIONS.indexOf('providers');
     const routingIdx = SETTINGS_SECTIONS.indexOf('model-routing');
     const modesIdx = SETTINGS_SECTIONS.indexOf('modes');
-    assert.ok(providersIdx >= 0 && routingIdx > providersIdx && modesIdx > routingIdx);
+    assert.ok(providersIdx >= 0 && routingIdx >= 0 && routingIdx < providersIdx);
+    assert.ok(modesIdx > routingIdx);
   });
 });

@@ -92,7 +92,7 @@ function appendCrosslinks(mount: HTMLElement): void {
   cross.append(
     linkToSettingsSection('Providers', 'providers'),
     linkToSettingsSection('Language servers', 'lsp'),
-    linkToSettingsSection('Model routing', 'model-routing'),
+    linkToSettingsSection('Models', 'model-routing'),
   );
   mount.append(cross);
 }

@@ -389,15 +389,15 @@
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavModels">
         <p id="settingsNavModels" class="settings-nav-group__label">Models &amp; APIs</p>
+        <button type="button" data-settings-nav="model-routing">Models</button>
         <button type="button" data-settings-nav="providers">Providers</button>
         <button type="button" data-settings-nav="usage">Usage &amp; cost</button>
-        <button type="button" data-settings-nav="model-routing">Model routing</button>
         <button type="button" data-settings-nav="sampler">Sampler</button>
         <button type="button" data-settings-nav="thinking">Thinking</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
-        <button type="button" data-settings-nav="prompting">Prompting</button>
+        <button type="button" data-settings-nav="prompting">Prompts</button>
         <button type="button" data-settings-nav="rules">Rules</button>
         <button type="button" data-settings-nav="memory">Memory</button>
       </div>
@@ -504,23 +504,23 @@
         <div id="settingsUsageBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-model-routing" class="settings-section settings-section--wide">
-        <h2>Model routing</h2>
-        <p class="settings-lead">Per-role provider and model overrides. Empty bindings use the active chat model (top-bar picker). Main chat is not listed here.</p>
+        <h2>Models</h2>
+        <p class="settings-lead">Per-role provider, model, sampler, and thinking. Main chat uses the top-bar picker; empty role bindings inherit the active chat model.</p>
         <div id="settingsModelRoutingBody" class="settings-section-body settings-section-body--routing"></div>
       </section>
       <section id="settingsSection-sampler" class="settings-section settings-section--wide">
         <h2>Sampler</h2>
-        <p class="settings-lead">Global temperature, nucleus, and penalty defaults for main chat, plus optional per work-agent and sub-agent overrides. Model bindings stay under <strong>Model routing</strong>.</p>
+        <p class="settings-lead">Global temperature, nucleus, and penalty defaults for main chat. Per-role sampler overrides live in <strong>Models</strong>.</p>
         <div id="settingsSamplerBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-thinking" class="settings-section settings-section--wide">
         <h2>Thinking</h2>
-        <p class="settings-lead">Control whether models emit separate reasoning streams. Global default is <strong>on</strong>; work agents, sub-agents, and the composer can override per role or per chat.</p>
+        <p class="settings-lead">Global default for reasoning streams (<strong>on</strong> by default). Per-role thinking overrides live in <strong>Models</strong>; the composer can still override per chat.</p>
         <div id="settingsThinkingBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-prompting" class="settings-section">
-        <h2>Prompting</h2>
-        <p class="settings-lead">Profiles, portable setup bundles, and per-part prompt templates composed on each send.</p>
+        <h2>Prompts</h2>
+        <p class="settings-lead">Profiles, setup bundles, base prompt parts, and every role prompt in one searchable list.</p>
         <p
           id="settingsPromptTokenBreakdown"
           class="settings-prompt-estimate-breakdown"
@@ -541,6 +541,7 @@
           <button type="button" id="settingsCustomConfigDelete">Delete</button>
         </div>
         <div id="settingsPromptParts" class="settings-parts-mount"></div>
+        <div id="settingsPromptsHubMount" class="settings-prompts-hub-mount"></div>
       </section>
       <section id="settingsSection-rules" class="settings-section">
         <h2>Rules</h2>
@@ -620,17 +621,17 @@
       </section>
       <section id="settingsSection-modes" class="settings-section">
         <h2>Modes</h2>
-        <p class="settings-lead">Build, Plan, Orchestrate, Research, and Reef — each mode’s prompts and tool policy. Expand a row to edit overrides.</p>
+        <p class="settings-lead">Build, Plan, Orchestrate, Research, and Reef — tool policy and mode-specific options. Edit prompts in <strong>Prompts</strong>.</p>
         <div id="settingsModesBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-experts" class="settings-section">
         <h2>Experts</h2>
-        <p class="settings-lead">Persona prompts selected in the composer. Overrides live under <code>~/.minnow/prompts/experts/</code>.</p>
+        <p class="settings-lead">Personas selected in the composer. Edit prompts in <strong>Prompts</strong>; open Expert Lab for trials.</p>
         <div id="settingsExpertsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-work-agents" class="settings-section">
         <h2>Work agents</h2>
-        <p class="settings-lead">Specialized agents (e.g. UI Designer) with their own prompts and optional model bindings.</p>
+        <p class="settings-lead">Specialized agents (e.g. UI Designer): enable flags, context budget, and policies. Prompts and models live in <strong>Prompts</strong> and <strong>Models</strong>.</p>
         <div id="settingsWorkAgentsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-agent-packs" class="settings-section">
@@ -640,7 +641,7 @@
       </section>
       <section id="settingsSection-sub-agents" class="settings-section">
         <h2>Sub-agents</h2>
-        <p class="settings-lead">Background workers (explore, shell, research, …) — concurrency, tool turns, and per-type prompts.</p>
+        <p class="settings-lead">Background workers (explore, shell, research, …): concurrency, timeouts, and tool policy. Prompts and models live in <strong>Prompts</strong> and <strong>Models</strong>.</p>
         <div id="settingsSubAgentsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-tools" class="settings-section">

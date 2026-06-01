@@ -96,16 +96,16 @@ import { renderLspSection } from './lsp-settings';
 import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
-import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { renderPromptsHubPanel } from './settings-prompts-hub';
 import {
   createSettingsSwitch,
   createSettingsToggleRow,
 } from './settings-switch';
 import { appendThemeControls } from './settings-theme';
 import {
-  mountPromptFileEditor,
   mountSubAgentTypeEditor,
-  mountWorkAgentEditor,
+  mountWorkAgentConfigEditor,
   renderEntityEditorList,
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
@@ -281,7 +281,7 @@ async function renderGeneralSection(): Promise<void> {
   cross.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
   cross.append(
     linkToSettingsSection('Providers', 'providers'),
-    linkToSettingsSection('Model routing', 'model-routing'),
+    linkToSettingsSection('Models', 'model-routing'),
     linkToSettingsSection('Tools', 'tools'),
   );
   connection.appendChild(cross);
@@ -651,6 +651,13 @@ async function renderPromptingSection(): Promise<void> {
   const meta = await loadPromptMetaSettings();
   await renderPromptPartsPanel(meta.activePromptProfile, meta.activePromptConfigId);
   schedulePromptTokenEstimateRefresh();
+
+  const hubMount = document.getElementById('settingsPromptsHubMount');
+  if (hubMount) {
+    const hubGen = beginAsyncSectionRender('prompting-hub');
+    await renderPromptsHubPanel(hubMount);
+    if (isAsyncSectionRenderStale('prompting-hub', hubGen)) return;
+  }
 }
 
 /** Plan granularity control inside Modes → Plan expandable row. */
@@ -699,24 +706,16 @@ async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
 
-  const serverReady = isServerStorageMode();
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
 
-  if (!serverReady) {
-    mount.appendChild(
-      serverBanner('Mode prompt editing requires <code>npm start</code>.'),
-    );
-  } else {
-    mount.appendChild(
-      el(
-        'p',
-        'settings-field-hint',
-        'Expand a mode to edit Full and Lite system prompts. Overrides are saved under ~/.minnow/prompts/modes/.',
-      ),
-    );
-  }
+  const listBody = appendSettingsGroup(
+    mount,
+    'Mode options',
+    'Tool policy and mode-specific settings. System prompts are edited in Prompts.',
+  );
 
   renderEntityEditorList(
-    mount,
+    listBody,
     listModes().map((mode) => ({
       id: mode.id,
       label: mode.label,
@@ -730,17 +729,13 @@ async function renderModesSection(): Promise<void> {
         mountReefWidgetLlmSettings(body);
       }
       if (id === 'research') {
-        // Hint: parallel Research worker runs share the global sub-agent concurrency cap.
         body.appendChild(
           el(
             'p',
             'settings-field-hint',
-            'Parallel research workers: Settings → Sub-agents → Research worker → Max concurrent (raising Global max concurrent may be needed to avoid queuing).',
+            'Parallel research workers: Sub-agents → Research worker → Max concurrent (raise Global max concurrent if workers queue).',
           ),
         );
-      }
-      if (serverReady) {
-        mountPromptFileEditor(body, { family: 'modes', entityId: id });
       }
     },
   );
@@ -750,21 +745,9 @@ async function renderExpertsSection(): Promise<void> {
   const mount = clearMount('settingsExpertsBody');
   if (!mount) return;
 
-  if (!isServerStorageMode()) {
-    mount.appendChild(
-      serverBanner('Expert prompt editing requires <code>npm start</code>.'),
-    );
-    return;
-  }
+  appendSettingsCrosslinks(mount, [{ label: 'Edit prompts in Prompts', sectionId: 'prompting' }]);
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Edit persona prompts per expert. Overrides live in ~/.minnow/prompts/experts/.',
-    ),
-  );
-
+  const labBody = appendSettingsGroup(mount, 'Expert Lab', 'Try personas outside the main composer.');
   const labLink = document.createElement('button');
   labLink.type = 'button';
   labLink.className = 'settings-action-btn';
@@ -772,19 +755,20 @@ async function renderExpertsSection(): Promise<void> {
   labLink.addEventListener('click', () => {
     void import('./expert-lab-page').then((m) => m.openExpertLabFromTopbar());
   });
-  mount.appendChild(labLink);
+  labBody.appendChild(labLink);
 
-  renderEntityEditorList(
+  const rosterBody = appendSettingsGroup(
     mount,
-    listExperts().map((expert) => ({
-      id: expert.meta.id,
-      label: expert.meta.label,
-      hint: expert.meta.description ?? '',
-    })),
-    (id, body) => {
-      mountPromptFileEditor(body, { family: 'experts', entityId: id });
-    },
+    'Roster',
+    `${listExperts().length} built-in personas. Prompt overrides live in ~/.minnow/prompts/experts/.`,
   );
+  const list = el('ul', 'settings-entity-list');
+  for (const expert of listExperts()) {
+    const item = el('li', 'settings-entity-list__item settings-entity-list__item--flat');
+    item.textContent = `${expert.meta.label}${expert.meta.description ? ` — ${expert.meta.description}` : ''}`;
+    list.appendChild(item);
+  }
+  rosterBody.appendChild(list);
 }
 
 async function renderModelRoutingSettingsSection(): Promise<void> {
@@ -827,16 +811,19 @@ async function renderWorkAgentsSection(): Promise<void> {
   if (isAsyncSectionRenderStale('work-agents', generation)) return;
   const agents = remote?.agents ?? [];
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Set provider and model per work agent; edit Full/Lite prompts. Binding is stored in ~/.minnow/work-agents.json. See Settings → Model routing and Sampler for consolidated overrides.',
-    ),
+  appendSettingsCrosslinks(mount, [
+    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
+    { label: 'Set model in Models', sectionId: 'model-routing' },
+  ]);
+
+  const listBody = appendSettingsGroup(
+    mount,
+    'Work agents',
+    'Enable flags and context budget per agent. Prompts and model bindings live in Prompts and Models.',
   );
 
   renderEntityEditorList(
-    mount,
+    listBody,
     agents.map((agent) => ({
       id: agent.id,
       label: `${agent.label}${agent.disabled ? ' (disabled)' : ''}`,
@@ -847,7 +834,7 @@ async function renderWorkAgentsSection(): Promise<void> {
     (id, body) => {
       const agent = agents.find((a) => a.id === id);
       if (!agent) return;
-      mountWorkAgentEditor(body, {
+      mountWorkAgentConfigEditor(body, {
         agentId: id,
         initialProviderId: agent.providerId,
         initialModelId: agent.modelId,
@@ -939,21 +926,22 @@ async function renderSubAgentsSection(): Promise<void> {
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
   nudgeDd.appendChild(nudgeWrap);
 
-  mount.appendChild(summary);
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Check-in nudge: while a sub-agent is still running, the parent gets one gentle reminder after this interval (Build/General/Research; not Orchestrate). Set 0 to disable.',
-    ),
+  const globalBody = appendSettingsGroup(
+    mount,
+    'Global limits',
+    'Check-in nudge: while a sub-agent runs, the parent gets one reminder after this interval (Build/General/Research; not Orchestrate). Set 0 to disable.',
   );
+  globalBody.appendChild(summary);
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-field-hint',
-      'Expand a sub-agent type to edit its system prompt and model binding. See Settings → Model routing and Sampler for consolidated overrides.',
-    ),
+  appendSettingsCrosslinks(mount, [
+    { label: 'Edit prompts in Prompts', sectionId: 'prompting' },
+    { label: 'Set model in Models', sectionId: 'model-routing' },
+  ]);
+
+  const typesBody = appendSettingsGroup(
+    mount,
+    'Sub-agent types',
+    'Concurrency, timeouts, and tool policy per type.',
   );
 
   const saveTypePatch = async (
@@ -967,11 +955,11 @@ async function renderSubAgentsSection(): Promise<void> {
   };
 
   renderEntityEditorList(
-    mount,
+    typesBody,
     Object.entries(config.types).map(([id, type]) => ({
       id,
       label: type.label ?? id.replace(/([A-Z])/g, ' $1').trim(),
-      hint: `Provider ${type.providerId ?? '—'} · model ${type.modelId || '(chat default)'}`,
+      hint: `Max concurrent ${type.maxConcurrent} · model ${type.modelId || '(chat default)'}`,
     })),
     (id, body) => {
       const type = config.types[id];
@@ -979,10 +967,8 @@ async function renderSubAgentsSection(): Promise<void> {
       mountSubAgentTypeEditor(
         body,
         id,
-        id,
+        type.label ?? id,
         {
-          providerId: type.providerId ?? '',
-          modelId: type.modelId ?? '',
           enabled: type.enabled !== false,
           maxConcurrent: type.maxConcurrent,
           maxInputTokens: type.maxInputTokens ?? null,
@@ -1770,13 +1756,23 @@ async function renderMcpSection(): Promise<void> {
 async function renderAgentPacksSection(): Promise<void> {
   const mount = clearMount('settingsAgentPacksBody');
   if (!mount) return;
-  await renderAgentPacksSettingsSection(mount);
+  const body = appendSettingsGroup(
+    mount,
+    'Installed packs',
+    'Enable bundled agent definitions for this workspace.',
+  );
+  await renderAgentPacksSettingsSection(body);
 }
 
 async function renderSkillsSection(): Promise<void> {
   const mount = clearMount('settingsSkillsBody');
   if (!mount) return;
-  await renderSkillsSettingsSection(mount);
+  const body = appendSettingsGroup(
+    mount,
+    'Skills catalog',
+    'Built-in and custom slash commands. Edit SKILL.md bodies from each row.',
+  );
+  await renderSkillsSettingsSection(body);
 }
 
 async function renderEvalsSection(): Promise<void> {

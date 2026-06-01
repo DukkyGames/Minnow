@@ -30,10 +30,10 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   general: 'General',
   providers: 'Providers',
   usage: 'Usage & cost',
-  'model-routing': 'Model routing',
+  'model-routing': 'Models',
   sampler: 'Sampler',
   thinking: 'Thinking',
-  prompting: 'Prompting',
+  prompting: 'Prompts',
   rules: 'Rules',
   memory: 'Memory',
   modes: 'Modes',
@@ -70,7 +70,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'models',
     label: 'Models & APIs',
-    sections: ['providers', 'usage', 'model-routing', 'sampler', 'thinking'],
+    sections: ['model-routing', 'providers', 'usage', 'sampler', 'thinking'],
   },
   {
     id: 'prompting',

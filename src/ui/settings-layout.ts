@@ -30,6 +30,23 @@ export function appendSettingsGroup(
   return body;
 }
 
+/** Related settings links row (hub cross-navigation). */
+export function appendSettingsCrosslinks(
+  mount: HTMLElement,
+  links: { label: string; sectionId: string }[],
+): void {
+  const cross = document.createElement('div');
+  cross.className = 'settings-crosslinks';
+  const label = document.createElement('span');
+  label.className = 'settings-crosslinks__label';
+  label.textContent = 'Related';
+  cross.appendChild(label);
+  for (const link of links) {
+    cross.appendChild(linkToSettingsSection(link.label, link.sectionId));
+  }
+  mount.appendChild(cross);
+}
+
 /** Jump to another settings section via hash (works before page is open). */
 export function linkToSettingsSection(
   label: string,

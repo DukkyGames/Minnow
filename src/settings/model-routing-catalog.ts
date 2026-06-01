@@ -20,19 +20,26 @@ import {
   resolveUiDesignerModel,
 } from './model-routing-effective';
 import { loadTitlesConfig } from '../config/titles-meta';
+import { loadSamplerMeta } from '../config/sampler-meta';
 import { detectConfigServer } from '../config/storage-mode';
+import WORK_AGENT_THINKING_DEFAULTS from '../agents/defaults/work-agent-thinking.json';
+import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { getActiveChat } from '../state/sessions';
+import type { SamplerPreset } from '../agents/sampler-types';
+import type { ThinkingTriState } from '../agents/thinking-types';
 import type { Chat } from '../types';
 
-/** Non-main-chat routing target groups shown in the consolidated settings pane. */
+/** Routing target groups in Settings → Models. */
 export type ModelRoutingGroup =
+  | 'main-chat'
   | 'work-agents'
   | 'sub-agents'
   | 'background'
   | 'reef';
 
-/** How a row is persisted when the user saves from model routing. */
+/** How a row is persisted when the user saves from Models hub. */
 export type ModelRoutingPersistKind =
+  | 'main-chat'
   | 'work-agent'
   | 'sub-agent'
   | 'ui-designer'
@@ -63,6 +70,12 @@ export interface ModelRoutingRow {
   fallbackToChatModel?: boolean;
   /** Titles: enabled flag from config. */
   titlesEnabled?: boolean;
+  /** Stored sampler override (empty = inherit). */
+  sampler?: SamplerPreset | null;
+  /** Stored thinking tri-state when applicable. */
+  thinkingMode?: ThinkingTriState;
+  /** Main chat: per-chat thinking override from session. */
+  chatThinkingMode?: ThinkingTriState;
 }
 
 export interface ModelRoutingCatalog {
@@ -99,6 +112,11 @@ function rowFromWorkAgent(
     advancedSettingsHash: '#/settings/work-agents',
     effectiveProviderId: effective.providerId,
     effectiveModelId: effective.modelId,
+    sampler: getUserWorkAgentOverride(agent.id)?.sampler ?? null,
+    thinkingMode:
+      getUserWorkAgentOverride(agent.id)?.thinkingMode ??
+      ((WORK_AGENT_THINKING_DEFAULTS as Record<string, ThinkingTriState>)[agent.id] ??
+        'inherit'),
   };
 }
 
@@ -118,15 +136,33 @@ export async function loadModelRoutingCatalog(
     return { rows: [], offline: true, activeChat, activeChatName };
   }
 
-  const [workAgentsRes, subAgentConfig, titlesConfig, uiDesignerConfig] =
+  const [workAgentsRes, subAgentConfig, titlesConfig, uiDesignerConfig, samplerMeta] =
     await Promise.all([
       fetchWorkAgentsList(),
       loadSubAgentConfig(),
       loadTitlesConfig(),
       loadUiDesignerConfig(),
+      loadSamplerMeta(),
     ]);
 
   const rows: ModelRoutingRow[] = [];
+
+  rows.push({
+    id: 'main-chat',
+    group: 'main-chat',
+    label: 'Main chat',
+    description: 'Active session model (top-bar picker) and global sampler defaults.',
+    providerId: chatCtx.providerId,
+    modelId: chatCtx.modelId,
+    usesChatDefault: false,
+    persistKind: 'main-chat',
+    advancedSettingsHash: '#/settings/sampler',
+    effectiveProviderId: chatCtx.providerId,
+    effectiveModelId: chatCtx.modelId,
+    activeChatName,
+    sampler: samplerMeta,
+    chatThinkingMode: activeChat.thinkingMode ?? 'inherit',
+  });
 
   for (const agent of workAgentsRes?.agents ?? []) {
     rows.push(rowFromWorkAgent(agent, chatCtx, defaults));
@@ -149,6 +185,8 @@ export async function loadModelRoutingCatalog(
       advancedSettingsHash: '#/settings/sub-agents',
       effectiveProviderId: effective.providerId,
       effectiveModelId: effective.modelId,
+      sampler: typeCfg.sampler ?? null,
+      thinkingMode: typeCfg.thinkingMode ?? 'inherit',
     });
   }
 

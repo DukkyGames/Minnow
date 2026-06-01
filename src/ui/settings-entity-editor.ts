@@ -75,6 +75,8 @@ export interface EntityEditorRow {
   id: string;
   label: string;
   hint?: string;
+  /** Optional type chip in expandable list headers (Prompts hub). */
+  badge?: string;
 }
 
 interface ModelBindingState {
@@ -247,7 +249,170 @@ interface WorkAgentEditorOptions {
   onModelSaved?: () => void;
 }
 
-/** Work agent: prompt files + work-agents.json model binding. */
+/** Work agent Full/Lite prompt editor only (Models hub holds binding). */
+export function mountWorkAgentPromptEditor(
+  container: HTMLElement,
+  options: Pick<WorkAgentEditorOptions, 'agentId'>,
+): void {
+  let currentProfile: WorkAgentPromptProfile = 'full';
+  let lastSavedPromptContent = '';
+  let builtinBaseline = '';
+
+  const sourceLabel = el('span', 'settings-badge', '…');
+  const ta = document.createElement('textarea');
+  ta.className = 'settings-part-editor';
+  ta.rows = 12;
+
+  const reloadBaseline = async () => {
+    builtinBaseline = await resolveWorkAgentBuiltinBaselineText(
+      options.agentId,
+      currentProfile,
+    );
+    diffControls.setBaseline(builtinBaseline);
+    diffControls.refresh();
+  };
+
+  const reloadPrompt = async () => {
+    const data = await fetchWorkAgentPrompt(options.agentId, currentProfile);
+    if (!data) {
+      sourceLabel.textContent = 'unavailable';
+      ta.value = '';
+      lastSavedPromptContent = '';
+      await reloadBaseline();
+      return;
+    }
+    sourceLabel.textContent =
+      data.source === 'override' ? 'Custom override' : 'Built-in default';
+    ta.value = data.content;
+    lastSavedPromptContent = data.content;
+    await reloadBaseline();
+  };
+
+  const tabs = buildProfileTabs((profile) => {
+    currentProfile = profile;
+    void reloadPrompt();
+  });
+
+  container.appendChild(tabs.root);
+
+  const meta = el('p', 'settings-field-hint');
+  meta.appendChild(document.createTextNode('Prompt source: '));
+  meta.appendChild(sourceLabel);
+  container.appendChild(meta);
+  container.appendChild(ta);
+
+  const diffControls = mountPromptDiffControls(container, {
+    getBaseline: () => builtinBaseline,
+    getCurrent: () => ta.value,
+    showOfflineHint: true,
+  });
+  ta.addEventListener('input', () => diffControls.refresh());
+
+  const actions = el('div', 'settings-actions');
+
+  const savePromptBtn = el('button', 'settings-action-btn', 'Save prompt');
+  savePromptBtn.type = 'button';
+  savePromptBtn.addEventListener('click', () => {
+    void (async () => {
+      const ok = await saveWorkAgentPromptOverride(
+        options.agentId,
+        currentProfile,
+        ta.value,
+      );
+      setStatus(
+        ok ? 'ok' : 'err',
+        ok ? `Prompt saved (${currentProfile})` : 'Save failed',
+      );
+      if (ok) {
+        lastSavedPromptContent = ta.value;
+        diffControls.refresh();
+        await reloadPrompt();
+      }
+    })();
+  });
+
+  const resetBtn = el('button', 'settings-action-btn', 'Reset prompt to built-in');
+  resetBtn.type = 'button';
+  resetBtn.addEventListener('click', () => {
+    const dirty = ta.value !== lastSavedPromptContent;
+    if (dirty && !confirm('Discard unsaved edits and remove your override?')) return;
+    if (!dirty && !confirm('Remove prompt override for this profile?')) return;
+    void (async () => {
+      const restored = await resetWorkAgentPromptOverride(
+        options.agentId,
+        currentProfile,
+      );
+      if (!restored) {
+        setStatus('err', 'No override to reset or server unavailable');
+        return;
+      }
+      ta.value = restored.content;
+      lastSavedPromptContent = restored.content;
+      sourceLabel.textContent = 'Built-in default';
+      await reloadBaseline();
+      setStatus('ok', 'Prompt reset to built-in');
+    })();
+  });
+
+  actions.appendChild(savePromptBtn);
+  actions.appendChild(resetBtn);
+  container.appendChild(actions);
+
+  void reloadPrompt();
+}
+
+/** Work agent structural settings (enable, context budget) without model binding. */
+export function mountWorkAgentConfigEditor(
+  container: HTMLElement,
+  options: WorkAgentEditorOptions,
+): void {
+  const maxInputTokensInput = document.createElement('input');
+  maxInputTokensInput.type = 'number';
+  maxInputTokensInput.className = 'settings-select settings-kv-input';
+  maxInputTokensInput.min = '1';
+  maxInputTokensInput.step = '1';
+  maxInputTokensInput.placeholder = 'No cap';
+  maxInputTokensInput.value =
+    options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
+
+  const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
+
+  const { row: disabledRow, input: disabledCb } = createSettingsToggleRow('Disabled', {
+    checked: !!options.initialDisabled,
+  });
+  const budgetBlock = el('div', 'settings-model-row');
+  budgetBlock.appendChild(el('label', 'settings-field-label', 'Max input tokens'));
+  budgetBlock.appendChild(maxInputTokensInput);
+  budgetBlock.appendChild(el('label', 'settings-field-label', 'Context policy'));
+  budgetBlock.appendChild(contextPolicySel);
+
+  container.appendChild(budgetBlock);
+  container.appendChild(disabledRow);
+
+  const saveBtn = el('button', 'settings-action-btn', 'Save agent settings');
+  saveBtn.type = 'button';
+  saveBtn.addEventListener('click', () => {
+    void (async () => {
+      const rawCap = maxInputTokensInput.value.trim();
+      const maxInputTokens =
+        rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
+      const agent = await patchWorkAgentOverride(options.agentId, {
+        disabled: !disabledCb.checked,
+        maxInputTokens,
+        contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
+      });
+      if (!agent) {
+        setStatus('err', 'Could not save work agent settings');
+        return;
+      }
+      setStatus('ok', 'Work agent settings saved');
+      options.onModelSaved?.();
+    })();
+  });
+  container.appendChild(saveBtn);
+}
+
+/** @deprecated Use mountWorkAgentPromptEditor + mountWorkAgentConfigEditor + Models hub. */
 export function mountWorkAgentEditor(
   container: HTMLElement,
   options: WorkAgentEditorOptions,
@@ -451,12 +616,12 @@ export function mountWorkAgentEditor(
   void fillProviders().then(() => reloadPrompt());
 }
 
-/** Sub-agent type: prompt file + config.json type overrides. */
+/** Sub-agent type structural settings (prompt/model live in hubs). */
 export function mountSubAgentTypeEditor(
   container: HTMLElement,
   typeId: string,
   label: string,
-  initial: ModelBindingState & {
+  initial: {
     enabled: boolean;
     maxConcurrent: number;
     maxInputTokens: number | null;
@@ -465,8 +630,6 @@ export function mountSubAgentTypeEditor(
   },
   onSaveConfig: (
     patch: Partial<{
-      providerId: string;
-      modelId: string;
       enabled: boolean;
       maxConcurrent: number;
       maxInputTokens: number | null;
@@ -475,13 +638,8 @@ export function mountSubAgentTypeEditor(
     }>,
   ) => Promise<boolean>,
 ): void {
-  const extra = el('div','settings-subagent-extra');
+  const extra = el('div', 'settings-subagent-extra');
   extra.appendChild(el('p', 'settings-field-hint', `Type id: ${typeId}`));
-
-  const providerSel = document.createElement('select');
-  providerSel.className = 'settings-select';
-  const modelSel = document.createElement('select');
-  modelSel.className = 'settings-select';
 
   const maxInput = document.createElement('input');
   maxInput.type = 'number';
@@ -501,12 +659,6 @@ export function mountSubAgentTypeEditor(
   const contextPolicySel = buildContextPolicySelect(initial.contextEnforcementPolicy);
   const summarySchemaSel = buildSummarySchemaSelect(initial.summarySchema);
 
-  const modelBlock = el('div','settings-model-row');
-  modelBlock.appendChild(el('label', 'settings-field-label', 'Provider'));
-  modelBlock.appendChild(providerSel);
-  modelBlock.appendChild(el('label', 'settings-field-label', 'Model'));
-  modelBlock.appendChild(modelSel);
-
   const { row: enabledRow, input: enabledCb } = createSettingsToggleRow(`${label} enabled`, {
     checked: initial.enabled,
   });
@@ -515,7 +667,6 @@ export function mountSubAgentTypeEditor(
   maxRow.appendChild(el('span', '', 'Max concurrent'));
   maxRow.appendChild(maxInput);
 
-  extra.appendChild(modelBlock);
   extra.appendChild(enabledRow);
   extra.appendChild(maxRow);
   const budgetRow = el('div', 'settings-model-row');
@@ -533,8 +684,6 @@ export function mountSubAgentTypeEditor(
   saveCfgBtn.addEventListener('click', () => {
     void (async () => {
       const ok = await onSaveConfig({
-        providerId: providerSel.value,
-        modelId: modelSel.value,
         enabled: enabledCb.checked,
         maxConcurrent: Math.max(1, Number(maxInput.value) || 1),
         maxInputTokens:
@@ -550,27 +699,6 @@ export function mountSubAgentTypeEditor(
   extra.appendChild(saveCfgBtn);
 
   container.appendChild(extra);
-  const promptHost = el('div','settings-entity-editor-body');
-  container.appendChild(promptHost);
-  mountPromptFileEditor(promptHost, { family: 'sub-agents', entityId: typeId });
-
-  void (async () => {
-    if (!isProvidersApiAvailable()) return;
-    const { providers } = await listProviders();
-    for (const p of providers) {
-      if (p.enabled === false) continue;
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.label;
-      providerSel.appendChild(opt);
-    }
-    providerSel.value = initial.providerId || providers[0]?.id || '';
-    await fillModelSelect(modelSel, providerSel.value, initial.modelId);
-  })();
-
-  providerSel.addEventListener('change', () => {
-    void fillModelSelect(modelSel, providerSel.value, '');
-  });
 }
 
 /** List of expandable entity cards. */
@@ -587,7 +715,11 @@ export function renderEntityEditorList(
 
     const summary = document.createElement('summary');
     summary.className = 'settings-entity-list__head';
-    summary.textContent = row.label;
+    if (row.badge) {
+      const badge = el('span', 'settings-entity-list__badge', row.badge);
+      summary.appendChild(badge);
+    }
+    summary.append(document.createTextNode(row.label));
     details.appendChild(summary);
 
     if (row.hint) {
