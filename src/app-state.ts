@@ -22,6 +22,13 @@ export let suppressSystemPromptSelectChange = false;
 /** Debounced assistant markdown render while SSE tokens arrive. */
 export let assistantRenderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** True while the full-page Expert Lab view covers the chat shell. */
+export let expertLabPageOpen = false;
+
+export function setExpertLabPageOpen(value: boolean): void {
+  expertLabPageOpen = value;
+}
+
 export function setStreaming(value: boolean, chatId?: string | null): void {
   streaming = value;
   if (!value) {

@@ -2,7 +2,7 @@
  * Helpers for per-chat streaming: which chat owns the in-flight turn vs which chat is active in the UI.
  */
 
-import { streaming, streamingChatId } from '../app-state';
+import { expertLabPageOpen, streaming, streamingChatId } from '../app-state';
 import { normalizeModeId } from '../chat/modes/types';
 import { getActiveChat, isExpertLabChat } from '../state/sessions';
 
@@ -58,7 +58,7 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
-  if (isExpertLabChat(active)) return false;
+  if (isExpertLabChat(active) && expertLabPageOpen) return false;
   const mode = normalizeModeId(active.modeId);
   if (mode === 'orchestrate' && active.viewMode === 'board') {
     return false;

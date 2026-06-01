@@ -6,6 +6,8 @@ import '../styles/expert-lab-page.css';
 
 import { getExpert, listExperts } from '../chat/experts/registry';
 import type { ExpertAccent, ExpertMeta } from '../chat/experts/types';
+import { setExpertLabPageOpen } from '../app-state';
+import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import { loadExpertsConfig } from '../config/experts-config';
 import { runChatTurn } from '../tools/loop';
 import {
@@ -23,9 +25,16 @@ import {
   scheduleAssistantBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
+import { renderChatFromHistory, renderStatsForChat } from './messages';
 import { closeBenchmark } from './benchmark-page';
 import { closeGlobalBugs } from './global-bugs-page';
 import { closeSettings } from './settings-page';
+import {
+  renderSidebar,
+  syncModelSelectForActiveChat,
+} from './sidebar';
+import { syncComposerFromStreamingState } from './composer-send';
+import { syncModeSelectorFromActiveChat } from './mode-selector';
 import {
   notifyExpertLabFirstToken,
   notifyExpertLabPartialText,
@@ -90,6 +99,10 @@ function setStep(step: ExpertLabStep): void {
   currentStep = step;
   const root = getRoot();
   if (root) root.dataset.step = step;
+  const openChatBtn = document.getElementById('btnExpertLabOpenChat');
+  if (openChatBtn) {
+    openChatBtn.hidden = step !== 'run';
+  }
 }
 
 function setPhaseStatus(phaseId: PhaseId, status: PhaseStatus): void {
@@ -203,15 +216,22 @@ function restoreQuestionHost(): void {
     parent.appendChild(host);
   }
   host.hidden = true;
+  getRoot()?.classList.remove('expert-lab-page--question-pending');
 }
 
 function mountQuestionHostInClarifying(): void {
   const host = document.getElementById('questionHost');
   const slot = document.getElementById('expertLabClarifyingBody');
+  const clarifyingPhase = document.querySelector(
+    '.expert-lab-phase[data-phase="clarifying"]',
+  ) as HTMLElement | null;
   if (!host || !slot) return;
   rememberQuestionHostHome();
+  if (clarifyingPhase) clarifyingPhase.hidden = false;
   slot.appendChild(host);
   host.hidden = false;
+  getRoot()?.classList.add('expert-lab-page--question-pending');
+  clarifyingPhase?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function watchQuestionHostResolve(onResolved: () => void): void {
@@ -444,12 +464,36 @@ export function isExpertLabPageOpen(): boolean {
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
+/** Show the Expert Lab session in the main chat shell (run may continue in background). */
+export function openExpertLabInChatView(): void {
+  const root = getRoot();
+  const shell = getChatShell();
+  if (!root || !shell) return;
+
+  activateExpertLabChat();
+  const chat = ensureExpertLabChat();
+  setExpertLabPageOpen(false);
+  root.classList.remove('is-open');
+  shell.classList.remove('hidden');
+  document.querySelector('header.topbar')?.classList.remove('hidden');
+
+  syncModelSelectForActiveChat();
+  renderChatFromHistory(chat);
+  void bootGenerationResumeForChat(chat);
+  renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncComposerFromStreamingState();
+  renderSidebar();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
+}
+
 /** Close Expert Lab and return to the chat shell. */
 export function closeExpertLab(): void {
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
 
+  setExpertLabPageOpen(false);
   root.classList.remove('is-open');
   shell.classList.remove('hidden');
   document.querySelector('header.topbar')?.classList.remove('hidden');
@@ -486,6 +530,7 @@ export function openExpertLab(): void {
     activateExpertLabChat();
   }
 
+  setExpertLabPageOpen(true);
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.querySelector('header.topbar')?.classList.add('hidden');
@@ -524,6 +569,10 @@ function bindStaticControls(): void {
 
   document.getElementById('btnExpertLabRun')?.addEventListener('click', () => {
     void startExpertLabRun();
+  });
+
+  document.getElementById('btnExpertLabOpenChat')?.addEventListener('click', () => {
+    openExpertLabInChatView();
   });
 
   document.getElementById('expertLabTimeline')?.addEventListener('click', (e) => {

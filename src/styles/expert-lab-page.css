@@ -193,7 +193,15 @@
 }
 
 .expert-lab-run-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 20px;
+}
+
+.expert-lab-open-chat-btn {
+  margin-left: auto;
 }
 
 .expert-lab-timeline {
@@ -323,6 +331,14 @@
 
 .expert-lab-clarifying-slot .question-host {
   margin: 0;
+  max-height: none;
+  border-top: none;
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-2);
+}
+
+.expert-lab-page--question-pending .expert-lab-phase[data-phase='clarifying'] .expert-lab-phase-body {
+  padding-bottom: 8px;
 }
 
 .expert-lab-empty {
