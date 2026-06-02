@@ -59,7 +59,6 @@ import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
-import { renderSupervisorSettingsSection } from './settings-supervisor';
 import {
   fillToolsSection,
   refreshProvidersBanner,
@@ -2089,7 +2088,6 @@ async function renderFeaturesSection(): Promise<void> {
   } catch {
     /* offline */
   }
-  await renderSupervisorSettingsSection();
 }
 
 /** Load or refresh one settings section from live APIs. */

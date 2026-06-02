@@ -45,7 +45,7 @@ describe('composer steer vs stop', () => {
   afterEach(() => {
     appState.setStreaming(false);
     setSessionStateForTests(null);
-    appState.setChatFetchAbort(null);
+    appState.setChatAbort(chat.id, null);
   });
 
   test('streaming with text enqueues steer without abort', () => {
@@ -58,7 +58,7 @@ describe('composer steer vs stop', () => {
     controller.signal.addEventListener('abort', () => {
       aborted = true;
     });
-    appState.setChatFetchAbort(controller);
+    appState.setChatAbort(chat.id, controller);
 
     handleComposerPrimaryAction();
 
@@ -76,7 +76,7 @@ describe('composer steer vs stop', () => {
     controller.signal.addEventListener('abort', () => {
       aborted = true;
     });
-    appState.setChatFetchAbort(controller);
+    appState.setChatAbort(chat.id, controller);
 
     handleComposerPrimaryAction();
 

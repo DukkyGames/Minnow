@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   buildOrchestrateCompletionMessage,
-  canOrchestrateResume,
   isOrchestratePlanComplete,
+  hasIncompleteOrchestrateWork,
 } from '../../src/chat/orchestrate/plan-complete.ts';
 import type { Chat, OrchestrateBoardState } from '../../src/types.ts';
 
@@ -35,7 +35,7 @@ describe('isOrchestratePlanComplete', () => {
       { id: 'B', title: 'b', wave: 'W1', category: 'test', status: 'complete' },
     ]);
     assert.equal(isOrchestratePlanComplete(b), true);
-    assert.equal(canOrchestrateResume(b), false);
+    assert.equal(hasIncompleteOrchestrateWork(b), false);
   });
 
   test('false when any task is not complete', () => {
@@ -44,7 +44,7 @@ describe('isOrchestratePlanComplete', () => {
       { id: 'B', title: 'b', wave: 'W1', category: 'build', status: 'planned' },
     ]);
     assert.equal(isOrchestratePlanComplete(b), false);
-    assert.equal(canOrchestrateResume(b), true);
+    assert.equal(hasIncompleteOrchestrateWork(b), true);
   });
 });
 
@@ -61,6 +61,6 @@ describe('buildOrchestrateCompletionMessage', () => {
     assert.match(text, /demo-plan/);
     assert.match(text, /1\/1 complete/);
     assert.match(text, /2m 5s/);
-    assert.match(text, /Auto-resume is off/);
+    assert.doesNotMatch(text, /Auto-resume/);
   });
 });

@@ -37,5 +37,6 @@ declare global {
     toggleFileSidebarCollapsed: () => void;
     closeMobileFileSidebar: () => void;
     togglePreviewFromTopbar: () => void;
+    toggleOrchestrateHubFromTopbar: () => void;
   }
 }

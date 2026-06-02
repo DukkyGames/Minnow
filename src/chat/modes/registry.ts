@@ -107,6 +107,11 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
+/** Composer mode strip (excludes Orchestrate; opened from the top bar). */
+export function listComposerModes(): ModeDefinition[] {
+  return MODE_DEFINITIONS.filter((m) => m.id !== 'orchestrate');
+}
+
 export function getMode(id: ModeId): ModeDefinition {
   const mode = MODE_DEFINITIONS.find((m) => m.id === id);
   if (!mode) {

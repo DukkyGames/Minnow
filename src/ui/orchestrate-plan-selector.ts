@@ -13,6 +13,7 @@ import {
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
+import type { Chat } from '../types';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import {
@@ -28,11 +29,7 @@ let planHintEl: HTMLElement | null = null;
 const INPUT_BAR_ORCHESTRATE_CLASS = 'input-bar--orchestrate-plan';
 
 /** True when the plan strip should replace the message textarea in the input row. */
-export function shouldMountOrchestratePlanInInputRow(chat: {
-  modeId?: string;
-  orchestrateBoard?: unknown;
-  viewMode?: string;
-}): boolean {
+export function shouldMountOrchestratePlanInInputRow(chat: Chat): boolean {
   if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
   return !shouldHideComposerPlanStripForOrchestrateBoardOnboarding(chat);
 }

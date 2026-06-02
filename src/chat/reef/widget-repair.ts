@@ -2,7 +2,8 @@
  * Silent in-place reef widget repair: patch fence in history and re-mount without error UI.
  */
 
-import { streaming, streamingChatId } from '../../app-state.ts';
+import { isAnyChatStreaming } from '../../app-state.ts';
+import { isChatStreaming } from '../../chat/streaming-state.ts';
 import { lintReefWidgetFence } from './widget-fence-lint.ts';
 import { extractFirstReefWidgetFenceBody, replaceReefWidgetFenceInMarkdown } from './widget-fence-markdown.ts';
 import { prepareReefWidgetHtml } from './widget-fence-body.ts';
@@ -18,11 +19,6 @@ const attemptKey = (chatId: string, historyIndex: number, widgetIndex: number): 
 
 const attemptsByKey = new Map<string, number>();
 let repairInFlight = false;
-
-/** True when the given chat has an in-flight assistant turn. */
-function isChatStreaming(chatId: string): boolean {
-  return streaming && streamingChatId === chatId;
-}
 
 const WIDGET_REPAIR_SYSTEM_PROMPT = `You fix broken Minnow reef-widget HTML fences. Output exactly one complete \`\`\`reef-widget fence with corrected HTML/CSS/JS only. No commentary outside the fence.
 
@@ -91,7 +87,7 @@ export interface SilentWidgetRepairContext {
  * Try to start silent repair. Returns true when repair was enqueued (caller must not show error UI).
  */
 export function tryEnqueueSilentWidgetRepair(ctx: SilentWidgetRepairContext): boolean {
-  if (repairInFlight || streaming) return false;
+  if (repairInFlight || isAnyChatStreaming()) return false;
 
   const chatId = ctx.host.dataset.chatId?.trim();
   const historyIndexRaw = ctx.host.dataset.historyIndex;

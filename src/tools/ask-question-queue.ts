@@ -3,7 +3,11 @@
  */
 
 import { showQuestionCardsModal } from '../ui/question-cards-modal';
-import type { QuestionCardsModalContext } from '../ui/question-cards-modal';
+import type {
+  QuestionCardsModalContext,
+  QuestionCardsModalOptions,
+} from '../ui/question-cards-modal';
+import { resolveOrchestratePlanScreenQuestionHost } from '../ui/orchestrate-plan-screen';
 import type { AskQuestionArgs } from './ask-question-types';
 import { stringifyAskQuestionResult } from './ask-question-types';
 
@@ -22,6 +26,7 @@ let draining = false;
 export function enqueueAskQuestion(
   args: AskQuestionArgs,
   context: QuestionCardsModalContext = {},
+  chatId?: string,
 ): Promise<string> {
   return new Promise((resolve) => {
     queue.push({ args, context, resolve });
@@ -35,7 +40,15 @@ async function drainQueue(): Promise<void> {
   if (!next) return;
   draining = true;
   try {
-    const result = await showQuestionCardsModal(next.args, next.context);
+    const planHost = resolveOrchestratePlanScreenQuestionHost(chatId);
+    const modalOptions: QuestionCardsModalOptions = planHost
+      ? { host: planHost, embedded: true, chatId }
+      : { chatId };
+    const result = await showQuestionCardsModal(
+      next.args,
+      next.context,
+      modalOptions,
+    );
     next.resolve(stringifyAskQuestionResult(result));
   } catch {
     next.resolve(stringifyAskQuestionResult({ status: 'cancelled', answers: [] }));

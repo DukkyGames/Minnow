@@ -13,7 +13,7 @@ import type {
 import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
-export const SESSION_SCHEMA_VERSION = 3 as const;
+export const SESSION_SCHEMA_VERSION = 5 as const;
 
 export type SessionSchemaVersion = typeof SESSION_SCHEMA_VERSION;
 
@@ -265,8 +265,14 @@ export interface BoardTask {
   filesChanged?: number;
   notes?: string;
   error?: string;
-  /** Auto-resume attempts by the orchestrate watchdog for this task. */
-  retryCount?: number;
+  /** Assigned sub-agent type id (manual board). */
+  agentType?: string;
+  /** Linked task chat session id. */
+  chatId?: string;
+  /** Build spec from plan parse (display + task-chat seed). */
+  buildSpec?: string;
+  /** Test spec from plan parse (display + task-chat seed). */
+  testSpec?: string;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -275,6 +281,8 @@ export interface BoardWave {
   status: BoardTaskStatus;
   taskCount?: number;
   completeCount?: number;
+  /** When true, the wave's kanban lanes are hidden in board view. */
+  collapsed?: boolean;
 }
 
 /** Structured Orchestrate plan execution state (persisted on chat). */
@@ -290,6 +298,29 @@ export interface OrchestrateBoardState {
   timerSegmentStartedAt?: number;
   /** Parent turn id for Stop orchestrator (minted in tool loop). */
   activeParentTurnId?: string;
+  /** Max concurrent task chats (default 3). */
+  maxConcurrentTasks?: number;
+  /** Epoch ms when plan-complete UI was shown (dedupe). */
+  completionShownAt?: number;
+}
+
+/** Collapsible sidebar folder for chats in a workspace. */
+export interface ChatGroup {
+  id: string;
+  name: string;
+  /** Normalized absolute workspace root; groups are per-workspace. */
+  workspacePath: string;
+  collapsed: boolean;
+  order: number;
+  createdAt: number;
+  /** Kanban + waves for Orchestrate plans owned by this folder. */
+  orchestrateBoard?: OrchestrateBoardState;
+  /** Workspace-relative plan path (documentation/plans/*.md). */
+  orchestratePlanPath?: string;
+  /** Main-column chat vs board rendering for this folder. */
+  viewMode?: 'chat' | 'board';
+  /** Orchestrate planner chat that parsed the plan / runs board_init. */
+  plannerChatId?: string;
 }
 
 /** Bug tracker workflow column (MIN-16). */
@@ -409,6 +440,8 @@ export interface Chat {
   providerId?: string;
   /** Operating mode for prompt + tool policy (Step 05); default build. */
   modeId?: ModeId;
+  /** Sidebar group membership (optional). */
+  groupId?: string;
   /** Workspace-relative plan path for Orchestrate mode (documentation/plans/*.md). */
   orchestratePlanPath?: string;
   /** Reef widget LLM provider override (Reef mode callLLM). */
@@ -431,11 +464,17 @@ export interface Chat {
   terminalHistory?: TerminalRunRecord[];
   /** Settled sub-agent transcripts keyed per chat (Step 09 + visibility). */
   subAgentRuns?: PersistedSubAgentRun[];
-  /** Orchestrate board state (Kanban + waves); Orchestrate mode only. */
+  /**
+   * @deprecated Board state lives on {@link ChatGroup}; stripped on load after v4→v5 migration.
+   */
   orchestrateBoard?: OrchestrateBoardState;
+  /** Weak link from planner chat to its board folder ({@link ChatGroup.id}). */
+  boardGroupId?: string;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
-  /** Chat vs Board rendering for Orchestrate (default implicit chat). */
+  /**
+   * @deprecated Board view mode lives on {@link ChatGroup}; stripped on load after migration.
+   */
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
@@ -489,6 +528,10 @@ export interface SessionState {
   activeId: string | null;
   sidebarCollapsed: boolean;
   chats: Chat[];
+  /** Collapsible chat folders per workspace. */
+  groups?: ChatGroup[];
+  /** Folder whose board fills #chatArea when viewMode is board. */
+  activeBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
 }

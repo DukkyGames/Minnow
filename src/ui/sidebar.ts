@@ -1,5 +1,14 @@
 ﻿import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
+import {
+  createGroup,
+  deleteGroup,
+  getActiveBoardGroup,
+  getGroupsForWorkspace,
+  openBoardGroup,
+  renameGroup,
+  toggleGroupCollapsed,
+} from '../state/chat-groups';
 import { syncComposerFromStreamingState } from './composer-send';
 import {
   createEmptyChatObject,
@@ -33,6 +42,8 @@ import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selec
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
@@ -126,6 +137,21 @@ export function applyWorkspaceScopedSession(newPath: string, previousPath?: stri
   }
 }
 
+interface AppendChatRowOptions {
+  /** Workspace chats can be dragged onto group headers; Unassigned rows cannot. */
+  draggable?: boolean;
+  /** Compact name-only row when listed under a sidebar group. */
+  inGroup?: boolean;
+}
+
+/** Sidebar row highlight id; suppressed while a board folder owns the main column. */
+function sidebarHighlightChatId(): string | null {
+  if (!sessionState) return null;
+  const boardGroup = getActiveBoardGroup();
+  if (boardGroup?.viewMode === 'board') return null;
+  return sessionState.activeId;
+}
+
 function appendChatListSection(
   list: HTMLElement,
   title: string,
@@ -152,23 +178,36 @@ function appendChatListSection(
   list.appendChild(head);
 
   for (const chat of chats) {
-    appendChatRow(list, chat, activeId);
+    appendChatRow(list, chat, activeId, { draggable: false });
   }
 }
 
-function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): void {
-  const isActive = chat.id === activeId;
+function appendChatRow(
+  list: HTMLElement,
+  chat: Chat,
+  highlightChatId: string | null,
+  options?: AppendChatRowOptions,
+): void {
+  const isActive = highlightChatId != null && chat.id === highlightChatId;
+  const inGroup = options?.inGroup === true;
   const modelLabel = chat.modelId || 'No model selected';
   const statsPreview = formatSidebarStatsPreview(chat.lastStats);
-  const rowLabel = `${chat.name}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
+  const rowLabel = inGroup
+    ? chat.name
+    : `${chat.name}, ${modelLabel}${statsPreview ? `, ${statsPreview}` : ''}`;
 
   const row = document.createElement('div');
   row.dataset.chatId = chat.id;
-  row.className = 'chat-item-row' + (isActive ? ' active' : '');
+  row.className =
+    'chat-item-row' + (isActive ? ' active' : '') + (inGroup ? ' chat-item-row--in-group' : '');
   row.setAttribute('role', 'listitem');
   row.setAttribute('aria-label', rowLabel);
   row.title = [chat.name, modelLabel, statsPreview].filter(Boolean).join('\n');
   row.tabIndex = 0;
+  if (options?.draggable !== false) {
+    row.draggable = true;
+    row.classList.add('chat-item-row--draggable');
+  }
   row.addEventListener('click', (e) => {
     if ((e.target as Element).closest('.chat-item-actions')) return;
     switchChat(chat.id);
@@ -190,7 +229,7 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   const dot = document.createElement('div');
   dot.className = 'chat-item-dot';
   dot.setAttribute('aria-hidden', 'true');
-  const dotCtx = getChatItemDotContext(activeId);
+  const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
   applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), row);
   titleRow.appendChild(dot);
 
@@ -199,13 +238,15 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   nameSpan.textContent = chat.name;
   titleRow.appendChild(nameSpan);
 
-  const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
-  if (agentAbbrev) {
-    const badge = document.createElement('span');
-    badge.className = 'chat-item-agent-badge';
-    badge.textContent = agentAbbrev;
-    badge.title = `Work agent: ${chat.workAgentId}`;
-    titleRow.appendChild(badge);
+  if (!inGroup) {
+    const agentAbbrev = workAgentSidebarAbbrev(chat.workAgentId);
+    if (agentAbbrev) {
+      const badge = document.createElement('span');
+      badge.className = 'chat-item-agent-badge';
+      badge.textContent = agentAbbrev;
+      badge.title = `Work agent: ${chat.workAgentId}`;
+      titleRow.appendChild(badge);
+    }
   }
 
   const actions = document.createElement('div');
@@ -234,18 +275,192 @@ function appendChatRow(list: HTMLElement, chat: Chat, activeId: string | null): 
   head.appendChild(titleRow);
   head.appendChild(actions);
 
-  const modelEl = document.createElement('div');
-  modelEl.className = 'chat-item-model';
-  modelEl.textContent = chat.modelId || '\u2014';
-
-  const statsEl = document.createElement('div');
-  statsEl.className = 'chat-item-stats';
-  statsEl.textContent = formatSidebarStatsPreview(chat.lastStats);
-
   row.appendChild(head);
-  row.appendChild(modelEl);
-  row.appendChild(statsEl);
+  if (!inGroup) {
+    const modelEl = document.createElement('div');
+    modelEl.className = 'chat-item-model';
+    modelEl.textContent = chat.modelId || '\u2014';
+
+    const statsEl = document.createElement('div');
+    statsEl.className = 'chat-item-stats';
+    statsEl.textContent = formatSidebarStatsPreview(chat.lastStats);
+
+    row.appendChild(modelEl);
+    row.appendChild(statsEl);
+  }
   list.appendChild(row);
+}
+
+function groupHasStreamingChat(groupId: string, chats: Chat[]): boolean {
+  return chats.some((c) => c.groupId === groupId && isChatStreaming(c.id));
+}
+
+function appendGroupHeader(
+  list: HTMLElement,
+  group: import('../types').ChatGroup,
+  memberCount: number,
+  streaming: boolean,
+): void {
+  const head = document.createElement('div');
+  head.className = 'chat-group-header';
+  const isActiveBoardFolder =
+    Boolean(group.orchestrateBoard) &&
+    sessionState?.activeBoardGroupId === group.id &&
+    group.viewMode === 'board';
+  if (group.orchestrateBoard) {
+    head.classList.add('chat-group-header--has-board');
+  }
+  if (isActiveBoardFolder) {
+    head.classList.add('active');
+    head.setAttribute('aria-current', 'true');
+  }
+  head.dataset.groupId = group.id;
+  head.title = group.name;
+  head.setAttribute('aria-expanded', group.collapsed ? 'false' : 'true');
+
+  const icon = document.createElement('span');
+  icon.className = 'chat-group-header__icon';
+  icon.setAttribute('aria-hidden', 'true');
+
+  const caret = document.createElement('button');
+  caret.type = 'button';
+  caret.className = 'chat-group-header__caret';
+  caret.setAttribute('aria-expanded', group.collapsed ? 'false' : 'true');
+  caret.setAttribute(
+    'aria-label',
+    group.collapsed ? 'Expand group chats' : 'Collapse group chats',
+  );
+  caret.textContent = group.collapsed ? '▸' : '▾';
+  caret.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleGroupCollapsed(group.id);
+    renderSidebar();
+  });
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'chat-group-header__name';
+  nameSpan.textContent = group.name;
+
+  const count = document.createElement('span');
+  count.className = 'chat-group-header__count';
+  count.textContent = String(memberCount);
+
+  if (streaming) {
+    const runDot = document.createElement('span');
+    runDot.className = 'chat-group-header__running';
+    runDot.title = 'Task running';
+    head.appendChild(runDot);
+  }
+
+  head.appendChild(icon);
+  head.appendChild(caret);
+  head.appendChild(nameSpan);
+  head.appendChild(count);
+
+  head.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showGroupContextMenu(e.clientX, e.clientY, group.id, nameSpan);
+  });
+
+  if (group.orchestrateBoard) {
+    head.addEventListener('click', (e) => {
+      if ((e.target as Element).closest('.chat-group-header__caret')) return;
+      openBoardGroup(group.id);
+      renderSidebar();
+      syncViewModeToggleFromActiveChat();
+    });
+  }
+
+  list.appendChild(head);
+}
+
+function showGroupContextMenu(
+  x: number,
+  y: number,
+  groupId: string,
+  nameSpan: HTMLSpanElement,
+): void {
+  const existing = document.getElementById('chatGroupContextMenu');
+  existing?.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'chatGroupContextMenu';
+  menu.className = 'chat-group-context-menu';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  const renameItem = document.createElement('button');
+  renameItem.type = 'button';
+  renameItem.textContent = 'Rename';
+  renameItem.addEventListener('click', () => {
+    menu.remove();
+    beginRenameGroup(groupId, nameSpan);
+  });
+
+  const deleteItem = document.createElement('button');
+  deleteItem.type = 'button';
+  deleteItem.textContent = 'Delete group';
+  deleteItem.addEventListener('click', () => {
+    menu.remove();
+    if (!confirm('Delete this group? Chats will stay in the list, ungrouped.')) return;
+    deleteGroup(groupId);
+    renderSidebar();
+  });
+
+  menu.appendChild(renameItem);
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const close = (): void => {
+    menu.remove();
+    document.removeEventListener('click', close);
+  };
+  window.setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+function beginRenameGroup(groupId: string, nameSpan: HTMLSpanElement): void {
+  const groups = sessionState?.groups ?? [];
+  const group = groups.find((g) => g.id === groupId);
+  if (!group) return;
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'chat-rename-input';
+  inp.value = group.name;
+  inp.maxLength = 80;
+  nameSpan.replaceWith(inp);
+  inp.focus();
+  inp.select();
+  const finish = (): void => {
+    renameGroup(groupId, inp.value);
+    inp.replaceWith(nameSpan);
+    nameSpan.textContent = group.name;
+    renderSidebar();
+  };
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') {
+      inp.value = group.name;
+      inp.blur();
+    }
+  });
+  inp.addEventListener('blur', finish, { once: true });
+}
+
+/** Wire "+ New group" and chat drag-drop (call once at init). */
+export function wireSidebarNewGroupButton(): void {
+  void import('./sidebar-chat-dnd').then((m) => m.wireSidebarChatDragDrop());
+
+  const btn = document.getElementById('btnNewChatGroup');
+  if (!btn || btn.dataset.wired === '1') return;
+  btn.dataset.wired = '1';
+  btn.addEventListener('click', () => {
+    const g = createGroup('New group', getWorkspacePath());
+    renderSidebar();
+    const head = document.querySelector(
+      `.chat-group-header[data-group-id="${g.id}"] .chat-group-header__name`,
+    );
+    if (head instanceof HTMLSpanElement) beginRenameGroup(g.id, head);
+  });
 }
 
 /** Rebuild the session list in the left sidebar (workspace-scoped + Unassigned). */
@@ -254,13 +469,39 @@ export function renderSidebar(): void {
   if (!list || !sessionState) return;
   list.innerHTML = '';
 
-  const workspaceChats = getChatsForWorkspace(getWorkspacePath(), sessionState);
-  for (const chat of workspaceChats) {
-    appendChatRow(list, chat, sessionState.activeId);
+  const ws = getWorkspacePath();
+  const workspaceChats = getChatsForWorkspace(ws, sessionState);
+  const groupedIds = new Set<string>();
+  const highlightChatId = sidebarHighlightChatId();
+
+  for (const group of getGroupsForWorkspace(ws)) {
+    const members = workspaceChats.filter((c) => c.groupId === group.id);
+    members.forEach((c) => groupedIds.add(c.id));
+    appendGroupHeader(
+      list,
+      group,
+      members.length,
+      groupHasStreamingChat(group.id, workspaceChats),
+    );
+    if (!group.collapsed && members.length > 0) {
+      const membersEl = document.createElement('div');
+      membersEl.className = 'chat-group-members';
+      membersEl.setAttribute('role', 'group');
+      membersEl.setAttribute('aria-label', `${group.name} chats`);
+      for (const chat of members) {
+        appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+      }
+      list.appendChild(membersEl);
+    }
+  }
+
+  const ungrouped = workspaceChats.filter((c) => !groupedIds.has(c.id));
+  for (const chat of ungrouped) {
+    appendChatRow(list, chat, highlightChatId);
   }
 
   const unassigned = getUnassignedChats(sessionState);
-  appendChatListSection(list, 'Unassigned', unassigned, sessionState.activeId);
+  appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
@@ -361,6 +602,12 @@ export function deleteChat(chatId: string, evt?: Event): void {
 }
 
 export function switchChat(id: string): void {
+  if (isOrchestrateHubMounted()) {
+    teardownOrchestrateHub();
+  }
+  if (sessionState?.activeId) {
+    suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
+  }
   if (!sessionState || id === sessionState.activeId) {
     closeMobileSidebar();
     applySidebarVisuals();
@@ -375,6 +622,13 @@ export function switchChat(id: string): void {
   }
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
+  if (sessionState.activeBoardGroupId) {
+    delete sessionState.activeBoardGroupId;
+    const boardGroup = sessionState.groups?.find(
+      (g) => g.id === chat.boardGroupId || g.id === chat.groupId,
+    );
+    if (boardGroup) boardGroup.viewMode = 'chat';
+  }
   sessionState.activeId = id;
   chat.unread = false;
   recordChatOpened(id);

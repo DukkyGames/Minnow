@@ -6,23 +6,27 @@ import {
   deriveOrchestratorLastActivity,
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
-import {
-  ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT,
-  resolveOrchestrateResumeMessage,
-} from '../chat/orchestrate/resume-message';
-import {
-  hasIncompleteOrchestrateWork,
-  isOrchestratePlanComplete,
-} from '../chat/orchestrate/plan-complete';
+import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
-import { shouldShowOrchestrateStallBadge } from '../agents/supervisor/state.ts';
-import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
+import { loadSubAgentConfig } from '../agents/sub-agent-config.ts';
 import {
-  cancelAllForParentTurn,
   getSubAgentRun,
   listActiveSubAgentRuns,
 } from '../agents/orchestrator';
+import {
+  getActiveBoardGroup,
+  getPlannerChatForGroup,
+} from '../state/chat-groups.ts';
+import {
+  assignAgent,
+  countRunningTaskChats,
+  moveTaskStatus,
+  startTask,
+  startWave,
+  stopTask,
+  toggleWaveCollapsed,
+} from '../state/orchestrate-board-actions.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus } from '../agents/types';
 import {
@@ -39,9 +43,12 @@ import type {
   BoardTask,
   BoardTaskStatus,
   Chat,
+  ChatGroup,
   PersistedSubAgentStatus,
 } from '../types';
-import { openSubAgentDrawer } from './sub-agent-drawer';
+
+type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
+import { switchChat } from './sidebar';
 import {
   populateOrchestratePlanSelect,
   persistOrchestratePlanPathFromSelectValue,
@@ -54,7 +61,14 @@ import {
   setOrchestrateViewMode,
   syncViewModeToggleFromActiveChat,
 } from './view-mode-toggle';
+import {
+  getOrchestrateBoardMountElement,
+  isOrchestrateInitSplitChromeActive,
+} from './orchestrate-board-init-split';
+import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import { openSubAgentDrawer } from './sub-agent-drawer';
 import { teardownHub } from './hub';
+import { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
 
 /** Agent status chip on a kanban task card. */
 export type TaskAgentBadgeVariant = 'active' | 'failed' | 'complete';
@@ -104,8 +118,12 @@ export { isUserStoppedChat };
 export function deriveTaskAgentBadge(
   task: BoardTask,
   runStatus?: RunStatusHint,
+  taskChatStreaming = false,
 ): TaskAgentBadge | null {
-  if (!getBoardTaskPrimaryRunId(task)) return null;
+  if (task.chatId && taskChatStreaming) {
+    return { variant: 'active', label: 'Running' };
+  }
+  if (!getBoardTaskPrimaryRunId(task) && !task.chatId) return null;
 
   if (runStatus === 'cancelled') {
     return { variant: 'failed', label: 'Cancelled' };
@@ -143,13 +161,19 @@ export function canOpenBoardTaskSubAgent(
 }
 
 interface BoardSession {
-  chatId: string;
+  groupId: string;
+  plannerChatId: string;
   unsubBoard: () => void;
   unsubAgents: () => void;
 }
 
 let currentSession: BoardSession | null = null;
 let boardLiveTickTimer: ReturnType<typeof setInterval> | null = null;
+/** Last kanban paint fingerprint — skip DOM rebuild when unchanged (keeps open selects alive). */
+let lastKanbanRefreshKey = '';
+/** Kanban rebuild deferred while a task-card control (e.g. agent select) has focus. */
+let pendingKanbanRefresh = false;
+let kanbanInteractionReleaseBound = false;
 
 const BOARD_LIVE_TICK_MS = 1000;
 
@@ -177,22 +201,23 @@ function tickOrchestrateBoardSession(): void {
     stopBoardLiveTick();
     return;
   }
-  const chat = findChatById(session.chatId);
-  if (!chat?.orchestrateBoard) {
+  const group = getActiveBoardGroup();
+  const planner = findChatById(session.plannerChatId);
+  if (!group?.orchestrateBoard || !planner || group.id !== session.groupId) {
     stopBoardLiveTick();
     return;
   }
   const activeRuns = listActiveSubAgentRuns().filter(
     (r) =>
-      r.parentChatId === chat.id &&
+      r.parentChatId === planner.id &&
       (r.status === 'queued' || r.status === 'running'),
   );
-  syncOrchestrateBoardTimer(chat, boardTimerContextForChat(chat, activeRuns.length));
-  if (
-    isOrchestrateBoardViewActive() &&
-    normalizeModeId(getActiveChat().modeId) === 'orchestrate' &&
-    getActiveChat().id === chat.id
-  ) {
+  syncOrchestrateBoardTimer(
+    group,
+    planner,
+    boardTimerContextForChat(planner, activeRuns.length),
+  );
+  if (!isOrchestrateHubMounted() && (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive())) {
     refreshActiveBoardIfMounted();
   }
 }
@@ -210,27 +235,122 @@ function disposeBoardSession(): void {
   currentSession.unsubBoard();
   currentSession.unsubAgents();
   currentSession = null;
+  lastKanbanRefreshKey = '';
+  pendingKanbanRefresh = false;
 }
 
-/** Refresh board UI when store or sub-agents change (stable handler per chat). */
-function scheduleBoardUiRefresh(chatId: string): void {
-  if (!isOrchestrateBoardViewActive()) return;
-  if (getActiveChat().id !== chatId) return;
+/** True when focus is on a field control inside the kanban (e.g. open agent select). */
+function isKanbanFormControlFocused(): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return false;
+  if (!active.closest('.board-kanban-waves')) return false;
+  // Buttons (Reopen, wave caret, Start) must not block refresh — after click they stay
+  // focused in real browsers, which left the kanban stale until another interaction.
+  return active.matches('select, input, textarea');
+}
+
+/** Stable key for kanban DOM — only rebuild when task/run/streaming presentation changes. */
+export function buildKanbanRefreshKey(
+  board: BoardState,
+  plannerChat: Chat,
+): string {
+  const cap = board.maxConcurrentTasks ?? 3;
+  const running = countRunningTaskChats(board);
+  const parts: string[] = [
+    `run:${running}/${cap}`,
+    `stream:${isChatStreaming(plannerChat.id) ? 1 : 0}`,
+  ];
+  for (const wave of board.waves) {
+    parts.push(
+      `w:${wave.id}:${wave.collapsed ? 1 : 0}:${wave.status ?? ''}:${wave.taskCount ?? 0}:${wave.completeCount ?? 0}`,
+    );
+  }
+  for (const task of board.tasks) {
+    const streaming = task.chatId && isChatStreaming(task.chatId) ? 1 : 0;
+    const runId = getBoardTaskPrimaryRunId(task);
+    const runStatus = runId ? resolveRunStatusForTask(plannerChat, runId) ?? '' : '';
+    parts.push(
+      [
+        task.id,
+        task.status,
+        task.agentType ?? '',
+        task.chatId ?? '',
+        streaming,
+        runStatus,
+        task.error ?? '',
+        task.title,
+        task.category,
+      ].join('|'),
+    );
+  }
+  return parts.join(';');
+}
+
+/** After agent select blur, apply a deferred kanban refresh if board state changed underneath. */
+function ensureKanbanInteractionReleaseListener(): void {
+  if (kanbanInteractionReleaseBound) return;
+  kanbanInteractionReleaseBound = true;
+  document.addEventListener('focusout', (event) => {
+    if (!pendingKanbanRefresh) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.closest('.board-kanban-waves')) return;
+    window.setTimeout(() => {
+      if (!pendingKanbanRefresh || isKanbanFormControlFocused()) return;
+      pendingKanbanRefresh = false;
+      refreshActiveBoardIfMounted();
+    }, 0);
+  });
+}
+
+function mountKanbanInMain(
+  main: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const planPanel = main.querySelector('.board-plan-panel');
+  const newKanban = renderKanban(board, group, plannerChat);
+  const oldKanban = main.querySelector('.board-kanban-waves');
+  if (oldKanban) {
+    oldKanban.replaceWith(newKanban);
+  } else if (planPanel) {
+    main.insertBefore(newKanban, planPanel);
+  } else {
+    main.prepend(newKanban);
+  }
+}
+
+/** Refresh board UI when store or sub-agents change (stable handler per folder). */
+function scheduleBoardUiRefresh(groupId: string): void {
+  if (isOrchestrateHubMounted()) return;
+  if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
+  if (getActiveBoardGroup()?.id !== groupId) return;
   refreshActiveBoardIfMounted();
 }
 
-/** Wire board + sub-agent listeners once per chat (idempotent). */
-function ensureBoardSession(chatId: string): void {
-  if (currentSession?.chatId === chatId) return;
+/** Wire board + sub-agent listeners once per folder (idempotent). */
+function ensureBoardSession(group: ChatGroup, plannerChat: Chat): void {
+  if (
+    currentSession?.groupId === group.id &&
+    currentSession.plannerChatId === plannerChat.id
+  ) {
+    return;
+  }
   disposeBoardSession();
   currentSession = {
-    chatId,
-    unsubBoard: subscribeBoardChanges(chatId, () => scheduleBoardUiRefresh(chatId)),
+    groupId: group.id,
+    plannerChatId: plannerChat.id,
+    unsubBoard: subscribeBoardChanges(group.id, () => scheduleBoardUiRefresh(group.id)),
     unsubAgents: subscribeSubAgentRuns((run) => {
-      if (run.parentChatId === chatId) scheduleBoardUiRefresh(chatId);
+      if (run.parentChatId === plannerChat.id) scheduleBoardUiRefresh(group.id);
     }),
   };
   startBoardLiveTick();
+}
+
+function plannerForGroup(group: ChatGroup): Chat {
+  return getPlannerChatForGroup(group) ?? getActiveChat();
 }
 
 function shortPlanName(planPath: string): string {
@@ -246,8 +366,7 @@ export type BoardHeaderStatusVariant =
   | 'complete'
   | 'failed'
   | 'blocked'
-  | 'stopped'
-  | 'stalled';
+  | 'stopped';
 
 export interface BoardHeaderStatus {
   variant: BoardHeaderStatusVariant;
@@ -256,11 +375,10 @@ export interface BoardHeaderStatus {
 
 /** Derive orchestration status from board tasks, sub-agents, and parent stream. */
 export function deriveBoardHeaderStatus(
-  board: NonNullable<Chat['orchestrateBoard']>,
+  board: BoardState,
   isStreaming: boolean,
   activeRunCount: number,
   userStopped = false,
-  watchdogStalled = false,
 ): BoardHeaderStatus {
   const tasks = board.tasks;
   const total = tasks.length;
@@ -287,15 +405,8 @@ export function deriveBoardHeaderStatus(
   if (hasBlocked && activeRunCount === 0 && !hasInFlight) {
     return { variant: 'blocked', label: 'Blocked' };
   }
-  if (
-    watchdogStalled &&
-    incomplete &&
-    !isStreaming &&
-    activeRunCount === 0
-  ) {
-    return { variant: 'stalled', label: 'Stalled — Resume' };
-  }
-  if (activeRunCount > 0 || hasInFlight) {
+  const runningTasks = countRunningTaskChats(board);
+  if (runningTasks > 0 || activeRunCount > 0 || hasInFlight) {
     return { variant: 'active', label: 'Active' };
   }
   if (completeCount > 0) {
@@ -393,14 +504,6 @@ function syncBoardHeaderActivity(
   if (textEl) textEl.textContent = activity.text;
 }
 
-/** Start vs Resume copy for the board header play control (idle state). */
-function playPauseIdleLabel(status: BoardHeaderStatus): string {
-  if (status.variant === 'complete') return 'Plan complete';
-  if (status.variant === 'active') return 'Active';
-  if (status.variant === 'stopped' || status.variant === 'ready') return 'Start';
-  return 'Resume';
-}
-
 /** Build an inline SVG icon for board header icon buttons. */
 function createBoardHeaderIconSvg(pathD: string): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -431,96 +534,7 @@ function createBoardHeaderIconButton(
 
 const BOARD_ICON_PLAN =
   'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
-const BOARD_ICON_PLAY = 'M8 5v14l11-7z';
-const BOARD_ICON_PAUSE = 'M6 4h4v16H6z M14 4h4v16h-4z';
-
-function isBoardPlayPauseRunning(
-  isStreaming: boolean,
-  board: NonNullable<Chat['orchestrateBoard']>,
-): boolean {
-  return isStreaming && Boolean(board.activeParentTurnId);
-}
-
-/** Sync play/pause icon, labels, pressed state, and disabled state on live board refresh. */
-function syncBoardPlayPauseButton(
-  btn: HTMLButtonElement,
-  board: NonNullable<Chat['orchestrateBoard']>,
-  isStreaming: boolean,
-  headerStatus: BoardHeaderStatus,
-): void {
-  const running = isBoardPlayPauseRunning(isStreaming, board);
-  const playIcon = btn.querySelector('[data-board-icon="play"]');
-  const pauseIcon = btn.querySelector('[data-board-icon="pause"]');
-  playIcon?.classList.toggle('hidden', running);
-  pauseIcon?.classList.toggle('hidden', !running);
-
-  if (running) {
-    btn.setAttribute('aria-label', 'Stop orchestrator');
-    btn.title = 'Stop orchestrator';
-    btn.setAttribute('aria-pressed', 'true');
-    btn.disabled = false;
-    btn.classList.add('board-header__icon-btn--danger');
-  } else {
-    const planComplete = isOrchestratePlanComplete(board);
-    const agentsActive = headerStatus.variant === 'active';
-    const idleLabel = playPauseIdleLabel(headerStatus);
-    btn.setAttribute('aria-label', idleLabel);
-    btn.title = planComplete ? ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT : idleLabel;
-    btn.setAttribute('aria-pressed', 'false');
-    btn.disabled = isStreaming || planComplete || agentsActive;
-    btn.classList.remove('board-header__icon-btn--danger');
-  }
-}
-
-function createBoardPlayPauseButton(
-  board: NonNullable<Chat['orchestrateBoard']>,
-  isStreaming: boolean,
-  headerStatus: BoardHeaderStatus,
-): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'icon-btn board-header__icon-btn';
-  btn.dataset.boardAction = 'play-pause';
-
-  const playSvg = createBoardHeaderIconSvg(BOARD_ICON_PLAY);
-  playSvg.dataset.boardIcon = 'play';
-  const pauseSvg = createBoardHeaderIconSvg(BOARD_ICON_PAUSE);
-  pauseSvg.dataset.boardIcon = 'pause';
-  pauseSvg.classList.add('hidden');
-  btn.appendChild(playSvg);
-  btn.appendChild(pauseSvg);
-
-  syncBoardPlayPauseButton(btn, board, isStreaming, headerStatus);
-
-  btn.addEventListener('click', () => {
-    const activeChat = getActiveChat();
-    const activeBoard = activeChat.orchestrateBoard;
-    if (!activeBoard) return;
-    if (isBoardPlayPauseRunning(isActiveChatStreaming(), activeBoard)) {
-      stopGeneration();
-      if (activeBoard.activeParentTurnId) {
-        cancelAllForParentTurn(activeBoard.activeParentTurnId);
-      }
-      refreshActiveBoardIfMounted();
-      return;
-    }
-    const message = resolveOrchestrateResumeMessage(activeBoard);
-    if (!message) return;
-    sendBoardMessage(message);
-    refreshActiveBoardIfMounted();
-  });
-
-  return btn;
-}
-
-function wireBoardHeaderControls(
-  controls: HTMLElement,
-  chat: Chat,
-  board: NonNullable<Chat['orchestrateBoard']>,
-  planPath: string,
-  isStreaming: boolean,
-  headerStatus: BoardHeaderStatus,
-): void {
+function wireBoardHeaderControls(controls: HTMLElement, planPath: string): void {
   controls.replaceChildren();
 
   const openPlan = createBoardHeaderIconButton(
@@ -539,7 +553,6 @@ function wireBoardHeaderControls(
 
   controls.appendChild(openPlan);
   ensureBoardChatViewToggle(controls);
-  controls.appendChild(createBoardPlayPauseButton(board, isStreaming, headerStatus));
 }
 
 interface BoardHeaderMetrics {
@@ -554,7 +567,7 @@ interface BoardHeaderMetrics {
 
 function buildBoardHeader(
   chat: Chat,
-  board: NonNullable<Chat['orchestrateBoard']>,
+  board: BoardState,
   planPath: string,
   metrics: BoardHeaderMetrics,
   isStreaming: boolean,
@@ -581,17 +594,14 @@ function buildBoardHeader(
 
   const controls = document.createElement('div');
   controls.className = 'board-header__controls';
-  wireBoardHeaderControls(controls, chat, board, planPath, isStreaming, headerStatus);
+  wireBoardHeaderControls(controls, planPath);
 
   toolbar.appendChild(leading);
   toolbar.appendChild(controls);
 
   const meta = document.createElement('div');
   meta.className = 'board-header__meta';
-
-  const stats = document.createElement('p');
-  stats.className = 'board-header__stats';
-  stats.textContent = `${metrics.done}/${metrics.totalTasks} tasks · ${metrics.wavesComplete}/${metrics.totalWaves} waves · ${metrics.activeRuns} active · ${metrics.elapsed}`;
+  meta.appendChild(buildBoardHeaderBench(metrics, board));
 
   const bar = document.createElement('div');
   bar.className = 'board-header__progress';
@@ -604,19 +614,96 @@ function buildBoardHeader(
   fill.style.setProperty('--progress-scale', String(metrics.progress / 100));
   bar.appendChild(fill);
 
-  meta.appendChild(stats);
   meta.appendChild(bar);
   header.appendChild(toolbar);
   header.appendChild(meta);
   return header;
 }
 
+/** One instrumentation cell in the board header bench (mono value + label). */
+function createBoardBenchCell(
+  value: string,
+  label: string,
+  benchKey: string,
+): HTMLElement {
+  const cell = document.createElement('div');
+  cell.className = 'board-bench__cell';
+  cell.dataset.boardBench = benchKey;
+  const valueEl = document.createElement('span');
+  valueEl.className = 'board-bench__value';
+  valueEl.textContent = value;
+  const labelEl = document.createElement('span');
+  labelEl.className = 'board-bench__label';
+  labelEl.textContent = label;
+  cell.appendChild(valueEl);
+  cell.appendChild(labelEl);
+  return cell;
+}
+
+/** Compact metrics row under the board toolbar (stats-strip family). */
+function buildBoardHeaderBench(
+  metrics: BoardHeaderMetrics,
+  board: BoardState,
+): HTMLElement {
+  const bench = document.createElement('div');
+  bench.className = 'board-header__bench';
+  bench.setAttribute('role', 'group');
+  bench.setAttribute('aria-label', 'Board metrics');
+  const cap = board.maxConcurrentTasks ?? 3;
+  const running = countRunningTaskChats(board);
+  bench.appendChild(
+    createBoardBenchCell(
+      `${metrics.done}/${metrics.totalTasks}`,
+      'Tasks',
+      'tasks',
+    ),
+  );
+  bench.appendChild(
+    createBoardBenchCell(
+      `${metrics.wavesComplete}/${metrics.totalWaves}`,
+      'Waves',
+      'waves',
+    ),
+  );
+  bench.appendChild(
+    createBoardBenchCell(`${running}/${cap}`, 'Running', 'running'),
+  );
+  bench.appendChild(
+    createBoardBenchCell(metrics.elapsed, 'Elapsed', 'elapsed'),
+  );
+  return bench;
+}
+
+function syncBoardHeaderBench(
+  header: Element,
+  metrics: BoardHeaderMetrics,
+  board: BoardState,
+): void {
+  const cap = board.maxConcurrentTasks ?? 3;
+  const running = countRunningTaskChats(board);
+  const values: Record<string, string> = {
+    tasks: `${metrics.done}/${metrics.totalTasks}`,
+    waves: `${metrics.wavesComplete}/${metrics.totalWaves}`,
+    running: `${running}/${cap}`,
+    elapsed: metrics.elapsed,
+  };
+  for (const [key, text] of Object.entries(values)) {
+    const cell = header.querySelector(`[data-board-bench="${key}"] .board-bench__value`);
+    if (cell) cell.textContent = text;
+  }
+}
+
 function boardHeaderMetrics(
-  chat: Chat,
-  board: NonNullable<Chat['orchestrateBoard']>,
+  group: ChatGroup,
+  plannerChat: Chat,
+  board: BoardState,
   activeRunCount: number,
 ): BoardHeaderMetrics {
-  syncOrchestrateBoardTimer(chat, boardTimerContextForChat(chat, activeRunCount));
+  syncOrchestrateBoardTimer(
+    group,
+    plannerChat,
+    boardTimerContextForChat(plannerChat, activeRunCount),
+  );
   const progress = getBoardProgressPercent(board);
   const wavesComplete = board.waves.filter((w) => w.status === 'complete').length;
   const done = board.tasks.filter((t) => t.status === 'complete').length;
@@ -652,103 +739,224 @@ function buildTaskAgentBadge(badge: TaskAgentBadge): HTMLElement {
   return el;
 }
 
-function buildTaskCard(task: BoardTask, chat: Chat): HTMLElement {
+/** Advance-action icon on kanban task cards (stroke paths, matches `.icon-svg`). */
+type BoardAdvanceIconKind = 'forward' | 'check' | 'recycle';
+
+const BOARD_ADVANCE_ICON_PATHS: Record<BoardAdvanceIconKind, readonly string[]> = {
+  forward: ['M5 12h14', 'M12 5l7 7-7 7'],
+  check: ['M20 6 9 17l-5-5'],
+  recycle: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+};
+
+function createBoardAdvanceIcon(kind: BoardAdvanceIconKind): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon-svg board-task-card__advance-icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of BOARD_ADVANCE_ICON_PATHS[kind]) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
+function buildStatusActionButtons(
+  task: BoardTask,
+  group: ChatGroup,
+  plannerChat: Chat,
+  row: HTMLElement,
+): void {
+  const addBtn = (
+    label: string,
+    status: BoardTaskStatus,
+    icon: BoardAdvanceIconKind,
+  ): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-task-card__advance-btn';
+    btn.appendChild(createBoardAdvanceIcon(icon));
+    const text = document.createElement('span');
+    text.className = 'board-task-card__advance-label';
+    text.textContent = label;
+    btn.appendChild(text);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moveTaskStatus(group, task.id, status, plannerChat);
+      refreshActiveBoardIfMounted();
+    });
+    row.appendChild(btn);
+  };
+  if (task.status === 'planned' || task.status === 'blocked') {
+    addBtn('In progress', 'in_progress', 'forward');
+  }
+  if (task.status === 'in_progress') {
+    addBtn('Testing', 'testing', 'forward');
+  }
+  if (task.status === 'testing') {
+    addBtn('Complete', 'complete', 'check');
+    addBtn('Failed', 'failed', 'forward');
+  }
+  if (task.status === 'complete' || task.status === 'failed') {
+    addBtn('Reopen', 'planned', 'recycle');
+  }
+}
+
+function buildTaskCard(
+  task: BoardTask,
+  group: ChatGroup,
+  plannerChat: Chat,
+  agentOptions: Array<{ id: string; label: string }>,
+): HTMLElement {
+  const taskStreaming = Boolean(task.chatId && isChatStreaming(task.chatId));
   const primaryRunId = getBoardTaskPrimaryRunId(task);
   const runStatus = primaryRunId
-    ? resolveRunStatusForTask(chat, primaryRunId)
+    ? resolveRunStatusForTask(plannerChat, primaryRunId)
     : null;
-  const agentBadge = deriveTaskAgentBadge(task, runStatus);
-  const openable = canOpenBoardTaskSubAgent(task, runStatus);
-  const runIds = getBoardTaskRunIds(task);
-  let selectedRunId = primaryRunId ?? runIds[runIds.length - 1] ?? null;
+  const agentBadge = deriveTaskAgentBadge(task, runStatus, taskStreaming);
+  const board = group.orchestrateBoard!;
+  const cap = board.maxConcurrentTasks ?? 3;
+  const atCap = countRunningTaskChats(board) >= cap && !taskStreaming;
 
   const card = document.createElement('article');
   card.className = 'board-task-card';
   if (task.status === 'failed' || task.status === 'blocked') {
     card.classList.add('board-task-card--alert');
   }
-  if (openable && selectedRunId) {
+  if (taskStreaming) {
+    card.classList.add('board-task-card--running');
+  }
+
+  const openableRunId = primaryRunId && canOpenBoardTaskSubAgent(task, runStatus);
+  if (openableRunId) {
     card.classList.add('board-task-card--clickable');
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
-    card.setAttribute(
-      'aria-label',
-      `Open sub-agent for ${task.id}: ${task.title}${agentBadge ? `, ${agentBadge.label}` : ''}`,
-    );
-    const open = (): void => {
-      const runId = selectedRunId ?? getBoardTaskPrimaryRunId(task);
-      if (runId) openSubAgentDrawer(runId, chat.id);
+    card.title = 'Open sub-agent run';
+    const openRun = (): void => {
+      if (primaryRunId) openSubAgentDrawer(primaryRunId, plannerChat.id);
     };
-    card.addEventListener('click', (ev) => {
-      if (
-        ev.target instanceof HTMLElement &&
-        ev.target.closest('.board-task-card__run-picker')
-      ) {
-        return;
-      }
-      open();
+    card.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest('.board-task-card__footer')) return;
+      openRun();
     });
-    card.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        ev.preventDefault();
-        open();
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openRun();
       }
     });
   }
 
-  const head = document.createElement('div');
-  head.className = 'board-task-card__head';
+  const top = document.createElement('div');
+  top.className = 'board-task-card__top';
   const id = document.createElement('span');
   id.className = 'board-task-card__id';
   id.textContent = task.id;
-  head.appendChild(id);
-  if (agentBadge) {
-    head.appendChild(buildTaskAgentBadge(agentBadge));
-  }
-  card.appendChild(head);
+  top.appendChild(id);
 
-  if (openable && runIds.length > 1) {
-    const pickerWrap = document.createElement('div');
-    pickerWrap.className = 'board-task-card__run-picker';
-    const pickerLabel = document.createElement('label');
-    pickerLabel.className = 'board-task-card__run-picker-label';
-    pickerLabel.textContent = 'Run';
-    const picker = document.createElement('select');
-    picker.className = 'board-task-card__run-picker-select';
-    picker.setAttribute('aria-label', `Sub-agent runs for ${task.id}`);
-    for (let i = 0; i < runIds.length; i++) {
-      const runId = runIds[i];
-      const opt = document.createElement('option');
-      opt.value = runId;
-      const status = resolveRunStatusForTask(chat, runId);
-      const shortId = runId.length > 8 ? `${runId.slice(0, 8)}…` : runId;
-      opt.textContent = `Run ${i + 1} · ${status ?? 'unknown'} · ${shortId}`;
-      if (runId === selectedRunId) opt.selected = true;
-      picker.appendChild(opt);
-    }
-    picker.addEventListener('click', (ev) => ev.stopPropagation());
-    picker.addEventListener('change', () => {
-      selectedRunId = picker.value;
-    });
-    pickerLabel.appendChild(picker);
-    pickerWrap.appendChild(pickerLabel);
-    card.appendChild(pickerWrap);
-  }
-
-  const title = document.createElement('p');
-  title.className = 'board-task-card__title';
-  title.textContent = task.title;
+  const trail = document.createElement('div');
+  trail.className = 'board-task-card__trail';
   const chip = document.createElement('span');
   chip.className = `board-task-card__cat bt--${task.category}`;
   chip.textContent = task.category;
-  card.appendChild(title);
-  card.appendChild(chip);
-  if (typeof task.filesChanged === 'number' && task.filesChanged > 0) {
-    const fc = document.createElement('span');
-    fc.className = 'board-task-card__files';
-    fc.textContent = `${task.filesChanged} file(s)`;
-    card.appendChild(fc);
+  trail.appendChild(chip);
+  if (agentBadge) {
+    trail.appendChild(buildTaskAgentBadge(agentBadge));
   }
+  top.appendChild(trail);
+  card.appendChild(top);
+
+  const title = document.createElement('h4');
+  title.className = 'board-task-card__title';
+  title.textContent = task.title;
+  title.title = task.title;
+  card.appendChild(title);
+
+  const footer = document.createElement('div');
+  footer.className = 'board-task-card__footer';
+
+  const assignRow = document.createElement('div');
+  assignRow.className = 'board-task-card__assign';
+  const agentLabel = document.createElement('label');
+  agentLabel.className = 'board-task-card__assign-label';
+  agentLabel.textContent = 'Agent';
+  const agentSelect = document.createElement('select');
+  agentSelect.className = 'board-select board-select--compact board-task-card__agent-select';
+  agentSelect.setAttribute('aria-label', `Agent for ${task.id}`);
+  const emptyOpt = document.createElement('option');
+  emptyOpt.value = '';
+  emptyOpt.textContent = 'Choose…';
+  agentSelect.appendChild(emptyOpt);
+  for (const { id, label } of agentOptions) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = label;
+    if (task.agentType === id) opt.selected = true;
+    agentSelect.appendChild(opt);
+  }
+  const stopCardBubble = (e: Event): void => e.stopPropagation();
+  agentSelect.addEventListener('mousedown', stopCardBubble);
+  agentSelect.addEventListener('click', stopCardBubble);
+  agentSelect.addEventListener('change', (e) => {
+    e.stopPropagation();
+    const v = agentSelect.value.trim();
+    if (v) assignAgent(group, task.id, v, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  agentLabel.appendChild(agentSelect);
+  assignRow.appendChild(agentLabel);
+  footer.appendChild(assignRow);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'board-task-card__toolbar';
+  const hasAgent = Boolean(task.agentType?.trim());
+  if (taskStreaming) {
+    const stopBtn = document.createElement('button');
+    stopBtn.type = 'button';
+    stopBtn.className = 'board-btn board-btn--compact board-btn--mn-danger board-task-card__btn--stop';
+    stopBtn.textContent = 'Stop';
+    stopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void stopTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
+    });
+    toolbar.appendChild(stopBtn);
+  } else {
+    const startBtn = document.createElement('button');
+    startBtn.type = 'button';
+    startBtn.className = 'board-btn board-btn--compact board-btn--primary board-task-card__btn--start';
+    startBtn.textContent = 'Start';
+    startBtn.disabled = !hasAgent || atCap;
+    startBtn.title = atCap ? `Concurrency cap (${cap}) reached` : !hasAgent ? 'Assign an agent first' : '';
+    startBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void startTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
+    });
+    toolbar.appendChild(startBtn);
+  }
+  if (task.chatId) {
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'board-btn board-btn--compact board-task-card__btn--open';
+    openBtn.textContent = 'Chat';
+    openBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      switchChat(task.chatId!);
+    });
+    toolbar.appendChild(openBtn);
+  }
+  footer.appendChild(toolbar);
+
+  const advanceRow = document.createElement('div');
+  advanceRow.className = 'board-task-card__advance';
+  buildStatusActionButtons(task, group, plannerChat, advanceRow);
+  if (advanceRow.childElementCount) {
+    footer.appendChild(advanceRow);
+  }
+
+  card.appendChild(footer);
+
   if (task.error) {
     const err = document.createElement('p');
     err.className = 'board-task-card__error';
@@ -758,29 +966,165 @@ function buildTaskCard(task: BoardTask, chat: Chat): HTMLElement {
   return card;
 }
 
-function renderKanban(
-  board: NonNullable<Chat['orchestrateBoard']>,
-  chat: Chat,
+/** Semantic chip variant for collapsed-wave task tokens (status + live stream). */
+function compactTaskChipVariant(task: BoardTask, taskStreaming: boolean): string {
+  if (taskStreaming) return 'running';
+  switch (task.status) {
+    case 'complete':
+      return 'complete';
+    case 'failed':
+    case 'blocked':
+      return 'failed';
+    case 'in_progress':
+    case 'testing':
+      return 'active';
+    default:
+      return 'planned';
+  }
+}
+
+/** Human-readable status for compact chip tooltips. */
+function compactTaskStatusLabel(task: BoardTask, taskStreaming: boolean): string {
+  if (taskStreaming) return 'Running';
+  switch (task.status) {
+    case 'planned':
+      return 'Planned';
+    case 'blocked':
+      return 'Blocked';
+    case 'in_progress':
+      return 'In progress';
+    case 'testing':
+      return 'Testing';
+    case 'complete':
+      return 'Complete';
+    case 'failed':
+      return 'Failed';
+    default:
+      return task.status;
+  }
+}
+
+/** Horizontal task strip shown while a wave kanban is collapsed. */
+function buildWaveCompactSummary(
+  waveTasks: BoardTask[],
+  group: ChatGroup,
+  plannerChat: Chat,
+  waveId: number | string,
+): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'board-wave-compact';
+  wrap.setAttribute('role', 'region');
+  wrap.setAttribute('aria-label', `Wave ${waveId} tasks`);
+
+  const laneMeta = document.createElement('div');
+  laneMeta.className = 'board-wave-compact__lanes';
+  laneMeta.setAttribute('aria-hidden', 'true');
+  const lanes: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
+    { label: 'Plan', statuses: ['planned', 'blocked'] },
+    { label: 'Run', statuses: ['in_progress'] },
+    { label: 'Test', statuses: ['testing'] },
+    { label: 'Done', statuses: ['complete', 'failed'] },
+  ];
+  for (const lane of lanes) {
+    const count = waveTasks.filter((t) => lane.statuses.includes(t.status)).length;
+    const cell = document.createElement('span');
+    cell.className = 'board-wave-compact__lane';
+    const label = document.createElement('span');
+    label.className = 'board-wave-compact__lane-label';
+    label.textContent = lane.label;
+    const value = document.createElement('span');
+    value.className = 'board-wave-compact__lane-count';
+    value.textContent = String(count);
+    cell.appendChild(label);
+    cell.appendChild(value);
+    laneMeta.appendChild(cell);
+  }
+  wrap.appendChild(laneMeta);
+
+  const strip = document.createElement('div');
+  strip.className = 'board-wave-compact__strip';
+  strip.setAttribute('role', 'list');
+  for (const task of waveTasks) {
+    const taskStreaming = Boolean(task.chatId && isChatStreaming(task.chatId));
+    const variant = compactTaskChipVariant(task, taskStreaming);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `board-wave-compact__chip board-wave-compact__chip--${variant}`;
+    chip.setAttribute('role', 'listitem');
+    chip.title = `${task.id}: ${task.title} (${compactTaskStatusLabel(task, taskStreaming)})`;
+    chip.setAttribute('aria-label', chip.title);
+
+    const dot = document.createElement('span');
+    dot.className = 'board-wave-compact__dot';
+    dot.setAttribute('aria-hidden', 'true');
+    chip.appendChild(dot);
+
+    const id = document.createElement('span');
+    id.className = 'board-wave-compact__id';
+    id.textContent = task.id;
+    chip.appendChild(id);
+
+    const title = document.createElement('span');
+    title.className = 'board-wave-compact__title';
+    title.textContent = task.title;
+    chip.appendChild(title);
+
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleWaveCollapsed(group, waveId);
+      refreshActiveBoardIfMounted();
+    });
+    strip.appendChild(chip);
+  }
+  wrap.appendChild(strip);
+  return wrap;
+}
+
+function renderKanbanColumns(
+  tasks: BoardTask[],
+  group: ChatGroup,
+  plannerChat: Chat,
+  agentOptions: Array<{ id: string; label: string }>,
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'kanban-grid';
-  const columns: Array<{ key: string; label: string; statuses: BoardTaskStatus[] }> = [
-    { key: 'planned', label: 'Planned', statuses: ['planned', 'blocked'] },
-    { key: 'in_progress', label: 'In Progress', statuses: ['in_progress'] },
-    { key: 'testing', label: 'Testing', statuses: ['testing'] },
-    { key: 'complete', label: 'Complete', statuses: ['complete', 'failed'] },
+  const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
+    { label: 'Planned', statuses: ['planned', 'blocked'] },
+    { label: 'In Progress', statuses: ['in_progress'] },
+    { label: 'Testing', statuses: ['testing'] },
+    { label: 'Complete', statuses: ['complete', 'failed'] },
   ];
   for (const col of columns) {
     const column = document.createElement('section');
     column.className = 'kanban-column';
+    const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
     const h = document.createElement('h3');
-    h.textContent = col.label;
+    const colLabel = document.createElement('span');
+    colLabel.className = 'kanban-column__label';
+    colLabel.textContent = col.label;
+    const colCount = document.createElement('span');
+    colCount.className = 'kanban-column__count';
+    colCount.textContent = String(colTasks.length);
+    colCount.setAttribute('aria-label', `${colTasks.length} tasks`);
+    h.appendChild(colLabel);
+    h.appendChild(colCount);
     column.appendChild(h);
     const list = document.createElement('div');
     list.className = 'kanban-column__list';
-    for (const task of board.tasks) {
-      if (!col.statuses.includes(task.status)) continue;
-      list.appendChild(buildTaskCard(task, chat));
+    let entranceIndex = 0;
+    const staggerEntrance =
+      isOrchestrateInitSplitChromeActive() && isChatStreaming(plannerChat.id);
+    for (const task of colTasks) {
+      const card = buildTaskCard(task, group, plannerChat, agentOptions);
+      if (staggerEntrance) {
+        card.classList.add('board-task-card--enter');
+        card.style.setProperty(
+          '--board-task-enter-delay',
+          `${entranceIndex * 55}ms`,
+        );
+        entranceIndex += 1;
+      }
+      list.appendChild(card);
     }
     column.appendChild(list);
     grid.appendChild(column);
@@ -788,32 +1132,123 @@ function renderKanban(
   return grid;
 }
 
+async function populateKanbanWaves(
+  wrap: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  const cfg = await loadSubAgentConfig();
+  const types = Object.entries(cfg.types)
+    .filter(([, t]) => t.enabled !== false)
+    .map(([id, t]) => ({ id, label: t.label?.trim() || id }));
+  wrap.replaceChildren();
+  for (const wave of board.waves) {
+    const waveTasks = board.tasks.filter((t) => t.wave === wave.id);
+    if (!waveTasks.length) continue;
+    const collapsed = wave.collapsed === true;
+    const block = document.createElement('section');
+    block.className = 'board-wave-block';
+    if (collapsed) block.classList.add('board-wave-block--collapsed');
+
+    const header = document.createElement('div');
+    header.className = 'board-wave-block__header';
+
+    const caret = document.createElement('button');
+    caret.type = 'button';
+    caret.className = 'board-wave-block__caret';
+    caret.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    caret.setAttribute(
+      'aria-label',
+      collapsed ? `Expand wave ${wave.id}` : `Collapse wave ${wave.id}`,
+    );
+    caret.textContent = collapsed ? '▸' : '▾';
+    caret.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleWaveCollapsed(group, wave.id);
+      refreshActiveBoardIfMounted();
+    });
+    header.appendChild(caret);
+
+    const title = document.createElement('h3');
+    title.className = 'board-wave-block__title';
+    const waveId = document.createElement('span');
+    waveId.className = 'board-wave-block__id';
+    waveId.textContent = String(wave.id);
+    title.appendChild(document.createTextNode('Wave'));
+    title.appendChild(waveId);
+    header.appendChild(title);
+
+    const completeCount = waveTasks.filter((t) => t.status === 'complete').length;
+    const progress = document.createElement('span');
+    progress.className = 'board-wave-block__progress';
+    progress.textContent = `${completeCount}/${waveTasks.length}`;
+    progress.setAttribute(
+      'aria-label',
+      `${completeCount} of ${waveTasks.length} tasks complete`,
+    );
+    header.appendChild(progress);
+
+    const startWaveBtn = document.createElement('button');
+    startWaveBtn.type = 'button';
+    startWaveBtn.className = 'board-btn board-btn--compact board-wave-block__start';
+    startWaveBtn.textContent = 'Start wave';
+    const hasPlanned = waveTasks.some((t) => t.status === 'planned');
+    startWaveBtn.disabled = !hasPlanned;
+    startWaveBtn.addEventListener('click', () => {
+      void startWave(group, wave.id, plannerChat).then(() => refreshActiveBoardIfMounted());
+    });
+    header.appendChild(startWaveBtn);
+    block.appendChild(header);
+
+    if (collapsed) {
+      block.appendChild(buildWaveCompactSummary(waveTasks, group, plannerChat, wave.id));
+    }
+
+    const body = document.createElement('div');
+    body.className = 'board-wave-block__body';
+    body.hidden = collapsed;
+    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat, types));
+    block.appendChild(body);
+    wrap.appendChild(block);
+  }
+}
+
+function renderKanban(
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'board-kanban-waves';
+  void populateKanbanWaves(wrap, board, group, plannerChat);
+  return wrap;
+}
+
 /** Update header and kanban without tearing down event subscriptions. */
 function refreshBoardDom(
   root: HTMLElement,
-  chat: Chat,
-  board: NonNullable<Chat['orchestrateBoard']>,
+  group: ChatGroup,
+  plannerChat: Chat,
+  board: BoardState,
 ): void {
-  const planPath = chat.orchestratePlanPath ?? board.planPath ?? '';
+  const planPath =
+    group.orchestratePlanPath ?? plannerChat.orchestratePlanPath ?? board.planPath ?? '';
   const activeRuns = listActiveSubAgentRuns().filter(
     (r) =>
-      r.parentChatId === chat.id &&
+      r.parentChatId === plannerChat.id &&
       (r.status === 'queued' || r.status === 'running'),
   );
-  const isStreaming = isActiveChatStreaming();
-  const metrics = boardHeaderMetrics(chat, board, activeRuns.length);
-  const userStopped = isUserStoppedChat(chat);
+  const isStreaming = isChatStreaming(plannerChat.id);
+  const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
+  const userStopped = isUserStoppedChat(plannerChat);
   const headerStatus = deriveBoardHeaderStatus(
     board,
     isStreaming,
     activeRuns.length,
     userStopped,
-    shouldShowOrchestrateStallBadge(chat.id, board, {
-      isStreaming,
-      activeRunCount: activeRuns.length,
-    }),
   );
-  const activity = deriveOrchestratorLastActivity(chat, isStreaming);
+  const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
 
   const header = root.querySelector('.board-header');
   if (header) {
@@ -824,9 +1259,9 @@ function refreshBoardDom(
   const title = root.querySelector('.board-header__title');
   if (title) title.textContent = shortPlanName(planPath);
 
-  const stats = root.querySelector('.board-header__stats');
-  if (stats) {
-    stats.textContent = `${metrics.done}/${metrics.totalTasks} tasks · ${metrics.wavesComplete}/${metrics.totalWaves} waves · ${metrics.activeRuns} active · ${metrics.elapsed}`;
+  const headerEl = root.querySelector('.board-header');
+  if (headerEl) {
+    syncBoardHeaderBench(headerEl, metrics, board);
   }
 
   const fill = root.querySelector(
@@ -836,13 +1271,6 @@ function refreshBoardDom(
 
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
-
-  const playPause = root.querySelector(
-    '[data-board-action="play-pause"]',
-  ) as HTMLButtonElement | null;
-  if (playPause) {
-    syncBoardPlayPauseButton(playPause, board, isStreaming, headerStatus);
-  }
 
   const openPlanBtn = root.querySelector(
     '[data-board-action="open-plan"]',
@@ -868,16 +1296,22 @@ function refreshBoardDom(
   syncViewModeToggleFromActiveChat();
 
   const main = root.querySelector('.board-main');
-  if (main) {
-    const planPanel = main.querySelector('.board-plan-panel');
-    const newKanban = renderKanban(board, chat);
-    const oldKanban = main.querySelector('.kanban-grid');
-    if (oldKanban) {
-      oldKanban.replaceWith(newKanban);
-    } else if (planPanel) {
-      main.insertBefore(newKanban, planPanel);
-    } else {
-      main.prepend(newKanban);
+  if (main instanceof HTMLElement) {
+    ensureKanbanInteractionReleaseListener();
+    const kanbanKey = buildKanbanRefreshKey(board, plannerChat);
+    const kanbanFocused = isKanbanFormControlFocused();
+    if (kanbanKey !== lastKanbanRefreshKey) {
+      if (kanbanFocused) {
+        pendingKanbanRefresh = true;
+      } else {
+        mountKanbanInMain(main, board, group, plannerChat);
+        lastKanbanRefreshKey = kanbanKey;
+        pendingKanbanRefresh = false;
+      }
+    } else if (pendingKanbanRefresh && !kanbanFocused) {
+      mountKanbanInMain(main, board, group, plannerChat);
+      lastKanbanRefreshKey = kanbanKey;
+      pendingKanbanRefresh = false;
     }
   }
 
@@ -891,9 +1325,12 @@ function sendBoardMessage(text: string): void {
   void import('../chat/messaging').then((m) => m.sendMessage());
 }
 
-/** First user turn from Board onboarding before the model runs board_init (MIN-5). */
-export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
-  'Initialize the board for the selected plan and begin execution.';
+/** Parse the active plan and call board_init (hub / plan screen entry). */
+export function kickoffOrchestrateBoardBuild(): void {
+  sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+}
+
+export { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
 
 /** Busy phases shown in the onboarding status strip (plan fetch vs board_init stream). */
 export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'init';
@@ -903,6 +1340,25 @@ const BOARD_ONBOARDING_BUSY_LABEL: Record<Exclude<BoardOnboardingBusyPhase, 'idl
     plans: 'Loading plans',
     init: 'Initializing board',
   };
+
+/** Kanban lane titles (must match `renderKanbanColumns`). */
+const BOARD_ONBOARDING_KANBAN_COLUMNS = [
+  'Planned',
+  'In Progress',
+  'Testing',
+  'Complete',
+] as const;
+
+/** Skeleton task tiles per lane while board_init streams (visual weight only). */
+const BOARD_ONBOARDING_SKELETON_CARD_COUNTS = [2, 1, 1, 0] as const;
+
+/** Basename for the init banner (plan path from the select). */
+export function formatBoardOnboardingPlanDisplay(planPath: string): string {
+  const trimmed = planPath.trim();
+  if (!trimmed) return 'Plan file';
+  const parts = trimmed.replace(/\\/g, '/').split('/');
+  return parts[parts.length - 1] ?? trimmed;
+}
 
 /** Resolve which loading affordance the onboarding shell should show. */
 export function resolveBoardOnboardingBusyPhase(
@@ -927,25 +1383,53 @@ function buildBoardOnboardingStatusDots(phase: Exclude<BoardOnboardingBusyPhase,
   return wrap;
 }
 
-/** Lightweight Kanban column silhouettes while board_init runs. */
+/** Kanban-shaped skeleton (real lane chrome + task tiles) while board_init runs. */
 function buildBoardOnboardingPreview(): HTMLElement {
   const preview = document.createElement('div');
   preview.className = 'board-onboarding__preview';
   preview.setAttribute('aria-hidden', 'true');
   preview.dataset.boardOnboardingPreview = '';
-  const labels = ['Planned', 'In progress', 'Testing', 'Complete'];
-  for (const label of labels) {
-    const col = document.createElement('div');
-    col.className = 'board-onboarding__preview-col';
-    const cap = document.createElement('span');
-    cap.className = 'board-onboarding__preview-cap';
-    cap.textContent = label;
-    const body = document.createElement('div');
-    body.className = 'board-onboarding__preview-body';
-    col.appendChild(cap);
-    col.appendChild(body);
-    preview.appendChild(col);
-  }
+
+  const grid = document.createElement('div');
+  grid.className = 'kanban-grid board-onboarding__kanban-skeleton';
+
+  BOARD_ONBOARDING_KANBAN_COLUMNS.forEach((label, laneIndex) => {
+    const column = document.createElement('section');
+    column.className = 'kanban-column';
+
+    const header = document.createElement('h3');
+    const colLabel = document.createElement('span');
+    colLabel.className = 'kanban-column__label';
+    colLabel.textContent = label;
+    const colCount = document.createElement('span');
+    colCount.className = 'kanban-column__count';
+    colCount.textContent = '—';
+    colCount.setAttribute('aria-hidden', 'true');
+    header.appendChild(colLabel);
+    header.appendChild(colCount);
+    column.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'kanban-column__list';
+    const cardCount = BOARD_ONBOARDING_SKELETON_CARD_COUNTS[laneIndex] ?? 0;
+    for (let i = 0; i < cardCount; i += 1) {
+      const card = document.createElement('div');
+      card.className = 'board-onboarding__skeleton-card';
+      const idLine = document.createElement('span');
+      idLine.className =
+        'board-onboarding__skeleton-line board-onboarding__skeleton-line--id';
+      const titleLine = document.createElement('span');
+      titleLine.className =
+        'board-onboarding__skeleton-line board-onboarding__skeleton-line--title';
+      card.appendChild(idLine);
+      card.appendChild(titleLine);
+      list.appendChild(card);
+    }
+    column.appendChild(list);
+    grid.appendChild(column);
+  });
+
+  preview.appendChild(grid);
   return preview;
 }
 
@@ -955,14 +1439,36 @@ export function syncBoardOnboardingBusyUI(
   phase: BoardOnboardingBusyPhase,
 ): void {
   const panel = wrap.querySelector('.board-onboarding__panel');
+  const setup = wrap.querySelector('[data-board-onboarding-setup]');
+  const initLead = wrap.querySelector('[data-board-onboarding-init-lead]');
+  const initPlan = wrap.querySelector('[data-board-onboarding-init-plan]') as HTMLElement | null;
+  const initProgress = wrap.querySelector('[data-board-onboarding-init-progress]');
   const status = wrap.querySelector('[data-board-onboarding-status]') as HTMLElement | null;
   const label = wrap.querySelector('[data-board-onboarding-status-label]') as HTMLElement | null;
   const dotsHost = wrap.querySelector('.board-onboarding__status-dots');
   const preview = wrap.querySelector('[data-board-onboarding-preview]');
+  const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
   wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
   if (panel instanceof HTMLElement) {
     panel.classList.toggle('board-onboarding__panel--busy', phase === 'init');
+  }
+  if (setup instanceof HTMLElement) {
+    setup.classList.toggle('hidden', phase === 'init');
+    setup.hidden = phase === 'init';
+  }
+  if (initLead instanceof HTMLElement) {
+    initLead.classList.toggle('hidden', phase !== 'init');
+    initLead.hidden = phase !== 'init';
+  }
+  if (initProgress instanceof HTMLElement) {
+    initProgress.classList.toggle('hidden', phase !== 'init');
+    initProgress.hidden = phase !== 'init';
+    initProgress.setAttribute('aria-hidden', phase === 'init' ? 'false' : 'true');
+  }
+  if (initPlan && planSelect) {
+    initPlan.textContent = formatBoardOnboardingPlanDisplay(planSelect.value);
+    initPlan.title = planSelect.value.trim() || undefined;
   }
 
   if (!status || !label) return;
@@ -1074,14 +1580,29 @@ export async function mountBoardOnboardingPanel(
   panel.className = 'board-onboarding__panel';
   container.appendChild(panel);
 
-  const title = document.createElement('h2');
-  title.className = 'board-onboarding__title';
-  title.textContent = 'Orchestrate a plan';
+  const initLead = document.createElement('div');
+  initLead.className = 'board-onboarding__init-lead hidden';
+  initLead.dataset.boardOnboardingInitLead = '';
+  initLead.hidden = true;
 
-  const desc = document.createElement('p');
-  desc.className = 'board-onboarding__desc';
-  desc.textContent =
-    'Pick a plan file. Minnow initializes the Kanban from its waves and tasks, then runs the orchestrator.';
+  const initPlan = document.createElement('p');
+  initPlan.className = 'board-onboarding__init-plan';
+  initPlan.dataset.boardOnboardingInitPlan = '';
+  initPlan.textContent = 'Plan file';
+
+  const initProgress = document.createElement('div');
+  initProgress.className = 'board-onboarding__init-progress hidden';
+  initProgress.dataset.boardOnboardingInitProgress = '';
+  initProgress.setAttribute('role', 'progressbar');
+  initProgress.setAttribute('aria-label', 'Board initialization');
+  initProgress.setAttribute('aria-valuetext', 'Initializing');
+  initProgress.hidden = true;
+  const initProgressFill = document.createElement('div');
+  initProgressFill.className = 'board-onboarding__init-progress-fill';
+  initProgress.appendChild(initProgressFill);
+
+  initLead.appendChild(initPlan);
+  initLead.appendChild(initProgress);
 
   const status = document.createElement('div');
   status.className = 'board-onboarding__status hidden';
@@ -1098,6 +1619,19 @@ export async function mountBoardOnboardingPanel(
   const preview = buildBoardOnboardingPreview();
   preview.classList.add('hidden');
 
+  const setup = document.createElement('div');
+  setup.className = 'board-onboarding__setup';
+  setup.dataset.boardOnboardingSetup = '';
+
+  const title = document.createElement('h2');
+  title.className = 'board-onboarding__title';
+  title.textContent = 'Orchestrate a plan';
+
+  const desc = document.createElement('p');
+  desc.className = 'board-onboarding__desc';
+  desc.textContent =
+    'Pick a plan file. Minnow initializes the Kanban from its waves and tasks, then runs the orchestrator.';
+
   const field = document.createElement('div');
   field.className = 'board-onboarding__field';
 
@@ -1111,6 +1645,7 @@ export async function mountBoardOnboardingPanel(
 
   const sel = document.createElement('select');
   sel.id = 'boardOnboardingPlanSelect';
+  sel.className = 'board-select';
   sel.dataset.testid = 'boardOnboardingPlanSelect';
   sel.setAttribute('aria-label', 'Orchestrate plan file');
 
@@ -1142,7 +1677,7 @@ export async function mountBoardOnboardingPanel(
   startBtn.type = 'button';
   startBtn.className = 'board-btn board-btn--primary';
   startBtn.dataset.boardOnboardingStart = '';
-  startBtn.textContent = 'Start';
+  startBtn.textContent = 'Build board';
 
   const openPlanBtn = document.createElement('button');
   openPlanBtn.type = 'button';
@@ -1159,14 +1694,17 @@ export async function mountBoardOnboardingPanel(
   actions.appendChild(openPlanBtn);
   actions.appendChild(chatBtn);
 
-  panel.appendChild(title);
-  panel.appendChild(desc);
+  setup.appendChild(title);
+  setup.appendChild(desc);
+  setup.appendChild(field);
+  setup.appendChild(hint);
+  setup.appendChild(pickPlanHint);
+  setup.appendChild(actions);
+
+  panel.appendChild(initLead);
   panel.appendChild(status);
   panel.appendChild(preview);
-  panel.appendChild(field);
-  panel.appendChild(hint);
-  panel.appendChild(pickPlanHint);
-  panel.appendChild(actions);
+  panel.appendChild(setup);
 
   container.className = 'board-onboarding';
   let latestPlanCount = 0;
@@ -1244,90 +1782,100 @@ export async function mountBoardOnboardingPanel(
  * Falls back to a full render when the DOM is missing or still empty.
  */
 export function refreshActiveBoardIfMounted(): void {
-  if (!isOrchestrateBoardViewActive()) return;
-  const chat = getActiveChat();
-  const area = document.getElementById('chatArea');
-  if (!area) return;
+  if (isOrchestrateHubMounted()) return;
+  if (!isOrchestrateBoardViewActive() && !isOrchestrateInitSplitChromeActive()) return;
+  const group = getActiveBoardGroup();
+  if (!group) return;
+  const plannerChat = plannerForGroup(group);
+  const mount = getOrchestrateBoardMountElement();
 
-  const board = chat.orchestrateBoard;
-  const root = area.querySelector(':scope > .board-root') as HTMLElement | null;
+  const board = group.orchestrateBoard;
+  const root = mount.querySelector(':scope > .board-root') as HTMLElement | null;
   if (root && board && root.querySelector('.board-main')) {
-    refreshBoardDom(root, chat, board);
+    refreshBoardDom(root, group, plannerChat, board);
     return;
   }
   if (root && !board) return;
-  renderBoardView(chat);
+  renderBoardView(group);
 }
 
-/** Render Orchestrate board into #chatArea. */
-export function renderBoardView(chat: Chat): void {
+/** Render Orchestrate board into the board mount (#chatArea or split top pane). */
+export function renderBoardView(group: ChatGroup): void {
+  teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');
   if (!area) return;
+  const mount = getOrchestrateBoardMountElement();
+  const splitActive = mount !== area;
 
-  const active = getActiveChat();
-  const board = active.id === chat.id ? active.orchestrateBoard : chat.orchestrateBoard;
-  const chatForRender = active.id === chat.id ? active : chat;
-  const sameChatSession = currentSession?.chatId === chatForRender.id;
-  const existingRoot = area.querySelector(':scope > .board-root') as HTMLElement | null;
+  const plannerChat = plannerForGroup(group);
+  const board = group.orchestrateBoard;
+  const sameGroupSession = currentSession?.groupId === group.id;
+  const existingRoot = mount.querySelector(':scope > .board-root') as HTMLElement | null;
+  const chatMount = splitActive
+    ? area.querySelector('[data-testid="boardInitSplitChat"]')
+    : null;
   const chatBubblesPresent = Boolean(
-    area.querySelector(':scope > .msg, :scope > #emptyState'),
+    chatMount
+      ? chatMount.querySelector('.msg, #emptyState')
+      : area.querySelector(':scope > .msg, :scope > #emptyState'),
   );
   const canRefreshInPlace =
     Boolean(board) &&
-    sameChatSession &&
+    sameGroupSession &&
     !chatBubblesPresent &&
     Boolean(existingRoot?.querySelector('.board-main')) &&
     Boolean(existingRoot?.querySelector(`#btnViewModeToggleChat`));
 
   if (canRefreshInPlace && board) {
-    refreshBoardDom(existingRoot!, chatForRender, board);
-    ensureBoardSession(chatForRender.id);
+    refreshBoardDom(existingRoot!, group, plannerChat, board);
+    ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
     return;
   }
 
-  if (!sameChatSession) disposeBoardSession();
-  area.innerHTML = '';
+  if (!sameGroupSession) disposeBoardSession();
+  if (splitActive) {
+    mount.replaceChildren();
+  } else {
+    area.innerHTML = '';
+  }
 
   const root = document.createElement('section');
   root.className = 'board-root';
 
-  const planPath = chatForRender.orchestratePlanPath ?? board?.planPath ?? '';
+  const planPath =
+    group.orchestratePlanPath ?? plannerChat.orchestratePlanPath ?? board?.planPath ?? '';
 
   if (!board) {
     const wrap = document.createElement('div');
     wrap.className = 'board-onboarding';
     root.appendChild(wrap);
-    area.appendChild(root);
-    ensureBoardSession(chatForRender.id);
+    mount.appendChild(root);
+    ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
-    void mountBoardOnboardingPanel(wrap, chatForRender);
+    void mountBoardOnboardingPanel(wrap, plannerChat);
     return;
   }
 
   const activeRuns = listActiveSubAgentRuns().filter(
     (r) =>
-      r.parentChatId === chatForRender.id &&
+      r.parentChatId === plannerChat.id &&
       (r.status === 'queued' || r.status === 'running'),
   );
-  const isStreaming = isActiveChatStreaming();
+  const isStreaming = isChatStreaming(plannerChat.id);
 
   const headerStatus = deriveBoardHeaderStatus(
     board,
     isStreaming,
     activeRuns.length,
-    isUserStoppedChat(chatForRender),
-    shouldShowOrchestrateStallBadge(chatForRender.id, board, {
-      isStreaming,
-      activeRunCount: activeRuns.length,
-    }),
+    isUserStoppedChat(plannerChat),
   );
-  const activity = deriveOrchestratorLastActivity(chatForRender, isStreaming);
-  const metrics = boardHeaderMetrics(chatForRender, board, activeRuns.length);
+  const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
+  const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
   const header = buildBoardHeader(
-    chatForRender,
+    plannerChat,
     board,
     planPath,
     metrics,
@@ -1338,13 +1886,13 @@ export function renderBoardView(chat: Chat): void {
 
   const main = document.createElement('div');
   main.className = 'board-main';
-  main.appendChild(renderKanban(board, chatForRender));
+  main.appendChild(renderKanban(board, group, plannerChat));
 
   root.appendChild(header);
   root.appendChild(main);
-  area.appendChild(root);
+  mount.appendChild(root);
 
-  ensureBoardSession(chatForRender.id);
+  ensureBoardSession(group, plannerChat);
   syncViewModeToggleFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
 }
@@ -1352,4 +1900,5 @@ export function renderBoardView(chat: Chat): void {
 /** Tear down board listeners (test teardown). */
 export function disposeBoardViewForTests(): void {
   disposeBoardSession();
+  kanbanInteractionReleaseBound = false;
 }

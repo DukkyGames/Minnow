@@ -1,8 +1,4 @@
-﻿import {
-  chatFetchAbort,
-  setChatFetchAbort,
-  setStreaming,
-} from '../app-state';
+﻿import { getChatAbort, setChatAbort, setStreaming } from '../app-state';
 import {
   isActiveChatStreaming,
   isBackgroundStreamBlockingSend,
@@ -36,7 +32,6 @@ import type {
   Usage,
 } from '../types';
 import { formatGenerationErrorMessage } from './generations';
-import { markChatStalledForUi } from '../agents/supervisor/state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
@@ -396,9 +391,9 @@ export async function sendMessage(): Promise<void> {
     setStatus('err', 'Max tokens must be at least 1');
     return;
   }
-  if (chatFetchAbort) chatFetchAbort.abort();
+  getChatAbort(chat.id)?.abort();
   const controller = new AbortController();
-  setChatFetchAbort(controller);
+  setChatAbort(chat.id, controller);
   const chatSignal = controller.signal;
 
   chat.modelId = modelId || chat.modelId;
@@ -469,7 +464,7 @@ export async function sendMessage(): Promise<void> {
   const thoughtController = new ThoughtBubbleController(wrap, {
     onThinkingStart: (): void => {
       streamStatus.setPhase('thinking');
-      setSidebarStreamPhase('thinking');
+      setSidebarStreamPhase('thinking', chat.id);
       thinkingTracker.startSegment();
     },
     onReasoningEnded: (): void => {
@@ -477,9 +472,9 @@ export async function sendMessage(): Promise<void> {
       streamStatus.setThinkingElapsed(null);
       if (wrap.classList.contains('msg--awaiting-prose')) {
         streamStatus.setPhase('generating');
-        setSidebarStreamPhase('generating');
+        setSidebarStreamPhase('generating', chat.id);
       } else {
-        setSidebarStreamPhase(null);
+        setSidebarStreamPhase(null, chat.id);
       }
     },
   });
@@ -665,10 +660,6 @@ export async function sendMessage(): Promise<void> {
         scheduleSaveSessions();
       }
 
-      if (normalizeModeId(chat.modeId) === 'orchestrate') {
-        markChatStalledForUi(chat.id, false);
-      }
-
       streamStatus.dispose();
       setStatus('ok', 'Stopped');
       return;
@@ -687,12 +678,12 @@ export async function sendMessage(): Promise<void> {
     thinkingTracker.abort();
   } finally {
     thoughtController.abort();
-    setStreaming(false);
-    setSidebarStreamPhase(null);
+    setStreaming(false, chat.id);
+    setSidebarStreamPhase(null, chat.id);
     syncChatItemDotsInDom();
     syncComposerFromStreamingState();
-    if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
-      setChatFetchAbort(null);
+    if (getChatAbort(chat.id)?.signal === chatSignal) {
+      setChatAbort(chat.id, null);
     }
     if (isStreamDomVisible(chat.id)) {
       scrollChatIfPinned();

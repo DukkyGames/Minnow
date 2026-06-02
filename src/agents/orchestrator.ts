@@ -3,6 +3,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
+import { getBoardGroupForChat } from '../state/chat-groups';
 import { appendTaskRunHistory, updateTask } from '../state/orchestrate-board-store';
 import { findChatById } from '../state/sessions';
 import { executeTool, getEnabledToolDefinitionsForMode } from '../tools/client';
@@ -261,7 +262,8 @@ function syncBoardTaskOnSettle(
   const chatId = run.parentChatId;
   if (!taskId || !chatId) return;
   const chat = findChatById(chatId);
-  if (!chat?.orchestrateBoard) return;
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  if (!chat || !group?.orchestrateBoard) return;
 
   const endedAt = Date.now();
   const maxTurnFailure =
@@ -275,14 +277,14 @@ function syncBoardTaskOnSettle(
   if (status === 'completed' && !maxTurnFailure) {
     // Don't auto-complete: orchestrator controls task status via board_update_task.
     // Only clear the assignment and record end time so the UI reflects the run ended.
-    updateTask(chat, taskId, {
+    updateTask(group, taskId, {
       endedAt,
       ...settlePatch,
-    });
+    }, chat);
     return;
   }
   if (status === 'failed' || status === 'cancelled' || maxTurnFailure) {
-    updateTask(chat, taskId, {
+    updateTask(group, taskId, {
       status: 'failed',
       endedAt,
       error:
@@ -293,7 +295,7 @@ function syncBoardTaskOnSettle(
             ? 'cancelled'
             : 'failed'),
       ...settlePatch,
-    });
+    }, chat);
   }
 }
 
@@ -532,13 +534,19 @@ async function spawnSubAgentInternal(
 
   if (input.boardTaskId && input.parentChatId) {
     const parentChat = findChatById(input.parentChatId);
-    if (parentChat?.orchestrateBoard) {
-      updateTask(parentChat, input.boardTaskId, {
-        status: 'in_progress',
-        assignedRunId: runId,
-        startedAt: Date.now(),
-      });
-      appendTaskRunHistory(parentChat, input.boardTaskId, runId);
+    const boardGroup = parentChat ? getBoardGroupForChat(parentChat) : undefined;
+    if (parentChat && boardGroup?.orchestrateBoard) {
+      updateTask(
+        boardGroup,
+        input.boardTaskId,
+        {
+          status: 'in_progress',
+          assignedRunId: runId,
+          startedAt: Date.now(),
+        },
+        parentChat,
+      );
+      appendTaskRunHistory(boardGroup, input.boardTaskId, runId, parentChat);
     }
   }
 

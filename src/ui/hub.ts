@@ -21,6 +21,11 @@ import {
   teardownHubDevServer,
   updateHubDevServer,
 } from './hub-dev-server';
+import { teardownOrchestrateHub } from './orchestrate-hub';
+import {
+  isOrchestratePlanScreenSuspendedForChat,
+  teardownOrchestratePlanScreen,
+} from './orchestrate-plan-screen';
 
 export const HUB_ROOT_ID = 'vibeHub';
 /** Max recent workspace chats shown on the hub (excluding the active empty chat). */
@@ -37,6 +42,11 @@ let vramCache: { available: boolean; usedMb?: number; totalMb?: number } = { ava
 /** True when the hub DOM is mounted in #chatArea. */
 export function isHubMounted(): boolean {
   return Boolean(document.getElementById(HUB_ROOT_ID));
+}
+
+/** Keep suspended plan-screen session when empty chat would open Vibe hub. */
+function shouldPreservePlanScreenSession(chat: Chat): boolean {
+  return isOrchestratePlanScreenSuspendedForChat(chat);
 }
 
 /** Remove hub chrome and restore the bottom composer. */
@@ -460,6 +470,10 @@ function buildHubDom(activeChat: Chat): HTMLElement {
 /** Paint the hub into #chatArea for an empty chat. */
 export function renderHub(chat: Chat): void {
   try {
+    teardownOrchestrateHub();
+    if (!shouldPreservePlanScreenSession(chat)) {
+      teardownOrchestratePlanScreen();
+    }
     teardownHub();
     hubChatId = chat.id;
     const area = document.getElementById('chatArea');

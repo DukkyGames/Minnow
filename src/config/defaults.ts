@@ -71,7 +71,8 @@ export function defaultSessionState(): SessionState {
       : '00000000-0000-0000-0000-000000000001';
 
   return {
-    version: 3,
+    version: 5,
+    groups: [],
     activeId: chatId,
     sidebarCollapsed: false,
     lastActiveChatIdByWorkspace: {},

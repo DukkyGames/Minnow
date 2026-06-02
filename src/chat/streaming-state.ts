@@ -1,10 +1,13 @@
 /**
- * Helpers for per-chat streaming: which chat owns the in-flight turn vs which chat is active in the UI.
+ * Helpers for per-chat streaming: which chats are in-flight vs which chat is active in the UI.
  */
 
-import { expertLabPageOpen, streaming, streamingChatId } from '../app-state';
+import { expertLabPageOpen, streamingChatIds } from '../app-state';
 import { normalizeModeId } from '../chat/modes/types';
 import { getActiveChat, isExpertLabChat } from '../state/sessions';
+import { isOrchestrateBoardInitSplitActive } from '../ui/orchestrate-board-init-split';
+import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
+import { isBoardViewActive } from '../ui/view-mode-toggle';
 
 type ChatStreamEndListener = (chatId: string) => void;
 const streamEndListeners = new Set<ChatStreamEndListener>();
@@ -29,38 +32,45 @@ export function notifyChatStreamEnded(chatId: string): void {
   }
 }
 
-/** Chat id driving the global streaming flag, or null when idle. */
+/**
+ * Active chat id when it is streaming; otherwise any single streaming id; else null.
+ * Sidebar "foreground" stream hint uses this.
+ */
 export function getStreamingChatId(): string | null {
-  if (!streaming) return null;
-  return streamingChatId;
+  const active = getActiveChat();
+  if (streamingChatIds.has(active.id)) return active.id;
+  if (streamingChatIds.size === 1) return [...streamingChatIds][0]!;
+  return null;
 }
 
 /** True when the given chat has an in-flight assistant turn. */
 export function isChatStreaming(chatId: string): boolean {
-  return streaming && streamingChatId === chatId;
+  return streamingChatIds.has(chatId);
 }
 
 /** True when the active sidebar chat is the one currently streaming. */
 export function isActiveChatStreaming(): boolean {
-  const id = getStreamingChatId();
-  if (!id) return false;
-  return getActiveChat().id === id;
+  return streamingChatIds.has(getActiveChat().id);
 }
 
-/** True when a different chat is streaming and the active chat must not start a new turn. */
+/** Concurrent streams are allowed — board cap handles orchestrate task limits. */
 export function isBackgroundStreamBlockingSend(): boolean {
-  const id = getStreamingChatId();
-  if (!id) return false;
-  return getActiveChat().id !== id;
+  return false;
 }
 
 /** Whether stream/tool DOM for this chat should mount in #chatArea (active chat, chat view). */
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
+  if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
   if (isExpertLabChat(active) && expertLabPageOpen) return false;
-  const mode = normalizeModeId(active.modeId);
-  if (mode === 'orchestrate' && active.viewMode === 'board') {
+  if (isBoardViewActive()) {
+    if (
+      normalizeModeId(active.modeId) === 'orchestrate' &&
+      isOrchestrateBoardInitSplitActive(active)
+    ) {
+      return true;
+    }
     return false;
   }
   return true;

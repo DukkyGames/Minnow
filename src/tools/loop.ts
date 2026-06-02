@@ -3,11 +3,7 @@
  * and persists assistant / tool messages in session history.
  */
 
-import {
-  chatFetchAbort,
-  setChatFetchAbort,
-  setStreaming,
-} from '../app-state';
+import { getChatAbort, setChatAbort, setStreaming } from '../app-state';
 import {
   beginChatTurnSetup,
   endChatTurnSetup,
@@ -60,8 +56,10 @@ import {
   emitMainTurnActivity,
   patchMainTurnActivity,
 } from '../chat/main-turn-activity';
+import { getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
+  isExpertLabChat,
   scheduleSaveSessions,
   touchChat,
   recordChatMessage,
@@ -107,7 +105,6 @@ import {
   notifyExpertLabRunStart,
   notifyExpertLabToolRound,
 } from '../ui/expert-lab-stream';
-import { isExpertLabChat } from '../state/sessions';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
@@ -117,7 +114,11 @@ import {
   renderBoardView,
 } from '../ui/orchestrate-board';
 import {
-  isBoardViewActive,
+  getOrchestrateChatMountElement,
+  isOrchestrateBoardInitSplitActive,
+  syncOrchestrateInitSplitChrome,
+} from '../ui/orchestrate-board-init-split';
+import {
   isOrchestrateBoardViewActive,
   refreshViewModeToggleDisabled,
   syncViewModeToggleFromActiveChat,
@@ -722,9 +723,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     document.getElementById('systemPrompt') as HTMLTextAreaElement
   ).value.trim();
 
-  if (chatFetchAbort) chatFetchAbort.abort();
+  getChatAbort(chat.id)?.abort();
   const controller = new AbortController();
-  setChatFetchAbort(controller);
+  setChatAbort(chat.id, controller);
   const chatSignal = controller.signal;
   const parentTurnId = createSubAgentRunId();
   const loopModeId = normalizeModeId(chat.modeId);
@@ -736,10 +737,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   setBoardExecutorContext({ chatId: chat.id });
   setBugBoardExecutorContext({ chatId: chat.id });
 
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.orchestrateBoard) {
-    chat.orchestrateBoard.activeParentTurnId = parentTurnId;
-    touchChat(chat);
-    scheduleSaveSessions();
+  if (normalizeModeId(chat.modeId) === 'orchestrate') {
+    const board = getBoardGroupForChat(chat)?.orchestrateBoard;
+    if (board) {
+      board.activeParentTurnId = parentTurnId;
+      touchChat(chat);
+      scheduleSaveSessions();
+    }
   }
 
   chat.modelId = modelId || chat.modelId;
@@ -873,12 +877,39 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
-    refreshModeSelectorDisabled();
-    refreshThinkingControlDisabled();
-    refreshOrchestratePlanSelectorDisabled();
-    refreshBoardOnboardingIfMounted();
-    refreshViewModeToggleDisabled();
+    syncOrchestrateInitSplitChrome(chat);
+    if (
+      !suppressUserEcho &&
+      pushUser &&
+      isOrchestrateBoardInitSplitActive(chat)
+    ) {
+      const userIdx = chat.history.length - 1;
+      const userRow = chat.history[userIdx];
+      if (userRow?.role === 'user') {
+        const { wrap: userWrap } = appendBubble(
+          'user',
+          userRow.content,
+          {
+            historyIndex: userIdx,
+            turnKind: 'user',
+            chatId: chat.id,
+          },
+          { liveAttachments: validAttachments },
+        );
+        const { attachMessageActions } = await import('../ui/message-actions');
+        attachMessageActions(userWrap, {
+          chatId: chat.id,
+          historyIndex: userIdx,
+          turnKind: 'user',
+        });
+      }
+    }
     if (isStreamDomVisible(chat.id)) {
+      refreshModeSelectorDisabled();
+      refreshThinkingControlDisabled();
+      refreshOrchestratePlanSelectorDisabled();
+      refreshBoardOnboardingIfMounted();
+      refreshViewModeToggleDisabled();
       setComposerStreamingMode('streaming');
     } else {
       syncComposerFromStreamingState();
@@ -935,7 +966,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (isStreamDomVisible(chat.id)) {
         streamCtx.streamStatus.setPhase('thinking');
       }
-      setSidebarStreamPhase('thinking');
+      setSidebarStreamPhase('thinking', chat.id);
       thinkingTracker?.startSegment();
     },
     onReasoningEnded: (): void => {
@@ -944,12 +975,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.streamStatus.setThinkingElapsed(null);
         if (streamCtx.wrap.classList.contains('msg--awaiting-prose')) {
           streamCtx.streamStatus.setPhase('generating');
-          setSidebarStreamPhase('generating');
+          setSidebarStreamPhase('generating', chat.id);
         } else {
-          setSidebarStreamPhase(null);
+          setSidebarStreamPhase(null, chat.id);
         }
       } else {
-        setSidebarStreamPhase(null);
+        setSidebarStreamPhase(null, chat.id);
       }
     },
   };
@@ -1255,9 +1286,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
         patchMainTurnActivity(chat.id, { phase: 'tools' });
 
-        const area = document.getElementById('chatArea')!;
-        const paintToolCallsInChat =
-          !isBoardViewActive() && isStreamDomVisible(chat.id);
+        const area = getOrchestrateChatMountElement();
+        const paintToolCallsInChat = isStreamDomVisible(chat.id);
         const STOPPED_TOOL_MSG = 'Stopped by user.';
         for (let ti = 0; ti < turnResult.toolCalls.length; ti++) {
           if (chatSignal.aborted) {
@@ -1381,7 +1411,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         scheduleSaveSessions();
         renderSidebar();
 
-        if (isOrchestrateBoardViewActive() && getActiveChat().id === chat.id) {
+        if (isOrchestrateBoardViewActive() || isOrchestrateBoardInitSplitActive(chat)) {
           refreshActiveBoardIfMounted();
         }
 
@@ -1705,13 +1735,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     setSubAgentExecutorContext(null);
     setBoardExecutorContext(null);
     setBugBoardExecutorContext(null);
-    if (
-      normalizeModeId(chat.modeId) === 'orchestrate' &&
-      chat.orchestrateBoard?.activeParentTurnId
-    ) {
-      chat.orchestrateBoard.activeParentTurnId = null;
-      touchChat(chat);
-      scheduleSaveSessions();
+    if (normalizeModeId(chat.modeId) === 'orchestrate') {
+      const board = getBoardGroupForChat(chat)?.orchestrateBoard;
+      if (board?.activeParentTurnId) {
+        board.activeParentTurnId = null;
+        touchChat(chat);
+        scheduleSaveSessions();
+      }
     }
     thoughtController?.abort();
     thinkingTracker?.abort();
@@ -1721,19 +1751,24 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     clearMainTurnActivity(chat.id);
     if (ownsGlobalStreaming) {
       notifyChatStreamEnded(chat.id);
-      setStreaming(false);
-      setSidebarStreamPhase(null);
+      setStreaming(false, chat.id);
+      syncOrchestrateInitSplitChrome(chat);
+      setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
-      refreshModeSelectorDisabled();
-    refreshThinkingControlDisabled();
-      refreshOrchestratePlanSelectorDisabled();
-      refreshBoardOnboardingIfMounted();
-      syncViewModeToggleFromActiveChat();
-      refreshViewModeToggleDisabled();
-      syncComposerFromStreamingState();
+      if (isStreamDomVisible(chat.id)) {
+        refreshModeSelectorDisabled();
+        refreshThinkingControlDisabled();
+        refreshOrchestratePlanSelectorDisabled();
+        refreshBoardOnboardingIfMounted();
+        syncViewModeToggleFromActiveChat();
+        refreshViewModeToggleDisabled();
+        syncComposerFromStreamingState();
+      } else {
+        syncComposerFromStreamingState();
+      }
     }
-    if (chatFetchAbort && chatFetchAbort.signal === chatSignal) {
-      setChatFetchAbort(null);
+    if (getChatAbort(chat.id)?.signal === chatSignal) {
+      setChatAbort(chat.id, null);
     }
     if (isStreamDomVisible(chat.id)) {
       scrollChatIfPinned();

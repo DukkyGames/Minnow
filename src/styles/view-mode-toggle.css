@@ -127,3 +127,20 @@
 }
 
 
+
+/* Init split: keep chat area scrollable; composer stays hidden like board view */
+.main-column.main-column--orchestrate-init-split .chat-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main-column.main-column--orchestrate-init-split .input-bar {
+  display: none !important;
+}
+
+.main-column.main-column--orchestrate-init-split .chat-jump-latest {
+  display: none !important;
+}
+
+

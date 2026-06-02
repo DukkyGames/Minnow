@@ -62,6 +62,7 @@ import type {
   BoardTaskStatus,
   BoardWave,
   Chat,
+  ChatGroup,
   ExpertSelection,
   Message,
   OrchestrateBoardState,
@@ -413,6 +414,14 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)
       ? r.filesChanged
       : undefined;
+  const agentType =
+    typeof r.agentType === 'string' && r.agentType.trim() ? r.agentType.trim() : undefined;
+  const chatId =
+    typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
+  const buildSpec =
+    typeof r.buildSpec === 'string' && r.buildSpec.trim() ? r.buildSpec.trim() : undefined;
+  const testSpec =
+    typeof r.testSpec === 'string' && r.testSpec.trim() ? r.testSpec.trim() : undefined;
   return {
     id,
     title,
@@ -427,6 +436,10 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(filesChanged !== undefined ? { filesChanged } : {}),
     ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
     ...(typeof r.error === 'string' ? { error: r.error } : {}),
+    ...(agentType ? { agentType } : {}),
+    ...(chatId ? { chatId } : {}),
+    ...(buildSpec ? { buildSpec } : {}),
+    ...(testSpec ? { testSpec } : {}),
   };
 }
 
@@ -469,6 +482,12 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     typeof r.timerAccumulatedMs === 'number' ? r.timerAccumulatedMs : undefined;
   const timerSegmentStartedAt =
     typeof r.timerSegmentStartedAt === 'number' ? r.timerSegmentStartedAt : undefined;
+  const maxConcurrentTasks =
+    typeof r.maxConcurrentTasks === 'number' && r.maxConcurrentTasks > 0
+      ? r.maxConcurrentTasks
+      : undefined;
+  const completionShownAt =
+    typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
   return {
     planPath,
     tasks,
@@ -478,7 +497,115 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
     ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
+    ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
+    ...(completionShownAt !== undefined ? { completionShownAt } : {}),
   };
+}
+
+function ensureChatGroup(raw: unknown): ChatGroup | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const name = typeof r.name === 'string' ? r.name.trim() : '';
+  const workspacePath =
+    typeof r.workspacePath === 'string'
+      ? normalizeWorkspacePath(r.workspacePath)
+      : '';
+  if (!id || !name) return null;
+  const orchestrateBoard = ensureOrchestrateBoard(r.orchestrateBoard);
+  const orchestratePlanPath = normalizeOrchestratePlanPath(r.orchestratePlanPath);
+  const viewMode = ensureViewMode(r.viewMode);
+  const plannerChatId =
+    typeof r.plannerChatId === 'string' && r.plannerChatId.trim()
+      ? r.plannerChatId.trim()
+      : undefined;
+  return {
+    id,
+    name,
+    workspacePath,
+    collapsed: r.collapsed === true,
+    order: typeof r.order === 'number' ? r.order : 0,
+    createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
+    ...(orchestrateBoard ? { orchestrateBoard } : {}),
+    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(viewMode ? { viewMode } : {}),
+    ...(plannerChatId ? { plannerChatId } : {}),
+  };
+}
+
+function ensureGroupsFromRaw(raw: unknown): ChatGroup[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatGroup[] = [];
+  for (const item of raw) {
+    const group = ensureChatGroup(item);
+    if (group) out.push(group);
+  }
+  return out;
+}
+
+/** Move legacy chat-owned boards onto sidebar folders (schema v4 → v5). */
+export function migrateSessionV4ToV5(state: SessionState): void {
+  if (!state.groups) state.groups = [];
+
+  for (const chat of state.chats) {
+    const legacyBoard = chat.orchestrateBoard;
+    if (!legacyBoard) continue;
+
+    const legacyGroupId =
+      typeof (legacyBoard as { groupId?: string }).groupId === 'string'
+        ? (legacyBoard as { groupId?: string }).groupId!.trim()
+        : '';
+    let group = legacyGroupId
+      ? state.groups.find((g) => g.id === legacyGroupId)
+      : undefined;
+
+    if (!group) {
+      const planLabel =
+        chat.orchestratePlanPath?.split('/').pop()?.replace(/\.md$/i, '') ||
+        legacyBoard.planPath.split('/').pop()?.replace(/\.md$/i, '') ||
+        'Orchestrate';
+      const ws = normalizeWorkspacePath(chat.workspacePath);
+      const siblings = state.groups.filter(
+        (g) => normalizeWorkspacePath(g.workspacePath) === ws,
+      );
+      group = {
+        id: `grp_${newChatId().slice(5)}`,
+        name: planLabel,
+        workspacePath: ws,
+        collapsed: false,
+        order: siblings.length,
+        createdAt: Date.now(),
+      };
+      state.groups.push(group);
+    }
+
+    const boardCopy = { ...legacyBoard };
+    delete (boardCopy as { groupId?: string }).groupId;
+    group.orchestrateBoard = boardCopy;
+    group.orchestratePlanPath =
+      chat.orchestratePlanPath ?? group.orchestratePlanPath ?? legacyBoard.planPath;
+    group.plannerChatId = chat.id;
+    if (chat.viewMode === 'board') {
+      group.viewMode = 'board';
+      state.activeBoardGroupId = group.id;
+    }
+
+    chat.boardGroupId = group.id;
+
+    for (const task of legacyBoard.tasks) {
+      const taskChatId = task.chatId?.trim();
+      if (!taskChatId) continue;
+      const taskChat = state.chats.find((c) => c.id === taskChatId);
+      if (!taskChat) continue;
+      taskChat.groupId = group.id;
+      taskChat.boardGroupId = group.id;
+    }
+
+    delete chat.orchestrateBoard;
+    delete chat.viewMode;
+  }
+
+  state.version = 5;
 }
 
 function ensureViewMode(raw: unknown): 'chat' | 'board' | undefined {
@@ -579,6 +706,12 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       ? { thinkingMode: normalizeThinkingTriState(raw.thinkingMode) }
       : {}),
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(typeof raw.groupId === 'string' && raw.groupId.trim()
+      ? { groupId: raw.groupId.trim() }
+      : {}),
+    ...(typeof raw.boardGroupId === 'string' && raw.boardGroupId.trim()
+      ? { boardGroupId: raw.boardGroupId.trim() }
+      : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
@@ -700,10 +833,24 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     return defaultSessionState();
   }
   const ver = parsed.version;
-  if (ver !== 1 && ver !== 2 && ver !== 3) {
+  if (ver !== 1 && ver !== 2 && ver !== 3 && ver !== 4 && ver !== 5) {
     return defaultSessionState();
   }
-  return migrateSessionStateV1ToV2(parsed);
+  const state = migrateSessionStateV1ToV2(parsed);
+  const rawSession = parsed as Partial<SessionState>;
+  state.groups = ensureGroupsFromRaw(rawSession.groups);
+  if (
+    typeof rawSession.activeBoardGroupId === 'string' &&
+    rawSession.activeBoardGroupId.trim()
+  ) {
+    state.activeBoardGroupId = rawSession.activeBoardGroupId.trim();
+  }
+  if (ver < 5 || state.chats.some((c) => c.orchestrateBoard)) {
+    migrateSessionV4ToV5(state);
+  } else {
+    state.version = 5;
+  }
+  return state;
 }
 
 /** Remember the active chat under the current workspace key before switching scope. */

@@ -1,8 +1,19 @@
 import { isHubMounted, renderHub, refreshHubLiveData, teardownHub } from './hub';
+import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import {
+  isOrchestratePlanScreenMounted,
+  isOrchestratePlanScreenSessionActive,
+  isOrchestratePlanScreenSuppressingChatDom,
+  isOrchestratePlanScreenSuspendedForChat,
+  showOrchestratePlanScreenSuspendedBanner,
+  teardownOrchestratePlanScreen,
+  teardownOrchestratePlanScreenDom,
+} from './orchestrate-plan-screen';
 import { normalizeModeId } from '../chat/modes/types';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
 import { setAssistantBubbleContent } from '../markdown/renderer';
+import { getActiveBoardGroup } from '../state/chat-groups';
 import {
   getActiveChat,
   touchChat,
@@ -23,6 +34,11 @@ import {
   scrollChatIfPinned,
   scrollChatToBottom,
 } from './chat-scroll';
+import {
+  getOrchestrateChatMountElement,
+  isOrchestrateBoardInitSplitActive,
+} from './orchestrate-board-init-split';
+import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
@@ -109,11 +125,30 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
-    // Hub relocates .input-bar into #chatArea; tear down before board replaces children.
+  if (isOrchestrateHubMounted()) {
+    teardownOrchestrateHub();
+  }
+  if (isOrchestratePlanScreenSuspendedForChat(chat)) {
+    teardownHub();
+    const area = document.getElementById('chatArea');
+    if (area) {
+      area.innerHTML = '';
+      showOrchestratePlanScreenSuspendedBanner(area, chat);
+    }
+    renderPersistedSubAgentCardsForChat(chat);
+    refreshContextUsageRing();
+    return;
+  }
+  if (!isOrchestratePlanScreenSessionActive(chat)) {
+    teardownOrchestratePlanScreen();
+  } else if (isOrchestratePlanScreenMounted()) {
+    teardownOrchestratePlanScreenDom();
+  }
+  const boardGroup = getActiveBoardGroup();
+  if (boardGroup?.viewMode === 'board') {
     teardownHub();
     void import('./orchestrate-board').then((m) => {
-      m.renderBoardView(chat);
+      m.renderBoardView(boardGroup);
       m.refreshActiveBoardIfMounted();
     });
     return;
@@ -260,6 +295,33 @@ export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
   renderFromHistory?: boolean;
 }
 
+/** True when board view should suppress chat bubbles (full board, no init split). */
+function shouldStubOrchestrateBoardStreamDom(chat: Chat): boolean {
+  if (!isBoardViewActive()) return false;
+  if (
+    normalizeModeId(chat.modeId) === 'orchestrate' &&
+    isOrchestrateBoardInitSplitActive(chat)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** True when plan authoring screen suppresses chat bubble DOM. */
+function shouldStubOrchestratePlanScreenStreamDom(chat: Chat): boolean {
+  if (normalizeModeId(chat.modeId) !== 'plan' && normalizeModeId(chat.modeId) !== 'orchestrate') {
+    return false;
+  }
+  return isOrchestratePlanScreenSuppressingChatDom(chat.id);
+}
+
+function shouldStubOrchestrateStreamDom(chat: Chat): boolean {
+  return (
+    shouldStubOrchestrateBoardStreamDom(chat) ||
+    shouldStubOrchestratePlanScreenStreamDom(chat)
+  );
+}
+
 export function appendBubble(
   role: 'user' | 'assistant',
   content: string,
@@ -267,7 +329,7 @@ export function appendBubble(
   userOptions?: AppendUserBubbleOptions,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
   const chat = getActiveChat();
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
+  if (shouldStubOrchestrateStreamDom(chat)) {
     const stub = document.createElement('div');
     return { wrap: stub, bubble: stub };
   }
@@ -306,7 +368,7 @@ export function appendBubble(
 
   wrap.appendChild(label);
   wrap.appendChild(bubble);
-  document.getElementById('chatArea')!.appendChild(wrap);
+  getOrchestrateChatMountElement().appendChild(wrap);
   if (role === 'user') {
     scrollChatToBottom();
   } else {
@@ -383,20 +445,8 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   if (!isStreamDomVisible(targetId)) {
     return streamingAssistantRowStub();
   }
-  if (normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board') {
-    const stub = document.createElement('div');
-    const bubble = document.createElement('div');
-    const cursor = document.createElement('div');
-    return {
-      wrap: stub,
-      bubble,
-      cursor,
-      streamStatus: {
-        setPhase: () => {},
-        setThinkingElapsed: () => {},
-        dispose: () => {},
-      },
-    };
+  if (shouldStubOrchestrateStreamDom(chat)) {
+    return streamingAssistantRowStub();
   }
   if (document.getElementById('emptyState')) {
     document.getElementById('emptyState')!.remove();
@@ -423,7 +473,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   const streamStatus = attachStreamStatus(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
-  document.getElementById('chatArea')!.appendChild(wrap);
+  getOrchestrateChatMountElement().appendChild(wrap);
   pinChatScroll();
   scrollChatToBottom();
   return { wrap, bubble, cursor, streamStatus };

@@ -8,8 +8,10 @@ import {
 } from '../chat/orchestrate/list-plans';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
+import { getActiveBoardGroup, getBoardGroupForChat } from '../state/chat-groups';
 import { scheduleSaveSessions, touchChat } from '../state/sessions';
 import type { Chat } from '../types';
+import { isBoardViewActive } from './view-mode-toggle';
 
 /** UI copy for stable discoverOrchestratePlans error codes. */
 export const PLAN_LIST_HINTS: Record<string, string> = {
@@ -131,9 +133,8 @@ export function persistOrchestratePlanPathFromSelectValue(
 export function shouldHideComposerPlanStripForOrchestrateBoardOnboarding(
   chat: Chat,
 ): boolean {
-  return (
-    normalizeModeId(chat.modeId) === 'orchestrate' &&
-    !chat.orchestrateBoard &&
-    chat.viewMode === 'board'
-  );
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
+  if (!isBoardViewActive()) return false;
+  const group = getActiveBoardGroup() ?? getBoardGroupForChat(chat);
+  return !group?.orchestrateBoard;
 }

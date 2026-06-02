@@ -2,7 +2,9 @@
  * Bottom strip UI for the `ask_question` tool: one question per card, carousel, Other row, submit on last card only.
  */
 
-import { chatFetchAbort, streaming } from '../app-state';
+import { getChatAbort } from '../app-state';
+import { isActiveChatStreaming } from '../chat/streaming-state';
+import { getActiveChat } from '../state/sessions';
 import {
   ASK_QUESTION_OTHER_ID,
   stringifyAskQuestionResult,
@@ -17,9 +19,19 @@ import {
 } from './question-cards-state';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
+import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
 
 export interface QuestionCardsModalContext {
   subAgentType?: string;
+}
+
+export interface QuestionCardsModalOptions {
+  /** When set, render inside this element instead of #questionHost. */
+  host?: HTMLElement;
+  /** Skip global composer lock and main-column pending class (plan screen embed). */
+  embedded?: boolean;
+  /** Plan-screen / tool-loop chat id (resolves embedded host when host omitted). */
+  chatId?: string;
 }
 
 /** Invoked from stop-generation to close the strip without waiting for user input. */
@@ -53,9 +65,21 @@ function getOrCreateDraft(
 export function showQuestionCardsModal(
   args: AskQuestionArgs,
   context: QuestionCardsModalContext = {},
+  options: QuestionCardsModalOptions = {},
 ): Promise<AskQuestionToolResult> {
   return new Promise((resolve) => {
-    const host = getQuestionHost();
+    let embedded = options.embedded === true;
+    let host = options.host;
+    if (!host && options.chatId) {
+      const planHost = resolveOrchestratePlanScreenQuestionHost(options.chatId);
+      if (planHost) {
+        host = planHost;
+        embedded = true;
+      }
+    }
+    if (!host) {
+      host = getQuestionHost();
+    }
     if (!host) {
       resolve({ status: 'cancelled', answers: [] });
       return;
@@ -66,12 +90,15 @@ export function showQuestionCardsModal(
     const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
-    if (msgInput) msgInput.disabled = true;
-    if (sendBtn) sendBtn.disabled = true;
-
-    mainColumn?.classList.add('main-column--question-pending');
-    host.hidden = false;
-    setSidebarInputPendingForActiveChat(true);
+    if (!embedded) {
+      if (msgInput) msgInput.disabled = true;
+      if (sendBtn) sendBtn.disabled = true;
+      mainColumn?.classList.add('main-column--question-pending');
+      setSidebarInputPendingForActiveChat(true);
+    }
+    if (!embedded) {
+      host.hidden = false;
+    }
     host.replaceChildren();
 
     const drafts = new Map<string, AskQuestionAnswerDraft>();
@@ -79,7 +106,9 @@ export function showQuestionCardsModal(
     const questions = args.questions;
 
     const panel = document.createElement('div');
-    panel.className = 'question-cards-panel';
+    panel.className = embedded
+      ? 'question-cards-panel question-cards-panel--embedded'
+      : 'question-cards-panel';
     panel.setAttribute('role', 'region');
     panel.setAttribute('aria-label', 'Assistant questions');
 
@@ -166,23 +195,25 @@ export function showQuestionCardsModal(
       requestQuestionCardsCancel = null;
       document.removeEventListener('keydown', onDocKeyDown, true);
       if (abortListener) {
-        chatFetchAbort?.signal.removeEventListener('abort', abortListener);
+        getChatAbort(getActiveChat().id)?.signal.removeEventListener('abort', abortListener);
       }
-      mainColumn?.classList.remove('main-column--question-pending');
-      host.replaceChildren();
-      host.hidden = true;
-      setSidebarInputPendingForActiveChat(false);
-      if (msgInput) {
-        msgInput.disabled = streaming ? false : prevInputDisabled;
-      }
-      if (sendBtn) {
-        if (streaming) {
-          setComposerStreamingMode('streaming');
-        } else {
-          sendBtn.disabled = prevSendDisabled;
+      if (!embedded) {
+        mainColumn?.classList.remove('main-column--question-pending');
+        host.hidden = true;
+        setSidebarInputPendingForActiveChat(false);
+        if (msgInput) {
+          msgInput.disabled = isActiveChatStreaming() ? false : prevInputDisabled;
         }
+        if (sendBtn) {
+          if (isActiveChatStreaming()) {
+            setComposerStreamingMode('streaming');
+          } else {
+            sendBtn.disabled = prevSendDisabled;
+          }
+        }
+        msgInput?.focus();
       }
-      msgInput?.focus();
+      host.replaceChildren();
       resolve(result);
     };
 
@@ -191,8 +222,9 @@ export function showQuestionCardsModal(
     const abortListener = (): void => {
       finish({ status: 'cancelled', answers: [] });
     };
-    if (chatFetchAbort?.signal) {
-      chatFetchAbort.signal.addEventListener('abort', abortListener, { once: true });
+    const abortSignal = getChatAbort(getActiveChat().id)?.signal;
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', abortListener, { once: true });
     }
 
     function syncNav(): void {

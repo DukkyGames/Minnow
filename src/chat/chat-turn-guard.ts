@@ -2,7 +2,7 @@
  * Prevents overlapping chat turn setup for the same session (double-send before streaming flag is set).
  */
 
-import { streaming, streamingChatId } from '../app-state';
+import { isChatStreaming } from './streaming-state';
 
 const chatTurnSetupPending = new Set<string>();
 
@@ -15,7 +15,7 @@ export function isChatTurnSetupPending(chatId: string): boolean {
  * Claim setup for a chat turn. Returns false when the chat is already busy.
  */
 export function beginChatTurnSetup(chatId: string): boolean {
-  if (streaming && streamingChatId === chatId) {
+  if (isChatStreaming(chatId)) {
     return false;
   }
   if (chatTurnSetupPending.has(chatId)) {
