@@ -6,10 +6,17 @@ import {
   buildOrchestrateCompletionMessage,
   isOrchestratePlanComplete,
 } from './plan-complete.ts';
-import { getSupervisorChatState, markChatStalledForUi } from '../../agents/supervisor/state.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
-import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../../state/sessions.ts';
-import type { Chat } from '../../types.ts';
+import {
+  findGroupById,
+  getPlannerChatForGroup,
+} from '../../state/chat-groups.ts';
+import {
+  findChatById,
+  getActiveChat,
+  scheduleSaveSessions,
+  touchChat,
+} from '../../state/sessions.ts';
 
 function showPlanCompleteToast(message: string): void {
   const el = document.createElement('div');
@@ -25,32 +32,27 @@ function showPlanCompleteToast(message: string): void {
 }
 
 /**
- * Mark supervisor state and surface completion once per chat when the board is all green.
+ * Surface completion once per board when every task is complete.
  */
-export async function maybeEmitOrchestratePlanComplete(chatId: string): Promise<void> {
-  const chat = findChatById(chatId);
-  const board = chat?.orchestrateBoard;
-  if (!chat || !board || !isOrchestratePlanComplete(board)) return;
+export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise<void> {
+  const group = findGroupById(groupId);
+  const board = group?.orchestrateBoard;
+  const planner = group ? getPlannerChatForGroup(group) : undefined;
+  if (!group || !board || !planner || !isOrchestratePlanComplete(board)) return;
 
-  const sup = getSupervisorChatState(chatId);
-  const now = Date.now();
-  if (sup.planCompletedAt == null) {
-    sup.planCompletedAt = now;
-    markChatStalledForUi(chatId, false);
-    emitBoardChange(chatId);
-  }
+  if (board.completionShownAt != null) return;
+  board.completionShownAt = Date.now();
+  emitBoardChange(groupId);
 
-  if (sup.completionMessageShown) return;
-  sup.completionMessageShown = true;
-
-  const text = buildOrchestrateCompletionMessage(chat, board, now);
-  chat.history.push({ role: 'assistant', content: text });
-  touchChat(chat);
+  const text = buildOrchestrateCompletionMessage(planner, board, board.completionShownAt);
+  planner.history.push({ role: 'assistant', content: text });
+  touchChat(planner);
   scheduleSaveSessions();
 
-  if (getActiveChat().id === chat.id) {
+  const active = getActiveChat();
+  if (active.id === planner.id || active.boardGroupId === groupId) {
     const { renderChatFromHistory } = await import('../../ui/messages.ts');
-    renderChatFromHistory(chat);
-    showPlanCompleteToast('Orchestrate plan complete');
+    renderChatFromHistory(active);
   }
+  showPlanCompleteToast('Orchestrate plan complete');
 }

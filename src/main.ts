@@ -40,6 +40,8 @@ import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
 import './styles/bug-board.css';
 import './styles/hub.css';
+import './styles/orchestrate-hub.css';
+import './styles/orchestrate-plan-screen.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -127,6 +129,10 @@ import {
 } from './ui/view-mode-toggle';
 import { initModeSelector, syncModeSelectorFromActiveChat } from './ui/mode-selector';
 import {
+  initOrchestrateHub,
+  toggleOrchestrateHubFromTopbar,
+} from './ui/orchestrate-hub';
+import {
   initThinkingControl,
   syncThinkingControlFromActiveChat,
 } from './ui/composer-thinking';
@@ -192,6 +198,7 @@ function registerWindowHandlers(): void {
   window.togglePreviewFromTopbar = () => {
     void import('./ui/preview-panel').then((m) => m.togglePreviewPanel());
   };
+  window.toggleOrchestrateHubFromTopbar = toggleOrchestrateHubFromTopbar;
 }
 
 /** Register PWA service worker (shell cache); failures are ignored. */
@@ -220,8 +227,6 @@ export async function initApp(): Promise<void> {
   }
   initSubAgentUi();
   initAgentActivityPanel();
-  const { startSupervisor } = await import('./agents/supervisor');
-  startSupervisor();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
   fillToolsSection();
@@ -231,6 +236,7 @@ export async function initApp(): Promise<void> {
   initAttachments();
   initContextUsageRing();
   initModeSelector();
+  initOrchestrateHub();
   initThinkingControl();
   initOrchestratePlanSelector();
   initViewModeToggle();
@@ -268,6 +274,8 @@ export async function initApp(): Promise<void> {
   loadToolConfigIntoDrawer();
   applySidebarVisuals();
   renderSidebar();
+  const { wireSidebarNewGroupButton } = await import('./ui/sidebar');
+  wireSidebarNewGroupButton();
   await refreshTerminalHistoryForActiveChat();
   const settingsPage = await import('./ui/settings-page');
   settingsPage.initSettingsPage();

@@ -2,6 +2,7 @@
  * Detect when the user explicitly stopped the orchestrate parent stream.
  */
 
+import { getBoardGroupForChat } from '../../state/chat-groups.ts';
 import { hasIncompleteOrchestrateWork } from './plan-complete.ts';
 import type { Chat } from '../../types.ts';
 
@@ -10,7 +11,7 @@ import type { Chat } from '../../types.ts';
  * Manual board Resume is allowed; supervisor auto-resume must not run.
  */
 export function isUserStoppedChat(chat: Chat): boolean {
-  const board = chat.orchestrateBoard;
+  const board = getBoardGroupForChat(chat)?.orchestrateBoard;
   if (!board || !hasIncompleteOrchestrateWork(board)) {
     return false;
   }

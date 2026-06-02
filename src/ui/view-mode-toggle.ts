@@ -1,15 +1,24 @@
 /**
  * Orchestrate mode: separate Chat / Board view toggles.
  * Board → composer column above send; Chat → board header controls.
+ * Board state lives on sidebar folders ({@link ChatGroup}).
  */
 
 import { normalizeModeId } from '../chat/modes/types';
 import {
+  closeBoardGroupView,
+  getActiveBoardGroup,
+  getBoardGroupForChat,
+  getOrCreateBoardGroup,
+  openBoardGroup,
+} from '../state/chat-groups';
+import {
   getActiveChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
 } from '../state/sessions';
-import type { Chat } from '../types';
+import type { Chat, ChatGroup } from '../types';
 
 const BOARD_TOGGLE_ID = 'btnViewModeToggleBoard';
 const CHAT_TOGGLE_ID = 'btnViewModeToggleChat';
@@ -36,12 +45,17 @@ export function resetViewModeToggleForTests(): void {
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
 }
 
-/** True when Orchestrate kanban is active. */
+/** Resolve board folder for toggles (active board view or planner link). */
+function resolveBoardGroupForToggle(chat: Chat): ChatGroup | undefined {
+  const activeBoard = getActiveBoardGroup();
+  if (activeBoard) return activeBoard;
+  return getBoardGroupForChat(chat);
+}
+
+/** True when Orchestrate kanban fills the main column. */
 export function isOrchestrateBoardViewActive(): boolean {
-  const chat = getActiveChat();
-  return (
-    normalizeModeId(chat.modeId) === 'orchestrate' && chat.viewMode === 'board'
-  );
+  const group = getActiveBoardGroup();
+  return group?.viewMode === 'board';
 }
 
 /** True when Orchestrate board view replaces chat bubbles. */
@@ -53,7 +67,9 @@ export function isBoardViewActive(): boolean {
 export function syncBoardViewChrome(): void {
   const mainColumn = document.getElementById('mainColumn');
   if (!mainColumn) return;
-  mainColumn.classList.toggle('main-column--board-view', isBoardViewActive());
+  const boardView = isBoardViewActive();
+  const initSplit = mainColumn.classList.contains('main-column--orchestrate-init-split');
+  mainColumn.classList.toggle('main-column--board-view', boardView && !initSplit);
   void import('./chat-scroll').then((m) => m.refreshChatJumpChipVisibility());
 }
 
@@ -77,7 +93,10 @@ function boardToggleLabels(
   chat: Chat,
   boardActive: boolean,
 ): { ariaLabel: string; title: string } {
-  const hasPlan = Boolean(chat.orchestratePlanPath?.trim());
+  const group = resolveBoardGroupForToggle(chat);
+  const hasPlan = Boolean(
+    group?.orchestratePlanPath?.trim() || chat.orchestratePlanPath?.trim(),
+  );
 
   if (normalizeModeId(chat.modeId) !== 'orchestrate') {
     return {
@@ -101,7 +120,10 @@ function chatToggleLabels(
   chat: Chat,
   boardActive: boolean,
 ): { ariaLabel: string; title: string } {
-  const hasPlan = Boolean(chat.orchestratePlanPath?.trim());
+  const group = resolveBoardGroupForToggle(chat);
+  const hasPlan = Boolean(
+    group?.orchestratePlanPath?.trim() || chat.orchestratePlanPath?.trim(),
+  );
 
   if (normalizeModeId(chat.modeId) !== 'orchestrate') {
     return {
@@ -144,7 +166,7 @@ export function refreshViewModeToggleDisabled(): void {
  */
 export function syncViewModeToggleFromActiveChat(): void {
   const chat = getActiveChat();
-  const boardActive = chat.viewMode === 'board';
+  const boardActive = isBoardViewActive();
   const enabled = isViewModeToggleEnabled(chat);
 
   applyToggleButtonState(
@@ -177,17 +199,36 @@ export function syncViewModeToggleFromActiveChat(): void {
   syncBoardViewChrome();
 }
 
-/** Switch Orchestrate chat between board and chat views (no-op if already there). */
+/** Switch Orchestrate folder between board and chat views. */
 export function setOrchestrateViewMode(next: 'chat' | 'board'): void {
   const chat = getActiveChat();
   if (!isViewModeToggleEnabled(chat)) return;
-  if (chat.viewMode === next) return;
 
-  chat.viewMode = next;
-  touchChat(chat);
-  scheduleSaveSessions();
+  if (next === 'board') {
+    const group = getBoardGroupForChat(chat) ?? getOrCreateBoardGroup(chat);
+    if (group.orchestrateBoard) {
+      openBoardGroup(group.id);
+    } else {
+      group.viewMode = 'board';
+      if (sessionState) {
+        sessionState.activeBoardGroupId = group.id;
+      }
+      scheduleSaveSessions();
+      renderChat(chat);
+    }
+    void import('./sidebar').then((m) => m.renderSidebar());
+    syncViewModeToggleFromActiveChat();
+    void import('./orchestrate-plan-selector').then((m) =>
+      m.syncOrchestratePlanStripFromActiveChat(),
+    );
+    return;
+  }
+
+  const activeGroup = getActiveBoardGroup() ?? getBoardGroupForChat(chat);
+  if (!activeGroup) return;
+  if (activeGroup.viewMode === 'chat') return;
+  closeBoardGroupView(activeGroup);
   syncViewModeToggleFromActiveChat();
-  renderChat(chat);
   void import('./orchestrate-plan-selector').then((m) =>
     m.syncOrchestratePlanStripFromActiveChat(),
   );

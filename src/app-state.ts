@@ -2,15 +2,24 @@ import type { LmModelRecord } from './types';
 
 /** Shared mutable app flags (streaming, abort controllers, debounce timers). */
 
+/** Chats with an in-flight assistant turn (supports concurrent streams). */
+export const streamingChatIds = new Set<string>();
+
+/** Per-chat fetch abort for SSE / tool-loop turns. */
+export const abortByChatId = new Map<string, AbortController>();
+
+/**
+ * Legacy boolean: true when any chat is streaming.
+ * Kept for call sites that gate on global activity (skill picker, tool approval).
+ */
 export let streaming = false;
 
-/** Which chat is driving the global streaming flag (sidebar thinking dot). */
+/** @deprecated Use streamingChatIds — kept for gradual migration of dot context. */
 export let streamingChatId: string | null = null;
 
 /** Model id → metadata from GET /api/v0/models (used by stats strip). */
 export const modelCache = new Map<string, LmModelRecord>();
 export let modelsFetchAbort: AbortController | null = null;
-export let chatFetchAbort: AbortController | null = null;
 export let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Which preset the textarea should match (empty string = Custom). */
@@ -29,25 +38,45 @@ export function setExpertLabPageOpen(value: boolean): void {
   expertLabPageOpen = value;
 }
 
+function syncLegacyStreamingFlags(): void {
+  streaming = streamingChatIds.size > 0;
+  streamingChatId =
+    streamingChatIds.size === 1 ? [...streamingChatIds][0]! : streamingChatIds.size > 1 ? null : null;
+}
+
+/**
+ * Register or clear streaming for a chat.
+ * `setStreaming(false)` with no chatId clears all entries (use sparingly).
+ */
 export function setStreaming(value: boolean, chatId?: string | null): void {
-  streaming = value;
-  if (!value) {
-    streamingChatId = null;
-    return;
+  if (value && chatId != null && chatId !== '') {
+    streamingChatIds.add(chatId);
+  } else if (!value && chatId != null && chatId !== '') {
+    streamingChatIds.delete(chatId);
+  } else if (!value) {
+    streamingChatIds.clear();
   }
-  if (chatId != null && chatId !== '') {
-    streamingChatId = chatId;
+  syncLegacyStreamingFlags();
+}
+
+export function isAnyChatStreaming(): boolean {
+  return streamingChatIds.size > 0;
+}
+
+export function getChatAbort(chatId: string): AbortController | undefined {
+  return abortByChatId.get(chatId);
+}
+
+export function setChatAbort(chatId: string, controller: AbortController | null): void {
+  if (controller === null) {
+    abortByChatId.delete(chatId);
   } else {
-    streamingChatId = null;
+    abortByChatId.set(chatId, controller);
   }
 }
 
 export function setModelsFetchAbort(controller: AbortController | null): void {
   modelsFetchAbort = controller;
-}
-
-export function setChatFetchAbort(controller: AbortController | null): void {
-  chatFetchAbort = controller;
 }
 
 export function setSaveTimer(timer: ReturnType<typeof setTimeout> | null): void {
@@ -63,7 +92,7 @@ export function setSuppressSystemPromptSelectChange(value: boolean): void {
 }
 
 export function setAssistantRenderDebounceTimer(
-  timer: ReturnType<typeof setTimeout> | null
+  timer: ReturnType<typeof setTimeout> | null,
 ): void {
   assistantRenderDebounceTimer = timer;
 }

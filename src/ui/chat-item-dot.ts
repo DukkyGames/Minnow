@@ -3,15 +3,15 @@
  * or reasoning phase (ring spinner). See resolveChatItemDotState for priority.
  */
 
-import { streaming, streamingChatId } from '../app-state';
+import { streamingChatIds } from '../app-state';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
 
 /** Ephemeral "last time user viewed this chat" for unread detection (not persisted). */
 const chatLastOpenedAt = new Map<string, number>();
 
-/** Live stream phase for the chat that is currently streaming (reasoning vs prose wait). */
-let sidebarStreamPhase: 'generating' | 'thinking' | null = null;
+/** Per-chat stream phase for sidebar thinking dots (concurrent streams). */
+const streamPhaseByChatId = new Map<string, 'generating' | 'thinking'>();
 
 /** Active chat id while tool approval or ask_question UI is open. */
 let inputPendingChatId: string | null = null;
@@ -20,9 +20,8 @@ export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'thinking';
 
 export interface ChatItemDotContext {
   activeChatId: string | null;
-  streaming: boolean;
-  streamingChatId: string | null;
-  streamPhase: 'generating' | 'thinking' | null;
+  streamingChatIds: ReadonlySet<string>;
+  streamPhaseByChatId: ReadonlyMap<string, 'generating' | 'thinking'>;
   inputPendingChatId: string | null;
 }
 
@@ -30,9 +29,8 @@ export interface ChatItemDotContext {
 export function getChatItemDotContext(activeChatId: string | null): ChatItemDotContext {
   return {
     activeChatId,
-    streaming,
-    streamingChatId,
-    streamPhase: sidebarStreamPhase,
+    streamingChatIds,
+    streamPhaseByChatId,
     inputPendingChatId,
   };
 }
@@ -44,13 +42,13 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   if (ctx.inputPendingChatId != null && chat.id === ctx.inputPendingChatId) {
     return 'needs-input';
   }
-  const streamingThisChat =
-    ctx.streaming && ctx.streamingChatId != null && ctx.streamingChatId === chat.id;
-  const inThinkingStream = streamingThisChat && ctx.streamPhase === 'thinking';
+  const streamingThisChat = ctx.streamingChatIds.has(chat.id);
+  const phase = ctx.streamPhaseByChatId.get(chat.id);
+  const inThinkingStream = streamingThisChat && phase === 'thinking';
   const generationThinkingReload =
     chat.id === ctx.activeChatId &&
     Boolean(chat.currentGenerationId?.trim()) &&
-    ctx.streamPhase === 'thinking';
+    phase === 'thinking';
   if (inThinkingStream || generationThinkingReload) {
     return 'thinking';
   }
@@ -102,9 +100,18 @@ export function syncChatItemDotsInDom(): void {
 /** Alias for call sites that already use this name from the plan. */
 export const refreshSidebarChatDots = syncChatItemDotsInDom;
 
-/** Called when the model enters or leaves the reasoning SSE phase. */
-export function setSidebarStreamPhase(phase: 'generating' | 'thinking' | null): void {
-  sidebarStreamPhase = phase;
+/** Called when the model enters or leaves the reasoning SSE phase for a chat. */
+export function setSidebarStreamPhase(
+  phase: 'generating' | 'thinking' | null,
+  chatId?: string,
+): void {
+  const id = chatId?.trim() || getActiveChat().id;
+  if (!id) return;
+  if (phase === null) {
+    streamPhaseByChatId.delete(id);
+  } else {
+    streamPhaseByChatId.set(id, phase);
+  }
   syncChatItemDotsInDom();
 }
 

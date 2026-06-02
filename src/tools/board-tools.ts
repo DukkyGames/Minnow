@@ -8,8 +8,9 @@ import {
   isSubAgentRunSuccessful,
 } from '../agents/sub-agent-outcome.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
+import { getOrCreateBoardGroup } from '../state/chat-groups.ts';
 import {
-  getBoardState,
+  getBoardStateForPlanner,
   initBoard,
   updateTask,
 } from '../state/orchestrate-board-store.ts';
@@ -18,6 +19,7 @@ import type { BoardCategory, BoardTaskStatus, Chat } from '../types.ts';
 
 export interface BoardExecutorContext {
   chatId: string;
+  groupId?: string;
 }
 
 let executorContext: BoardExecutorContext | null = null;
@@ -64,6 +66,9 @@ export type BoardInitArgs = {
     title: string;
     wave: number | string;
     category: BoardCategory;
+    build?: string;
+    test?: string;
+    agent_type?: string;
   }>;
   waves: Array<{ id: number | string }>;
 };
@@ -128,8 +133,20 @@ export function validateBoardInitArgs(
     if (!waveIds.has(wave)) {
       return { ok: false, error: `Error: task "${id}" references unknown wave "${wave}"` };
     }
+    const build = typeof r.build === 'string' ? r.build.trim() : '';
+    const test = typeof r.test === 'string' ? r.test.trim() : '';
+    const agent_type =
+      typeof r.agent_type === 'string' ? r.agent_type.trim() : '';
     taskIds.add(id);
-    parsedTasks.push({ id, title, wave, category });
+    parsedTasks.push({
+      id,
+      title,
+      wave,
+      category,
+      ...(build ? { build } : {}),
+      ...(test ? { test } : {}),
+      ...(agent_type ? { agent_type } : {}),
+    });
   }
 
   return {
@@ -199,23 +216,39 @@ export async function executeBoardTool(
   if (name === 'board_init') {
     const validated = validateBoardInitArgs(args, chat);
     if (validated.ok === false) return validated.error;
-    const board = initBoard(chat, {
-      planPath: validated.args.plan_path,
-      tasks: validated.args.tasks,
-      waves: validated.args.waves,
-    });
+    const group = getOrCreateBoardGroup(chat);
+    const board = initBoard(
+      group,
+      chat,
+      {
+        planPath: validated.args.plan_path,
+        tasks: validated.args.tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          wave: t.wave,
+          category: t.category,
+          build: t.build,
+          test: t.test,
+          agentType: t.agent_type,
+        })),
+        waves: validated.args.waves,
+      },
+    );
+    executorContext = { chatId: chat.id, groupId: group.id };
     return JSON.stringify(board, null, 2);
   }
 
   if (name === 'board_update_task') {
     const validated = validateBoardUpdateTaskArgs(args);
     if (validated.ok === false) return validated.error;
-    if (!chat.orchestrateBoard) {
+    const group = getOrCreateBoardGroup(chat);
+    const board = group.orchestrateBoard;
+    if (!board) {
       return 'Error: orchestrate board is not initialized';
     }
     try {
       if (validated.args.status === 'complete') {
-        const task = chat.orchestrateBoard.tasks.find(
+        const task = board.tasks.find(
           (t) => t.id === validated.args.task_id,
         );
         if (task?.error && isMaxToolTurnSummary(task.error)) {
@@ -244,7 +277,7 @@ export async function executeBoardTool(
       }
       if (validated.args.notes !== undefined) patch.notes = validated.args.notes;
       if (validated.args.error !== undefined) patch.error = validated.args.error;
-      const task = updateTask(chat, validated.args.task_id, patch);
+      const task = updateTask(group, validated.args.task_id, patch, chat);
       return JSON.stringify(task, null, 2);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -253,7 +286,7 @@ export async function executeBoardTool(
   }
 
   if (name === 'board_get_state') {
-    const board = getBoardState(chat);
+    const board = getBoardStateForPlanner(chat);
     if (!board) return 'Error: orchestrate board is not initialized';
     return JSON.stringify(board, null, 2);
   }

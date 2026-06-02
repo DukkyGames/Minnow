@@ -1,24 +1,13 @@
 /**
- * Self-healing controller — delegated to the Orchestrate supervisor (repetition / budgets).
+ * Self-healing controller — disabled while supervisor auto-recovery is removed.
  */
 
-import type { ToolCallLogEntry } from './detector';
-import { observeSubAgentToolCall as observeSupervisor } from '../supervisor/observe-sub-agent.ts';
-import { resetSupervisorStateForTests } from '../supervisor/state.ts';
-
-/**
- * Observe a sub-agent tool call; may cancel/restart on repetition when enabled in supervisor settings.
- */
-export function observeSubAgentToolCall(
-  runId: string,
-  subAgentType: string,
-  log: ToolCallLogEntry[],
-  parentChatId?: string | null,
-): void {
-  observeSupervisor(runId, subAgentType, log, parentChatId);
+/** No-op: repetition auto-restart removed with supervisor. */
+export function observeSubAgentToolCall(..._args: unknown[]): void {
+  /* disabled */
 }
 
-/** Reset supervisor maps (tests). */
+/** No-op: clears nothing (tests may still call). */
 export function resetSelfHealingState(): void {
-  resetSupervisorStateForTests();
+  /* disabled */
 }

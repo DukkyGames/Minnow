@@ -11,7 +11,9 @@ import {
   shouldOrchestrateBoardTimerRun,
   syncOrchestrateBoardTimer,
 } from '../../src/state/orchestrate-board-store.ts';
-import type { Chat, OrchestrateBoardState } from '../../src/types.ts';
+import type { Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
+
+const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 
 const PLAN_PATH = 'documentation/plans/shiny-minsky-board-view.md';
 const FIXED_NOW = 1710000001000;
@@ -33,17 +35,29 @@ function makeChat(): Chat {
   };
 }
 
+function makeGroup(): ChatGroup {
+  return {
+    id: GROUP_ID,
+    name: 'Timer',
+    workspacePath: '',
+    collapsed: false,
+    order: 0,
+    createdAt: FIXED_NOW,
+  };
+}
+
 function boardWithTask(status: 'planned' | 'in_progress' = 'planned'): OrchestrateBoardState {
   const chat = makeChat();
-  initBoard(chat, {
+  const group = makeGroup();
+  initBoard(group, chat, {
     planPath: PLAN_PATH,
     tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
     waves: [{ id: 'W1' }],
   });
   if (status === 'in_progress') {
-    chat.orchestrateBoard!.tasks[0].status = 'in_progress';
+    group.orchestrateBoard!.tasks[0].status = 'in_progress';
   }
-  return chat.orchestrateBoard!;
+  return group.orchestrateBoard!;
 }
 
 describe('orchestrate board timer', () => {
@@ -86,16 +100,17 @@ describe('orchestrate board timer', () => {
 
   test('syncOrchestrateBoardTimer accumulates only while active', () => {
     const chat = makeChat();
-    initBoard(chat, {
+    const group = makeGroup();
+    initBoard(group, chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    const board = chat.orchestrateBoard!;
+    const board = group.orchestrateBoard!;
 
     board.activeParentTurnId = 'turn-1';
     setBoardNowForTests(() => T0);
-    syncOrchestrateBoardTimer(chat, {
+    syncOrchestrateBoardTimer(group, chat, {
       isStreaming: true,
       activeRunCount: 0,
       userStopped: false,
@@ -106,7 +121,7 @@ describe('orchestrate board timer', () => {
     assert.equal(getOrchestrateBoardElapsedMs(board, T1), 5_000);
 
     setBoardNowForTests(() => T1);
-    syncOrchestrateBoardTimer(chat, {
+    syncOrchestrateBoardTimer(group, chat, {
       isStreaming: false,
       activeRunCount: 0,
       userStopped: false,

@@ -1,16 +1,17 @@
-import { chatFetchAbort } from '../app-state';
+import { getChatAbort } from '../app-state';
 import { clearPendingSteer } from './steer-message';
 import { cancelGeneration } from '../api/generations';
-import { getActiveChat } from '../state/sessions';
+import { findChatById, getActiveChat } from '../state/sessions';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 
 /**
- * Stop the active chat turn: cancel the backend generation (if any) and abort the local SSE reader.
+ * Stop a chat turn: cancel the backend generation (if any) and abort the local SSE reader.
  */
-export function stopGeneration(): void {
+export function stopGeneration(chatId?: string): void {
   forceCloseAskQuestionModal();
 
-  const chat = getActiveChat();
+  const id = chatId?.trim() || getActiveChat().id;
+  const chat = findChatById(id) ?? getActiveChat();
   const generationId = chat.currentGenerationId?.trim();
   if (generationId) {
     void cancelGeneration(generationId).catch(() => {
@@ -20,5 +21,5 @@ export function stopGeneration(): void {
 
   clearPendingSteer(chat);
 
-  if (chatFetchAbort) chatFetchAbort.abort();
+  getChatAbort(chat.id)?.abort();
 }

@@ -1,8 +1,7 @@
 /**
- * Orchestrate plan completion helpers (supervisor gating, resume, completion copy).
+ * Orchestrate plan completion helpers (manual board — completion message only).
  */
 
-import type { SupervisorChatState } from '../../agents/supervisor/state.ts';
 import type { Chat, OrchestrateBoardState } from '../../types.ts';
 
 /** True when the board has at least one task and every task is `complete`. */
@@ -11,29 +10,9 @@ export function isOrchestratePlanComplete(board: OrchestrateBoardState): boolean
   return tasks.length > 0 && tasks.every((t) => t.status === 'complete');
 }
 
-/** True when orchestration still has work that can be resumed. */
+/** True when orchestration still has incomplete tasks. */
 export function hasIncompleteOrchestrateWork(board: OrchestrateBoardState): boolean {
   return board.tasks.some((t) => t.status !== 'complete');
-}
-
-/** Manual/auto resume is allowed only while incomplete work remains. */
-export function canOrchestrateResume(board: OrchestrateBoardState): boolean {
-  return hasIncompleteOrchestrateWork(board);
-}
-
-/**
- * True once orchestration has actually run (not a fresh board with only `startedAt`).
- * Gates supervisor auto-resume (R7) so new/idle chats are not treated as stalled.
- */
-export function hasOrchestrateSupervisorSessionStarted(
-  sup: SupervisorChatState,
-  board: OrchestrateBoardState,
-): boolean {
-  if (sup.lastTerminalAt != null && sup.lastTerminalAt > 0) return true;
-  if (sup.lastReportAt != null && sup.lastReportAt > 0) return true;
-  if (sup.lastParentToolResultAt != null && sup.lastParentToolResultAt > 0) return true;
-  if (board.activeParentTurnId?.trim()) return true;
-  return board.tasks.some((t) => t.status !== 'planned');
 }
 
 function shortPlanLabel(planPath: string): string {
@@ -74,11 +53,8 @@ export function buildOrchestrateCompletionMessage(
     `- **Tasks:** ${total}/${total} complete`,
     `- **Elapsed:** ${elapsed}`,
     '',
-    'All board tasks are finished. Auto-resume is off for this chat.',
+    'All board tasks are finished. Move any remaining cards or start a new chat when ready.',
     '',
-    '**Next steps:** review results in the board, start a new chat, or export/share the plan if needed.',
+    '**Next steps:** review results in the board, open task chats, or export/share the plan if needed.',
   ].join('\n');
 }
-
-export const ORCHESTRATE_PLAN_COMPLETE_RESUME_HINT =
-  'Plan complete — all board tasks are finished. Start a new chat or review results in the board.';

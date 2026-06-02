@@ -7,7 +7,7 @@ import { isComposerRecoveryBlocked } from './composer-send';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat } from './work-agent-dev';
-import { listModes } from '../chat/modes/registry';
+import { listComposerModes, listModes } from '../chat/modes/registry';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   getActiveChat,
@@ -130,7 +130,7 @@ function onSegmentKeydown(event: KeyboardEvent, modeId: ModeId): void {
   const root = getModeSelectorEl();
   if (!root || isActiveChatStreaming()) return;
 
-  const modes = listModes();
+  const modes = listComposerModes();
   const currentIndex = modes.findIndex((m) => m.id === modeId);
   if (currentIndex < 0) return;
 
@@ -167,7 +167,7 @@ export function initModeSelector(): void {
   root.innerHTML = '';
   root.setAttribute('role', 'radiogroup');
 
-  for (const mode of listModes()) {
+  for (const mode of listComposerModes()) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mode-segment';

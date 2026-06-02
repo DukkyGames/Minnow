@@ -1,5 +1,5 @@
 /**
- * Pure mutators for chat.orchestrateBoard (Kanban state).
+ * Pure mutators for folder-owned Orchestrate boards ({@link ChatGroup.orchestrateBoard}).
  *
  * Wave rollup per wave.id from tasks where task.wave === wave.id:
  * - complete: every task is complete
@@ -14,8 +14,10 @@ import type {
   BoardTaskStatus,
   BoardWave,
   Chat,
+  ChatGroup,
   OrchestrateBoardState,
 } from '../types.ts';
+import { getBoardGroupForChat } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { scheduleSaveSessions, touchChat } from './sessions.ts';
 
@@ -71,10 +73,11 @@ export function getOrchestrateBoardElapsedMs(
 
 /** Open/close timer segments when orchestration transitions between active and idle. */
 export function syncOrchestrateBoardTimer(
-  chat: Chat,
+  group: ChatGroup,
+  plannerChat: Chat,
   ctx: OrchestrateBoardTimerContext,
 ): void {
-  const board = chat.orchestrateBoard;
+  const board = group.orchestrateBoard;
   if (!board) return;
   const nowMs = boardNowMs();
   ensureBoardTimerFields(board, nowMs);
@@ -94,7 +97,7 @@ export function syncOrchestrateBoardTimer(
 
   if (!changed) return;
   board.lastUpdatedAt = nowMs;
-  touchChat(chat);
+  touchChat(plannerChat);
   scheduleSaveSessions();
 }
 
@@ -134,12 +137,18 @@ export function getBoardProgressPercent(board: OrchestrateBoardState): number {
   return Math.round((completeCount / board.tasks.length) * 100);
 }
 
-export function getBoardState(chat: Chat): OrchestrateBoardState | null {
-  return chat.orchestrateBoard ?? null;
+export function getBoardState(group: ChatGroup): OrchestrateBoardState | null {
+  return group.orchestrateBoard ?? null;
 }
 
-export function findTaskByRunId(chat: Chat, runId: string): BoardTask | null {
-  const board = chat.orchestrateBoard;
+/** Board on the planner chat's linked folder (if any). */
+export function getBoardStateForPlanner(plannerChat: Chat): OrchestrateBoardState | null {
+  const group = getBoardGroupForChat(plannerChat);
+  return group?.orchestrateBoard ?? null;
+}
+
+export function findTaskByRunId(group: ChatGroup, runId: string): BoardTask | null {
+  const board = group.orchestrateBoard;
   if (!board || !runId) return null;
   return (
     board.tasks.find(
@@ -158,12 +167,19 @@ export type InitBoardInput = {
     title: string;
     wave: number | string;
     category: BoardTask['category'];
+    build?: string;
+    test?: string;
+    agentType?: string;
   }>;
   waves: Array<{ id: number | string }>;
 };
 
-/** Create or replace orchestrate board on chat. */
-export function initBoard(chat: Chat, input: InitBoardInput): OrchestrateBoardState {
+/** Create or replace orchestrate board on a folder. */
+export function initBoard(
+  group: ChatGroup,
+  plannerChat: Chat,
+  input: InitBoardInput,
+): OrchestrateBoardState {
   const now = boardNowMs();
   const tasks: BoardTask[] = input.tasks.map((t) => ({
     id: t.id,
@@ -171,6 +187,9 @@ export function initBoard(chat: Chat, input: InitBoardInput): OrchestrateBoardSt
     wave: t.wave,
     category: t.category,
     status: 'planned' as BoardTaskStatus,
+    ...(t.build?.trim() ? { buildSpec: t.build.trim() } : {}),
+    ...(t.test?.trim() ? { testSpec: t.test.trim() } : {}),
+    ...(t.agentType?.trim() ? { agentType: t.agentType.trim() } : {}),
   }));
   const waves: BoardWave[] = input.waves.map((w) => ({
     id: w.id,
@@ -183,12 +202,16 @@ export function initBoard(chat: Chat, input: InitBoardInput): OrchestrateBoardSt
     startedAt: now,
     lastUpdatedAt: now,
     timerAccumulatedMs: 0,
+    maxConcurrentTasks: 3,
   };
   recomputeWaveRollup(board);
-  chat.orchestrateBoard = board;
-  touchChat(chat);
+  group.orchestrateBoard = board;
+  group.orchestratePlanPath = input.planPath;
+  group.plannerChatId = plannerChat.id;
+  plannerChat.boardGroupId = group.id;
+  touchChat(plannerChat);
   scheduleSaveSessions();
-  emitBoardChange(chat.id);
+  emitBoardChange(group.id);
   return board;
 }
 
@@ -204,17 +227,26 @@ export type UpdateTaskPatch = Partial<
     | 'filesChanged'
     | 'notes'
     | 'error'
-    | 'retryCount'
+    | 'agentType'
+    | 'chatId'
+    | 'buildSpec'
+    | 'testSpec'
   >
 >;
 
+function touchBoardGroup(group: ChatGroup, plannerChat?: Chat): void {
+  if (plannerChat) touchChat(plannerChat);
+  scheduleSaveSessions();
+}
+
 /** Append a sub-agent run id to a task's history (deduped, newest last). */
 export function appendTaskRunHistory(
-  chat: Chat,
+  group: ChatGroup,
   taskId: string,
   runId: string,
+  plannerChat?: Chat,
 ): BoardTask {
-  const board = chat.orchestrateBoard;
+  const board = group.orchestrateBoard;
   if (!board) throw new Error('Error: orchestrate board is not initialized');
   const task = board.tasks.find((t) => t.id === taskId);
   if (!task) throw new Error(`Error: unknown board task "${taskId}"`);
@@ -222,26 +254,30 @@ export function appendTaskRunHistory(
   if (!trimmed) return task;
   const prev = task.runHistory ?? [];
   const runHistory = prev.includes(trimmed) ? prev : [...prev, trimmed];
-  return updateTask(chat, taskId, { runHistory });
+  return updateTask(group, taskId, { runHistory }, plannerChat);
 }
 
 /** Merge task patch, rollup waves, persist, emit. */
 export function updateTask(
-  chat: Chat,
+  group: ChatGroup,
   taskId: string,
   patch: UpdateTaskPatch,
+  plannerChat?: Chat,
 ): BoardTask {
-  const board = chat.orchestrateBoard;
+  const board = group.orchestrateBoard;
   if (!board) throw new Error('Error: orchestrate board is not initialized');
   const idx = board.tasks.findIndex((t) => t.id === taskId);
   if (idx < 0) throw new Error(`Error: unknown board task "${taskId}"`);
 
-  const task = { ...board.tasks[idx], ...patch };
+  const task: BoardTask = { ...board.tasks[idx], ...patch };
+  // Explicit `error: undefined` removes a stale failure message from the task row.
+  if ('error' in patch && patch.error === undefined) {
+    delete task.error;
+  }
   board.tasks[idx] = task;
   board.lastUpdatedAt = boardNowMs();
   recomputeWaveRollup(board);
-  touchChat(chat);
-  scheduleSaveSessions();
-  emitBoardChange(chat.id);
+  touchBoardGroup(group, plannerChat);
+  emitBoardChange(group.id);
   return task;
 }

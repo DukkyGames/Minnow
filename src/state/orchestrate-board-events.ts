@@ -1,35 +1,36 @@
 /**
  * Pub/sub for Orchestrate board UI updates (decoupled from DOM).
+ * Listeners are keyed by sidebar folder id ({@link ChatGroup.id}).
  */
 
-type BoardChangeListener = (chatId: string) => void;
+type BoardChangeListener = (groupId: string) => void;
 
-const listenersByChatId = new Map<string, Set<BoardChangeListener>>();
+const listenersByGroupId = new Map<string, Set<BoardChangeListener>>();
 
-/** Register a listener for one chat; returns unsubscribe. */
+/** Register a listener for one board folder; returns unsubscribe. */
 export function subscribeBoardChanges(
-  chatId: string,
+  groupId: string,
   listener: BoardChangeListener,
 ): () => void {
-  let set = listenersByChatId.get(chatId);
+  let set = listenersByGroupId.get(groupId);
   if (!set) {
     set = new Set();
-    listenersByChatId.set(chatId, set);
+    listenersByGroupId.set(groupId, set);
   }
   set.add(listener);
   return () => {
     set?.delete(listener);
-    if (set && set.size === 0) listenersByChatId.delete(chatId);
+    if (set && set.size === 0) listenersByGroupId.delete(groupId);
   };
 }
 
-/** Notify subscribers that board state changed for a chat. */
-export function emitBoardChange(chatId: string): void {
-  const set = listenersByChatId.get(chatId);
+/** Notify subscribers that board state changed for a folder. */
+export function emitBoardChange(groupId: string): void {
+  const set = listenersByGroupId.get(groupId);
   if (!set) return;
   for (const fn of set) {
     try {
-      fn(chatId);
+      fn(groupId);
     } catch {
       /* ignore subscriber errors */
     }
@@ -38,5 +39,5 @@ export function emitBoardChange(chatId: string): void {
 
 /** Clear all listeners (test teardown). */
 export function clearBoardListenersForTests(): void {
-  listenersByChatId.clear();
+  listenersByGroupId.clear();
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { setChatFetchAbort } from '../../src/app-state.ts';
+import { setChatAbort } from '../../src/app-state.ts';
 import { stopGeneration } from '../../src/chat/stop-generation.ts';
 import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
 
@@ -28,24 +28,24 @@ describe('stopGeneration', () => {
 
   afterEach(() => {
     setSessionStateForTests(null);
-    setChatFetchAbort(null);
+    setChatAbort('11111111-1111-1111-1111-111111111111', null);
   });
 
-  test('calls abort() when chatFetchAbort is set', () => {
+  test('calls abort() when chat abort controller is set', () => {
     seedActiveChat();
     let aborted = false;
     const controller = new AbortController();
     controller.signal.addEventListener('abort', () => {
       aborted = true;
     });
-    setChatFetchAbort(controller);
+    setChatAbort('11111111-1111-1111-1111-111111111111', controller);
     stopGeneration();
     assert.equal(aborted, true);
   });
 
   test('no-op when chatFetchAbort is null', () => {
     seedActiveChat();
-    setChatFetchAbort(null);
+    setChatAbort('11111111-1111-1111-1111-111111111111', null);
     assert.doesNotThrow(() => stopGeneration());
   });
 });

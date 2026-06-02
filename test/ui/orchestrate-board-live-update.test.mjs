@@ -24,6 +24,7 @@ const {
   canOpenBoardTaskSubAgent,
   deriveTaskAgentBadge,
   getBoardTaskPrimaryRunId,
+  buildKanbanRefreshKey,
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
 const { setViewModeToggleRenderHandlerForTests } = await import(
@@ -32,6 +33,9 @@ const { setViewModeToggleRenderHandlerForTests } = await import(
 const { setStreaming } = await import('../../src/app-state.ts');
 const { clearBoardListenersForTests } = await import(
   '../../src/state/orchestrate-board-events.ts'
+);
+const { loadSubAgentConfig, resetSubAgentConfigCache } = await import(
+  '../../src/agents/sub-agent-config.ts'
 );
 
 function setupDom() {
@@ -71,11 +75,27 @@ function makeOrchestrateChat() {
   return chat;
 }
 
+/** populateKanbanWaves awaits sub-agent config; prime cache before board paint. */
+async function primeSubAgentConfig() {
+  resetSubAgentConfigCache();
+  await loadSubAgentConfig();
+}
+
+async function waitForKanban() {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    if (document.querySelector('.kanban-grid')) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('kanban grid not rendered');
+}
+
 describe('orchestrate board live updates', () => {
   afterEach(() => {
     closeSubAgentDrawer();
     disposeBoardViewForTests();
     clearBoardListenersForTests();
+    resetSubAgentConfigCache();
     setBoardNowForTests(null);
     setSessionStateForTests(null);
   });
@@ -147,6 +167,90 @@ describe('orchestrate board live updates', () => {
     ).length;
     assert.equal(plannedAfter, 1);
     assert.equal(inProgress, 1);
+  });
+
+  test('wave caret collapses kanban and persists on board state', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    initBoard(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderBoardView(chat);
+    await waitForKanban();
+    const body = () => document.querySelector('.board-wave-block__body');
+    const caret = () => document.querySelector('.board-wave-block__caret');
+    assert.ok(body());
+    assert.equal(body().hidden, false);
+    assert.equal(caret()?.getAttribute('aria-expanded'), 'true');
+
+    caret().click();
+    await waitForKanban();
+    assert.equal(body().hidden, true);
+    assert.equal(chat.orchestrateBoard.waves[0].collapsed, true);
+    assert.equal(caret().getAttribute('aria-expanded'), 'false');
+    assert.ok(document.querySelector('.board-wave-compact'));
+    assert.equal(document.querySelectorAll('.board-wave-compact__chip').length, 1);
+    assert.match(
+      document.querySelector('.board-wave-compact__title')?.textContent ?? '',
+      /Task A/,
+    );
+
+    refreshActiveBoardIfMounted();
+    await waitForKanban();
+    assert.equal(document.querySelector('.board-wave-block__body').hidden, true);
+  });
+
+  test('kanban refreshes immediately when a board button stays focused after click', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    initBoard(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(chat, 'W1-A', { status: 'complete' });
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    renderBoardView(chat);
+    await waitForKanban();
+
+    const reopenBtn = document.querySelector(
+      '.kanban-column:nth-child(4) .board-task-card__advance-btn',
+    );
+    assert.ok(reopenBtn, 'complete column shows Reopen');
+    reopenBtn.focus();
+    assert.equal(document.activeElement, reopenBtn);
+
+    reopenBtn.click();
+    await waitForKanban();
+
+    assert.equal(
+      document.querySelectorAll('.kanban-column:first-child .board-task-card').length,
+      1,
+      'reopened task should move to Planned without a second click',
+    );
+    assert.equal(
+      document.querySelectorAll('.kanban-column:nth-child(4) .board-task-card').length,
+      0,
+    );
   });
 
   test('header status badge reflects board lifecycle', () => {
@@ -406,15 +510,10 @@ describe('orchestrate board live updates', () => {
 
     const failedBadge = document.querySelector('.board-task-card__agent--failed');
     assert.ok(failedBadge, 'settled failed task shows Failed agent badge');
-    failedBadge.closest('.board-task-card--clickable')?.click();
-    assert.ok(document.querySelector('.sub-agent-drawer-panel'));
-    assert.equal(
-      document.querySelector('.sub-agent-drawer__status')?.textContent,
-      'Failed',
-    );
+    assert.ok(failedBadge.textContent?.includes('Failed'));
   });
 
-  test('board header icon controls ordered Plan, Chat, play/pause', () => {
+  test('board header controls include Plan and Chat view', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
@@ -440,16 +539,7 @@ describe('orchestrate board live updates', () => {
         el.getAttribute('data-board-action') ??
         (el.id === 'btnViewModeToggleChat' ? 'chat-view' : null),
     );
-    assert.deepEqual(actions, ['open-plan', 'chat-view', 'play-pause']);
-
-    const openPlan = headerControls.querySelector('[data-board-action="open-plan"]');
-    const playPause = headerControls.querySelector('[data-board-action="play-pause"]');
-    assert.ok(openPlan?.classList.contains('board-header__icon-btn'));
-    assert.equal(openPlan?.textContent?.trim(), '');
-    assert.equal(playPause?.getAttribute('aria-label'), 'Start');
-    assert.equal(playPause?.getAttribute('aria-pressed'), 'false');
-    assert.ok(playPause?.querySelector('[data-board-icon="play"]'));
-    assert.ok(playPause?.querySelector('[data-board-icon="pause"].hidden'));
+    assert.deepEqual(actions, ['open-plan', 'chat-view']);
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {
@@ -556,8 +646,9 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('refreshActiveBoardIfMounted syncs play/pause when streaming stops', () => {
+  test('focused agent select is not replaced by in-place board refresh', async () => {
     setupDom();
+    await primeSubAgentConfig();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
     initBoard(chat, {
@@ -565,7 +656,6 @@ describe('orchestrate board live updates', () => {
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    chat.orchestrateBoard.activeParentTurnId = 'turn-stream-1';
     setSessionStateForTests({
       version: 2,
       activeId: chat.id,
@@ -574,22 +664,16 @@ describe('orchestrate board live updates', () => {
     });
 
     renderBoardView(chat);
-    setStreaming(true, chat.id);
-    refreshActiveBoardIfMounted();
-    const playPauseBtn = document.querySelector('[data-board-action="play-pause"]');
-    assert.ok(playPauseBtn);
-    assert.equal(playPauseBtn.getAttribute('aria-pressed'), 'true');
-    assert.equal(playPauseBtn.getAttribute('aria-label'), 'Stop orchestrator');
-    assert.ok(playPauseBtn.querySelector('[data-board-icon="pause"]:not(.hidden)'));
+    await waitForKanban();
 
-    setStreaming(false);
+    const select = document.querySelector('.board-task-card__agent-select');
+    assert.ok(select instanceof HTMLSelectElement);
+    const keyBefore = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    select.focus();
     refreshActiveBoardIfMounted();
-    const playPauseAfterIdle = document.querySelector(
-      '[data-board-action="play-pause"]',
-    );
-    assert.ok(playPauseAfterIdle);
-    assert.equal(playPauseAfterIdle.disabled, false);
-    assert.equal(playPauseAfterIdle.getAttribute('aria-pressed'), 'false');
-    assert.equal(playPauseAfterIdle.getAttribute('aria-label'), 'Start');
+    const keyAfter = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    assert.equal(keyAfter, keyBefore);
+    const selectAfter = document.querySelector('.board-task-card__agent-select');
+    assert.equal(selectAfter, select, 'timer refresh must not rebuild kanban while select is focused');
   });
 });

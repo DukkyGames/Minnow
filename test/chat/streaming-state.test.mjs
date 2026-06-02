@@ -11,6 +11,9 @@ const {
   isBackgroundStreamBlockingSend,
   isStreamDomVisible,
 } = await import('../../src/chat/streaming-state.ts');
+const { BOARD_ONBOARDING_KICKOFF_MESSAGE } = await import(
+  '../../src/ui/orchestrate-board-kickoff.ts'
+);
 
 function seedTwoChats(activeId) {
   const a = createEmptyChatObject('');
@@ -59,10 +62,72 @@ describe('streaming-state helpers', () => {
     assert.equal(isStreamDomVisible('chat-b'), false);
   });
 
-  test('isBackgroundStreamBlockingSend when another chat streams', () => {
+  test('isStreamDomVisible false for build task chat during full board view', () => {
+    const planner = createEmptyChatObject('');
+    planner.id = 'chat-planner';
+    planner.modeId = 'orchestrate';
+    planner.orchestratePlanPath = 'documentation/plans/x.md';
+    const task = createEmptyChatObject('');
+    task.id = 'chat-task';
+    task.modeId = 'build';
+    task.boardGroupId = 'grp-board-task';
+    const group = {
+      id: 'grp-board-task',
+      name: 'Board',
+      workspacePath: planner.workspacePath || '',
+      collapsed: false,
+      order: 0,
+      createdAt: 1,
+      viewMode: 'board',
+      plannerChatId: planner.id,
+      orchestrateBoard: { planPath: planner.orchestratePlanPath, tasks: [], waves: [] },
+    };
+    planner.boardGroupId = group.id;
+    setSessionStateForTests({
+      version: 5,
+      activeId: task.id,
+      activeBoardGroupId: group.id,
+      sidebarCollapsed: false,
+      chats: [planner, task],
+      groups: [group],
+    });
+    appState.setStreaming(true, task.id);
+    assert.equal(isStreamDomVisible(task.id), false);
+  });
+
+  test('isStreamDomVisible true during orchestrate board init split', () => {
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-orchestrate-split';
+    chat.modeId = 'orchestrate';
+    chat.orchestratePlanPath = 'documentation/plans/x.md';
+    chat.history.push({ role: 'user', content: BOARD_ONBOARDING_KICKOFF_MESSAGE });
+    const group = {
+      id: 'grp-stream-state',
+      name: 'Board',
+      workspacePath: chat.workspacePath || '',
+      collapsed: false,
+      order: 0,
+      createdAt: 1,
+      viewMode: 'board',
+      plannerChatId: chat.id,
+    };
+    chat.boardGroupId = group.id;
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      activeBoardGroupId: group.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+      groups: [group],
+    });
+    appState.setStreaming(true, chat.id);
+    assert.equal(isStreamDomVisible(chat.id), true);
+  });
+
+  test('isBackgroundStreamBlockingSend allows concurrent sends', () => {
     seedTwoChats('chat-b');
     appState.setStreaming(true, 'chat-a');
-    assert.equal(isBackgroundStreamBlockingSend(), true);
+    assert.equal(isBackgroundStreamBlockingSend(), false);
     assert.equal(isActiveChatStreaming(), false);
   });
 
