@@ -5,7 +5,8 @@
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for \\(const k of Object.keys\\(s\\)\\) if\\(/test|typecheck|tsc|lint/.test\\(k\\)\\) console.log\\(k, '=>', s[k]\\);\")",
       "Bash(ls src/chat/prompts/work-agents/)",
       "Bash(ls src/agents/packs)",
-      "Bash(ls src/agents/prompts/work-agents)"
+      "Bash(ls src/agents/prompts/work-agents)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }

@@ -433,16 +433,22 @@ async function executeToolBodyAfterGates(
           'Error: local tool server is not available. Run `npm start` for file, git, and code tools.',
       };
     }
-    if (
+    const useStreaming =
       STREAMING_TOOL_NAMES.has(name) &&
       context.chatId &&
-      typeof enrichedArgs === 'object'
-    ) {
+      typeof enrichedArgs === 'object' &&
+      !(name === 'execute_command' && enrichedArgs.background === true);
+
+    if (useStreaming) {
       return {
         content: await executeStreamingCodeTool(name, enrichedArgs, context),
       };
     }
-    return executeServerTool(name, enrichedArgs, context.modeId);
+    return executeServerTool(
+      name,
+      mergeServerToolContextArgs(name, enrichedArgs, context),
+      context.modeId,
+    );
   }
 
   return { content: await executeBrowserTool(name, enrichedArgs) };
@@ -502,6 +508,25 @@ export function getEnabledToolDefinitionsForMode(
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
 export const getEnabledToolDefinitionsForSend = getEnabledToolDefinitionsForMode;
 
+/** Pass chat/tool ids to the Node tool server for terminal registry and filters. */
+function mergeServerToolContextArgs(
+  name: string,
+  args: Record<string, unknown>,
+  context: ExecuteToolContext,
+): Record<string, unknown> {
+  const out = { ...args };
+  if (context.chatId) {
+    out.chatId = context.chatId;
+    if (name === 'list_running_commands' && out.chat_id == null) {
+      out.chat_id = context.chatId;
+    }
+  }
+  if (context.toolCallId) {
+    out.toolCallId = context.toolCallId;
+  }
+  return out;
+}
+
 /** Map code tools to process argv for the terminal runner. */
 function mapCodeToolToCommand(
   name: string,
@@ -552,6 +577,7 @@ async function executeStreamingCodeTool(
   }
 
   try {
+    const { chatFetchAbort } = await import('../app-state');
     return await runCommandWithTerminalStream(mapped.command, {
       chatId: context.chatId!,
       source: 'agent',
@@ -559,6 +585,7 @@ async function executeStreamingCodeTool(
       displayLabel: mapped.label,
       args: mapped.argv,
       shell: mapped.shell,
+      abortSignal: chatFetchAbort?.signal,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

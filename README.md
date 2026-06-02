@@ -1,6 +1,6 @@
 # Minnow
 
-A fast, lightweight browser client for **[LM Studio](https://lmstudio.ai/)** and other OpenAI-compatible local providers — streaming chat, multi-session history, inference metrics, programmatic system prompts, and **57 built-in agent tools** (files, git, shell, browser CDP, sub-agents, orchestration board, memory, LSP, and more).
+A fast, lightweight browser client for **[LM Studio](https://lmstudio.ai/)** and other OpenAI-compatible local providers — streaming chat, multi-session history, inference metrics, programmatic system prompts, and **60 built-in agent tools** (files, git, shell, browser CDP, sub-agents, orchestration board, memory, LSP, and more).
 
 Built with **Vite + TypeScript**. The UI is a single-page app; a **Node dev server** (`server.js`) runs alongside Vite during development for filesystem tools, config persistence under `~/.minnow`, and provider proxying.
 
@@ -17,7 +17,7 @@ Built with **Vite + TypeScript**. The UI is a single-page app; a **Node dev serv
 
 ### Agent capabilities
 
-- **57 built-in tools** — OpenAI-style function calling; browser-routed tools (web, utilities, mode handoff, sub-agent/board orchestration, Electron preview `browser_*`), plus Node tool server (files, git, code, memory, LSP, Impeccable)
+- **60 built-in tools** — OpenAI-style function calling; browser-routed tools (web, utilities, mode handoff, sub-agent/board orchestration, Electron preview `browser_*`), plus Node tool server (files, git, code, memory, LSP, Impeccable)
 - **Operating modes** — **Build**, **Plan**, **Orchestrate**, **Research**, **Reef** (sandboxed inline widgets via `reef-widget` fences)
 - **Orchestrate board** — kanban view tied to plans under `documentation/plans/`; `board_*` tools + sub-agent cards and drawer
 - **Sub-agents** — `spawn_sub_agent`, concurrency limits, live cards, transcript drawer, persisted runs on the chat

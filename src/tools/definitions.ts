@@ -711,16 +711,92 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     id: 'execute_command',
     label: 'Run command',
-    description: 'Runs a shell command in the project directory (30s timeout).',
+    description:
+      'Runs a shell command in the project directory. Blocking runs time out after 30s; use background for dev servers and long-running processes.',
     category: 'code',
     serverRequired: true,
     definition: toolSchema(
       'execute_command',
-      'Execute a shell command and return stdout and stderr.',
+      'Execute a shell command and return stdout and stderr. Default: blocking (30s timeout). Set background: true for servers, watchers, and processes that may not exit; poll with read_command_log; stop with stop_command or stop: true + run_id.',
       {
-        command: { type: 'string', description: 'Shell command to run' },
+        command: { type: 'string', description: 'Shell command to run (omit when stop: true)' },
+        background: {
+          type: 'boolean',
+          description:
+            'When true, spawn detached with no timeout and return runId immediately. Mutually exclusive with stop.',
+        },
+        block_until_ms: {
+          type: 'number',
+          description:
+            'With background: true, wait up to this many ms for initial output (0–120000) before returning.',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Working directory relative to workspace root (default .)',
+        },
+        stop: {
+          type: 'boolean',
+          description:
+            'When true, stop an existing run by run_id instead of spawning (mutually exclusive with background and command).',
+        },
+        run_id: {
+          type: 'string',
+          description: 'runId from a background execute_command (required when stop: true)',
+        },
       },
       ['command'],
+    ),
+  },
+  {
+    id: 'read_command_log',
+    label: 'Read command log',
+    description: 'Tail stdout/stderr for a background or recent agent command run.',
+    category: 'code',
+    serverRequired: true,
+    definition: toolSchema(
+      'read_command_log',
+      'Read the log tail for a command run started with execute_command (background: true) or start_background_command.',
+      {
+        run_id: { type: 'string', description: 'runId from the start response' },
+        max_bytes: {
+          type: 'number',
+          description: 'Max bytes to read from the log file (default 65536)',
+        },
+      },
+      ['run_id'],
+    ),
+  },
+  {
+    id: 'list_running_commands',
+    label: 'List running commands',
+    description: 'List active agent shell runs still in the server registry.',
+    category: 'code',
+    serverRequired: true,
+    definition: toolSchema(
+      'list_running_commands',
+      'List non-finished agent command runs (use when run_id was lost). Optional chat_id filters to one chat.',
+      {
+        chat_id: {
+          type: 'string',
+          description: 'Optional chat id to filter runs for the current conversation',
+        },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'stop_command',
+    label: 'Stop command',
+    description: 'Stop a running agent shell command by run_id.',
+    category: 'code',
+    serverRequired: true,
+    definition: toolSchema(
+      'stop_command',
+      'Stop an active agent command run (background or blocking still in registry).',
+      {
+        run_id: { type: 'string', description: 'runId from execute_command or list_running_commands' },
+      },
+      ['run_id'],
     ),
   },
   {

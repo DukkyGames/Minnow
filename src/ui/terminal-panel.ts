@@ -3,6 +3,7 @@
  */
 
 import {
+  cancelTerminalRun,
   fetchTerminalLog,
   loadTerminalHistory,
   startTerminalRun,
@@ -473,6 +474,8 @@ export async function runCommandWithTerminalStream(
     args?: string[];
     shell?: boolean;
     hooks?: TerminalStreamHooks;
+    /** When aborted (e.g. user Stop), cancel the server run. */
+    abortSignal?: AbortSignal;
   },
 ): Promise<string> {
   const panelWasClosed = !isTerminalPanelOpen();
@@ -504,23 +507,43 @@ export async function runCommandWithTerminalStream(
   let timedOut = false;
   let stdoutAcc = '';
   let stderrAcc = '';
+  let aborted = false;
 
-  await streamTerminalRun(runId, (ev) => {
-    if (ev.type === 'stdout') {
-      stdoutAcc += ev.text;
-      appendTerminalOutput(runId, 'stdout', ev.text);
-      options.hooks?.onChunk?.(runId, 'stdout', ev.text);
-    } else if (ev.type === 'stderr') {
-      stderrAcc += ev.text;
-      appendTerminalOutput(runId, 'stderr', ev.text);
-      options.hooks?.onChunk?.(runId, 'stderr', ev.text);
-    } else if (ev.type === 'exit') {
-      exitCode = ev.code;
-      timedOut = ev.timedOut;
-    } else if (ev.type === 'error') {
-      appendOutputText(`\nError: ${ev.message}\n`, 'stderr');
+  const onAbort = () => {
+    aborted = true;
+    void cancelTerminalRun(runId);
+  };
+  options.abortSignal?.addEventListener('abort', onAbort, { once: true });
+
+  try {
+    await streamTerminalRun(
+      runId,
+      (ev) => {
+        if (ev.type === 'stdout') {
+          stdoutAcc += ev.text;
+          appendTerminalOutput(runId, 'stdout', ev.text);
+          options.hooks?.onChunk?.(runId, 'stdout', ev.text);
+        } else if (ev.type === 'stderr') {
+          stderrAcc += ev.text;
+          appendTerminalOutput(runId, 'stderr', ev.text);
+          options.hooks?.onChunk?.(runId, 'stderr', ev.text);
+        } else if (ev.type === 'exit') {
+          exitCode = ev.code;
+          timedOut = ev.timedOut;
+        } else if (ev.type === 'error') {
+          appendOutputText(`\nError: ${ev.message}\n`, 'stderr');
+        }
+      },
+      options.abortSignal,
+    );
+  } catch (err) {
+    if (!aborted && !options.abortSignal?.aborted) {
+      throw err;
     }
-  });
+    aborted = true;
+  } finally {
+    options.abortSignal?.removeEventListener('abort', onAbort);
+  }
 
   activeRunId = null;
   options.hooks?.onRunEnd?.(runId);
@@ -545,9 +568,11 @@ export async function runCommandWithTerminalStream(
   }
 
   const parts = [
-    timedOut
-      ? `${label} (timed out after 30s)`
-      : `${label} (exit ${exitCode ?? 1})`,
+    aborted
+      ? `${label} (cancelled)`
+      : timedOut
+        ? `${label} (timed out after 30s)`
+        : `${label} (exit ${exitCode ?? 1})`,
   ];
   if (stdoutAcc.trim()) {
     parts.push(`stdout:\n${stdoutAcc.trimEnd()}`);

@@ -7,7 +7,13 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TIMEOUT_MS, formatProcessOutput, runProcess } from '../process-runner.js';
-import { executeCommandBlocking } from '../terminal-runner.js';
+import {
+  createBackgroundRun,
+  executeCommandBlocking,
+  listActiveRuns,
+  readCommandLogSnapshot,
+  waitForRunOutput,
+} from '../terminal-runner.js';
 import { toolRunImpeccable } from '../impeccable/run-impeccable.js';
 import { toolLoadImpeccableContext } from '../impeccable/load-impeccable-context.js';
 import {
@@ -49,6 +55,7 @@ import { pathAccessStore, resolveSafePath } from './path-access.js';
 import {
   toolStartBackgroundCommand,
   toolStopBackgroundCommand,
+  toolStopCommand,
 } from '../dev-server/manager.js';
 
 const execFileAsync = promisify(execFile);
@@ -484,22 +491,132 @@ async function toolGitCheckout(args) {
 
 // --- Code execution tools ---
 
+const BLOCK_UNTIL_MS_MAX = 120_000;
+
+function clampBlockUntilMs(value) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(Math.floor(n), BLOCK_UNTIL_MS_MAX));
+}
+
+function resolveCommandCwd(args) {
+  const cwdUser =
+    typeof args?.cwd === 'string' && args.cwd.trim() ? args.cwd.trim() : '.';
+  return resolveSafePath(cwdUser, { write: false });
+}
+
 async function toolExecuteCommand(args) {
+  if (args?.stop === true) {
+    return toolStopCommand(args);
+  }
+
+  if (args?.background === true) {
+    const command = typeof args?.command === 'string' ? args.command.trim() : '';
+    if (!command) return 'Error: command is required';
+
+    let cwd;
+    try {
+      cwd = resolveCommandCwd(args);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return `Error: ${message}`;
+    }
+
+    const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+    const toolCallId =
+      typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+
+    try {
+      const started = await createBackgroundRun({
+        command,
+        cwd,
+        shell: process.platform === 'win32',
+        source: 'agent',
+        chatId,
+        toolCallId,
+        logSubdir: 'terminal',
+      });
+      const blockUntilMs = clampBlockUntilMs(args?.block_until_ms);
+      const output =
+        blockUntilMs > 0
+          ? await waitForRunOutput(started.runId, blockUntilMs)
+          : '';
+      return JSON.stringify(
+        {
+          ok: true,
+          background: true,
+          runId: started.runId,
+          pid: started.pid,
+          logPath: started.logPath,
+          startedAt: started.startedAt,
+          output,
+        },
+        null,
+        2,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return `Error: ${message}`;
+    }
+  }
+
   const command = args?.command;
   if (!command || typeof command !== 'string') {
     return 'Error: command is required';
   }
 
+  let cwd = getWorkspaceRoot();
+  if (typeof args?.cwd === 'string' && args.cwd.trim()) {
+    try {
+      cwd = resolveCommandCwd(args);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return `Error: ${message}`;
+    }
+  }
+
+  const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+  const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+
   try {
     return await executeCommandBlocking({
       command,
-      cwd: getWorkspaceRoot(),
+      cwd,
       shell: process.platform === 'win32',
+      chatId,
+      toolCallId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
   }
+}
+
+async function toolReadCommandLog(args) {
+  const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
+  if (!runId) return 'Error: run_id is required';
+
+  const maxBytes =
+    typeof args?.max_bytes === 'number' && Number.isFinite(args.max_bytes)
+      ? Math.max(1024, Math.min(Math.floor(args.max_bytes), 512 * 1024))
+      : 64 * 1024;
+
+  try {
+    const snapshot = await readCommandLogSnapshot(runId, maxBytes);
+    return JSON.stringify(snapshot, null, 2);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
+}
+
+async function toolListRunningCommands(args) {
+  const chatId =
+    typeof args?.chat_id === 'string' && args.chat_id.trim()
+      ? args.chat_id.trim()
+      : undefined;
+  const runs = listActiveRuns({ source: 'agent', ...(chatId ? { chatId } : {}) });
+  return JSON.stringify({ ok: true, runs }, null, 2);
 }
 
 async function toolRunJavascript(args) {
@@ -616,6 +733,9 @@ const SERVER_TOOL_HANDLERS = {
   git_commit: toolGitCommit,
   git_checkout: toolGitCheckout,
   execute_command: toolExecuteCommand,
+  read_command_log: toolReadCommandLog,
+  list_running_commands: toolListRunningCommands,
+  stop_command: toolStopCommand,
   start_background_command: toolStartBackgroundCommand,
   stop_background_command: toolStopBackgroundCommand,
   run_javascript: toolRunJavascript,
