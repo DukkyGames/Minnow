@@ -287,7 +287,12 @@
   outline-offset: 2px;
 }
 
-.terminal-agent-output {
+.terminal-tab--dev-server[aria-selected='true'] {
+  border-color: var(--mn-accent);
+}
+
+.terminal-agent-output,
+.terminal-dev-server-output {
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -300,6 +305,15 @@
   word-break: break-word;
   color: var(--mn-fg);
   background: var(--mn-bg);
+}
+
+.terminal-dev-server-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .terminal-xterm-host {

@@ -372,6 +372,16 @@ function buildHubDom(activeChat: Chat): HTMLElement {
       <div class="hub-strip__server-body">
         <span class="hub-strip__label" id="hubDevServerLabel">Dev server</span>
         <span class="hub-strip__meta" id="hubDevServerMeta">stopped</span>
+        <div class="hub-dev-server-settings" id="hubDevServerSettings" aria-label="Dev server port and network">
+          <label class="hub-dev-server-settings__port">
+            <span class="hub-dev-server-settings__port-label">Port</span>
+            <input type="number" id="hubDevServerPort" class="hub-dev-server-settings__port-input" min="1" max="65535" value="5173" inputmode="numeric" aria-label="Dev server port" />
+          </label>
+          <div class="hub-dev-server-settings__network" role="group" aria-label="Dev server network access">
+            <button type="button" class="hub-dev-server-settings__net-btn is-active" id="hubDevServerNetworkLocal" data-network="local">This PC</button>
+            <button type="button" class="hub-dev-server-settings__net-btn" id="hubDevServerNetworkLan" data-network="lan">Network</button>
+          </div>
+        </div>
       </div>
       <button type="button" class="hub-strip__link hidden" id="hubDevServerConsole">Console</button>
     </div>

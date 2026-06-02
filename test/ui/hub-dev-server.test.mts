@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { deriveHubDevServerView } from '../../src/ui/hub-dev-server-view.ts';
+import {
+  deriveHubDevServerView,
+  formatHubDevServerMeta,
+} from '../../src/ui/hub-dev-server-view.ts';
 
 describe('deriveHubDevServerView', () => {
   test('offline when tool server unavailable', () => {
@@ -18,10 +21,25 @@ describe('deriveHubDevServerView', () => {
   });
 
   test('running shows console link', () => {
-    const view = deriveHubDevServerView(true, 'running', null, 'run-1');
+    const view = deriveHubDevServerView(true, 'running', null, 'run-1', 5173, 'local');
     assert.equal(view.uiState, 'running');
     assert.equal(view.showConsole, true);
     assert.equal(view.primaryDisabled, false);
+    assert.equal(view.meta, 'running :5173 · this PC');
+    assert.equal(view.settingsDisabled, true);
+  });
+
+  test('stopped exposes port and network in meta', () => {
+    const view = deriveHubDevServerView(true, 'stopped', null, null, 3000, 'lan');
+    assert.equal(view.meta, 'stopped :3000 · network');
+    assert.equal(view.settingsDisabled, false);
+  });
+
+  test('formatHubDevServerMeta for starting', () => {
+    assert.equal(
+      formatHubDevServerMeta('starting', null, 5173, 'local'),
+      'starting… :5173 · this PC',
+    );
   });
 
   test('starting disables primary', () => {

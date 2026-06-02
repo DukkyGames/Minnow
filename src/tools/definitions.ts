@@ -808,12 +808,18 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'start_background_command',
-      'Start a detached background command in the workspace. Use for dev servers (npm run dev, vite, etc.).',
+      'Start a detached background command in the workspace. Use for dev servers (npm run dev, vite, etc.). Do not prefix command with cd; set cwd instead.',
       {
         command: { type: 'string', description: 'Shell command to run' },
         cwd: {
           type: 'string',
-          description: 'Working directory relative to workspace root (default .)',
+          description:
+            'Working directory relative to workspace root (e.g. . or apps/web). Default .',
+        },
+        register_dev_server: {
+          type: 'boolean',
+          description:
+            'When true and startup.md exists, register this run as the workspace dev server for hub status',
         },
       },
       ['command'],

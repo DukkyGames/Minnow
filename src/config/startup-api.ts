@@ -10,6 +10,13 @@ export type DevServerLifecycleStatus =
   | 'stopping'
   | 'error';
 
+export type DevServerNetwork = 'local' | 'lan';
+
+export interface DevServerSettings {
+  port: number;
+  network: DevServerNetwork;
+}
+
 export interface StartupGuide {
   command: string;
   cwd?: string;
@@ -34,11 +41,13 @@ export interface DevServerStatusResponse {
   workspacePath: string;
   startupExists: boolean;
   guide: StartupGuide | null;
+  settings?: DevServerSettings;
   parseError?: string | null;
   status: DevServerLifecycleStatus;
   runId: string | null;
   pid: number | null;
   port: number | null;
+  network?: DevServerNetwork | null;
   healthUrl: string | null;
   healthOk: boolean | null;
   error: string | null;
@@ -69,7 +78,9 @@ export async function fetchDevServerStatus(): Promise<DevServerStatusResponse> {
 }
 
 /** Start the dev server from startup.md (idempotent when already running). */
-export async function postDevServerStart(): Promise<{
+export async function postDevServerStart(
+  settings?: Partial<DevServerSettings>,
+): Promise<{
   ok: boolean;
   status?: DevServerLifecycleStatus;
   runId?: string;
@@ -79,7 +90,7 @@ export async function postDevServerStart(): Promise<{
   const res = await fetch('/api/workspace/dev-server/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(settings ?? {}),
   });
   return readJson(res);
 }
@@ -95,4 +106,30 @@ export async function postDevServerStop(): Promise<{
     body: '{}',
   });
   return readJson(res);
+}
+
+/** Read hub dev-server port / network settings for the active workspace. */
+export async function fetchDevServerSettings(): Promise<DevServerSettings> {
+  const res = await fetch('/api/workspace/dev-server/settings', { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`dev-server settings failed (${res.status})`);
+  }
+  const json = (await res.json()) as { ok?: boolean; settings: DevServerSettings };
+  return json.settings;
+}
+
+/** Persist hub dev-server port / network settings for the active workspace. */
+export async function putDevServerSettings(
+  patch: Partial<DevServerSettings>,
+): Promise<DevServerSettings> {
+  const res = await fetch('/api/workspace/dev-server/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    throw new Error(`dev-server settings save failed (${res.status})`);
+  }
+  const json = (await res.json()) as { ok?: boolean; settings: DevServerSettings };
+  return json.settings;
 }

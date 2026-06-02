@@ -1008,6 +1008,27 @@ export function mergeConfigMeta(existing, patch) {
         .filter((p) => p.length > 0);
       existingWorkspace.recentPaths = trimmed.slice(0, 10);
     }
+    if (w.devServerSettingsByPath && typeof w.devServerSettingsByPath === 'object') {
+      const prev =
+        existingWorkspace.devServerSettingsByPath &&
+        typeof existingWorkspace.devServerSettingsByPath === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingWorkspace.devServerSettingsByPath)
+          : {};
+      existingWorkspace.devServerSettingsByPath = {
+        ...prev,
+        .../** @type {Record<string, unknown>} */ (w.devServerSettingsByPath),
+      };
+    }
+    if (w.devServerByPath && typeof w.devServerByPath === 'object') {
+      const prev =
+        existingWorkspace.devServerByPath && typeof existingWorkspace.devServerByPath === 'object'
+          ? /** @type {Record<string, unknown>} */ (existingWorkspace.devServerByPath)
+          : {};
+      existingWorkspace.devServerByPath = {
+        ...prev,
+        .../** @type {Record<string, unknown>} */ (w.devServerByPath),
+      };
+    }
     base.workspace = existingWorkspace;
   }
 
