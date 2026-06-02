@@ -121,6 +121,16 @@ export async function loadTerminalHistory(
   return Array.isArray(body.runs) ? body.runs : [];
 }
 
+/** Cancel an in-flight agent terminal run (e.g. when the user stops generation). */
+export async function cancelTerminalRun(runId: string): Promise<boolean> {
+  const res = await fetch(`/api/terminal/cancel/${encodeURIComponent(runId)}`, {
+    method: 'POST',
+  });
+  if (!res.ok) return false;
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean };
+  return body.ok === true;
+}
+
 /** Fetch log tail for a prior run. */
 export async function fetchTerminalLog(runId: string): Promise<string | null> {
   const res = await fetch(`/api/terminal/log/${encodeURIComponent(runId)}`, {

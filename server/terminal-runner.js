@@ -469,6 +469,119 @@ export function cancelRun(runId) {
 }
 
 /**
+ * Stop an active run by runId (background or foreground agent runs).
+ * @param {string} runId
+ * @returns {{ ok: boolean, runId: string, alreadyStopped?: boolean, error?: string }}
+ */
+export function stopActiveRun(runId) {
+  const state = activeRuns.get(runId);
+  if (!state) {
+    return { ok: false, runId, error: `unknown run_id ${runId}` };
+  }
+  if (state.finished) {
+    return { ok: true, runId, alreadyStopped: true };
+  }
+  if (state.child) {
+    killProcessTree(state.child);
+  } else {
+    cancelRun(runId);
+  }
+  return { ok: true, runId };
+}
+
+/**
+ * Non-finished runs still in the active registry.
+ * @param {{ source?: TerminalSource, chatId?: string }} [filter]
+ */
+export function listActiveRuns(filter = {}) {
+  /** @type {Array<{ runId: string, command: string, cwd: string, pid: number | null, startedAt: number, chatId?: string, source: TerminalSource }>} */
+  const rows = [];
+  for (const state of activeRuns.values()) {
+    if (state.finished) continue;
+    if (filter.source && state.source !== filter.source) continue;
+    if (filter.chatId && state.chatId !== filter.chatId) continue;
+    rows.push({
+      runId: state.runId,
+      command: state.command,
+      cwd: state.cwd,
+      pid: state.child?.pid ?? null,
+      startedAt: state.startedAt,
+      source: state.source,
+      ...(state.chatId ? { chatId: state.chatId } : {}),
+    });
+  }
+  return rows;
+}
+
+function formatRunOutputTail(state) {
+  let out = `${state.stdout}${state.stderr}`;
+  if (state.truncated && !out.includes('…[truncated]')) {
+    out += '\n…[truncated]\n';
+  }
+  return out;
+}
+
+/**
+ * Wait up to maxMs for stdout/stderr from an active run (process may keep running).
+ * @param {string} runId
+ * @param {number} maxMs
+ * @returns {Promise<string>}
+ */
+export function waitForRunOutput(runId, maxMs) {
+  const state = activeRuns.get(runId);
+  if (!state) {
+    return Promise.reject(new Error('Unknown run'));
+  }
+  const clamped = Math.max(0, Math.min(maxMs, 120_000));
+  if (clamped === 0) {
+    return Promise.resolve(formatRunOutputTail(state));
+  }
+
+  return new Promise((resolve) => {
+    const deadline = Date.now() + clamped;
+    const finish = () => resolve(formatRunOutputTail(state));
+    let timer = null;
+    let unsubscribe = () => {};
+    const cleanup = () => {
+      if (timer) clearInterval(timer);
+      unsubscribe();
+    };
+    unsubscribe = subscribeRun(runId, (event) => {
+      if (event.type === 'exit' || event.type === 'error') {
+        cleanup();
+        finish();
+      }
+    });
+    timer = setInterval(() => {
+      if (state.finished || Date.now() >= deadline) {
+        cleanup();
+        finish();
+      }
+    }, 50);
+  });
+}
+
+/**
+ * Snapshot output + lifecycle fields for read_command_log.
+ * @param {string} runId
+ * @param {number} [maxBytes]
+ */
+export async function readCommandLogSnapshot(runId, maxBytes = 64 * 1024) {
+  const state = activeRuns.get(runId);
+  const fileTail = await readRunLogTail(runId, maxBytes);
+  const memory = state ? formatRunOutputTail(state) : '';
+  const output = memory.length >= (fileTail?.length ?? 0) ? memory : (fileTail ?? memory);
+  return {
+    runId,
+    output: output ?? '',
+    finished: state?.finished ?? true,
+    exitCode: state?.exitCode ?? null,
+    timedOut: state?.timedOut ?? false,
+    truncated: state?.truncated ?? false,
+  };
+}
+
+/**
  * SIGTERM / taskkill the process tree for a spawned child.
  * @param {import('node:child_process').ChildProcess} child
  */

@@ -86,7 +86,7 @@ $ npm test
 ## Restrictions
 
 - **Do not modify application code.** You verify; you do not fix.
-- You **may** run test commands via `execute_command`.
+- You **may** run test commands via `execute_command` (blocking default — do **not** use `background: true` for `npm test`, typecheck, or build; those must finish in one tool result).
 - You **may** write only to the orchestrator's progress file if you've been given that responsibility.
 - If the test command itself is destructive (e.g. wipes a database), refuse and report the spec as faulty.
 

@@ -34,8 +34,18 @@ export function validateToolRequiredArgs(
   const required = params?.required;
   if (!required?.length) return null;
 
+  if (toolName === 'execute_command' && args.stop === true) {
+    if (!isPresentRequiredValue(args.run_id)) {
+      return `Error: tool "execute_command" requires argument(s): "run_id" when stop is true.`;
+    }
+    return null;
+  }
+
   const missing: string[] = [];
   for (const key of required) {
+    if (toolName === 'execute_command' && key === 'command') {
+      if (args.background === true || args.stop === true) continue;
+    }
     if (!isPresentRequiredValue(args[key])) {
       missing.push(key);
     }

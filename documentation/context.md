@@ -1014,14 +1014,15 @@ Browser (same origin :5173)
 - **Path guard:** `resolveSafePath()` — paths under the workspace root after `realpath` canonicalization (`server/workspace/safe-path.js`) unless `toolSecurity.filesystemAccess` is `full` in `config.json` or `TOOLS_ALLOW_ALL_PATHS=1`. Client approval UX uses string prefix rules in `src/tools/workspace-path-guard.ts` (server remains authoritative).
 - **Errors:** Handlers return **strings**; failures use `Error: …` prefix (not thrown to the client).
 - **Browser-only tools on POST:** Names not in `SERVER_TOOL_HANDLERS` (e.g. `get_datetime`, `calculate`, `web_search`) return `Not implemented: {name}`. Expected — the client runs them via [`executeBrowserTool`](../src/tools/browser-executor.ts); only mistaken direct POSTs hit the stub.
-- **Timeouts:** `execute_command`, `run_javascript`, `run_python` — **30s**.
-- **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking `POST /api/tools` still uses the same runner via `executeCommandBlocking()` (no SSE).
+- **Timeouts:** Blocking `execute_command`, `run_javascript`, `run_python` — **30s**. `execute_command` with **`background: true`** has no timeout (detached via `createBackgroundRun`).
+- **Background shell tools:** `read_command_log`, `list_running_commands`, `stop_command`; `execute_command` also accepts `stop: true` + `run_id`. Plan: [`documentation/plans/execute-command-background.md`](plans/execute-command-background.md).
+- **Terminal streaming (Step 10):** [`server/terminal-runner.js`](../server/terminal-runner.js) + [`server/terminal/middleware.js`](../server/terminal/middleware.js). Client panel: [`src/ui/terminal-panel.ts`](../src/ui/terminal-panel.ts), API [`src/api/terminal.ts`](../src/api/terminal.ts). Blocking chat `execute_command` uses SSE (`runCommandWithTerminalStream`); **`background: true` skips SSE** and uses `POST /api/tools`. Blocking tools middleware path uses `executeCommandBlocking()` (no SSE).
 
 ### Terminal panel (Step 10 + Epic D1 PTY)
 
 Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus a fixed **Agent** tab for agent command output (SSE). Both share one display area; switching tabs shows either the xterm viewport or agent stream. Past runs are selectable from a dropdown in the Agent tab toolbar. Toggle metrics via `#btnStats` or terminal via `#btnTerminal` (sidebar footer) or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS). **Chrome:** [`src/styles/terminal.css`](../src/styles/terminal.css) matches bench-instrument panels (stats strip / input bar): hairline borders, `--code-inline-bg` for `#terminalShellHint` and hovers, ink-accent active tabs, solid bordered controls (no dashed add tab). Tokens: `--code-bg`, `--code-inline-bg` in [`src/styles/tokens.css`](../src/styles/tokens.css).
 
-**Dual backend:** User shell → `@lydell/node-pty`. Agent `execute_command` / `run_javascript` / `run_python` → unchanged `terminal-runner` + SSE (`runCommandWithTerminalStream`).
+**Dual backend:** User shell → `@lydell/node-pty`. Agent blocking `execute_command` / `run_javascript` / `run_python` → `terminal-runner` + SSE (`runCommandWithTerminalStream`). Background `execute_command` → server `createBackgroundRun` only (no SSE). User **Stop** aborts the SSE stream and `POST /api/terminal/cancel/:runId`.
 
 | Concern | Location |
 |---------|----------|

@@ -8,10 +8,11 @@ import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { COMMAND_TIMEOUT_MS, runProcess } from '../process-runner.js';
 import {
+  cancelRun,
   createBackgroundRun,
   getRun,
   killProcessTree,
-  cancelRun,
+  stopActiveRun,
 } from '../terminal-runner.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
@@ -419,16 +420,9 @@ export async function toolStopBackgroundCommand(args) {
   const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
   if (!runId) return 'Error: run_id is required';
 
-  const run = getRun(runId);
-  if (!run) return `Error: unknown run_id ${runId}`;
-  if (run.finished) {
-    return JSON.stringify({ ok: true, runId, alreadyStopped: true }, null, 2);
-  }
-
-  if (run.child) {
-    killProcessTree(run.child);
-  } else {
-    cancelRun(runId);
+  const stopped = stopActiveRun(runId);
+  if (!stopped.ok) {
+    return `Error: ${stopped.error}`;
   }
 
   const key = workspaceKey(getWorkspaceRoot());
@@ -440,5 +434,35 @@ export async function toolStopBackgroundCommand(args) {
     await saveState(row);
   }
 
-  return JSON.stringify({ ok: true, runId }, null, 2);
+  return JSON.stringify(
+    { ok: true, runId, ...(stopped.alreadyStopped ? { alreadyStopped: true } : {}) },
+    null,
+    2,
+  );
+}
+
+/** Server tool: stop_command — any active agent terminal run. */
+export async function toolStopCommand(args) {
+  const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
+  if (!runId) return 'Error: run_id is required';
+
+  const stopped = stopActiveRun(runId);
+  if (!stopped.ok) {
+    return `Error: ${stopped.error}`;
+  }
+
+  const key = workspaceKey(getWorkspaceRoot());
+  const row = byWorkspaceKey.get(key);
+  if (row?.runId === runId) {
+    row.status = 'stopped';
+    row.runId = undefined;
+    row.pid = null;
+    await saveState(row);
+  }
+
+  return JSON.stringify(
+    { ok: true, runId, ...(stopped.alreadyStopped ? { alreadyStopped: true } : {}) },
+    null,
+    2,
+  );
 }
