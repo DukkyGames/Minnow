@@ -505,6 +505,42 @@ export function revealPreviewPanelForAgentNavigation(url: string): void {
   }
 }
 
+/**
+ * Open an http(s) URL in the in-app preview panel (hub dev-server link, etc.).
+ */
+export async function openUrlInPreviewPanel(url: string): Promise<void> {
+  const trimmed = url.trim();
+  if (!trimmed || !HTTP_URL_RE.test(trimmed)) return;
+  if (!dismissFileViewerForPreview()) return;
+
+  const api = getPreviewApi();
+  if (!api) {
+    openPreviewPanel({ kind: 'url', url: trimmed });
+    return;
+  }
+
+  revealPreviewPanelForAgentNavigation(trimmed);
+  await api.show();
+  scheduleElectronPreviewHostVisibilitySync();
+
+  if (api.navigateAndWait) {
+    const result = await api.navigateAndWait(trimmed);
+    if (!result.ok) {
+      showPreviewStatus(
+        result.errorDescription?.trim() || 'Preview failed to load',
+        trimmed,
+      );
+      return;
+    }
+    hidePreviewStatus();
+    scheduleElectronPreviewHostVisibilitySync();
+    return;
+  }
+
+  await loadSourceInPreview({ kind: 'url', url: trimmed });
+  scheduleElectronPreviewHostVisibilitySync();
+}
+
 /** Open the preview panel with an optional initial source. */
 export function openPreviewPanel(source?: PreviewSource | null): void {
   if (!dismissFileViewerForPreview()) return;

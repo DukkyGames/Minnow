@@ -18,7 +18,7 @@ import {
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
-const SESSION_SCHEMA_VERSION = 3;
+const SESSION_SCHEMA_VERSION = 5;
 
 /** Normalize workspace paths for stable keys (mirror src/lib/normalize-workspace-path.ts). */
 function normalizeWorkspacePath(fsPath) {
@@ -158,6 +158,55 @@ function ensureOrchestrateBoard(raw) {
   }
   if (typeof r.timerSegmentStartedAt === 'number') {
     out.timerSegmentStartedAt = r.timerSegmentStartedAt;
+  }
+  if (typeof r.maxConcurrentTasks === 'number' && r.maxConcurrentTasks > 0) {
+    out.maxConcurrentTasks = r.maxConcurrentTasks;
+  }
+  if (typeof r.completionShownAt === 'number') {
+    out.completionShownAt = r.completionShownAt;
+  }
+  return out;
+}
+
+/** Sidebar chat folder (schema v4+). */
+function ensureChatGroup(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const name = typeof r.name === 'string' ? r.name.trim() : '';
+  const workspacePath =
+    typeof r.workspacePath === 'string'
+      ? normalizeWorkspacePath(r.workspacePath)
+      : '';
+  if (!id || !name) return null;
+  const orchestrateBoard = ensureOrchestrateBoard(r.orchestrateBoard);
+  const orchestratePlanPath = normalizeOrchestratePlanPath(r.orchestratePlanPath);
+  const viewMode = ensureViewMode(r.viewMode);
+  const plannerChatId =
+    typeof r.plannerChatId === 'string' && r.plannerChatId.trim()
+      ? r.plannerChatId.trim()
+      : undefined;
+  return {
+    id,
+    name,
+    workspacePath,
+    collapsed: r.collapsed === true,
+    order: typeof r.order === 'number' ? r.order : 0,
+    createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
+    ...(orchestrateBoard ? { orchestrateBoard } : {}),
+    ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(viewMode ? { viewMode } : {}),
+    ...(plannerChatId ? { plannerChatId } : {}),
+  };
+}
+
+/** Coerce persisted sidebar folders. */
+function ensureGroupsFromRaw(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const group = ensureChatGroup(item);
+    if (group) out.push(group);
   }
   return out;
 }
@@ -318,6 +367,12 @@ function ensureChatShape(raw) {
     lastResolvedExpertId:
       typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
+    ...(typeof row.groupId === 'string' && row.groupId.trim()
+      ? { groupId: row.groupId.trim() }
+      : {}),
+    ...(typeof row.boardGroupId === 'string' && row.boardGroupId.trim()
+      ? { boardGroupId: row.boardGroupId.trim() }
+      : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(runs?.length ? { runs } : {}),
@@ -376,7 +431,7 @@ export function validateSessionState(raw) {
 
   const parsed = /** @type {Record<string, unknown>} */ (raw);
   const version = parsed.version;
-  if (version !== 1 && version !== 2 && version !== 3) {
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
     throw new Error('Invalid session version');
   }
 
@@ -385,13 +440,21 @@ export function validateSessionState(raw) {
   }
 
   const chats = parsed.chats.map(ensureChatShape).filter(Boolean);
+  const groups = ensureGroupsFromRaw(parsed.groups);
   const state = {
     version: SESSION_SCHEMA_VERSION,
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
     lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
+    groups,
     chats: chats.length ? chats : [ensureChatShape(null)],
   };
+  if (
+    typeof parsed.activeBoardGroupId === 'string' &&
+    parsed.activeBoardGroupId.trim()
+  ) {
+    state.activeBoardGroupId = parsed.activeBoardGroupId.trim();
+  }
 
   if (!state.chats.some((c) => c.id === state.activeId)) {
     state.activeId = state.chats[0].id;
