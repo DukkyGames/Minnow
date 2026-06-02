@@ -20,6 +20,7 @@ import type { Chat } from '../types';
 import {
   deriveHubDevServerView,
   formatHubDevServerMeta,
+  formatHubDevServerOpenUrl,
   type HubDevServerViewModel,
 } from './hub-dev-server-view';
 import {
@@ -44,6 +45,7 @@ let cachedSettings: DevServerSettings = { port: 5173, network: 'local' };
 let settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastLifecycleStatus: DevServerLifecycleStatus = 'stopped';
 let lastLifecycleError: string | null = null;
+let lastHealthUrl: string | null = null;
 
 const SETUP_TASK = `Create or update startup.md at the workspace root.
 
@@ -105,6 +107,29 @@ function applySettingsToDom(view: HubDevServerViewModel): void {
   lanBtn?.toggleAttribute('disabled', view.settingsDisabled);
 }
 
+const HUB_DEV_SERVER_URL_ATTR = 'data-hub-dev-url';
+
+function applyOpenUrlToDom(openUrl: string | null): void {
+  const urlEl = document.getElementById('hubDevServerUrl') as HTMLButtonElement | null;
+  if (!urlEl) return;
+  if (!openUrl) {
+    urlEl.classList.add('hidden');
+    urlEl.removeAttribute(HUB_DEV_SERVER_URL_ATTR);
+    urlEl.textContent = '';
+    urlEl.removeAttribute('aria-label');
+    return;
+  }
+  urlEl.classList.remove('hidden');
+  urlEl.setAttribute(HUB_DEV_SERVER_URL_ATTR, openUrl);
+  urlEl.textContent = openUrl;
+  urlEl.setAttribute('aria-label', `Open dev server in preview: ${openUrl}`);
+}
+
+async function openHubDevServerInPreview(url: string): Promise<void> {
+  const { openUrlInPreviewPanel } = await import('./preview-panel');
+  await openUrlInPreviewPanel(url);
+}
+
 function applyViewToDom(view: HubDevServerViewModel): void {
   const cell = document.getElementById('hubDevServerCell');
   const labelEl = document.getElementById('hubDevServerLabel');
@@ -116,6 +141,7 @@ function applyViewToDom(view: HubDevServerViewModel): void {
 
   labelEl.textContent = view.label;
   metaEl.textContent = view.meta;
+  applyOpenUrlToDom(view.openUrl);
   applySettingsToDom(view);
 
   cell.classList.remove(
@@ -157,6 +183,15 @@ function refreshMetaFromCache(): void {
     cachedSettings.port,
     cachedSettings.network,
   );
+  const openUrl =
+    lastLifecycleStatus === 'starting' || lastLifecycleStatus === 'running'
+      ? formatHubDevServerOpenUrl(
+          lastHealthUrl,
+          cachedSettings.port,
+          cachedSettings.network,
+        )
+      : null;
+  applyOpenUrlToDom(openUrl);
 }
 
 function resolveSettingsFromStatus(
@@ -260,6 +295,7 @@ async function refreshDevServerCell(): Promise<void> {
     managedRunId = status.runId;
     lastLifecycleStatus = status.status;
     lastLifecycleError = status.error;
+    lastHealthUrl = status.healthUrl;
     const settings = resolveSettingsFromStatus(status);
     const view = deriveHubDevServerView(
       true,
@@ -268,6 +304,7 @@ async function refreshDevServerCell(): Promise<void> {
       status.runId,
       settings.port,
       settings.network,
+      status.healthUrl,
     );
     applyViewToDom(view);
     syncDevServerStream(status.status, status.runId, status.command);
@@ -474,6 +511,7 @@ export function initHubDevServer(cell: HTMLElement, chat: Chat): void {
   wireDevServerSettings();
 
   const consoleBtn = document.getElementById('hubDevServerConsole');
+
   consoleBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (managedRunId && activeChatId) {
@@ -487,17 +525,28 @@ export function initHubDevServer(cell: HTMLElement, chat: Chat): void {
     const target = e?.target;
     if (
       target instanceof HTMLElement &&
-      target.closest('#hubDevServerSettings, #hubDevServerConsole')
+      target.closest('#hubDevServerSettings, #hubDevServerConsole, #hubDevServerUrl')
     ) {
       return;
     }
     void handlePrimaryClick(chat);
   };
 
-  cell.addEventListener('click', (e) => onPrimary(e));
+  cell.addEventListener('click', (e) => {
+    const urlBtn = (e.target as HTMLElement).closest('#hubDevServerUrl');
+    if (urlBtn && !urlBtn.classList.contains('hidden')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = urlBtn.getAttribute(HUB_DEV_SERVER_URL_ATTR)?.trim();
+      if (url) void openHubDevServerInPreview(url);
+      return;
+    }
+    onPrimary(e);
+  });
   cell.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     if ((e.target as HTMLElement).closest('#hubDevServerConsole')) return;
+    if ((e.target as HTMLElement).closest('#hubDevServerUrl')) return;
     if ((e.target as HTMLElement).closest('#hubDevServerSettings')) return;
     e.preventDefault();
     onPrimary();

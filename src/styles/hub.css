@@ -332,6 +332,34 @@
   color: var(--mn-fg-muted);
 }
 
+.hub-strip__url {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--mn-accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  width: fit-content;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hub-strip__url:hover {
+  text-decoration: underline;
+}
+
+.hub-strip__url.hidden {
+  display: none;
+}
+
 .hub-strip__server-body {
   display: flex;
   flex-direction: column;

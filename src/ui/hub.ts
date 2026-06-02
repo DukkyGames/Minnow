@@ -367,11 +367,12 @@ function buildHubDom(activeChat: Chat): HTMLElement {
   const strip = document.createElement('div');
   strip.className = 'hub-strip';
   strip.innerHTML = `
-    <div class="hub-strip__cell hub-strip__cell--server hub-strip__cell--stopped" id="hubDevServerCell" role="button" tabindex="0" aria-label="Dev server">
+    <div class="hub-strip__cell hub-strip__cell--server hub-strip__cell--stopped" id="hubDevServerCell" tabindex="0" aria-label="Dev server">
       <span class="hub-strip__dot idle" id="hubDevServerDot" aria-hidden="true"></span>
       <div class="hub-strip__server-body">
         <span class="hub-strip__label" id="hubDevServerLabel">Dev server</span>
         <span class="hub-strip__meta" id="hubDevServerMeta">stopped</span>
+        <button type="button" class="hub-strip__url hidden" id="hubDevServerUrl">http://localhost:5173/</button>
         <div class="hub-dev-server-settings" id="hubDevServerSettings" aria-label="Dev server port and network">
           <label class="hub-dev-server-settings__port">
             <span class="hub-dev-server-settings__port-label">Port</span>

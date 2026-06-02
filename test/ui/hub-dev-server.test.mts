@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   deriveHubDevServerView,
   formatHubDevServerMeta,
+  formatHubDevServerOpenUrl,
 } from '../../src/ui/hub-dev-server-view.ts';
 
 describe('deriveHubDevServerView', () => {
@@ -20,13 +21,31 @@ describe('deriveHubDevServerView', () => {
     assert.equal(view.meta, 'no startup guide');
   });
 
-  test('running shows console link', () => {
-    const view = deriveHubDevServerView(true, 'running', null, 'run-1', 5173, 'local');
+  test('running shows console link and open URL', () => {
+    const view = deriveHubDevServerView(
+      true,
+      'running',
+      null,
+      'run-1',
+      5180,
+      'local',
+      'http://127.0.0.1:5180/',
+    );
     assert.equal(view.uiState, 'running');
     assert.equal(view.showConsole, true);
     assert.equal(view.primaryDisabled, false);
-    assert.equal(view.meta, 'running :5173 · this PC');
+    assert.equal(view.meta, 'running :5180 · this PC');
+    assert.equal(view.openUrl, 'http://localhost:5180/');
     assert.equal(view.settingsDisabled, true);
+  });
+
+  test('formatHubDevServerOpenUrl falls back to localhost port', () => {
+    assert.equal(formatHubDevServerOpenUrl(null, 3000, 'local'), 'http://localhost:3000/');
+  });
+
+  test('stopped hides open URL', () => {
+    const view = deriveHubDevServerView(true, 'stopped', null, null, 5173, 'local', 'http://127.0.0.1:5173/');
+    assert.equal(view.openUrl, null);
   });
 
   test('stopped exposes port and network in meta', () => {
