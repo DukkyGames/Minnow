@@ -17,6 +17,11 @@ import {
 import { resolveSafePath } from '../runtime/path-access.js';
 import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
 import { parseStartupMarkdown, startupFilePath } from './parse-startup.js';
+import {
+  buildDevServerSpawnEnv,
+  resolveEffectiveGuide,
+} from './effective-guide.js';
+import { readDevServerSettings } from './settings.js';
 
 /** @typedef {'no_guide' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error'} DevServerStatus */
 
@@ -192,6 +197,42 @@ async function probeHealth(healthUrl) {
 }
 
 /**
+ * Apply a successful background run to the managed dev-server row.
+ * @param {ManagedDevServer} row
+ * @param {{ runId: string, pid: number, startedAt: number }} started
+ * @param {{ command: string, healthUrl?: string, port?: number }} guide
+ */
+async function applyStartedRun(row, started, guide) {
+  row.runId = started.runId;
+  row.pid = started.pid;
+  row.startedAt = started.startedAt;
+  row.command = guide.command;
+  row.healthUrl = guide.healthUrl;
+  row.port = guide.port;
+  row.error = undefined;
+
+  if (guide.healthUrl) {
+    const ok = await probeHealth(guide.healthUrl);
+    row.status = ok ? 'running' : 'starting';
+  } else {
+    row.status = 'running';
+  }
+
+  await saveState(row);
+}
+
+/**
+ * Whether a background tool invocation should register as the managed dev server.
+ * @param {Record<string, unknown>} args
+ * @param {{ command: string }} guide
+ */
+function shouldRegisterDevServerFromTool(args, guide) {
+  if (args?.register_dev_server === true) return true;
+  const command = typeof args?.command === 'string' ? args.command.trim() : '';
+  return command.length > 0 && command === guide.command.trim();
+}
+
+/**
  * @param {string} [workspaceRoot]
  */
 export async function readStartupGuide(workspaceRoot = getWorkspaceRoot()) {
@@ -222,14 +263,24 @@ export async function readStartupGuide(workspaceRoot = getWorkspaceRoot()) {
 export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
   const root = path.resolve(workspaceRoot);
   const startup = await readStartupGuide(root);
+  const settings = await readDevServerSettings(root);
+  const effective =
+    startup.guide != null
+      ? resolveEffectiveGuide(startup.guide, settings)
+      : null;
   let row = await getOrInitRow(root);
   row = await reconcileRow(row);
 
   let healthOk = null;
-  if (row.status === 'running' && startup.guide?.healthUrl) {
-    healthOk = await probeHealth(startup.guide.healthUrl);
-    if (!healthOk && row.status === 'running') {
-      /* keep running; health may lag */
+  const healthUrl = row.healthUrl ?? effective?.healthUrl ?? startup.guide?.healthUrl;
+  if ((row.status === 'running' || row.status === 'starting') && healthUrl) {
+    healthOk = await probeHealth(healthUrl);
+    if (row.status === 'starting' && healthOk) {
+      const run = row.runId ? getRun(row.runId) : null;
+      if (run && !run.finished) {
+        row.status = 'running';
+        await saveState(row);
+      }
     }
   }
 
@@ -237,15 +288,18 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
     workspacePath: root,
     startupExists: startup.exists,
     guide: startup.guide,
+    effectiveGuide: effective,
+    settings,
     parseError: startup.parseError,
     status: startup.exists && startup.guide ? row.status : 'no_guide',
     runId: row.runId ?? null,
     pid: row.pid ?? null,
-    port: row.port ?? startup.guide?.port ?? null,
-    healthUrl: row.healthUrl ?? startup.guide?.healthUrl ?? null,
+    port: row.port ?? effective?.port ?? startup.guide?.port ?? null,
+    network: effective?.network ?? settings.network ?? null,
+    healthUrl: row.healthUrl ?? effective?.healthUrl ?? startup.guide?.healthUrl ?? null,
     healthOk,
     error: row.error ?? startup.parseError ?? null,
-    command: row.command ?? startup.guide?.command ?? null,
+    command: row.command ?? effective?.command ?? startup.guide?.command ?? null,
     startedAt: row.startedAt ?? null,
   };
 }
@@ -263,6 +317,9 @@ export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
     return { ok: false, error: startup.parseError ?? 'Invalid startup.md' };
   }
 
+  const settings = await readDevServerSettings(root);
+  const effective = resolveEffectiveGuide(startup.guide, settings);
+
   let row = await getOrInitRow(root);
   row = await reconcileRow(row);
 
@@ -270,37 +327,27 @@ export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
     return { ok: true, status: row.status, runId: row.runId, alreadyRunning: true };
   }
 
-  const cwdRel = startup.guide.cwd ?? '.';
+  const cwdRel = effective.cwd ?? '.';
   const cwd = resolveSafePath(cwdRel, { write: false });
 
   row.status = 'starting';
-  row.command = startup.guide.command;
-  row.healthUrl = startup.guide.healthUrl;
-  row.port = startup.guide.port;
+  row.command = effective.command;
+  row.healthUrl = effective.healthUrl;
+  row.port = effective.port;
   row.error = undefined;
   await saveState(row);
 
   try {
     const started = await createBackgroundRun({
-      command: startup.guide.command,
+      command: effective.command,
       cwd,
       shell: process.platform === 'win32',
       source: 'agent',
       logSubdir: 'dev-server',
+      env: buildDevServerSpawnEnv(effective.port, effective.network),
     });
 
-    row.runId = started.runId;
-    row.pid = started.pid;
-    row.startedAt = started.startedAt;
-
-    if (startup.guide.healthUrl) {
-      const ok = await probeHealth(startup.guide.healthUrl);
-      row.status = ok ? 'running' : 'starting';
-    } else {
-      row.status = 'running';
-    }
-
-    await saveState(row);
+    await applyStartedRun(row, started, effective);
     return {
       ok: true,
       status: row.status,
@@ -395,6 +442,19 @@ export async function toolStartBackgroundCommand(args) {
       source: 'agent',
       logSubdir: 'dev-server',
     });
+
+    const root = path.resolve(getWorkspaceRoot());
+    const startup = await readStartupGuide(root);
+    if (startup.guide && shouldRegisterDevServerFromTool(args, startup.guide)) {
+      const settings = await readDevServerSettings(root);
+      const effective = resolveEffectiveGuide(startup.guide, settings);
+      const row = await getOrInitRow(root);
+      row.command = effective.command;
+      row.healthUrl = effective.healthUrl;
+      row.port = effective.port;
+      await applyStartedRun(row, started, effective);
+    }
+
     return JSON.stringify(
       {
         ok: true,

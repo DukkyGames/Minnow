@@ -255,6 +255,7 @@ export async function createRun({
  * @param {string} [params.toolCallId]
  * @param {boolean} [params.shell]
  * @param {string} [params.logSubdir] logs subdirectory under ~/.minnow/logs/
+ * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @returns {Promise<{ runId: string, startedAt: number, logPath: string, pid: number | null }>}
  */
 export async function createBackgroundRun({
@@ -266,6 +267,7 @@ export async function createBackgroundRun({
   chatId,
   toolCallId,
   logSubdir = 'terminal',
+  env: envOverrides,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -311,11 +313,17 @@ export async function createBackgroundRun({
   const execArgs = winOneShot ? ['/d', '/s', '/c', command] : args;
   const useShell = winOneShot ? false : shell === true;
 
+  const childEnv =
+    envOverrides && typeof envOverrides === 'object'
+      ? { ...process.env, ...envOverrides }
+      : process.env;
+
   const child = spawn(execCommand, execArgs, {
     cwd,
-    env: process.env,
+    env: childEnv,
     shell: useShell,
-    detached: true,
+    // detached on Windows spawns a separate console window; windowsHide cannot hide it.
+    detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });

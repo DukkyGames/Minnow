@@ -18,6 +18,8 @@ import {
   startDevServer,
   stopDevServer,
 } from '../dev-server/manager.js';
+import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
+import { getWorkspaceRoot } from './root.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -121,6 +123,13 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace/dev-server/start' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (body?.port != null || body?.network != null) {
+        await writeDevServerSettings(getWorkspaceRoot(), {
+          port: body?.port,
+          network: body?.network,
+        });
+      }
       const result = await startDevServer();
       sendJson(res, result.ok ? 200 : 400, result);
       return true;
@@ -129,6 +138,22 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     if (pathname === '/api/workspace/dev-server/stop' && req.method === 'POST') {
       const result = await stopDevServer();
       sendJson(res, 200, result);
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-server/settings' && req.method === 'GET') {
+      const settings = await readDevServerSettings(getWorkspaceRoot());
+      sendJson(res, 200, { ok: true, settings });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/dev-server/settings' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const settings = await writeDevServerSettings(getWorkspaceRoot(), {
+        port: body?.port,
+        network: body?.network,
+      });
+      sendJson(res, 200, { ok: true, settings });
       return true;
     }
 

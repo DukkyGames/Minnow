@@ -20,19 +20,28 @@ function createServer() {
   });
 }
 
-function httpJson(baseUrl, pathname, method = 'GET') {
+function httpJson(baseUrl, pathname, method = 'GET', body) {
   return new Promise((resolve, reject) => {
     const url = new URL(pathname, baseUrl);
-    const req = http.request(url, { method }, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
-        resolve({ status: res.statusCode, json: JSON.parse(text) });
-      });
-    });
+    const payload =
+      body != null ? JSON.stringify(body) : method === 'POST' || method === 'PUT' ? '{}' : null;
+    const req = http.request(
+      url,
+      {
+        method,
+        headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({ status: res.statusCode, json: JSON.parse(text) });
+        });
+      },
+    );
     req.on('error', reject);
-    if (method === 'POST') req.write('{}');
+    if (payload) req.write(payload);
     req.end();
   });
 }
@@ -102,5 +111,80 @@ describe('workspace dev-server API', () => {
     const stop = await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
     assert.equal(stop.json.ok, true);
     assert.equal(stop.json.status, 'stopped');
+  });
+
+  test('GET and PUT dev-server settings', async () => {
+    const put = await httpJson(
+      baseUrl,
+      '/api/workspace/dev-server/settings',
+      'PUT',
+      { port: 4321, network: 'lan' },
+    );
+    assert.equal(put.status, 200);
+    assert.equal(put.json.settings.port, 4321);
+    assert.equal(put.json.settings.network, 'lan');
+
+    const get = await httpJson(baseUrl, '/api/workspace/dev-server/settings');
+    assert.equal(get.json.settings.port, 4321);
+    assert.equal(get.json.settings.network, 'lan');
+  });
+
+  test('start POST body persists port before spawn', async () => {
+    const startupPath = path.join(workspaceDir, 'startup.md');
+    await fs.writeFile(
+      startupPath,
+      '---\ncommand: node -e "setInterval(()=>{}, 60000)"\ncwd: .\n---\n',
+      'utf8',
+    );
+
+    const start = await httpJson(baseUrl, '/api/workspace/dev-server/start', 'POST', {
+      port: 5199,
+      network: 'local',
+    });
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ok, true);
+
+    const status = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+    assert.equal(status.json.settings.port, 5199);
+
+    await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
+  });
+
+  test('status poll promotes starting to running when health becomes ok', async () => {
+    const startupPath = path.join(workspaceDir, 'startup.md');
+    const healthPort = 38473;
+    const healthUrl = `http://127.0.0.1:${healthPort}/`;
+    const command = 'node -e "setInterval(()=>{}, 60000)"';
+
+    await httpJson(baseUrl, '/api/workspace/dev-server/settings', 'PUT', {
+      port: healthPort,
+      network: 'local',
+    });
+
+    await fs.writeFile(
+      startupPath,
+      `---\ncommand: ${command}\ncwd: .\nhealthUrl: ${healthUrl}\n---\n`,
+      'utf8',
+    );
+
+    const start = await httpJson(baseUrl, '/api/workspace/dev-server/start', 'POST');
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ok, true);
+    assert.equal(start.json.status, 'starting');
+
+    const healthServer = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+    await new Promise((resolve) => healthServer.listen(healthPort, '127.0.0.1', resolve));
+
+    try {
+      const status = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+      assert.equal(status.json.status, 'running');
+      assert.equal(status.json.healthOk, true);
+    } finally {
+      await new Promise((resolve) => healthServer.close(resolve));
+      await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
+    }
   });
 });

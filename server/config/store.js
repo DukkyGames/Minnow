@@ -48,11 +48,28 @@ export async function configFileExists(relativeKey) {
   }
 }
 
+/** Serialize config.json updates so parallel dev-server settings + run-state writes do not clobber each other. */
+let configJsonQueue = Promise.resolve();
+
+/**
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function withConfigJsonLock(fn) {
+  const run = configJsonQueue.then(fn, fn);
+  configJsonQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /**
  * @param {string} relativeKey
  * @returns {Promise<unknown>}
  */
-export async function readConfigJson(relativeKey) {
+async function readConfigJsonUnlocked(relativeKey) {
   await ensureMinnowLayout();
   const full = resolveConfigPath(relativeKey);
   try {
@@ -67,11 +84,22 @@ export async function readConfigJson(relativeKey) {
 }
 
 /**
+ * @param {string} relativeKey
+ * @returns {Promise<unknown>}
+ */
+export async function readConfigJson(relativeKey) {
+  if (relativeKey !== 'config.json') {
+    return readConfigJsonUnlocked(relativeKey);
+  }
+  return withConfigJsonLock(() => readConfigJsonUnlocked(relativeKey));
+}
+
+/**
  * Atomic write: temp file in same directory then rename.
  * @param {string} relativeKey
  * @param {unknown} data
  */
-export async function writeConfigJson(relativeKey, data) {
+async function writeConfigJsonUnlocked(relativeKey, data) {
   await ensureMinnowLayout();
   const full = resolveConfigPath(relativeKey);
   await fs.mkdir(path.dirname(full), { recursive: true });
@@ -82,6 +110,17 @@ export async function writeConfigJson(relativeKey, data) {
   if (relativeKey === 'tools.json') {
     await chmodSecretFile(full);
   }
+}
+
+/**
+ * @param {string} relativeKey
+ * @param {unknown} data
+ */
+export async function writeConfigJson(relativeKey, data) {
+  if (relativeKey !== 'config.json') {
+    return writeConfigJsonUnlocked(relativeKey, data);
+  }
+  return withConfigJsonLock(() => writeConfigJsonUnlocked(relativeKey, data));
 }
 
 /**

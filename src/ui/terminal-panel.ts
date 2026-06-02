@@ -8,7 +8,6 @@ import {
   loadTerminalHistory,
   startTerminalRun,
   streamTerminalRun,
-  type TerminalStreamEvent,
 } from '../api/terminal';
 import {
   getTerminalMetaCached,
@@ -25,6 +24,7 @@ import {
   onTerminalPanelResize,
   setTerminalTabChangeHandler,
   switchToAgentTab,
+  switchToDevServerTab,
   type TerminalTabKind,
 } from './terminal-tabs';
 import {
@@ -38,12 +38,20 @@ const MAX_HEIGHT_RATIO = 0.5;
 
 let panelEl: HTMLElement | null = null;
 let agentPaneEl: HTMLElement | null = null;
+let devServerPaneEl: HTMLElement | null = null;
+let devServerOutputEl: HTMLElement | null = null;
 let ptyPaneEl: HTMLElement | null = null;
 let outputEl: HTMLElement | null = null;
 let xtermHostEl: HTMLElement | null = null;
 let agentRunSelectEl: HTMLSelectElement | null = null;
 let offlineBannerEl: HTMLElement | null = null;
 let activeRunId: string | null = null;
+/** Background dev-server log stream (hub-owned; does not open the panel). */
+let devServerSubscribedRunId: string | null = null;
+let devServerStreamChatId: string | null = null;
+let devServerStreamAbort: AbortController | null = null;
+let devServerStickToBottom = true;
+let devServerDisplayBytes = 0;
 let stickToBottom = true;
 let displayBytes = 0;
 const MAX_DISPLAY_BYTES = 2 * 1024 * 1024;
@@ -75,6 +83,8 @@ function clampHeight(px: number): number {
 function getElements(): void {
   panelEl = document.getElementById('terminalPanel');
   agentPaneEl = document.getElementById('terminalAgentPane');
+  devServerPaneEl = document.getElementById('terminalDevServerPane');
+  devServerOutputEl = document.getElementById('terminalDevServerOutput');
   ptyPaneEl = document.getElementById('terminalPtyPane');
   outputEl = document.getElementById('terminalOutput');
   xtermHostEl = document.getElementById('terminalXtermHost');
@@ -87,16 +97,29 @@ function getElements(): void {
 function applyActiveTabView(kind: TerminalTabKind): void {
   activeTabKind = kind;
   const isAgent = kind === 'agent';
+  const isDevServer = kind === 'devServer';
+  const isPty = kind === 'pty';
+  const isVirtual = isAgent || isDevServer;
 
   agentPaneEl?.classList.toggle('hidden', !isAgent);
-  ptyPaneEl?.classList.toggle('hidden', isAgent);
+  devServerPaneEl?.classList.toggle('hidden', !isDevServer);
+  ptyPaneEl?.classList.toggle('hidden', !isPty);
 
-  document.getElementById('terminalShellHint')?.classList.toggle('hidden', isAgent);
-  document.getElementById('terminalShellSelect')?.classList.toggle('hidden', isAgent);
-  document.getElementById('btnTerminalClear')?.classList.toggle('hidden', !isAgent);
+  document.getElementById('terminalShellHint')?.classList.toggle('hidden', isVirtual);
+  document.getElementById('terminalShellSelect')?.classList.toggle('hidden', isVirtual);
+  const clearBtn = document.getElementById('btnTerminalClear');
+  clearBtn?.classList.toggle('hidden', !isAgent && !isDevServer);
+  if (clearBtn) {
+    clearBtn.textContent = isDevServer ? 'Clear dev server output' : 'Clear agent output';
+  }
 
   if (isAgent) {
     scrollOutputIfPinned();
+    return;
+  }
+
+  if (isDevServer) {
+    scrollDevServerIfPinned();
     return;
   }
 
@@ -260,38 +283,101 @@ export function openTerminalPanel(): void {
   void refreshTerminalHistoryForActiveChat();
 }
 
-/**
- * Open the agent console and stream logs for a background dev-server run.
- */
-export async function attachDevServerConsole(
+function scrollDevServerIfPinned(): void {
+  if (!devServerOutputEl || !devServerStickToBottom || activeTabKind !== 'devServer') {
+    return;
+  }
+  devServerOutputEl.scrollTop = devServerOutputEl.scrollHeight;
+}
+
+function clearDevServerOutput(): void {
+  if (!devServerOutputEl) return;
+  devServerOutputEl.textContent = '';
+  delete devServerOutputEl.dataset.truncated;
+  devServerDisplayBytes = 0;
+}
+
+function appendDevServerOutputText(text: string, stream: 'stdout' | 'stderr'): void {
+  if (!devServerOutputEl || !text) return;
+
+  const addBytes = new TextEncoder().encode(text).length;
+  if (devServerDisplayBytes + addBytes > MAX_DISPLAY_BYTES) {
+    if (!devServerOutputEl.dataset.truncated) {
+      devServerOutputEl.appendChild(document.createTextNode('\n…[truncated]\n'));
+      devServerOutputEl.dataset.truncated = '1';
+    }
+    return;
+  }
+  devServerDisplayBytes += addBytes;
+
+  if (stream === 'stderr') {
+    const span = document.createElement('span');
+    span.className = 'stderr-line';
+    span.textContent = text;
+    devServerOutputEl.appendChild(span);
+  } else {
+    devServerOutputEl.appendChild(document.createTextNode(text));
+  }
+  scrollDevServerIfPinned();
+}
+
+/** Stop background dev-server log streaming (hub teardown / run change). */
+export function stopDevServerStream(): void {
+  devServerStreamAbort?.abort();
+  devServerStreamAbort = null;
+  devServerSubscribedRunId = null;
+  devServerStreamChatId = null;
+}
+
+async function pumpDevServerStream(
   runId: string,
   label: string,
   chatId: string,
+  abort: AbortController,
 ): Promise<void> {
-  openTerminalPanel();
-  await switchToAgentTab();
-  beginCommandOutput(label, { clear: true });
-  activeRunId = runId;
-  setActiveHistoryRun(runId);
-
   let finished = false;
-  await streamTerminalRun(runId, (ev) => {
-    if (ev.type === 'stdout') {
-      appendTerminalOutput(runId, 'stdout', ev.text);
-    } else if (ev.type === 'stderr') {
-      appendTerminalOutput(runId, 'stderr', ev.text);
-    } else if (ev.type === 'exit') {
-      finished = true;
-      appendOutputText(
-        `\n[exit ${ev.code ?? '?'}${ev.timedOut ? ', timed out' : ''}]\n`,
-        'stderr',
-      );
-    } else if (ev.type === 'error') {
-      appendOutputText(`\nError: ${ev.message}\n`, 'stderr');
-    }
-  });
+  let exitCode: number | null = null;
+  let timedOut = false;
 
-  if (!finished) return;
+  try {
+    await streamTerminalRun(
+      runId,
+      (ev) => {
+        if (devServerSubscribedRunId !== runId) return;
+        if (ev.type === 'stdout') {
+          appendDevServerOutputText(ev.text, 'stdout');
+        } else if (ev.type === 'stderr') {
+          appendDevServerOutputText(ev.text, 'stderr');
+        } else if (ev.type === 'exit') {
+          finished = true;
+          exitCode = ev.code;
+          timedOut = ev.timedOut;
+          appendDevServerOutputText(
+            `\n[exit ${ev.code ?? '?'}${ev.timedOut ? ', timed out' : ''}]\n`,
+            'stderr',
+          );
+        } else if (ev.type === 'error') {
+          appendDevServerOutputText(`\nError: ${ev.message}\n`, 'stderr');
+        }
+      },
+      abort.signal,
+    );
+  } catch (err) {
+    if (abort.signal.aborted) return;
+    appendDevServerOutputText(
+      `\nError: ${err instanceof Error ? err.message : String(err)}\n`,
+      'stderr',
+    );
+  } finally {
+    if (devServerStreamAbort === abort) {
+      devServerStreamAbort = null;
+    }
+    if (devServerSubscribedRunId === runId) {
+      devServerSubscribedRunId = null;
+    }
+  }
+
+  if (!finished || abort.signal.aborted) return;
 
   const chat = getActiveChat();
   if (chat?.id === chatId) {
@@ -302,14 +388,52 @@ export async function attachDevServerConsole(
       source: 'agent',
       startedAt: Date.now(),
       finishedAt: Date.now(),
-      exitCode: null,
-      timedOut: false,
+      exitCode,
+      timedOut,
       logPath: `logs/dev-server/${runId}.log`,
     });
     await refreshTerminalHistoryForActiveChat();
     scheduleSaveSessions();
   }
-  activeRunId = null;
+}
+
+/**
+ * Attach SSE logs for a managed dev-server run without opening the terminal panel.
+ * Idempotent while the same runId is already streaming.
+ */
+export function ensureDevServerStream(
+  runId: string,
+  label: string,
+  chatId: string,
+): void {
+  getElements();
+  if (devServerSubscribedRunId === runId && devServerStreamAbort) return;
+
+  stopDevServerStream();
+  devServerSubscribedRunId = runId;
+  devServerStreamChatId = chatId;
+  clearDevServerOutput();
+  appendDevServerOutputText(`$ ${label}\n`, 'stdout');
+  devServerStickToBottom = true;
+
+  const abort = new AbortController();
+  devServerStreamAbort = abort;
+  void pumpDevServerStream(runId, label, chatId, abort);
+}
+
+/** Open the terminal panel on the Dev server tab (Console button). */
+export async function openDevServerConsole(): Promise<void> {
+  openTerminalPanel();
+  await ensureTerminalTabsWhenOpen();
+  await switchToDevServerTab();
+  scrollDevServerIfPinned();
+}
+
+/**
+ * @deprecated Use ensureDevServerStream + openDevServerConsole.
+ */
+export async function attachDevServerConsole(): Promise<void> {
+  await openDevServerConsole();
 }
 
 export function closeTerminalPanel(): void {
@@ -462,6 +586,16 @@ function setupOutputScroll(): void {
       outputEl.scrollHeight - outputEl.scrollTop - outputEl.clientHeight < 24;
     stickToBottom = atBottom;
   });
+
+  devServerOutputEl?.addEventListener('scroll', () => {
+    if (!devServerOutputEl) return;
+    const atBottom =
+      devServerOutputEl.scrollHeight -
+        devServerOutputEl.scrollTop -
+        devServerOutputEl.clientHeight <
+      24;
+    devServerStickToBottom = atBottom;
+  });
 }
 
 export async function runCommandWithTerminalStream(
@@ -604,7 +738,13 @@ function wireTerminalPanelButtons(): void {
   });
 
   document.getElementById('btnTerminalClear')?.addEventListener('click', () => {
-    clearOutput();
+    if (activeTabKind === 'devServer') {
+      clearDevServerOutput();
+      return;
+    }
+    if (activeTabKind === 'agent') {
+      clearOutput();
+    }
   });
 
   document.getElementById('btnTerminalCollapse')?.addEventListener('click', () => {
