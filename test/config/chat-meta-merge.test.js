@@ -27,8 +27,8 @@ describe('chat.maxToolTurns clamp (client contract)', () => {
 
 describe('generation timeout clamps (server)', () => {
   test('idle timeout defaults and bounds', () => {
-    assert.equal(DEFAULT_GENERATION_IDLE_TIMEOUT_MS, 180_000);
-    assert.equal(clampGenerationIdleTimeoutMs(undefined), 180_000);
+    assert.equal(DEFAULT_GENERATION_IDLE_TIMEOUT_MS, 25 * 60_000);
+    assert.equal(clampGenerationIdleTimeoutMs(undefined), 25 * 60_000);
     assert.equal(clampGenerationIdleTimeoutMs(10_000), 30_000);
     assert.equal(clampGenerationIdleTimeoutMs(60 * 60_000), 30 * 60_000);
   });
@@ -44,14 +44,14 @@ describe('generation timeout clamps (server)', () => {
 describe('config.json chat.maxToolTurns merge', () => {
   test('DEFAULT_META seeds chat block for new homes', () => {
     assert.equal(DEFAULT_META.chat?.maxToolTurns, 8);
-    assert.equal(DEFAULT_META.chat?.generationIdleTimeoutMs, 180_000);
+    assert.equal(DEFAULT_META.chat?.generationIdleTimeoutMs, 25 * 60_000);
     assert.equal(DEFAULT_META.chat?.generationMaxDurationMs, 3_600_000);
   });
 
   test('mergeConfigMeta defaults chat block when patch provides empty object', () => {
     const merged = mergeConfigMeta({}, { chat: {} });
     assert.equal(merged.chat.maxToolTurns, 8);
-    assert.equal(merged.chat.generationIdleTimeoutMs, 180_000);
+    assert.equal(merged.chat.generationIdleTimeoutMs, 25 * 60_000);
     assert.equal(merged.chat.generationMaxDurationMs, 3_600_000);
   });
 

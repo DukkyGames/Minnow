@@ -18,7 +18,7 @@ const CHAT_META_STORAGE_KEY = 'minnow.chatMeta';
 /** Default cap when unset (matches historical hardcoded loop limit). */
 export const DEFAULT_CHAT_MAX_TOOL_TURNS = 8;
 
-export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 180_000;
+export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
 export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
 
 const MIN_GENERATION_IDLE_TIMEOUT_MS = 30_000;

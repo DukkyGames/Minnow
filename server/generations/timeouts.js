@@ -5,7 +5,7 @@
 import { readConfigJson } from '../config/store.js';
 
 /** Default: abort when no SSE bytes for this long (timer resets per chunk). */
-export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 180_000;
+export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
 /** Default: hard wall-clock cap for a single generation. */
 export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
 
