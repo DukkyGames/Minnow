@@ -56,7 +56,7 @@ describe('LSP spawn ENOENT', () => {
       return;
     }
     const result = await getLspDiagnostics('sample.missinglsp');
-    assert.match(result, /not installed or not on PATH/i);
+    assert.match(result, /Run npm install in the Minnow app folder/i);
     assert.match(result, /missing/);
   });
 });

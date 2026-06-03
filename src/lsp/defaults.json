@@ -2,7 +2,7 @@
   "lsp": {
     "typescript": {
       "disabled": false,
-      "command": ["typescript-language-server", "--stdio"],
+      "command": ["$minnow:typescript-language-server"],
       "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
       "defaultEnabled": true,
       "label": "TypeScript/JavaScript"

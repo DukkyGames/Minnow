@@ -469,6 +469,7 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       status,
       ...(typeof w.taskCount === 'number' ? { taskCount: w.taskCount } : {}),
       ...(typeof w.completeCount === 'number' ? { completeCount: w.completeCount } : {}),
+      ...(w.collapsed === true ? { collapsed: true } : {}),
     });
   }
   if (!waves.length) return undefined;

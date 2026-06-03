@@ -195,10 +195,13 @@ export function openBoardGroup(groupId: string): void {
   state.activeBoardGroupId = groupId;
   group.viewMode = 'board';
   scheduleSaveSessions();
-  void import('../ui/sidebar').then((m) => m.renderSidebar());
-  void import('../ui/messages').then((m) => {
-    const chat = state.chats.find((c) => c.id === state.activeId);
-    if (chat) m.renderChatFromHistory(chat);
+  void import('./orchestrate-board-store.ts').then(({ applyOpenBoardWaveCollapse }) => {
+    applyOpenBoardWaveCollapse(group);
+    void import('../ui/sidebar').then((m) => m.renderSidebar());
+    void import('../ui/messages').then((m) => {
+      const chat = state.chats.find((c) => c.id === state.activeId);
+      if (chat) m.renderChatFromHistory(chat);
+    });
   });
 }
 

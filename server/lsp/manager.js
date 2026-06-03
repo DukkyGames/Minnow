@@ -4,18 +4,20 @@
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   createMessageConnection,
   StreamMessageReader,
   StreamMessageWriter,
 } from 'vscode-jsonrpc/node.js';
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
+import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
 import { matchServersForPath } from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
+import { getWorkspaceRoot } from '../workspace/root.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const APP_ROOT = path.resolve(__dirname, '../..');
 
 const processes = new Map();
 
@@ -25,19 +27,13 @@ const pendingConnections = new Map();
 /** Per-fileUri sync state: LSP version + latest full text. */
 const documentSync = new Map();
 
-function resolveCommand(command) {
-  const cmd = command.map((part) => {
-    if (part === 'test/fixtures/fake-lsp.mjs') {
-      return path.join(PROJECT_ROOT, 'test/fixtures/fake-lsp.mjs');
-    }
-    return part;
-  });
-  return { command: cmd[0], args: cmd.slice(1) };
+function workspaceRootUri() {
+  return pathToFileURL(getWorkspaceRoot()).href;
 }
 
 function toFileUri(relativePath) {
-  const abs = path.resolve(PROJECT_ROOT, relativePath);
-  return `file://${abs.replace(/\\/g, '/')}`;
+  const abs = path.resolve(getWorkspaceRoot(), relativePath);
+  return pathToFileURL(abs).href;
 }
 
 /** Map file extension to LSP languageId for didOpen. */
@@ -90,8 +86,8 @@ function formatLspSpawnError(serverId, bin, err) {
   const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
   if (code === 'ENOENT') {
     return (
-      `LSP server "${serverId}" not found: "${bin}" is not installed or not on PATH. ` +
-      `Install the language server or disable "${serverId}" under Settings → Language servers.`
+      `LSP server "${serverId}" not found: "${bin}". ` +
+      `Run npm install in the Minnow app folder, or disable "${serverId}" under Settings → Language servers.`
     );
   }
   const message = err instanceof Error ? err.message : String(err);
@@ -99,17 +95,41 @@ function formatLspSpawnError(serverId, bin, err) {
 }
 
 /** Wait for spawn success; reject on ENOENT and other spawn failures (avoids unhandled 'error'). */
-function spawnLspChild(bin, args) {
+function spawnLspChild(argv) {
+  const [bin, ...args] = argv;
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
-      cwd: PROJECT_ROOT,
+      cwd: getWorkspaceRoot(),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
+      env: {
+        ...process.env,
+        MINNOW_APP_ROOT: APP_ROOT,
+      },
     });
+    /** @type {string[]} */
+    const stderrLines = [];
+    child.stderr?.on('data', (chunk) => {
+      const text = String(chunk);
+      stderrLines.push(text);
+      if (text.trim()) {
+        console.error(`[lsp] stderr: ${text.trimEnd()}`);
+      }
+    });
+    child.stderrLines = stderrLines;
     child.once('error', reject);
     child.once('spawn', () => resolve(child));
   });
+}
+
+/** LSP initialize options for built-in TypeScript (TLS v4+ uses init, not CLI flags). */
+function typescriptInitializationOptions() {
+  return {
+    tsserver: {
+      fallbackPath: getBundledTsserverPath(),
+    },
+  };
 }
 
 function discardLspState(serverId, state) {
@@ -131,9 +151,12 @@ function bindLspProcessLifecycle(serverId, state) {
     console.error(`[lsp] ${serverId}:`, err instanceof Error ? err.message : err);
     discardLspState(serverId, state);
   });
-  state.child.on('exit', (code, signal) => {
+  state.  child.on('exit', (code, signal) => {
     if (code !== 0 && code != null) {
-      console.error(`[lsp] ${serverId} exited with code ${code}`);
+      const detail = child.stderrLines?.join('').trim();
+      console.error(
+        `[lsp] ${serverId} exited with code ${code}${detail ? `: ${detail}` : ''}`,
+      );
     } else if (signal) {
       console.error(`[lsp] ${serverId} exited on signal ${signal}`);
     }
@@ -149,12 +172,17 @@ async function connectLspServer(serverId, config) {
     );
   }
 
-  const { command: bin, args } = resolveCommand(command);
+  const { argv, displayBin } = resolveLspSpawnArgv(command);
+  if (argv.length === 0) {
+    throw new Error(
+      `LSP server "${serverId}" has no command. Run npm install in the Minnow app folder or set lsp.${serverId}.command in ~/.minnow/lsp.json`,
+    );
+  }
   let child;
   try {
-    child = await spawnLspChild(bin, args);
+    child = await spawnLspChild(argv);
   } catch (err) {
-    throw new Error(formatLspSpawnError(serverId, bin, err));
+    throw new Error(formatLspSpawnError(serverId, displayBin, err));
   }
 
   const connection = createMessageConnection(
@@ -181,7 +209,10 @@ async function connectLspServer(serverId, config) {
     connection.listen();
     await connection.sendRequest('initialize', {
       processId: process.pid,
-      rootUri: `file://${PROJECT_ROOT.replace(/\\/g, '/')}`,
+      rootUri: workspaceRootUri(),
+      ...(serverId === 'typescript'
+        ? { initializationOptions: typescriptInitializationOptions() }
+        : {}),
       capabilities: {
         textDocument: {
           completion: {
@@ -307,7 +338,7 @@ export async function getLspCompletions(relativePath, line, character) {
 
   if (!documentSync.has(fileUri)) {
     const fs = await import('node:fs/promises');
-    const abs = path.resolve(PROJECT_ROOT, relativePath);
+    const abs = path.resolve(getWorkspaceRoot(), relativePath);
     const diskText = await fs.readFile(abs, 'utf8').catch(() => '');
     await notifyLspDocument(relativePath, 'open', diskText);
   }
@@ -345,7 +376,7 @@ export async function getLspDiagnostics(relativePath) {
     return 'Error: LSP is disabled in settings.';
   }
 
-  const abs = path.resolve(PROJECT_ROOT, relativePath);
+  const abs = path.resolve(getWorkspaceRoot(), relativePath);
   const fileUri = toFileUri(relativePath);
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
@@ -356,8 +387,8 @@ export async function getLspDiagnostics(relativePath) {
   for (const { id, config } of matchers) {
     try {
       const state = await getConnection(id, config);
-      const fs = await import('node:fs/promises');
-      const text = await fs.readFile(abs, 'utf8').catch(() => '');
+      const fsMod = await import('node:fs/promises');
+      const text = await fsMod.readFile(abs, 'utf8').catch(() => '');
       await notifyLspDocument(relativePath, 'open', text);
       await new Promise((r) => setTimeout(r, 200));
       const diags = state.diagnostics.get(fileUri) ?? [];
