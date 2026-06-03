@@ -712,6 +712,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(typeof raw.boardGroupId === 'string' && raw.boardGroupId.trim()
       ? { boardGroupId: raw.boardGroupId.trim() }
       : {}),
+    ...(typeof raw.boardTaskId === 'string' && raw.boardTaskId.trim()
+      ? { boardTaskId: raw.boardTaskId.trim() }
+      : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),

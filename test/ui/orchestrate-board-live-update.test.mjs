@@ -8,6 +8,7 @@ import { Window } from 'happy-dom';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_RUN_ID = '22222222-2222-2222-2222-222222222222';
+const FIXED_TASK_CHAT_ID = '33333333-3333-3333-3333-333333333333';
 const PLAN_PATH = 'documentation/plans/fixture-plan.md';
 
 const { setSessionStateForTests, createEmptyChatObject } = await import(
@@ -31,6 +32,10 @@ const { setViewModeToggleRenderHandlerForTests } = await import(
   '../../src/ui/view-mode-toggle.ts'
 );
 const { setStreaming } = await import('../../src/app-state.ts');
+const {
+  emitMainTurnActivity,
+  resetMainTurnActivity,
+} = await import('../../src/chat/main-turn-activity.ts');
 const { clearBoardListenersForTests } = await import(
   '../../src/state/orchestrate-board-events.ts'
 );
@@ -96,6 +101,7 @@ describe('orchestrate board live updates', () => {
     disposeBoardViewForTests();
     clearBoardListenersForTests();
     resetSubAgentConfigCache();
+    resetMainTurnActivity();
     setBoardNowForTests(null);
     setSessionStateForTests(null);
   });
@@ -644,6 +650,61 @@ describe('orchestrate board live updates', () => {
       document.querySelector('.board-header__activity-kind')?.textContent,
       'Message',
     );
+  });
+
+  test('task card shows activity line and related chat row', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.name = 'Task W1-A: Task A';
+    taskChat.groupId = chat.boardGroupId ?? chat.id;
+    taskChat.history = [
+      { role: 'user', content: 'Start task' },
+      { role: 'assistant', content: 'Reading project files.' },
+    ];
+    initBoard(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          agentType: 'builder',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(chat, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat, taskChat],
+    });
+
+    renderBoardView(chat);
+    await waitForKanban();
+
+    const card = document.querySelector('.board-task-card');
+    assert.ok(card?.querySelector('.board-task-card__chat-row'));
+    assert.ok(card?.querySelector('.board-task-card__activity'));
+
+    const keyBefore = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    emitMainTurnActivity({
+      chatId: FIXED_TASK_CHAT_ID,
+      phase: 'tools',
+      currentTool: 'read_file',
+      workAgentLabel: 'Builder',
+      modelId: 'm',
+      providerId: 'p',
+      startedAtMs: 1,
+    });
+    const keyAfter = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    assert.notEqual(keyAfter, keyBefore);
   });
 
   test('focused agent select is not replaced by in-place board refresh', async () => {

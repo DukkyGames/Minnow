@@ -8,6 +8,8 @@ export type SettingsSwitchOptions = {
   checked?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
+  /** Scroll target for the settings global finder. */
+  searchKey?: string;
   onChange?: (checked: boolean) => void;
 };
 
@@ -51,6 +53,9 @@ export function createSettingsToggleRow(
 ): { row: HTMLDivElement; input: HTMLInputElement } {
   const row = document.createElement('div');
   row.className = 'settings-toggle-row';
+  if (options.searchKey) {
+    row.dataset.settingsSearchKey = options.searchKey;
+  }
 
   const label = document.createElement('span');
   label.className = 'settings-toggle-row__label';

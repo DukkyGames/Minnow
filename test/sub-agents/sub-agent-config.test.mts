@@ -47,9 +47,9 @@ describe('sub-agent config', () => {
 
   test('all types share global maxToolTurns', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, null);
-    assert.equal(getSubAgentsMaxToolTurns(merged), 12);
-    assert.equal(merged.types.generalPurpose.maxToolTurns, 12);
-    assert.equal(merged.types.explore.maxToolTurns, 12);
+    assert.equal(getSubAgentsMaxToolTurns(merged), 100);
+    assert.equal(merged.types.generalPurpose.maxToolTurns, 100);
+    assert.equal(merged.types.explore.maxToolTurns, 100);
   });
 
   test('user global maxToolTurns applies to every type', () => {
@@ -74,7 +74,7 @@ describe('sub-agent config', () => {
     const r = merged.types.researcher;
     assert.ok(r);
     assert.equal(r.label, 'Research worker');
-    assert.equal(r.maxToolTurns, 12);
+    assert.equal(r.maxToolTurns, 100);
     assert.equal(r.maxConcurrent, 5);
     assert.equal(r.timeoutMs, 420000);
     assert.ok(r.allowedTools?.includes('web_search'));

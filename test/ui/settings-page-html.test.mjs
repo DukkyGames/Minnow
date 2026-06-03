@@ -14,6 +14,7 @@ const SETTINGS_SECTION_IDS = [
   'usage',
   'model-routing',
   'sampler',
+  'thinking',
   'prompting',
   'rules',
   'memory',
@@ -91,6 +92,19 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsPromptTokenEstimate"/);
     assert.match(html, /id="settingsPromptTokenBreakdown"/);
     assert.match(html, /class="settings-prompt-estimate"/);
+  });
+
+  test('settings global search finder exists in header', () => {
+    assert.match(html, /id="settingsSearchFinder"/);
+    assert.match(html, /id="settingsSearchInput"/);
+    assert.match(html, /id="settingsSearchResults"/);
+    assert.match(html, /class="settings-page-header"/);
+    assert.match(html, /id="btnSettingsPageBack"/);
+    assert.match(html, /id="settingsPromptTokenEstimate"/);
+  });
+
+  test('SETTINGS_SECTION_IDS matches canonical section count', () => {
+    assert.equal(SETTINGS_SECTION_IDS.length, 21);
   });
 
   test('prompts hub mount exists in index.html', () => {

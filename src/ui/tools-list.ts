@@ -138,6 +138,7 @@ export function fillToolsSection(
     const group = document.createElement('section');
     group.className = 'tool-group';
     group.setAttribute('data-tool-category', category);
+    group.dataset.settingsSearchKey = `tools.category.${category}`;
 
     const head = document.createElement('div');
     head.className = 'tool-group-head';
@@ -161,6 +162,7 @@ export function fillToolsSection(
       const row = document.createElement('div');
       row.className = 'tool-row';
       row.setAttribute('data-tool-id', tool.id);
+      row.dataset.settingsSearchKey = `tools.item.${tool.id}`;
       if (tool.serverRequired) {
         row.setAttribute('data-server-required', '');
       }

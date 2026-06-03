@@ -613,6 +613,111 @@ button.board-header__activity {
   overflow: hidden;
 }
 
+.board-task-card__activity {
+  margin: 4px 0 0;
+  padding: 0 9px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-task-card__activity--tool {
+  color: var(--mn-warning);
+}
+
+.board-task-card__activity--thinking,
+.board-task-card__activity--waiting {
+  color: color-mix(in srgb, var(--mn-warning) 85%, var(--mn-fg-muted));
+}
+
+.board-task-card__chats {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.board-task-card__chat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--mn-fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease-out),
+    background 0.2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-task-card__chat-row:hover {
+    border-color: color-mix(in srgb, var(--mn-accent) 30%, var(--mn-border));
+    background: color-mix(in srgb, var(--mn-accent) 6%, var(--mn-surface-1));
+  }
+}
+
+.board-task-card__chat-row:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.board-task-card__chat-row--streaming {
+  border-color: color-mix(in srgb, var(--mn-warning-border) 65%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-warning-soft) 35%, var(--mn-surface-1));
+}
+
+.board-task-card__chat-dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mn-fg-subtle);
+}
+
+.board-task-card__chat-row--streaming .board-task-card__chat-dot {
+  background: var(--mn-warning);
+  animation: board-badge-pulse 1.4s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-task-card__chat-row--streaming .board-task-card__chat-dot {
+    animation: none;
+  }
+}
+
+.board-task-card__chat-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-task-card__chats-more {
+  padding: 2px 6px 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--mn-fg-subtle);
+}
+
 .board-task-card__cat {
   display: inline-block;
   padding: 1px 5px;
@@ -683,10 +788,6 @@ button.board-header__activity {
 .board-task-card__toolbar .board-task-card__btn--stop {
   flex: 1 1 5.5rem;
   min-width: 0;
-}
-
-.board-task-card__toolbar .board-task-card__btn--open {
-  flex: 0 1 auto;
 }
 
 .board-task-card__advance {

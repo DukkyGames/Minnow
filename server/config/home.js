@@ -188,7 +188,7 @@ const DEFAULT_META = {
     granularity: 'medium',
   },
   chat: {
-    maxToolTurns: 8,
+    maxToolTurns: 100,
     generationIdleTimeoutMs: 25 * 60_000,
     generationMaxDurationMs: 3_600_000,
   },

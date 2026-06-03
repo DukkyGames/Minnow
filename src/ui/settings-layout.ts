@@ -7,9 +7,13 @@ export function appendSettingsGroup(
   mount: HTMLElement,
   title: string,
   hint?: string,
+  searchKey?: string,
 ): HTMLElement {
   const group = document.createElement('section');
   group.className = 'settings-group';
+  if (searchKey) {
+    group.dataset.settingsSearchKey = searchKey;
+  }
 
   const heading = document.createElement('h3');
   heading.className = 'settings-group__title';

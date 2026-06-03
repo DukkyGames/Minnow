@@ -375,7 +375,33 @@
     <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
-    <h1 style="margin:0;font-size:1.1rem;flex:1">Settings</h1>
+    <h1 class="settings-page-header__title">Settings</h1>
+    <div
+      id="settingsSearchFinder"
+      class="settings-search-finder"
+    >
+      <label class="settings-search-finder__field">
+        <span class="visually-hidden">Search settings</span>
+        <input
+          type="search"
+          id="settingsSearchInput"
+          class="settings-search-finder__input"
+          placeholder="Search settings…"
+          autocomplete="off"
+          spellcheck="false"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="settingsSearchResults"
+          aria-expanded="false"
+        >
+      </label>
+      <div
+        id="settingsSearchResults"
+        class="settings-search-finder__results"
+        role="listbox"
+        hidden
+      ></div>
+    </div>
     <span
       id="settingsPromptTokenEstimate"
       class="settings-prompt-estimate"

@@ -119,6 +119,7 @@ import {
   clampGenerationIdleTimeoutMs,
   clampGenerationMaxDurationMs,
   clampMaxToolTurns,
+  MAX_CHAT_MAX_TOOL_TURNS,
   generationTimeoutMinutesToMs,
   generationTimeoutMsToMinutes,
   getChatMetaSync,
@@ -1021,7 +1022,7 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
   mainInput.type = 'number';
   mainInput.className = 'settings-select';
   mainInput.min = '1';
-  mainInput.max = '64';
+  mainInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
   mainInput.step = '1';
   mainInput.value = String(getChatMetaSync().maxToolTurns);
   mainInput.setAttribute('aria-label', 'Main agent maximum tool turns per send');
@@ -1034,7 +1035,7 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
   subInput.type = 'number';
   subInput.className = 'settings-select';
   subInput.min = '1';
-  subInput.max = '64';
+  subInput.max = String(MAX_CHAT_MAX_TOOL_TURNS);
   subInput.step = '1';
   subInput.value = String(getSubAgentsMaxToolTurns(subConfig));
   subInput.setAttribute('aria-label', 'Sub-agent maximum tool turns per run');

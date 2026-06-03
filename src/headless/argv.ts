@@ -3,6 +3,7 @@
  */
 
 import { parseArgs } from 'node:util';
+import { MAX_CHAT_MAX_TOOL_TURNS } from '../config/chat-meta';
 
 export interface HeadlessRunCliOptions {
   prompt: string;
@@ -56,7 +57,7 @@ Output:
   --quiet               Only final assistant text on stdout (logs on stderr)
 
 Limits:
-  --max-tool-turns <n>  Cap tool rounds for this run (1–64)
+  --max-tool-turns <n>  Cap tool rounds for this run (1–${MAX_CHAT_MAX_TOOL_TURNS})
 
 Env:
   MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1  Required with --no-approval
@@ -137,8 +138,11 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
   let maxToolTurns: number | null = null;
   if (values['max-tool-turns'] != null) {
     const n = parseInt(String(values['max-tool-turns']), 10);
-    if (!Number.isFinite(n) || n < 1 || n > 64) {
-      return { ok: false, message: '--max-tool-turns must be an integer between 1 and 64' };
+    if (!Number.isFinite(n) || n < 1 || n > MAX_CHAT_MAX_TOOL_TURNS) {
+      return {
+        ok: false,
+        message: `--max-tool-turns must be an integer between 1 and ${MAX_CHAT_MAX_TOOL_TURNS}`,
+      };
     }
     maxToolTurns = n;
   }

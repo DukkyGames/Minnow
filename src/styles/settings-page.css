@@ -26,11 +26,100 @@
   border-bottom: 1px solid var(--mn-border);
 }
 
+.settings-page-header__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  flex: 0 0 auto;
+}
+
 .settings-page-header h1 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.settings-search-finder {
+  position: relative;
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.settings-search-finder__field {
+  display: block;
+}
+
+.settings-search-finder__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  color: var(--mn-fg);
+  font-size: 13px;
+}
+
+.settings-search-finder__input:focus {
+  outline: 2px solid var(--mn-accent, #3b82f6);
+  outline-offset: 1px;
+}
+
+.settings-search-finder__results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.settings-search-finder__option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-search-finder__option.is-highlighted,
+.settings-search-finder__option:hover {
+  background: var(--mn-bg-muted, rgb(128 128 128 / 12%));
+}
+
+.settings-search-finder__option-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-search-finder__option-hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.settings-search-target-flash {
+  outline: 2px solid var(--mn-accent, #3b82f6);
+  outline-offset: 2px;
+  transition: outline-color 0.2s ease;
 }
 
 .settings-prompt-estimate {

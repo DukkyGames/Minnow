@@ -6,6 +6,16 @@ import {
   deriveOrchestratorLastActivity,
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
+import {
+  deriveTaskCardActivity,
+  type TaskCardActivity,
+  type TaskCardSubAgentHint,
+} from '../chat/orchestrate/task-activity';
+import { listTaskRelatedChats } from '../chat/orchestrate/task-chats';
+import {
+  getMainTurnActivity,
+  subscribeMainTurnActivity,
+} from '../chat/main-turn-activity';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
@@ -37,7 +47,13 @@ import {
 } from '../state/orchestrate-board-store';
 import { normalizeModeId } from '../chat/modes/types';
 import { subscribeBoardChanges } from '../state/orchestrate-board-events';
-import { findChatById, getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
+import {
+  findChatById,
+  getActiveChat,
+  getChatsSortedByUpdatedDesc,
+  scheduleSaveSessions,
+  touchChat,
+} from '../state/sessions';
 import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import type {
   BoardTask,
@@ -165,6 +181,7 @@ interface BoardSession {
   plannerChatId: string;
   unsubBoard: () => void;
   unsubAgents: () => void;
+  unsubMainTurn: () => void;
 }
 
 let currentSession: BoardSession | null = null;
@@ -234,6 +251,7 @@ function disposeBoardSession(): void {
   if (!currentSession) return;
   currentSession.unsubBoard();
   currentSession.unsubAgents();
+  currentSession.unsubMainTurn();
   currentSession = null;
   lastKanbanRefreshKey = '';
   pendingKanbanRefresh = false;
@@ -249,11 +267,31 @@ function isKanbanFormControlFocused(): boolean {
   return active.matches('select, input, textarea');
 }
 
+function resolveKanbanGroup(
+  board: BoardState,
+  plannerChat: Chat,
+  group?: ChatGroup,
+): ChatGroup {
+  if (group) return group;
+  const id = plannerChat.boardGroupId ?? plannerChat.groupId ?? 'board';
+  return {
+    id,
+    name: '',
+    workspacePath: plannerChat.workspacePath,
+    collapsed: false,
+    order: 0,
+    createdAt: 0,
+    orchestrateBoard: board,
+  };
+}
+
 /** Stable key for kanban DOM — only rebuild when task/run/streaming presentation changes. */
 export function buildKanbanRefreshKey(
   board: BoardState,
   plannerChat: Chat,
+  group?: ChatGroup,
 ): string {
+  const folder = resolveKanbanGroup(board, plannerChat, group);
   const cap = board.maxConcurrentTasks ?? 3;
   const running = countRunningTaskChats(board);
   const parts: string[] = [
@@ -265,10 +303,19 @@ export function buildKanbanRefreshKey(
       `w:${wave.id}:${wave.collapsed ? 1 : 0}:${wave.status ?? ''}:${wave.taskCount ?? 0}:${wave.completeCount ?? 0}`,
     );
   }
+  const allChats = getChatsSortedByUpdatedDesc();
   for (const task of board.tasks) {
     const streaming = task.chatId && isChatStreaming(task.chatId) ? 1 : 0;
     const runId = getBoardTaskPrimaryRunId(task);
     const runStatus = runId ? resolveRunStatusForTask(plannerChat, runId) ?? '' : '';
+    const taskChat = task.chatId ? findChatById(task.chatId) : undefined;
+    const mainTurn = task.chatId ? getMainTurnActivity(task.chatId) : undefined;
+    const activity = deriveTaskCardActivity(task, plannerChat, {
+      taskChat,
+      mainTurn,
+      subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
+    });
+    const relatedChats = listTaskRelatedChats(task, folder, allChats);
     parts.push(
       [
         task.id,
@@ -280,6 +327,8 @@ export function buildKanbanRefreshKey(
         task.error ?? '',
         task.title,
         task.category,
+        activity ? `${activity.kind}:${activity.text}` : '',
+        relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
       ].join('|'),
     );
   }
@@ -345,6 +394,7 @@ function ensureBoardSession(group: ChatGroup, plannerChat: Chat): void {
     unsubAgents: subscribeSubAgentRuns((run) => {
       if (run.parentChatId === plannerChat.id) scheduleBoardUiRefresh(group.id);
     }),
+    unsubMainTurn: subscribeMainTurnActivity(() => scheduleBoardUiRefresh(group.id)),
   };
   startBoardLiveTick();
 }
@@ -802,6 +852,90 @@ function buildStatusActionButtons(
   }
 }
 
+const TASK_CARD_MAX_CHAT_ROWS = 2;
+
+/** Sub-agent activity when a task has a run but no task chat yet. */
+function resolveTaskCardSubAgentHint(
+  task: BoardTask,
+  plannerChat: Chat,
+): TaskCardSubAgentHint | null {
+  if (task.chatId?.trim()) return null;
+  const runId = getBoardTaskPrimaryRunId(task);
+  if (!runId) return null;
+  const live = getSubAgentRun(runId);
+  const persisted = plannerChat.subAgentRuns?.find((r) => r.runId === runId);
+  const status = live?.status ?? persisted?.status;
+  if (status !== 'queued' && status !== 'running') return null;
+  return {
+    status,
+    taskLabel: (live?.task ?? persisted?.task ?? '').trim(),
+  };
+}
+
+function appendTaskCardActivityLine(
+  card: HTMLElement,
+  activity: TaskCardActivity,
+): void {
+  const line = document.createElement('p');
+  line.className = `board-task-card__activity board-task-card__activity--${activity.kind}`;
+  line.textContent = activity.text;
+  line.title = activity.title;
+  line.addEventListener('click', (e) => e.stopPropagation());
+  card.appendChild(line);
+}
+
+function appendTaskCardChats(
+  card: HTMLElement,
+  chats: ReturnType<typeof listTaskRelatedChats>,
+): void {
+  if (!chats.length) return;
+
+  const list = document.createElement('ul');
+  list.className = 'board-task-card__chats';
+
+  const visible = chats.slice(0, TASK_CARD_MAX_CHAT_ROWS);
+  const overflow = chats.length - visible.length;
+
+  for (const row of visible) {
+    const item = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-task-card__chat-row';
+    if (row.streaming) {
+      btn.classList.add('board-task-card__chat-row--streaming');
+    }
+    btn.setAttribute('aria-label', `Open task chat: ${row.title}`);
+    btn.title = row.title;
+
+    const dot = document.createElement('span');
+    dot.className = 'board-task-card__chat-dot';
+    dot.setAttribute('aria-hidden', 'true');
+
+    const label = document.createElement('span');
+    label.className = 'board-task-card__chat-title';
+    label.textContent = row.title;
+
+    btn.appendChild(dot);
+    btn.appendChild(label);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      switchChat(row.chatId);
+    });
+    item.appendChild(btn);
+    list.appendChild(item);
+  }
+
+  if (overflow > 0) {
+    const more = document.createElement('li');
+    more.className = 'board-task-card__chats-more';
+    more.textContent = `+${overflow} more`;
+    list.appendChild(more);
+  }
+
+  list.addEventListener('click', (e) => e.stopPropagation());
+  card.appendChild(list);
+}
+
 function buildTaskCard(
   task: BoardTask,
   group: ChatGroup,
@@ -838,7 +972,10 @@ function buildTaskCard(
     };
     card.addEventListener('click', (e) => {
       const target = e.target;
-      if (target instanceof HTMLElement && target.closest('.board-task-card__footer')) return;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest('.board-task-card__footer')) return;
+      if (target.closest('.board-task-card__activity')) return;
+      if (target.closest('.board-task-card__chats')) return;
       openRun();
     });
     card.addEventListener('keydown', (e) => {
@@ -873,6 +1010,21 @@ function buildTaskCard(
   title.textContent = task.title;
   title.title = task.title;
   card.appendChild(title);
+
+  const taskChat = task.chatId ? findChatById(task.chatId) : undefined;
+  const activity = deriveTaskCardActivity(task, plannerChat, {
+    taskChat,
+    mainTurn: task.chatId ? getMainTurnActivity(task.chatId) : undefined,
+    subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
+  });
+  if (activity) appendTaskCardActivityLine(card, activity);
+
+  const relatedChats = listTaskRelatedChats(
+    task,
+    group,
+    getChatsSortedByUpdatedDesc(),
+  );
+  appendTaskCardChats(card, relatedChats);
 
   const footer = document.createElement('div');
   footer.className = 'board-task-card__footer';
@@ -934,17 +1086,6 @@ function buildTaskCard(
       void startTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
     });
     toolbar.appendChild(startBtn);
-  }
-  if (task.chatId) {
-    const openBtn = document.createElement('button');
-    openBtn.type = 'button';
-    openBtn.className = 'board-btn board-btn--compact board-task-card__btn--open';
-    openBtn.textContent = 'Chat';
-    openBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      switchChat(task.chatId!);
-    });
-    toolbar.appendChild(openBtn);
   }
   footer.appendChild(toolbar);
 
@@ -1298,7 +1439,7 @@ function refreshBoardDom(
   const main = root.querySelector('.board-main');
   if (main instanceof HTMLElement) {
     ensureKanbanInteractionReleaseListener();
-    const kanbanKey = buildKanbanRefreshKey(board, plannerChat);
+    const kanbanKey = buildKanbanRefreshKey(board, plannerChat, group);
     const kanbanFocused = isKanbanFormControlFocused();
     if (kanbanKey !== lastKanbanRefreshKey) {
       if (kanbanFocused) {

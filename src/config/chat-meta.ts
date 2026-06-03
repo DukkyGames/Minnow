@@ -15,8 +15,11 @@ export interface ChatMeta {
 
 const CHAT_META_STORAGE_KEY = 'minnow.chatMeta';
 
-/** Default cap when unset (matches historical hardcoded loop limit). */
-export const DEFAULT_CHAT_MAX_TOOL_TURNS = 8;
+/** Default cap when unset (Settings → Tools). */
+export const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
+
+/** Upper bound for `chat.maxToolTurns` (main agent and sub-agents share this range). */
+export const MAX_CHAT_MAX_TOOL_TURNS = 128;
 
 export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
 export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;
@@ -34,11 +37,11 @@ const DEFAULT_CHAT_META: ChatMeta = {
 
 let cachedChat: ChatMeta | null = null;
 
-/** Coerce a value to an integer max tool turn count in [1, 64]. */
+/** Coerce a value to an integer max tool turn count in [1, {@link MAX_CHAT_MAX_TOOL_TURNS}]. */
 export function clampMaxToolTurns(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_CHAT_MAX_TOOL_TURNS;
-  return Math.min(64, Math.max(1, Math.round(n)));
+  return Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(n)));
 }
 
 /** Coerce idle timeout (ms) to server-allowed range. */
