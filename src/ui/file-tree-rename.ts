@@ -76,6 +76,8 @@ export function cancelInlineRename(showStatus = true): void {
 
 /** Replace the row label with an input; commit via commitRename on Enter/blur. */
 export function startInlineRename(path: string, kind: FileTreeEntryKind): void {
+  void import('./file-tree-create').then((m) => m.cancelInlineCreate(false));
+
   const norm = normalizeTreePath(path);
   if (activeRenamePath && activeRenamePath !== norm) {
     cancelInlineRename(false);

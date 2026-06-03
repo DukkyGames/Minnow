@@ -187,12 +187,12 @@ function buildFolderMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
     {
       label: 'New File…',
       disabled,
-      action: () => void fileTreeOps.createFileInDir(ctx.targetDir),
+      action: () => fileTreeOps.createFileInDir(ctx.targetDir),
     },
     {
       label: 'New Folder…',
       disabled,
-      action: () => void fileTreeOps.createFolderInDir(ctx.targetDir),
+      action: () => fileTreeOps.createFolderInDir(ctx.targetDir),
     },
     {
       label: 'Cut',
@@ -229,12 +229,12 @@ function buildBackgroundMenuItems(targetDir: string): MenuItemDef[] {
     {
       label: 'New File…',
       disabled: offline,
-      action: () => void fileTreeOps.createFileInDir(targetDir),
+      action: () => fileTreeOps.createFileInDir(targetDir),
     },
     {
       label: 'New Folder…',
       disabled: offline,
-      action: () => void fileTreeOps.createFolderInDir(targetDir),
+      action: () => fileTreeOps.createFolderInDir(targetDir),
     },
   ];
 }

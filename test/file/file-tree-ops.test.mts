@@ -81,6 +81,10 @@ describe('file-tree-path helpers', () => {
     assert.equal(isValidEntryName('bad/name'), false);
     assert.equal(isValidEntryName(''), false);
   });
+
+  test('joinTreePath for create under nested parent', () => {
+    assert.equal(joinTreePath('src/ui', 'widget.ts'), 'src/ui/widget.ts');
+  });
 });
 
 describe('file tree clipboard', () => {
