@@ -273,33 +273,37 @@ export async function pasteInto(targetDir: string): Promise<boolean> {
   return true;
 }
 
-/** Create an empty text file under parentDir. */
-export async function createFileInDir(parentDir: string): Promise<boolean> {
-  const name = window.prompt('New file name:', 'untitled.txt');
-  if (name === null) return false;
-  if (!isValidEntryName(name)) {
-    setStatus('err', 'Invalid name. Use a single name without / or \\.');
-    return false;
-  }
-  const path = joinTreePath(parentDir, name.trim());
-  setStatus('spin', 'Creating file…');
-  const result = await runFileTreeTool('save_file', { path, content: '' });
-  if (!result.ok) return false;
-  await finishMutation(null, null, 'create');
-  return true;
+/** Open inline name field for a new file under parentDir (context menu). */
+export function createFileInDir(parentDir: string): void {
+  void import('./file-tree-create').then((m) => m.startInlineCreate(parentDir, 'file'));
 }
 
-/** Create a folder under parentDir. */
-export async function createFolderInDir(parentDir: string): Promise<boolean> {
-  const name = window.prompt('New folder name:', 'new-folder');
-  if (name === null) return false;
-  if (!isValidEntryName(name)) {
+/** Open inline name field for a new folder under parentDir (context menu). */
+export function createFolderInDir(parentDir: string): void {
+  void import('./file-tree-create').then((m) => m.startInlineCreate(parentDir, 'dir'));
+}
+
+/** Create file or folder after inline name entry. */
+export async function commitCreate(
+  parentDir: string,
+  kind: FileTreeEntryKind,
+  name: string,
+): Promise<boolean> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    setStatus('err', 'Name cannot be empty.');
+    return false;
+  }
+  if (!isValidEntryName(trimmed)) {
     setStatus('err', 'Invalid name. Use a single name without / or \\.');
     return false;
   }
-  const path = joinTreePath(parentDir, name.trim());
-  setStatus('spin', 'Creating folder…');
-  const result = await runFileTreeTool('make_directory', { path });
+  const path = joinTreePath(parentDir, trimmed);
+  setStatus('spin', kind === 'dir' ? 'Creating folder…' : 'Creating file…');
+  const result = await runFileTreeTool(
+    kind === 'dir' ? 'make_directory' : 'save_file',
+    kind === 'dir' ? { path } : { path, content: '' },
+  );
   if (!result.ok) return false;
   await finishMutation(null, null, 'create');
   return true;
