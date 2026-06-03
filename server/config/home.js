@@ -189,7 +189,7 @@ const DEFAULT_META = {
   },
   chat: {
     maxToolTurns: 8,
-    generationIdleTimeoutMs: 180_000,
+    generationIdleTimeoutMs: 25 * 60_000,
     generationMaxDurationMs: 3_600_000,
   },
   editorAiCompletion: {
