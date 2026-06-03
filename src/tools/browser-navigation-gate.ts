@@ -10,6 +10,10 @@ import {
 } from '../config/browser-meta';
 import { isNavigationAllowed } from './browser-allowlist-match';
 import { enqueueAskQuestion } from './ask-question-queue';
+import {
+  acquireUserPromptLock,
+  releaseUserPromptLock,
+} from '../ui/user-prompt-lock';
 import type { ToolApprovalContext } from './approval-queue';
 import type { AskQuestionToolResult } from './ask-question-types';
 import { isLocalServerAvailable } from './config';
@@ -65,35 +69,42 @@ export async function maybeBlockBrowserNavigation(
     return null;
   }
 
-  const raw = await enqueueAskQuestion(
-    {
-      title: 'Browser navigation',
-      questions: [
-        {
-          id: ALLOWLIST_QUESTION_ID,
-          prompt: `Allow browser navigation to ${check.origin}?`,
-          options: [
-            {
-              id: DECISION_ONCE,
-              label: 'Allow once',
-              description: 'Open this URL one time only',
-            },
-            {
-              id: DECISION_PERSIST,
-              label: 'Add to allowlist',
-              description: `Save pattern: ${check.suggestedPattern}`,
-            },
-            {
-              id: DECISION_DENY,
-              label: 'Do not allow',
-              description: 'Skip navigation',
-            },
-          ],
-        },
-      ],
-    },
-    { subAgentType: context.subAgentType },
-  );
+  acquireUserPromptLock();
+  let raw: string;
+  try {
+    raw = await enqueueAskQuestion(
+      {
+        title: 'Browser navigation',
+        questions: [
+          {
+            id: ALLOWLIST_QUESTION_ID,
+            prompt: `Allow browser navigation to ${check.origin}?`,
+            options: [
+              {
+                id: DECISION_ONCE,
+                label: 'Allow once',
+                description: 'Open this URL one time only',
+              },
+              {
+                id: DECISION_PERSIST,
+                label: 'Add to allowlist',
+                description: `Save pattern: ${check.suggestedPattern}`,
+              },
+              {
+                id: DECISION_DENY,
+                label: 'Do not allow',
+                description: 'Skip navigation',
+              },
+            ],
+          },
+        ],
+      },
+      { subAgentType: context.subAgentType },
+      context.chatId,
+    );
+  } finally {
+    releaseUserPromptLock();
+  }
 
   let parsed: AskQuestionToolResult;
   try {

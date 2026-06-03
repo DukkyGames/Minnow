@@ -14,6 +14,7 @@ import { stringifyAskQuestionResult } from './ask-question-types';
 interface Queued {
   args: AskQuestionArgs;
   context: QuestionCardsModalContext;
+  chatId?: string;
   resolve: (content: string) => void;
 }
 
@@ -29,7 +30,7 @@ export function enqueueAskQuestion(
   chatId?: string,
 ): Promise<string> {
   return new Promise((resolve) => {
-    queue.push({ args, context, resolve });
+    queue.push({ args, context, chatId, resolve });
     void drainQueue();
   });
 }
@@ -40,6 +41,7 @@ async function drainQueue(): Promise<void> {
   if (!next) return;
   draining = true;
   try {
+    const chatId = next.chatId;
     const planHost = resolveOrchestratePlanScreenQuestionHost(chatId);
     const modalOptions: QuestionCardsModalOptions = planHost
       ? { host: planHost, embedded: true, chatId }

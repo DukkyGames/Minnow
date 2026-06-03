@@ -181,6 +181,7 @@ export async function startTask(
     const existing = findChatById(existingId);
     if (existing) {
       taskChat = existing;
+      taskChat.boardTaskId = task.id;
     } else {
       taskChat = createEmptyChatObject(binding.modelId, plannerChat.workspacePath);
       taskChat.providerId = binding.providerId;
@@ -189,6 +190,7 @@ export async function startTask(
       taskChat.name = `Task ${task.id}: ${task.title}`;
       taskChat.groupId = folderId;
       taskChat.boardGroupId = folderId;
+      taskChat.boardTaskId = task.id;
       requireSession().chats.unshift(taskChat);
       updateTask(group, taskId, { chatId: taskChat.id }, plannerChat);
     }
@@ -200,6 +202,7 @@ export async function startTask(
     taskChat.name = `Task ${task.id}: ${task.title}`;
     taskChat.groupId = folderId;
     taskChat.boardGroupId = folderId;
+    taskChat.boardTaskId = task.id;
     requireSession().chats.unshift(taskChat);
     updateTask(group, taskId, { chatId: taskChat.id }, plannerChat);
     assignChatToGroup(taskChat.id, folderId);

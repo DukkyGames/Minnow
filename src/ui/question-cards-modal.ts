@@ -20,6 +20,11 @@ import {
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
+import {
+  acquireUserPromptLock,
+  isUserPromptLocked,
+  releaseUserPromptLock,
+} from './user-prompt-lock';
 
 export interface QuestionCardsModalContext {
   subAgentType?: string;
@@ -90,9 +95,9 @@ export function showQuestionCardsModal(
     const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
+    const chatIdForAbort = options.chatId?.trim() || getActiveChat().id;
     if (!embedded) {
-      if (msgInput) msgInput.disabled = true;
-      if (sendBtn) sendBtn.disabled = true;
+      acquireUserPromptLock();
       mainColumn?.classList.add('main-column--question-pending');
       setSidebarInputPendingForActiveChat(true);
     }
@@ -195,23 +200,26 @@ export function showQuestionCardsModal(
       requestQuestionCardsCancel = null;
       document.removeEventListener('keydown', onDocKeyDown, true);
       if (abortListener) {
-        getChatAbort(getActiveChat().id)?.signal.removeEventListener('abort', abortListener);
+        getChatAbort(chatIdForAbort)?.signal.removeEventListener('abort', abortListener);
       }
       if (!embedded) {
         mainColumn?.classList.remove('main-column--question-pending');
         host.hidden = true;
         setSidebarInputPendingForActiveChat(false);
-        if (msgInput) {
-          msgInput.disabled = isActiveChatStreaming() ? false : prevInputDisabled;
-        }
-        if (sendBtn) {
-          if (isActiveChatStreaming()) {
-            setComposerStreamingMode('streaming');
-          } else {
-            sendBtn.disabled = prevSendDisabled;
+        releaseUserPromptLock();
+        if (!isUserPromptLocked()) {
+          if (msgInput) {
+            msgInput.disabled = isActiveChatStreaming() ? false : prevInputDisabled;
           }
+          if (sendBtn) {
+            if (isActiveChatStreaming()) {
+              setComposerStreamingMode('streaming');
+            } else {
+              sendBtn.disabled = prevSendDisabled;
+            }
+          }
+          msgInput?.focus();
         }
-        msgInput?.focus();
       }
       host.replaceChildren();
       resolve(result);
@@ -222,9 +230,17 @@ export function showQuestionCardsModal(
     const abortListener = (): void => {
       finish({ status: 'cancelled', answers: [] });
     };
-    const abortSignal = getChatAbort(getActiveChat().id)?.signal;
-    if (abortSignal) {
+    const abortSignal = getChatAbort(chatIdForAbort)?.signal;
+    if (abortSignal && !abortSignal.aborted) {
       abortSignal.addEventListener('abort', abortListener, { once: true });
+    }
+
+    function tryAutoSubmitAfterSingleSelect(): void {
+      if (questions.length !== 1) return;
+      const only = questions[0];
+      if (only.allow_multiple === true) return;
+      if (!areAllDraftsValid(questions, drafts)) return;
+      finish({ status: 'answered', answers: buildAnswerEntries(questions, drafts) });
     }
 
     function syncNav(): void {
@@ -296,6 +312,7 @@ export function showQuestionCardsModal(
             d.otherText = '';
             renderQuestion(q);
             syncNav();
+            tryAutoSubmitAfterSingleSelect();
           });
         }
 

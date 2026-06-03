@@ -12,16 +12,16 @@ import {
 /** Mirror of {@link ../../src/config/chat-meta.ts} `clampMaxToolTurns` for contract tests. */
 function clampMaxToolTurns(value) {
   const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return 8;
-  return Math.min(64, Math.max(1, Math.round(n)));
+  if (!Number.isFinite(n)) return 100;
+  return Math.min(128, Math.max(1, Math.round(n)));
 }
 
 describe('chat.maxToolTurns clamp (client contract)', () => {
-  test('clampMaxToolTurns enforces [1, 64]', () => {
+  test('clampMaxToolTurns enforces [1, 128]', () => {
     assert.equal(clampMaxToolTurns(0), 1);
-    assert.equal(clampMaxToolTurns(200), 64);
+    assert.equal(clampMaxToolTurns(200), 128);
     assert.equal(clampMaxToolTurns(24), 24);
-    assert.equal(clampMaxToolTurns('nope'), 8);
+    assert.equal(clampMaxToolTurns('nope'), 100);
   });
 });
 
@@ -43,21 +43,21 @@ describe('generation timeout clamps (server)', () => {
 
 describe('config.json chat.maxToolTurns merge', () => {
   test('DEFAULT_META seeds chat block for new homes', () => {
-    assert.equal(DEFAULT_META.chat?.maxToolTurns, 8);
+    assert.equal(DEFAULT_META.chat?.maxToolTurns, 100);
     assert.equal(DEFAULT_META.chat?.generationIdleTimeoutMs, 25 * 60_000);
     assert.equal(DEFAULT_META.chat?.generationMaxDurationMs, 3_600_000);
   });
 
   test('mergeConfigMeta defaults chat block when patch provides empty object', () => {
     const merged = mergeConfigMeta({}, { chat: {} });
-    assert.equal(merged.chat.maxToolTurns, 8);
+    assert.equal(merged.chat.maxToolTurns, 100);
     assert.equal(merged.chat.generationIdleTimeoutMs, 25 * 60_000);
     assert.equal(merged.chat.generationMaxDurationMs, 3_600_000);
   });
 
-  test('mergeConfigMeta clamps chat.maxToolTurns to 64', () => {
+  test('mergeConfigMeta clamps chat.maxToolTurns to 128', () => {
     const merged = mergeConfigMeta({}, { chat: { maxToolTurns: 200 } });
-    assert.equal(merged.chat.maxToolTurns, 64);
+    assert.equal(merged.chat.maxToolTurns, 128);
   });
 
   test('mergeConfigMeta clamps chat.maxToolTurns to at least 1', () => {

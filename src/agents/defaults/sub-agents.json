@@ -4,7 +4,7 @@
   "globalMaxConcurrent": 3,
   "defaultTimeoutMs": 300000,
   "checkInNudgeMs": 120000,
-  "maxToolTurns": 12,
+  "maxToolTurns": 100,
   "defaultMaxInputTokens": null,
   "defaultContextEnforcementPolicy": "slide",
   "defaultSummarySchema": "minnow.sub-agent.v1",
@@ -283,5 +283,5 @@
       }
     }
   },
-  "maxToolTurns": 12
+  "maxToolTurns": 100
 }

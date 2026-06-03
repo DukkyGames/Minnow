@@ -16,6 +16,10 @@ import {
   DEFAULT_GENERATION_MAX_DURATION_MS,
 } from '../generations/timeouts.js';
 
+const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
+const MAX_CHAT_MAX_TOOL_TURNS = 128;
+const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
+
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 const MAX_CHATS = 50;
 const SESSION_SCHEMA_VERSION = 5;
@@ -1003,15 +1007,15 @@ export function mergeConfigMeta(existing, patch) {
       base.chat && typeof base.chat === 'object'
         ? { .../** @type {Record<string, unknown>} */ (base.chat) }
         : {
-            maxToolTurns: 8,
+            maxToolTurns: DEFAULT_CHAT_MAX_TOOL_TURNS,
             generationIdleTimeoutMs: DEFAULT_GENERATION_IDLE_TIMEOUT_MS,
             generationMaxDurationMs: DEFAULT_GENERATION_MAX_DURATION_MS,
           };
     let maxToolTurns =
       typeof existingChat.maxToolTurns === 'number' && Number.isFinite(existingChat.maxToolTurns)
         ? Math.round(existingChat.maxToolTurns)
-        : 8;
-    maxToolTurns = Math.min(64, Math.max(1, maxToolTurns));
+        : DEFAULT_CHAT_MAX_TOOL_TURNS;
+    maxToolTurns = Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, maxToolTurns));
     let generationIdleTimeoutMs = clampGenerationIdleTimeoutMs(
       existingChat.generationIdleTimeoutMs,
     );
@@ -1020,7 +1024,7 @@ export function mergeConfigMeta(existing, patch) {
     );
     const c = /** @type {Record<string, unknown>} */ (p.chat);
     if (typeof c.maxToolTurns === 'number' && Number.isFinite(c.maxToolTurns)) {
-      maxToolTurns = Math.min(64, Math.max(1, Math.round(c.maxToolTurns)));
+      maxToolTurns = Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(c.maxToolTurns)));
     }
     if (
       typeof c.generationIdleTimeoutMs === 'number' &&
@@ -1321,14 +1325,14 @@ export function normalizeSubAgentsConfig(body) {
   } else {
     base.checkInNudgeMs = 120_000;
   }
-  let maxToolTurns = 12;
+  let maxToolTurns = DEFAULT_SUB_AGENT_MAX_TOOL_TURNS;
   if (typeof base.maxToolTurns === 'number' && Number.isFinite(base.maxToolTurns)) {
-    maxToolTurns = Math.min(64, Math.max(1, Math.round(base.maxToolTurns)));
+    maxToolTurns = Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(base.maxToolTurns)));
   } else if (
     typeof base.defaultMaxToolTurns === 'number' &&
     Number.isFinite(base.defaultMaxToolTurns)
   ) {
-    maxToolTurns = Math.min(64, Math.max(1, Math.round(base.defaultMaxToolTurns)));
+    maxToolTurns = Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(base.defaultMaxToolTurns)));
   }
   base.maxToolTurns = maxToolTurns;
   delete base.defaultMaxToolTurns;

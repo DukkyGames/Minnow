@@ -470,6 +470,8 @@ export interface Chat {
   orchestrateBoard?: OrchestrateBoardState;
   /** Weak link from planner chat to its board folder ({@link ChatGroup.id}). */
   boardGroupId?: string;
+  /** Orchestrate board task id when this chat is a per-task worker thread. */
+  boardTaskId?: string;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
   /**

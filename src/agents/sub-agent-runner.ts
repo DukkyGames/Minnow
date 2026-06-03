@@ -75,7 +75,7 @@ import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
-export const MAX_SUB_AGENT_TOOL_TURNS = 12;
+export const MAX_SUB_AGENT_TOOL_TURNS = 100;
 
 /** Prefer main `content`; some reasoning models only emit JSON on the reasoning channel. */
 function resolveStreamedCompletionText(content: string, reasoning: string): string {

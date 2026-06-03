@@ -2,6 +2,7 @@
  * Load and merge sub-agent configuration (defaults + ~/.minnow/sub-agents.json).
  */
 
+import { MAX_CHAT_MAX_TOOL_TURNS } from '../config/chat-meta';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
@@ -12,7 +13,7 @@ import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
 /** Fallback when sub-agents config omits `maxToolTurns`. */
-export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 12;
+export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
@@ -26,11 +27,11 @@ export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000):
   return Math.min(1_800_000, Math.max(10_000, rounded));
 }
 
-/** Coerce sub-agent max tool turns to [1, 64]. */
+/** Coerce sub-agent max tool turns to [1, {@link MAX_CHAT_MAX_TOOL_TURNS}]. */
 export function clampSubAgentMaxToolTurns(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SUB_AGENT_MAX_TOOL_TURNS;
-  return Math.min(64, Math.max(1, Math.round(n)));
+  return Math.min(MAX_CHAT_MAX_TOOL_TURNS, Math.max(1, Math.round(n)));
 }
 
 /** Resolve global sub-agent tool-turn cap from merged or partial config. */

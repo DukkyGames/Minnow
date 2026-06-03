@@ -23,6 +23,7 @@ import {
   SETTINGS_SECTIONS,
   type SettingsSectionId,
 } from './settings-page-types';
+import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 
 export type { SettingsSectionId } from './settings-page-types';
@@ -262,6 +263,7 @@ function onHashChange(): void {
 /** Wire nav, back button, and hash routing. */
 export function initSettingsPage(): void {
   upgradeSettingsCheckboxes();
+  initSettingsSearchFinder();
 
   document
     .getElementById('btnSettingsPageBack')
