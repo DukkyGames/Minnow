@@ -8,7 +8,11 @@ import {
   isSubAgentRunSuccessful,
 } from '../agents/sub-agent-outcome.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
-import { getOrCreateBoardGroup } from '../state/chat-groups.ts';
+import {
+  getBoardGroupForChat,
+  getOrCreateBoardGroup,
+  getPlannerChatForGroup,
+} from '../state/chat-groups.ts';
 import {
   getBoardStateForPlanner,
   initBoard,
@@ -45,12 +49,43 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
-function resolveOrchestrateChat(): Chat | null {
-  const chatId = executorContext?.chatId?.trim();
+export type BoardToolOptions = {
+  /** Active chat from the tool loop or sub-agent parent (overrides module context). */
+  chatId?: string;
+};
+
+function resolveActiveChatId(overrideChatId?: string): string | null {
+  const id = overrideChatId?.trim() || executorContext?.chatId?.trim();
+  return id || null;
+}
+
+/** Planner chat for board_init (must be Orchestrate mode on the calling chat). */
+function resolveOrchestratePlannerChat(overrideChatId?: string): Chat | null {
+  const chatId = resolveActiveChatId(overrideChatId);
   if (!chatId) return null;
   const chat = findChatById(chatId);
   if (!chat || normalizeModeId(chat.modeId) !== 'orchestrate') return null;
   return chat;
+}
+
+/**
+ * Planner chat for board_get_state / board_update_task.
+ * Accepts Orchestrate planner chats, board task chats, and sub-agent parents linked to a board folder.
+ */
+function resolveBoardPlannerChat(overrideChatId?: string): Chat | null {
+  const chatId = resolveActiveChatId(overrideChatId);
+  if (!chatId) return null;
+  const chat = findChatById(chatId);
+  if (!chat) return null;
+
+  if (normalizeModeId(chat.modeId) === 'orchestrate') {
+    return chat;
+  }
+
+  const group = getBoardGroupForChat(chat);
+  if (!group?.orchestrateBoard) return null;
+
+  return getPlannerChatForGroup(group) ?? null;
 }
 
 function parseWaveId(raw: unknown): number | string | null {
@@ -207,82 +242,23 @@ export function validateBoardUpdateTaskArgs(
 export async function executeBoardTool(
   name: string,
   args: Record<string, unknown>,
+  options?: BoardToolOptions,
 ): Promise<string> {
-  const chat = resolveOrchestrateChat();
+  if (name === 'board_init') {
+    const initChat = resolveOrchestratePlannerChat(options?.chatId);
+    if (!initChat) {
+      return 'Error: board tools require an active Orchestrate chat';
+    }
+    return executeBoardInit(initChat, args);
+  }
+
+  const chat = resolveBoardPlannerChat(options?.chatId);
   if (!chat) {
     return 'Error: board tools require an active Orchestrate chat';
   }
 
-  if (name === 'board_init') {
-    const validated = validateBoardInitArgs(args, chat);
-    if (validated.ok === false) return validated.error;
-    const group = getOrCreateBoardGroup(chat);
-    const board = initBoard(
-      group,
-      chat,
-      {
-        planPath: validated.args.plan_path,
-        tasks: validated.args.tasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          wave: t.wave,
-          category: t.category,
-          build: t.build,
-          test: t.test,
-          agentType: t.agent_type,
-        })),
-        waves: validated.args.waves,
-      },
-    );
-    executorContext = { chatId: chat.id, groupId: group.id };
-    return JSON.stringify(board, null, 2);
-  }
-
   if (name === 'board_update_task') {
-    const validated = validateBoardUpdateTaskArgs(args);
-    if (validated.ok === false) return validated.error;
-    const group = getOrCreateBoardGroup(chat);
-    const board = group.orchestrateBoard;
-    if (!board) {
-      return 'Error: orchestrate board is not initialized';
-    }
-    try {
-      if (validated.args.status === 'complete') {
-        const task = board.tasks.find(
-          (t) => t.id === validated.args.task_id,
-        );
-        if (task?.error && isMaxToolTurnSummary(task.error)) {
-          return (
-            'Error: cannot mark task complete — task failed with max tool turns. ' +
-            'Restart or spawn a new sub-agent.'
-          );
-        }
-        const linkedRunId =
-          validated.args.run_id?.trim() || task?.assignedRunId?.trim() || '';
-        if (linkedRunId) {
-          const run = getSubAgentRun(linkedRunId);
-          if (run && !isSubAgentRunSuccessful(run)) {
-            return (
-              'Error: cannot mark task complete — linked sub-agent run did not succeed ' +
-              '(failed, cancelled, or hit max tool turns). Restart or spawn a new sub-agent.'
-            );
-          }
-        }
-      }
-
-      const patch: Parameters<typeof updateTask>[2] = { status: validated.args.status };
-      if (validated.args.run_id) patch.assignedRunId = validated.args.run_id;
-      if (validated.args.files_changed !== undefined) {
-        patch.filesChanged = validated.args.files_changed;
-      }
-      if (validated.args.notes !== undefined) patch.notes = validated.args.notes;
-      if (validated.args.error !== undefined) patch.error = validated.args.error;
-      const task = updateTask(group, validated.args.task_id, patch, chat);
-      return JSON.stringify(task, null, 2);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return message.startsWith('Error:') ? message : `Error: ${message}`;
-    }
+    return executeBoardUpdateTask(chat, args);
   }
 
   if (name === 'board_get_state') {
@@ -292,4 +268,80 @@ export async function executeBoardTool(
   }
 
   return `Error: unknown board tool "${name}"`;
+}
+
+async function executeBoardInit(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const validated = validateBoardInitArgs(args, chat);
+  if (validated.ok === false) return validated.error;
+  const group = getOrCreateBoardGroup(chat);
+  const board = initBoard(
+    group,
+    chat,
+    {
+      planPath: validated.args.plan_path,
+      tasks: validated.args.tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        wave: t.wave,
+        category: t.category,
+        build: t.build,
+        test: t.test,
+        agentType: t.agent_type,
+      })),
+      waves: validated.args.waves,
+    },
+  );
+  executorContext = { chatId: chat.id, groupId: group.id };
+  return JSON.stringify(board, null, 2);
+}
+
+async function executeBoardUpdateTask(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const validated = validateBoardUpdateTaskArgs(args);
+  if (validated.ok === false) return validated.error;
+  const group = getOrCreateBoardGroup(chat);
+  const board = group.orchestrateBoard;
+  if (!board) {
+    return 'Error: orchestrate board is not initialized';
+  }
+  try {
+    if (validated.args.status === 'complete') {
+      const task = board.tasks.find((t) => t.id === validated.args.task_id);
+      if (task?.error && isMaxToolTurnSummary(task.error)) {
+        return (
+          'Error: cannot mark task complete — task failed with max tool turns. ' +
+          'Restart or spawn a new sub-agent.'
+        );
+      }
+      const linkedRunId =
+        validated.args.run_id?.trim() || task?.assignedRunId?.trim() || '';
+      if (linkedRunId) {
+        const run = getSubAgentRun(linkedRunId);
+        if (run && !isSubAgentRunSuccessful(run)) {
+          return (
+            'Error: cannot mark task complete — linked sub-agent run did not succeed ' +
+            '(failed, cancelled, or hit max tool turns). Restart or spawn a new sub-agent.'
+          );
+        }
+      }
+    }
+
+    const patch: Parameters<typeof updateTask>[2] = { status: validated.args.status };
+    if (validated.args.run_id) patch.assignedRunId = validated.args.run_id;
+    if (validated.args.files_changed !== undefined) {
+      patch.filesChanged = validated.args.files_changed;
+    }
+    if (validated.args.notes !== undefined) patch.notes = validated.args.notes;
+    if (validated.args.error !== undefined) patch.error = validated.args.error;
+    const task = updateTask(group, validated.args.task_id, patch, chat);
+    return JSON.stringify(task, null, 2);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.startsWith('Error:') ? message : `Error: ${message}`;
+  }
 }

@@ -220,8 +220,20 @@ export async function initWorkspaceRoot() {
  * @returns {Promise<string>} absolute path
  */
 export async function setWorkspaceRoot(userPath) {
+  const previous = workspaceRoot;
   const resolved = await validateWorkspacePath(userPath);
+  const changed =
+    path.resolve(previous) !== path.resolve(resolved);
   workspaceRoot = resolved;
+  if (changed) {
+    try {
+      const { shutdownAllLsp } = await import('../lsp/manager.js');
+      shutdownAllLsp();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[lsp] shutdown on workspace change failed: ${message}`);
+    }
+  }
   const meta = (await readConfigJson('config.json')) ?? {};
   const merged = mergeConfigMeta(meta, { workspace: { path: resolved } });
   await writeConfigJson('config.json', merged);

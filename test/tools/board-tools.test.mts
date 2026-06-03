@@ -27,6 +27,8 @@ import {
 } from '../../src/tools/board-tools.ts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
+const TASK_CHAT_ID = '22222222-2222-2222-2222-222222222222';
+const BOARD_GROUP_ID = '33333333-3333-3333-3333-333333333333';
 const FIXED_NOW = 1710000001000;
 const PLAN_PATH = 'documentation/plans/shiny-minsky-board-view.md';
 
@@ -51,7 +53,8 @@ const EXPECTED_BOARD_INIT_RESULT = `{
   ],
   "startedAt": 1710000001000,
   "lastUpdatedAt": 1710000001000,
-  "timerAccumulatedMs": 0
+  "timerAccumulatedMs": 0,
+  "maxConcurrentTasks": 3
 }`;
 
 const EXPECTED_UPDATE_TASK_RESULT = `{
@@ -85,7 +88,8 @@ const EXPECTED_GET_STATE_RESULT = `{
   ],
   "startedAt": 1710000001000,
   "lastUpdatedAt": 1710000001000,
-  "timerAccumulatedMs": 0
+  "timerAccumulatedMs": 0,
+  "maxConcurrentTasks": 3
 }`;
 
 function seedOrchestrateChat(overrides: Record<string, unknown> = {}) {
@@ -195,7 +199,17 @@ describe('executeBoardTool', () => {
     setBoardExecutorContext(null);
   });
 
-  test('rejects when chat is not orchestrate mode', async () => {
+  test('rejects when chat is not linked to an orchestrate board', async () => {
+    seedOrchestrateChat({ modeId: 'build' });
+    const out = await executeBoardTool(
+      'board_get_state',
+      {},
+      { chatId: CHAT_ID },
+    );
+    assert.equal(out, 'Error: board tools require an active Orchestrate chat');
+  });
+
+  test('rejects board_init when chat is not orchestrate mode', async () => {
     seedOrchestrateChat({ modeId: 'build' });
     withBoardContext();
     const out = await executeBoardTool('board_init', {
@@ -204,6 +218,90 @@ describe('executeBoardTool', () => {
       waves: [{ id: 'W1' }],
     });
     assert.equal(out, 'Error: board tools require an active Orchestrate chat');
+  });
+
+  test('board_get_state accepts chatId without module executor context', async () => {
+    seedOrchestrateChat();
+    withBoardContext();
+    await executeBoardTool('board_init', {
+      plan_path: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Implement board store',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    setBoardExecutorContext(null);
+    const out = await executeBoardTool('board_get_state', {}, { chatId: CHAT_ID });
+    assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
+  });
+
+  test('board_get_state from linked build task chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: TASK_CHAT_ID,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      chats: [
+        {
+          id: CHAT_ID,
+          name: 'Planner',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'orchestrate',
+          orchestratePlanPath: PLAN_PATH,
+          boardGroupId: BOARD_GROUP_ID,
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+        {
+          id: TASK_CHAT_ID,
+          name: 'Task W1-A',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'build',
+          boardGroupId: BOARD_GROUP_ID,
+          boardTaskId: 'W1-A',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+      ],
+      groups: [
+        {
+          id: BOARD_GROUP_ID,
+          name: 'Board',
+          workspacePath: '',
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          plannerChatId: CHAT_ID,
+          orchestratePlanPath: PLAN_PATH,
+        },
+      ],
+    });
+    await executeBoardTool('board_init', {
+      plan_path: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Implement board store',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    }, { chatId: CHAT_ID });
+
+    const out = await executeBoardTool('board_get_state', {}, { chatId: TASK_CHAT_ID });
+    assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
   });
 
   test('board_init happy path returns static board JSON', async () => {

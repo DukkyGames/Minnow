@@ -148,6 +148,7 @@ function ensureOrchestrateBoard(raw) {
     const wave = { id, status };
     if (typeof w.taskCount === 'number') wave.taskCount = w.taskCount;
     if (typeof w.completeCount === 'number') wave.completeCount = w.completeCount;
+    if (w.collapsed === true) wave.collapsed = true;
     waves.push(wave);
   }
   if (!waves.length) return undefined;

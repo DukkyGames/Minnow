@@ -40,6 +40,7 @@ import {
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus } from '../agents/types';
 import {
+  applyOpenBoardWaveCollapse,
   getBoardProgressPercent,
   getOrchestrateBoardElapsedMs,
   syncOrchestrateBoardTimer,
@@ -1973,6 +1974,10 @@ export function renderBoardView(group: ChatGroup): void {
     ensureBoardSession(group, plannerChat);
     syncViewModeToggleFromActiveChat();
     return;
+  }
+
+  if (board) {
+    applyOpenBoardWaveCollapse(group);
   }
 
   if (!sameGroupSession) disposeBoardSession();

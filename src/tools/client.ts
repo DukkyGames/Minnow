@@ -300,7 +300,9 @@ async function executeToolInner(
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    const text = await executeBoardTool(name, args);
+    const text = await executeBoardTool(name, args, {
+      chatId: context?.chatId,
+    });
     return { content: text };
   }
 

@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-06-03T08:57:40.910Z",
+  "migratedFromLocalStorage": false,
+  "migratedAt": null,
+  "localStorageKeysMigrated": [],
+  "layoutVersion": 1,
+  "activeProviderId": "lm-studio-local",
+  "activePromptProfile": "full",
+  "activePromptConfigId": null,
+  "activeInfoPresetId": "general-assistant",
+  "activeSetupProfileId": null,
+  "workspaceProfiles": {},
+  "workspaceProfileAutoApply": false,
+  "titles": {
+    "enabled": true,
+    "modelId": "",
+    "providerId": "",
+    "maxTokens": 24,
+    "temperature": 0.3
+  },
+  "sampler": {
+    "temperature": 1,
+    "topP": 0.95,
+    "topK": 20,
+    "minP": 0,
+    "repetitionPenalty": 1,
+    "presencePenalty": 0,
+    "maxTokens": 32768
+  },
+  "thinking": {
+    "defaultMode": "on"
+  },
+  "terminal": {
+    "open": false,
+    "heightPx": 240,
+    "autoOpenOnAgentRun": false
+  },
+  "browser": {
+    "enabled": true,
+    "allowNavigate": true,
+    "allowedOriginPatterns": [
+      "http://localhost:*",
+      "http://127.0.0.1:*",
+      "https://localhost:*"
+    ]
+  },
+  "uiDesigner": {
+    "providerId": "",
+    "modelId": "",
+    "fallbackToChatModel": true
+  },
+  "toolSecurity": {
+    "filesystemAccess": "workspace"
+  },
+  "selfHealing": {
+    "enabled": false,
+    "tier1": {
+      "maxRestartsPerParentTurn": 2,
+      "duplicateToolCallThreshold": 3,
+      "sameErrorThreshold": 3,
+      "noProgressTurnThreshold": 4
+    },
+    "tier2": {
+      "enabled": true,
+      "requireScriptApproval": true
+    }
+  },
+  "supervisor": {
+    "enabled": true,
+    "autoResume": true,
+    "repetitionDetection": true,
+    "llmEscalation": true,
+    "askUserOnBudgetExhausted": true,
+    "stallMs": 30000,
+    "maxRetriesPerTask": 3,
+    "orchestratorHeartbeatMs": 90000,
+    "inProgressNoRunMs": 45000,
+    "spawnStuckMs": 30000,
+    "parentSilenceAfterToolMs": 20000,
+    "subAgentToolSilenceMs": 60000,
+    "runRestartCap": 2,
+    "spawnCapPerTask": 3,
+    "llmEscalationsPerSession": 10,
+    "llmEscalationTimeoutMs": 8000,
+    "tickIntervalMs": 5000,
+    "repetition": {
+      "duplicateToolCallThreshold": 3,
+      "sameErrorThreshold": 3,
+      "maxRestartsPerRun": 2
+    },
+    "escalationProviderId": "",
+    "escalationModelId": ""
+  },
+  "memory": {
+    "enabled": true,
+    "maxEntries": 500,
+    "maxInjectCharsFull": 4000,
+    "maxInjectCharsLite": 800,
+    "retrieveLimit": 20,
+    "defaultTags": []
+  },
+  "planning": {
+    "granularity": "medium"
+  },
+  "chat": {
+    "maxToolTurns": 100,
+    "generationIdleTimeoutMs": 1500000,
+    "generationMaxDurationMs": 3600000
+  },
+  "editorAiCompletion": {
+    "enabled": false,
+    "debounceMs": 450,
+    "maxPrefixLines": 80,
+    "maxSuffixLines": 40,
+    "maxPrefixChars": 6000,
+    "maxSuffixChars": 2000,
+    "temperature": 0.3,
+    "maxTokens": 128,
+    "useChatModel": true,
+    "providerId": "",
+    "modelId": ""
+  },
+  "workspace": {
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-ZNRhHt",
+    "recentPaths": [
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-ZNRhHt"
+    ]
+  }
+}

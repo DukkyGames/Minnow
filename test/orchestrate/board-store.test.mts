@@ -10,6 +10,7 @@ import {
   subscribeBoardChanges,
 } from '../../src/state/orchestrate-board-events.ts';
 import {
+  applyOpenBoardWaveCollapse,
   getBoardProgressPercent,
   getBoardState,
   initBoard,
@@ -275,6 +276,31 @@ describe('orchestrate board store init and progress', () => {
     assert.equal(board.waves[0].status, 'in_progress');
     assert.equal(board.waves[0].taskCount, 2);
     assert.equal(board.waves[0].completeCount, 1);
+  });
+
+  test('applyOpenBoardWaveCollapse keeps only waves with in_progress tasks expanded', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'Planned', wave: 'W1', category: 'build' },
+        { id: 'W2-A', title: 'Active', wave: 'W2', category: 'build' },
+        { id: 'W3-A', title: 'Testing', wave: 'W3', category: 'test' },
+      ],
+      waves: [{ id: 'W1' }, { id: 'W2' }, { id: 'W3' }],
+    });
+    updateTask(group, 'W2-A', { status: 'in_progress' });
+    updateTask(group, 'W3-A', { status: 'testing' });
+    group.orchestrateBoard!.waves[1].collapsed = false;
+    group.orchestrateBoard!.waves[2].collapsed = false;
+
+    applyOpenBoardWaveCollapse(group);
+
+    const waves = group.orchestrateBoard!.waves;
+    assert.equal(waves[0].collapsed, true);
+    assert.equal(waves[1].collapsed, false);
+    assert.equal(waves[2].collapsed, true);
   });
 });
 

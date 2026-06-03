@@ -130,6 +130,26 @@ export function recomputeWaveRollup(board: OrchestrateBoardState): void {
   }
 }
 
+/** Collapse idle waves when opening board view; keep waves with in-progress tasks expanded. */
+export function applyOpenBoardWaveCollapse(group: ChatGroup): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  let changed = false;
+  for (const wave of board.waves) {
+    const hasInProgress = board.tasks.some(
+      (t) => String(t.wave) === String(wave.id) && t.status === 'in_progress',
+    );
+    const nextCollapsed = !hasInProgress;
+    if (wave.collapsed === nextCollapsed) continue;
+    wave.collapsed = nextCollapsed;
+    changed = true;
+  }
+  if (!changed) return;
+  board.lastUpdatedAt = boardNowMs();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
 /** Progress percent 0–100 (complete tasks / all tasks). */
 export function getBoardProgressPercent(board: OrchestrateBoardState): number {
   if (!board.tasks.length) return 0;
