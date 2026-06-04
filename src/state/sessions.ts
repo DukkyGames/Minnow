@@ -22,6 +22,11 @@ import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
 import { ensurePinnedSkill } from '../skills/pinned-skill';
+import { normalizeCodeChangePayload } from '../usage/code-change-payload';
+import {
+  ensureChatCodeChangeBackfillOnSwitch,
+  runSessionCodeChangeBackfill,
+} from '../usage/code-change-backfill';
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -272,20 +277,6 @@ function ensureToolCalls(raw: unknown): ToolCall[] {
   return raw.map(ensureToolCall).filter((tc): tc is ToolCall => Boolean(tc));
 }
 
-/** Keep persisted line stats on tool rows when valid. */
-function normalizePersistedCodeChange(
-  raw: unknown,
-): import('../types').CodeChangeStats | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = raw as Record<string, unknown>;
-  const additions = Number(row.additions);
-  const deletions = Number(row.deletions);
-  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return undefined;
-  if (additions === 0 && deletions === 0) return undefined;
-  const path = typeof row.path === 'string' && row.path.trim() ? row.path.trim() : undefined;
-  return { additions, deletions, ...(path ? { path } : {}) };
-}
-
 function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | null {
   if (!m || !m.role) return null;
 
@@ -304,7 +295,7 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
             typeof a.url === 'string',
         )
       : undefined;
-    const codeChange = normalizePersistedCodeChange(toolMsg.codeChange);
+    const codeChange = normalizeCodeChangePayload(toolMsg.codeChange);
     return {
       role: 'tool',
       tool_call_id: toolCallId,
@@ -756,6 +747,21 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(raw.tokenLedger && typeof raw.tokenLedger === 'object'
       ? { tokenLedger: raw.tokenLedger }
       : {}),
+    ...(raw.codeChangeTotals &&
+    typeof raw.codeChangeTotals === 'object' &&
+    Number.isFinite(Number(raw.codeChangeTotals.additions)) &&
+    Number.isFinite(Number(raw.codeChangeTotals.deletions))
+      ? {
+          codeChangeTotals: {
+            additions: Number(raw.codeChangeTotals.additions),
+            deletions: Number(raw.codeChangeTotals.deletions),
+          },
+        }
+      : {}),
+    ...(typeof raw.codeChangeBackfillAt === 'number' &&
+    Number.isFinite(raw.codeChangeBackfillAt)
+      ? { codeChangeBackfillAt: raw.codeChangeBackfillAt }
+      : {}),
     ...(raw.kind === 'expert-lab' ? { kind: 'expert-lab' as const } : {}),
     ...(pinnedSkill ? { pinnedSkill } : {}),
   };
@@ -869,6 +875,12 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     state.version = 5;
   }
   repairPlannerChatFolderMembership(state);
+  if (
+    rawSession.codeChangeTotalsByWorkspace &&
+    typeof rawSession.codeChangeTotalsByWorkspace === 'object'
+  ) {
+    state.codeChangeTotalsByWorkspace = rawSession.codeChangeTotalsByWorkspace;
+  }
   return state;
 }
 
@@ -962,6 +974,7 @@ export async function loadSessionsFromStorage(): Promise<void> {
     try {
       const remote = await getSessions();
       sessionState = parseSessionStateFromJson(remote);
+      await runSessionCodeChangeBackfill(sessionState);
       return;
     } catch {
       setStatus('err', 'Could not load sessions from ~/.minnow');
@@ -975,6 +988,7 @@ export async function loadSessionsFromStorage(): Promise<void> {
       return;
     }
     sessionState = parseSessionStateFromJson(JSON.parse(raw) as Partial<SessionState>);
+    await runSessionCodeChangeBackfill(sessionState);
   } catch {
     sessionState = defaultSessionState();
   }

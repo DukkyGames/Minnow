@@ -59,4 +59,22 @@ describe('renderToolResult codeChange badge', () => {
     });
     assert.equal(wrap.querySelector('.tool-call-code-change'), null);
   });
+
+  test('renders unified diff panel when diffLines present', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'a.ts' });
+    renderToolResult(wrap, 'Saved', undefined, undefined, {
+      additions: 1,
+      deletions: 1,
+      path: 'a.ts',
+      diffLines: [
+        { type: 'remove', text: 'old' },
+        { type: 'add', text: 'new' },
+      ],
+    });
+    const panel = wrap.querySelector('.tool-call-diff');
+    assert.ok(panel);
+    assert.ok(panel.querySelector('.prompt-diff__line--remove'));
+    assert.ok(panel.querySelector('.prompt-diff__line--add'));
+  });
 });
