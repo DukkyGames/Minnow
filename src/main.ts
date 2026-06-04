@@ -25,6 +25,7 @@ import './styles/responsive.css';
 import './styles/mode-selector.css';
 import './styles/composer-controls.css';
 import './styles/file-panel.css';
+import './styles/editor-quick-edit.css';
 import './styles/preview-panel.css';
 import './styles/terminal.css';
 import './styles/skill-picker.css';

@@ -2,7 +2,7 @@
  * Editable file viewer (CodeMirror 6) using read_file / read_file_range / save_file tools.
  */
 
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { isImageFilePath } from '../attachments/image-path';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -25,10 +25,22 @@ import {
   renderFileTreeViaBridge,
 } from './file-tree-refresh-bridge';
 import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
+import { editorCoreExtensions } from './editor-core-extensions';
+import { loadLanguageExtensionsForPath } from './editor-language';
 import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
+import { setLspDiagnosticsChromeListener } from './lsp-editor';
 import { editorAiCompletionExtensions } from './file-editor-ai-extensions';
+import {
+  buildFileViewerContextMenuItems,
+  editorQuickEditExtensions,
+  formatSelectionFence,
+  insertSelectionInComposer,
+  lineNumbersForRange,
+  openQuickEditPanel,
+} from './editor-quick-edit';
 
 export const LARGE_FILE_BYTES = 512_000;
 const RANGE_LINE_COUNT = 2000;
@@ -52,6 +64,8 @@ let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
+let diagnosticsBadgeEl: HTMLElement | null = null;
+let pendingInitialSelection: { line: number; character: number } | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
 export function parseReadFileRangeBody(raw: string): string {
@@ -85,38 +99,6 @@ export function isMarkdownPreviewActive(): boolean {
 
 function buildLargeFileExcerptFooter(byteLength: number): string {
   return `\n\n/* Showing lines 1–${RANGE_LINE_COUNT} only (${byteLength} bytes total). */`;
-}
-
-async function loadLanguageExtension(path: string): Promise<Extension[]> {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
-  try {
-    switch (ext) {
-      case 'ts':
-      case 'tsx':
-      case 'mts':
-        return [(await import('@codemirror/lang-javascript')).javascript({ typescript: true })];
-      case 'js':
-      case 'mjs':
-      case 'cjs':
-        return [(await import('@codemirror/lang-javascript')).javascript()];
-      case 'json':
-        return [(await import('@codemirror/lang-json')).json()];
-      case 'md':
-      case 'markdown':
-        return [(await import('@codemirror/lang-markdown')).markdown()];
-      case 'css':
-        return [(await import('@codemirror/lang-css')).css()];
-      case 'html':
-      case 'htm':
-        return [(await import('@codemirror/lang-html')).html()];
-      case 'py':
-        return [(await import('@codemirror/lang-python')).python()];
-      default:
-        return [];
-    }
-  } catch {
-    return [];
-  }
 }
 
 function getViewerHost(): HTMLElement | null {
@@ -176,6 +158,38 @@ function destroyEditor(): void {
 function markDirty(dirty: boolean): void {
   isDirty = dirty;
   updateViewerChrome();
+}
+
+function ensureDiagnosticsBadge(): HTMLElement | null {
+  const label = getPathLabel();
+  if (!label?.parentElement) return null;
+  if (!diagnosticsBadgeEl) {
+    diagnosticsBadgeEl = document.createElement('span');
+    diagnosticsBadgeEl.className = 'file-viewer-diagnostics';
+    diagnosticsBadgeEl.hidden = true;
+    label.insertAdjacentElement('afterend', diagnosticsBadgeEl);
+  }
+  return diagnosticsBadgeEl;
+}
+
+function updateDiagnosticsChrome(counts: {
+  errors: number;
+  warnings: number;
+}): void {
+  const badge = ensureDiagnosticsBadge();
+  if (!badge) return;
+  const { errors, warnings } = counts;
+  if (errors === 0 && warnings === 0) {
+    badge.hidden = true;
+    badge.textContent = '';
+    return;
+  }
+  const parts: string[] = [];
+  if (errors > 0) parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
+  if (warnings > 0) parts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
+  badge.textContent = parts.join(', ');
+  badge.hidden = false;
+  badge.classList.toggle('file-viewer-diagnostics--errors', errors > 0);
 }
 
 function updateViewerChrome(): void {
@@ -254,10 +268,11 @@ function mountEditor(content: string, path: string): void {
   editorAiStatusEl = aiStatus;
 
   void (async () => {
-    const [langExts, useLsp, editorAiConfig] = await Promise.all([
-      loadLanguageExtension(path),
+    const [langExts, useLsp, editorAiConfig, editorSettings] = await Promise.all([
+      loadLanguageExtensionsForPath(path),
       isLspEnabledForViewer(),
       loadEditorAiCompletionConfig(),
+      loadEditorSettings(),
     ]);
     const readOnlyExts: Extension[] = readOnlyExcerpt
       ? [EditorView.editable.of(false), EditorState.readOnly.of(true)]
@@ -281,6 +296,13 @@ function mountEditor(content: string, path: string): void {
           },
         })
       : [];
+    const quickEditExts =
+      !readOnlyExcerpt && getLocalServerAvailable()
+        ? editorQuickEditExtensions({
+            filePath: path,
+            canRequest: () => getLocalServerAvailable(),
+          })
+        : [];
 
     const state = EditorState.create({
       doc: content,
@@ -300,8 +322,14 @@ function mountEditor(content: string, path: string): void {
             markDirty(nextDirty);
           }
         }),
+        ...editorCoreExtensions({
+          wordWrap: editorSettings.wordWrap,
+          tabSize: editorSettings.tabSize,
+          renderWhitespace: editorSettings.renderWhitespace,
+        }),
         ...fileEditorKeymapExtensions(),
         ...aiExts,
+        ...quickEditExts,
         keymap.of([
           {
             key: 'Mod-s',
@@ -312,7 +340,7 @@ function mountEditor(content: string, path: string): void {
           },
         ]),
         EditorView.theme({
-          '&': { height: '100%', fontSize: '13px' },
+          '&': { height: '100%', fontSize: `${editorSettings.fontSize}px` },
           '.cm-scroller': { fontFamily: 'var(--font-mono)' },
         }),
         ...minnowEditorExtensions(),
@@ -320,6 +348,20 @@ function mountEditor(content: string, path: string): void {
       ],
     });
     editorView = new EditorView({ state, parent: editorMount });
+    if (pendingInitialSelection && editorView) {
+      const { line, character } = pendingInitialSelection;
+      pendingInitialSelection = null;
+      const doc = editorView.state.doc;
+      const lineNumber = Math.min(line + 1, doc.lines);
+      const lineInfo = doc.line(lineNumber);
+      const col = Math.min(character, lineInfo.length);
+      const anchor = lineInfo.from + col;
+      editorView.dispatch({
+        selection: EditorSelection.cursor(anchor),
+        scrollIntoView: true,
+      });
+      editorView.focus();
+    }
     if (useLsp) {
       lspSyncedPath = path;
       void notifyLspDocument(path, 'open', content);
@@ -452,6 +494,10 @@ export function bindFileViewerControls(): void {
   if (viewerControlsBound) return;
   viewerControlsBound = true;
 
+  setLspDiagnosticsChromeListener((counts) => {
+    updateDiagnosticsChrome({ errors: counts.errors, warnings: counts.warnings });
+  });
+
   const saveBtn = getSaveButton();
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
@@ -460,7 +506,7 @@ export function bindFileViewerControls(): void {
   }
 }
 
-/** Right-click on the viewer: switch markdown between preview and code. */
+/** Right-click on the viewer: selection → chat / quick edit; markdown preview toggles. */
 export function bindFileViewerContextMenu(): void {
   if (viewerContextMenuBound) return;
   const host = getViewerHost();
@@ -469,19 +515,61 @@ export function bindFileViewerContextMenu(): void {
 
   host.addEventListener('contextmenu', (e) => {
     const path = currentPath;
-    if (!path || !isMarkdownFilePath(path)) return;
+    if (!path) return;
+
+    const hasEditorSelection = Boolean(
+      editorView &&
+        !readOnlyExcerpt &&
+        !markdownPreviewEl &&
+        !editorView.state.selection.main.empty,
+    );
+    const isMarkdown = isMarkdownFilePath(path);
+    const isPreview = isMarkdownPreviewActive();
+
+    if (!hasEditorSelection && !isMarkdown) return;
+
     e.preventDefault();
-    const items = isMarkdownPreviewActive()
-      ? [{ label: 'Open as code', action: () => switchMarkdownViewerToCode() }]
-      : [{ label: 'Open as preview', action: () => switchMarkdownViewerToPreview() }];
+
+    const items = buildFileViewerContextMenuItems({
+      path,
+      hasEditorSelection,
+      isMarkdown,
+      isMarkdownPreview: isPreview,
+      onAddSelectionToChat: () => {
+        if (!editorView || readOnlyExcerpt) return;
+        const sel = editorView.state.selection.main;
+        const text = editorView.state.doc.sliceString(sel.from, sel.to);
+        const { fromLine, toLine } = lineNumbersForRange(
+          editorView.state.doc,
+          sel.from,
+          sel.to,
+        );
+        insertSelectionInComposer(formatSelectionFence(text, path, fromLine, toLine));
+      },
+      onQuickEdit: () => {
+        if (!editorView || readOnlyExcerpt) return;
+        openQuickEditPanel(editorView, path);
+      },
+      onSwitchToCode: () => switchMarkdownViewerToCode(),
+      onSwitchToPreview: () => switchMarkdownViewerToPreview(),
+    });
+
+    if (items.length === 0) return;
     showFilePanelContextMenu(items, e.clientX, e.clientY);
   });
+}
+
+/** Active CodeMirror view when the code editor (not markdown preview) is mounted. */
+export function getFileViewerEditorView(): EditorView | null {
+  return editorView;
 }
 
 export interface OpenFileInViewerOptions {
   skipUnsavedGuard?: boolean;
   /** Open `.md` / `.markdown` in CodeMirror instead of read-only GFM preview. */
   asCode?: boolean;
+  /** Move cursor after mount (0-based LSP line/character). */
+  initialSelection?: { line: number; character: number };
 }
 
 /** Open inlined chat attachment text in a read-only editor pane. */
@@ -620,6 +708,7 @@ export async function openFileInViewer(
   isDirty = false;
   readOnlyExcerpt = false;
   readOnlyBannerText = null;
+  pendingInitialSelection = options?.initialSelection ?? null;
   patchFilePanelState({ selectedPath: relativePath });
   showViewerSplit();
   renderFileTreeViaBridge();

@@ -17,6 +17,14 @@ export interface EditorAiCompletionConfig {
   useChatModel: boolean;
   providerId: string;
   modelId: string;
+  /** Include import/require lines from the file in the chat prompt. */
+  includeImportContext: boolean;
+  /** Fetch LSP hover at cursor for prompt context (no-op when unavailable). */
+  includeLspHover: boolean;
+  /** Use Qwen native FIM tokens when the model id matches. */
+  useNativeFim: boolean;
+  /** Cache completions by file path + prefix/suffix hash. */
+  enableCompletionCache: boolean;
 }
 
 const STORAGE_KEY = 'minnow.editorAiCompletion';
@@ -29,10 +37,14 @@ export const DEFAULT_EDITOR_AI_COMPLETION: EditorAiCompletionConfig = {
   maxPrefixChars: 6000,
   maxSuffixChars: 2000,
   temperature: 0.3,
-  maxTokens: 128,
+  maxTokens: 256,
   useChatModel: true,
   providerId: '',
   modelId: '',
+  includeImportContext: true,
+  includeLspHover: true,
+  useNativeFim: true,
+  enableCompletionCache: true,
 };
 
 let cached: EditorAiCompletionConfig | null = null;
@@ -88,10 +100,14 @@ export function parseEditorAiCompletionBlock(raw: unknown): EditorAiCompletionCo
       1,
       DEFAULT_EDITOR_AI_COMPLETION.temperature,
     ),
-    maxTokens: clampInt(block.maxTokens, 16, 512, DEFAULT_EDITOR_AI_COMPLETION.maxTokens),
+    maxTokens: clampInt(block.maxTokens, 16, 1024, DEFAULT_EDITOR_AI_COMPLETION.maxTokens),
     useChatModel: block.useChatModel !== false,
     providerId: typeof block.providerId === 'string' ? block.providerId : '',
     modelId: typeof block.modelId === 'string' ? block.modelId : '',
+    includeImportContext: block.includeImportContext !== false,
+    includeLspHover: block.includeLspHover !== false,
+    useNativeFim: block.useNativeFim !== false,
+    enableCompletionCache: block.enableCompletionCache !== false,
   };
 }
 
@@ -175,12 +191,24 @@ export async function saveEditorAiCompletionConfig(
         : current.temperature,
     maxTokens:
       patch.maxTokens !== undefined
-        ? clampInt(patch.maxTokens, 16, 512, current.maxTokens)
+        ? clampInt(patch.maxTokens, 16, 1024, current.maxTokens)
         : current.maxTokens,
     useChatModel:
       patch.useChatModel !== undefined ? patch.useChatModel : current.useChatModel,
     providerId: patch.providerId !== undefined ? patch.providerId : current.providerId,
     modelId: patch.modelId !== undefined ? patch.modelId : current.modelId,
+    includeImportContext:
+      patch.includeImportContext !== undefined
+        ? patch.includeImportContext
+        : current.includeImportContext,
+    includeLspHover:
+      patch.includeLspHover !== undefined ? patch.includeLspHover : current.includeLspHover,
+    useNativeFim:
+      patch.useNativeFim !== undefined ? patch.useNativeFim : current.useNativeFim,
+    enableCompletionCache:
+      patch.enableCompletionCache !== undefined
+        ? patch.enableCompletionCache
+        : current.enableCompletionCache,
   };
   cached = next;
   writeLocal(next);

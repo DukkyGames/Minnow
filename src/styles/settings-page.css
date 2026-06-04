@@ -1241,6 +1241,85 @@
   align-items: center;
 }
 
+.settings-lsp-bundle-category {
+  margin-top: 16px;
+}
+
+.settings-lsp-bundle-category-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mn-fg-muted, #888);
+}
+
+.settings-lsp-bundle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.settings-lsp-bundle-card {
+  border: 1px solid var(--mn-border, #333);
+  border-radius: var(--mn-radius-md, 8px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--mn-surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.settings-lsp-bundle-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-lsp-bundle-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted, #888);
+  line-height: 1.4;
+}
+
+.settings-lsp-bundle-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mn-fg-muted, #888);
+}
+
+.settings-lsp-bundle-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-lsp-bundle-progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mn-border, #333);
+  overflow: hidden;
+}
+
+.settings-lsp-bundle-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--mn-accent, #6cf);
+  transition: width 0.2s ease;
+}
+
+.settings-lsp-bundle-progress-text {
+  font-size: 11px;
+  color: var(--mn-fg-muted, #888);
+}
+
+.settings-lsp-bundle-actions {
+  margin-top: auto;
+}
+
 .settings-mcp-row-head {
   display: flex;
   align-items: flex-start;

@@ -11,7 +11,6 @@ import {
   startCompletion,
 } from '@codemirror/autocomplete';
 import { indentLess, indentMore } from '@codemirror/commands';
-import { indentUnit } from '@codemirror/language';
 import { Prec, type Extension } from '@codemirror/state';
 import { keymap, type EditorView, type KeyBinding } from '@codemirror/view';
 
@@ -58,8 +57,9 @@ export const fileEditorKeymapBindings: KeyBinding[] = [
 ];
 
 /**
- * Shared file-viewer keymaps: 2-space indent unit, Tab/Shift+Tab, Escape blur.
+ * Shared file-viewer keymaps: Tab/Shift+Tab (LSP accept or indent), Escape blur.
+ * Runs above {@link editorCoreExtensions} defaultKeymap Tab/Escape.
  */
 export function fileEditorKeymapExtensions(): Extension[] {
-  return [indentUnit.of('  '), keymap.of(fileEditorKeymapBindings)];
+  return [Prec.high(keymap.of(fileEditorKeymapBindings))];
 }

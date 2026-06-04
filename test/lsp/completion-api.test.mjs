@@ -19,7 +19,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const SAMPLE_PATH = 'test/fixtures/sample.fake';
 const SAMPLE_TEXT = 'let x = 1\n';
 
-const EXPECTED_ITEMS_JSON = `{"items":[{"label":"fakeKeyword","insertText":"fakeKeyword","kind":14,"detail":"Fake LSP keyword"},{"label":"console.log","insertText":"console.log($0)","kind":3,"detail":"Log to console"}]}`;
+const EXPECTED_ITEMS_JSON = `{"items":[{"label":"fakeKeyword","insertText":"fakeKeyword","kind":14,"detail":"Fake LSP keyword"},{"label":"console.log","insertText":"console.log($0)","kind":3,"detail":"Log to console"},{"label":"importHelper","insertText":"importHelper","kind":3,"detail":"Needs resolve"}]}`;
 
 function httpRequest(baseUrl, method, pathname, body) {
   return new Promise((resolve, reject) => {

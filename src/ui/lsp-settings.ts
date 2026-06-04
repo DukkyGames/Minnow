@@ -3,8 +3,13 @@
  */
 
 import {
+  fetchLspBundles,
+  fetchLspBundleProgress,
   fetchLspConfig,
+  installLspBundle,
   saveLspConfig,
+  uninstallLspBundle,
+  type LspBundleStatus,
   type LspServerStatus,
 } from '../lsp/config-client';
 import { detectLocalServer } from '../tools/client';
@@ -260,6 +265,173 @@ function appendCustomServerPanel(mount: HTMLElement, onAdded: () => void): void 
   mount.append(details);
 }
 
+function formatBundleSize(bytes: number, estimateMb?: number): string {
+  if (bytes > 0) {
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (estimateMb && estimateMb > 0) {
+    return `~${estimateMb} MB`;
+  }
+  return '';
+}
+
+function createBundleCard(
+  bundle: LspBundleStatus,
+  onChanged: () => void,
+): HTMLElement {
+  const card = el('article', 'settings-lsp-bundle-card');
+  card.dataset.bundleId = bundle.id;
+
+  const head = el('div', 'settings-lsp-bundle-head');
+  head.append(el('h4', 'settings-lsp-bundle-title', bundle.label));
+  if (bundle.description) {
+    head.append(el('p', 'settings-lsp-bundle-desc', bundle.description));
+  }
+  card.append(head);
+
+  const meta = el('div', 'settings-lsp-bundle-meta');
+  const sizeLabel = formatBundleSize(bundle.sizeBytes, bundle.sizeEstimateMb);
+  if (bundle.installed && bundle.version) {
+    meta.append(el('span', 'settings-lsp-bundle-version', `v${bundle.version}`));
+  }
+  if (sizeLabel) {
+    meta.append(el('span', 'settings-lsp-bundle-size', sizeLabel));
+  }
+  if (bundle.prebundled) {
+    meta.append(el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Bundled'));
+  }
+  if (bundle.kind === 'binary') {
+    meta.append(el('span', 'settings-lsp-bundle-kind', 'Binary download'));
+  }
+  card.append(meta);
+
+  const progress = el('div', 'settings-lsp-bundle-progress');
+  progress.hidden = true;
+  const progressBar = el('div', 'settings-lsp-bundle-progress-bar');
+  const progressFill = el('div', 'settings-lsp-bundle-progress-fill');
+  progressBar.append(progressFill);
+  const progressText = el('span', 'settings-lsp-bundle-progress-text');
+  progress.append(progressBar, progressText);
+  card.append(progress);
+
+  const actions = el('div', 'settings-lsp-bundle-actions');
+  const actionBtn = el(
+    'button',
+    'settings-action-btn settings-lsp-bundle-btn',
+    bundle.installed ? 'Uninstall' : 'Install',
+  );
+  actionBtn.type = 'button';
+  actionBtn.disabled = bundle.prebundled === true && bundle.installed;
+
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stopPoll = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  };
+
+  const showProgress = (percent: number, message: string) => {
+    progress.hidden = false;
+    progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    progressText.textContent = message;
+  };
+
+  const hideProgress = () => {
+    progress.hidden = true;
+    progressFill.style.width = '0%';
+    progressText.textContent = '';
+  };
+
+  actionBtn.addEventListener('click', () => {
+    void (async () => {
+      actionBtn.disabled = true;
+      if (bundle.installed && !bundle.prebundled) {
+        const ok = await uninstallLspBundle(bundle.id);
+        setStatus(ok ? 'ok' : 'err', ok ? `Removed ${bundle.label}` : 'Uninstall failed');
+        stopPoll();
+        hideProgress();
+        onChanged();
+        return;
+      }
+      if (bundle.installed) return;
+
+      showProgress(0, 'Starting…');
+      const result = await installLspBundle(bundle.id);
+      if (!result.ok) {
+        setStatus('err', result.error ?? 'Install failed');
+        hideProgress();
+        actionBtn.disabled = false;
+        return;
+      }
+
+      pollTimer = setInterval(() => {
+        void fetchLspBundleProgress(bundle.id).then((payload) => {
+          const job = payload?.job;
+          if (!job) return;
+          if (job.phase === 'error') {
+            setStatus('err', job.error ?? job.message ?? 'Install failed');
+            stopPoll();
+            hideProgress();
+            actionBtn.disabled = false;
+            onChanged();
+            return;
+          }
+          showProgress(job.percent, job.message || job.phase);
+          if (job.phase === 'done') {
+            setStatus('ok', `${bundle.label} installed`);
+            stopPoll();
+            hideProgress();
+            onChanged();
+          }
+        });
+      }, 500);
+    })();
+  });
+
+  actions.append(actionBtn);
+  card.append(actions);
+  return card;
+}
+
+function appendLanguageBundlesPanel(mount: HTMLElement, refresh: () => void): void {
+  const group = appendSettingsGroup(
+    mount,
+    'Language bundles',
+    'Install language servers to ~/.minnow/lsp-servers. Lightweight servers ship with Minnow; heavy binaries download on demand.',
+  );
+
+  const loading = el('p', 'settings-field-hint', 'Loading bundles…');
+  group.append(loading);
+
+  void fetchLspBundles().then((data) => {
+    loading.remove();
+    if (!data?.categories?.length) {
+      group.append(
+        el('p', 'settings-field-hint', 'Could not load language bundles.'),
+      );
+      return;
+    }
+
+    for (const category of data.categories) {
+      if (!category.bundles?.length) continue;
+      const section = el('section', 'settings-lsp-bundle-category');
+      section.append(el('h3', 'settings-lsp-bundle-category-title', category.label));
+      const grid = el('div', 'settings-lsp-bundle-grid');
+      grid.setAttribute('role', 'list');
+      for (const bundle of category.bundles) {
+        grid.append(createBundleCard(bundle, refresh));
+      }
+      section.append(grid);
+      group.append(section);
+    }
+  });
+}
+
 function appendCrosslinks(mount: HTMLElement): void {
   const cross = el('div', 'settings-crosslinks');
   cross.append(el('span', 'settings-crosslinks__label', 'Related'));
@@ -337,6 +509,8 @@ export async function renderLspSection(): Promise<void> {
   const refresh = () => {
     void renderLspSection();
   };
+
+  appendLanguageBundlesPanel(mount, refresh);
 
   const setServerDisabled = async (id: string, enabled: boolean) => {
     const ok = await saveLspConfig({

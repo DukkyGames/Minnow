@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-06-04T04:48:36.396Z",
+  "createdAt": "2026-06-04T05:51:19.492Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -116,15 +116,25 @@
     "maxPrefixChars": 6000,
     "maxSuffixChars": 2000,
     "temperature": 0.3,
-    "maxTokens": 128,
+    "maxTokens": 256,
     "useChatModel": true,
     "providerId": "",
-    "modelId": ""
+    "modelId": "",
+    "includeImportContext": true,
+    "includeLspHover": true,
+    "useNativeFim": true,
+    "enableCompletionCache": true
+  },
+  "editorSettings": {
+    "fontSize": 13,
+    "tabSize": 2,
+    "wordWrap": false,
+    "renderWhitespace": false
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-o9bF2J",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-gLMgTT",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-o9bF2J"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-gLMgTT"
     ]
   }
 }

@@ -46,7 +46,7 @@ describe('GET /api/config/lsp catalog', () => {
       await fs.readFile(path.join(PROJECT_ROOT, 'src/lsp/defaults.json'), 'utf8'),
     );
     defaultCount = Object.keys(defaults.lsp ?? {}).length;
-    assert.equal(defaultCount, 39);
+    assert.equal(defaultCount, 42);
 
     homeDir = path.join(__dirname, '../fixtures/lsp-config-api-home');
     process.env.MINNOW_HOME = homeDir;

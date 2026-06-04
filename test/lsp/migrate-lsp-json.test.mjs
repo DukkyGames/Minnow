@@ -92,7 +92,7 @@ describe('loadMergedLspConfig migration on disk', () => {
     );
     const defaults = await readDefaults();
     const builtinIds = Object.keys(defaults.lsp).filter((id) => id !== 'fake');
-    assert.equal(builtinIds.length, 38);
+    assert.equal(builtinIds.length, 41);
     for (const id of builtinIds) {
       assert.ok(onDisk.lsp[id], `disk missing ${id}`);
     }

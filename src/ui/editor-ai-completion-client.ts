@@ -1,5 +1,5 @@
 /**
- * Debounced LLM client for editor inline completions (POLISH-006).
+ * Debounced LLM client for editor inline completions (POLISH-006, Phase 4).
  */
 
 import { extractMessageText } from '../api/chat';
@@ -22,8 +22,10 @@ import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../types';
+import { buildCompletionCacheKey } from './editor-ai-completion-cache';
 import {
   buildEditorAiCompletionMessages,
+  buildEditorAiCompletionMessagesAsync,
   sanitizeCompletionText,
   type EditorAiPromptInput,
 } from './editor-ai-completion-prompt';
@@ -65,6 +67,35 @@ export interface FetchEditorAiCompletionInput extends EditorAiPromptInput {
   onPartial?: (text: string) => void;
 }
 
+/** In-memory completion cache (cleared on full page reload). */
+const completionCache = new Map<string, string>();
+
+/** Clear completion cache (tests). */
+export function resetEditorAiCompletionCache(): void {
+  completionCache.clear();
+}
+
+/** Read cached completion when enabled. */
+export function getCachedEditorAiCompletion(
+  filePath: string,
+  prefix: string,
+  suffix: string,
+): string | undefined {
+  const key = buildCompletionCacheKey(filePath, prefix, suffix);
+  return completionCache.get(key);
+}
+
+/** Store a completion in cache when enabled. */
+export function setCachedEditorAiCompletion(
+  filePath: string,
+  prefix: string,
+  suffix: string,
+  text: string,
+): void {
+  const key = buildCompletionCacheKey(filePath, prefix, suffix);
+  completionCache.set(key, text);
+}
+
 /** Merge streamed chunks into displayable completion text (content + reasoning fallback). */
 export function resolveEditorCompletionRawText(
   contentAcc: StreamingContentAccumulator,
@@ -86,17 +117,35 @@ export function resolveEditorCompletionRawText(
 export async function fetchEditorAiCompletion(
   input: FetchEditorAiCompletionInput,
 ): Promise<string | null> {
-  const { messages, prefix } = buildEditorAiCompletionMessages(input);
+  const modelId = input.binding.modelId.trim();
+  const promptResult = await buildEditorAiCompletionMessagesAsync({
+    ...input,
+    modelId,
+  });
+  const { prefix, suffix, messages, useNativeFim, fimPrompt } = promptResult;
+
+  if (input.config.enableCompletionCache !== false) {
+    const cached = getCachedEditorAiCompletion(input.filePath, prefix, suffix);
+    if (cached !== undefined) {
+      if (cached) input.onPartial?.(cached);
+      return cached.length > 0 ? cached : null;
+    }
+  }
+
   const provider = await resolveProvider(input.binding.providerId);
   const body: Record<string, unknown> = {
-    model: input.binding.modelId || undefined,
-    messages,
+    model: modelId || undefined,
     temperature: input.config.temperature,
     max_tokens: input.config.maxTokens,
     stream: true,
   };
 
-  const modelId = input.binding.modelId.trim();
+  if (useNativeFim && fimPrompt) {
+    body.prompt = fimPrompt;
+  } else {
+    body.messages = messages;
+  }
+
   const modelRow = modelId
     ? modelCache.get(encodeModelSelectKey(provider.id, modelId))
     : undefined;
@@ -134,6 +183,9 @@ export async function fetchEditorAiCompletion(
     const finish = (text: string | null): void => {
       if (settled) return;
       settled = true;
+      if (text && input.config.enableCompletionCache !== false) {
+        setCachedEditorAiCompletion(input.filePath, prefix, suffix, text);
+      }
       resolve(text);
     };
 

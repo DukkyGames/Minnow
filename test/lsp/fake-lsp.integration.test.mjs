@@ -60,4 +60,15 @@ describe('fake LSP integration', () => {
     assert.match(result, /';' expected/);
     assert.match(result, /fake/);
   });
+
+  test('getLspHover returns fixture markdown', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') {
+      return;
+    }
+    const { getLspHover } = await import('../../server/lsp/manager.js');
+    const { hover } = await getLspHover('test/fixtures/sample.fake', 0, 0);
+    const text =
+      hover?.contents?.value ?? (typeof hover?.contents === 'string' ? hover.contents : '');
+    assert.match(String(text), /Fake hover/i);
+  });
 });

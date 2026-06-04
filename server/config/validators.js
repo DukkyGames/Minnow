@@ -1210,6 +1210,30 @@ export function mergeConfigMeta(existing, patch) {
     base.editorAiCompletion = existing;
   }
 
+  if (p.editorSettings && typeof p.editorSettings === 'object') {
+    const existing =
+      base.editorSettings && typeof base.editorSettings === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.editorSettings) }
+        : {
+            fontSize: 13,
+            tabSize: 2,
+            wordWrap: false,
+            renderWhitespace: false,
+          };
+    const e = /** @type {Record<string, unknown>} */ (p.editorSettings);
+    if (typeof e.fontSize === 'number' && Number.isFinite(e.fontSize)) {
+      existing.fontSize = Math.min(24, Math.max(10, Math.round(e.fontSize)));
+    }
+    if (typeof e.tabSize === 'number' && Number.isFinite(e.tabSize)) {
+      existing.tabSize = Math.min(8, Math.max(1, Math.round(e.tabSize)));
+    }
+    if (typeof e.wordWrap === 'boolean') existing.wordWrap = e.wordWrap;
+    if (typeof e.renderWhitespace === 'boolean') {
+      existing.renderWhitespace = e.renderWhitespace;
+    }
+    base.editorSettings = existing;
+  }
+
   if (p.browser && typeof p.browser === 'object') {
     const existingBrowser =
       base.browser && typeof base.browser === 'object'

@@ -36,6 +36,15 @@
       "disabled": true
     },
     "pyright": {
+      "disabled": false
+    },
+    "html": {
+      "disabled": false
+    },
+    "css": {
+      "disabled": false
+    },
+    "graphql": {
       "disabled": true
     },
     "rust": {
@@ -72,7 +81,7 @@
       "disabled": true
     },
     "yaml-ls": {
-      "disabled": true
+      "disabled": false
     },
     "bash": {
       "disabled": true

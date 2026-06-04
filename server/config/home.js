@@ -200,10 +200,20 @@ const DEFAULT_META = {
     maxPrefixChars: 6000,
     maxSuffixChars: 2000,
     temperature: 0.3,
-    maxTokens: 128,
+    maxTokens: 256,
     useChatModel: true,
     providerId: '',
     modelId: '',
+    includeImportContext: true,
+    includeLspHover: true,
+    useNativeFim: true,
+    enableCompletionCache: true,
+  },
+  editorSettings: {
+    fontSize: 13,
+    tabSize: 2,
+    wordWrap: false,
+    renderWhitespace: false,
   },
 };
 

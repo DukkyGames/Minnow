@@ -60,12 +60,32 @@
       "label": "Astro"
     },
     "pyright": {
-      "disabled": true,
-      "command": ["pyright-langserver", "--stdio"],
+      "disabled": false,
+      "command": ["$minnow:pyright-langserver"],
       "extensions": [".py", ".pyi"],
+      "defaultEnabled": true,
+      "label": "Pyright"
+    },
+    "html": {
+      "disabled": false,
+      "command": ["$minnow:vscode-html-language-server"],
+      "extensions": [".html", ".htm"],
+      "defaultEnabled": true,
+      "label": "HTML"
+    },
+    "css": {
+      "disabled": false,
+      "command": ["$minnow:vscode-css-language-server"],
+      "extensions": [".css", ".scss", ".less"],
+      "defaultEnabled": true,
+      "label": "CSS"
+    },
+    "graphql": {
+      "disabled": true,
+      "command": ["$minnow:graphql-lsp"],
+      "extensions": [".graphql", ".gql"],
       "defaultEnabled": false,
-      "label": "Pyright",
-      "requirements": { "package": "pyright" }
+      "label": "GraphQL"
     },
     "rust": {
       "disabled": true,
@@ -151,15 +171,15 @@
       "label": "Lua"
     },
     "yaml-ls": {
-      "disabled": true,
-      "command": ["yaml-language-server", "--stdio"],
+      "disabled": false,
+      "command": ["$minnow:yaml-language-server"],
       "extensions": [".yaml", ".yml"],
-      "defaultEnabled": false,
+      "defaultEnabled": true,
       "label": "YAML"
     },
     "bash": {
-      "disabled": true,
-      "command": ["bash-language-server", "start"],
+      "disabled": false,
+      "command": ["$minnow:bash-language-server"],
       "extensions": [".sh", ".bash", ".zsh", ".ksh"],
       "defaultEnabled": false,
       "label": "Bash"
@@ -276,8 +296,8 @@
       "requirements": { "binary": "texlab" }
     },
     "dockerfile": {
-      "disabled": true,
-      "command": ["docker-langserver", "--stdio"],
+      "disabled": false,
+      "command": ["$minnow:docker-langserver"],
       "extensions": [".dockerfile", "Dockerfile"],
       "defaultEnabled": false,
       "label": "Dockerfile"

@@ -210,6 +210,87 @@
   border-left-color: var(--mn-fg);
 }
 
+/* Active line + fold gutter */
+.file-viewer-editor-mount .cm-activeLine,
+.file-viewer-body .cm-activeLine {
+  background: oklch(from var(--mn-accent) l c h / 0.06);
+}
+
+.file-viewer-editor-mount .cm-activeLineGutter,
+.file-viewer-body .cm-activeLineGutter {
+  background: oklch(from var(--mn-accent) l c h / 0.1);
+  color: var(--mn-fg);
+}
+
+.file-viewer-editor-mount .cm-gutters,
+.file-viewer-body .cm-gutters {
+  background: var(--mn-surface-1);
+  border-right: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-foldGutter span,
+.file-viewer-body .cm-foldGutter span {
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.file-viewer-editor-mount .cm-foldGutter span:hover,
+.file-viewer-body .cm-foldGutter span:hover {
+  color: var(--mn-accent);
+}
+
+/* Find / replace panel (search top: true) */
+.file-viewer-editor-mount .cm-panel.cm-search,
+.file-viewer-body .cm-panel.cm-search {
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.file-viewer-editor-mount .cm-panel.cm-search input,
+.file-viewer-editor-mount .cm-panel.cm-search button,
+.file-viewer-body .cm-panel.cm-search input,
+.file-viewer-body .cm-panel.cm-search button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.file-viewer-editor-mount .cm-panel.cm-search button[name='close'],
+.file-viewer-body .cm-panel.cm-search button[name='close'] {
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-panel.cm-search label,
+.file-viewer-body .cm-panel.cm-search label {
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-searchMatch,
+.file-viewer-body .cm-searchMatch {
+  background: oklch(from var(--mn-warning) l c h / 0.35);
+  outline: 1px solid var(--mn-warning);
+}
+
+.file-viewer-editor-mount .cm-selectionMatch,
+.file-viewer-body .cm-selectionMatch {
+  background: oklch(from var(--mn-accent) l c h / 0.2);
+}
+
+.file-viewer-editor-mount .cm-whitespace,
+.file-viewer-body .cm-whitespace {
+  color: var(--mn-fg-muted);
+  opacity: 0.45;
+}
+
 .file-viewer-markdown-preview {
   flex: 1;
   min-height: 0;

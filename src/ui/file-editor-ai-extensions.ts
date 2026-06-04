@@ -26,6 +26,7 @@ import {
   fetchEditorAiCompletion,
   resolveEditorAiBinding,
 } from './editor-ai-completion-client';
+import { nextPartialGhostChunk } from './editor-ai-completion-prompt';
 
 export interface EditorAiExtensionOptions {
   filePath: string;
@@ -134,6 +135,23 @@ export function acceptEditorAiGhost(view: EditorView): boolean {
   return true;
 }
 
+/** Accept the next word/line chunk from the visible ghost (Ctrl/Cmd-Right). */
+export function acceptPartialEditorAiGhost(view: EditorView): boolean {
+  const row = view.state.field(aiGhostField, false);
+  const ghost = row?.ghost;
+  if (!ghost?.text) return false;
+  const chunk = nextPartialGhostChunk(ghost.text);
+  if (!chunk) return false;
+  const insertPos = ghost.pos;
+  const remainder = ghost.text.slice(chunk.length);
+  view.dispatch({
+    changes: { from: insertPos, insert: chunk },
+    effects: setAiGhost.of(remainder ? { text: remainder, pos: insertPos + chunk.length } : null),
+    selection: EditorSelection.cursor(insertPos + chunk.length),
+  });
+  return true;
+}
+
 /** Clear ghost without modifying the document. */
 export function dismissEditorAiGhost(view: EditorView): boolean {
   if (!hasEditorAiGhost(view.state)) return false;
@@ -164,6 +182,14 @@ export const editorAiGhostKeymapBindings: KeyBinding[] = [
     },
   },
   {
+    key: 'Mod-ArrowRight',
+    preventDefault: true,
+    run: (view) => {
+      if (!hasEditorAiGhost(view.state)) return false;
+      return acceptPartialEditorAiGhost(view);
+    },
+  },
+  {
     key: 'Escape',
     preventDefault: true,
     run: (view) => {
@@ -190,7 +216,8 @@ class EditorAiCompletionPlugin {
 
   update(update: ViewUpdate): void {
     if (!update.docChanged && !update.selectionSet) return;
-    this.cancelInFlight(update.docChanged);
+    const tr = update.transactions[0];
+    this.cancelInFlight(update.docChanged, tr);
     if (update.state.readOnly) return;
     if (!this.opts.canRequest()) {
       this.opts.onStatus?.('AI completion unavailable (start npm start and configure a provider).');
@@ -221,7 +248,7 @@ class EditorAiCompletionPlugin {
   }
 
   /** Abort in-flight completion; optionally clear visible ghost. */
-  private cancelInFlight(clearGhost: boolean): void {
+  private cancelInFlight(clearGhost: boolean, tr?: Transaction): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
@@ -230,8 +257,14 @@ class EditorAiCompletionPlugin {
       this.abortController.abort();
       this.abortController = null;
     }
-    if (clearGhost && hasEditorAiGhost(this.view.state)) {
-      this.view.dispatch({ effects: setAiGhost.of(null) });
+    const explicitGhostSet = tr?.effects.some((effect) => effect.is(setAiGhost)) ?? false;
+    if (clearGhost && !explicitGhostSet && hasEditorAiGhost(this.view.state)) {
+      const view = this.view;
+      queueMicrotask(() => {
+        if (hasEditorAiGhost(view.state)) {
+          view.dispatch({ effects: setAiGhost.of(null) });
+        }
+      });
     }
   }
 

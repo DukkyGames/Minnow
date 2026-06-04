@@ -158,6 +158,32 @@ const minnowEditorTooltipTheme = EditorView.theme({
     borderTopColor: 'var(--mn-surface-2)',
     borderBottomColor: 'var(--mn-surface-2)',
   },
+  '.cm-lintRange-error': {
+    backgroundImage:
+      'url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 3 l2 -2 l1 0 l2 2 l1 0" stroke="%23ef4444" fill="none" stroke-width=".7"/></svg>\')',
+  },
+  '.cm-lintRange-warning': {
+    backgroundImage:
+      'url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 3 l2 -2 l1 0 l2 2 l1 0" stroke="%23f59e0b" fill="none" stroke-width=".7"/></svg>\')',
+  },
+  '.cm-gutter-lint': {
+    width: '1.1em',
+  },
+  '.cm-gutter-lint .cm-lintMarker-error': {
+    color: 'var(--mn-danger)',
+  },
+  '.cm-gutter-lint .cm-lintMarker-warning': {
+    color: 'var(--mn-warning)',
+  },
+  '.cm-lsp-hover, .cm-lsp-signature': {
+    maxWidth: 'min(480px, 90vw)',
+    padding: '6px 10px',
+    lineHeight: '1.45',
+  },
+  '.cm-lsp-signature-param--active': {
+    fontWeight: 'bold',
+    textDecoration: 'underline',
+  },
   '.cm-tooltip-autocomplete': {
     '& > ul': {
       backgroundColor: 'var(--mn-surface-2)',

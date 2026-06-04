@@ -1,31 +1,72 @@
 /**
  * Resolve LSP spawn commands to bundled Minnow binaries (no global install).
+ * Search order: workspace node_modules → app bundle → ~/.minnow/lsp-servers → PATH.
  */
 
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getAppRoot } from '../workspace/root.js';
+import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
+import {
+  findExecutableInPaths,
+  getLspSearchPaths,
+  getManagedLspNpmRoot,
+} from './paths.js';
 
 /** @typedef {{ argv: string[], displayBin: string }} ResolvedLspSpawn */
 
 /**
- * Resolve a package entry from Minnow's install root (works on Windows without .cmd).
+ * Resolve a package entry from a given package.json root.
+ * @param {string} rootDir - directory containing package.json
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
+function tryResolveFromRoot(rootDir, specifier) {
+  const pkgJson = path.join(rootDir, 'package.json');
+  if (!fs.existsSync(pkgJson)) return undefined;
+  try {
+    const require = createRequire(pkgJson);
+    return require.resolve(specifier);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve specifier: workspace → app bundle → managed prefix.
+ * @param {string} specifier
+ * @returns {string}
+ */
+function resolvePackageSpec(specifier) {
+  const workspace = getWorkspaceRoot();
+  const managed = getManagedLspNpmRoot();
+  const appRoot = getAppRoot();
+
+  const fromWorkspace = tryResolveFromRoot(workspace, specifier);
+  if (fromWorkspace) return fromWorkspace;
+
+  const fromApp = tryResolveFromRoot(appRoot, specifier);
+  if (fromApp) return fromApp;
+
+  const fromManaged = tryResolveFromRoot(managed, specifier);
+  if (fromManaged) return fromManaged;
+
+  throw new Error(
+    `Cannot resolve "${specifier}" — install the language server bundle in Settings or run npm install in the project.`,
+  );
+}
+
+/**
  * @param {string} specifier - e.g. "typescript-language-server/lib/cli.mjs"
  * @returns {string}
  */
 function resolveFromAppRoot(specifier) {
-  const pkgJson = path.join(getAppRoot(), 'package.json');
-  if (!fs.existsSync(pkgJson)) {
-    throw new Error(`Minnow package.json not found at ${pkgJson}`);
-  }
-  const require = createRequire(pkgJson);
-  return require.resolve(specifier);
+  return resolvePackageSpec(specifier);
 }
 
 /**
  * Full argv for the bundled TypeScript/JavaScript language server.
- * @param {string[]} extraArgs - user-provided flags after the binary name
+ * @param {string[]} extraArgs
  * @returns {ResolvedLspSpawn}
  */
 /** Bundled tsserver.js (used when the workspace has no local typescript). */
@@ -46,12 +87,98 @@ function stripLegacyTsserverCliFlags(extraArgs) {
   return flags;
 }
 
+function buildNodeCliArgv(cliPath, displayBin, extraArgs = []) {
+  return {
+    argv: ['node', cliPath, ...extraArgs],
+    displayBin,
+  };
+}
+
 function buildTypeScriptLanguageServerArgv(extraArgs = []) {
   const cli = resolveFromAppRoot('typescript-language-server/lib/cli.mjs');
   return {
     argv: ['node', cli, '--stdio', ...stripLegacyTsserverCliFlags(extraArgs)],
     displayBin: 'typescript-language-server',
   };
+}
+
+/** $minnow: token → node CLI resolution spec and default stdio args. */
+const MINNOW_NODE_SERVERS = {
+  'typescript-language-server': {
+    spec: 'typescript-language-server/lib/cli.mjs',
+    build: buildTypeScriptLanguageServerArgv,
+  },
+  'pyright-langserver': {
+    spec: 'pyright/langserver.index.js',
+    args: ['--stdio'],
+    display: 'pyright-langserver',
+  },
+  'yaml-language-server': {
+    spec: 'yaml-language-server/out/server/src/server.js',
+    args: ['--stdio'],
+    display: 'yaml-language-server',
+  },
+  'bash-language-server': {
+    spec: 'bash-language-server/out/cli.js',
+    args: ['start'],
+    display: 'bash-language-server',
+  },
+  'docker-langserver': {
+    spec: 'dockerfile-language-server-nodejs/lib/server.js',
+    args: ['--stdio'],
+    display: 'docker-langserver',
+  },
+  'graphql-lsp': {
+    spec: 'graphql-language-service-cli/bin/graphql.js',
+    args: ['server', '--method=stdio'],
+    display: 'graphql-lsp',
+  },
+  'vscode-html-language-server': {
+    spec: 'vscode-langservers-extracted/lib/htmlServerMain.js',
+    args: ['--stdio'],
+    display: 'vscode-html-language-server',
+  },
+  'vscode-css-language-server': {
+    spec: 'vscode-langservers-extracted/lib/cssServerMain.js',
+    args: ['--stdio'],
+    display: 'vscode-css-language-server',
+  },
+  'vscode-json-language-server': {
+    spec: 'vscode-langservers-extracted/lib/jsonServerMain.js',
+    args: ['--stdio'],
+    display: 'vscode-json-language-server',
+  },
+};
+
+/**
+ * @param {string} minnowId - token without $minnow: prefix
+ * @param {string[]} tail
+ * @returns {ResolvedLspSpawn}
+ */
+function resolveMinnowToken(minnowId, tail) {
+  const entry = MINNOW_NODE_SERVERS[minnowId];
+  if (!entry) {
+    throw new Error(`Unknown Minnow LSP bundle token: $minnow:${minnowId}`);
+  }
+  if (typeof entry.build === 'function') {
+    return entry.build(tail);
+  }
+  const cli = resolvePackageSpec(entry.spec);
+  const args = tail.length > 0 ? tail : (entry.args ?? ['--stdio']);
+  return buildNodeCliArgv(cli, entry.display ?? minnowId, args);
+}
+
+/**
+ * Resolve the first token of a plain command through LSP search paths.
+ * @param {string} bin
+ * @returns {string}
+ */
+export function resolveLspExecutable(bin) {
+  if (!bin || bin.includes(path.sep) || bin.startsWith('.')) {
+    return bin;
+  }
+  const found = findExecutableInPaths(bin, getLspSearchPaths());
+  return found ?? bin;
 }
 
 /**
@@ -67,23 +194,32 @@ export function resolveLspSpawnArgv(command) {
   const head = command[0];
   const tail = command.slice(1);
 
-  if (head === '$minnow:typescript-language-server') {
-    return buildTypeScriptLanguageServerArgv(tail);
+  if (typeof head === 'string' && head.startsWith('$minnow:')) {
+    const minnowId = head.slice('$minnow:'.length);
+    return resolveMinnowToken(minnowId, tail);
   }
 
   if (head === 'typescript-language-server') {
     return buildTypeScriptLanguageServerArgv(tail);
   }
 
-  const mapped = command.map((part) => {
+  const mapped = command.map((part, index) => {
     if (part === 'test/fixtures/fake-lsp.mjs') {
       return path.join(getAppRoot(), 'test/fixtures/fake-lsp.mjs');
     }
     if (part === '$minnow:tsserver') {
       return resolveFromAppRoot('typescript/lib/tsserver.js');
     }
+    if (index === 0 && typeof part === 'string') {
+      return resolveLspExecutable(part);
+    }
     return part;
   });
 
   return { argv: mapped, displayBin: mapped[0] ?? '' };
+}
+
+/** Exposed for tests — managed LSP npm prefix used in resolution order. */
+export function getManagedLspServersDir() {
+  return getManagedLspNpmRoot();
 }
