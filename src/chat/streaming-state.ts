@@ -2,9 +2,9 @@
  * Helpers for per-chat streaming: which chats are in-flight vs which chat is active in the UI.
  */
 
-import { expertLabPageOpen, streamingChatIds } from '../app-state';
+import { expertsPageOpen, streamingChatIds } from '../app-state';
 import { normalizeModeId } from '../chat/modes/types';
-import { getActiveChat, isExpertLabChat } from '../state/sessions';
+import { getActiveChat } from '../state/sessions';
 import { isOrchestrateBoardInitSplitActive } from '../ui/orchestrate-board-init-split';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
@@ -63,7 +63,7 @@ export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
-  if (isExpertLabChat(active) && expertLabPageOpen) return false;
+  if (active.kind === 'expert-lab' && expertsPageOpen) return false;
   if (isBoardViewActive()) {
     if (
       normalizeModeId(active.modeId) === 'orchestrate' &&

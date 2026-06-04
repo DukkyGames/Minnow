@@ -60,7 +60,6 @@ import {
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
-  isExpertLabChat,
   scheduleSaveSessions,
   touchChat,
   recordChatMessage,
@@ -98,14 +97,6 @@ import {
   syncSteerQueuedHint,
 } from '../ui/composer-send';
 import { registerStreamDomRemount } from './stream-chat-dom';
-import {
-  notifyExpertLabFirstToken,
-  notifyExpertLabPartialText,
-  notifyExpertLabRunEnd,
-  notifyExpertLabRunError,
-  notifyExpertLabRunStart,
-  notifyExpertLabToolRound,
-} from '../ui/expert-lab-stream';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
@@ -895,9 +886,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? ` (${activeWorkAgent.label})`
       : '';
 
-  if (isExpertLabChat(chat)) {
-    notifyExpertLabRunStart(chat.id);
-  }
 
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
@@ -1211,15 +1199,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           domVisible,
           () => {
             revealProse();
-            if (isExpertLabChat(chat)) {
-              notifyExpertLabFirstToken(chat.id);
-            }
           },
           (text) => {
             livePartialText = text;
-            if (isExpertLabChat(chat)) {
-              notifyExpertLabPartialText(chat.id, text);
-            }
           },
           undefined,
           () => {
@@ -1382,9 +1364,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
           const toolName = tc.function.name;
-          if (isExpertLabChat(chat) && toolName === 'ask_question') {
-            notifyExpertLabToolRound(chat.id, toolName);
-          }
           const toolOut = planBlock
             ? { content: planBlock }
             : await executeTool(toolName, args, {
@@ -1393,9 +1372,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
-          if (isExpertLabChat(chat) && toolName !== 'ask_question') {
-            notifyExpertLabToolRound(chat.id, toolName);
-          }
           let toolContent = toolOut.content;
           try {
             const promoted = await maybePromoteToolResultToArtifact({
@@ -1655,9 +1631,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncTurnContextUsage(chat.id, '', thoughtController);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
-        if (isExpertLabChat(chat)) {
-          notifyExpertLabRunEnd(chat.id, finalContent);
-        }
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, meta.stats, meta.usage);
           if (thinkingNorm.length > 0) {
@@ -1739,12 +1712,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return;
     }
     turnRunStatus = 'failed';
-    if (isExpertLabChat(chat)) {
-      notifyExpertLabRunError(
-        chat.id,
-        e instanceof Error ? e.message : String(e),
-      );
-    }
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();

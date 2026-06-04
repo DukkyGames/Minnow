@@ -38,7 +38,10 @@ async function resolvePartEntityId(partId: PromptPartId): Promise<string> {
   if (partId === 'mode') return normalizeModeId(chat.modeId);
   if (partId === 'expert') {
     const selection = getExpertSelection(chat);
-    return selection.expertId?.trim() || chat.lastResolvedExpertId?.trim() || defaultIdForPart(partId);
+    if (chat.kind === 'expert' && chat.expertId?.trim()) {
+      return chat.expertId.trim();
+    }
+    return selection.expertId?.trim() || defaultIdForPart(partId);
   }
   if (partId === 'work-agent') return chat.workAgentId?.trim() || defaultIdForPart(partId);
   if (partId === 'info') {

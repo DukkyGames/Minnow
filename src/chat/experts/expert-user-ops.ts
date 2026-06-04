@@ -21,6 +21,8 @@ export interface SaveUserExpertInput {
   id: string;
   label: string;
   description?: string;
+  tagline?: string;
+  greeting?: string;
   icon?: string;
   accent?: ExpertAccent;
   fullBody: string;
@@ -40,12 +42,10 @@ export async function saveUserExpert(input: SaveUserExpertInput): Promise<void> 
       id: input.id,
       label: input.label,
       kind: 'expert',
-      version: '1',
     }),
     id: input.id,
     label: input.label.trim() || input.id,
     kind: 'expert',
-    version: record?.meta.version ?? '1',
     description: input.description?.trim() || undefined,
     icon: input.icon?.trim() || undefined,
     accent: input.accent,
