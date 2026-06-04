@@ -21,7 +21,10 @@ import {
   isToolAllowedForMode,
 } from '../chat/modes/tool-policy';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
-import type { ToolExecutionResult } from '../types';
+import type { CodeChangeStats, ToolExecutionResult } from '../types';
+import { findChatById } from '../state/sessions';
+import { recordCodeChange } from '../usage/code-change-ledger';
+import { updateCodeChangeStrip } from '../ui/code-change-strip';
 import {
   BUILT_IN_TOOLS,
   type OpenAIFunctionDefinition,
@@ -369,7 +372,7 @@ async function executeToolInner(
       return { content: planWriteBlock };
     }
     return executeWithResultCache(name, enrichedArgs, context, () =>
-      executeServerTool(name, enrichedArgs, context.modeId),
+      executeServerTool(name, enrichedArgs, context.modeId, context),
     );
   }
 
@@ -450,6 +453,7 @@ async function executeToolBodyAfterGates(
       name,
       mergeServerToolContextArgs(name, enrichedArgs, context),
       context.modeId,
+      context,
     );
   }
 
@@ -600,6 +604,7 @@ async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
   modeId?: ModeId | string,
+  context?: ExecuteToolContext,
 ): Promise<ToolExecutionResult> {
   let response: Response;
   const payload: {
@@ -625,6 +630,7 @@ async function executeServerTool(
     result?: string;
     error?: string;
     attachments?: ToolExecutionResult['attachments'];
+    codeChange?: CodeChangeStats;
   };
   try {
     responsePayload = (await response.json()) as typeof responsePayload;
@@ -651,7 +657,36 @@ async function executeServerTool(
       )
     : undefined;
 
-  return attachments?.length ? { content, attachments } : { content };
+  const codeChange = normalizeCodeChangePayload(responsePayload.codeChange);
+  if (
+    codeChange &&
+    context?.chatId &&
+    !content.trimStart().startsWith('Error:')
+  ) {
+    const chat = findChatById(context.chatId);
+    if (chat) {
+      recordCodeChange(chat, codeChange);
+      updateCodeChangeStrip(chat);
+    }
+  }
+
+  const base: ToolExecutionResult = { content };
+  if (attachments?.length) base.attachments = attachments;
+  if (codeChange) base.codeChange = codeChange;
+  return base;
+}
+
+/** Validate server codeChange stats before recording or displaying. */
+function normalizeCodeChangePayload(
+  raw: CodeChangeStats | undefined,
+): CodeChangeStats | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const additions = Number(raw.additions);
+  const deletions = Number(raw.deletions);
+  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return undefined;
+  if (additions === 0 && deletions === 0) return undefined;
+  const path = typeof raw.path === 'string' && raw.path.trim() ? raw.path.trim() : undefined;
+  return { additions, deletions, ...(path ? { path } : {}) };
 }
 
 /** Resolves catalog entry by OpenAI function name. */

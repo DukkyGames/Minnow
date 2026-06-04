@@ -13,6 +13,7 @@ import {
 } from './handlers.js';
 import { buildPromptRegistry } from '../prompts/registry.js';
 import {
+  deleteExpertEntityDir,
   deletePromptFileOverride,
   readBuiltinPromptFile,
   readPromptFile,
@@ -68,6 +69,7 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const profileParam = params.get('profile') === 'lite' ? 'lite' : 'full';
   const baselineBuiltin = params.get('baseline') === 'builtin';
+  const rawFile = params.get('raw') === '1' || params.get('raw') === 'true';
 
   setCorsHeaders(res);
 
@@ -107,6 +109,18 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
       return true;
     }
 
+    const expertEntityMatch = pathname.match(
+      /^\/api\/prompts\/experts\/([a-z][a-z0-9-]{0,63})$/,
+    );
+    if (expertEntityMatch && req.method === 'DELETE') {
+      const entityId = expertEntityMatch[1];
+      await deletePromptFileOverride('experts', entityId, 'full').catch(() => false);
+      await deletePromptFileOverride('experts', entityId, 'lite').catch(() => false);
+      await deleteExpertEntityDir(entityId);
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+
     const filePromptMatch = pathname.match(
       /^\/api\/prompts\/(modes|experts|sub-agents)\/([a-z][a-z0-9-]{0,63})\/prompt$/,
     );
@@ -117,7 +131,9 @@ export async function handlePromptRequest(req, res, pathname, search = '') {
       if (req.method === 'GET') {
         const result = baselineBuiltin
           ? await readBuiltinPromptFile(PROJECT_ROOT, family, entityId, profileParam)
-          : await readPromptFile(PROJECT_ROOT, family, entityId, profileParam);
+          : await readPromptFile(PROJECT_ROOT, family, entityId, profileParam, {
+              raw: rawFile,
+            });
         sendJson(res, 200, result);
         return true;
       }

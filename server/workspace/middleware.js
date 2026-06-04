@@ -9,7 +9,11 @@ import {
   setWorkspaceRoot,
   validateWorkspacePath,
 } from './root.js';
-import { browseWorkspaceFolders, createWorkspaceSubfolder } from './browse.js';
+import {
+  browseWorkspaceFolders,
+  createWorkspaceSubfolder,
+  ensureDefaultProjectsParent,
+} from './browse.js';
 import { pickWorkspaceFolder } from './pick-folder.js';
 import { countWorkspaceLoc } from './loc.js';
 import {
@@ -159,7 +163,8 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
 
     if (pathname === '/api/workspace' && req.method === 'GET') {
       const recent = await buildRecentWorkspaceList();
-      sendJson(res, 200, { ok: true, ...getWorkspaceInfo(), recent });
+      const newProjectParent = await ensureDefaultProjectsParent();
+      sendJson(res, 200, { ok: true, ...getWorkspaceInfo(), recent, newProjectParent });
       return true;
     }
 

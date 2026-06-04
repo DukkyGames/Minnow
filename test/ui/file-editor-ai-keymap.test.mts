@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-import { indentWithTab } from '@codemirror/commands';
+import { indentMore } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 const DEFAULT_EDITOR_AI_COMPLETION = {
@@ -17,8 +17,12 @@ const DEFAULT_EDITOR_AI_COMPLETION = {
   providerId: '',
   modelId: '',
 };
-import { fileEditorEscapeBlurBinding } from '../../src/ui/file-editor-keymap.ts';
-import { fileEditorKeymapExtensions } from '../../src/ui/file-editor-keymap.ts';
+import {
+  fileEditorEscapeBlurBinding,
+  fileEditorKeymapExtensions,
+  fileEditorTabBinding,
+  lspCompletionKeymapBindings,
+} from '../../src/ui/file-editor-keymap.ts';
 import {
   acceptEditorAiGhost,
   dismissEditorAiGhost,
@@ -77,7 +81,7 @@ describe('file editor AI keymap', () => {
     view.focus();
     const aiHandled = editorAiGhostKeymapBindings[0].run!(view);
     assert.equal(aiHandled, false);
-    const indentHandled = indentWithTab.run(view);
+    const indentHandled = fileEditorTabBinding.run!(view);
     assert.equal(indentHandled, true);
     assert.equal(view.state.doc.toString(), '  line');
   });
@@ -91,6 +95,14 @@ describe('file editor AI keymap', () => {
     assert.equal(dismissed, true);
     assert.equal(hasEditorAiGhost(view.state), false);
     assert.equal(editorAiGhostKeymapBindings[1].preventDefault, true);
+  });
+
+  test('LSP completion keymap uses Tab accept via fileEditorTabBinding, not Enter', () => {
+    const lspKeys = lspCompletionKeymapBindings.map((b) => b.key);
+    assert.equal(lspKeys.includes('Enter'), false);
+    assert.equal(fileEditorTabBinding.key, 'Tab');
+    assert.equal(typeof fileEditorTabBinding.run, 'function');
+    assert.equal(typeof indentMore, 'function');
   });
 
   test('ghost Escape binding returns false when no ghost', () => {

@@ -137,18 +137,25 @@ export function findBoardGroupForPlanner(plannerChatId: string): ChatGroup | und
   return (requireSession().groups ?? []).find((g) => g.plannerChatId === id);
 }
 
+/** Sidebar folder membership + board link for the orchestrate planner (parse) chat. */
+export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup): void {
+  group.plannerChatId = plannerChat.id;
+  plannerChat.boardGroupId = group.id;
+  plannerChat.groupId = group.id;
+  if (plannerChat.orchestratePlanPath && !group.orchestratePlanPath) {
+    group.orchestratePlanPath = plannerChat.orchestratePlanPath;
+  }
+  touchChat(plannerChat);
+  scheduleSaveSessions();
+}
+
 /** Create or return the board folder for an Orchestrate planner chat. */
 export function getOrCreateBoardGroup(plannerChat: Chat): ChatGroup {
   const existing = plannerChat.boardGroupId
     ? findGroupById(plannerChat.boardGroupId)
     : findBoardGroupForPlanner(plannerChat.id);
   if (existing) {
-    if (!existing.plannerChatId) {
-      existing.plannerChatId = plannerChat.id;
-    }
-    if (!plannerChat.boardGroupId) {
-      plannerChat.boardGroupId = existing.id;
-    }
+    linkPlannerChatToBoardFolder(plannerChat, existing);
     return existing;
   }
 
@@ -156,13 +163,7 @@ export function getOrCreateBoardGroup(plannerChat: Chat): ChatGroup {
     plannerChat.orchestratePlanPath?.split('/').pop()?.replace(/\.md$/i, '') ||
     'Orchestrate';
   const group = createGroup(planLabel, plannerChat.workspacePath);
-  group.plannerChatId = plannerChat.id;
-  if (plannerChat.orchestratePlanPath) {
-    group.orchestratePlanPath = plannerChat.orchestratePlanPath;
-  }
-  plannerChat.boardGroupId = group.id;
-  touchChat(plannerChat);
-  scheduleSaveSessions();
+  linkPlannerChatToBoardFolder(plannerChat, group);
   return group;
 }
 

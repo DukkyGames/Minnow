@@ -100,7 +100,14 @@ export async function readBuiltinPromptFile(projectRoot, family, entityId, profi
   return { content: extractBody(raw, builtinPath), source: 'builtin' };
 }
 
-export async function readPromptFile(projectRoot, family, entityId, profile) {
+/**
+ * @param {string} projectRoot
+ * @param {'modes'|'experts'|'sub-agents'} family
+ * @param {string} entityId
+ * @param {'full'|'lite'} profile
+ * @param {{ raw?: boolean }} [options]
+ */
+export async function readPromptFile(projectRoot, family, entityId, profile, options = {}) {
   assertValidPromptEntityId(entityId);
   if (profile !== 'full' && profile !== 'lite') {
     throw new Error('Invalid profile');
@@ -111,12 +118,40 @@ export async function readPromptFile(projectRoot, family, entityId, profile) {
 
   try {
     const raw = await fs.readFile(userPath, 'utf8');
+    if (options.raw) {
+      return { content: raw, source: 'override' };
+    }
     return { content: extractBody(raw, userPath), source: 'override' };
   } catch {
     /* fall through */
   }
 
+  if (options.raw) {
+    const builtinPath = resolveUnderRoot(
+      path.resolve(projectRoot),
+      builtinRelativePath(family, entityId, profile),
+    );
+    const rawBuiltin = await fs.readFile(builtinPath, 'utf8');
+    return { content: rawBuiltin, source: 'builtin' };
+  }
+
   return readBuiltinPromptFile(projectRoot, family, entityId, profile);
+}
+
+/**
+ * Remove ~/.minnow/prompts/experts/<entityId>/ (user-created expert).
+ * @param {string} entityId
+ */
+export async function deleteExpertEntityDir(entityId) {
+  assertValidPromptEntityId(entityId);
+  const home = path.resolve(getMinnowHome());
+  const dirPath = resolveUnderRoot(home, path.join('prompts', 'experts', entityId));
+  try {
+    await fs.rm(dirPath, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -116,6 +116,7 @@ import {
 import {
   getOrchestrateChatMountElement,
   isOrchestrateBoardInitSplitActive,
+  isOrchestrateInitSplitChromeActive,
   syncOrchestrateInitSplitChrome,
 } from '../ui/orchestrate-board-init-split';
 import {
@@ -1390,7 +1391,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             /* Promotion is best-effort; never block the tool loop. */
           }
 
-          renderToolResult(toolWrap, toolContent, toolOut.attachments, args);
+          renderToolResult(
+            toolWrap,
+            toolContent,
+            toolOut.attachments,
+            args,
+            toolOut.codeChange,
+          );
 
           chat.history.push({
             role: 'tool',
@@ -1399,11 +1406,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ...(toolOut.attachments?.length
               ? { attachments: toolOut.attachments }
               : {}),
+            ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
           });
           trackRunHistoryPush(chat, turnRunId);
           syncTurnContextUsage(chat.id, livePartialText, thoughtController);
           if (paintToolCallsInChat) {
             scrollChatIfPinned();
+          }
+
+          if (tc.function.name === 'board_init') {
+            syncOrchestrateInitSplitChrome(chat);
           }
         }
 
@@ -1411,7 +1423,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         scheduleSaveSessions();
         renderSidebar();
 
-        if (isOrchestrateBoardViewActive() || isOrchestrateBoardInitSplitActive(chat)) {
+        if (
+          isOrchestrateBoardViewActive() ||
+          isOrchestrateBoardInitSplitActive(chat) ||
+          isOrchestrateInitSplitChromeActive()
+        ) {
           refreshActiveBoardIfMounted();
         }
 

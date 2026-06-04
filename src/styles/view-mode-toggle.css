@@ -128,11 +128,14 @@
 
 
 
-/* Init split: keep chat area scrollable; composer stays hidden like board view */
+/* Init split: #chatArea hosts board+chat shell; transcript scrolls in __chat */
 .main-column.main-column--orchestrate-init-split .chat-area {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
 }
 
 .main-column.main-column--orchestrate-init-split .input-bar {

@@ -80,6 +80,7 @@ describe('migrateSessionV4ToV5', () => {
     assert.equal(planner.orchestrateBoard, undefined);
     assert.equal(planner.viewMode, undefined);
     assert.equal(planner.boardGroupId, 'grp_legacy');
+    assert.equal(planner.groupId, 'grp_legacy');
 
     const group = state.groups?.find((g) => g.id === 'grp_legacy');
     assert.ok(group?.orchestrateBoard);

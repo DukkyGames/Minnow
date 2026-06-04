@@ -587,6 +587,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
             ...(toolOut.attachments?.length
               ? { attachments: toolOut.attachments }
               : {}),
+            ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
           });
           emitProgress(undefined, true);
         }

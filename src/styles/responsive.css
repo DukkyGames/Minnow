@@ -55,7 +55,8 @@
     gap: 6px;
   }
 
-  .chat-area {
+  .chat-area,
+  .board-init-split__chat {
     padding: 16px 12px;
     gap: 16px;
     /* Keep last message above composer when mobile keyboard opens */
@@ -124,7 +125,8 @@
 
 /* Phone landscape: reclaim vertical space for messages */
 @media (max-height: 500px) and (orientation: landscape) {
-  .chat-area {
+  .chat-area,
+  .board-init-split__chat {
     padding-top: 10px;
     padding-bottom: 10px;
     gap: 12px;

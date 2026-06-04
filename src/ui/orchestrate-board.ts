@@ -19,7 +19,6 @@ import {
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
-import { loadSubAgentConfig } from '../agents/sub-agent-config.ts';
 import {
   getSubAgentRun,
   listActiveSubAgentRuns,
@@ -29,7 +28,6 @@ import {
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
 import {
-  assignAgent,
   countRunningTaskChats,
   moveTaskStatus,
   startTask,
@@ -73,7 +71,13 @@ import {
 import type { DiscoverOrchestratePlansResult } from '../chat/orchestrate/list-plans';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import {
-  ensureBoardChatViewToggle,
+  openBoardTaskChat,
+  setBoardTaskPlanSelection,
+  showBoardTaskPlanPanel,
+  syncBoardTaskPlanPanel,
+  taskCardOpensPlanPanel,
+} from './board-task-plan-panel';
+import {
   isOrchestrateBoardViewActive,
   setOrchestrateViewMode,
   syncViewModeToggleFromActiveChat,
@@ -83,7 +87,6 @@ import {
   isOrchestrateInitSplitChromeActive,
 } from './orchestrate-board-init-split';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
-import { openSubAgentDrawer } from './sub-agent-drawer';
 import { teardownHub } from './hub';
 import { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
 
@@ -321,7 +324,6 @@ export function buildKanbanRefreshKey(
       [
         task.id,
         task.status,
-        task.agentType ?? '',
         task.chatId ?? '',
         streaming,
         runStatus,
@@ -369,6 +371,7 @@ function mountKanbanInMain(
   } else {
     main.prepend(newKanban);
   }
+  syncBoardTaskPlanPanel(main, board, group);
 }
 
 /** Refresh board UI when store or sub-agents change (stable handler per folder). */
@@ -603,7 +606,6 @@ function wireBoardHeaderControls(controls: HTMLElement, planPath: string): void 
   });
 
   controls.appendChild(openPlan);
-  ensureBoardChatViewToggle(controls);
 }
 
 interface BoardHeaderMetrics {
@@ -941,7 +943,6 @@ function buildTaskCard(
   task: BoardTask,
   group: ChatGroup,
   plannerChat: Chat,
-  agentOptions: Array<{ id: string; label: string }>,
 ): HTMLElement {
   const taskStreaming = Boolean(task.chatId && isChatStreaming(task.chatId));
   const primaryRunId = getBoardTaskPrimaryRunId(task);
@@ -962,27 +963,47 @@ function buildTaskCard(
     card.classList.add('board-task-card--running');
   }
 
-  const openableRunId = primaryRunId && canOpenBoardTaskSubAgent(task, runStatus);
-  if (openableRunId) {
+  card.setAttribute('data-board-task-id', task.id);
+
+  const opensPlan = taskCardOpensPlanPanel(task.status);
+  const opensChat = !opensPlan;
+  if (opensPlan || opensChat) {
     card.classList.add('board-task-card--clickable');
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
-    card.title = 'Open sub-agent run';
-    const openRun = (): void => {
-      if (primaryRunId) openSubAgentDrawer(primaryRunId, plannerChat.id);
+    card.title = opensPlan ? 'View task plan' : 'Open task chat';
+
+    const activateCard = (): void => {
+      const main = card.closest('.board-main');
+      if (opensPlan) {
+        if (main instanceof HTMLElement) {
+          for (const selected of main.querySelectorAll('.board-task-card--selected')) {
+            selected.classList.remove('board-task-card--selected');
+          }
+          card.classList.add('board-task-card--selected');
+          showBoardTaskPlanPanel(main, task, group);
+        }
+        return;
+      }
+      setBoardTaskPlanSelection(null);
+      if (main instanceof HTMLElement) {
+        syncBoardTaskPlanPanel(main, board, group);
+      }
+      openBoardTaskChat(task, group, plannerChat);
     };
+
     card.addEventListener('click', (e) => {
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
       if (target.closest('.board-task-card__footer')) return;
       if (target.closest('.board-task-card__activity')) return;
       if (target.closest('.board-task-card__chats')) return;
-      openRun();
+      activateCard();
     });
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        openRun();
+        activateCard();
       }
     });
   }
@@ -1030,41 +1051,8 @@ function buildTaskCard(
   const footer = document.createElement('div');
   footer.className = 'board-task-card__footer';
 
-  const assignRow = document.createElement('div');
-  assignRow.className = 'board-task-card__assign';
-  const agentLabel = document.createElement('label');
-  agentLabel.className = 'board-task-card__assign-label';
-  agentLabel.textContent = 'Agent';
-  const agentSelect = document.createElement('select');
-  agentSelect.className = 'board-select board-select--compact board-task-card__agent-select';
-  agentSelect.setAttribute('aria-label', `Agent for ${task.id}`);
-  const emptyOpt = document.createElement('option');
-  emptyOpt.value = '';
-  emptyOpt.textContent = 'Choose…';
-  agentSelect.appendChild(emptyOpt);
-  for (const { id, label } of agentOptions) {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = label;
-    if (task.agentType === id) opt.selected = true;
-    agentSelect.appendChild(opt);
-  }
-  const stopCardBubble = (e: Event): void => e.stopPropagation();
-  agentSelect.addEventListener('mousedown', stopCardBubble);
-  agentSelect.addEventListener('click', stopCardBubble);
-  agentSelect.addEventListener('change', (e) => {
-    e.stopPropagation();
-    const v = agentSelect.value.trim();
-    if (v) assignAgent(group, task.id, v, plannerChat);
-    refreshActiveBoardIfMounted();
-  });
-  agentLabel.appendChild(agentSelect);
-  assignRow.appendChild(agentLabel);
-  footer.appendChild(assignRow);
-
   const toolbar = document.createElement('div');
   toolbar.className = 'board-task-card__toolbar';
-  const hasAgent = Boolean(task.agentType?.trim());
   if (taskStreaming) {
     const stopBtn = document.createElement('button');
     stopBtn.type = 'button';
@@ -1080,8 +1068,8 @@ function buildTaskCard(
     startBtn.type = 'button';
     startBtn.className = 'board-btn board-btn--compact board-btn--primary board-task-card__btn--start';
     startBtn.textContent = 'Start';
-    startBtn.disabled = !hasAgent || atCap;
-    startBtn.title = atCap ? `Concurrency cap (${cap}) reached` : !hasAgent ? 'Assign an agent first' : '';
+    startBtn.disabled = atCap;
+    startBtn.title = atCap ? `Concurrency cap (${cap}) reached` : '';
     startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       void startTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
@@ -1226,7 +1214,6 @@ function renderKanbanColumns(
   tasks: BoardTask[],
   group: ChatGroup,
   plannerChat: Chat,
-  agentOptions: Array<{ id: string; label: string }>,
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'kanban-grid';
@@ -1257,7 +1244,7 @@ function renderKanbanColumns(
     const staggerEntrance =
       isOrchestrateInitSplitChromeActive() && isChatStreaming(plannerChat.id);
     for (const task of colTasks) {
-      const card = buildTaskCard(task, group, plannerChat, agentOptions);
+      const card = buildTaskCard(task, group, plannerChat);
       if (staggerEntrance) {
         card.classList.add('board-task-card--enter');
         card.style.setProperty(
@@ -1280,10 +1267,6 @@ async function populateKanbanWaves(
   group: ChatGroup,
   plannerChat: Chat,
 ): Promise<void> {
-  const cfg = await loadSubAgentConfig();
-  const types = Object.entries(cfg.types)
-    .filter(([, t]) => t.enabled !== false)
-    .map(([id, t]) => ({ id, label: t.label?.trim() || id }));
   wrap.replaceChildren();
   for (const wave of board.waves) {
     const waveTasks = board.tasks.filter((t) => t.wave === wave.id);
@@ -1350,7 +1333,7 @@ async function populateKanbanWaves(
     const body = document.createElement('div');
     body.className = 'board-wave-block__body';
     body.hidden = collapsed;
-    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat, types));
+    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat));
     block.appendChild(body);
     wrap.appendChild(block);
   }
@@ -1431,10 +1414,6 @@ function refreshBoardDom(
   ) as HTMLButtonElement | null;
   if (send) send.disabled = isStreaming;
 
-  const controls = root.querySelector('.board-header__controls');
-  if (controls instanceof HTMLElement) {
-    ensureBoardChatViewToggle(controls);
-  }
   syncViewModeToggleFromActiveChat();
 
   const main = root.querySelector('.board-main');
@@ -1967,7 +1946,7 @@ export function renderBoardView(group: ChatGroup): void {
     sameGroupSession &&
     !chatBubblesPresent &&
     Boolean(existingRoot?.querySelector('.board-main')) &&
-    Boolean(existingRoot?.querySelector(`#btnViewModeToggleChat`));
+    Boolean(existingRoot?.querySelector('[data-board-action="open-plan"]'));
 
   if (canRefreshInPlace && board) {
     refreshBoardDom(existingRoot!, group, plannerChat, board);

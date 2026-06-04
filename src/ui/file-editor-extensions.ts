@@ -15,8 +15,10 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
-import type { Extension } from '@codemirror/state';
+import { Prec, type Extension } from '@codemirror/state';
+import { keymap } from '@codemirror/view';
 import { fetchCompletions, type LspCompletionItem } from '../lsp/completion-client';
+import { lspCompletionKeymapBindings } from './file-editor-keymap';
 
 /** Map LSP CompletionItemKind numbers to CodeMirror completion type hints. */
 function completionTypeFromKind(kind?: number): string | undefined {
@@ -67,6 +69,7 @@ export function lspEditorExtensions(filePath: string): Extension[] {
   return [
     autocompletion({
       activateOnTyping: true,
+      defaultKeymap: false,
       override: [
         async (context: CompletionContext): Promise<CompletionResult | null> => {
           const word = context.matchBefore(/[\w$]*/);
@@ -87,5 +90,6 @@ export function lspEditorExtensions(filePath: string): Extension[] {
         },
       ],
     }),
+    Prec.highest(keymap.of(lspCompletionKeymapBindings)),
   ];
 }

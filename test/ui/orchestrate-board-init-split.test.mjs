@@ -138,6 +138,35 @@ describe('orchestrate board init split', () => {
     assert.equal(isStreamDomVisible(FIXED_CHAT_ID), false);
   });
 
+  test('split ends as soon as board exists while stream still runs', async () => {
+    setupDom();
+    const { chat, group } = seedBoardInitSession({ kickoffInHistory: true });
+    setStreaming(true, chat.id);
+    syncOrchestrateInitSplitChrome(chat);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.ok(document.querySelector('.board-init-split'));
+
+    group.orchestrateBoard = {
+      planPath: PLAN_PATH,
+      tasks: [],
+      waves: [],
+      startedAt: 1,
+      lastUpdatedAt: 1,
+    };
+    syncOrchestrateInitSplitChrome(chat);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    disposeBoardViewForTests();
+
+    assert.equal(isOrchestrateBoardInitSplitActive(chat), false);
+    assert.equal(document.querySelector('.board-init-split'), null);
+    assert.equal(
+      document.getElementById('mainColumn')?.classList.contains(
+        'main-column--orchestrate-init-split',
+      ),
+      false,
+    );
+  });
+
   test('split tears down after stream end and leaves full board shell', async () => {
     setupDom();
     const { chat } = seedBoardInitSession({ kickoffInHistory: true });

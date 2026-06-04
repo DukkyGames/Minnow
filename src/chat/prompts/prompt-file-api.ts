@@ -83,3 +83,34 @@ export async function resetPromptFileOverride(
     return null;
   }
 }
+
+/** Full file bytes including YAML front matter (for expert registry sync / edit). */
+export async function fetchPromptFileRaw(
+  family: PromptFileFamily,
+  entityId: string,
+  profile: PromptFileProfile = 'full',
+): Promise<PromptFileResponse | null> {
+  try {
+    const res = await fetch(
+      `/api/prompts/${family}/${encodeURIComponent(entityId)}/prompt?profile=${profile}&raw=1`,
+      { cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as PromptFileResponse;
+  } catch {
+    return null;
+  }
+}
+
+/** Delete a user expert folder under ~/.minnow/prompts/experts/. */
+export async function deleteExpertEntity(entityId: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `/api/prompts/experts/${encodeURIComponent(entityId)}`,
+      { method: 'DELETE' },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

@@ -43,7 +43,9 @@ import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
+import { resetCodeChangeTotals } from '../usage/code-change-ledger';
 import { resetTokenLedger } from '../usage/token-ledger';
+import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
@@ -125,6 +127,7 @@ export function renderStatsForChat(chat: Chat): void {
 }
 
 export function renderChatFromHistory(chat: Chat): void {
+  updateCodeChangeStrip(chat);
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }
@@ -166,7 +169,11 @@ export function renderChatFromHistory(chat: Chat): void {
   area.innerHTML = '';
   const toolResultMap = new Map<
     string,
-    { content: string; attachments?: ToolResultMessage['attachments'] }
+    {
+      content: string;
+      attachments?: ToolResultMessage['attachments'];
+      codeChange?: ToolResultMessage['codeChange'];
+    }
   >();
   for (const msg of chat.history) {
     if (msg?.role !== 'tool') continue;
@@ -174,6 +181,7 @@ export function renderChatFromHistory(chat: Chat): void {
     toolResultMap.set(toolMsg.tool_call_id, {
       content: toolMsg.content,
       attachments: toolMsg.attachments,
+      ...(toolMsg.codeChange ? { codeChange: toolMsg.codeChange } : {}),
     });
   }
 
@@ -231,7 +239,13 @@ export function renderChatFromHistory(chat: Chat): void {
         if (!firstToolEl) firstToolEl = toolWrap;
         const stored = toolResultMap.get(tc.id);
         if (stored !== undefined) {
-          renderToolResult(toolWrap, stored.content, stored.attachments, argsObj);
+          renderToolResult(
+            toolWrap,
+            stored.content,
+            stored.attachments,
+            argsObj,
+            stored.codeChange,
+          );
         }
       }
       if (!prose && firstToolEl) {
@@ -553,6 +567,7 @@ export function clearChat(): void {
   const chat = getActiveChat();
   chat.history = [];
   resetTokenLedger(chat);
+  resetCodeChangeTotals(chat);
   chat.lastStats = null;
   chat.modelInfo = {};
   chat.lastMessageAt = 0;

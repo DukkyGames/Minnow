@@ -27,4 +27,18 @@ describe('text-diff', () => {
     const lines = buildLineDiff('', 'hello');
     assert.ok(lines.some((l) => l.type === 'add'));
   });
+
+  test('countLineChangeStats matches buildLineDiff counts', async () => {
+    const { buildLineDiff, countLineChangeStats } = await import(
+      '../../src/chat/prompts/text-diff.ts'
+    );
+    const baseline = 'one\ntwo\nthree';
+    const current = 'one\nfour\nthree';
+    const stats = countLineChangeStats(baseline, current);
+    const lines = buildLineDiff(baseline, current);
+    const adds = lines.filter((l) => l.type === 'add').length;
+    const dels = lines.filter((l) => l.type === 'remove').length;
+    assert.equal(stats.additions, adds);
+    assert.equal(stats.deletions, dels);
+  });
 });

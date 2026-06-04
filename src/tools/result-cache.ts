@@ -289,6 +289,9 @@ function cloneResult(result: ToolExecutionResult): ToolExecutionResult {
   if (result.attachments?.length) {
     cloned.attachments = result.attachments.map((a) => ({ ...a }));
   }
+  if (result.codeChange) {
+    cloned.codeChange = { ...result.codeChange };
+  }
   return cloned;
 }
 

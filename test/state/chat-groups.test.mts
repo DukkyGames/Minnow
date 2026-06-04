@@ -72,6 +72,7 @@ describe('chat groups', () => {
       waves: [{ id: 'W1' }],
     });
     assert.equal(planner.boardGroupId, group.id);
+    assert.equal(planner.groupId, group.id);
     assert.equal(findBoardGroupForPlanner(planner.id)?.id, group.id);
     assert.equal(getBoardGroupForChat(planner)?.orchestrateBoard?.tasks.length, 1);
     group.viewMode = 'board';

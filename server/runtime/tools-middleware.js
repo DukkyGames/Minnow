@@ -48,7 +48,15 @@ import {
   isAllowedReefArtifactPath,
   tryResolveReefArtifactsFindRoot,
 } from '../reef/artifact-paths.js';
-import { appendArtifactVersionFromSave } from '../reef/artifact-store.js';
+import {
+  appendArtifactVersionFromSave,
+  getArtifactWithCurrentBody,
+} from '../reef/artifact-store.js';
+import {
+  codeChangeFromDiff,
+  countAppendLineStats,
+  countLinesInText,
+} from '../tools/line-diff-stats.js';
 import { runGrepSearch } from '../tools/grep.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
 import { pathAccessStore, resolveSafePath } from './path-access.js';
@@ -198,6 +206,33 @@ async function toolReadFile(args) {
   return await fs.readFile(filePath, 'utf8');
 }
 
+/** Read UTF-8 file or empty string when missing (for before-write diffs). */
+async function readUtf8OrEmpty(filePath) {
+  try {
+    return await fs.readFile(filePath, 'utf8');
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+    if (code === 'ENOENT') return '';
+    throw err;
+  }
+}
+
+/** Attach codeChange when line stats are non-zero. */
+function withCodeChange(message, codeChange) {
+  if (codeChange && (codeChange.additions > 0 || codeChange.deletions > 0)) {
+    return { result: message, codeChange };
+  }
+  return message;
+}
+
+/** Reef artifact id from an absolute artifact body path. */
+function artifactIdFromAbsPath(absPath) {
+  const root = path.resolve(getHomeReefArtifactsDir());
+  const rel = path.relative(root, path.resolve(absPath)).replace(/\\/g, '/');
+  const segments = rel.split('/').filter(Boolean);
+  return segments[0] ?? null;
+}
+
 async function toolReadFileRange(args) {
   const filePath = resolveSafePath(args?.path);
   const startLine = Number(args?.start_line);
@@ -218,13 +253,24 @@ async function toolSaveFile(args) {
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
+  const rel = toRelativePath(filePath);
+  const nextContent = String(args.content);
   if (isAllowedReefArtifactPath(filePath)) {
-    const result = await appendArtifactVersionFromSave(filePath, String(args.content), 'agent');
-    return `Saved reef artifact ${result.manifest.id} v${result.version} (${String(args.content).length} bytes)`;
+    let before = '';
+    const artifactId = artifactIdFromAbsPath(filePath);
+    if (artifactId) {
+      const current = await getArtifactWithCurrentBody(artifactId);
+      before = current?.body ?? '';
+    }
+    const result = await appendArtifactVersionFromSave(filePath, nextContent, 'agent');
+    const message = `Saved reef artifact ${result.manifest.id} v${result.version} (${nextContent.length} bytes)`;
+    return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
   }
+  const before = await readUtf8OrEmpty(filePath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, String(args.content), 'utf8');
-  return `Saved ${toRelativePath(filePath)} (${String(args.content).length} bytes)`;
+  await fs.writeFile(filePath, nextContent, 'utf8');
+  const message = `Saved ${rel} (${nextContent.length} bytes)`;
+  return withCodeChange(message, codeChangeFromDiff(before, nextContent, rel));
 }
 
 async function toolAppendFile(args) {
@@ -232,9 +278,12 @@ async function toolAppendFile(args) {
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
+  const rel = toRelativePath(filePath);
+  const appendStats = countAppendLineStats(String(args.content));
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.appendFile(filePath, String(args.content), 'utf8');
-  return `Appended to ${toRelativePath(filePath)}`;
+  const message = `Appended to ${rel}`;
+  return withCodeChange(message, { ...appendStats, path: rel });
 }
 
 async function toolInsertAtLine(args) {
@@ -246,13 +295,16 @@ async function toolInsertAtLine(args) {
   if (args?.content === undefined) {
     return 'Error: content is required';
   }
+  const rel = toRelativePath(filePath);
+  const insertStats = countAppendLineStats(String(args.content));
   const existing = await fs.readFile(filePath, 'utf8');
   const lines = existing.split(/\r?\n/);
   const insertLines = String(args.content).split(/\r?\n/);
   const index = Math.min(lineNumber - 1, lines.length);
   lines.splice(index, 0, ...insertLines);
   await fs.writeFile(filePath, lines.join('\n'), 'utf8');
-  return `Inserted ${insertLines.length} line(s) at line ${lineNumber} in ${toRelativePath(filePath)}`;
+  const message = `Inserted ${insertLines.length} line(s) at line ${lineNumber} in ${rel}`;
+  return withCodeChange(message, { ...insertStats, path: rel });
 }
 
 async function toolReplaceTextInFile(args) {
@@ -262,14 +314,17 @@ async function toolReplaceTextInFile(args) {
   if (search === undefined) {
     return 'Error: search is required';
   }
+  const rel = toRelativePath(filePath);
   const content = await fs.readFile(filePath, 'utf8');
   const parts = content.split(String(search));
   const count = parts.length - 1;
   if (count === 0) {
-    return `No occurrences of search text in ${toRelativePath(filePath)}`;
+    return `No occurrences of search text in ${rel}`;
   }
-  await fs.writeFile(filePath, parts.join(String(replace)), 'utf8');
-  return `Replaced ${count} occurrence(s) in ${toRelativePath(filePath)}`;
+  const after = parts.join(String(replace));
+  await fs.writeFile(filePath, after, 'utf8');
+  const message = `Replaced ${count} occurrence(s) in ${rel}`;
+  return withCodeChange(message, codeChangeFromDiff(content, after, rel));
 }
 
 async function toolSearchInFile(args) {
@@ -313,6 +368,17 @@ async function toolMakeDirectory(args) {
 async function toolMoveFile(args) {
   const source = resolveSafePath(args?.source);
   const destination = resolveSafePath(args?.destination, { write: true });
+  const destRel = toRelativePath(destination);
+  const destBefore = await readUtf8OrEmpty(destination);
+  let sourceContent = '';
+  try {
+    const srcStat = await fs.stat(source);
+    if (srcStat.isFile()) {
+      sourceContent = await fs.readFile(source, 'utf8');
+    }
+  } catch {
+    /* Non-file or missing source — stats omitted below. */
+  }
   await fs.mkdir(path.dirname(destination), { recursive: true });
   try {
     await fs.rename(source, destination);
@@ -327,7 +393,8 @@ async function toolMoveFile(args) {
     }
     throw err;
   }
-  return `Moved ${toRelativePath(source)} -> ${toRelativePath(destination)}`;
+  const message = `Moved ${toRelativePath(source)} -> ${destRel}`;
+  return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
 }
 
 async function toolCopyFile(args) {
@@ -337,20 +404,29 @@ async function toolCopyFile(args) {
   if (!stat.isFile()) {
     return `Error: source "${args.source}" is not a file (use move for directories)`;
   }
+  const destRel = toRelativePath(destination);
+  const destBefore = await readUtf8OrEmpty(destination);
+  const sourceContent = await fs.readFile(source, 'utf8');
   await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.copyFile(source, destination);
-  return `Copied ${toRelativePath(source)} -> ${toRelativePath(destination)}`;
+  const message = `Copied ${toRelativePath(source)} -> ${destRel}`;
+  return withCodeChange(message, codeChangeFromDiff(destBefore, sourceContent, destRel));
 }
 
 async function toolDeletePath(args) {
   const target = resolveSafePath(args?.path, { write: true });
+  const rel = toRelativePath(target);
   const stat = await fs.stat(target);
   if (stat.isDirectory()) {
     await fs.rm(target, { recursive: true, force: true });
-  } else {
-    await fs.unlink(target);
+    return `Deleted ${rel}`;
   }
-  return `Deleted ${toRelativePath(target)}`;
+  const content = await fs.readFile(target, 'utf8');
+  const deletions = countLinesInText(content);
+  await fs.unlink(target);
+  const message = `Deleted ${rel}`;
+  if (deletions === 0) return message;
+  return withCodeChange(message, { additions: 0, deletions, path: rel });
 }
 
 async function toolFindFiles(args) {

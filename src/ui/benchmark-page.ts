@@ -1359,6 +1359,9 @@ export function openBenchmark(): void {
   void import('./global-bugs-page').then((m) => {
     if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
   });
+  void import('./welcome-page').then((m) => {
+    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+  });
 
   root.classList.add('is-open');
   shell.classList.add('hidden');

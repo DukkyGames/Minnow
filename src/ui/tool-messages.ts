@@ -2,7 +2,7 @@
  * Tool-call / tool-result bubbles in the chat transcript (SA-8).
  */
 
-import type { ToolImageAttachment } from '../types';
+import type { CodeChangeStats, ToolImageAttachment } from '../types';
 import { formatAskQuestionResultAsListItems } from './format-ask-question-result';
 
 /** Max characters shown in expanded result <pre> blocks. */
@@ -17,6 +17,31 @@ export function isToolResultFailure(result: string): boolean {
 function toolSummaryAriaLabel(name: string, status: 'running' | 'failed' | 'succeeded'): string {
   if (status === 'running') return `${name}, running, show details`;
   return `${name}, ${status}, show details`;
+}
+
+/** GitHub-style +/− badge for file-mutation tool results. */
+function appendCodeChangeBadge(summary: Element, codeChange?: CodeChangeStats): void {
+  summary.querySelector('.tool-call-code-change')?.remove();
+  if (!codeChange || (codeChange.additions === 0 && codeChange.deletions === 0)) return;
+
+  const badge = document.createElement('span');
+  badge.className = 'tool-call-code-change';
+  badge.setAttribute('aria-label', `Lines changed: plus ${codeChange.additions}, minus ${codeChange.deletions}`);
+
+  if (codeChange.additions > 0) {
+    const add = document.createElement('span');
+    add.className = 'tool-call-code-change__add';
+    add.textContent = `+${codeChange.additions}`;
+    badge.appendChild(add);
+  }
+  if (codeChange.deletions > 0) {
+    const del = document.createElement('span');
+    del.className = 'tool-call-code-change__del';
+    del.textContent = `−${codeChange.deletions}`;
+    badge.appendChild(del);
+  }
+
+  summary.appendChild(badge);
 }
 
 /** Truncate long tool output for the UI while keeping the full string in history. */
@@ -118,6 +143,7 @@ export function renderToolResult(
   result: string,
   attachments?: ToolImageAttachment[],
   toolArgs?: Record<string, unknown> | unknown,
+  codeChange?: CodeChangeStats,
 ): void {
   const details = wrap.querySelector('.tool-call-details');
   const summary = wrap.querySelector('.tool-call-summary');
@@ -157,6 +183,12 @@ export function renderToolResult(
   statusLabel.textContent = failed ? 'Failed' : 'Success';
   statusLabel.classList.remove('tool-call-status-label--pending');
   statusLabel.classList.add(failed ? 'tool-call-status-label--fail' : 'tool-call-status-label--ok');
+
+  if (!failed) {
+    appendCodeChangeBadge(summary, codeChange);
+  } else {
+    summary.querySelector('.tool-call-code-change')?.remove();
+  }
 
   if (body.querySelector('.tool-call-pre--result')) return;
 

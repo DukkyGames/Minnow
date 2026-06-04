@@ -272,6 +272,20 @@ function ensureToolCalls(raw: unknown): ToolCall[] {
   return raw.map(ensureToolCall).filter((tc): tc is ToolCall => Boolean(tc));
 }
 
+/** Keep persisted line stats on tool rows when valid. */
+function normalizePersistedCodeChange(
+  raw: unknown,
+): import('../types').CodeChangeStats | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = raw as Record<string, unknown>;
+  const additions = Number(row.additions);
+  const deletions = Number(row.deletions);
+  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return undefined;
+  if (additions === 0 && deletions === 0) return undefined;
+  const path = typeof row.path === 'string' && row.path.trim() ? row.path.trim() : undefined;
+  return { additions, deletions, ...(path ? { path } : {}) };
+}
+
 function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | null {
   if (!m || !m.role) return null;
 
@@ -290,11 +304,13 @@ function ensureMessageEntry(m: Partial<Message> | null | undefined): Message | n
             typeof a.url === 'string',
         )
       : undefined;
+    const codeChange = normalizePersistedCodeChange(toolMsg.codeChange);
     return {
       role: 'tool',
       tool_call_id: toolCallId,
       content,
       ...(attachments?.length ? { attachments } : {}),
+      ...(codeChange ? { codeChange } : {}),
     };
   }
 
@@ -414,8 +430,6 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.filesChanged === 'number' && Number.isFinite(r.filesChanged)
       ? r.filesChanged
       : undefined;
-  const agentType =
-    typeof r.agentType === 'string' && r.agentType.trim() ? r.agentType.trim() : undefined;
   const chatId =
     typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
   const buildSpec =
@@ -436,7 +450,6 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(filesChanged !== undefined ? { filesChanged } : {}),
     ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
     ...(typeof r.error === 'string' ? { error: r.error } : {}),
-    ...(agentType ? { agentType } : {}),
     ...(chatId ? { chatId } : {}),
     ...(buildSpec ? { buildSpec } : {}),
     ...(testSpec ? { testSpec } : {}),
@@ -592,6 +605,7 @@ export function migrateSessionV4ToV5(state: SessionState): void {
     }
 
     chat.boardGroupId = group.id;
+    chat.groupId = group.id;
 
     for (const task of legacyBoard.tasks) {
       const taskChatId = task.chatId?.trim();
@@ -854,7 +868,21 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
   } else {
     state.version = 5;
   }
+  repairPlannerChatFolderMembership(state);
   return state;
+}
+
+/** Planners linked via boardGroupId appear under their board folder in the sidebar. */
+function repairPlannerChatFolderMembership(state: SessionState): void {
+  for (const group of state.groups ?? []) {
+    const plannerId = group.plannerChatId?.trim();
+    if (!plannerId) continue;
+    const planner = state.chats.find((c) => c.id === plannerId);
+    if (!planner) continue;
+    if (planner.boardGroupId === group.id && planner.groupId !== group.id) {
+      planner.groupId = group.id;
+    }
+  }
 }
 
 /** Remember the active chat under the current workspace key before switching scope. */

@@ -4,6 +4,7 @@
 
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 
 /** GitHub light palette — mirrors highlight.js/styles/github.min.css */
@@ -136,7 +137,61 @@ const minnowHighlightStyle = HighlightStyle.define([
   { tag: tags.invalid, color: gh.invalid },
 ]);
 
+/**
+ * LSP autocomplete + tooltips — match Minnow surfaces (overrides CodeMirror light defaults).
+ */
+const minnowEditorTooltipTheme = EditorView.theme({
+  '.cm-tooltip': {
+    backgroundColor: 'var(--mn-surface-2)',
+    color: 'var(--mn-fg)',
+    border: '1px solid var(--mn-border)',
+    borderRadius: 'var(--radius-sm)',
+    boxShadow: 'var(--shadow-popover-soft)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+  },
+  '.cm-tooltip .cm-tooltip-arrow:before': {
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  '.cm-tooltip .cm-tooltip-arrow:after': {
+    borderTopColor: 'var(--mn-surface-2)',
+    borderBottomColor: 'var(--mn-surface-2)',
+  },
+  '.cm-tooltip-autocomplete': {
+    '& > ul': {
+      backgroundColor: 'var(--mn-surface-2)',
+      border: 'none',
+    },
+    '& > ul > li': {
+      color: 'var(--mn-fg)',
+    },
+    '& > ul > li[aria-selected]': {
+      backgroundColor: 'var(--mn-surface-elevated)',
+      color: 'var(--mn-fg)',
+    },
+    '& > ul > completion-section': {
+      color: 'var(--mn-fg-muted)',
+      borderBottomColor: 'var(--mn-border)',
+    },
+    '& .cm-completionIcon': {
+      opacity: 0.9,
+    },
+    '& .cm-completionLabel': {
+      color: 'inherit',
+    },
+    '& .cm-completionDetail': {
+      color: 'var(--mn-fg-muted)',
+      fontStyle: 'normal',
+    },
+    '& > ul > li[aria-selected] .cm-completionDetail': {
+      color: 'var(--mn-fg-muted)',
+      opacity: 0.9,
+    },
+  },
+});
+
 /** Shared editor extensions: GitHub-style token colors for the file viewer. */
 export function minnowEditorExtensions(): Extension[] {
-  return [syntaxHighlighting(minnowHighlightStyle)];
+  return [syntaxHighlighting(minnowHighlightStyle), minnowEditorTooltipTheme];
 }

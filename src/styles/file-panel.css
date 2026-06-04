@@ -185,6 +185,23 @@
   caret-color: var(--mn-fg);
 }
 
+/* LSP autocomplete — token overrides for light/dark class from @codemirror/autocomplete */
+.file-viewer-editor-mount .cm-tooltip-autocomplete ul > li[aria-selected],
+.file-viewer-body .cm-tooltip-autocomplete ul > li[aria-selected] {
+  background: var(--mn-surface-elevated);
+  color: var(--mn-fg);
+}
+
+.file-viewer-editor-mount .cm-tooltip-autocomplete ul > li,
+.file-viewer-body .cm-tooltip-autocomplete ul > li {
+  color: var(--mn-fg);
+}
+
+.file-viewer-editor-mount .cm-tooltip-autocomplete .cm-completionDetail,
+.file-viewer-body .cm-tooltip-autocomplete .cm-completionDetail {
+  color: var(--mn-fg-muted);
+}
+
 /* drawSelection cursors (if enabled) */
 .file-viewer-editor-mount .cm-cursor,
 .file-viewer-editor-mount .cm-cursor-primary,

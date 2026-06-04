@@ -1114,18 +1114,18 @@
   border-radius: var(--radius-md);
 }
 
-.settings-lsp-row-head {
+.settings-lsp-row-main {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .settings-lsp-toggle {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
   min-width: 0;
   cursor: default;
 }
@@ -1140,39 +1140,25 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--mn-fg);
-}
-
-.settings-lsp-detail {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.settings-lsp-id {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--mn-fg-muted);
+  white-space: nowrap;
 }
 
 .settings-lsp-extensions {
-  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
   color: var(--mn-fg-muted);
-  word-break: break-word;
 }
 
 .settings-lsp-status {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--mn-fg);
 }
 
 .settings-lsp-status-dot {
@@ -1186,14 +1172,15 @@
 
 .settings-lsp-status--ok .settings-lsp-status-dot {
   background: var(--mn-success);
-}
-
-.settings-lsp-status-text {
-  font-family: var(--font-mono);
+  box-shadow: none;
 }
 
 .settings-lsp-hint {
-  margin: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
@@ -1201,7 +1188,11 @@
 }
 
 .settings-lsp-warn {
-  margin: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   line-height: 1.45;
   color: var(--mn-warning);

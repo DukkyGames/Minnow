@@ -4,8 +4,21 @@
 
 import '../styles/expert-lab-page.css';
 
-import { getExpert, listExperts } from '../chat/experts/registry';
+import { createExpertFromDescription } from '../chat/experts/create-expert';
+import { isUserOwnedExpert } from '../chat/experts/expert-ownership';
+import {
+  deleteUserExpert,
+  loadUserExpertForEdit,
+  saveUserExpert,
+} from '../chat/experts/expert-user-ops';
+import {
+  getBuiltinExpertIds,
+  getExpert,
+  listExperts,
+  syncExpertRegistryFromServer,
+} from '../chat/experts/registry';
 import type { ExpertAccent, ExpertMeta } from '../chat/experts/types';
+import { EXPERT_ACCENT_VALUES } from '../chat/experts/types';
 import { setExpertLabPageOpen } from '../app-state';
 import { bootGenerationResumeForChat } from '../chat/generation-resume';
 import { loadExpertsConfig } from '../config/experts-config';
@@ -44,7 +57,7 @@ import {
   setExpertLabStreamListener,
 } from './expert-lab-stream';
 
-export type ExpertLabStep = 'pick' | 'brief' | 'run';
+export type ExpertLabStep = 'pick' | 'create' | 'edit' | 'brief' | 'run';
 
 type PhaseId = 'understanding' | 'clarifying' | 'working' | 'output';
 
@@ -61,6 +74,13 @@ let outputStreamCursor: HTMLDivElement | null = null;
 let clarifyingActive = false;
 let questionHostHome: { parent: HTMLElement; nextSibling: ChildNode | null } | null =
   null;
+let createInFlight = false;
+let editExpertId: string | null = null;
+let editFullBody = '';
+let editLiteBody = '';
+let editLiteEdited = false;
+let editDirty = false;
+let editProfile: 'full' | 'lite' = 'full';
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('expertLabView');
@@ -252,11 +272,106 @@ function watchQuestionHostResolve(onResolved: () => void): void {
   }
 }
 
+function setFormError(elementId: string, message: string | null): void {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+
+function renderMakeExpertTile(grid: HTMLElement): void {
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'expert-lab-tile expert-lab-tile--make expert-accent-violet';
+  tile.setAttribute('aria-label', 'Make your own expert');
+
+  const iconEl = document.createElement('span');
+  iconEl.className = 'expert-lab-tile-icon';
+  iconEl.textContent = '+';
+  iconEl.setAttribute('aria-hidden', 'true');
+
+  const label = document.createElement('span');
+  label.className = 'expert-lab-tile-label';
+  label.textContent = 'Make your own expert';
+
+  const desc = document.createElement('p');
+  desc.className = 'expert-lab-tile-desc';
+  desc.textContent = 'Describe a specialist and Minnow will draft a custom expert for you.';
+
+  tile.appendChild(iconEl);
+  tile.appendChild(label);
+  tile.appendChild(desc);
+  tile.addEventListener('click', () => openCreateExpertStep());
+  grid.appendChild(tile);
+}
+
+function closeTileMenus(): void {
+  document.querySelectorAll('.expert-lab-tile-menu').forEach((menu) => {
+    menu.classList.remove('is-open');
+  });
+}
+
+function renderExpertTileMenu(tile: HTMLElement, expertId: string, label: string): void {
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'expert-lab-tile-menu-wrap';
+
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'expert-lab-tile-menu-btn';
+  menuBtn.setAttribute('aria-label', `Actions for ${label}`);
+  menuBtn.textContent = '⋯';
+
+  const menu = document.createElement('div');
+  menu.className = 'expert-lab-tile-menu';
+
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.textContent = 'Edit';
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeTileMenus();
+    void openEditExpertStep(expertId);
+  });
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeTileMenus();
+    void deleteExpertFromLab(expertId, label);
+  });
+
+  menu.appendChild(editBtn);
+  menu.appendChild(deleteBtn);
+  menuWrap.appendChild(menuBtn);
+  menuWrap.appendChild(menu);
+
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasOpen = menu.classList.contains('is-open');
+    closeTileMenus();
+    if (!wasOpen) {
+      menu.classList.add('is-open');
+    }
+  });
+
+  tile.appendChild(menuWrap);
+}
+
 function renderExpertGrid(): void {
   const grid = document.getElementById('expertLabGrid');
   if (!grid) return;
   grid.replaceChildren();
 
+  renderMakeExpertTile(grid);
+
+  const builtinIds = getBuiltinExpertIds();
   for (const expert of listExperts()) {
     const accent = expertAccent(expert.meta);
     const tile = document.createElement('button');
@@ -280,8 +395,174 @@ function renderExpertGrid(): void {
     tile.appendChild(iconEl);
     tile.appendChild(label);
     tile.appendChild(desc);
+
+    if (isUserOwnedExpert(expert, builtinIds)) {
+      renderExpertTileMenu(tile, expert.meta.id, expert.meta.label);
+    }
+
     tile.addEventListener('click', () => selectExpert(expert.meta.id));
     grid.appendChild(tile);
+  }
+}
+
+function openCreateExpertStep(): void {
+  setFormError('expertLabCreateError', null);
+  const input = document.getElementById('expertLabCreateInput') as HTMLTextAreaElement | null;
+  if (input) {
+    input.value = '';
+    input.disabled = false;
+  }
+  setStep('create');
+  input?.focus();
+}
+
+async function submitCreateExpert(): Promise<void> {
+  if (createInFlight) return;
+  const input = document.getElementById('expertLabCreateInput') as HTMLTextAreaElement | null;
+  const description = input?.value.trim() ?? '';
+  if (!description) {
+    setFormError('expertLabCreateError', 'Describe the expert you want to create.');
+    return;
+  }
+
+  createInFlight = true;
+  setFormError('expertLabCreateError', null);
+  const createBtn = document.getElementById('btnExpertLabCreate');
+  if (createBtn instanceof HTMLButtonElement) createBtn.disabled = true;
+  if (input) input.disabled = true;
+
+  try {
+    const result = await createExpertFromDescription({ description });
+    renderExpertGrid();
+    selectExpert(result.expertId);
+    setStep('brief');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setFormError('expertLabCreateError', message);
+  } finally {
+    createInFlight = false;
+    if (createBtn instanceof HTMLButtonElement) createBtn.disabled = false;
+    if (input) input.disabled = false;
+  }
+}
+
+function syncEditBodyField(): void {
+  const bodyInput = document.getElementById('expertLabEditBody') as HTMLTextAreaElement | null;
+  if (!bodyInput) return;
+  bodyInput.value = editProfile === 'full' ? editFullBody : editLiteBody;
+}
+
+function markEditDirty(): void {
+  editDirty = true;
+}
+
+async function openEditExpertStep(expertId: string): Promise<void> {
+  const loaded = await loadUserExpertForEdit(expertId);
+  if (!loaded) {
+    setFormError('expertLabEditError', 'Could not load this expert.');
+    return;
+  }
+
+  editExpertId = expertId;
+  editFullBody = loaded.fullBody;
+  editLiteBody = loaded.liteBody;
+  editLiteEdited = false;
+  editDirty = false;
+  editProfile = 'full';
+
+  const labelInput = document.getElementById('expertLabEditLabel') as HTMLInputElement | null;
+  const descInput = document.getElementById('expertLabEditDescription') as HTMLInputElement | null;
+  const iconInput = document.getElementById('expertLabEditIcon') as HTMLInputElement | null;
+  const accentSelect = document.getElementById('expertLabEditAccent') as HTMLSelectElement | null;
+
+  if (labelInput) labelInput.value = loaded.meta.label;
+  if (descInput) descInput.value = loaded.meta.description ?? '';
+  if (iconInput) iconInput.value = loaded.meta.icon ?? '';
+  if (accentSelect) {
+    accentSelect.replaceChildren();
+    for (const accent of EXPERT_ACCENT_VALUES) {
+      const opt = document.createElement('option');
+      opt.value = accent;
+      opt.textContent = accent.charAt(0).toUpperCase() + accent.slice(1);
+      if (accent === (loaded.meta.accent ?? 'sage')) opt.selected = true;
+      accentSelect.appendChild(opt);
+    }
+  }
+
+  document.querySelectorAll('.expert-lab-profile-tab').forEach((tab) => {
+    const el = tab as HTMLElement;
+    const isFull = el.dataset.profile === 'full';
+    el.classList.toggle('is-active', isFull);
+    el.setAttribute('aria-selected', isFull ? 'true' : 'false');
+  });
+
+  setFormError('expertLabEditError', null);
+  syncEditBodyField();
+  setStep('edit');
+  labelInput?.focus();
+}
+
+async function submitEditExpert(event?: Event): Promise<void> {
+  event?.preventDefault();
+  if (!editExpertId) return;
+
+  const labelInput = document.getElementById('expertLabEditLabel') as HTMLInputElement | null;
+  const descInput = document.getElementById('expertLabEditDescription') as HTMLInputElement | null;
+  const iconInput = document.getElementById('expertLabEditIcon') as HTMLInputElement | null;
+  const accentSelect = document.getElementById('expertLabEditAccent') as HTMLSelectElement | null;
+  const bodyInput = document.getElementById('expertLabEditBody') as HTMLTextAreaElement | null;
+
+  if (editProfile === 'full') {
+    editFullBody = bodyInput?.value ?? editFullBody;
+  } else {
+    editLiteBody = bodyInput?.value ?? editLiteBody;
+  }
+
+  const saveBtn = document.getElementById('btnExpertLabEditSave');
+  if (saveBtn instanceof HTMLButtonElement) saveBtn.disabled = true;
+  setFormError('expertLabEditError', null);
+
+  try {
+    await saveUserExpert({
+      id: editExpertId,
+      label: labelInput?.value.trim() || editExpertId,
+      description: descInput?.value.trim(),
+      icon: iconInput?.value.trim(),
+      accent: (accentSelect?.value as ExpertAccent) || 'sage',
+      fullBody: editFullBody,
+      liteBody: editLiteBody,
+      liteEdited: editLiteEdited,
+    });
+    editExpertId = null;
+    editDirty = false;
+    renderExpertGrid();
+    setStep('pick');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setFormError('expertLabEditError', message);
+  } finally {
+    if (saveBtn instanceof HTMLButtonElement) saveBtn.disabled = false;
+  }
+}
+
+function cancelEditExpert(): void {
+  if (editDirty && !confirm('Discard unsaved changes?')) return;
+  editExpertId = null;
+  editDirty = false;
+  setFormError('expertLabEditError', null);
+  setStep('pick');
+}
+
+async function deleteExpertFromLab(expertId: string, label: string): Promise<void> {
+  if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+  try {
+    await deleteUserExpert(expertId);
+    if (selectedExpertId === expertId) selectedExpertId = null;
+    renderExpertGrid();
+    setStep('pick');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    alert(message);
   }
 }
 
@@ -453,6 +734,7 @@ export async function refreshExpertLabEnabledState(): Promise<void> {
   if (config.enabled) {
     empty.classList.add('hidden');
     pickStep.classList.remove('hidden-by-disabled');
+    await syncExpertRegistryFromServer();
     renderExpertGrid();
   } else {
     empty.classList.remove('hidden');
@@ -511,6 +793,9 @@ export function closeExpertLab(): void {
   setStep('pick');
   selectedExpertId = null;
   briefText = '';
+  editExpertId = null;
+  editDirty = false;
+  closeTileMenus();
 
   if (window.location.hash.startsWith('#/experts')) {
     window.location.hash = '#/';
@@ -526,6 +811,9 @@ export function openExpertLab(): void {
   closeSettings();
   closeGlobalBugs();
   closeBenchmark();
+  void import('./welcome-page').then((m) => {
+    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+  });
 
   if (!savedActiveChatId) {
     savedActiveChatId = activateExpertLabChat();
@@ -562,11 +850,79 @@ function bindStaticControls(): void {
   staticBindingsDone = true;
 
   document.getElementById('btnExpertLabPageBack')?.addEventListener('click', () => {
-    if (currentStep === 'brief' || currentStep === 'run') {
-      setStep(currentStep === 'run' ? 'brief' : 'pick');
+    if (currentStep === 'run') {
+      setStep('brief');
+      return;
+    }
+    if (currentStep === 'brief') {
+      setStep('pick');
+      return;
+    }
+    if (currentStep === 'create') {
+      setStep('pick');
+      return;
+    }
+    if (currentStep === 'edit') {
+      cancelEditExpert();
       return;
     }
     closeExpertLab();
+  });
+
+  document.getElementById('btnExpertLabCreateCancel')?.addEventListener('click', () => {
+    setStep('pick');
+  });
+
+  document.getElementById('btnExpertLabCreate')?.addEventListener('click', () => {
+    void submitCreateExpert();
+  });
+
+  document.getElementById('btnExpertLabEditCancel')?.addEventListener('click', () => {
+    cancelEditExpert();
+  });
+
+  document.getElementById('expertLabEditForm')?.addEventListener('submit', (e) => {
+    void submitEditExpert(e);
+  });
+
+  document.getElementById('expertLabEditLabel')?.addEventListener('input', markEditDirty);
+  document.getElementById('expertLabEditDescription')?.addEventListener('input', markEditDirty);
+  document.getElementById('expertLabEditIcon')?.addEventListener('input', markEditDirty);
+  document.getElementById('expertLabEditAccent')?.addEventListener('change', markEditDirty);
+
+  const editBody = document.getElementById('expertLabEditBody');
+  editBody?.addEventListener('input', () => {
+    markEditDirty();
+    if (editProfile === 'lite') editLiteEdited = true;
+    const ta = editBody as HTMLTextAreaElement;
+    if (editProfile === 'full') editFullBody = ta.value;
+    else editLiteBody = ta.value;
+  });
+
+  document.querySelectorAll('.expert-lab-profile-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const el = tab as HTMLElement;
+      const profile = el.dataset.profile === 'lite' ? 'lite' : 'full';
+      const bodyInput = document.getElementById('expertLabEditBody') as HTMLTextAreaElement | null;
+      if (bodyInput) {
+        if (editProfile === 'full') editFullBody = bodyInput.value;
+        else editLiteBody = bodyInput.value;
+      }
+      editProfile = profile;
+      document.querySelectorAll('.expert-lab-profile-tab').forEach((t) => {
+        const node = t as HTMLElement;
+        const active = node.dataset.profile === profile;
+        node.classList.toggle('is-active', active);
+        node.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      syncEditBodyField();
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('.expert-lab-tile-menu-wrap')) {
+      closeTileMenus();
+    }
   });
 
   document.getElementById('btnExpertLabBriefBack')?.addEventListener('click', () => {
