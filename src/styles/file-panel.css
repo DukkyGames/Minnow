@@ -413,8 +413,9 @@
   white-space: nowrap;
 }
 
-.file-viewer-editor-mount .mn-editor-search__btn--close,
-.file-viewer-body .mn-editor-search__btn--close {
+.file-viewer-editor-mount .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close,
+.file-viewer-body .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close {
+  position: static;
   width: 30px;
   color: var(--mn-fg-muted);
   background: transparent;
@@ -448,8 +449,8 @@
     background: var(--mn-surface-elevated);
   }
 
-  .file-viewer-editor-mount .mn-editor-search__btn--close:hover,
-  .file-viewer-body .mn-editor-search__btn--close:hover {
+  .file-viewer-editor-mount .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close:hover,
+  .file-viewer-body .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close:hover {
     color: var(--mn-fg);
     background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
   }
