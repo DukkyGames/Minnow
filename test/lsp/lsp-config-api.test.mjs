@@ -46,7 +46,7 @@ describe('GET /api/config/lsp catalog', () => {
       await fs.readFile(path.join(PROJECT_ROOT, 'src/lsp/defaults.json'), 'utf8'),
     );
     defaultCount = Object.keys(defaults.lsp ?? {}).length;
-    assert.equal(defaultCount, 39);
+    assert.equal(defaultCount, 15);
 
     homeDir = path.join(__dirname, '../fixtures/lsp-config-api-home');
     process.env.MINNOW_HOME = homeDir;
@@ -93,14 +93,14 @@ describe('GET /api/config/lsp catalog', () => {
     assert.ok(res.json.lsp.pyright);
   });
 
-  test('eslint row includes requirements and disabledReason when disabled', async () => {
+  test('rust row includes requirements and disabledReason when disabled', async () => {
     const res = await httpGet(baseUrl, '/api/config/lsp');
-    const eslint = res.json.servers.find((s) => s.id === 'eslint');
-    assert.ok(eslint);
-    assert.equal(eslint.requirements?.package, 'eslint');
-    assert.equal(eslint.disabled, true);
-    assert.match(String(eslint.disabledReason ?? ''), /Disabled in settings/);
-    assert.match(String(eslint.disabledReason ?? ''), /Requires:.*eslint/);
+    const rust = res.json.servers.find((s) => s.id === 'rust');
+    assert.ok(rust);
+    assert.equal(rust.requirements?.binary, 'rust-analyzer');
+    assert.equal(rust.disabled, true);
+    assert.match(String(rust.disabledReason ?? ''), /Disabled in settings/);
+    assert.match(String(rust.disabledReason ?? ''), /Requires:.*rust-analyzer/);
   });
 
   test('typescript is enabled with command', async () => {

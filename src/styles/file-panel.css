@@ -91,21 +91,99 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--mn-border);
   flex-shrink: 0;
+  min-width: 0;
 }
 
-.file-viewer-path {
+.file-viewer-tabs {
+  display: flex;
   flex: 1;
   min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  /* Fade only the trailing edge so the first tab is not dimmed at scroll start. */
+  mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent 100%);
+}
+
+.file-viewer-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 6px;
+  background: var(--mn-bg);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--mn-fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.file-viewer-tab.is-active {
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
+}
+
+.file-viewer-tab--dirty .file-viewer-tab__label {
+  color: var(--mn-fg);
+}
+
+.file-viewer-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.file-viewer-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.file-viewer-tab__close:hover {
+  background: oklch(from var(--mn-fg) l c h / 0.12);
+}
+
+.file-viewer-diagnostics {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-viewer-path--dirty {
-  color: var(--mn-fg);
+.file-viewer-diagnostics--errors {
+  color: var(--mn-danger);
+}
+
+@media (pointer: coarse) {
+  .file-viewer-tab {
+    padding: 8px 8px 8px 12px;
+    max-width: 180px;
+  }
+
+  .file-viewer-tab__close {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .file-viewer-save {
@@ -208,6 +286,281 @@
 .file-viewer-body .cm-editor .cm-cursor,
 .file-viewer-body .cm-editor .cm-cursor-primary {
   border-left-color: var(--mn-fg);
+}
+
+/* drawSelection background — CM6 defaults to light #d9d9d9 unless cm-dark is set */
+.file-viewer-editor-mount .cm-editor .cm-selectionBackground,
+.file-viewer-body .cm-editor .cm-selectionBackground {
+  background: var(--mn-selection-bg) !important;
+}
+
+.file-viewer-editor-mount .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.file-viewer-body .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: var(--mn-selection-bg) !important;
+}
+
+/* Active line + fold gutter */
+.file-viewer-editor-mount .cm-activeLine,
+.file-viewer-body .cm-activeLine {
+  background: oklch(from var(--mn-accent) l c h / 0.06);
+}
+
+.file-viewer-editor-mount .cm-activeLineGutter,
+.file-viewer-body .cm-activeLineGutter {
+  background: oklch(from var(--mn-accent) l c h / 0.1);
+  color: var(--mn-fg);
+}
+
+.file-viewer-editor-mount .cm-gutters,
+.file-viewer-body .cm-gutters {
+  background: var(--mn-surface-1);
+  border-right: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+}
+
+.file-viewer-editor-mount .cm-foldGutter span,
+.file-viewer-body .cm-foldGutter span {
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.file-viewer-editor-mount .cm-foldGutter span:hover,
+.file-viewer-body .cm-foldGutter span:hover {
+  color: var(--mn-accent);
+}
+
+/* Find / replace panel — Minnow layout (see editor-search-panel.ts) */
+.file-viewer-editor-mount .cm-panel.cm-search.mn-editor-search,
+.file-viewer-body .cm-panel.cm-search.mn-editor-search {
+  padding: 8px;
+  margin: 0;
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.file-viewer-editor-mount .mn-editor-search__bar,
+.file-viewer-body .mn-editor-search__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-viewer-editor-mount .mn-editor-search__input-wrapper,
+.file-viewer-body .mn-editor-search__input-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.file-viewer-editor-mount .mn-editor-search__input-wrapper:focus-within,
+.file-viewer-body .mn-editor-search__input-wrapper:focus-within {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--mn-accent) 28%, transparent);
+}
+
+.file-viewer-editor-mount .mn-editor-search__input,
+.file-viewer-body .mn-editor-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg);
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  margin: 0;
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggles,
+.file-viewer-body .mn-editor-search__toggles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggle,
+.file-viewer-body .mn-editor-search__toggle {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggle-input,
+.file-viewer-body .mn-editor-search__toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggle-label,
+.file-viewer-body .mn-editor-search__toggle-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition: all 0.15s var(--ease-out);
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggle-input:focus-visible + .mn-editor-search__toggle-label,
+.file-viewer-body .mn-editor-search__toggle-input:focus-visible + .mn-editor-search__toggle-label {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -1px;
+}
+
+.file-viewer-editor-mount .mn-editor-search__toggle-input:checked + .mn-editor-search__toggle-label,
+.file-viewer-body .mn-editor-search__toggle-input:checked + .mn-editor-search__toggle-label {
+  color: var(--mn-fg);
+  background: var(--mn-surface-elevated);
+  border-color: var(--mn-border-strong);
+}
+
+.file-viewer-editor-mount .mn-editor-search__nav,
+.file-viewer-editor-mount .mn-editor-search__replace-actions,
+.file-viewer-body .mn-editor-search__nav,
+.file-viewer-body .mn-editor-search__replace-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.file-viewer-editor-mount .mn-editor-search__btn,
+.file-viewer-body .mn-editor-search__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  height: 30px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+}
+
+.file-viewer-editor-mount .mn-editor-search__btn--icon,
+.file-viewer-body .mn-editor-search__btn--icon {
+  width: 30px;
+}
+
+.file-viewer-editor-mount .mn-editor-search__btn--text,
+.file-viewer-body .mn-editor-search__btn--text {
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.file-viewer-editor-mount .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close,
+.file-viewer-body .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close {
+  position: static;
+  width: 30px;
+  color: var(--mn-fg-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.file-viewer-editor-mount .mn-editor-search__spacer,
+.file-viewer-body .mn-editor-search__spacer {
+  width: 30px; /* matches close btn width to align columns */
+  flex-shrink: 0;
+}
+
+.file-viewer-editor-mount .mn-editor-search__btn-inner,
+.file-viewer-body .mn-editor-search__btn-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.file-viewer-editor-mount .mn-editor-search__icon,
+.file-viewer-body .mn-editor-search__icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .file-viewer-editor-mount .mn-editor-search__btn:not(.mn-editor-search__btn--close):hover,
+  .file-viewer-body .mn-editor-search__btn:not(.mn-editor-search__btn--close):hover {
+    border-color: var(--mn-border-strong);
+    background: var(--mn-surface-elevated);
+  }
+
+  .file-viewer-editor-mount .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close:hover,
+  .file-viewer-body .cm-panel.cm-search button[name="close"].mn-editor-search__btn--close:hover {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 8%, transparent);
+  }
+
+  .file-viewer-editor-mount .mn-editor-search__toggle:hover .mn-editor-search__toggle-label,
+  .file-viewer-body .mn-editor-search__toggle:hover .mn-editor-search__toggle-label {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+}
+
+.file-viewer-editor-mount .cm-searchMatch,
+.file-viewer-body .cm-searchMatch {
+  background: oklch(from var(--mn-warning) l c h / 0.35);
+  outline: 1px solid var(--mn-warning);
+}
+
+.file-viewer-editor-mount .cm-searchMatch.cm-searchMatch-selected,
+.file-viewer-body .cm-searchMatch.cm-searchMatch-selected {
+  background: oklch(from var(--mn-accent) l c h / 0.28);
+  outline: 1px solid var(--mn-accent);
+}
+
+.file-viewer-editor-mount .cm-selectionMatch,
+.file-viewer-body .cm-selectionMatch {
+  background: oklch(from var(--mn-accent) l c h / 0.2);
+}
+
+.file-viewer-editor-mount .cm-whitespace,
+.file-viewer-body .cm-whitespace {
+  color: var(--mn-fg-muted);
+  opacity: 0.45;
 }
 
 .file-viewer-markdown-preview {

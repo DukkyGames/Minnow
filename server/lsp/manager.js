@@ -12,6 +12,7 @@ import {
 } from 'vscode-jsonrpc/node.js';
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
+import { buildLspProcessEnv } from './paths.js';
 import { matchServersForPath } from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -60,9 +61,94 @@ function guessLanguageId(relativePath) {
     '.pyi': 'python',
     '.rs': 'rust',
     '.go': 'go',
+    '.yaml': 'yaml',
+    '.yml': 'yaml',
+    '.sh': 'shellscript',
+    '.bash': 'shellscript',
+    '.zsh': 'shellscript',
+    '.ksh': 'shellscript',
+    '.dockerfile': 'dockerfile',
+    '.graphql': 'graphql',
+    '.gql': 'graphql',
+    '.php': 'php',
+    '.java': 'java',
+    '.kt': 'kotlin',
+    '.kts': 'kotlin',
+    '.rb': 'ruby',
+    '.lua': 'lua',
+    '.zig': 'zig',
+    '.zon': 'zig',
+    '.tf': 'terraform',
+    '.tfvars': 'terraform',
+    '.vue': 'vue',
+    '.svelte': 'svelte',
+    '.astro': 'astro',
+    '.cs': 'csharp',
+    '.swift': 'swift',
+    '.scala': 'scala',
+    '.sql': 'sql',
+    '.xml': 'xml',
+    '.svg': 'xml',
+    '.dart': 'dart',
     '.fake': 'fake',
   };
+  const base = path.basename(relativePath);
+  if (base === 'Dockerfile' || base.startsWith('Dockerfile.')) {
+    return 'dockerfile';
+  }
   return map[ext] ?? 'plaintext';
+}
+
+function normalizeDocumentation(doc) {
+  if (doc == null) return undefined;
+  if (typeof doc === 'string') return doc;
+  if (typeof doc === 'object' && doc.value != null) {
+    return {
+      kind: doc.kind === 'markdown' ? 'markdown' : 'plaintext',
+      value: String(doc.value),
+    };
+  }
+  return undefined;
+}
+
+function normalizeLspRange(range) {
+  if (!range || typeof range !== 'object' || !range.start) return undefined;
+  const start = range.start;
+  const end = range.end ?? start;
+  return {
+    start: {
+      line: Number(start.line ?? 0),
+      character: Number(start.character ?? 0),
+    },
+    end: {
+      line: Number(end.line ?? start.line ?? 0),
+      character: Number(end.character ?? start.character ?? 0),
+    },
+  };
+}
+
+/** Prefer textEdit / insert-replace ranges over bare insertText. */
+function extractCompletionInsertFields(item) {
+  let insertText = String(item.insertText ?? item.label ?? '');
+  let textEditRange;
+  let textEditInsertRange;
+  let textEditReplaceRange;
+  const te = item.textEdit;
+  if (te && typeof te === 'object') {
+    if (te.insert != null && te.replace != null) {
+      insertText = String(te.newText ?? insertText);
+      textEditInsertRange = normalizeLspRange(te.insert);
+      textEditReplaceRange = normalizeLspRange(te.replace);
+      textEditRange = textEditReplaceRange;
+    } else if (te.range != null && te.newText != null) {
+      insertText = String(te.newText);
+      textEditRange = normalizeLspRange(te.range);
+    } else if (te.replace != null) {
+      insertText = String(te.newText ?? insertText);
+      textEditRange = normalizeLspRange(te.replace);
+    }
+  }
+  return { insertText, textEditRange, textEditInsertRange, textEditReplaceRange };
 }
 
 function normalizeCompletionItems(result) {
@@ -72,11 +158,53 @@ function normalizeCompletionItems(result) {
     if (!item || typeof item !== 'object') continue;
     const label = String(item.label ?? '');
     if (!label) continue;
-    out.push({
+    const { insertText, textEditRange, textEditInsertRange, textEditReplaceRange } =
+      extractCompletionInsertFields(item);
+    const entry = {
       label,
-      insertText: String(item.insertText ?? item.label ?? ''),
+      insertText,
       kind: typeof item.kind === 'number' ? item.kind : undefined,
       detail: item.detail != null ? String(item.detail) : undefined,
+    };
+    if (textEditRange) entry.textEditRange = textEditRange;
+    if (textEditInsertRange) entry.textEditInsertRange = textEditInsertRange;
+    if (textEditReplaceRange) entry.textEditReplaceRange = textEditReplaceRange;
+    const documentation = normalizeDocumentation(item.documentation);
+    if (documentation !== undefined) entry.documentation = documentation;
+    if (item.data !== undefined) entry.data = item.data;
+    if (typeof item.insertTextFormat === 'number') {
+      entry.insertTextFormat = item.insertTextFormat;
+    }
+    if (Array.isArray(item.additionalTextEdits) && item.additionalTextEdits.length > 0) {
+      entry.additionalTextEdits = item.additionalTextEdits;
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
+function normalizeStructuredDiagnostics(diagnostics) {
+  if (!Array.isArray(diagnostics)) return [];
+  const out = [];
+  for (const d of diagnostics) {
+    if (!d || typeof d !== 'object') continue;
+    const start = d.range?.start ?? {};
+    const end = d.range?.end ?? start;
+    out.push({
+      message: String(d.message ?? ''),
+      severity: typeof d.severity === 'number' ? d.severity : 1,
+      source: d.source != null ? String(d.source) : undefined,
+      code: d.code != null ? String(d.code) : undefined,
+      range: {
+        start: {
+          line: Number(start.line ?? 0),
+          character: Number(start.character ?? 0),
+        },
+        end: {
+          line: Number(end.line ?? start.line ?? 0),
+          character: Number(end.character ?? start.character ?? 0),
+        },
+      },
     });
   }
   return out;
@@ -103,10 +231,10 @@ function spawnLspChild(argv) {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
-      env: {
+      env: buildLspProcessEnv({
         ...process.env,
         MINNOW_APP_ROOT: APP_ROOT,
-      },
+      }),
     });
     /** @type {string[]} */
     const stderrLines = [];
@@ -151,9 +279,9 @@ function bindLspProcessLifecycle(serverId, state) {
     console.error(`[lsp] ${serverId}:`, err instanceof Error ? err.message : err);
     discardLspState(serverId, state);
   });
-  state.  child.on('exit', (code, signal) => {
+  state.child.on('exit', (code, signal) => {
     if (code !== 0 && code != null) {
-      const detail = child.stderrLines?.join('').trim();
+      const detail = state.child.stderrLines?.join('').trim();
       console.error(
         `[lsp] ${serverId} exited with code ${code}${detail ? `: ${detail}` : ''}`,
       );
@@ -215,9 +343,24 @@ async function connectLspServer(serverId, config) {
         : {}),
       capabilities: {
         textDocument: {
+          publishDiagnostics: {},
+          hover: { contentFormat: ['markdown', 'plaintext'] },
+          definition: { linkSupport: true },
+          typeDefinition: { linkSupport: true },
+          references: {},
+          signatureHelp: {
+            signatureInformation: {
+              documentationFormat: ['markdown', 'plaintext'],
+              parameterInformation: { labelOffsetSupport: true },
+            },
+          },
           completion: {
             completionItem: {
               snippetSupport: true,
+              insertReplaceSupport: true,
+              resolveSupport: {
+                properties: ['documentation', 'detail', 'additionalTextEdits'],
+              },
             },
           },
         },
@@ -273,6 +416,22 @@ export async function notifyLspDocument(relativePath, event, text) {
 
   if (event === 'open') {
     const body = text ?? '';
+    const existing = documentSync.get(fileUri);
+    if (existing) {
+      if (existing.text === body) {
+        return { ok: true };
+      }
+      const nextVersion = existing.version + 1;
+      documentSync.set(fileUri, { version: nextVersion, text: body });
+      for (const { id, config } of matchers) {
+        const state = await getConnection(id, config);
+        await state.connection.sendNotification('textDocument/didChange', {
+          textDocument: { uri: fileUri, version: nextVersion },
+          contentChanges: [{ text: body }],
+        });
+      }
+      return { ok: true };
+    }
     documentSync.set(fileUri, { version: 1, text: body });
     for (const { id, config } of matchers) {
       const state = await getConnection(id, config);
@@ -318,6 +477,51 @@ export async function notifyLspDocument(relativePath, event, text) {
 }
 
 /**
+ * Ensure the LSP has the latest buffer for a path.
+ * @param {string} relativePath
+ * @param {{ editorText?: string }} [options] - When set (e.g. from CM6), never fall back to disk.
+ */
+async function ensureDocumentSynced(relativePath, options = {}) {
+  const fileUri = toFileUri(relativePath);
+  const synced = documentSync.get(fileUri);
+  if (synced) {
+    if (options.editorText !== undefined && options.editorText !== synced.text) {
+      await notifyLspDocument(relativePath, 'change', options.editorText);
+    }
+    return fileUri;
+  }
+  let body = options.editorText;
+  if (body === undefined) {
+    const fs = await import('node:fs/promises');
+    const abs = path.resolve(getWorkspaceRoot(), relativePath);
+    body = await fs.readFile(abs, 'utf8').catch(() => '');
+  }
+  await notifyLspDocument(relativePath, 'open', body);
+  return fileUri;
+}
+
+/** Brief wait for publishDiagnostics after the document is already synced. */
+async function awaitPublishedDiagnostics() {
+  await new Promise((r) => setTimeout(r, 200));
+}
+
+async function withLspMatchers(relativePath, handler, options = {}) {
+  const merged = await loadMergedLspConfig();
+  if (merged.enabled === false) {
+    return { ok: false, error: 'LSP is disabled' };
+  }
+  if (!relativePath || relativePath.includes('..')) {
+    return { ok: false, error: 'Invalid path' };
+  }
+  const matchers = matchServersForPath(merged, relativePath);
+  if (matchers.length === 0) {
+    return { ok: false, error: `No LSP server configured for ${relativePath}` };
+  }
+  const fileUri = await ensureDocumentSynced(relativePath, options);
+  return handler({ merged, matchers, fileUri });
+}
+
+/**
  * Request completion items at a 0-based line/character position.
  */
 export async function getLspCompletions(relativePath, line, character) {
@@ -336,12 +540,7 @@ export async function getLspCompletions(relativePath, line, character) {
     return { items: [], error: `No LSP server configured for ${relativePath}` };
   }
 
-  if (!documentSync.has(fileUri)) {
-    const fs = await import('node:fs/promises');
-    const abs = path.resolve(getWorkspaceRoot(), relativePath);
-    const diskText = await fs.readFile(abs, 'utf8').catch(() => '');
-    await notifyLspDocument(relativePath, 'open', diskText);
-  }
+  await ensureDocumentSynced(relativePath);
 
   const seen = new Set();
   const items = [];
@@ -376,21 +575,24 @@ export async function getLspDiagnostics(relativePath) {
     return 'Error: LSP is disabled in settings.';
   }
 
-  const abs = path.resolve(getWorkspaceRoot(), relativePath);
   const fileUri = toFileUri(relativePath);
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
     return `No LSP server configured for ${relativePath}.`;
   }
 
+  try {
+    await ensureDocumentSynced(relativePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
+
   const parts = [];
   for (const { id, config } of matchers) {
     try {
       const state = await getConnection(id, config);
-      const fsMod = await import('node:fs/promises');
-      const text = await fsMod.readFile(abs, 'utf8').catch(() => '');
-      await notifyLspDocument(relativePath, 'open', text);
-      await new Promise((r) => setTimeout(r, 200));
+      await awaitPublishedDiagnostics();
       const diags = state.diagnostics.get(fileUri) ?? [];
       const formatted = formatDiagnostics(`${relativePath} (${id})`, diags);
       parts.push(formatted);
@@ -400,6 +602,221 @@ export async function getLspDiagnostics(relativePath) {
     }
   }
   return parts.join('\n\n');
+}
+
+/**
+ * Raw LSP diagnostics for a path (not LLM-formatted).
+ * @param {string} relativePath
+ * @param {string} [editorText] - Current editor buffer; avoids disk fallback when provided.
+ */
+export async function getLspStructuredDiagnostics(relativePath, editorText) {
+  const syncOpts =
+    typeof editorText === 'string' ? { editorText } : {};
+  const ctx = await withLspMatchers(
+    relativePath,
+    async ({ matchers, fileUri }) => ({
+      ok: true,
+      matchers,
+      fileUri,
+    }),
+    syncOpts,
+  );
+  if (!ctx.ok) {
+    return { diagnostics: [], error: ctx.error };
+  }
+
+  const parts = [];
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      await awaitPublishedDiagnostics();
+      const diags = state.diagnostics.get(ctx.fileUri) ?? [];
+      parts.push(...normalizeStructuredDiagnostics(diags));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { diagnostics: parts, error: `[${id}] ${message}` };
+    }
+  }
+  return { diagnostics: parts };
+}
+
+/**
+ * Hover contents at a 0-based position (first matching server wins).
+ */
+export async function getLspHover(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { hover: null, error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const hover = await state.connection.sendRequest('textDocument/hover', {
+        textDocument: { uri: ctx.fileUri },
+        position: { line, character },
+      });
+      return { hover: hover ?? null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { hover: null, error: `[${id}] ${message}` };
+    }
+  }
+  return { hover: null };
+}
+
+/**
+ * Go-to-definition at a 0-based position (first non-null result).
+ */
+export async function getLspDefinition(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { locations: [], error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const result = await state.connection.sendRequest('textDocument/definition', {
+        textDocument: { uri: ctx.fileUri },
+        position: { line, character },
+      });
+      if (result != null) {
+        return { locations: result };
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { locations: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { locations: [] };
+}
+
+/** Type definition — same shape as definition. */
+export async function getLspTypeDefinition(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { locations: [], error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const result = await state.connection.sendRequest('textDocument/typeDefinition', {
+        textDocument: { uri: ctx.fileUri },
+        position: { line, character },
+      });
+      if (result != null) {
+        return { locations: result };
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { locations: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { locations: [] };
+}
+
+/** Find references at a 0-based position. */
+export async function getLspReferences(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { locations: [], error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const result = await state.connection.sendRequest('textDocument/references', {
+        textDocument: { uri: ctx.fileUri },
+        position: { line, character },
+        context: { includeDeclaration: true },
+      });
+      return { locations: Array.isArray(result) ? result : [] };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { locations: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { locations: [] };
+}
+
+/**
+ * Signature help at a 0-based position.
+ */
+export async function getLspSignatureHelp(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { signatureHelp: null, error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const signatureHelp = await state.connection.sendRequest(
+        'textDocument/signatureHelp',
+        {
+          textDocument: { uri: ctx.fileUri },
+          position: { line, character },
+        },
+      );
+      return { signatureHelp: signatureHelp ?? null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { signatureHelp: null, error: `[${id}] ${message}` };
+    }
+  }
+  return { signatureHelp: null };
+}
+
+/**
+ * Resolve a completion item (documentation, additionalTextEdits).
+ */
+export async function resolveLspCompletion(relativePath, item) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { item: null, error: ctx.error };
+  }
+  if (!item || typeof item !== 'object') {
+    return { item: null, error: 'Invalid completion item' };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const resolved = await state.connection.sendRequest('completionItem/resolve', item);
+      const [normalized] = normalizeCompletionItems([resolved]);
+      return { item: normalized ?? null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { item: null, error: `[${id}] ${message}` };
+    }
+  }
+  return { item: null };
 }
 
 /** Human-readable install hint from defaults requirements block. */
@@ -461,6 +878,14 @@ export async function listLspServers() {
       defaultEnabled: cfg.defaultEnabled === true,
     };
   });
+}
+
+/** @internal Test-only — in-memory sync state for a project-relative path. */
+export function getLspDocumentSyncForTest(relativePath) {
+  const fileUri = toFileUri(relativePath);
+  const entry = documentSync.get(fileUri);
+  if (!entry) return null;
+  return { version: entry.version, text: entry.text };
 }
 
 export function shutdownAllLsp() {

@@ -6,6 +6,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
+import { getMode, getStoredTheme } from '../theme';
 
 /** GitHub light palette — mirrors highlight.js/styles/github.min.css */
 const gh = {
@@ -137,6 +138,17 @@ const minnowHighlightStyle = HighlightStyle.define([
   { tag: tags.invalid, color: gh.invalid },
 ]);
 
+/** Selection + chrome: sync CM6 dark/light facet with Minnow palette (avoids default light gray on dark UI). */
+const minnowEditorColorSchemeTheme = EditorView.theme(
+  {
+    '.cm-selectionBackground': { backgroundColor: 'var(--mn-selection-bg)' },
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+      backgroundColor: 'var(--mn-selection-bg)',
+    },
+  },
+  { dark: getMode(getStoredTheme()) === 'dark' },
+);
+
 /**
  * LSP autocomplete + tooltips — match Minnow surfaces (overrides CodeMirror light defaults).
  */
@@ -157,6 +169,32 @@ const minnowEditorTooltipTheme = EditorView.theme({
   '.cm-tooltip .cm-tooltip-arrow:after': {
     borderTopColor: 'var(--mn-surface-2)',
     borderBottomColor: 'var(--mn-surface-2)',
+  },
+  '.cm-lintRange-error': {
+    backgroundImage:
+      'url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 3 l2 -2 l1 0 l2 2 l1 0" stroke="%23ef4444" fill="none" stroke-width=".7"/></svg>\')',
+  },
+  '.cm-lintRange-warning': {
+    backgroundImage:
+      'url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 3 l2 -2 l1 0 l2 2 l1 0" stroke="%23f59e0b" fill="none" stroke-width=".7"/></svg>\')',
+  },
+  '.cm-gutter-lint': {
+    width: '1.1em',
+  },
+  '.cm-gutter-lint .cm-lintMarker-error': {
+    color: 'var(--mn-danger)',
+  },
+  '.cm-gutter-lint .cm-lintMarker-warning': {
+    color: 'var(--mn-warning)',
+  },
+  '.cm-lsp-hover, .cm-lsp-signature': {
+    maxWidth: 'min(480px, 90vw)',
+    padding: '6px 10px',
+    lineHeight: '1.45',
+  },
+  '.cm-lsp-signature-param--active': {
+    fontWeight: 'bold',
+    textDecoration: 'underline',
   },
   '.cm-tooltip-autocomplete': {
     '& > ul': {
@@ -193,5 +231,9 @@ const minnowEditorTooltipTheme = EditorView.theme({
 
 /** Shared editor extensions: GitHub-style token colors for the file viewer. */
 export function minnowEditorExtensions(): Extension[] {
-  return [syntaxHighlighting(minnowHighlightStyle), minnowEditorTooltipTheme];
+  return [
+    syntaxHighlighting(minnowHighlightStyle),
+    minnowEditorColorSchemeTheme,
+    minnowEditorTooltipTheme,
+  ];
 }

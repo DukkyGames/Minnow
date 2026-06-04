@@ -1,5 +1,5 @@
 /**
- * Minimal stdio LSP server for tests — static diagnostics on .fake files.
+ * Minimal stdio LSP server for tests — static diagnostics, hover, completion on .fake files.
  */
 
 import process from 'node:process';
@@ -12,6 +12,10 @@ function send(msg) {
   process.stdout.write(header + body);
 }
 
+function isFakeUri(uri) {
+  return uri.includes('sample.fake') || uri.endsWith('.fake');
+}
+
 function handleMessage(msg) {
   if (msg.method === 'initialize') {
     send({
@@ -21,6 +25,9 @@ function handleMessage(msg) {
         capabilities: {
           textDocumentSync: 1,
           completionProvider: { triggerCharacters: ['.'] },
+          hoverProvider: true,
+          definitionProvider: true,
+          signatureHelpProvider: { triggerCharacters: ['(', ','] },
         },
       },
     });
@@ -31,10 +38,58 @@ function handleMessage(msg) {
     return;
   }
 
+  if (msg.method === 'textDocument/hover') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const result = isFakeUri(uri)
+      ? {
+          contents: {
+            kind: 'markdown',
+            value: '**Fake hover** — test fixture LSP',
+          },
+        }
+      : null;
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'textDocument/definition') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const pos = msg.params?.position ?? { line: 0, character: 0 };
+    const result = isFakeUri(uri)
+      ? {
+          uri,
+          range: {
+            start: { line: pos.line, character: 0 },
+            end: { line: pos.line, character: 1 },
+          },
+        }
+      : null;
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'textDocument/signatureHelp') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const result = isFakeUri(uri)
+      ? {
+          signatures: [
+            {
+              label: 'fakeFn(param)',
+              parameters: [{ label: 'param' }],
+            },
+          ],
+          activeSignature: 0,
+          activeParameter: 0,
+        }
+      : null;
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
   if (msg.method === 'textDocument/completion') {
     const uri = msg.params?.textDocument?.uri ?? '';
     const items =
-      uri.includes('sample.fake') || uri.endsWith('.fake')
+      isFakeUri(uri)
         ? [
             {
               label: 'fakeKeyword',
@@ -47,6 +102,40 @@ function handleMessage(msg) {
               kind: 3,
               detail: 'Log to console',
               insertText: 'console.log($0)',
+              insertTextFormat: 2,
+            },
+            {
+              label: 'importHelper',
+              kind: 3,
+              detail: 'Needs resolve',
+              insertText: 'importHelper',
+              data: { id: 'resolve-me' },
+            },
+            {
+              label: 'rangeEdit',
+              kind: 14,
+              textEdit: {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 3 },
+                },
+                newText: 'edited',
+              },
+            },
+            {
+              label: 'insertReplace',
+              kind: 14,
+              textEdit: {
+                insert: {
+                  start: { line: 0, character: 4 },
+                  end: { line: 0, character: 4 },
+                },
+                replace: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 4 },
+                },
+                newText: 'replaced',
+              },
             },
           ]
         : [];
@@ -54,6 +143,28 @@ function handleMessage(msg) {
       jsonrpc: '2.0',
       id: msg.id,
       result: { isIncomplete: false, items },
+    });
+    return;
+  }
+
+  if (msg.method === 'completionItem/resolve') {
+    const item = msg.params ?? {};
+    send({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: {
+        ...item,
+        documentation: { kind: 'markdown', value: 'Resolved **import** docs' },
+        additionalTextEdits: [
+          {
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 0 },
+            },
+            newText: '// resolved-import\n',
+          },
+        ],
+      },
     });
     return;
   }

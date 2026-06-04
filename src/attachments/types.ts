@@ -3,7 +3,13 @@
  */
 
 /** How an attachment is represented after `processFile` or workspace drag-drop. */
-export type AttachmentKind = 'image' | 'text' | 'pdf' | 'error' | 'workspace';
+export type AttachmentKind =
+  | 'image'
+  | 'text'
+  | 'pdf'
+  | 'error'
+  | 'workspace'
+  | 'codeRef';
 
 /** One pending file in the composer strip before send. */
 export interface Attachment {
@@ -26,4 +32,8 @@ export interface Attachment {
   largeTextWarning?: boolean;
   /** Project-relative path for workspace reference chips (loaded on send). */
   workspacePath?: string;
+  /** 1-based start line for `codeRef` selections. */
+  lineStart?: number;
+  /** 1-based end line for `codeRef` selections (inclusive). */
+  lineEnd?: number;
 }

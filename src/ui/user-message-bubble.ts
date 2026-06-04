@@ -5,6 +5,7 @@
 import type { Attachment } from '../attachments/types';
 import { parseHistoryUserContent } from '../chat/user-message-parts';
 import { stripSkillTagFromHistory } from '../skills/history-content';
+import { createCodeRefLinkButton } from './code-ref-link';
 
 /** Optional live attachments when the bubble is painted at send time. */
 export interface UserBubbleRenderOptions {
@@ -85,13 +86,32 @@ export function renderUserMessageBubble(
     bubble.appendChild(textEl);
   }
 
-  const hasChips = parsed.files.length > 0 || parsed.images.length > 0;
+  const hasChips =
+    parsed.files.length > 0 ||
+    parsed.images.length > 0 ||
+    parsed.codeRefs.length > 0;
   if (!hasChips) {
     if (!parsed.text) {
       bubble.textContent = displaySource.trim() || historyContent;
       bubble.classList.remove('msg-bubble--user-parts');
     }
     return;
+  }
+
+  if (parsed.codeRefs.length > 0) {
+    const refsRow = document.createElement('div');
+    refsRow.className = 'user-msg-code-refs';
+    refsRow.setAttribute('role', 'list');
+    for (const ref of parsed.codeRefs) {
+      refsRow.appendChild(
+        createCodeRefLinkButton({
+          workspacePath: ref.workspacePath,
+          startLine: ref.startLine,
+          endLine: ref.endLine,
+        }),
+      );
+    }
+    bubble.appendChild(refsRow);
   }
 
   const row = document.createElement('div');
@@ -126,7 +146,9 @@ export function renderUserMessageBubble(
     );
   }
 
-  bubble.appendChild(row);
+  if (parsed.files.length > 0 || parsed.images.length > 0) {
+    bubble.appendChild(row);
+  }
 }
 
 function setStatusForMissingImage(name: string): void {

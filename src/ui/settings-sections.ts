@@ -654,9 +654,9 @@ async function renderPromptingSection(): Promise<void> {
 
   const hubMount = document.getElementById('settingsPromptsHubMount');
   if (hubMount) {
-    const hubGen = beginAsyncSectionRender('prompting-hub');
+    const hubGen = beginAsyncSectionRender('prompting');
     await renderPromptsHubPanel(hubMount);
-    if (isAsyncSectionRenderStale('prompting-hub', hubGen)) return;
+    if (isAsyncSectionRenderStale('prompting', hubGen)) return;
   }
 }
 

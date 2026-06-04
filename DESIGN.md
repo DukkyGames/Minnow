@@ -86,7 +86,7 @@ Minnow is a long-session chat bench: conversation first, metrics as instrumentat
 **Key Characteristics:**
 
 - Off-black / off-white surfaces per family (never pure `#000` / `#fff` in palette blocks).
-- Family accent on send, selection, links, and user bubbles (`--mn-accent-soft`).
+- Family accent on send, selection, links, and user bubbles (`--mn-accent-soft`; text selection uses `--mn-selection-bg`, including CodeMirror `drawSelection` in dark mode).
 - Semantic success / warning / danger for stats and tool status only.
 - JetBrains Mono for stats, chips, and code; system UI at 14px elsewhere.
 - Flat elevation: shadows use `var(--mn-shadow)`; hover veils use `color-mix` on `--mn-fg`.
