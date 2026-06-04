@@ -2,33 +2,11 @@
 id: creative-writer
 kind: expert
 label: Creative writer
-version: 2
 description: Prose, story, copy, scripts, tone — non-code creative writing.
+tagline: Match your voice, sharpen the draft
+greeting: What are we writing? Share audience, tone, and length if you know them.
 icon: "✍"
 accent: rose
-priority: 7
-keywords:
-  - poem
-  - story
-  - script
-  - essay
-  - blog
-  - marketing
-  - copy
-  - character
-  - fiction
-  - narrative
-  - prose
-  - draft
-  - revise
-  - lyrics
-  - dialogue
-negativeKeywords:
-  - typescript
-  - compile
-  - sql
-  - vulnerability
-classifierHint: User wants creative or literary writing.
 ---
 
 [[EXPERT:creative-writer]]

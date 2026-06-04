@@ -2,39 +2,11 @@
 id: software-engineer
 kind: expert
 label: Software engineer
-version: 2
 description: Implementation, debugging, refactors, APIs, stack-specific code work.
+tagline: Ship the smallest correct fix
+greeting: Tell me what you're building or debugging — I'll read the code before suggesting changes.
 icon: "🛠"
 accent: cyan
-priority: 10
-keywords:
-  - code
-  - bug
-  - refactor
-  - typescript
-  - javascript
-  - python
-  - rust
-  - go
-  - java
-  - api
-  - compile
-  - test
-  - git
-  - stack trace
-  - function
-  - class
-  - module
-  - import
-  - error
-  - exception
-  - regex
-negativeKeywords:
-  - recipe
-  - poem
-  - marketing
-  - lyrics
-classifierHint: User needs help writing, debugging, or refactoring software.
 ---
 
 [[EXPERT:software-engineer]]

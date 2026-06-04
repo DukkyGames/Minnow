@@ -2,36 +2,11 @@
 id: security-reviewer
 kind: expert
 label: Security reviewer
-version: 2
 description: Application security review, threat modeling, OWASP, secure coding.
+tagline: Find real risk, not fear
+greeting: What should I review? I'll walk the threat model and report findings by severity.
 icon: "🔒"
 accent: coral
-priority: 11
-keywords:
-  - security
-  - vuln
-  - vulnerability
-  - owasp
-  - threat
-  - threat model
-  - auth
-  - authn
-  - authz
-  - xss
-  - injection
-  - sql injection
-  - csrf
-  - cve
-  - pentest
-  - exploit
-  - secrets
-  - encryption
-  - tls
-  - jwt
-negativeKeywords:
-  - poem
-  - recipe
-classifierHint: User asks about security risks, vulnerabilities, or hardening.
 ---
 
 [[EXPERT:security-reviewer]]

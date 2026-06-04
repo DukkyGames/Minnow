@@ -132,20 +132,19 @@ describe('streaming-state helpers', () => {
   });
 
   test('expert thread streams in chat shell when Experts hub is closed', () => {
-    const expert = createEmptyChatObject('');
-    expert.id = 'expert-thread-1';
-    expert.kind = 'expert';
-    expert.expertId = 'software-engineer';
+    const lab = createEmptyChatObject('');
+    lab.id = EXPERT_LAB_CHAT_ID;
+    lab.kind = 'expert-lab';
     setSessionStateForTests({
       version: 2,
-      activeId: expert.id,
+      activeId: EXPERT_LAB_CHAT_ID,
       sidebarCollapsed: false,
-      chats: [expert],
+      chats: [lab],
     });
-    appState.setExpertsPageOpen(true);
-    appState.setStreaming(true, expert.id);
-    assert.equal(isStreamDomVisible(expert.id), false);
-    appState.setExpertsPageOpen(false);
-    assert.equal(isStreamDomVisible(expert.id), true);
+    appState.setExpertLabPageOpen(true);
+    appState.setStreaming(true, EXPERT_LAB_CHAT_ID);
+    assert.equal(isStreamDomVisible(EXPERT_LAB_CHAT_ID), false);
+    appState.setExpertLabPageOpen(false);
+    assert.equal(isStreamDomVisible(EXPERT_LAB_CHAT_ID), true);
   });
 });

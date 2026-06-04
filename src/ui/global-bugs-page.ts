@@ -140,8 +140,8 @@ export function openGlobalBugs(): void {
   void import('./welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });
-  void import('./expert-lab-page').then((m) => {
-    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  void import('./experts/experts-hub').then((m) => {
+    if (m.isExpertsPageOpen()) m.closeExpertsHub();
   });
   void import('./benchmark-page').then((m) => {
     const benchmarkRoot = document.getElementById('benchmarkView');

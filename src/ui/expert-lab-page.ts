@@ -364,7 +364,7 @@ function renderExpertTileMenu(tile: HTMLElement, expertId: string, label: string
   tile.appendChild(menuWrap);
 }
 
-function renderExpertGrid(): void {
+export function renderExpertGrid(): void {
   const grid = document.getElementById('expertLabGrid');
   if (!grid) return;
   grid.replaceChildren();

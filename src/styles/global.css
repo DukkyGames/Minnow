@@ -106,7 +106,7 @@ body {
 .settings-page { display: none; }
 .benchmark-page { display: none; }
 .global-bugs-page { display: none; }
-.expert-lab-page { display: none; }
+.experts-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

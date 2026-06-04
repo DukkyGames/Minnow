@@ -9,7 +9,7 @@ const FULLSCREEN_OVERLAY_IDS = [
   'globalBugsView',
   'settingsView',
   'benchmarkView',
-  'expertLabView',
+  'expertsView',
 ] as const;
 
 function usesElectronPreview(): boolean {

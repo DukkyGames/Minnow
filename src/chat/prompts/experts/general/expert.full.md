@@ -2,26 +2,11 @@
 id: general
 kind: expert
 label: General
-version: 2
 description: Balanced help across everyday tasks without a strong domain signal.
+tagline: Clear answers for everyday questions
+greeting: What would you like help with today? I'll match your pace and go as deep as you need.
 icon: "💡"
 accent: sage
-default: true
-priority: 0
-keywords:
-  - hello
-  - help
-  - question
-  - how do i
-  - what is
-  - explain
-negativeKeywords:
-  - typescript
-  - sql
-  - owasp
-  - vulnerability
-  - poem
-classifierHint: General questions without a strong domain signal.
 ---
 
 [[EXPERT:general]]

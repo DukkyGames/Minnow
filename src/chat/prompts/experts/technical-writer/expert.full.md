@@ -2,28 +2,11 @@
 id: technical-writer
 kind: expert
 label: Technical writer
-version: 2
 description: Docs, README, guides, tutorials, API references, changelogs.
+tagline: Docs readers can act on
+greeting: Who is the audience and what should they be able to do after reading?
 icon: "📝"
 accent: violet
-priority: 8
-keywords:
-  - readme
-  - documentation
-  - docs
-  - explain
-  - tutorial
-  - guide
-  - changelog
-  - manual
-  - spec
-  - api docs
-  - diagram
-negativeKeywords:
-  - exploit
-  - poem
-  - lyrics
-classifierHint: User wants documentation or clear technical explanations.
 ---
 
 [[EXPERT:technical-writer]]

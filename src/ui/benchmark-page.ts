@@ -1353,8 +1353,8 @@ export function openBenchmark(): void {
     return;
   }
 
-  void import('./expert-lab-page').then((m) => {
-    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  void import('./experts/experts-hub').then((m) => {
+    if (m.isExpertsPageOpen()) m.closeExpertsHub();
   });
   void import('./global-bugs-page').then((m) => {
     if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();

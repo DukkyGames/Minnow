@@ -31,11 +31,24 @@ export let suppressSystemPromptSelectChange = false;
 /** Debounced assistant markdown render while SSE tokens arrive. */
 export let assistantRenderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** True while the full-page Expert Lab view covers the chat shell. */
-export let expertLabPageOpen = false;
+/** True while the full-page Experts hub covers the chat shell. */
+export let expertsPageOpen = false;
 
-export function setExpertLabPageOpen(value: boolean): void {
+/** @deprecated Use expertsPageOpen */
+export let expertLabPageOpen = expertsPageOpen;
+
+export function setExpertsPageOpen(value: boolean): void {
+  expertsPageOpen = value;
   expertLabPageOpen = value;
+}
+
+/** @deprecated Use setExpertsPageOpen */
+export function setExpertLabPageOpen(value: boolean): void {
+  setExpertsPageOpen(value);
+}
+
+export function isExpertsPageOpen(): boolean {
+  return expertsPageOpen;
 }
 
 function syncLegacyStreamingFlags(): void {

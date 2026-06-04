@@ -2,35 +2,11 @@
 id: data-analyst
 kind: expert
 label: Data analyst
-version: 2
 description: SQL, pandas, statistics, dashboards, schemas, data quality.
+tagline: Query, quality-check, then answer
+greeting: What data are you working with? Share schema or grain and I'll start from there.
 icon: "📊"
 accent: amber
-priority: 9
-keywords:
-  - sql
-  - select
-  - from
-  - where
-  - join
-  - group by
-  - csv
-  - chart
-  - metric
-  - dashboard
-  - pandas
-  - dataframe
-  - query
-  - dataset
-  - aggregation
-  - statistics
-  - visualization
-  - schema
-negativeKeywords:
-  - poem
-  - story
-  - lyrics
-classifierHint: User works with data, queries, or analytics.
 ---
 
 [[EXPERT:data-analyst]]
