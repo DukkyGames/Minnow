@@ -532,19 +532,8 @@ async function deleteExpertFromHub(expertId: string, label: string): Promise<voi
 }
 
 export async function refreshExpertsEnabledState(): Promise<void> {
-  const config = await loadExpertsConfig();
-  const empty = document.getElementById('expertsDisabled');
-  const galleryStep = document.querySelector('.experts-step--gallery');
-  if (!empty || !galleryStep) return;
-  if (config.enabled) {
-    empty.classList.add('hidden');
-    galleryStep.classList.remove('hidden-by-disabled');
-    await syncExpertRegistryFromServer();
-    renderGallery();
-  } else {
-    empty.classList.remove('hidden');
-    galleryStep.classList.add('hidden-by-disabled');
-  }
+  const { refreshExpertsEnabledState: refresh } = await import('../experts-settings');
+  await refresh();
 }
 
 export { isExpertsPageOpen };

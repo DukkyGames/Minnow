@@ -14,15 +14,28 @@ export interface ExpertHintContext {
 /** Refresh Experts empty state vs picker grid when experts.enabled toggles. */
 export async function refreshExpertsEnabledState(): Promise<void> {
   const config = await loadExpertsConfig();
-  const empty = document.getElementById('expertLabDisabled');
-  const pickStep = document.querySelector('.expert-lab-step--pick');
+  const empty =
+    document.getElementById('expertsDisabled') ??
+    document.getElementById('expertLabDisabled');
+  const pickStep =
+    document.querySelector('.experts-step--gallery') ??
+    document.querySelector('.expert-lab-step--pick');
   if (!empty || !pickStep) return;
   if (config.enabled) {
     empty.classList.add('hidden');
     pickStep.classList.remove('hidden-by-disabled');
     await syncExpertRegistryFromServer();
-    const { renderExpertGrid } = await import('./expert-lab-page');
-    renderExpertGrid();
+    try {
+      const hub = await import('./experts/experts-hub');
+      hub.renderGallery();
+    } catch {
+      try {
+        const lab = await import('./expert-lab-page');
+        lab.renderExpertGrid();
+      } catch {
+        /* picker module not loaded */
+      }
+    }
   } else {
     empty.classList.remove('hidden');
     pickStep.classList.add('hidden-by-disabled');
