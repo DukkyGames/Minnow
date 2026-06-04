@@ -208,7 +208,7 @@ export function showBoardTaskPlanPanel(
   group: ChatGroup,
 ): void {
   setBoardTaskPlanSelection(task.id);
-  let panel = main.querySelector(`.${PANEL_CLASS}`);
+  let panel: HTMLElement | null = main.querySelector(`.${PANEL_CLASS}`);
   if (!(panel instanceof HTMLElement)) {
     panel = document.createElement('aside');
     panel.className = PANEL_CLASS;

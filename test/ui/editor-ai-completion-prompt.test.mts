@@ -9,13 +9,18 @@ const DEFAULT_EDITOR_AI_COMPLETION = {
   maxPrefixChars: 6000,
   maxSuffixChars: 2000,
   temperature: 0.3,
-  maxTokens: 128,
+  maxTokens: 256,
   useChatModel: true,
   providerId: '',
   modelId: '',
+  includeImportContext: true,
+  includeLspHover: true,
+  useNativeFim: true,
+  enableCompletionCache: true,
 };
 import {
   buildEditorAiCompletionMessages,
+  extractImportSymbols,
   extractPrefixSuffix,
   languageHintFromPath,
   sanitizeCompletionText,
@@ -68,6 +73,27 @@ describe('editor AI completion prompt', () => {
 
   test('sanitizeCompletionText strips duplicate doc prefix', () => {
     assert.equal(sanitizeCompletionText('const x = 1', 'const x = '), '1');
+  });
+
+  test('buildEditorAiCompletionMessages includes import context in chat mode', () => {
+    const doc = 'import fs from "node:fs";\nconst x = 1;\n';
+    const state = EditorState.create({ doc });
+    const pos = doc.indexOf('const') + 6;
+    const { messages } = buildEditorAiCompletionMessages({
+      state,
+      cursorPos: pos,
+      filePath: 'src/demo.ts',
+      config: DEFAULT_EDITOR_AI_COMPLETION,
+      modelId: 'llama-3',
+    });
+    assert.match(String(messages[1].content), /Imports \/ requires:/);
+    assert.match(String(messages[1].content), /import fs/);
+  });
+
+  test('extractImportSymbols collects top-of-file imports', () => {
+    const text = 'import a from "a";\nimport { b } from "b";\n\nconst x = 1;';
+    assert.match(extractImportSymbols(text), /import a/);
+    assert.match(extractImportSymbols(text), /import \{ b \}/);
   });
 
   test('sanitizeCompletionText handles binary-safe paths in user content', () => {

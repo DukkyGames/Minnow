@@ -35,7 +35,9 @@ import {
   bindFileViewerContextMenu,
   closeFileViewer,
   openFileInViewer,
+  restoreViewerTabsFromPrefs,
 } from './file-viewer';
+import { bindFileViewerTabs } from './file-viewer-tabs';
 import { isLocalServerAvailable } from '../tools/config';
 import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
@@ -141,6 +143,8 @@ export async function initFilePanel(): Promise<void> {
   const state = getFilePanelState();
   if (state.rightPaneMode === 'preview') {
     // Restored by initPreviewPanel from persisted previewSource.
+  } else if (state.openViewerTabs.length > 0) {
+    await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
   } else if (state.viewerOpen && state.selectedPath) {
     await openFileInViewer(state.selectedPath);
   }
@@ -148,6 +152,7 @@ export async function initFilePanel(): Promise<void> {
   bindSplitResizer();
   bindFilePanelControls();
   bindFileViewerControls();
+  bindFileViewerTabs();
   bindFileViewerContextMenu();
   initFileTreeCrud();
   initFileTreeDnD();

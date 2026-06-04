@@ -858,7 +858,7 @@ export function showOrchestratePlanScreenSuspendedBanner(
         try {
           const result = await executeTool('read_file', { path: session.planPath! });
           const pre = document.querySelector('.orchestrate-plan-screen__preview');
-          if (!pre) return;
+          if (!(pre instanceof HTMLElement)) return;
           mountPlanPreviewContent(pre, result.content, { modeId: 'plan' });
         } catch {
           /* keep placeholder */

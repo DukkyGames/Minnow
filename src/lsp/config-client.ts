@@ -97,3 +97,93 @@ export async function fetchLspStatus(): Promise<{
     '/api/lsp/status',
   );
 }
+
+/** Install progress for a language server bundle job. */
+export interface LspBundleJob {
+  bundleId: string;
+  phase: 'pending' | 'downloading' | 'installing' | 'done' | 'error';
+  percent: number;
+  message: string;
+  error?: string;
+}
+
+/** Single bundle row from GET /api/lsp/bundles */
+export interface LspBundleStatus {
+  id: string;
+  label: string;
+  description?: string;
+  kind: 'npm' | 'binary';
+  categoryId?: string;
+  categoryLabel?: string;
+  /** LSP server ids in defaults.json tied to this bundle (from bundles.json). */
+  lspIds?: string[];
+  installed: boolean;
+  version: string | null;
+  sizeBytes: number;
+  prebundled?: boolean;
+  sizeEstimateMb?: number;
+  job?: LspBundleJob | null;
+}
+
+export interface LspBundlesResponse {
+  categories: Array<{
+    id: string;
+    label: string;
+    bundles: LspBundleStatus[];
+  }>;
+}
+
+/** Catalog + install state for Language bundles settings UI. */
+export async function fetchLspBundles(): Promise<LspBundlesResponse | null> {
+  return lspFetch<LspBundlesResponse>('/api/lsp/bundles');
+}
+
+/** Poll install/uninstall progress for one bundle. */
+export async function fetchLspBundleProgress(
+  bundleId: string,
+): Promise<{ job: LspBundleJob | null } | null> {
+  return lspFetch<{ job: LspBundleJob | null }>(
+    `/api/lsp/bundles/progress?bundleId=${encodeURIComponent(bundleId)}`,
+  );
+}
+
+/** Install a language server bundle to ~/.minnow/lsp-servers. */
+export async function installLspBundle(
+  bundleId: string,
+): Promise<{ ok: boolean; error?: string; alreadyInstalled?: boolean }> {
+  const ok = await detectLocalServer();
+  if (!ok) return { ok: false, error: 'Server offline' };
+  try {
+    const res = await fetch('/api/lsp/bundles/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bundleId }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      alreadyInstalled?: boolean;
+    };
+    if (!res.ok) {
+      return { ok: false, error: body.error ?? res.statusText };
+    }
+    return { ok: true, alreadyInstalled: body.alreadyInstalled === true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Remove a managed bundle from ~/.minnow/lsp-servers. */
+export async function uninstallLspBundle(bundleId: string): Promise<boolean> {
+  const ok = await detectLocalServer();
+  if (!ok) return false;
+  try {
+    const res = await fetch('/api/lsp/bundles/uninstall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bundleId }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

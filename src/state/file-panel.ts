@@ -12,6 +12,9 @@ export type PreviewSource =
 /** Which pane occupies the right split (null = closed). */
 export type RightPaneMode = 'viewer' | 'preview' | null;
 
+/** Max workspace file tabs persisted and open at once in the viewer strip. */
+export const MAX_OPEN_VIEWER_TABS = 20;
+
 /** Persisted + in-memory file explorer / viewer preferences. */
 export interface FilePanelState {
   fileSidebarCollapsed: boolean;
@@ -23,6 +26,10 @@ export interface FilePanelState {
   splitRatio: number;
   expandedDirs: string[];
   selectedPath: string | null;
+  /** Workspace-relative paths open in the file viewer (attachments excluded). */
+  openViewerTabs: string[];
+  /** Active viewer tab path; must be in openViewerTabs or null. */
+  activeViewerTab: string | null;
   treeRoot: string;
 }
 
@@ -35,6 +42,8 @@ export const DEFAULT_FILE_PANEL_STATE: FilePanelState = {
   splitRatio: 0.55,
   expandedDirs: [],
   selectedPath: null,
+  openViewerTabs: [],
+  activeViewerTab: null,
   treeRoot: '.',
 };
 
@@ -68,6 +77,39 @@ function normalizeRightPaneMode(raw: unknown, viewerOpen: boolean): RightPaneMod
   return null;
 }
 
+function normalizeViewerTabPaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const paths: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed || trimmed.startsWith('.minnow/attachments/')) continue;
+    const norm = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+    if (!norm || seen.has(norm)) continue;
+    seen.add(norm);
+    paths.push(norm);
+    if (paths.length >= MAX_OPEN_VIEWER_TABS) break;
+  }
+  return paths;
+}
+
+function normalizeActiveViewerTab(
+  raw: unknown,
+  openTabs: string[],
+  selectedPath: string | null,
+): string | null {
+  if (typeof raw === 'string' && raw.trim()) {
+    const norm = raw.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+    if (openTabs.includes(norm)) return norm;
+  }
+  if (selectedPath) {
+    const sel = selectedPath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+    if (openTabs.includes(sel)) return sel;
+  }
+  return openTabs.length > 0 ? openTabs[openTabs.length - 1]! : null;
+}
+
 function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_FILE_PANEL_STATE };
@@ -79,6 +121,22 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   const viewerOpenLegacy = row.viewerOpen === true;
   const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy);
   const viewerOpen = rightPaneMode !== null;
+  const selectedPath = typeof row.selectedPath === 'string' ? row.selectedPath : null;
+  const openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
+  const legacySelected =
+    selectedPath &&
+    !selectedPath.startsWith('.minnow/attachments/') &&
+    openViewerTabs.length === 0
+      ? [selectedPath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '')]
+      : openViewerTabs;
+  const tabs =
+    legacySelected.length > openViewerTabs.length ? legacySelected.slice(0, MAX_OPEN_VIEWER_TABS) : openViewerTabs;
+  const activeViewerTab = normalizeActiveViewerTab(
+    row.activeViewerTab,
+    tabs,
+    selectedPath,
+  );
+  const syncedSelected = activeViewerTab ?? selectedPath;
   return {
     fileSidebarCollapsed: row.fileSidebarCollapsed === true,
     viewerOpen,
@@ -89,7 +147,9 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
       typeof row.splitRatio === 'number' ? row.splitRatio : DEFAULT_FILE_PANEL_STATE.splitRatio,
     ),
     expandedDirs,
-    selectedPath: typeof row.selectedPath === 'string' ? row.selectedPath : null,
+    selectedPath: syncedSelected,
+    openViewerTabs: tabs,
+    activeViewerTab,
     treeRoot: typeof row.treeRoot === 'string' && row.treeRoot.trim() ? row.treeRoot : '.',
   };
 }
@@ -117,6 +177,7 @@ export function setFilePanelState(next: FilePanelState): void {
     viewerOpen: rightPaneMode !== null,
     splitRatio: clampSplitRatio(next.splitRatio),
     expandedDirs: [...next.expandedDirs],
+    openViewerTabs: [...next.openViewerTabs],
   };
 }
 
@@ -133,6 +194,10 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
       partial.expandedDirs !== undefined
         ? [...partial.expandedDirs]
         : panelState.expandedDirs,
+    openViewerTabs:
+      partial.openViewerTabs !== undefined
+        ? [...partial.openViewerTabs]
+        : panelState.openViewerTabs,
   };
   const rightPaneMode =
     partial.rightPaneMode !== undefined

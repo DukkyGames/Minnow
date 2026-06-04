@@ -65,9 +65,13 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   updateWorkspaceButtonLabel(info.label, info.path);
   applyWorkspaceScopedSession(info.path, previousPath);
 
+  const { closeFileViewerForce } = await import('./file-viewer');
+  closeFileViewerForce();
   patchFilePanelState({
     expandedDirs: [],
     selectedPath: null,
+    openViewerTabs: [],
+    activeViewerTab: null,
   });
   await refreshFileTreeViaBridge();
 

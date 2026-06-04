@@ -48,6 +48,24 @@ describe('migrateLspJsonMissingBuiltins', () => {
     }
   });
 
+  test('removes pruned built-in stubs without a custom command', async () => {
+    const defaults = await readDefaults();
+    const stale = JSON.parse(
+      await fs.readFile(path.join(STALE_FIXTURE, 'lsp.json'), 'utf8'),
+    );
+    stale.lsp.eslint = { disabled: true };
+    stale.lsp.oxlint = {
+      disabled: false,
+      command: ['oxlint', '--lsp'],
+      extensions: ['.ts'],
+    };
+    const { payload, mutated } = migrateLspJsonMissingBuiltins(defaults, stale);
+    assert.equal(mutated, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.lsp, 'eslint'), false);
+    assert.ok(payload.lsp.oxlint);
+    assert.deepEqual(payload.lsp.oxlint.command, ['oxlint', '--lsp']);
+  });
+
   test('second migration is idempotent', async () => {
     const defaults = await readDefaults();
     const stale = JSON.parse(
@@ -92,7 +110,7 @@ describe('loadMergedLspConfig migration on disk', () => {
     );
     const defaults = await readDefaults();
     const builtinIds = Object.keys(defaults.lsp).filter((id) => id !== 'fake');
-    assert.equal(builtinIds.length, 38);
+    assert.equal(builtinIds.length, 14);
     for (const id of builtinIds) {
       assert.ok(onDisk.lsp[id], `disk missing ${id}`);
     }

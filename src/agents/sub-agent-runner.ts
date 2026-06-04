@@ -363,7 +363,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
       mergeThinkingIntoCompletionBody(
-        body as Record<string, unknown>,
+        body as unknown as Record<string, unknown>,
         resolvedThinking.mode,
         provider,
         sendCaps,
@@ -488,7 +488,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         resolvedSampler.maxTokens,
       ) as SubAgentCompletionBody;
       mergeThinkingIntoCompletionBody(
-        body as Record<string, unknown>,
+        body as unknown as Record<string, unknown>,
         resolvedThinking.mode,
         provider,
         sendCaps,

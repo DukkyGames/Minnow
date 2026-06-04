@@ -14,6 +14,37 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 let cached = null;
 let builtinIdsCache = null;
 
+/** Former built-ins removed from defaults.json — drop migration stubs from ~/.minnow/lsp.json. */
+const PRUNED_BUILTIN_LSP_IDS = [
+  'eslint',
+  'oxlint',
+  'biome',
+  'deno',
+  'vue',
+  'svelte',
+  'astro',
+  'csharp',
+  'fsharp',
+  'razor',
+  'jdtls',
+  'kotlin-ls',
+  'ruby-lsp',
+  'elixir-ls',
+  'dart',
+  'prisma',
+  'intelephense',
+  'ocaml-lsp',
+  'clojure-lsp',
+  'gleam',
+  'nixd',
+  'sourcekit-lsp',
+  'hls',
+  'julials',
+  'tinymist',
+  'texlab',
+  'ty',
+];
+
 /** Server ids shipped in src/lsp/defaults.json (built-ins, not user-defined). */
 export async function getBuiltinLspIds() {
   if (builtinIdsCache) return builtinIdsCache;
@@ -36,6 +67,15 @@ export function migrateLspJsonMissingBuiltins(defaults, userPayload) {
     userPayload?.lsp && typeof userPayload.lsp === 'object' ? userPayload.lsp : {};
   const nextLsp = { ...userLsp };
   let mutated = false;
+
+  for (const id of PRUNED_BUILTIN_LSP_IDS) {
+    const entry = nextLsp[id];
+    if (!entry || typeof entry !== 'object') continue;
+    const hasCommand = Array.isArray(entry.command) && entry.command.length > 0;
+    if (hasCommand) continue;
+    delete nextLsp[id];
+    mutated = true;
+  }
 
   for (const [id, cfg] of Object.entries(defaultLsp)) {
     if (id === 'fake') continue;

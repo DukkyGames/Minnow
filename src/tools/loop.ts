@@ -27,6 +27,7 @@ import {
   replacePendingAttachments,
 } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
+import { codeRefHistoryBlock, isCodeRefAttachment } from '../attachments/code-ref';
 import { resolveWorkspaceReferences } from '../attachments/workspace-ref';
 import {
   extractMessageText,
@@ -341,6 +342,17 @@ export function buildHistoryUserContent(
       parts.push(imageHistoryPlaceholder(att.name));
       continue;
     }
+    if (isCodeRefAttachment(att)) {
+      parts.push(
+        codeRefHistoryBlock(
+          att.workspacePath,
+          att.lineStart,
+          att.lineEnd,
+          att.text,
+        ),
+      );
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       parts.push(fileContentBlock(att.name, att.text));
     }
@@ -368,6 +380,17 @@ function buildVlmUserApiContent(
 
   for (const att of attachments) {
     if (att.kind === 'error' || att.kind === 'image') continue;
+    if (isCodeRefAttachment(att)) {
+      textParts.push(
+        codeRefHistoryBlock(
+          att.workspacePath,
+          att.lineStart,
+          att.lineEnd,
+          att.text,
+        ),
+      );
+      continue;
+    }
     if ((att.kind === 'text' || att.kind === 'pdf') && att.text) {
       textParts.push(fileContentBlock(att.name, att.text));
     }
@@ -1142,7 +1165,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         modelRow?.capabilities ??
         (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
       mergeThinkingIntoCompletionBody(
-        body,
+        body as unknown as Record<string, unknown>,
         replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
         provider,
         sendCaps,
@@ -1469,7 +1492,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           resolvedSampler.maxTokens,
         ) as ChatCompletionBody;
         mergeThinkingIntoCompletionBody(
-          fallbackBody,
+          fallbackBody as unknown as Record<string, unknown>,
           replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
           provider,
           sendCaps,

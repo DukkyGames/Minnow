@@ -61,7 +61,7 @@ function contrastRatio(fg: string, bg: string): number {
 
 function readThemeBlock(css: string, themeId: string): Record<string, string> {
   const re = new RegExp(
-    `:root\\[data-theme="${themeId}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`,
+    `:root\\[data-theme="${themeId}"\\](?:,\\s*\\.settings-theme-preview\\[data-theme="${themeId}"\\])?\\s*\\{([\\s\\S]*?)\\n\\}`,
     'm',
   );
   const m = re.exec(css);
@@ -84,7 +84,8 @@ describe('theme-contrast', () => {
       const fg = vars['--mn-fg'];
       const bg = vars['--mn-bg'];
       const s1 = vars['--mn-surface-1'];
-      assert.ok(fg && bg && s1, 'core tokens present');
+      const selectionBg = vars['--mn-selection-bg'];
+      assert.ok(fg && bg && s1 && selectionBg, 'core tokens present');
       assert.ok(
         contrastRatio(fg, bg) >= 4.5,
         `fg/bg ${contrastRatio(fg, bg).toFixed(2)} < 4.5`,

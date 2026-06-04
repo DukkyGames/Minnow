@@ -15,6 +15,7 @@ import {
   fillProviderSelect,
 } from './settings-model-binding';
 import { isLocalServerAvailable } from '../tools/config';
+import { appendEditorFundamentalsSettings } from './editor-fundamentals-settings';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
@@ -297,6 +298,15 @@ function renderEditorSettingsBody(
   const dismissDd = el('dd', 'settings-kv__value');
   dismissDd.append(kbdKey('Esc'), document.createTextNode(' clear ghost text'));
   shortcuts.append(dismissDd);
+  shortcuts.append(el('dt', 'settings-kv__term', 'Partial accept'));
+  const partialDd = el('dd', 'settings-kv__value');
+  partialDd.append(
+    kbdKey('Ctrl'),
+    document.createTextNode('+'),
+    kbdKey('→'),
+    document.createTextNode(' accept next word/line'),
+  );
+  shortcuts.append(partialDd);
   ghost.append(shortcuts);
 
   const debounceKv = el('dl', 'settings-kv settings-editor-debounce');
@@ -328,6 +338,84 @@ function renderEditorSettingsBody(
   });
   ghost.append(debounceKv);
 
+  const advanced = appendSettingsGroup(
+    mount,
+    'Prompt context',
+    'Extra signals for inline completion requests (Quick Edit always uses chat).',
+  );
+
+  const contextToggles: Array<{
+    label: string;
+    key: keyof Pick<
+      EditorAiCompletionConfig,
+      'includeImportContext' | 'includeLspHover' | 'useNativeFim' | 'enableCompletionCache'
+    >;
+    aria: string;
+  }> = [
+    {
+      label: 'Include import lines',
+      key: 'includeImportContext',
+      aria: 'Include import and require lines in completion prompt',
+    },
+    {
+      label: 'Include LSP hover at cursor',
+      key: 'includeLspHover',
+      aria: 'Fetch LSP hover text for the symbol at the cursor when available',
+    },
+    {
+      label: 'Qwen native FIM when supported',
+      key: 'useNativeFim',
+      aria: 'Use Qwen fill-in-the-middle tokens for matching models',
+    },
+    {
+      label: 'Cache completions',
+      key: 'enableCompletionCache',
+      aria: 'Cache inline completions by file and surrounding context hash',
+    },
+  ];
+
+  for (const toggle of contextToggles) {
+    const { row } = createSettingsToggleRow(toggle.label, {
+      checked: config[toggle.key],
+      ariaLabel: toggle.aria,
+      onChange: async (enabled) => {
+        await saveEditorAiCompletionConfig({ [toggle.key]: enabled });
+        setStatus('ok', `${toggle.label} ${enabled ? 'on' : 'off'}`);
+        refresh();
+      },
+    });
+    advanced.append(row);
+  }
+
+  const tokensKv = el('dl', 'settings-kv settings-editor-debounce');
+  tokensKv.append(el('dt', 'settings-kv__term', 'Max completion tokens'));
+  const tokensDd = el('dd', 'settings-kv__value');
+  const tokensWrap = el('span', 'settings-kv-input-wrap settings-editor-debounce__control');
+  const tokensInput = document.createElement('input');
+  tokensInput.type = 'number';
+  tokensInput.id = 'settingsEditorMaxTokens';
+  tokensInput.min = '16';
+  tokensInput.max = '1024';
+  tokensInput.step = '16';
+  tokensInput.value = String(config.maxTokens);
+  tokensInput.className = 'settings-select settings-kv-input';
+  tokensInput.setAttribute('aria-label', 'Maximum tokens for inline completion');
+  tokensWrap.append(tokensInput);
+  tokensDd.append(tokensWrap);
+  tokensKv.append(tokensDd);
+  tokensInput.addEventListener('change', () => {
+    const raw = Number(tokensInput.value);
+    const n = Number.isFinite(raw)
+      ? Math.min(1024, Math.max(16, Math.round(raw)))
+      : config.maxTokens;
+    tokensInput.value = String(n);
+    void saveEditorAiCompletionConfig({ maxTokens: n }).then(() => {
+      setStatus('ok', 'Max tokens saved');
+      refresh();
+    });
+  });
+  advanced.append(tokensKv);
+
   const modelGroup = appendSettingsGroup(
     mount,
     'Model source',
@@ -344,5 +432,6 @@ export async function renderEditorSettingsSection(): Promise<void> {
 
   const online = isLocalServerAvailable();
   const config = await loadEditorAiCompletionConfig();
+  await appendEditorFundamentalsSettings(mount);
   renderEditorSettingsBody(mount, config, online);
 }

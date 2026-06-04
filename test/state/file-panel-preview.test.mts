@@ -11,6 +11,8 @@ import {
 describe('file panel preview state', () => {
   beforeEach(() => {
     resetFilePanelStateForTests();
+    globalThis.fetch = (async () =>
+      ({ ok: true, json: async () => ({}) }) as Response) as typeof fetch;
   });
 
   test('patch rightPaneMode preview keeps viewerOpen true', () => {
@@ -43,5 +45,31 @@ describe('file panel preview state', () => {
     const state = getFilePanelState();
     assert.equal(state.rightPaneMode, 'viewer');
     assert.equal(state.viewerOpen, true);
+  });
+
+  test('openViewerTabs and activeViewerTab round-trip via setFilePanelState', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'viewer',
+      viewerOpen: true,
+      openViewerTabs: ['src/a.ts', 'src/b.ts'],
+      activeViewerTab: 'src/a.ts',
+      selectedPath: 'src/a.ts',
+    });
+    const state = getFilePanelState();
+    assert.deepEqual(state.openViewerTabs, ['src/a.ts', 'src/b.ts']);
+    assert.equal(state.activeViewerTab, 'src/a.ts');
+    assert.equal(state.selectedPath, 'src/a.ts');
+  });
+
+  test('patch replaces openViewerTabs array', () => {
+    const before = getFilePanelState().openViewerTabs;
+    patchFilePanelState({
+      openViewerTabs: ['one.ts', 'two.ts'],
+      activeViewerTab: 'one.ts',
+    });
+    const state = getFilePanelState();
+    assert.deepEqual(state.openViewerTabs, ['one.ts', 'two.ts']);
+    assert.notEqual(state.openViewerTabs, before);
   });
 });
