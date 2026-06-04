@@ -3,6 +3,7 @@
  * Send path and multimodal API wiring land in SA-13 / SA-15.
  */
 
+import { formatCodeRefLabel } from './code-ref-format';
 import { processFile } from './reader';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import type { Attachment } from './types';
@@ -62,6 +63,9 @@ function chipLabel(attachment: Attachment): string {
   if (attachment.kind === 'workspace') {
     return attachment.workspacePath ?? attachment.name;
   }
+  if (attachment.kind === 'codeRef') {
+    return attachment.name;
+  }
   if (attachment.largeTextWarning) {
     return `${attachment.name} (large file)`;
   }
@@ -88,6 +92,48 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   if (attachment.kind === 'workspace') {
     chip.classList.add('attach-chip--workspace');
     chip.title = 'Workspace image — loads when you send';
+  }
+
+  if (
+    attachment.kind === 'codeRef' &&
+    attachment.workspacePath &&
+    attachment.lineStart != null &&
+    attachment.lineEnd != null
+  ) {
+    chip.classList.add('attach-chip--code-ref');
+    chip.title = 'Selection — included when you send';
+    const path = attachment.workspacePath;
+    const startLine = attachment.lineStart;
+    const endLine = attachment.lineEnd;
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'code-ref-link code-ref-link--chip';
+    const label = formatCodeRefLabel(path, startLine, endLine);
+    const fileName = label.replace(/\s+L\d+(-\d+)?$/, '');
+    const linePart = label.slice(fileName.length).trim();
+    link.title = `Open ${path} ${linePart}`;
+    const icon = document.createElement('span');
+    icon.className = 'code-ref-link__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '<>';
+    link.appendChild(icon);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'code-ref-link__name';
+    nameEl.textContent = fileName;
+    link.appendChild(nameEl);
+    if (linePart) {
+      const linesEl = document.createElement('span');
+      linesEl.className = 'code-ref-link__lines';
+      linesEl.textContent = linePart;
+      link.appendChild(linesEl);
+    }
+    link.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void import('../ui/code-ref-link').then((m) => {
+        m.openCodeRefInViewer({ workspacePath: path, startLine, endLine });
+      });
+    });
+    chip.appendChild(link);
   }
 
   if (attachment.kind === 'error') {

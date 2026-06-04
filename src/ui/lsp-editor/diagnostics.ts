@@ -70,7 +70,7 @@ function toCmDiagnostics(
 export function lspDiagnosticsExtensions(filePath: string): Extension[] {
   const lspLinter = linter(
     async (view) => {
-      const raw = await fetchLspDiagnostics(filePath);
+      const raw = await fetchLspDiagnostics(filePath, view.state.doc.toString());
       const counts = countDiagnostics(raw);
       diagnosticsChromeListener?.(counts);
       return toCmDiagnostics(view, raw);

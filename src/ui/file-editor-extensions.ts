@@ -112,6 +112,11 @@ function resolveReplaceSpan(
   fallbackFrom: number,
   fallbackTo: number,
 ): { from: number; to: number } {
+  const emptySelection = fallbackFrom === fallbackTo;
+  if (item.textEditInsertRange && item.textEditReplaceRange) {
+    const range = emptySelection ? item.textEditInsertRange : item.textEditReplaceRange;
+    return lspRangeToSpan(view, range);
+  }
   if (item.textEditRange) {
     return lspRangeToSpan(view, item.textEditRange);
   }
@@ -125,8 +130,13 @@ function completionMenuFrom(
 ): number {
   let from = wordFrom;
   for (const item of items) {
-    if (item.textEditRange) {
-      const span = lspRangeToSpanFromDoc(doc, item.textEditRange);
+    const ranges = [
+      item.textEditRange,
+      item.textEditInsertRange,
+      item.textEditReplaceRange,
+    ].filter(Boolean) as NonNullable<LspCompletionItem['textEditRange']>[];
+    for (const range of ranges) {
+      const span = lspRangeToSpanFromDoc(doc, range);
       from = Math.min(from, span.from);
     }
   }

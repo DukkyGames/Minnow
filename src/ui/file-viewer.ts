@@ -33,11 +33,10 @@ import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 import { setLspDiagnosticsChromeListener } from './lsp-editor';
 import { editorAiCompletionExtensions } from './file-editor-ai-extensions';
+import { addCodeReferenceToComposer } from '../attachments/code-ref';
 import {
   buildFileViewerContextMenuItems,
   editorQuickEditExtensions,
-  formatSelectionFence,
-  insertSelectionInComposer,
   lineNumbersForRange,
   openQuickEditPanel,
 } from './editor-quick-edit';
@@ -66,6 +65,7 @@ let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 let pendingInitialSelection: { line: number; character: number } | null = null;
+let pendingInitialLineRange: { startLine: number; endLine: number } | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
 export function parseReadFileRangeBody(raw: string): string {
@@ -348,7 +348,20 @@ function mountEditor(content: string, path: string): void {
       ],
     });
     editorView = new EditorView({ state, parent: editorMount });
-    if (pendingInitialSelection && editorView) {
+    if (pendingInitialLineRange && editorView) {
+      const { startLine, endLine } = pendingInitialLineRange;
+      pendingInitialLineRange = null;
+      const doc = editorView.state.doc;
+      const fromLine = Math.max(1, Math.min(startLine, doc.lines));
+      const toLine = Math.max(fromLine, Math.min(endLine, doc.lines));
+      const from = doc.line(fromLine).from;
+      const to = doc.line(toLine).to;
+      editorView.dispatch({
+        selection: EditorSelection.range(from, to),
+        scrollIntoView: true,
+      });
+      editorView.focus();
+    } else if (pendingInitialSelection && editorView) {
       const { line, character } = pendingInitialSelection;
       pendingInitialSelection = null;
       const doc = editorView.state.doc;
@@ -544,7 +557,12 @@ export function bindFileViewerContextMenu(): void {
           sel.from,
           sel.to,
         );
-        insertSelectionInComposer(formatSelectionFence(text, path, fromLine, toLine));
+        addCodeReferenceToComposer({
+          workspacePath: path,
+          startLine: fromLine,
+          endLine: toLine,
+          text,
+        });
       },
       onQuickEdit: () => {
         if (!editorView || readOnlyExcerpt) return;
@@ -570,6 +588,8 @@ export interface OpenFileInViewerOptions {
   asCode?: boolean;
   /** Move cursor after mount (0-based LSP line/character). */
   initialSelection?: { line: number; character: number };
+  /** Select a 1-based inclusive line range after mount (editor selections). */
+  initialLineRange?: { startLine: number; endLine: number };
 }
 
 /** Open inlined chat attachment text in a read-only editor pane. */
@@ -709,6 +729,7 @@ export async function openFileInViewer(
   readOnlyExcerpt = false;
   readOnlyBannerText = null;
   pendingInitialSelection = options?.initialSelection ?? null;
+  pendingInitialLineRange = options?.initialLineRange ?? null;
   patchFilePanelState({ selectedPath: relativePath });
   showViewerSplit();
   renderFileTreeViaBridge();

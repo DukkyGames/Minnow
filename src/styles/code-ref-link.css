@@ -1,0 +1,85 @@
+/* Compact workspace file + line links (Add to chat, user bubbles) */
+.code-ref-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px 2px 6px;
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mn-fg);
+  cursor: pointer;
+  text-align: left;
+}
+
+.code-ref-link__icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  letter-spacing: -0.04em;
+}
+
+.code-ref-link__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mn-accent);
+  max-width: 12rem;
+}
+
+.code-ref-link__lines {
+  flex-shrink: 0;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .code-ref-link:hover {
+    background: color-mix(in srgb, var(--mn-fg) 6%, transparent);
+  }
+
+  .code-ref-link:hover .code-ref-link__name {
+    text-decoration: underline;
+  }
+}
+
+.code-ref-link:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.attach-chip--code-ref {
+  padding-left: 4px;
+  gap: 4px;
+}
+
+.attach-chip--code-ref .attach-chip-label {
+  display: none;
+}
+
+.user-msg-code-refs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.user-msg-code-refs .code-ref-link {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 10%, var(--mn-border));
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .user-msg-code-refs .code-ref-link:hover {
+    border-color: var(--mn-accent);
+    background: var(--mn-surface-1);
+  }
+}

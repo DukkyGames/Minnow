@@ -44,7 +44,7 @@
       "disabled": false
     },
     "graphql": {
-      "disabled": true
+      "disabled": false
     },
     "rust": {
       "disabled": true
@@ -83,7 +83,7 @@
       "disabled": false
     },
     "bash": {
-      "disabled": true
+      "disabled": false
     },
     "terraform": {
       "disabled": true
@@ -128,7 +128,7 @@
       "disabled": true
     },
     "dockerfile": {
-      "disabled": true
+      "disabled": false
     },
     "ty": {
       "disabled": true

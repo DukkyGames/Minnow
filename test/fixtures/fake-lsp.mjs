@@ -111,6 +111,32 @@ function handleMessage(msg) {
               insertText: 'importHelper',
               data: { id: 'resolve-me' },
             },
+            {
+              label: 'rangeEdit',
+              kind: 14,
+              textEdit: {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 3 },
+                },
+                newText: 'edited',
+              },
+            },
+            {
+              label: 'insertReplace',
+              kind: 14,
+              textEdit: {
+                insert: {
+                  start: { line: 0, character: 4 },
+                  end: { line: 0, character: 4 },
+                },
+                replace: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 4 },
+                },
+                newText: 'replaced',
+              },
+            },
           ]
         : [];
     send({

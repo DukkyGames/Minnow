@@ -11,6 +11,7 @@ import {
 import { bracketMatching, codeFolding, foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
 import { lintKeymap } from '@codemirror/lint';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
+import { createMinnowSearchPanel } from './editor-search-panel';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import {
   crosshairCursor,
@@ -71,7 +72,7 @@ export function editorCoreExtensions(options: EditorCoreExtensionOptions): Exten
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     EditorState.allowMultipleSelections.of(true),
-    search({ top: true }),
+    search({ top: true, createPanel: createMinnowSearchPanel }),
     highlightSelectionMatches(),
     ...whitespaceExts,
     ...wrapExts,

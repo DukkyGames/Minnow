@@ -16,6 +16,10 @@ export interface LspCompletionItem {
   additionalTextEdits?: LspTextEdit[];
   /** When set, replace this LSP range instead of the matched word span. */
   textEditRange?: LspRange;
+  /** InsertReplaceEdit — used when the selection is empty. */
+  textEditInsertRange?: LspRange;
+  /** InsertReplaceEdit — used when the selection is non-empty. */
+  textEditReplaceRange?: LspRange;
 }
 
 export interface LspPosition {
@@ -163,10 +167,17 @@ export async function fetchLspSignature(
 }
 
 /** Structured diagnostics for squiggles (not LLM-formatted text). */
-export async function fetchLspDiagnostics(path: string): Promise<LspStructuredDiagnostic[]> {
+export async function fetchLspDiagnostics(
+  path: string,
+  editorText?: string,
+): Promise<LspStructuredDiagnostic[]> {
+  const body: Record<string, unknown> = { path };
+  if (editorText !== undefined) {
+    body.text = editorText;
+  }
   const data = await postLspJson<{ diagnostics?: LspStructuredDiagnostic[] }>(
     '/api/lsp/diagnostics-structured',
-    { path },
+    body,
   );
   return Array.isArray(data?.diagnostics) ? data.diagnostics : [];
 }

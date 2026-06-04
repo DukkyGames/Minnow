@@ -81,10 +81,10 @@
       "label": "CSS"
     },
     "graphql": {
-      "disabled": true,
+      "disabled": false,
       "command": ["$minnow:graphql-lsp"],
       "extensions": [".graphql", ".gql"],
-      "defaultEnabled": false,
+      "defaultEnabled": true,
       "label": "GraphQL"
     },
     "rust": {
@@ -181,7 +181,7 @@
       "disabled": false,
       "command": ["$minnow:bash-language-server"],
       "extensions": [".sh", ".bash", ".zsh", ".ksh"],
-      "defaultEnabled": false,
+      "defaultEnabled": true,
       "label": "Bash"
     },
     "terraform": {
@@ -299,7 +299,7 @@
       "disabled": false,
       "command": ["$minnow:docker-langserver"],
       "extensions": [".dockerfile", "Dockerfile"],
-      "defaultEnabled": false,
+      "defaultEnabled": true,
       "label": "Dockerfile"
     },
     "ty": {

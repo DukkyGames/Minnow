@@ -127,13 +127,20 @@ function normalizeLspRange(range) {
   };
 }
 
-/** Prefer textEdit / insert-replace range over bare insertText. */
+/** Prefer textEdit / insert-replace ranges over bare insertText. */
 function extractCompletionInsertFields(item) {
   let insertText = String(item.insertText ?? item.label ?? '');
   let textEditRange;
+  let textEditInsertRange;
+  let textEditReplaceRange;
   const te = item.textEdit;
   if (te && typeof te === 'object') {
-    if (te.range != null && te.newText != null) {
+    if (te.insert != null && te.replace != null) {
+      insertText = String(te.newText ?? insertText);
+      textEditInsertRange = normalizeLspRange(te.insert);
+      textEditReplaceRange = normalizeLspRange(te.replace);
+      textEditRange = textEditReplaceRange;
+    } else if (te.range != null && te.newText != null) {
       insertText = String(te.newText);
       textEditRange = normalizeLspRange(te.range);
     } else if (te.replace != null) {
@@ -141,7 +148,7 @@ function extractCompletionInsertFields(item) {
       textEditRange = normalizeLspRange(te.replace);
     }
   }
-  return { insertText, textEditRange };
+  return { insertText, textEditRange, textEditInsertRange, textEditReplaceRange };
 }
 
 function normalizeCompletionItems(result) {
@@ -151,7 +158,8 @@ function normalizeCompletionItems(result) {
     if (!item || typeof item !== 'object') continue;
     const label = String(item.label ?? '');
     if (!label) continue;
-    const { insertText, textEditRange } = extractCompletionInsertFields(item);
+    const { insertText, textEditRange, textEditInsertRange, textEditReplaceRange } =
+      extractCompletionInsertFields(item);
     const entry = {
       label,
       insertText,
@@ -159,6 +167,8 @@ function normalizeCompletionItems(result) {
       detail: item.detail != null ? String(item.detail) : undefined,
     };
     if (textEditRange) entry.textEditRange = textEditRange;
+    if (textEditInsertRange) entry.textEditInsertRange = textEditInsertRange;
+    if (textEditReplaceRange) entry.textEditReplaceRange = textEditReplaceRange;
     const documentation = normalizeDocumentation(item.documentation);
     if (documentation !== undefined) entry.documentation = documentation;
     if (item.data !== undefined) entry.data = item.data;
@@ -347,6 +357,7 @@ async function connectLspServer(serverId, config) {
           completion: {
             completionItem: {
               snippetSupport: true,
+              insertReplaceSupport: true,
               resolveSupport: {
                 properties: ['documentation', 'detail', 'additionalTextEdits'],
               },
@@ -405,6 +416,22 @@ export async function notifyLspDocument(relativePath, event, text) {
 
   if (event === 'open') {
     const body = text ?? '';
+    const existing = documentSync.get(fileUri);
+    if (existing) {
+      if (existing.text === body) {
+        return { ok: true };
+      }
+      const nextVersion = existing.version + 1;
+      documentSync.set(fileUri, { version: nextVersion, text: body });
+      for (const { id, config } of matchers) {
+        const state = await getConnection(id, config);
+        await state.connection.sendNotification('textDocument/didChange', {
+          textDocument: { uri: fileUri, version: nextVersion },
+          contentChanges: [{ text: body }],
+        });
+      }
+      return { ok: true };
+    }
     documentSync.set(fileUri, { version: 1, text: body });
     for (const { id, config } of matchers) {
       const state = await getConnection(id, config);
@@ -449,14 +476,27 @@ export async function notifyLspDocument(relativePath, event, text) {
   return { ok: false, error: 'Invalid event' };
 }
 
-async function ensureDocumentSynced(relativePath) {
+/**
+ * Ensure the LSP has the latest buffer for a path.
+ * @param {string} relativePath
+ * @param {{ editorText?: string }} [options] - When set (e.g. from CM6), never fall back to disk.
+ */
+async function ensureDocumentSynced(relativePath, options = {}) {
   const fileUri = toFileUri(relativePath);
-  if (!documentSync.has(fileUri)) {
+  const synced = documentSync.get(fileUri);
+  if (synced) {
+    if (options.editorText !== undefined && options.editorText !== synced.text) {
+      await notifyLspDocument(relativePath, 'change', options.editorText);
+    }
+    return fileUri;
+  }
+  let body = options.editorText;
+  if (body === undefined) {
     const fs = await import('node:fs/promises');
     const abs = path.resolve(getWorkspaceRoot(), relativePath);
-    const diskText = await fs.readFile(abs, 'utf8').catch(() => '');
-    await notifyLspDocument(relativePath, 'open', diskText);
+    body = await fs.readFile(abs, 'utf8').catch(() => '');
   }
+  await notifyLspDocument(relativePath, 'open', body);
   return fileUri;
 }
 
@@ -465,7 +505,7 @@ async function awaitPublishedDiagnostics() {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-async function withLspMatchers(relativePath, handler) {
+async function withLspMatchers(relativePath, handler, options = {}) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
     return { ok: false, error: 'LSP is disabled' };
@@ -477,7 +517,7 @@ async function withLspMatchers(relativePath, handler) {
   if (matchers.length === 0) {
     return { ok: false, error: `No LSP server configured for ${relativePath}` };
   }
-  const fileUri = await ensureDocumentSynced(relativePath);
+  const fileUri = await ensureDocumentSynced(relativePath, options);
   return handler({ merged, matchers, fileUri });
 }
 
@@ -535,22 +575,23 @@ export async function getLspDiagnostics(relativePath) {
     return 'Error: LSP is disabled in settings.';
   }
 
-  const abs = path.resolve(getWorkspaceRoot(), relativePath);
   const fileUri = toFileUri(relativePath);
   const matchers = matchServersForPath(merged, relativePath);
   if (matchers.length === 0) {
     return `No LSP server configured for ${relativePath}.`;
   }
 
+  try {
+    await ensureDocumentSynced(relativePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error: ${message}`;
+  }
+
   const parts = [];
   for (const { id, config } of matchers) {
     try {
       const state = await getConnection(id, config);
-      if (!documentSync.has(fileUri)) {
-        const fsMod = await import('node:fs/promises');
-        const text = await fsMod.readFile(abs, 'utf8').catch(() => '');
-        await notifyLspDocument(relativePath, 'open', text);
-      }
       await awaitPublishedDiagnostics();
       const diags = state.diagnostics.get(fileUri) ?? [];
       const formatted = formatDiagnostics(`${relativePath} (${id})`, diags);
@@ -565,27 +606,29 @@ export async function getLspDiagnostics(relativePath) {
 
 /**
  * Raw LSP diagnostics for a path (not LLM-formatted).
+ * @param {string} relativePath
+ * @param {string} [editorText] - Current editor buffer; avoids disk fallback when provided.
  */
-export async function getLspStructuredDiagnostics(relativePath) {
-  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
-    ok: true,
-    matchers,
-    fileUri,
-  }));
+export async function getLspStructuredDiagnostics(relativePath, editorText) {
+  const syncOpts =
+    typeof editorText === 'string' ? { editorText } : {};
+  const ctx = await withLspMatchers(
+    relativePath,
+    async ({ matchers, fileUri }) => ({
+      ok: true,
+      matchers,
+      fileUri,
+    }),
+    syncOpts,
+  );
   if (!ctx.ok) {
     return { diagnostics: [], error: ctx.error };
   }
 
-  const abs = path.resolve(getWorkspaceRoot(), relativePath);
   const parts = [];
   for (const { id, config } of ctx.matchers) {
     try {
       const state = await getConnection(id, config);
-      if (!documentSync.has(ctx.fileUri)) {
-        const fsMod = await import('node:fs/promises');
-        const text = await fsMod.readFile(abs, 'utf8').catch(() => '');
-        await notifyLspDocument(relativePath, 'open', text);
-      }
       await awaitPublishedDiagnostics();
       const diags = state.diagnostics.get(ctx.fileUri) ?? [];
       parts.push(...normalizeStructuredDiagnostics(diags));
@@ -835,6 +878,14 @@ export async function listLspServers() {
       defaultEnabled: cfg.defaultEnabled === true,
     };
   });
+}
+
+/** @internal Test-only — in-memory sync state for a project-relative path. */
+export function getLspDocumentSyncForTest(relativePath) {
+  const fileUri = toFileUri(relativePath);
+  const entry = documentSync.get(fileUri);
+  if (!entry) return null;
+  return { version: entry.version, text: entry.text };
 }
 
 export function shutdownAllLsp() {

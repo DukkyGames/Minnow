@@ -66,6 +66,11 @@ describe('resolveLspSpawnArgv managed dir', () => {
     assert.match(argv[1], /langserver\.index\.js$/);
     assert.ok(argv.includes('--stdio'));
     assert.equal(displayBin, 'pyright-langserver');
+    const managedRoot = path.join(tempHome, 'lsp-servers', 'node_modules', 'pyright');
+    assert.ok(
+      !argv[1].includes(managedRoot),
+      'app bundle must win over ~/.minnow/lsp-servers managed prefix',
+    );
   });
 
   it('resolves typescript $minnow token when app bundle exists', () => {

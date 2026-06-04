@@ -248,7 +248,12 @@ export function createLspMiddleware(resolveProjectRoot) {
           sendJson(res, pathCheck.status, { error: pathCheck.error });
           return;
         }
-        const { diagnostics, error } = await getLspStructuredDiagnostics(pathCheck.rel);
+        const editorText =
+          typeof body.text === 'string' ? body.text : undefined;
+        const { diagnostics, error } = await getLspStructuredDiagnostics(
+          pathCheck.rel,
+          editorText,
+        );
         sendJson(res, 200, { diagnostics, ...(error ? { error } : {}) });
         return;
       }

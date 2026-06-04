@@ -13,8 +13,10 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../server/lsp/config-loader.js';
 import { createLspMiddleware } from '../../server/lsp/middleware.js';
 import {
+  getLspCompletions,
   getLspHover,
   getLspStructuredDiagnostics,
+  notifyLspDocument,
   shutdownAllLsp,
 } from '../../server/lsp/manager.js';
 
@@ -107,6 +109,20 @@ describe('LSP UX API (manager)', () => {
     assert.equal(first.severity, 1);
     assert.match(first.message, /';' expected/);
     assert.equal(typeof first.range?.start?.line, 'number');
+  });
+
+  test('getLspCompletions normalizes textEdit and insertReplace ranges', async () => {
+    if (process.env.MINNOW_LSP_ENABLED === 'false') return;
+
+    await notifyLspDocument(SAMPLE_PATH, 'open', SAMPLE_TEXT);
+    const { items } = await getLspCompletions(SAMPLE_PATH, 0, 5);
+    const rangeEdit = items.find((i) => i.label === 'rangeEdit');
+    assert.ok(rangeEdit?.textEditRange);
+    assert.equal(rangeEdit.insertText, 'edited');
+    const insertReplace = items.find((i) => i.label === 'insertReplace');
+    assert.ok(insertReplace?.textEditInsertRange);
+    assert.ok(insertReplace?.textEditReplaceRange);
+    assert.equal(insertReplace.insertText, 'replaced');
   });
 
   test('getLspHover returns markdown contents for .fake', async () => {

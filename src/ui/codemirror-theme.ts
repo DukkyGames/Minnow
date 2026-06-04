@@ -6,6 +6,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
+import { getMode, getStoredTheme } from '../theme';
 
 /** GitHub light palette — mirrors highlight.js/styles/github.min.css */
 const gh = {
@@ -137,6 +138,17 @@ const minnowHighlightStyle = HighlightStyle.define([
   { tag: tags.invalid, color: gh.invalid },
 ]);
 
+/** Selection + chrome: sync CM6 dark/light facet with Minnow palette (avoids default light gray on dark UI). */
+const minnowEditorColorSchemeTheme = EditorView.theme(
+  {
+    '.cm-selectionBackground': { backgroundColor: 'var(--mn-selection-bg)' },
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+      backgroundColor: 'var(--mn-selection-bg)',
+    },
+  },
+  { dark: getMode(getStoredTheme()) === 'dark' },
+);
+
 /**
  * LSP autocomplete + tooltips — match Minnow surfaces (overrides CodeMirror light defaults).
  */
@@ -219,5 +231,9 @@ const minnowEditorTooltipTheme = EditorView.theme({
 
 /** Shared editor extensions: GitHub-style token colors for the file viewer. */
 export function minnowEditorExtensions(): Extension[] {
-  return [syntaxHighlighting(minnowHighlightStyle), minnowEditorTooltipTheme];
+  return [
+    syntaxHighlighting(minnowHighlightStyle),
+    minnowEditorColorSchemeTheme,
+    minnowEditorTooltipTheme,
+  ];
 }

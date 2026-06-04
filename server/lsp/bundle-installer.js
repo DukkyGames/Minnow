@@ -343,6 +343,16 @@ function pickGithubAssetName(github, bundleId) {
     const archName = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
     return `zls-${archName}-${osName}.tar.xz`;
   }
+  if (bundleId === 'lua-language-server') {
+    const osName =
+      process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
+    const archName = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const ver = String(github?.version ?? '').replace(/^v/, '');
+    return `lua-language-server-${ver}-${osName}-${archName}.zip`;
+  }
+  if (bundleId === 'gopls') {
+    return '';
+  }
   return `${bundleId}-${target}.zip`;
 }
 
