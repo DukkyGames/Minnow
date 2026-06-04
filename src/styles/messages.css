@@ -7,8 +7,9 @@
   position: relative;
 }
 
-/* ─── CHAT AREA ─── */
-.chat-area {
+/* ─── CHAT AREA (full column + board-init split bottom pane) ─── */
+.chat-area,
+.board-init-split__chat {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -17,6 +18,12 @@
   flex-direction: column;
   gap: 20px;
   scroll-behavior: smooth;
+}
+
+/* Init split: center the 720px transcript column in the wide lower pane */
+.board-init-split__chat {
+  align-items: center;
+  scroll-padding-bottom: 12px;
 }
 
 /* Jump to latest when user scrolls up during a stream */

@@ -15,7 +15,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tool-approval-panel,
-  .question-cards-panel {
+  .question-cards-panel,
+  .workspace-picker {
     animation: none;
   }
 }

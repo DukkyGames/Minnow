@@ -22,4 +22,17 @@ describe('validateToolRequiredArgs', () => {
   it('ignores unknown tools', () => {
     assert.equal(validateToolRequiredArgs('not_a_real_tool', {}), null);
   });
+
+  it('allows empty content for save_file (new empty file)', () => {
+    assert.equal(
+      validateToolRequiredArgs('save_file', { path: 'notes.txt', content: '' }),
+      null,
+    );
+  });
+
+  it('errors when content is missing for save_file', () => {
+    const err = validateToolRequiredArgs('save_file', { path: 'notes.txt' });
+    assert.ok(err);
+    assert.match(err!, /"content"/);
+  });
 });

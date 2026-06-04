@@ -48,6 +48,8 @@
 }
 
 .expert-lab-page[data-step='pick'] .expert-lab-step--pick,
+.expert-lab-page[data-step='create'] .expert-lab-step--create,
+.expert-lab-page[data-step='edit'] .expert-lab-step--edit,
 .expert-lab-page[data-step='brief'] .expert-lab-step--brief,
 .expert-lab-page[data-step='run'] .expert-lab-step--run {
   display: block;
@@ -66,6 +68,7 @@
 }
 
 .expert-lab-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -82,6 +85,141 @@
     border-color 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out),
     transform 0.15s var(--ease-out);
+}
+
+.expert-lab-tile--make {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+}
+
+.expert-lab-tile-menu-wrap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.expert-lab-tile-menu-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.expert-lab-tile-menu-btn:hover {
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
+}
+
+.expert-lab-tile-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--mn-fg) 12%, transparent);
+}
+
+.expert-lab-tile-menu:not(.is-open) {
+  display: none;
+}
+
+.expert-lab-tile-menu button {
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.expert-lab-tile-menu button:hover {
+  background: var(--mn-surface-2);
+}
+
+.expert-lab-form-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-danger, #c44);
+}
+
+.expert-lab-form-error.hidden {
+  display: none;
+}
+
+.expert-lab-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.expert-lab-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expert-lab-edit-row--split {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.expert-lab-edit-row--split > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expert-lab-edit-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.expert-lab-edit-input--icon {
+  max-width: 80px;
+}
+
+.expert-lab-edit-profile-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.expert-lab-profile-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.expert-lab-profile-tab.is-active {
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  background: var(--mn-accent-soft);
 }
 
 .expert-lab-tile:hover {

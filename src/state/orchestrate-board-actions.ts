@@ -2,8 +2,6 @@
  * Manual orchestrate board operations — shared by UI buttons and LLM tools.
  */
 
-import { resolveSubAgentModelBinding } from '../agents/resolve-sub-agent-binding.ts';
-import { loadSubAgentConfig } from '../agents/sub-agent-config.ts';
 import { stopGeneration } from '../chat/stop-generation.ts';
 import { maybeEmitOrchestratePlanComplete } from '../chat/orchestrate/plan-complete-ui.ts';
 import { isChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state.ts';
@@ -83,15 +81,6 @@ function resolveBoardContext(plannerOrMemberChat: Chat): {
   return { group, planner };
 }
 
-export function assignAgent(
-  group: ChatGroup,
-  taskId: string,
-  agentType: string,
-  plannerChat?: Chat,
-): void {
-  updateTask(group, taskId, { agentType: agentType.trim() }, plannerChat);
-}
-
 export function buildTaskSeedMessage(
   group: ChatGroup,
   plannerChat: Chat,
@@ -153,26 +142,13 @@ export async function startTask(
   const task = board.tasks.find((t) => t.id === taskId);
   if (!task) return;
 
-  const agentType = task.agentType?.trim() || 'generalPurpose';
-  if (!task.agentType) {
-    updateTask(group, taskId, { agentType }, plannerChat);
-  }
-
   if (countRunningTaskChats(board) >= maxConcurrent(board)) {
     enqueueTask(group.id, taskId);
     return;
   }
 
-  const config = await loadSubAgentConfig();
-  const typeConfig = config.types[agentType];
-  const binding = resolveSubAgentModelBinding(
-    {
-      providerId: typeConfig?.providerId ?? plannerChat.providerId ?? '',
-      modelId: typeConfig?.modelId ?? plannerChat.modelId ?? '',
-    },
-    plannerChat,
-  );
-
+  const providerId = plannerChat.providerId ?? '';
+  const modelId = plannerChat.modelId ?? '';
   const folderId = group.id;
 
   let taskChat: Chat;
@@ -183,10 +159,10 @@ export async function startTask(
       taskChat = existing;
       taskChat.boardTaskId = task.id;
     } else {
-      taskChat = createEmptyChatObject(binding.modelId, plannerChat.workspacePath);
-      taskChat.providerId = binding.providerId;
+      taskChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
+      taskChat.providerId = providerId;
       taskChat.modeId = 'build';
-      taskChat.workAgentId = typeConfig?.workAgentId ?? null;
+      taskChat.workAgentId = null;
       taskChat.name = `Task ${task.id}: ${task.title}`;
       taskChat.groupId = folderId;
       taskChat.boardGroupId = folderId;
@@ -195,10 +171,10 @@ export async function startTask(
       updateTask(group, taskId, { chatId: taskChat.id }, plannerChat);
     }
   } else {
-    taskChat = createEmptyChatObject(binding.modelId, plannerChat.workspacePath);
-    taskChat.providerId = binding.providerId;
+    taskChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
+    taskChat.providerId = providerId;
     taskChat.modeId = 'build';
-    taskChat.workAgentId = typeConfig?.workAgentId ?? null;
+    taskChat.workAgentId = null;
     taskChat.name = `Task ${task.id}: ${task.title}`;
     taskChat.groupId = folderId;
     taskChat.boardGroupId = folderId;

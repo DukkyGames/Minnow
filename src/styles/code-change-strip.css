@@ -1,0 +1,67 @@
+/* Cumulative file line stats above the composer */
+
+.code-change-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 0 12px 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 8px);
+}
+
+.code-change-strip.hidden {
+  display: none;
+}
+
+.code-change-strip__label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--mn-fg-muted);
+}
+
+.code-change-strip__stats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-change-strip__add {
+  color: var(--mn-success);
+}
+
+.code-change-strip__del {
+  color: var(--mn-danger);
+}
+
+/* Per-tool bubble badges (summary row) */
+.tool-call-code-change {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: auto;
+  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-call-code-change__add {
+  color: var(--mn-success);
+}
+
+.tool-call-code-change__del {
+  color: var(--mn-danger);
+}

@@ -15,6 +15,8 @@ export interface WorkspaceInfo {
   label: string;
   isDefault: boolean;
   recent?: WorkspaceRecentItem[];
+  /** Parent directory for welcome "Create new project" (~/Projects). */
+  newProjectParent?: string;
 }
 
 export interface WorkspacePickResult {

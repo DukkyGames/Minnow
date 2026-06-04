@@ -81,6 +81,7 @@ body {
 
 /* Reserve gutter so thumbs do not cover rounded panel chrome */
 .chat-area,
+.board-init-split__chat,
 .chat-list,
 .board-main,
 .skill-picker,

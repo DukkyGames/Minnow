@@ -83,41 +83,23 @@ function createLspSettingsRow(
   row.setAttribute('role', 'listitem');
   row.dataset.serverId = server.id;
 
-  const head = el('div', 'settings-lsp-row-head');
+  const main = el('div', 'settings-lsp-row-main');
 
   const labelWrap = el('div', 'settings-lsp-toggle');
-  const { root: switchRoot, input: checkbox } = createSettingsSwitch({
+  const { root: switchRoot } = createSettingsSwitch({
     checked: !server.disabled,
     ariaLabel: `${server.disabled ? 'Enable' : 'Disable'} ${server.label}`,
     onChange: (enabled) => onToggle(server.id, enabled),
   });
 
-  const title = el('span', 'settings-lsp-name', server.label);
-  labelWrap.append(switchRoot, title);
-  head.append(labelWrap);
-
-  if (server.builtin) {
-    head.append(el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Built-in'));
-  } else {
-    const removeBtn = el('button', 'settings-inline-btn settings-lsp-remove', 'Remove');
-    removeBtn.type = 'button';
-    removeBtn.setAttribute('aria-label', `Remove ${server.label}`);
-    removeBtn.addEventListener('click', () => onDelete(server.id));
-    head.append(removeBtn);
-  }
-
-  row.append(head);
-
-  const detail = el('div', 'settings-lsp-detail');
-
-  const idLine = el('p', 'settings-lsp-id');
-  idLine.textContent = server.id;
-  detail.append(idLine);
+  labelWrap.append(switchRoot, el('span', 'settings-lsp-name', server.label));
+  main.append(labelWrap);
 
   if (server.extensions.length > 0) {
-    const ext = el('p', 'settings-lsp-extensions');
+    const ext = el('span', 'settings-lsp-extensions');
     ext.textContent = server.extensions.join(' ');
-    detail.append(ext);
+    ext.title = server.extensions.join(', ');
+    main.append(ext);
   }
 
   const status = el(
@@ -128,26 +110,31 @@ function createLspSettingsRow(
     'aria-label',
     server.running ? 'Language server process running' : 'Language server idle',
   );
-  const statusDot = el('span', 'settings-lsp-status-dot');
-  statusDot.setAttribute('aria-hidden', 'true');
-  const statusText = el(
-    'span',
-    'settings-lsp-status-text',
-    server.running ? 'Running' : 'Idle',
-  );
-  status.append(statusDot, statusText);
-  detail.append(status);
+  status.append(el('span', 'settings-lsp-status-dot'));
+  main.append(status);
 
   const reqHint = formatRequirementsHint(server.requirements);
-  if (reqHint) {
-    detail.append(el('p', 'settings-lsp-hint', reqHint));
-  }
-
   if (server.disabledReason) {
-    detail.append(el('p', 'settings-lsp-warn', server.disabledReason));
+    const warn = el('span', 'settings-lsp-warn', server.disabledReason);
+    if (reqHint) warn.title = reqHint;
+    main.append(warn);
+  } else if (reqHint) {
+    const hint = el('span', 'settings-lsp-hint', reqHint);
+    hint.title = reqHint;
+    main.append(hint);
   }
 
-  row.append(detail);
+  if (server.builtin) {
+    main.append(el('span', 'settings-lsp-badge settings-lsp-badge--builtin', 'Built-in'));
+  } else {
+    const removeBtn = el('button', 'settings-inline-btn settings-lsp-remove', 'Remove');
+    removeBtn.type = 'button';
+    removeBtn.setAttribute('aria-label', `Remove ${server.label}`);
+    removeBtn.addEventListener('click', () => onDelete(server.id));
+    main.append(removeBtn);
+  }
+
+  row.append(main);
   return row;
 }
 

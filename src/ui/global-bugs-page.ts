@@ -137,6 +137,9 @@ export function openGlobalBugs(): void {
   if (!root || !shell) return;
 
   closeSettings();
+  void import('./welcome-page').then((m) => {
+    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+  });
   void import('./expert-lab-page').then((m) => {
     if (m.isExpertLabPageOpen()) m.closeExpertLab();
   });

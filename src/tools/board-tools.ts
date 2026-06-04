@@ -103,7 +103,6 @@ export type BoardInitArgs = {
     category: BoardCategory;
     build?: string;
     test?: string;
-    agent_type?: string;
   }>;
   waves: Array<{ id: number | string }>;
 };
@@ -170,8 +169,6 @@ export function validateBoardInitArgs(
     }
     const build = typeof r.build === 'string' ? r.build.trim() : '';
     const test = typeof r.test === 'string' ? r.test.trim() : '';
-    const agent_type =
-      typeof r.agent_type === 'string' ? r.agent_type.trim() : '';
     taskIds.add(id);
     parsedTasks.push({
       id,
@@ -180,7 +177,6 @@ export function validateBoardInitArgs(
       category,
       ...(build ? { build } : {}),
       ...(test ? { test } : {}),
-      ...(agent_type ? { agent_type } : {}),
     });
   }
 
@@ -289,7 +285,6 @@ async function executeBoardInit(
         category: t.category,
         build: t.build,
         test: t.test,
-        agentType: t.agent_type,
       })),
       waves: validated.args.waves,
     },

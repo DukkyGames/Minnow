@@ -2,7 +2,10 @@
  * Bootstrap prompt registry: built-ins via Vite glob + optional server user overrides.
  */
 
-import { loadBuiltinExpertsFromPromptRaw } from '../experts/registry';
+import {
+  loadBuiltinExpertsFromPromptRaw,
+  syncExpertRegistryFromServer,
+} from '../experts/registry';
 import { BUILTIN_RAW } from './builtin-globs';
 import { initBuiltinPromptRegistry, setUserPromptRegistry } from './prompt-loader';
 import type { ParsedPrompt } from './types';
@@ -20,6 +23,7 @@ export async function initPromptSystem(): Promise<void> {
     if (userOnly.length > 0) {
       setUserPromptRegistry(userOnly);
     }
+    await syncExpertRegistryFromServer();
   } catch {
     /* Vite-only dev: built-ins only */
   }

@@ -17,7 +17,7 @@ import type {
   ChatGroup,
   OrchestrateBoardState,
 } from '../types.ts';
-import { getBoardGroupForChat } from './chat-groups.ts';
+import { getBoardGroupForChat, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { scheduleSaveSessions, touchChat } from './sessions.ts';
 
@@ -189,7 +189,6 @@ export type InitBoardInput = {
     category: BoardTask['category'];
     build?: string;
     test?: string;
-    agentType?: string;
   }>;
   waves: Array<{ id: number | string }>;
 };
@@ -209,7 +208,6 @@ export function initBoard(
     status: 'planned' as BoardTaskStatus,
     ...(t.build?.trim() ? { buildSpec: t.build.trim() } : {}),
     ...(t.test?.trim() ? { testSpec: t.test.trim() } : {}),
-    ...(t.agentType?.trim() ? { agentType: t.agentType.trim() } : {}),
   }));
   const waves: BoardWave[] = input.waves.map((w) => ({
     id: w.id,
@@ -227,10 +225,7 @@ export function initBoard(
   recomputeWaveRollup(board);
   group.orchestrateBoard = board;
   group.orchestratePlanPath = input.planPath;
-  group.plannerChatId = plannerChat.id;
-  plannerChat.boardGroupId = group.id;
-  touchChat(plannerChat);
-  scheduleSaveSessions();
+  linkPlannerChatToBoardFolder(plannerChat, group);
   emitBoardChange(group.id);
   return board;
 }
@@ -247,7 +242,6 @@ export type UpdateTaskPatch = Partial<
     | 'filesChanged'
     | 'notes'
     | 'error'
-    | 'agentType'
     | 'chatId'
     | 'buildSpec'
     | 'testSpec'

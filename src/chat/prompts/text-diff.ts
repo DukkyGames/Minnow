@@ -52,3 +52,17 @@ export function buildLineDiff(baseline: string, current: string): DiffLine[] {
   }
   return out;
 }
+
+/** GitHub-style line add/delete counts (same normalization as {@link buildLineDiff}). */
+export function countLineChangeStats(
+  baseline: string,
+  current: string,
+): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of buildLineDiff(baseline, current)) {
+    if (line.type === 'add') additions += 1;
+    else if (line.type === 'remove') deletions += 1;
+  }
+  return { additions, deletions };
+}

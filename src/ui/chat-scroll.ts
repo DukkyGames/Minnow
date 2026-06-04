@@ -10,10 +10,26 @@ export const CHAT_JUMP_CHIP_ID = 'chatJumpLatest';
 let stickToBottom = true;
 let chatAreaEl: HTMLElement | null = null;
 let jumpChipEl: HTMLButtonElement | null = null;
+const BOARD_INIT_SPLIT_CHAT_TESTID = 'boardInitSplitChat';
+
+/** Scroll container for messages: split bottom pane during board_init, else #chatArea. */
+export function getChatScrollRoot(): HTMLElement | null {
+  const splitPane = document.querySelector(
+    `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
+  ) as HTMLElement | null;
+  return splitPane ?? chatAreaEl;
+}
+
+function onChatScrollTargetScroll(): void {
+  const root = getChatScrollRoot();
+  if (!root) return;
+  stickToBottom = isChatAtBottom(root);
+  updateJumpChipVisibility();
+}
 
 /** True when scroll position is within the pin threshold of the bottom. */
 export function isChatAtBottom(el?: HTMLElement): boolean {
-  const area = el ?? chatAreaEl;
+  const area = el ?? getChatScrollRoot();
   if (!area) return true;
   const distance = area.scrollHeight - area.scrollTop - area.clientHeight;
   return distance <= CHAT_PIN_THRESHOLD_PX;
@@ -51,19 +67,21 @@ function applyInstantScroll(area: HTMLElement, scrollTop: number): void {
 
 /** Scroll to tail only when the user is pinned near the bottom. */
 export function scrollChatIfPinned(): void {
-  if (!chatAreaEl || !stickToBottom) {
+  const root = getChatScrollRoot();
+  if (!root || !stickToBottom) {
     updateJumpChipVisibility();
     return;
   }
-  applyInstantScroll(chatAreaEl, chatAreaEl.scrollHeight);
+  applyInstantScroll(root, root.scrollHeight);
   updateJumpChipVisibility();
 }
 
 /** Force scroll to tail and re-enable auto-follow. */
 export function scrollChatToBottom(): void {
-  if (!chatAreaEl) return;
+  const root = getChatScrollRoot();
+  if (!root) return;
   stickToBottom = true;
-  applyInstantScroll(chatAreaEl, chatAreaEl.scrollHeight);
+  applyInstantScroll(root, root.scrollHeight);
   updateJumpChipVisibility();
 }
 
@@ -82,24 +100,27 @@ export function refreshChatJumpChipVisibility(): void {
   updateJumpChipVisibility();
 }
 
+/** Bind scroll listener on the board-init split chat pane (idempotent). */
+export function bindBoardInitSplitChatScroll(): void {
+  const pane = document.querySelector(
+    `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
+  ) as HTMLElement | null;
+  if (!pane || pane.dataset.chatScrollBound === '1') return;
+  pane.dataset.chatScrollBound = '1';
+  pane.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+}
+
 /** Wire #chatArea scroll listener and Jump to latest chip (call once from main). */
 export function initChatScroll(): void {
   chatAreaEl = document.getElementById('chatArea');
   jumpChipEl = document.getElementById(CHAT_JUMP_CHIP_ID) as HTMLButtonElement | null;
 
-  chatAreaEl?.addEventListener(
-    'scroll',
-    () => {
-      if (!chatAreaEl) return;
-      stickToBottom = isChatAtBottom(chatAreaEl);
-      updateJumpChipVisibility();
-    },
-    { passive: true },
-  );
+  chatAreaEl?.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
 
   jumpChipEl?.addEventListener('click', () => {
     scrollChatToBottom();
   });
 
+  bindBoardInitSplitChatScroll();
   updateJumpChipVisibility();
 }

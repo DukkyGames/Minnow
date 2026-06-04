@@ -2,7 +2,7 @@
 name: POLISH-016 — Workspace welcome screen
 overview: On first launch (or when workspace is still the Minnow app default), show a Cursor-style workspace select home instead of dropping users into chat with no project context.
 source: documentation/bug-hunt-session-2026-05-24.md (POLISH-016)
-status: planned
+status: shipped
 severity: polish
 todos:
   - id: product-gate

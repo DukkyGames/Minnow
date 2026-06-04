@@ -171,6 +171,9 @@
     min-height: 0;
     position: relative;
   }
+  html.welcome-pending .app-body {
+    visibility: hidden;
+  }
   .main-column {
     flex: 1;
     min-width: 0;
@@ -759,6 +762,55 @@
   </div>
 </main>
 
+<main id="welcomeView" class="welcome-page" aria-label="Choose workspace" hidden>
+  <div class="welcome-page__inner">
+    <h1 class="welcome-page__title">Choose a folder to work in</h1>
+    <p id="welcomeServerBanner" class="welcome-page__banner hidden" role="status">
+      Workspace requires <code>npm start</code> (local tool server), not <code>npm run dev</code> alone.
+    </p>
+    <div class="welcome-page__tiles" role="group" aria-label="Workspace actions">
+      <button type="button" class="welcome-page__tile" id="btnWelcomeOpenProject">
+        <span class="welcome-page__tile-icon" aria-hidden="true">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="welcome-page__tile-label">Open project</span>
+        <span class="welcome-page__tile-desc">Browse to an existing folder</span>
+      </button>
+      <button type="button" class="welcome-page__tile" id="btnWelcomeCreateProject">
+        <span class="welcome-page__tile-icon" aria-hidden="true">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+        <span class="welcome-page__tile-label">Create new project</span>
+        <span class="welcome-page__tile-desc">New folder under Projects</span>
+      </button>
+    </div>
+    <section id="welcomeCreatePanel" class="welcome-page__create-panel hidden" aria-label="Create new project">
+      <label class="welcome-page__field" for="welcomeProjectName">Project name</label>
+      <input type="text" id="welcomeProjectName" class="welcome-page__input" autocomplete="off" spellcheck="false" placeholder="my-app">
+      <p class="welcome-page__parent-hint">
+        Location: <code id="welcomeParentPath"></code>
+        <button type="button" class="welcome-page__link-btn" id="btnWelcomeChangeParent">Change location</button>
+      </p>
+      <p id="welcomeCreateError" class="welcome-page__error hidden" role="alert"></p>
+      <div class="welcome-page__create-actions">
+        <button type="button" class="welcome-page__btn welcome-page__btn--secondary" id="btnWelcomeCreateCancel">Cancel</button>
+        <button type="button" class="welcome-page__btn welcome-page__btn--primary" id="btnWelcomeCreateSubmit">Create</button>
+      </div>
+    </section>
+    <section class="welcome-page__recents" aria-labelledby="welcomeRecentsTitle">
+      <div class="welcome-page__recents-header">
+        <h2 id="welcomeRecentsTitle" class="welcome-page__recents-title">Recent workspaces</h2>
+        <span id="welcomeRecentsCount" class="welcome-page__recents-count" hidden></span>
+      </div>
+      <ul id="welcomeRecentsList" class="welcome-page__recents-list" role="list"></ul>
+      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No recent workspaces yet.</p>
+    </section>
+    <button type="button" class="welcome-page__continue" id="btnWelcomeContinueMinnow">
+      Continue in Minnow folder
+    </button>
+  </div>
+</main>
+
 <main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
   <header class="benchmark-page-header">
     <button class="icon-btn" type="button" id="btnBenchmarkPageBack" aria-label="Back to chat">
@@ -852,6 +904,54 @@
     <section class="expert-lab-step expert-lab-step--pick" aria-label="Choose an expert">
       <p class="expert-lab-intro">Pick a specialist, describe your request, and watch a step-by-step run with clarifying questions when needed.</p>
       <div id="expertLabGrid" class="expert-lab-grid" role="list"></div>
+    </section>
+    <section class="expert-lab-step expert-lab-step--create" aria-label="Make your own expert">
+      <p class="expert-lab-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Expert Lab.</p>
+      <div class="expert-lab-brief-form">
+        <label for="expertLabCreateInput">Expert description</label>
+        <textarea id="expertLabCreateInput" class="expert-lab-brief-input" rows="6" placeholder="e.g. A patent attorney who explains claims in plain English…"></textarea>
+        <p id="expertLabCreateError" class="expert-lab-form-error hidden" role="alert"></p>
+        <div class="expert-lab-actions">
+          <button type="button" class="settings-inline-btn" id="btnExpertLabCreateCancel">Cancel</button>
+          <button type="button" class="is-primary" id="btnExpertLabCreate">Create expert</button>
+        </div>
+      </div>
+    </section>
+    <section class="expert-lab-step expert-lab-step--edit" aria-label="Edit expert">
+      <p class="expert-lab-intro">Update your custom expert’s details and prompt.</p>
+      <form id="expertLabEditForm" class="expert-lab-edit-form">
+        <div class="expert-lab-edit-row">
+          <label for="expertLabEditLabel">Label</label>
+          <input type="text" id="expertLabEditLabel" class="expert-lab-edit-input" autocomplete="off" />
+        </div>
+        <div class="expert-lab-edit-row">
+          <label for="expertLabEditDescription">Description</label>
+          <input type="text" id="expertLabEditDescription" class="expert-lab-edit-input" autocomplete="off" />
+        </div>
+        <div class="expert-lab-edit-row expert-lab-edit-row--split">
+          <div>
+            <label for="expertLabEditIcon">Icon</label>
+            <input type="text" id="expertLabEditIcon" class="expert-lab-edit-input expert-lab-edit-input--icon" maxlength="4" autocomplete="off" />
+          </div>
+          <div>
+            <label for="expertLabEditAccent">Accent</label>
+            <select id="expertLabEditAccent" class="expert-lab-edit-input"></select>
+          </div>
+        </div>
+        <div class="expert-lab-edit-profile-tabs" role="tablist" aria-label="Prompt profile">
+          <button type="button" class="expert-lab-profile-tab is-active" data-profile="full" role="tab" aria-selected="true">Full</button>
+          <button type="button" class="expert-lab-profile-tab" data-profile="lite" role="tab" aria-selected="false">Lite</button>
+        </div>
+        <div class="expert-lab-edit-row">
+          <label for="expertLabEditBody">Prompt body</label>
+          <textarea id="expertLabEditBody" class="expert-lab-brief-input expert-lab-edit-body" rows="12"></textarea>
+        </div>
+        <p id="expertLabEditError" class="expert-lab-form-error hidden" role="alert"></p>
+        <div class="expert-lab-actions">
+          <button type="button" class="settings-inline-btn" id="btnExpertLabEditCancel">Cancel</button>
+          <button type="submit" class="is-primary" id="btnExpertLabEditSave">Save changes</button>
+        </div>
+      </form>
     </section>
     <section class="expert-lab-step expert-lab-step--brief" aria-label="Your brief">
       <div class="expert-lab-brief-header">
@@ -972,6 +1072,11 @@
 
     <!-- Ask question: structured Q&A strip (below tool approval, above composer) -->
     <div id="questionHost" class="question-host" aria-live="polite" hidden></div>
+
+    <div id="codeChangeStrip" class="code-change-strip hidden" role="status" aria-live="polite" aria-label="Code changes in this chat">
+      <span class="code-change-strip__label">Code changes</span>
+      <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+    </div>
 
     <!-- Input bar -->
     <div class="input-bar">

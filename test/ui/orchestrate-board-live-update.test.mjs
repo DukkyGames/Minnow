@@ -7,13 +7,16 @@ import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
+const FIXED_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const FIXED_RUN_ID = '22222222-2222-2222-2222-222222222222';
 const FIXED_TASK_CHAT_ID = '33333333-3333-3333-3333-333333333333';
 const PLAN_PATH = 'documentation/plans/fixture-plan.md';
 
-const { setSessionStateForTests, createEmptyChatObject } = await import(
-  '../../src/state/sessions.ts'
-);
+const {
+  setSessionStateForTests,
+  createEmptyChatObject,
+  getActiveChat,
+} = await import('../../src/state/sessions.ts');
 const { initBoard, updateTask, setBoardNowForTests } = await import(
   '../../src/state/orchestrate-board-store.ts'
 );
@@ -47,12 +50,35 @@ function setupDom() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  globalThis.HTMLSelectElement = window.HTMLSelectElement;
   const area = document.createElement('div');
   area.id = 'chatArea';
   document.body.appendChild(area);
   const main = document.createElement('div');
   main.id = 'mainColumn';
   document.body.appendChild(main);
+  for (const id of [
+    'stripTPS',
+    'stripTTFT',
+    'stripGen',
+    'stripTotal',
+    'stripCost',
+    'barPrompt',
+    'barCompletion',
+    'cntPrompt',
+    'cntCompletion',
+    'msgInput',
+    'iArch',
+    'iQuant',
+    'iCtx',
+    'iStop',
+  ]) {
+    if (!document.getElementById(id)) {
+      const el = document.createElement('div');
+      el.id = id;
+      document.body.appendChild(el);
+    }
+  }
 }
 
 function persistedRun() {
@@ -78,6 +104,45 @@ function makeOrchestrateChat() {
   chat.viewMode = 'board';
   chat.orchestratePlanPath = PLAN_PATH;
   return chat;
+}
+
+function makeBoardGroup(chat) {
+  return {
+    id: FIXED_GROUP_ID,
+    name: 'Fixture Board',
+    workspacePath: '',
+    collapsed: false,
+    order: 0,
+    createdAt: 1,
+    plannerChatId: chat.id,
+    orchestratePlanPath: PLAN_PATH,
+    viewMode: 'board',
+  };
+}
+
+function linkChatToBoardGroup(chat, group) {
+  chat.boardGroupId = group.id;
+  chat.groupId = group.id;
+}
+
+/** Init board on a folder and wire session fields tests expect. */
+function initBoardForChat(chat, input) {
+  const group = makeBoardGroup(chat);
+  initBoard(group, chat, input);
+  linkChatToBoardGroup(chat, group);
+  return group;
+}
+
+function sessionStateForBoard(chat, group, extra = {}) {
+  return {
+    version: 2,
+    activeId: chat.id,
+    activeBoardGroupId: group.id,
+    sidebarCollapsed: false,
+    chats: [chat],
+    groups: [group],
+    ...extra,
+  };
 }
 
 /** populateKanbanWaves awaits sub-agent config; prime cache before board paint. */
@@ -106,27 +171,27 @@ describe('orchestrate board live updates', () => {
     setSessionStateForTests(null);
   });
 
-  test('empty board view subscribes and paints kanban after board_init', () => {
+  test('empty board view subscribes and paints kanban after board_init', async () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    const group = makeBoardGroup(chat);
+    linkChatToBoardGroup(chat, group);
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     assert.ok(document.querySelector('.board-onboarding'));
 
-    initBoard(chat, {
+    initBoard(group, chat, {
       planPath: PLAN_PATH,
       tasks: [
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
       ],
       waves: [{ id: 'W1' }],
     });
+    await primeSubAgentConfig();
+    refreshActiveBoardIfMounted();
+    await waitForKanban();
 
     assert.ok(
       document.querySelector('.board-main .kanban-grid'),
@@ -138,11 +203,11 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('updateTask refreshes kanban column without full navigation', () => {
+  test('updateTask refreshes kanban column without full navigation', async () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
@@ -150,20 +215,19 @@ describe('orchestrate board live updates', () => {
       ],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    await primeSubAgentConfig();
+    renderBoardView(group);
+    await waitForKanban();
     const plannedBefore = document.querySelectorAll(
       '.kanban-column:first-child .board-task-card',
     ).length;
     assert.equal(plannedBefore, 2);
 
-    updateTask(chat, 'W1-A', { status: 'in_progress' });
+    updateTask(group, 'W1-A', { status: 'in_progress' });
+    refreshActiveBoardIfMounted();
+    await waitForKanban();
 
     const plannedAfter = document.querySelectorAll(
       '.kanban-column:first-child .board-task-card',
@@ -180,19 +244,14 @@ describe('orchestrate board live updates', () => {
     await primeSubAgentConfig();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     await waitForKanban();
     const body = () => document.querySelector('.board-wave-block__body');
     const caret = () => document.querySelector('.board-wave-block__caret');
@@ -222,20 +281,15 @@ describe('orchestrate board live updates', () => {
     await primeSubAgentConfig();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', { status: 'complete' });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    updateTask(group, 'W1-A', { status: 'complete' });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     await waitForKanban();
 
     const reopenBtn = document.querySelector(
@@ -263,7 +317,7 @@ describe('orchestrate board live updates', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
@@ -271,19 +325,14 @@ describe('orchestrate board live updates', () => {
       ],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     const badge = () =>
       document.querySelector('.board-header__badge .board-header__badge-label');
     assert.equal(badge()?.textContent, 'Ready');
 
-    updateTask(chat, 'W1-A', { status: 'in_progress' });
+    updateTask(group, 'W1-A', { status: 'in_progress' });
     refreshActiveBoardIfMounted();
     assert.equal(badge()?.textContent, 'Active');
 
@@ -291,27 +340,27 @@ describe('orchestrate board live updates', () => {
     refreshActiveBoardIfMounted();
     assert.equal(badge()?.textContent, 'Active');
 
-    updateTask(chat, 'W1-A', { status: 'complete' });
-    updateTask(chat, 'W1-B', { status: 'complete' });
+    updateTask(group, 'W1-A', { status: 'complete' });
+    updateTask(group, 'W1-B', { status: 'complete' });
     refreshActiveBoardIfMounted();
     assert.equal(badge()?.textContent, 'Complete');
   });
 
   test('deriveBoardHeaderStatus marks running when parent turn streams', () => {
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    chat.orchestrateBoard.activeParentTurnId = 'turn-abc';
-    const status = deriveBoardHeaderStatus(chat.orchestrateBoard, true, 0);
+    group.orchestrateBoard.activeParentTurnId = 'turn-abc';
+    const status = deriveBoardHeaderStatus(group.orchestrateBoard, true, 0);
     assert.deepEqual(status, { variant: 'running', label: 'Running' });
   });
 
   test('deriveBoardHeaderStatus marks stopped after user stops orchestrator', () => {
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
@@ -319,8 +368,8 @@ describe('orchestrate board live updates', () => {
       ],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', { status: 'in_progress' });
-    const status = deriveBoardHeaderStatus(chat.orchestrateBoard, false, 0, true);
+    updateTask(group, 'W1-A', { status: 'in_progress' });
+    const status = deriveBoardHeaderStatus(group.orchestrateBoard, false, 0, true);
     assert.deepEqual(status, { variant: 'stopped', label: 'Stopped' });
   });
 
@@ -428,37 +477,99 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('clicking in-progress or complete kanban card opens sub-agent drawer', () => {
+  test('clicking planned kanban card opens task plan panel', async () => {
     setupDom();
+    await primeSubAgentConfig();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    chat.subAgentRuns = [persistedRun()];
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
-        { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          build: 'Add feature X',
+          test: 'npm test',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+
+    const plannedCard = document.querySelector(
+      '.kanban-column:first-child .board-task-card--clickable',
+    );
+    assert.ok(plannedCard);
+    plannedCard.click();
+
+    const panel = document.querySelector('.board-task-plan-panel:not(.hidden)');
+    assert.ok(panel, 'plan panel visible');
+    assert.ok(panel.textContent?.includes('Add feature X'));
+    assert.ok(panel.textContent?.includes('npm test'));
+    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
+  });
+
+  test('clicking in-progress or complete kanban card switches to chat view', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.modeId = 'build';
+    taskChat.boardTaskId = 'W1-A';
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    chat.subAgentRuns = [persistedRun()];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          chatId: FIXED_TASK_CHAT_ID,
+        },
         { id: 'W1-B', title: 'Task B', wave: 'W1', category: 'test' },
       ],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', {
+    updateTask(group, 'W1-A', {
       status: 'in_progress',
       assignedRunId: FIXED_RUN_ID,
     });
-    updateTask(chat, 'W1-B', {
+    updateTask(group, 'W1-B', {
       status: 'complete',
       lastRunId: FIXED_RUN_ID,
       runHistory: [FIXED_RUN_ID],
       assignedRunId: null,
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
 
-    renderBoardView(chat);
+    renderBoardView(group);
+    await waitForKanban();
+
+    const completeBadge = document.querySelector(
+      '.kanban-column:nth-child(4) .board-task-card__agent--complete',
+    );
+    assert.ok(completeBadge, 'complete task shows Complete agent badge');
+    completeBadge.closest('.board-task-card--clickable')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(getActiveChat().id, chat.id);
+
+    group.viewMode = 'board';
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+    renderBoardView(group);
+    await waitForKanban();
 
     const inProgressBadge = document.querySelector(
       '.kanban-column:nth-child(2) .board-task-card__agent--active',
@@ -467,20 +578,15 @@ describe('orchestrate board live updates', () => {
     const inProgressCard = inProgressBadge.closest('.board-task-card--clickable');
     assert.ok(inProgressCard);
     inProgressCard.click();
-    assert.ok(document.querySelector('.sub-agent-drawer-panel'));
-    closeSubAgentDrawer();
-
-    const completeBadge = document.querySelector(
-      '.kanban-column:nth-child(4) .board-task-card__agent--complete',
-    );
-    assert.ok(completeBadge, 'complete task shows Complete agent badge');
-    completeBadge.closest('.board-task-card--clickable')?.click();
-    assert.ok(document.querySelector('.sub-agent-drawer-panel'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(getActiveChat().id, FIXED_TASK_CHAT_ID);
+    assert.equal(document.querySelector('.sub-agent-drawer-panel'), null);
     assert.equal(document.querySelectorAll('.board-agents').length, 0);
   });
 
-  test('settled task with lastRunId opens drawer after assignedRunId cleared', () => {
+  test('settled task with lastRunId shows failed agent badge', async () => {
     setupDom();
+    await primeSubAgentConfig();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
     chat.subAgentRuns = [
@@ -492,12 +598,12 @@ describe('orchestrate board live updates', () => {
         endedAt: '2024-01-01T00:00:00.000Z',
       },
     ];
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Failed task', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', {
+    updateTask(group, 'W1-A', {
       status: 'failed',
       lastRunId: FIXED_RUN_ID,
       runHistory: [FIXED_RUN_ID],
@@ -505,54 +611,44 @@ describe('orchestrate board live updates', () => {
       endedAt: 1_700_000_100_000,
       error: 'maximum tool turns',
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
+    await waitForKanban();
 
     const failedBadge = document.querySelector('.board-task-card__agent--failed');
     assert.ok(failedBadge, 'settled failed task shows Failed agent badge');
     assert.ok(failedBadge.textContent?.includes('Failed'));
   });
 
-  test('board header controls include Plan and Chat view', () => {
+  test('board header controls include Plan only (no duplicate chat icon)', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     const toolbar = document.querySelector('.board-header__toolbar');
     const headerControls = document.querySelector('.board-header__controls');
     assert.ok(toolbar?.contains(headerControls));
 
-    const actions = [...headerControls.children].map(
-      (el) =>
-        el.getAttribute('data-board-action') ??
-        (el.id === 'btnViewModeToggleChat' ? 'chat-view' : null),
+    const actions = [...headerControls.children].map((el) =>
+      el.getAttribute('data-board-action'),
     );
-    assert.deepEqual(actions, ['open-plan', 'chat-view']);
+    assert.deepEqual(actions, ['open-plan']);
+    assert.equal(document.getElementById('btnViewModeToggleChat'), null);
   });
 
   test('header badge shows Stopped with danger styling after user stop', () => {
     setupDom();
     setBoardNowForTests(() => 1_700_000_000_000);
     const chat = makeOrchestrateChat();
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
         { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
@@ -560,19 +656,14 @@ describe('orchestrate board live updates', () => {
       ],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', { status: 'in_progress' });
+    updateTask(group, 'W1-A', { status: 'in_progress' });
     chat.history = [
       { role: 'user', content: 'Run plan' },
       { role: 'assistant', content: 'Partial', stopped: true },
     ];
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     const badge = document.querySelector('.board-header__badge');
     assert.ok(badge?.classList.contains('board-header__badge--stopped'));
     assert.equal(
@@ -591,24 +682,19 @@ describe('orchestrate board live updates', () => {
         content: 'Initialized the board and spawned builders.',
       },
     ];
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
     let renderCalls = 0;
     setViewModeToggleRenderHandlerForTests(() => {
       renderCalls += 1;
     });
 
-    renderBoardView(chat);
+    renderBoardView(group);
     const chip = document.querySelector('.board-header__activity');
     assert.ok(chip);
     assert.equal(chip.tagName, 'BUTTON');
@@ -630,19 +716,14 @@ describe('orchestrate board live updates', () => {
         content: 'Initialized the board and spawned builders.',
       },
     ];
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
       waves: [{ id: 'W1' }],
     });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    renderBoardView(chat);
+    renderBoardView(group);
     const activityText = document.querySelector('.board-header__activity-text');
     assert.ok(activityText);
     assert.match(activityText.textContent ?? '', /Initialized the board/);
@@ -660,12 +741,13 @@ describe('orchestrate board live updates', () => {
     const taskChat = createEmptyChatObject('');
     taskChat.id = FIXED_TASK_CHAT_ID;
     taskChat.name = 'Task W1-A: Task A';
-    taskChat.groupId = chat.boardGroupId ?? chat.id;
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
     taskChat.history = [
       { role: 'user', content: 'Start task' },
       { role: 'assistant', content: 'Reading project files.' },
     ];
-    initBoard(chat, {
+    const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
       tasks: [
         {
@@ -673,27 +755,23 @@ describe('orchestrate board live updates', () => {
           title: 'Task A',
           wave: 'W1',
           category: 'build',
-          agentType: 'builder',
         },
       ],
       waves: [{ id: 'W1' }],
     });
-    updateTask(chat, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat, taskChat],
-    });
+    updateTask(group, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
 
-    renderBoardView(chat);
+    renderBoardView(group);
     await waitForKanban();
 
     const card = document.querySelector('.board-task-card');
     assert.ok(card?.querySelector('.board-task-card__chat-row'));
     assert.ok(card?.querySelector('.board-task-card__activity'));
 
-    const keyBefore = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    const keyBefore = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
     emitMainTurnActivity({
       chatId: FIXED_TASK_CHAT_ID,
       phase: 'tools',
@@ -703,38 +781,8 @@ describe('orchestrate board live updates', () => {
       providerId: 'p',
       startedAtMs: 1,
     });
-    const keyAfter = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
+    const keyAfter = buildKanbanRefreshKey(group.orchestrateBoard, chat, group);
     assert.notEqual(keyAfter, keyBefore);
   });
 
-  test('focused agent select is not replaced by in-place board refresh', async () => {
-    setupDom();
-    await primeSubAgentConfig();
-    setBoardNowForTests(() => 1_700_000_000_000);
-    const chat = makeOrchestrateChat();
-    initBoard(chat, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
-    });
-    setSessionStateForTests({
-      version: 2,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      chats: [chat],
-    });
-
-    renderBoardView(chat);
-    await waitForKanban();
-
-    const select = document.querySelector('.board-task-card__agent-select');
-    assert.ok(select instanceof HTMLSelectElement);
-    const keyBefore = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
-    select.focus();
-    refreshActiveBoardIfMounted();
-    const keyAfter = buildKanbanRefreshKey(chat.orchestrateBoard, chat);
-    assert.equal(keyAfter, keyBefore);
-    const selectAfter = document.querySelector('.board-task-card__agent-select');
-    assert.equal(selectAfter, select, 'timer refresh must not rebuild kanban while select is focused');
-  });
 });

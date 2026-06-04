@@ -14,6 +14,7 @@ import './styles/messages.css';
 import './styles/message-actions.css';
 import './styles/branch-picker.css';
 import './styles/thoughts.css';
+import './styles/code-change-strip.css';
 import './styles/input.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
@@ -151,7 +152,13 @@ import {
   toggleFileSidebarCollapsed,
   toggleFileSidebarLayout,
 } from './ui/file-layout';
-import { initWorkspaceButton } from './ui/workspace-button';
+import { initWorkspaceButton, refreshWorkspaceUi } from './ui/workspace-button';
+import {
+  initWelcomePage,
+  markWelcomePendingIfNeeded,
+  openWelcome,
+  shouldShowWelcomeOnBoot,
+} from './ui/welcome-page';
 import { getWorkspacePath } from './state/workspace.ts';
 import { bindWorkspacePathForToolCache } from './tools/result-cache.ts';
 import {
@@ -246,6 +253,14 @@ export async function initApp(): Promise<void> {
   await detectLocalServer();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
+  await refreshWorkspaceUi();
+  markWelcomePendingIfNeeded();
+  initWelcomePage();
+  if (shouldShowWelcomeOnBoot()) {
+    openWelcome();
+  } else {
+    document.documentElement.classList.remove('welcome-pending');
+  }
   initModelSelectPicker();
   await refreshSkillCatalog();
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;

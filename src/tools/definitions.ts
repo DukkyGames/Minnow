@@ -952,10 +952,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
                 type: 'string',
                 description: 'Optional test spec from the plan (stored on the card)',
               },
-              agent_type: {
-                type: 'string',
-                description: 'Optional default sub-agent type id (e.g. generalPurpose, explore)',
-              },
             },
             required: ['id', 'title', 'wave', 'category'],
           },

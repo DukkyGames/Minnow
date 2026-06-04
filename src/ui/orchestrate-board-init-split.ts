@@ -16,6 +16,7 @@ import {
   BOARD_BUILD_KICKOFF_MESSAGE,
   BOARD_ONBOARDING_KICKOFF_MESSAGE,
 } from './orchestrate-board-kickoff';
+import { bindBoardInitSplitChatScroll } from './chat-scroll';
 import { isOrchestrateBoardViewActive, syncBoardViewChrome } from './view-mode-toggle';
 
 const SPLIT_CLASS = 'main-column--orchestrate-init-split';
@@ -53,7 +54,7 @@ export function isOrchestrateBoardInitSplitActive(chat: Chat): boolean {
   }
   const group = getBoardGroupForChat(chat);
   const board = group?.orchestrateBoard;
-  if (!board) return true;
+  if (board) return false;
   return lastUserMessageMatchesBoardKickoff(chat);
 }
 
@@ -96,6 +97,7 @@ function ensureSplitHost(area: HTMLElement): void {
   split.appendChild(boardPane);
   split.appendChild(chatPane);
   area.appendChild(split);
+  bindBoardInitSplitChatScroll();
 }
 
 function teardownSplitHost(area: HTMLElement): void {

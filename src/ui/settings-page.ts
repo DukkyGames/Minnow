@@ -200,6 +200,9 @@ export function openSettings(section?: SettingsSectionId): void {
   void import('./expert-lab-page').then((m) => {
     if (m.isExpertLabPageOpen()) m.closeExpertLab();
   });
+  void import('./welcome-page').then((m) => {
+    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+  });
 
   const wasAlreadyOpen = root.classList.contains('is-open');
 

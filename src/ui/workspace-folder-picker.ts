@@ -16,12 +16,21 @@ export interface WorkspaceFolderPickerResult {
 const OVERLAY_ID = 'workspaceFolderPickerOverlay';
 const DIALOG_ID = 'workspaceFolderPicker';
 
+const ICON_FOLDER =
+  'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z';
+const ICON_CHEVRON = 'M9 18l6-6-6-6';
+const ICON_UP = 'M12 19V5M5 12l7-7 7 7';
+const ICON_FOLDER_PLUS =
+  'M12 10v6M9 13h6M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z';
+const ICON_CLOSE = 'M18 6L6 18M6 6l12 12';
+
 let overlayEl: HTMLDivElement | null = null;
 let dialogEl: HTMLDivElement | null = null;
-let pathEl: HTMLElement | null = null;
+let breadcrumbsEl: HTMLOListElement | null = null;
 let listEl: HTMLUListElement | null = null;
 let upBtn: HTMLButtonElement | null = null;
 let newFolderBtn: HTMLButtonElement | null = null;
+let closeBtn: HTMLButtonElement | null = null;
 let newFolderPanel: HTMLDivElement | null = null;
 let newFolderInput: HTMLInputElement | null = null;
 let newFolderCreateBtn: HTMLButtonElement | null = null;
@@ -30,6 +39,8 @@ let errorEl: HTMLElement | null = null;
 let openBtn: HTMLButtonElement | null = null;
 let cancelBtn: HTMLButtonElement | null = null;
 let emptyEl: HTMLElement | null = null;
+let selectionPathEl: HTMLElement | null = null;
+let selectionWrapEl: HTMLElement | null = null;
 let creatingFolder = false;
 
 let currentPath = '';
@@ -41,6 +52,18 @@ let previousFocus: HTMLElement | null = null;
 
 /** Delay single-click selection so double-click can drill down first. */
 const PICKER_CLICK_DELAY_MS = 220;
+
+/** Build a stroke SVG icon matching global `.icon-svg` styling. */
+function createIconSvg(pathD: string, className = 'icon-svg'): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathD);
+  svg.appendChild(path);
+  return svg;
+}
 
 function folderDisplayName(absPath: string): string {
   const normalized = absPath.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -55,6 +78,36 @@ function folderDisplayName(absPath: string): string {
   return absPath || 'Folder';
 }
 
+/** Split an absolute path into clickable breadcrumb segments. */
+function pathToSegments(absPath: string): { label: string; path: string }[] {
+  const trimmed = absPath.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const isWin = /^[A-Za-z]:/.test(trimmed);
+  const sep = isWin ? '\\' : '/';
+  const parts = trimmed.replace(/\\/g, '/').split('/').filter(Boolean);
+  const segments: { label: string; path: string }[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (i === 0 && /^[A-Za-z]:$/.test(part)) {
+      segments.push({ label: part, path: `${part}${sep}` });
+      continue;
+    }
+
+    const prevPath = segments[i - 1]?.path ?? '';
+    const path =
+      i === 0
+        ? part
+        : `${prevPath.replace(new RegExp(`${sep.replace('\\', '\\\\')}+$`), '')}${sep}${part}`;
+    segments.push({ label: part, path });
+  }
+
+  return segments;
+}
+
 function clearRowSelection(): void {
   if (!listEl) {
     return;
@@ -64,11 +117,30 @@ function clearRowSelection(): void {
   }
 }
 
+function updateSelectionDisplay(): void {
+  if (!selectionPathEl || !selectionWrapEl || !openBtn) {
+    return;
+  }
+
+  const chosen = selectedEntryPath ?? (currentPath.trim() || null);
+  if (!chosen) {
+    selectionWrapEl.hidden = true;
+    openBtn.textContent = 'Open folder';
+    return;
+  }
+
+  selectionWrapEl.hidden = false;
+  selectionPathEl.textContent = chosen;
+  selectionPathEl.title = chosen;
+  openBtn.textContent = `Open ${folderDisplayName(chosen)}`;
+}
+
 function selectRow(path: string, btn: HTMLButtonElement): void {
   selectedEntryPath = path;
   clearRowSelection();
   btn.setAttribute('aria-selected', 'true');
   updateToolbar();
+  updateSelectionDisplay();
 }
 
 /** Single click selects; double click drills without firing a late select. */
@@ -101,57 +173,19 @@ function wireRowActivation(
   });
 }
 
-function createFolderIcon(): HTMLSpanElement {
-  const icon = document.createElement('span');
-  icon.className = 'workspace-picker__icon';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.textContent = '📁';
-  return icon;
-}
-
-function createCurrentFolderRow(): HTMLLIElement {
-  const li = document.createElement('li');
-  li.className = 'workspace-picker__item workspace-picker__item--current';
-  li.setAttribute('role', 'presentation');
-
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'workspace-picker__row workspace-picker__row--current';
-  btn.setAttribute('role', 'option');
-  btn.title = currentPath;
-
-  const icon = createFolderIcon();
-  icon.classList.add('workspace-picker__icon--open');
-
-  const labelWrap = document.createElement('span');
-  labelWrap.className = 'workspace-picker__label-wrap';
-
-  const name = document.createElement('span');
-  name.className = 'workspace-picker__name';
-  name.textContent = folderDisplayName(currentPath);
-
-  const meta = document.createElement('span');
-  meta.className = 'workspace-picker__meta';
-  meta.textContent = 'This folder';
-
-  labelWrap.appendChild(name);
-  labelWrap.appendChild(meta);
-  btn.appendChild(icon);
-  btn.appendChild(labelWrap);
-  wireRowActivation(btn, currentPath);
-  li.appendChild(btn);
-  return li;
+function createFolderIcon(): SVGSVGElement {
+  const svg = createIconSvg(ICON_FOLDER, 'icon-svg workspace-picker__folder-icon');
+  return svg;
 }
 
 function createChildFolderRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
   const li = document.createElement('li');
-  li.className = 'workspace-picker__item workspace-picker__item--child';
-  li.style.setProperty('--picker-depth', '1');
+  li.className = 'workspace-picker__item';
   li.setAttribute('role', 'presentation');
 
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'workspace-picker__row workspace-picker__row--child';
+  btn.className = 'workspace-picker__row';
   btn.setAttribute('role', 'option');
   btn.title = entry.path;
 
@@ -160,10 +194,8 @@ function createChildFolderRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
   name.className = 'workspace-picker__name';
   name.textContent = entry.name;
 
-  const chevron = document.createElement('span');
-  chevron.className = 'workspace-picker__chevron';
+  const chevron = createIconSvg(ICON_CHEVRON, 'icon-svg workspace-picker__chevron');
   chevron.setAttribute('aria-hidden', 'true');
-  chevron.textContent = '›';
 
   btn.appendChild(icon);
   btn.appendChild(name);
@@ -187,23 +219,81 @@ function createQuickLocationRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
   btn.title = entry.path;
 
   const icon = createFolderIcon();
+  const labelWrap = document.createElement('span');
+  labelWrap.className = 'workspace-picker__label-wrap';
+
   const name = document.createElement('span');
   name.className = 'workspace-picker__name';
   name.textContent = entry.name;
 
-  const chevron = document.createElement('span');
-  chevron.className = 'workspace-picker__chevron';
+  const meta = document.createElement('span');
+  meta.className = 'workspace-picker__meta';
+  meta.textContent = entry.path;
+
+  labelWrap.appendChild(name);
+  labelWrap.appendChild(meta);
+
+  const chevron = createIconSvg(ICON_CHEVRON, 'icon-svg workspace-picker__chevron');
   chevron.setAttribute('aria-hidden', 'true');
-  chevron.textContent = '›';
 
   btn.appendChild(icon);
-  btn.appendChild(name);
+  btn.appendChild(labelWrap);
   btn.appendChild(chevron);
   wireRowActivation(btn, entry.path, () => {
     void loadListing(entry.path);
   });
   li.appendChild(btn);
   return li;
+}
+
+function updateBreadcrumbs(): void {
+  if (!breadcrumbsEl) {
+    return;
+  }
+
+  breadcrumbsEl.innerHTML = '';
+
+  if (!currentPath.trim()) {
+    const item = document.createElement('li');
+    item.className = 'workspace-picker__crumb workspace-picker__crumb--current';
+    item.textContent = 'Quick locations';
+    item.setAttribute('aria-current', 'location');
+    breadcrumbsEl.appendChild(item);
+    return;
+  }
+
+  const segments = pathToSegments(currentPath);
+  for (let i = 0; i < segments.length; i++) {
+    const { label, path } = segments[i];
+    const item = document.createElement('li');
+    item.className = 'workspace-picker__crumb';
+
+    if (i === segments.length - 1) {
+      item.classList.add('workspace-picker__crumb--current');
+      item.textContent = label;
+      item.setAttribute('aria-current', 'location');
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'workspace-picker__crumb-btn';
+      btn.textContent = label;
+      btn.title = path;
+      btn.addEventListener('click', () => {
+        void loadListing(path);
+      });
+      item.appendChild(btn);
+    }
+
+    breadcrumbsEl.appendChild(item);
+
+    if (i < segments.length - 1) {
+      const sep = document.createElement('li');
+      sep.className = 'workspace-picker__crumb-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.appendChild(createIconSvg(ICON_CHEVRON, 'icon-svg workspace-picker__crumb-sep-icon'));
+      breadcrumbsEl.appendChild(sep);
+    }
+  }
 }
 
 function ensureShell(): void {
@@ -215,10 +305,11 @@ function ensureShell(): void {
   if (existing instanceof HTMLDivElement) {
     overlayEl = existing;
     dialogEl = existing.querySelector(`#${DIALOG_ID}`) as HTMLDivElement | null;
-    pathEl = existing.querySelector('[data-ws-picker-path]');
+    breadcrumbsEl = existing.querySelector('[data-ws-picker-breadcrumbs]');
     listEl = existing.querySelector('[data-ws-picker-list]');
     upBtn = existing.querySelector('[data-ws-picker-up]');
     newFolderBtn = existing.querySelector('[data-ws-picker-new-folder]');
+    closeBtn = existing.querySelector('[data-ws-picker-close]');
     newFolderPanel = existing.querySelector('[data-ws-picker-new-folder-panel]');
     newFolderInput = existing.querySelector('[data-ws-picker-new-folder-input]');
     newFolderCreateBtn = existing.querySelector('[data-ws-picker-new-folder-create]');
@@ -227,6 +318,8 @@ function ensureShell(): void {
     openBtn = existing.querySelector('[data-ws-picker-open]');
     cancelBtn = existing.querySelector('[data-ws-picker-cancel]');
     emptyEl = existing.querySelector('[data-ws-picker-empty]');
+    selectionPathEl = existing.querySelector('[data-ws-picker-selection-path]');
+    selectionWrapEl = existing.querySelector('[data-ws-picker-selection]');
     return;
   }
 
@@ -243,16 +336,40 @@ function ensureShell(): void {
       aria-labelledby="workspaceFolderPickerTitle"
       tabindex="-1"
     >
-      <div class="workspace-picker__header">
-        <h2 id="workspaceFolderPickerTitle" class="workspace-picker__title">Choose workspace folder</h2>
+      <header class="workspace-picker__header">
+        <h2 id="workspaceFolderPickerTitle" class="workspace-picker__title">Open workspace</h2>
+        <button
+          type="button"
+          class="icon-btn workspace-picker__close"
+          data-ws-picker-close
+          aria-label="Close"
+        ></button>
+      </header>
+
+      <div class="workspace-picker__nav">
+        <ol
+          class="workspace-picker__breadcrumbs"
+          data-ws-picker-breadcrumbs
+          aria-label="Folder path"
+        ></ol>
+        <div class="workspace-picker__nav-actions">
+          <button
+            type="button"
+            class="icon-btn workspace-picker__nav-btn"
+            data-ws-picker-up
+            aria-label="Go to parent folder"
+            title="Up"
+          ></button>
+          <button
+            type="button"
+            class="icon-btn workspace-picker__nav-btn"
+            data-ws-picker-new-folder
+            aria-label="New folder"
+            title="New folder"
+          ></button>
+        </div>
       </div>
-      <p class="workspace-picker__path" data-ws-picker-path></p>
-      <div class="workspace-picker__toolbar">
-        <button type="button" class="workspace-picker__up" data-ws-picker-up>Up</button>
-        <button type="button" class="workspace-picker__new-folder" data-ws-picker-new-folder>
-          New folder
-        </button>
-      </div>
+
       <div class="workspace-picker__new-folder-panel hidden" data-ws-picker-new-folder-panel hidden>
         <label class="workspace-picker__new-folder-label" for="workspacePickerNewFolderInput">
           Folder name
@@ -283,24 +400,36 @@ function ensureShell(): void {
           </button>
         </div>
       </div>
+
       <p class="workspace-picker__error hidden" data-ws-picker-error role="alert" hidden></p>
-      <ul class="workspace-picker__list" data-ws-picker-list role="listbox" aria-label="Folders"></ul>
-      <p class="workspace-picker__empty hidden" data-ws-picker-empty hidden>No subfolders</p>
-      <div class="workspace-picker__footer">
-        <button type="button" class="workspace-picker__btn" data-ws-picker-cancel>Cancel</button>
-        <button type="button" class="workspace-picker__btn workspace-picker__btn--primary" data-ws-picker-open>
-          Open folder
-        </button>
+
+      <div class="workspace-picker__body">
+        <ul class="workspace-picker__list" data-ws-picker-list role="listbox" aria-label="Folders"></ul>
+        <p class="workspace-picker__empty hidden" data-ws-picker-empty hidden>No subfolders</p>
       </div>
+
+      <footer class="workspace-picker__footer">
+        <div class="workspace-picker__selection" data-ws-picker-selection hidden>
+          <span class="workspace-picker__selection-label">Selected</span>
+          <span class="workspace-picker__selection-path" data-ws-picker-selection-path></span>
+        </div>
+        <div class="workspace-picker__footer-actions">
+          <button type="button" class="workspace-picker__btn" data-ws-picker-cancel>Cancel</button>
+          <button type="button" class="workspace-picker__btn workspace-picker__btn--primary" data-ws-picker-open>
+            Open folder
+          </button>
+        </div>
+      </footer>
     </div>
   `;
 
   document.body.appendChild(overlayEl);
   dialogEl = overlayEl.querySelector(`#${DIALOG_ID}`) as HTMLDivElement;
-  pathEl = overlayEl.querySelector('[data-ws-picker-path]');
+  breadcrumbsEl = overlayEl.querySelector('[data-ws-picker-breadcrumbs]');
   listEl = overlayEl.querySelector('[data-ws-picker-list]');
   upBtn = overlayEl.querySelector('[data-ws-picker-up]');
   newFolderBtn = overlayEl.querySelector('[data-ws-picker-new-folder]');
+  closeBtn = overlayEl.querySelector('[data-ws-picker-close]');
   newFolderPanel = overlayEl.querySelector('[data-ws-picker-new-folder-panel]');
   newFolderInput = overlayEl.querySelector('[data-ws-picker-new-folder-input]');
   newFolderCreateBtn = overlayEl.querySelector('[data-ws-picker-new-folder-create]');
@@ -309,6 +438,12 @@ function ensureShell(): void {
   openBtn = overlayEl.querySelector('[data-ws-picker-open]');
   cancelBtn = overlayEl.querySelector('[data-ws-picker-cancel]');
   emptyEl = overlayEl.querySelector('[data-ws-picker-empty]');
+  selectionPathEl = overlayEl.querySelector('[data-ws-picker-selection-path]');
+  selectionWrapEl = overlayEl.querySelector('[data-ws-picker-selection]');
+
+  closeBtn?.appendChild(createIconSvg(ICON_CLOSE));
+  upBtn?.appendChild(createIconSvg(ICON_UP));
+  newFolderBtn?.appendChild(createIconSvg(ICON_FOLDER_PLUS));
 
   overlayEl.addEventListener('click', (event) => {
     if (event.target === overlayEl) {
@@ -316,9 +451,10 @@ function ensureShell(): void {
     }
   });
 
-  cancelBtn?.addEventListener('click', () => {
-    finishPicker({ cancelled: true, path: null });
-  });
+  const cancel = () => finishPicker({ cancelled: true, path: null });
+
+  cancelBtn?.addEventListener('click', cancel);
+  closeBtn?.addEventListener('click', cancel);
 
   openBtn?.addEventListener('click', () => {
     const chosen = selectedEntryPath ?? (currentPath.trim() || null);
@@ -433,6 +569,7 @@ async function submitNewFolder(): Promise<void> {
       }
     }
     updateToolbar();
+    updateSelectionDisplay();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     showPickerError(message);
@@ -443,19 +580,6 @@ async function submitNewFolder(): Promise<void> {
       newFolderCreateBtn.disabled = false;
     }
   }
-}
-
-function updatePathLabel(): void {
-  if (!pathEl) {
-    return;
-  }
-  if (!currentPath.trim()) {
-    pathEl.textContent = 'Quick locations';
-    pathEl.classList.add('workspace-picker__path--roots');
-    return;
-  }
-  pathEl.textContent = currentPath;
-  pathEl.classList.remove('workspace-picker__path--roots');
 }
 
 function updateToolbar(): void {
@@ -476,47 +600,32 @@ function renderEntries(entries: WorkspaceBrowseEntry[]): void {
     return;
   }
   listEl.innerHTML = '';
-  selectedEntryPath = null;
 
   const inDirectory = Boolean(currentPath.trim());
-  const hasCurrent = inDirectory;
   const hasChildren = entries.length > 0;
 
-  if (hasCurrent) {
-    const currentRow = createCurrentFolderRow();
-    listEl.appendChild(currentRow);
+  if (inDirectory) {
     selectedEntryPath = currentPath;
-    const currentBtn = currentRow.querySelector('.workspace-picker__row');
-    if (currentBtn instanceof HTMLButtonElement) {
-      currentBtn.setAttribute('aria-selected', 'true');
-    }
+  } else {
+    selectedEntryPath = null;
   }
 
-  if (hasChildren) {
-    if (hasCurrent) {
-      const section = document.createElement('li');
-      section.className = 'workspace-picker__section';
-      section.setAttribute('role', 'presentation');
-      section.textContent = 'Folders';
-      listEl.appendChild(section);
-    }
-
-    for (const entry of entries) {
-      listEl.appendChild(
-        inDirectory ? createChildFolderRow(entry) : createQuickLocationRow(entry),
-      );
-    }
+  for (const entry of entries) {
+    listEl.appendChild(
+      inDirectory ? createChildFolderRow(entry) : createQuickLocationRow(entry),
+    );
   }
 
-  if (!hasCurrent && !hasChildren) {
+  if (!inDirectory && !hasChildren) {
     emptyEl.textContent = 'No locations available';
     emptyEl.hidden = false;
     emptyEl.classList.remove('hidden');
     updateToolbar();
+    updateSelectionDisplay();
     return;
   }
 
-  if (hasCurrent && !hasChildren) {
+  if (inDirectory && !hasChildren) {
     emptyEl.textContent = 'No subfolders in this directory';
     emptyEl.hidden = false;
     emptyEl.classList.remove('hidden');
@@ -526,6 +635,7 @@ function renderEntries(entries: WorkspaceBrowseEntry[]): void {
   }
 
   updateToolbar();
+  updateSelectionDisplay();
 }
 
 async function loadListing(browsePath: string): Promise<void> {
@@ -534,7 +644,7 @@ async function loadListing(browsePath: string): Promise<void> {
   currentPath = listing.path ?? '';
   currentParent = listing.parent ?? null;
   selectedEntryPath = null;
-  updatePathLabel();
+  updateBreadcrumbs();
   renderEntries(listing.entries ?? []);
 }
 

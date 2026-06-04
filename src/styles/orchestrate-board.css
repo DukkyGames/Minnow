@@ -411,6 +411,151 @@ button.board-header__activity {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: relative;
+}
+
+/* Reserve right rail beside kanban (board-main stays column flex in board view). */
+.board-main--task-plan-open .board-kanban-waves {
+  box-sizing: border-box;
+  padding-right: min(320px, 38%);
+}
+
+/* Planned-task detail: build/test specs from board_init. */
+.board-task-plan-panel {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  width: min(320px, 38%);
+  min-height: 12rem;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-surface-1);
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--mn-bg) 55%, transparent);
+  overflow: auto;
+}
+
+.board-task-plan-panel.hidden {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .board-main--task-plan-open .board-kanban-waves {
+    padding-right: 0;
+  }
+
+  .board-task-plan-panel {
+    position: static;
+    width: 100%;
+    min-height: 0;
+    max-height: min(45vh, 420px);
+    margin-top: 12px;
+    box-shadow: none;
+  }
+}
+
+.board-task-plan-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-task-plan-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.board-task-plan-panel__id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+}
+
+.board-task-plan-panel__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--mn-fg);
+}
+
+.board-task-plan-panel__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.board-task-plan-panel__meta-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.6875rem;
+}
+
+.board-task-plan-panel__meta-label {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.board-task-plan-panel__meta-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--mn-fg);
+  text-transform: capitalize;
+}
+
+.board-task-plan-panel__block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-task-plan-panel__block-label {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.board-task-plan-panel__spec {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--mn-fg);
+}
+
+.board-task-plan-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.board-task-card--selected {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mn-accent) 35%, transparent);
 }
 
 /* Single kanban surface; lanes separated by dividers, not nested cards. */
@@ -757,25 +902,6 @@ button.board-header__activity {
   padding: 8px 9px 9px;
   border-top: 1px solid var(--mn-border);
   background: color-mix(in srgb, var(--mn-surface-1) 55%, var(--mn-bg));
-}
-
-.board-task-card__assign {
-  min-width: 0;
-}
-
-.board-task-card__assign-label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--mn-fg-muted);
-}
-
-.board-task-card__agent-select {
-  width: 100%;
 }
 
 .board-task-card__toolbar {
@@ -1170,6 +1296,15 @@ button.board-header__activity {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.main-column.main-column--board-view
+  .chat-area
+  > .board-root
+  .board-main.board-main--task-plan-open
+  .board-kanban-waves {
+  min-width: 0;
 }
 
 .main-column.main-column--board-view .chat-area > .board-root .kanban-grid {
@@ -1599,11 +1734,14 @@ button.board-header__activity {
   padding-bottom: 8px;
 }
 
+.board-init-split__board .board-main {
+  position: relative;
+  min-height: 10rem;
+}
+
 .board-init-split__chat {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  padding-top: 8px;
 }
 
 @keyframes board-task-card-enter {

@@ -1,0 +1,332 @@
+/**
+ * Workspace welcome / project picker (first launch when workspace is default).
+ */
+
+.welcome-page {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+}
+
+.welcome-page.is-open {
+  display: flex;
+}
+
+.welcome-page__inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  box-sizing: border-box;
+}
+
+.welcome-page__title {
+  margin: 0 0 24px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.welcome-page__banner {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+  background: var(--mn-surface-raised, rgba(15, 18, 22, 0.04));
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+}
+
+.welcome-page__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 520px) {
+  .welcome-page__tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+.welcome-page__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 18px 16px;
+  text-align: left;
+  background: var(--mn-surface, var(--mn-bg));
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg, 10px);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.welcome-page__tile:hover:not(:disabled) {
+  border-color: var(--mn-accent);
+  background: var(--mn-surface-raised, rgba(15, 18, 22, 0.03));
+}
+
+.welcome-page__tile:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.welcome-page__tile:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.welcome-page__tile-icon {
+  display: flex;
+  color: var(--mn-accent);
+}
+
+.welcome-page__tile-icon .icon-svg {
+  width: 22px;
+  height: 22px;
+}
+
+.welcome-page__tile-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.welcome-page__tile-desc {
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+  line-height: 1.4;
+}
+
+.welcome-page__create-panel {
+  margin-bottom: 28px;
+  padding: 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg, 10px);
+  background: var(--mn-surface-raised, rgba(15, 18, 22, 0.03));
+}
+
+.welcome-page__field {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.welcome-page__input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 8px);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.welcome-page__parent-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.welcome-page__parent-hint code {
+  font-size: 11px;
+}
+
+.welcome-page__link-btn {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-accent);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.welcome-page__link-btn:hover {
+  color: var(--mn-fg);
+}
+
+.welcome-page__error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--mn-danger, #c44);
+}
+
+.welcome-page__create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.welcome-page__btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: var(--mn-radius-md, 8px);
+  cursor: pointer;
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.welcome-page__btn--primary {
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg-on-accent, #fff);
+}
+
+.welcome-page__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.welcome-page__recents-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.welcome-page__recents-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mn-fg-subtle);
+}
+
+.welcome-page__recents-count {
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+}
+
+.welcome-page__recents-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg, 10px);
+  overflow: hidden;
+}
+
+.welcome-page__recents-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.welcome-page__recents-row:last-child {
+  border-bottom: none;
+}
+
+.welcome-page__recents-row:hover:not(:disabled) {
+  background: var(--mn-surface-raised, rgba(15, 18, 22, 0.03));
+}
+
+.welcome-page__recents-row:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.welcome-page__recents-row--missing {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.welcome-page__recents-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-page__recents-path {
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--mn-fg-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-page__recents-remove {
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg-subtle);
+  cursor: pointer;
+}
+
+.welcome-page__recents-remove:hover {
+  color: var(--mn-fg);
+  border-color: var(--mn-fg-subtle);
+}
+
+.welcome-page__recents-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mn-fg-subtle);
+}
+
+.welcome-page__continue {
+  display: block;
+  margin: 28px auto 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mn-fg-subtle);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.welcome-page__continue:hover {
+  color: var(--mn-fg);
+}
+
+/* Simplified top bar while welcome is open */
+header.topbar.topbar--welcome .topbar-sep,
+header.topbar.topbar--welcome .topbar-end,
+header.topbar.topbar--welcome .topbar-spacer,
+header.topbar.topbar--welcome .topbar-actions > :not(#btnSettings) {
+  display: none !important;
+}
+
+header.topbar.topbar--welcome .topbar-actions {
+  margin-left: auto;
+}

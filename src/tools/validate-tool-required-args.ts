@@ -8,9 +8,13 @@ function findBuiltInTool(functionName: string): ToolDefinition | undefined {
   return BUILT_IN_TOOLS.find((t) => t.definition.function.name === functionName);
 }
 
-function isPresentRequiredValue(value: unknown): boolean {
+function isPresentRequiredValue(value: unknown, fieldKey?: string): boolean {
   if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
+  // Empty files and no-op appends are valid; only reject when content is absent.
+  if (typeof value === 'string') {
+    if (fieldKey === 'content') return true;
+    return value.trim().length > 0;
+  }
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'boolean') return true;
   if (Array.isArray(value)) return value.length > 0;
@@ -46,7 +50,7 @@ export function validateToolRequiredArgs(
     if (toolName === 'execute_command' && key === 'command') {
       if (args.background === true || args.stop === true) continue;
     }
-    if (!isPresentRequiredValue(args[key])) {
+    if (!isPresentRequiredValue(args[key], key)) {
       missing.push(key);
     }
   }

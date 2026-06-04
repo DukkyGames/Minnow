@@ -3,6 +3,7 @@
  */
 
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
+import { fetchPromptFileRaw } from '../prompts/prompt-file-api';
 import { parseExpertMetaFromMarkdown } from './expert-meta-parse';
 import type { ExpertMeta, ExpertRecord } from './types';
 
@@ -99,6 +100,52 @@ function buildRegistryFromRaw(
   return out;
 }
 
+function recordFromRawFiles(
+  expertId: string,
+  fullRaw: string,
+  liteRaw: string | null,
+): ExpertRecord | null {
+  const relativePath = `experts/${expertId}/expert.full.md`;
+  const meta = parseExpertMetaFromMarkdown(fullRaw, relativePath);
+  if (!meta) return null;
+
+  let fullBody = '';
+  let liteBody: string | undefined;
+  try {
+    fullBody = parsePromptMarkdown(fullRaw, relativePath).markdownBody.trim();
+  } catch {
+    return null;
+  }
+  if (!fullBody) return null;
+
+  if (liteRaw?.trim()) {
+    try {
+      liteBody = parsePromptMarkdown(
+        liteRaw,
+        `experts/${expertId}/expert.lite.md`,
+      ).markdownBody.trim();
+    } catch {
+      liteBody = undefined;
+    }
+  }
+
+  return {
+    meta,
+    fullBody,
+    liteBody,
+    source: 'user',
+  };
+}
+
+async function loadUserExpertRecordFromApi(expertId: string): Promise<ExpertRecord | null> {
+  const [fullRes, liteRes] = await Promise.all([
+    fetchPromptFileRaw('experts', expertId, 'full'),
+    fetchPromptFileRaw('experts', expertId, 'lite'),
+  ]);
+  if (!fullRes?.content?.trim()) return null;
+  return recordFromRawFiles(expertId, fullRes.content, liteRes?.content ?? null);
+}
+
 /** Initialize built-in experts from Vite glob (idempotent). */
 export function initBuiltinExpertRegistry(raw: Record<string, string> = {}): void {
   if (builtinRegistry.size > 0 && Object.keys(raw).length === 0) return;
@@ -116,6 +163,11 @@ export function setUserExpertRegistry(records: ExpertRecord[]): void {
   for (const record of records) {
     userRegistry.set(record.meta.id, record);
   }
+}
+
+/** Ids shipped in the built-in bundle (for ownership checks). */
+export function getBuiltinExpertIds(): ReadonlySet<string> {
+  return new Set(builtinRegistry.keys());
 }
 
 /** Register expert files for tests. */
@@ -159,6 +211,46 @@ export function getExpert(id: string): ExpertRecord | null {
   return userRegistry.get(id) ?? builtinRegistry.get(id) ?? null;
 }
 
+/** Load user-created experts from ~/.minnow via the prompt API. */
+export async function syncExpertRegistryFromServer(): Promise<void> {
+  if (builtinRegistry.size === 0 && builtinRaw) {
+    initBuiltinExpertRegistry(builtinRaw);
+  }
+
+  try {
+    const res = await fetch('/api/prompts/registry', { cache: 'no-store' });
+    if (!res.ok) {
+      userRegistry.clear();
+      return;
+    }
+    const body = (await res.json()) as {
+      prompts?: { kind: string; id: string; source: string }[];
+    };
+    const userOnlyIds = [
+      ...new Set(
+        (body.prompts ?? [])
+          .filter((p) => p.kind === 'expert' && p.source === 'user')
+          .map((p) => p.id)
+          .filter((id) => !shouldSkipExpertId(id) && !builtinRegistry.has(id)),
+      ),
+    ];
+
+    if (userOnlyIds.length === 0) {
+      userRegistry.clear();
+      return;
+    }
+
+    const records: ExpertRecord[] = [];
+    for (const id of userOnlyIds) {
+      const record = await loadUserExpertRecordFromApi(id);
+      if (record) records.push(record);
+    }
+    setUserExpertRegistry(records);
+  } catch {
+    userRegistry.clear();
+  }
+}
+
 /** Reload built-in + optional user experts from prompt registry API. */
 export async function refreshExpertRegistry(
   builtinRawMap?: Record<string, string>,
@@ -169,27 +261,7 @@ export async function refreshExpertRegistry(
   } else if (builtinRaw) {
     initBuiltinExpertRegistry(builtinRaw);
   }
-
-  try {
-    const res = await fetch('/api/prompts/registry', { cache: 'no-store' });
-    if (!res.ok) return;
-    const body = (await res.json()) as {
-      prompts?: { kind: string; id: string; source: string; relativePath?: string }[];
-    };
-    const expertIds = new Set(
-      (body.prompts ?? [])
-        .filter((p) => p.kind === 'expert' && p.source === 'user')
-        .map((p) => p.id),
-    );
-    if (expertIds.size === 0) {
-      userRegistry.clear();
-      return;
-    }
-    /* User bodies are loaded via prompt-loader; re-scan would need file fetch.
-       For now user overrides in browser use same built-in scan + prompt-loader merge. */
-  } catch {
-    /* dev without server */
-  }
+  await syncExpertRegistryFromServer();
 }
 
 /** Load built-in experts using bundled prompt markdown (call from init). */

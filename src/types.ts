@@ -97,18 +97,33 @@ export interface ToolImageAttachment {
   alt?: string;
 }
 
+/** Per file-mutation tool: line adds/deletes (GitHub-style). */
+export interface CodeChangeStats {
+  additions: number;
+  deletions: number;
+  path?: string;
+}
+
+/** Cumulative line stats for one chat (file-write tools only). */
+export interface ChatCodeChangeTotals {
+  additions: number;
+  deletions: number;
+}
+
 /** Tool execution result correlated to `tool_call_id` from the prior assistant turn. */
 export interface ToolResultMessage {
   role: 'tool';
   tool_call_id: string;
   content: string;
   attachments?: ToolImageAttachment[];
+  codeChange?: CodeChangeStats;
 }
 
 /** Result returned from executeTool (text + optional UI attachments). */
 export interface ToolExecutionResult {
   content: string;
   attachments?: ToolImageAttachment[];
+  codeChange?: CodeChangeStats;
 }
 
 export type Message =
@@ -265,8 +280,6 @@ export interface BoardTask {
   filesChanged?: number;
   notes?: string;
   error?: string;
-  /** Assigned sub-agent type id (manual board). */
-  agentType?: string;
   /** Linked task chat session id. */
   chatId?: string;
   /** Build spec from plan parse (display + task-chat seed). */
@@ -505,6 +518,8 @@ export interface Chat {
   reefArtifactIds?: string[];
   /** Cumulative token usage and optional USD cost (Feature #14). */
   tokenLedger?: ChatTokenLedger;
+  /** Cumulative line add/delete from file-mutation tools in this chat. */
+  codeChangeTotals?: ChatCodeChangeTotals;
 }
 
 export type {

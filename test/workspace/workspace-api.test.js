@@ -100,6 +100,9 @@ describe('workspace API', () => {
     assert.ok(typeof json.path === 'string' && json.path.length > 0);
     assert.ok(typeof json.label === 'string');
     assert.ok(Array.isArray(json.recent));
+    assert.ok(typeof json.newProjectParent === 'string' && json.newProjectParent.length > 0);
+    const stat = await fs.stat(json.newProjectParent);
+    assert.ok(stat.isDirectory());
   });
 
   test('PUT sets workspace and persists to config.json', async () => {

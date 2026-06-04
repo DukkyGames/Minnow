@@ -42,6 +42,24 @@ async function listWindowsDriveRoots() {
 }
 
 /**
+ * Default parent for "Create new project" on the welcome screen (~/Projects).
+ * @returns {string}
+ */
+export function getDefaultNewProjectParentPath() {
+  return path.join(os.homedir(), 'Projects');
+}
+
+/**
+ * Ensure ~/Projects exists for the welcome create-project wizard.
+ * @returns {Promise<string>} absolute path to the parent directory
+ */
+export async function ensureDefaultProjectsParent() {
+  const parent = getDefaultNewProjectParentPath();
+  await fs.mkdir(parent, { recursive: true });
+  return parent;
+}
+
+/**
  * Top-level locations when no path is provided (home + OS roots).
  * @returns {Promise<Array<{ name: string, path: string }>>}
  */
