@@ -1,25 +1,15 @@
 /**
- * Experts settings panel helpers (formerly in expert-select.ts).
+ * Experts settings panel helpers.
  */
 
 import { syncExpertRegistryFromServer } from '../chat/experts/registry';
 import { loadExpertsConfig, saveExpertsConfig } from '../config/experts-config';
 
-/** Hint payload after auto-routing on send (chat composer path). */
-export interface ExpertHintContext {
-  expertId: string | null;
-  expertLabel: string | null;
-}
-
-/** Refresh Experts empty state vs picker grid when experts.enabled toggles. */
+/** Refresh Experts empty state vs gallery when experts.enabled toggles. */
 export async function refreshExpertsEnabledState(): Promise<void> {
   const config = await loadExpertsConfig();
-  const empty =
-    document.getElementById('expertsDisabled') ??
-    document.getElementById('expertLabDisabled');
-  const pickStep =
-    document.querySelector('.experts-step--gallery') ??
-    document.querySelector('.expert-lab-step--pick');
+  const empty = document.getElementById('expertsDisabled');
+  const pickStep = document.querySelector('.experts-step--gallery');
   if (!empty || !pickStep) return;
   if (config.enabled) {
     empty.classList.add('hidden');
@@ -29,12 +19,7 @@ export async function refreshExpertsEnabledState(): Promise<void> {
       const hub = await import('./experts/experts-hub');
       hub.renderGallery();
     } catch {
-      try {
-        const lab = await import('./expert-lab-page');
-        lab.renderExpertGrid();
-      } catch {
-        /* picker module not loaded */
-      }
+      /* Experts hub not loaded yet */
     }
   } else {
     empty.classList.remove('hidden');

@@ -440,9 +440,14 @@ async function openEditExpertStep(expertId: string): Promise<void> {
   const iconInput = document.getElementById('expertsEditIcon') as HTMLInputElement | null;
   const accentSelect = document.getElementById('expertsEditAccent') as HTMLSelectElement | null;
 
+  const taglineInput = document.getElementById('expertsEditTagline') as HTMLInputElement | null;
+  const greetingInput = document.getElementById('expertsEditGreeting') as HTMLInputElement | null;
+
   if (labelInput) labelInput.value = loaded.meta.label;
   if (descInput) descInput.value = loaded.meta.description ?? '';
   if (iconInput) iconInput.value = loaded.meta.icon ?? '';
+  if (taglineInput) taglineInput.value = loaded.meta.tagline ?? '';
+  if (greetingInput) greetingInput.value = loaded.meta.greeting ?? '';
   if (accentSelect) {
     accentSelect.replaceChildren();
     for (const accent of EXPERT_ACCENT_VALUES) {
@@ -475,6 +480,8 @@ async function submitEditExpert(event?: Event): Promise<void> {
   const descInput = document.getElementById('expertsEditDescription') as HTMLInputElement | null;
   const iconInput = document.getElementById('expertsEditIcon') as HTMLInputElement | null;
   const accentSelect = document.getElementById('expertsEditAccent') as HTMLSelectElement | null;
+  const taglineInput = document.getElementById('expertsEditTagline') as HTMLInputElement | null;
+  const greetingInput = document.getElementById('expertsEditGreeting') as HTMLInputElement | null;
   const bodyInput = document.getElementById('expertsEditBody') as HTMLTextAreaElement | null;
 
   if (editProfile === 'full') {
@@ -494,6 +501,8 @@ async function submitEditExpert(event?: Event): Promise<void> {
       description: descInput?.value.trim(),
       icon: iconInput?.value.trim(),
       accent: (accentSelect?.value as ExpertAccent) || 'sage',
+      tagline: taglineInput?.value.trim(),
+      greeting: greetingInput?.value.trim(),
       fullBody: editFullBody,
       liteBody: editLiteBody,
       liteEdited: editLiteEdited,
