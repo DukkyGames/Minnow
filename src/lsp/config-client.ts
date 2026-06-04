@@ -115,6 +115,8 @@ export interface LspBundleStatus {
   kind: 'npm' | 'binary';
   categoryId?: string;
   categoryLabel?: string;
+  /** LSP server ids in defaults.json tied to this bundle (from bundles.json). */
+  lspIds?: string[];
   installed: boolean;
   version: string | null;
   sizeBytes: number;
