@@ -1276,11 +1276,12 @@
 
   <section class="file-viewer-pane hidden" id="fileViewerPane" aria-label="File viewer">
     <header class="file-viewer-header">
-      <span class="file-viewer-path" id="fileViewerPath"></span>
+      <div class="file-viewer-tabs" id="fileViewerTabs" role="tablist" aria-label="Open files"></div>
+      <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
       <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
       </button>
-      <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close file viewer">
+      <button type="button" class="icon-btn file-viewer-close" id="btnFileViewerClose" aria-label="Close tab" title="Close tab">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </header>

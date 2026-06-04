@@ -148,7 +148,7 @@ export async function fetchLspBundleProgress(
 /** Install a language server bundle to ~/.minnow/lsp-servers. */
 export async function installLspBundle(
   bundleId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; alreadyInstalled?: boolean }> {
   const ok = await detectLocalServer();
   if (!ok) return { ok: false, error: 'Server offline' };
   try {
@@ -157,11 +157,14 @@ export async function installLspBundle(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bundleId }),
     });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      alreadyInstalled?: boolean;
+    };
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { ok: false, error: body.error ?? res.statusText };
     }
-    return { ok: true };
+    return { ok: true, alreadyInstalled: body.alreadyInstalled === true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

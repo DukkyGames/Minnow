@@ -13,27 +13,6 @@
     "typescript": {
       "disabled": false
     },
-    "eslint": {
-      "disabled": true
-    },
-    "oxlint": {
-      "disabled": true
-    },
-    "biome": {
-      "disabled": true
-    },
-    "deno": {
-      "disabled": true
-    },
-    "vue": {
-      "disabled": true
-    },
-    "svelte": {
-      "disabled": true
-    },
-    "astro": {
-      "disabled": true
-    },
     "pyright": {
       "disabled": false
     },
@@ -46,6 +25,15 @@
     "graphql": {
       "disabled": false
     },
+    "yaml-ls": {
+      "disabled": false
+    },
+    "bash": {
+      "disabled": false
+    },
+    "dockerfile": {
+      "disabled": false
+    },
     "rust": {
       "disabled": true
     },
@@ -55,82 +43,13 @@
     "clangd": {
       "disabled": true
     },
-    "csharp": {
-      "disabled": true
-    },
-    "fsharp": {
-      "disabled": true
-    },
-    "razor": {
-      "disabled": true
-    },
-    "jdtls": {
-      "disabled": true
-    },
-    "kotlin-ls": {
-      "disabled": true
-    },
-    "ruby-lsp": {
-      "disabled": true
-    },
-    "elixir-ls": {
-      "disabled": true
-    },
     "lua-ls": {
       "disabled": true
-    },
-    "yaml-ls": {
-      "disabled": false
-    },
-    "bash": {
-      "disabled": false
     },
     "terraform": {
       "disabled": true
     },
-    "dart": {
-      "disabled": true
-    },
-    "prisma": {
-      "disabled": true
-    },
-    "intelephense": {
-      "disabled": true
-    },
-    "ocaml-lsp": {
-      "disabled": true
-    },
-    "clojure-lsp": {
-      "disabled": true
-    },
-    "gleam": {
-      "disabled": true
-    },
-    "nixd": {
-      "disabled": true
-    },
     "zls": {
-      "disabled": true
-    },
-    "sourcekit-lsp": {
-      "disabled": true
-    },
-    "hls": {
-      "disabled": true
-    },
-    "julials": {
-      "disabled": true
-    },
-    "tinymist": {
-      "disabled": true
-    },
-    "texlab": {
-      "disabled": true
-    },
-    "dockerfile": {
-      "disabled": false
-    },
-    "ty": {
       "disabled": true
     }
   }

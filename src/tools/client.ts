@@ -583,7 +583,7 @@ async function executeStreamingCodeTool(
   }
 
   try {
-    const { chatFetchAbort } = await import('../app-state');
+    const { getChatAbort } = await import('../app-state');
     return await runCommandWithTerminalStream(mapped.command, {
       chatId: context.chatId!,
       source: 'agent',
@@ -591,7 +591,9 @@ async function executeStreamingCodeTool(
       displayLabel: mapped.label,
       args: mapped.argv,
       shell: mapped.shell,
-      abortSignal: chatFetchAbort?.signal,
+      abortSignal: context.chatId
+        ? getChatAbort(context.chatId)?.signal
+        : undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

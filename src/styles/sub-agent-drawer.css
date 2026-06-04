@@ -3,9 +3,14 @@
  */
 
 .sub-agent-card {
-  margin: 10px 0 12px;
+  /* Match .msg / .tool-call-msg inset inside .chat-area (padding + 720px column). */
+  align-self: flex-start;
+  max-width: min(720px, 100%);
+  width: 100%;
+  margin: 0;
   padding: 12px 14px;
   border-radius: var(--radius-md, 8px);
+  animation: fadeUp 0.22s var(--ease-out);
   border: 1px solid var(--mn-border);
   background: var(--mn-surface-1, var(--mn-bg));
   cursor: pointer;

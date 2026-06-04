@@ -129,11 +129,12 @@ export function resetLspBundleSpawnOverride() {
 
 function runProcess(command, args, options = {}) {
   const spawnFn = spawnOverride ?? spawn;
+  const { shell = false, ...spawnOpts } = options;
   return new Promise((resolve, reject) => {
     const child = spawnFn(command, args, {
-      ...options,
-      shell: false,
       windowsHide: true,
+      ...spawnOpts,
+      shell,
     });
     let stderr = '';
     child.stderr?.on('data', (c) => {
@@ -145,6 +146,14 @@ function runProcess(command, args, options = {}) {
       else reject(new Error(stderr.trim() || `${command} exited ${code}`));
     });
   });
+}
+
+/** npm on Windows must use shell:true; npm.cmd with shell:false throws spawn EINVAL. */
+export function npmSpawnOptions(extra = {}) {
+  return {
+    shell: process.platform === 'win32',
+    ...extra,
+  };
 }
 
 async function dirSizeBytes(root) {
@@ -291,9 +300,9 @@ async function installNpmBundle(bundleId, bundle) {
     message: `npm install ${spec}`,
   });
   await runProcess(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    'npm',
     ['install', '--prefix', prefix, '--no-save', '--no-audit', '--no-fund', spec],
-    { cwd: prefix, env: process.env },
+    npmSpawnOptions({ cwd: prefix, env: process.env }),
   );
   const status = await getInstalledNpmStatus(bundleId, bundle);
   await writeMeta(bundleId, {
@@ -604,6 +613,12 @@ export async function installBundle(bundleId) {
       ? await getInstalledNpmStatus(bundleId, bundle)
       : await getInstalledBinaryStatus(bundleId, bundle);
   if (existing.installed) {
+    updateJob(bundleId, {
+      phase: 'done',
+      percent: 100,
+      message: 'Already installed',
+      error: undefined,
+    });
     return { ok: true, alreadyInstalled: true, ...existing };
   }
 
@@ -633,9 +648,9 @@ export async function uninstallBundle(bundleId) {
     const prefix = getManagedLspNpmRoot();
     if (fs.existsSync(path.join(prefix, 'node_modules', bundle.npmPackage))) {
       await runProcess(
-        process.platform === 'win32' ? 'npm.cmd' : 'npm',
+        'npm',
         ['uninstall', '--prefix', prefix, bundle.npmPackage],
-        { cwd: prefix },
+        npmSpawnOptions({ cwd: prefix }),
       );
     }
   } else if (bundle.kind === 'binary') {

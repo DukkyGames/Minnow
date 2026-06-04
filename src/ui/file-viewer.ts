@@ -1,5 +1,5 @@
 /**
- * Editable file viewer (CodeMirror 6) using read_file / read_file_range / save_file tools.
+ * Editable file viewer (CodeMirror 6) with multi-tab strip and per-tab in-memory state.
  */
 
 import { EditorSelection, EditorState, type Extension } from '@codemirror/state';
@@ -10,16 +10,17 @@ import { executeTool, getLocalServerAvailable } from '../tools/client';
 import { resolvePreviewLoadUrl } from './preview-panel';
 import { fetchLspConfig } from '../lsp/config-client';
 import { notifyLspDocument } from '../lsp/completion-client';
-import { patchFilePanelState } from '../state/file-panel';
+import {
+  MAX_OPEN_VIEWER_TABS,
+  patchFilePanelState,
+} from '../state/file-panel';
 import {
   hideViewerPaneDom,
   hideViewerSplit,
   showViewerSplit,
 } from './file-layout';
 import { isMarkdownFilePath } from './file-markdown-path';
-import {
-  showFilePanelContextMenu,
-} from './file-tree-context-menu';
+import { showFilePanelContextMenu } from './file-tree-context-menu';
 import {
   refreshFileTreeViaBridge,
   renderFileTreeViaBridge,
@@ -40,6 +41,28 @@ import {
   lineNumbersForRange,
   openQuickEditPanel,
 } from './editor-quick-edit';
+import {
+  activateViewerTab,
+  clearAllViewerTabs,
+  getActiveViewerTab,
+  getActiveViewerTabPath,
+  getOpenViewerTabPaths,
+  isAnyViewerTabDirty,
+  isViewerTabDirty,
+  listViewerTabs,
+  markActiveTabSaved,
+  openViewerTab,
+  removeViewerTab,
+  restoreWorkspaceViewerTabs,
+  retargetViewerTab,
+  setActiveTabLoadState,
+  snapshotActiveTabEditorContent,
+  updateActiveTabFromEditor,
+  type OpenViewerTabOptions,
+  type ViewerTabState,
+} from './file-viewer-tab-store';
+import { refreshFileViewerTabs, registerFileViewerTabHandlers } from './file-viewer-tabs';
+import { setStatus } from './status';
 
 export const LARGE_FILE_BYTES = 512_000;
 const RANGE_LINE_COUNT = 2000;
@@ -51,12 +74,6 @@ export const LARGE_FILE_EXCERPT_FOOTER_RE =
 
 let editorView: EditorView | null = null;
 let markdownPreviewEl: HTMLElement | null = null;
-let currentPath: string | null = null;
-let originalContent = '';
-let isDirty = false;
-let readOnlyExcerpt = false;
-/** Overrides the large-file banner when opening chat attachment snapshots. */
-let readOnlyBannerText: string | null = null;
 let isSaving = false;
 let viewerControlsBound = false;
 let viewerContextMenuBound = false;
@@ -64,8 +81,6 @@ let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
-let pendingInitialSelection: { line: number; character: number } | null = null;
-let pendingInitialLineRange: { startLine: number; endLine: number } | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
 export function parseReadFileRangeBody(raw: string): string {
@@ -94,7 +109,8 @@ export function shouldUseMarkdownPreview(path: string, asCode?: boolean): boolea
 
 /** True when the viewer is showing markdown preview (not the code editor). */
 export function isMarkdownPreviewActive(): boolean {
-  return markdownPreviewEl !== null;
+  const tab = getActiveViewerTab();
+  return tab?.viewMode === 'markdown-preview' && markdownPreviewEl !== null;
 }
 
 function buildLargeFileExcerptFooter(byteLength: number): string {
@@ -105,16 +121,24 @@ function getViewerHost(): HTMLElement | null {
   return document.getElementById('fileViewerHost');
 }
 
-function getPathLabel(): HTMLElement | null {
-  return document.getElementById('fileViewerPath');
-}
-
 function getSaveButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerSave') as HTMLButtonElement | null;
 }
 
 function getReadOnlyBanner(): HTMLElement | null {
   return document.getElementById('fileViewerReadOnlyBanner');
+}
+
+function activeTabContent(tab: ViewerTabState): string {
+  if (editorView && getActiveViewerTabPath() === tab.path) {
+    return editorView.state.doc.toString();
+  }
+  return tab.cachedEditorContent ?? tab.originalContent;
+}
+
+function readOnlyBannerMessage(tab: ViewerTabState): string {
+  if (tab.readOnlyBannerText) return tab.readOnlyBannerText;
+  return `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
 }
 
 function clearLspChangeTimer(): void {
@@ -146,7 +170,17 @@ async function isLspEnabledForViewer(): Promise<boolean> {
   return cfg?.enabled === true;
 }
 
+/** Persist editor buffer into the active tab before teardown or switch. */
+function snapshotActiveTabFromEditor(): void {
+  const tab = getActiveViewerTab();
+  if (!tab || !editorView || tab.viewMode === 'image') return;
+  const text = editorView.state.doc.toString();
+  const dirty = !tab.readOnlyExcerpt && text !== tab.originalContent;
+  snapshotActiveTabEditorContent(text, dirty);
+}
+
 function destroyEditor(): void {
+  snapshotActiveTabFromEditor();
   closeLspDocument();
   if (editorView) {
     editorView.destroy();
@@ -155,19 +189,9 @@ function destroyEditor(): void {
   markdownPreviewEl = null;
 }
 
-function markDirty(dirty: boolean): void {
-  isDirty = dirty;
-  updateViewerChrome();
-}
-
 function ensureDiagnosticsBadge(): HTMLElement | null {
-  const label = getPathLabel();
-  if (!label?.parentElement) return null;
   if (!diagnosticsBadgeEl) {
-    diagnosticsBadgeEl = document.createElement('span');
-    diagnosticsBadgeEl.className = 'file-viewer-diagnostics';
-    diagnosticsBadgeEl.hidden = true;
-    label.insertAdjacentElement('afterend', diagnosticsBadgeEl);
+    diagnosticsBadgeEl = document.getElementById('fileViewerDiagnostics');
   }
   return diagnosticsBadgeEl;
 }
@@ -193,45 +217,43 @@ function updateDiagnosticsChrome(counts: {
 }
 
 function updateViewerChrome(): void {
-  const label = getPathLabel();
-  if (label && currentPath) {
-    label.textContent = formatViewerPathLabel(currentPath, isDirty);
-    label.classList.toggle('file-viewer-path--dirty', isDirty);
-  }
-
+  const tab = getActiveViewerTab();
   const saveBtn = getSaveButton();
   if (saveBtn) {
-    const canSave = Boolean(currentPath && editorView && isDirty && !readOnlyExcerpt && !isSaving);
+    const canSave = Boolean(
+      tab &&
+        editorView &&
+        tab.isDirty &&
+        !tab.readOnlyExcerpt &&
+        tab.viewMode === 'editor' &&
+        !isSaving,
+    );
     saveBtn.disabled = !canSave;
     saveBtn.classList.toggle('file-viewer-save--active', canSave);
     saveBtn.setAttribute('aria-busy', isSaving ? 'true' : 'false');
   }
 
   const banner = getReadOnlyBanner();
-  if (banner) {
-    banner.hidden = !readOnlyExcerpt;
-    if (readOnlyExcerpt && readOnlyBannerText) {
-      banner.textContent = readOnlyBannerText;
+  if (banner && tab) {
+    banner.hidden = !tab.readOnlyExcerpt;
+    if (tab.readOnlyExcerpt) {
+      banner.textContent = readOnlyBannerMessage(tab);
     }
   }
+  refreshFileViewerTabs();
 }
 
-function readOnlyBannerMessage(): string {
-  if (readOnlyBannerText) return readOnlyBannerText;
-  return `Read-only preview: file is larger than ${LARGE_FILE_BYTES.toLocaleString()} bytes; showing lines 1–${RANGE_LINE_COUNT} only.`;
-}
-
-function mountMarkdownPreview(content: string): void {
+function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
   const host = getViewerHost();
   if (!host) return;
   destroyEditor();
   host.innerHTML = '';
 
-  if (readOnlyExcerpt) {
+  if (tab.readOnlyExcerpt) {
     const banner = document.createElement('p');
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
-    banner.textContent = readOnlyBannerMessage();
+    banner.textContent = readOnlyBannerMessage(tab);
     host.appendChild(banner);
   }
 
@@ -243,17 +265,17 @@ function mountMarkdownPreview(content: string): void {
   updateViewerChrome();
 }
 
-function mountEditor(content: string, path: string): void {
+function mountEditor(tab: ViewerTabState, content: string): void {
   const host = getViewerHost();
   if (!host) return;
   destroyEditor();
   host.innerHTML = '';
 
-  if (readOnlyExcerpt) {
+  if (tab.readOnlyExcerpt) {
     const banner = document.createElement('p');
     banner.id = 'fileViewerReadOnlyBanner';
     banner.className = 'file-viewer-readonly-banner';
-    banner.textContent = readOnlyBannerMessage();
+    banner.textContent = readOnlyBannerMessage(tab);
     host.appendChild(banner);
   }
 
@@ -267,6 +289,8 @@ function mountEditor(content: string, path: string): void {
   host.appendChild(aiStatus);
   editorAiStatusEl = aiStatus;
 
+  const path = tab.path;
+
   void (async () => {
     const [langExts, useLsp, editorAiConfig, editorSettings] = await Promise.all([
       loadLanguageExtensionsForPath(path),
@@ -274,12 +298,12 @@ function mountEditor(content: string, path: string): void {
       loadEditorAiCompletionConfig(),
       loadEditorSettings(),
     ]);
-    const readOnlyExts: Extension[] = readOnlyExcerpt
+    const readOnlyExts: Extension[] = tab.readOnlyExcerpt
       ? [EditorView.editable.of(false), EditorState.readOnly.of(true)]
       : [];
     const lspExts = useLsp ? lspEditorExtensions(path) : [];
     const useEditorAi =
-      editorAiConfig.enabled && !readOnlyExcerpt && getLocalServerAvailable();
+      editorAiConfig.enabled && !tab.readOnlyExcerpt && getLocalServerAvailable();
     const aiExts = useEditorAi
       ? editorAiCompletionExtensions({
           filePath: path,
@@ -297,7 +321,7 @@ function mountEditor(content: string, path: string): void {
         })
       : [];
     const quickEditExts =
-      !readOnlyExcerpt && getLocalServerAvailable()
+      !tab.readOnlyExcerpt && getLocalServerAvailable()
         ? editorQuickEditExtensions({
             filePath: path,
             canRequest: () => getLocalServerAvailable(),
@@ -316,10 +340,11 @@ function mountEditor(content: string, path: string): void {
           if (useLsp) {
             scheduleLspChangeNotify(path, text);
           }
-          if (readOnlyExcerpt) return;
-          const nextDirty = text !== originalContent;
-          if (nextDirty !== isDirty) {
-            markDirty(nextDirty);
+          if (tab.readOnlyExcerpt) return;
+          const nextDirty = text !== tab.originalContent;
+          if (nextDirty !== tab.isDirty) {
+            updateActiveTabFromEditor(text, nextDirty);
+            updateViewerChrome();
           }
         }),
         ...editorCoreExtensions({
@@ -348,9 +373,10 @@ function mountEditor(content: string, path: string): void {
       ],
     });
     editorView = new EditorView({ state, parent: editorMount });
-    if (pendingInitialLineRange && editorView) {
-      const { startLine, endLine } = pendingInitialLineRange;
-      pendingInitialLineRange = null;
+
+    if (tab.pendingInitialLineRange && editorView) {
+      const { startLine, endLine } = tab.pendingInitialLineRange;
+      tab.pendingInitialLineRange = null;
       const doc = editorView.state.doc;
       const fromLine = Math.max(1, Math.min(startLine, doc.lines));
       const toLine = Math.max(fromLine, Math.min(endLine, doc.lines));
@@ -361,9 +387,9 @@ function mountEditor(content: string, path: string): void {
         scrollIntoView: true,
       });
       editorView.focus();
-    } else if (pendingInitialSelection && editorView) {
-      const { line, character } = pendingInitialSelection;
-      pendingInitialSelection = null;
+    } else if (tab.pendingInitialSelection && editorView) {
+      const { line, character } = tab.pendingInitialSelection;
+      tab.pendingInitialSelection = null;
       const doc = editorView.state.doc;
       const lineNumber = Math.min(line + 1, doc.lines);
       const lineInfo = doc.line(lineNumber);
@@ -375,6 +401,7 @@ function mountEditor(content: string, path: string): void {
       });
       editorView.focus();
     }
+
     if (useLsp) {
       lspSyncedPath = path;
       void notifyLspDocument(path, 'open', content);
@@ -383,12 +410,32 @@ function mountEditor(content: string, path: string): void {
   })();
 }
 
-export function setViewerLoading(path: string): void {
-  const label = getPathLabel();
-  if (label) {
-    label.textContent = path;
-    label.classList.remove('file-viewer-path--dirty');
+function mountImagePreview(tab: ViewerTabState, src: string, onImageError?: () => void): void {
+  const host = getViewerHost();
+  if (!host) return;
+  destroyEditor();
+  host.innerHTML = '';
+
+  const banner = document.createElement('p');
+  banner.id = 'fileViewerReadOnlyBanner';
+  banner.className = 'file-viewer-readonly-banner';
+  banner.textContent = readOnlyBannerMessage(tab);
+  host.appendChild(banner);
+
+  const figure = document.createElement('figure');
+  figure.className = 'file-viewer-image-preview';
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = tab.displayName;
+  if (onImageError) {
+    img.onerror = onImageError;
   }
+  figure.appendChild(img);
+  host.appendChild(figure);
+  updateViewerChrome();
+}
+
+export function setViewerLoading(_path: string): void {
   const host = getViewerHost();
   if (host) {
     destroyEditor();
@@ -447,9 +494,132 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
   return { content: raw, readOnlyExcerpt: false };
 }
 
+/** Load workspace file content for the active tab when needed. */
+async function ensureActiveTabLoaded(): Promise<void> {
+  const tab = getActiveViewerTab();
+  if (!tab || tab.loadStatus !== 'loading' || tab.kind === 'attachment') return;
+
+  setViewerLoading(tab.path);
+  try {
+    if (isImageFilePath(tab.path)) {
+      setActiveTabLoadState('ready', { viewMode: 'image' });
+      renderActiveViewerTab();
+      return;
+    }
+    const loaded = await loadFileContent(tab.path);
+    const viewMode = tab.viewMode === 'markdown-preview' ? 'markdown-preview' : 'editor';
+    setActiveTabLoadState('ready', {
+      content: loaded.content,
+      readOnlyExcerpt: loaded.readOnlyExcerpt,
+      viewMode,
+    });
+    renderActiveViewerTab();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setActiveTabLoadState('error', { error: message });
+    setViewerError(message || 'Could not open file');
+  }
+}
+
+/** Mount the active tab in #fileViewerHost (editor, preview, image, loading, error). */
+export function renderActiveViewerTab(): void {
+  const tab = getActiveViewerTab();
+  const host = getViewerHost();
+  if (!tab || !host) {
+    if (host) host.innerHTML = '';
+    destroyEditor();
+    updateViewerChrome();
+    return;
+  }
+
+  if (tab.loadStatus === 'loading') {
+    setViewerLoading(tab.path);
+    void ensureActiveTabLoaded();
+    return;
+  }
+
+  if (tab.loadStatus === 'error') {
+    setViewerError(tab.loadError ?? 'Could not open file');
+    return;
+  }
+
+  const content = activeTabContent(tab);
+
+  if (tab.viewMode === 'image') {
+    if (tab.kind === 'attachment') {
+      mountImagePreview(tab, content);
+    } else {
+      const src = resolvePreviewLoadUrl({ kind: 'workspace', path: tab.path });
+      mountImagePreview(tab, src, () => {
+        setViewerError(
+          'Could not load image preview. Is the tool server running (npm start)?',
+        );
+      });
+    }
+    return;
+  }
+
+  if (tab.viewMode === 'markdown-preview') {
+    mountMarkdownPreview(tab, content);
+    return;
+  }
+
+  mountEditor(tab, content);
+}
+
+/** Confirm when leaving a dirty active editor tab. */
+export function confirmLeaveDirtyActiveTab(): boolean {
+  const tab = getActiveViewerTab();
+  if (!tab?.isDirty) return true;
+  return window.confirm('You have unsaved changes. Continue without saving?');
+}
+
+async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?: boolean }): Promise<boolean> {
+  snapshotActiveTabFromEditor();
+  const ok = activateViewerTab(path, {
+    skipUnsavedGuard: options?.skipUnsavedGuard,
+    confirmUnsaved: confirmLeaveDirtyActiveTab,
+  });
+  if (!ok) return false;
+  renderActiveViewerTab();
+  renderFileTreeViaBridge();
+  return true;
+}
+
+/** Close a single tab by path (with unsaved confirm). */
+export async function closeViewerTab(path: string): Promise<void> {
+  const tab = listViewerTabs().find((t) => t.path === path);
+  if (!tab) return;
+
+  if (path === getActiveViewerTabPath() && tab.isDirty) {
+    const proceed = window.confirm('You have unsaved changes. Close without saving?');
+    if (!proceed) return;
+  } else if (tab.isDirty) {
+    const proceed = window.confirm('You have unsaved changes. Close without saving?');
+    if (!proceed) return;
+  }
+
+  const wasActive = path === getActiveViewerTabPath();
+  if (wasActive) {
+    destroyEditor();
+  }
+  removeViewerTab(path);
+
+  if (listViewerTabs().length === 0) {
+    patchFilePanelState({ openViewerTabs: [], activeViewerTab: null, selectedPath: null });
+    hideViewerSplit();
+    const host = getViewerHost();
+    if (host) host.innerHTML = '';
+  } else if (wasActive) {
+    renderActiveViewerTab();
+  }
+  renderFileTreeViaBridge();
+}
+
 /** Persist the open file via save_file. */
 export async function saveCurrentFile(): Promise<boolean> {
-  if (!currentPath || !editorView || readOnlyExcerpt || !isDirty || isSaving) {
+  const tab = getActiveViewerTab();
+  if (!tab || !editorView || tab.readOnlyExcerpt || !tab.isDirty || isSaving) {
     return false;
   }
 
@@ -458,18 +628,17 @@ export async function saveCurrentFile(): Promise<boolean> {
   updateViewerChrome();
 
   try {
-    const raw = (await executeTool('save_file', { path: currentPath, content })).content;
+    const raw = (await executeTool('save_file', { path: tab.path, content })).content;
     if (raw.startsWith('Error:')) {
       throw new Error(raw.replace(/^Error:\s*/i, '').trim());
     }
-    originalContent = content;
-    markDirty(false);
-    if (lspSyncedPath === currentPath) {
-      void notifyLspDocument(currentPath, 'change', content);
+    markActiveTabSaved(content);
+    if (lspSyncedPath === tab.path) {
+      void notifyLspDocument(tab.path, 'change', content);
     }
     await refreshFileTreeViaBridge();
     const { emitFileSaved } = await import('../state/preview-events');
-    emitFileSaved(currentPath);
+    emitFileSaved(tab.path);
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -483,29 +652,44 @@ export async function saveCurrentFile(): Promise<boolean> {
 
 /** Switch the open markdown file from preview to the editable code editor. */
 export function switchMarkdownViewerToCode(): void {
-  if (!currentPath || !isMarkdownFilePath(currentPath) || editorView) return;
-  mountEditor(originalContent, currentPath);
+  const tab = getActiveViewerTab();
+  if (!tab || !isMarkdownFilePath(tab.path) || tab.viewMode !== 'markdown-preview') return;
+  tab.viewMode = 'editor';
+  tab.cachedEditorContent = tab.originalContent;
+  renderActiveViewerTab();
 }
 
 /** Switch the open markdown file from the code editor to GFM preview. */
 export function switchMarkdownViewerToPreview(): void {
-  if (!currentPath || !isMarkdownFilePath(currentPath) || !editorView) return;
-  if (isDirty) {
+  const tab = getActiveViewerTab();
+  if (!tab || !isMarkdownFilePath(tab.path) || !editorView) return;
+  if (tab.isDirty) {
     const proceed = window.confirm(
       'You have unsaved changes. Switch to preview without saving?',
     );
     if (!proceed) return;
   }
   const content = editorView.state.doc.toString();
-  originalContent = content;
-  isDirty = false;
-  mountMarkdownPreview(content);
+  tab.originalContent = content;
+  tab.cachedEditorContent = content;
+  tab.isDirty = false;
+  tab.viewMode = 'markdown-preview';
+  renderActiveViewerTab();
 }
 
-/** Wire Save button (call once from init-file-panel). */
+/** Wire Save button and tab handlers (call once from init-file-panel). */
 export function bindFileViewerControls(): void {
   if (viewerControlsBound) return;
   viewerControlsBound = true;
+
+  registerFileViewerTabHandlers({
+    onActivate: (path) => {
+      void activateTabAndRender(path);
+    },
+    onClose: (path) => {
+      void closeViewerTab(path);
+    },
+  });
 
   setLspDiagnosticsChromeListener((counts) => {
     updateDiagnosticsChrome({ errors: counts.errors, warnings: counts.warnings });
@@ -517,6 +701,12 @@ export function bindFileViewerControls(): void {
       void saveCurrentFile();
     });
   }
+
+  const closeBtn = document.getElementById('btnFileViewerClose');
+  if (closeBtn) {
+    closeBtn.setAttribute('aria-label', 'Close tab');
+    closeBtn.setAttribute('title', 'Close tab');
+  }
 }
 
 /** Right-click on the viewer: selection → chat / quick edit; markdown preview toggles. */
@@ -527,16 +717,16 @@ export function bindFileViewerContextMenu(): void {
   viewerContextMenuBound = true;
 
   host.addEventListener('contextmenu', (e) => {
-    const path = currentPath;
-    if (!path) return;
+    const tab = getActiveViewerTab();
+    if (!tab) return;
 
     const hasEditorSelection = Boolean(
       editorView &&
-        !readOnlyExcerpt &&
-        !markdownPreviewEl &&
+        !tab.readOnlyExcerpt &&
+        tab.viewMode === 'editor' &&
         !editorView.state.selection.main.empty,
     );
-    const isMarkdown = isMarkdownFilePath(path);
+    const isMarkdown = isMarkdownFilePath(tab.path);
     const isPreview = isMarkdownPreviewActive();
 
     if (!hasEditorSelection && !isMarkdown) return;
@@ -544,12 +734,12 @@ export function bindFileViewerContextMenu(): void {
     e.preventDefault();
 
     const items = buildFileViewerContextMenuItems({
-      path,
+      path: tab.path,
       hasEditorSelection,
       isMarkdown,
       isMarkdownPreview: isPreview,
       onAddSelectionToChat: () => {
-        if (!editorView || readOnlyExcerpt) return;
+        if (!editorView || tab.readOnlyExcerpt) return;
         const sel = editorView.state.selection.main;
         const text = editorView.state.doc.sliceString(sel.from, sel.to);
         const { fromLine, toLine } = lineNumbersForRange(
@@ -558,15 +748,15 @@ export function bindFileViewerContextMenu(): void {
           sel.to,
         );
         addCodeReferenceToComposer({
-          workspacePath: path,
+          workspacePath: tab.path,
           startLine: fromLine,
           endLine: toLine,
           text,
         });
       },
       onQuickEdit: () => {
-        if (!editorView || readOnlyExcerpt) return;
-        openQuickEditPanel(editorView, path);
+        if (!editorView || tab.readOnlyExcerpt) return;
+        openQuickEditPanel(editorView, tab.path);
       },
       onSwitchToCode: () => switchMarkdownViewerToCode(),
       onSwitchToPreview: () => switchMarkdownViewerToPreview(),
@@ -584,12 +774,21 @@ export function getFileViewerEditorView(): EditorView | null {
 
 export interface OpenFileInViewerOptions {
   skipUnsavedGuard?: boolean;
-  /** Open `.md` / `.markdown` in CodeMirror instead of read-only GFM preview. */
   asCode?: boolean;
-  /** Move cursor after mount (0-based LSP line/character). */
   initialSelection?: { line: number; character: number };
-  /** Select a 1-based inclusive line range after mount (editor selections). */
   initialLineRange?: { startLine: number; endLine: number };
+}
+
+function openTabOptionsFromViewerOptions(
+  options?: OpenFileInViewerOptions,
+): OpenViewerTabOptions {
+  return {
+    skipUnsavedGuard: options?.skipUnsavedGuard,
+    asCode: options?.asCode,
+    initialSelection: options?.initialSelection,
+    initialLineRange: options?.initialLineRange,
+    viewMode: undefined,
+  };
 }
 
 /** Open inlined chat attachment text in a read-only editor pane. */
@@ -597,98 +796,37 @@ export function openAttachmentSnapshotInViewer(displayName: string, content: str
   const safeName = displayName.replace(/[/\\]/g, '_') || 'attachment';
   const path = `.minnow/attachments/${safeName}`;
 
-  if (isDirty && currentPath && currentPath !== path) {
-    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
-    if (!proceed) return;
-  }
+  const result = openViewerTab(path, {
+    kind: 'attachment',
+    displayName,
+    content,
+    readOnlyExcerpt: true,
+    readOnlyBannerText: 'Chat attachment snapshot (read-only; not saved to the project).',
+    viewMode: shouldUseMarkdownPreview(path) ? 'markdown-preview' : 'editor',
+    confirmUnsaved: confirmLeaveDirtyActiveTab,
+    skipUnsavedGuard: false,
+  });
+  if (!result) return;
 
-  currentPath = path;
-  originalContent = content;
-  isDirty = false;
-  readOnlyExcerpt = true;
-  readOnlyBannerText = 'Chat attachment snapshot (read-only; not saved to the project).';
-  patchFilePanelState({ selectedPath: path });
   showViewerSplit();
-
-  const label = getPathLabel();
-  if (label) {
-    label.textContent = displayName;
-    label.classList.remove('file-viewer-path--dirty');
-  }
-
-  if (isMarkdownFilePath(path)) {
-    mountMarkdownPreview(content);
-  } else {
-    mountEditor(content, path);
-  }
-  updateViewerChrome();
-}
-
-interface MountImagePreviewOptions {
-  src: string;
-  displayName: string;
-  bannerText: string;
-  /** Virtual path for selection state (workspace path or attachment snapshot). */
-  statePath: string;
-  onImageError?: () => void;
-}
-
-/** Renders a read-only image preview in the file viewer host. */
-function mountImagePreviewInViewer(options: MountImagePreviewOptions): void {
-  const { src, displayName, bannerText, statePath, onImageError } = options;
-
-  currentPath = statePath;
-  originalContent = '';
-  isDirty = false;
-  readOnlyExcerpt = true;
-  readOnlyBannerText = bannerText;
-  patchFilePanelState({ selectedPath: statePath });
-  showViewerSplit();
-  closeLspDocument();
-
-  const label = getPathLabel();
-  if (label) {
-    label.textContent = displayName;
-    label.classList.remove('file-viewer-path--dirty');
-  }
-
-  const host = getViewerHost();
-  if (!host) return;
-  destroyEditor();
-  host.innerHTML = '';
-
-  const banner = document.createElement('p');
-  banner.id = 'fileViewerReadOnlyBanner';
-  banner.className = 'file-viewer-readonly-banner';
-  banner.textContent = readOnlyBannerMessage();
-  host.appendChild(banner);
-
-  const figure = document.createElement('figure');
-  figure.className = 'file-viewer-image-preview';
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = displayName;
-  if (onImageError) {
-    img.onerror = onImageError;
-  }
-  figure.appendChild(img);
-  host.appendChild(figure);
-  updateViewerChrome();
+  renderActiveViewerTab();
+  renderFileTreeViaBridge();
 }
 
 /** Open a workspace image via the preview file API (binary-safe). */
 export function openWorkspaceImageInViewer(relativePath: string): void {
   const displayName = relativePath.split(/[/\\]/).pop() ?? relativePath;
-  const src = resolvePreviewLoadUrl({ kind: 'workspace', path: relativePath });
-  mountImagePreviewInViewer({
-    src,
-    displayName,
-    statePath: relativePath,
-    bannerText: 'Workspace image (read-only preview).',
-    onImageError: () => {
-      setViewerError('Could not load image preview. Is the tool server running (npm start)?');
-    },
+  const result = openViewerTab(relativePath, {
+    viewMode: 'image',
+    readOnlyExcerpt: true,
+    readOnlyBannerText: 'Workspace image (read-only preview).',
+    content: '',
+    confirmUnsaved: confirmLeaveDirtyActiveTab,
   });
+  if (!result) return;
+  showViewerSplit();
+  renderActiveViewerTab();
+  renderFileTreeViaBridge();
 }
 
 /** Open an image data URL from a chat attachment in the viewer pane. */
@@ -696,17 +834,19 @@ export function openImageDataUrlInViewer(displayName: string, dataUrl: string): 
   const safeName = displayName.replace(/[/\\]/g, '_') || 'image';
   const path = `.minnow/attachments/${safeName}`;
 
-  if (isDirty && currentPath && currentPath !== path) {
-    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
-    if (!proceed) return;
-  }
-
-  mountImagePreviewInViewer({
-    src: dataUrl,
+  const result = openViewerTab(path, {
+    kind: 'attachment',
     displayName,
-    statePath: path,
-    bannerText: 'Chat image attachment (read-only preview).',
+    content: dataUrl,
+    viewMode: 'image',
+    readOnlyExcerpt: true,
+    readOnlyBannerText: 'Chat image attachment (read-only preview).',
+    confirmUnsaved: confirmLeaveDirtyActiveTab,
   });
+  if (!result) return;
+  showViewerSplit();
+  renderActiveViewerTab();
+  renderFileTreeViaBridge();
 }
 
 /** Open a project file in the split viewer. */
@@ -714,64 +854,58 @@ export async function openFileInViewer(
   relativePath: string,
   options?: OpenFileInViewerOptions,
 ): Promise<void> {
-  if (
-    !options?.skipUnsavedGuard &&
-    isDirty &&
-    currentPath &&
-    currentPath !== relativePath
-  ) {
-    const proceed = window.confirm('You have unsaved changes. Open another file anyway?');
-    if (!proceed) return;
-  }
-
-  currentPath = relativePath;
-  isDirty = false;
-  readOnlyExcerpt = false;
-  readOnlyBannerText = null;
-  pendingInitialSelection = options?.initialSelection ?? null;
-  pendingInitialLineRange = options?.initialLineRange ?? null;
-  patchFilePanelState({ selectedPath: relativePath });
-  showViewerSplit();
-  renderFileTreeViaBridge();
-
   if (isImageFilePath(relativePath)) {
     openWorkspaceImageInViewer(relativePath);
     return;
   }
 
-  setViewerLoading(relativePath);
+  const viewMode = shouldUseMarkdownPreview(relativePath, options?.asCode)
+    ? 'markdown-preview'
+    : 'editor';
 
-  try {
-    const loaded = await loadFileContent(relativePath);
-    originalContent = loaded.content;
-    readOnlyExcerpt = loaded.readOnlyExcerpt;
-    isDirty = false;
-    if (shouldUseMarkdownPreview(relativePath, options?.asCode)) {
-      mountMarkdownPreview(loaded.content);
-    } else {
-      mountEditor(loaded.content, relativePath);
+  const result = openViewerTab(relativePath, {
+    ...openTabOptionsFromViewerOptions(options),
+    viewMode,
+    confirmUnsaved: options?.skipUnsavedGuard ? undefined : confirmLeaveDirtyActiveTab,
+    skipUnsavedGuard: options?.skipUnsavedGuard,
+  });
+
+  if (!result) {
+    if (listViewerTabs().length >= MAX_OPEN_VIEWER_TABS) {
+      setStatus('err', `At most ${MAX_OPEN_VIEWER_TABS} files can be open in the viewer.`);
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    setViewerError(message || 'Could not open file');
+    return;
   }
+
+  showViewerSplit();
+  renderFileTreeViaBridge();
+
+  if (result.focusedExisting && result.tab.loadStatus === 'ready') {
+    renderActiveViewerTab();
+    return;
+  }
+
+  result.tab.loadStatus = 'loading';
+  renderActiveViewerTab();
 }
 
-function resetViewerPane(options?: { closeSplit?: boolean }): void {
-  currentPath = null;
-  originalContent = '';
-  isDirty = false;
-  readOnlyExcerpt = false;
-  readOnlyBannerText = null;
-  patchFilePanelState({ selectedPath: null });
+/** Restore persisted workspace tabs after boot (active tab loads first). */
+export async function restoreViewerTabsFromPrefs(
+  paths: string[],
+  activePath: string | null,
+): Promise<void> {
+  if (paths.length === 0) return;
+  restoreWorkspaceViewerTabs(paths, activePath);
+  showViewerSplit();
+  renderFileTreeViaBridge();
+  renderActiveViewerTab();
+}
+
+function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
   destroyEditor();
+  clearAllViewerTabs();
   const host = getViewerHost();
   if (host) host.innerHTML = '';
-  const label = getPathLabel();
-  if (label) {
-    label.textContent = '';
-    label.classList.remove('file-viewer-path--dirty');
-  }
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   if (options?.closeSplit !== false) {
@@ -782,43 +916,44 @@ function resetViewerPane(options?: { closeSplit?: boolean }): void {
   renderFileTreeViaBridge();
 }
 
-/** Close viewer pane and clear selection. */
+/** Close active tab; hide split when no tabs remain. */
 export function closeFileViewer(): void {
-  if (isDirty) {
-    const proceed = window.confirm('You have unsaved changes. Close without saving?');
-    if (!proceed) return;
-  }
-  resetViewerPane();
+  const path = getActiveViewerTabPath();
+  if (!path) return;
+  void closeViewerTab(path);
 }
 
-/** Dismiss file viewer when switching to preview (keeps right split open). */
+/** Dismiss all file viewer tabs when switching to preview. */
 export function dismissFileViewerForPreview(): boolean {
-  if (isDirty) {
+  if (isAnyViewerTabDirty()) {
     const proceed = window.confirm('You have unsaved changes. Close without saving?');
     if (!proceed) return false;
   }
-  resetViewerPane({ closeSplit: false });
+  resetAllViewerTabs({ closeSplit: false });
   return true;
 }
 
-/** Close viewer without unsaved prompt (path already removed on disk). */
+/** Close all tabs without unsaved prompt (paths removed on disk). */
 export function closeFileViewerForce(): void {
-  resetViewerPane();
+  resetAllViewerTabs();
 }
 
 /** Update open path after rename/move without reloading editor content. */
 export function retargetOpenViewerPath(newPath: string): void {
-  if (!currentPath) return;
-  currentPath = newPath;
-  patchFilePanelState({ selectedPath: newPath });
-  updateViewerChrome();
+  const active = getActiveViewerTabPath();
+  if (!active) return;
+  retargetViewerTab(active, newPath);
+  renderActiveViewerTab();
   renderFileTreeViaBridge();
 }
 
 export function getOpenViewerPath(): string | null {
-  return currentPath;
+  return getActiveViewerTabPath();
 }
 
 export function isFileViewerDirty(): boolean {
-  return isDirty;
+  const tab = getActiveViewerTab();
+  return tab?.isDirty ?? false;
 }
+
+export { getOpenViewerTabPaths, isViewerTabDirty };

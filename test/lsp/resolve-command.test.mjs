@@ -92,4 +92,38 @@ describe('resolveLspSpawnArgv managed dir', () => {
     assert.match(argv[1], /cli\.mjs$/);
     assert.equal(displayBin, 'typescript-language-server');
   });
+
+  it('resolves vscode HTML/CSS tokens (v4 layout under lib/*-language-server/node)', () => {
+    const htmlMain = path.join(
+      APP_ROOT,
+      'node_modules',
+      'vscode-langservers-extracted',
+      'lib',
+      'html-language-server',
+      'node',
+      'htmlServerMain.js',
+    );
+    const cssMain = path.join(
+      APP_ROOT,
+      'node_modules',
+      'vscode-langservers-extracted',
+      'lib',
+      'css-language-server',
+      'node',
+      'cssServerMain.js',
+    );
+    if (!fs.existsSync(htmlMain) || !fs.existsSync(cssMain)) {
+      console.log('skip: vscode-langservers-extracted not installed');
+      return;
+    }
+    const html = resolveLspSpawnArgv(['$minnow:vscode-html-language-server']);
+    assert.equal(html.argv[0], 'node');
+    assert.equal(html.argv[1], htmlMain);
+    assert.ok(html.argv.includes('--stdio'));
+
+    const css = resolveLspSpawnArgv(['$minnow:vscode-css-language-server']);
+    assert.equal(css.argv[0], 'node');
+    assert.equal(css.argv[1], cssMain);
+    assert.ok(css.argv.includes('--stdio'));
+  });
 });

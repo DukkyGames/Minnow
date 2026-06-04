@@ -9,6 +9,7 @@ import {
   installLspBundle,
   saveLspConfig,
   uninstallLspBundle,
+  type LspBundleJob,
   type LspBundleStatus,
   type LspServerStatus,
 } from '../lsp/config-client';
@@ -361,6 +362,40 @@ function createBundleCard(
       if (bundle.installed) return;
 
       showProgress(0, 'Starting…');
+
+      const handleInstallJob = (
+        job: LspBundleJob | null | undefined,
+        alreadyInstalled = false,
+      ) => {
+        if (!job) return false;
+        if (job.phase === 'error') {
+          setStatus('err', job.error ?? job.message ?? 'Install failed');
+          stopPoll();
+          hideProgress();
+          actionBtn.disabled = false;
+          onChanged();
+          return true;
+        }
+        showProgress(job.percent, job.message || job.phase);
+        if (job.phase === 'done') {
+          setStatus(
+            'ok',
+            alreadyInstalled ? `${bundle.label} already installed` : `${bundle.label} installed`,
+          );
+          stopPoll();
+          hideProgress();
+          onChanged();
+          return true;
+        }
+        return false;
+      };
+
+      const pollProgress = (alreadyInstalled: boolean) => {
+        void fetchLspBundleProgress(bundle.id).then((payload) => {
+          handleInstallJob(payload?.job, alreadyInstalled);
+        });
+      };
+
       const result = await installLspBundle(bundle.id);
       if (!result.ok) {
         setStatus('err', result.error ?? 'Install failed');
@@ -369,27 +404,17 @@ function createBundleCard(
         return;
       }
 
-      pollTimer = setInterval(() => {
-        void fetchLspBundleProgress(bundle.id).then((payload) => {
-          const job = payload?.job;
-          if (!job) return;
-          if (job.phase === 'error') {
-            setStatus('err', job.error ?? job.message ?? 'Install failed');
-            stopPoll();
-            hideProgress();
-            actionBtn.disabled = false;
-            onChanged();
-            return;
-          }
-          showProgress(job.percent, job.message || job.phase);
-          if (job.phase === 'done') {
-            setStatus('ok', `${bundle.label} installed`);
-            stopPoll();
-            hideProgress();
-            onChanged();
-          }
-        });
-      }, 500);
+      const alreadyInstalled = result.alreadyInstalled === true;
+      if (
+        handleInstallJob(
+          await fetchLspBundleProgress(bundle.id).then((p) => p?.job),
+          alreadyInstalled,
+        )
+      ) {
+        return;
+      }
+
+      pollTimer = setInterval(() => pollProgress(alreadyInstalled), 500);
     })();
   });
 
@@ -539,7 +564,7 @@ export async function renderLspSection(): Promise<void> {
   const catalog = appendSettingsGroup(
     mount,
     'Servers',
-    'Built-in analyzers ship with Minnow; custom entries are merged from your home config.',
+    'Shipped analyzers and bundle-backed servers; custom entries are merged from your home config.',
   );
 
   const list = el('div', 'settings-lsp-list');

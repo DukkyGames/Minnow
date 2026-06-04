@@ -1165,7 +1165,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         modelRow?.capabilities ??
         (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
       mergeThinkingIntoCompletionBody(
-        body,
+        body as unknown as Record<string, unknown>,
         replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
         provider,
         sendCaps,
@@ -1492,7 +1492,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           resolvedSampler.maxTokens,
         ) as ChatCompletionBody;
         mergeThinkingIntoCompletionBody(
-          fallbackBody,
+          fallbackBody as unknown as Record<string, unknown>,
           replaySnapshot?.thinkingMode ?? resolvedThinking.mode,
           provider,
           sendCaps,

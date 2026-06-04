@@ -13,7 +13,8 @@
           "npmVersion": "4.10.0",
           "commandToken": "$minnow:vscode-html-language-server",
           "lspIds": ["html"],
-          "sizeEstimateMb": 12
+          "sizeEstimateMb": 12,
+          "prebundled": true
         },
         {
           "id": "vscode-css",
@@ -24,7 +25,8 @@
           "npmVersion": "4.10.0",
           "commandToken": "$minnow:vscode-css-language-server",
           "lspIds": ["css"],
-          "sizeEstimateMb": 12
+          "sizeEstimateMb": 12,
+          "prebundled": true
         },
         {
           "id": "graphql",
@@ -35,7 +37,8 @@
           "npmVersion": "3.3.0",
           "commandToken": "$minnow:graphql-lsp",
           "lspIds": ["graphql"],
-          "sizeEstimateMb": 8
+          "sizeEstimateMb": 8,
+          "prebundled": true
         }
       ]
     },
@@ -147,11 +150,6 @@
           }
         }
       ]
-    },
-    {
-      "id": "jvm",
-      "label": "JVM",
-      "bundles": []
     },
     {
       "id": "scripting",

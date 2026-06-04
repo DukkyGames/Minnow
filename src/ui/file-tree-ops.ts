@@ -97,43 +97,32 @@ export function applyPathChangeToFilePanelState(
   patchFilePanelState({ expandedDirs, selectedPath });
 }
 
-/** Align viewer with deleted, renamed, or moved paths. */
+/** Align viewer tabs with deleted, renamed, or moved paths. */
 export function syncViewerAfterPathChange(
   oldPath: string | null,
   newPath: string | null,
   operation: FileTreeMutationOp,
 ): void {
   void (async () => {
+    if (!oldPath) return;
     const viewer = await import('./file-viewer');
-    const openPath = viewer.getOpenViewerPath();
-    if (!openPath || !oldPath) return;
-
-    const openNorm = normalizeTreePath(openPath);
+    const tabStore = await import('./file-viewer-tab-store');
     const oldNorm = normalizeTreePath(oldPath);
 
     if (operation === 'delete') {
-      if (openNorm === oldNorm || isAncestorPath(oldNorm, openNorm)) {
+      tabStore.closeViewerTabsUnderAncestor(oldNorm);
+      if (tabStore.listViewerTabs().length === 0) {
         viewer.closeFileViewerForce();
+      } else {
+        viewer.renderActiveViewerTab();
       }
       return;
     }
 
     if (!newPath) return;
     const newNorm = normalizeTreePath(newPath);
-
-    if (openNorm === oldNorm) {
-      if (operation === 'rename' || operation === 'move') {
-        viewer.retargetOpenViewerPath(newNorm);
-      } else {
-        void viewer.openFileInViewer(newNorm, { skipUnsavedGuard: true });
-      }
-      return;
-    }
-
-    if (isAncestorPath(oldNorm, openNorm)) {
-      const remapped = normalizeTreePath(newNorm + openNorm.slice(oldNorm.length));
-      void viewer.openFileInViewer(remapped, { skipUnsavedGuard: true });
-    }
+    tabStore.remapViewerTabsUnderAncestor(oldNorm, newNorm);
+    viewer.renderActiveViewerTab();
   })();
 }
 
@@ -148,14 +137,9 @@ async function finishMutation(
 }
 
 async function confirmRenameIfDirty(path: string): Promise<boolean> {
-  const viewer = await import('./file-viewer');
-  const openPath = viewer.getOpenViewerPath();
+  const tabStore = await import('./file-viewer-tab-store');
   const norm = normalizeTreePath(path);
-  if (
-    openPath &&
-    normalizeTreePath(openPath) === norm &&
-    viewer.isFileViewerDirty()
-  ) {
+  if (tabStore.isViewerTabDirty(norm)) {
     return window.confirm(
       'This file has unsaved changes. Rename anyway? The editor will follow the new path.',
     );
@@ -164,14 +148,9 @@ async function confirmRenameIfDirty(path: string): Promise<boolean> {
 }
 
 async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boolean> {
-  const viewer = await import('./file-viewer');
-  const openPath = viewer.getOpenViewerPath();
+  const tabStore = await import('./file-viewer-tab-store');
   const norm = normalizeTreePath(path);
-  if (
-    openPath &&
-    normalizeTreePath(openPath) === norm &&
-    viewer.isFileViewerDirty()
-  ) {
+  if (tabStore.isViewerTabDirty(norm)) {
     const ok = window.confirm(
       'This file has unsaved changes. Delete anyway? Changes will be lost.',
     );

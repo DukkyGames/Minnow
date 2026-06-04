@@ -13,6 +13,7 @@ import {
   getBundleInstallStatus,
   installBundle,
   listBundlesWithStatus,
+  npmSpawnOptions,
   resetBundlesCatalogCache,
   resetLspBundleSpawnOverride,
   setLspBundleSpawnForTests,
@@ -21,6 +22,21 @@ import {
 import { getManagedLspMetaPath, getManagedLspNpmRoot } from '../../server/lsp/paths.js';
 
 const APP_ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+/** Hide app node_modules so prebundled npm bundles exercise managed install paths. */
+async function useEmptyAppRoot() {
+  const emptyApp = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-empty-app-'));
+  await fsp.writeFile(
+    path.join(emptyApp, 'package.json'),
+    JSON.stringify({ name: 'empty', private: true }),
+    'utf8',
+  );
+  setAppRoot(emptyApp);
+  return async () => {
+    setAppRoot(APP_ROOT);
+    await fsp.rm(emptyApp, { recursive: true, force: true });
+  };
+}
 
 describe('bundle-installer', () => {
   /** @type {string} */
@@ -56,7 +72,14 @@ describe('bundle-installer', () => {
     assert.equal(status.installed, false);
   });
 
+  it('enables shell for npm spawn on Windows', () => {
+    if (process.platform !== 'win32') return;
+    assert.equal(npmSpawnOptions().shell, true);
+    assert.equal(npmSpawnOptions({ cwd: '/tmp' }).shell, true);
+  });
+
   it('installs npm bundle idempotently with mocked spawn', async () => {
+    const restoreAppRoot = await useEmptyAppRoot();
     setLspBundleSpawnForTests((command, args) => {
       const child = {
         stderr: { on: () => {} },
@@ -99,9 +122,11 @@ describe('bundle-installer', () => {
     assert.equal(second.alreadyInstalled, true);
 
     resetLspBundleSpawnOverride();
+    await restoreAppRoot();
   });
 
   it('uninstall clears managed npm package and meta', async () => {
+    const restoreAppRoot = await useEmptyAppRoot();
     const prefix = getManagedLspNpmRoot();
     const pkgDir = path.join(prefix, 'node_modules', 'graphql-language-service-cli');
     await fsp.mkdir(pkgDir, { recursive: true });
@@ -140,5 +165,6 @@ describe('bundle-installer', () => {
     const status = await getBundleInstallStatus('graphql');
     assert.equal(status.installed, false);
     resetLspBundleSpawnOverride();
+    await restoreAppRoot();
   });
 });

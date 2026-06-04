@@ -38,6 +38,18 @@ function tryResolveFromRoot(rootDir, specifier) {
  * @returns {string}
  */
 function resolvePackageSpec(specifier) {
+  const resolved = tryResolvePackageSpec(specifier);
+  if (resolved) return resolved;
+  throw new Error(
+    `Cannot resolve "${specifier}" — install the language server bundle in Settings or run npm install in the project.`,
+  );
+}
+
+/**
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
+function tryResolvePackageSpec(specifier) {
   const workspace = getWorkspaceRoot();
   const managed = getManagedLspNpmRoot();
   const appRoot = getAppRoot();
@@ -51,8 +63,40 @@ function resolvePackageSpec(specifier) {
   const fromManaged = tryResolveFromRoot(managed, specifier);
   if (fromManaged) return fromManaged;
 
+  return undefined;
+}
+
+/**
+ * vscode-langservers-extracted v4 moved server entrypoints under lib/*-language-server/node/.
+ * Keep legacy v3 paths as fallbacks for older managed installs.
+ * @param {string} minnowId
+ * @returns {string}
+ */
+function resolveVscodeLangserversExtractedEntry(minnowId) {
+  const candidatesById = {
+    'vscode-html-language-server': [
+      'vscode-langservers-extracted/lib/html-language-server/node/htmlServerMain.js',
+      'vscode-langservers-extracted/lib/htmlServerMain.js',
+    ],
+    'vscode-css-language-server': [
+      'vscode-langservers-extracted/lib/css-language-server/node/cssServerMain.js',
+      'vscode-langservers-extracted/lib/cssServerMain.js',
+    ],
+    'vscode-json-language-server': [
+      'vscode-langservers-extracted/lib/json-language-server/node/jsonServerMain.js',
+      'vscode-langservers-extracted/lib/jsonServerMain.js',
+    ],
+  };
+  const candidates = candidatesById[minnowId];
+  if (!candidates) {
+    throw new Error(`Unknown vscode-langservers entry: ${minnowId}`);
+  }
+  for (const spec of candidates) {
+    const resolved = tryResolvePackageSpec(spec);
+    if (resolved) return resolved;
+  }
   throw new Error(
-    `Cannot resolve "${specifier}" — install the language server bundle in Settings or run npm install in the project.`,
+    `Cannot resolve ${minnowId} — install vscode-langservers-extracted in Settings → Language bundles or run npm install in the Minnow app folder.`,
   );
 }
 
@@ -134,17 +178,17 @@ const MINNOW_NODE_SERVERS = {
     display: 'graphql-lsp',
   },
   'vscode-html-language-server': {
-    spec: 'vscode-langservers-extracted/lib/htmlServerMain.js',
+    resolve: () => resolveVscodeLangserversExtractedEntry('vscode-html-language-server'),
     args: ['--stdio'],
     display: 'vscode-html-language-server',
   },
   'vscode-css-language-server': {
-    spec: 'vscode-langservers-extracted/lib/cssServerMain.js',
+    resolve: () => resolveVscodeLangserversExtractedEntry('vscode-css-language-server'),
     args: ['--stdio'],
     display: 'vscode-css-language-server',
   },
   'vscode-json-language-server': {
-    spec: 'vscode-langservers-extracted/lib/jsonServerMain.js',
+    resolve: () => resolveVscodeLangserversExtractedEntry('vscode-json-language-server'),
     args: ['--stdio'],
     display: 'vscode-json-language-server',
   },
@@ -163,7 +207,10 @@ function resolveMinnowToken(minnowId, tail) {
   if (typeof entry.build === 'function') {
     return entry.build(tail);
   }
-  const cli = resolvePackageSpec(entry.spec);
+  const cli =
+    typeof entry.resolve === 'function'
+      ? entry.resolve()
+      : resolvePackageSpec(entry.spec);
   const args = tail.length > 0 ? tail : (entry.args ?? ['--stdio']);
   return buildNodeCliArgv(cli, entry.display ?? minnowId, args);
 }
