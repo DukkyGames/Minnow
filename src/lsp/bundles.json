@@ -1,0 +1,205 @@
+{
+  "categories": [
+    {
+      "id": "web",
+      "label": "Web",
+      "bundles": [
+        {
+          "id": "vscode-html",
+          "label": "HTML",
+          "description": "HTML language features via vscode-langservers-extracted",
+          "kind": "npm",
+          "npmPackage": "vscode-langservers-extracted",
+          "npmVersion": "4.10.0",
+          "commandToken": "$minnow:vscode-html-language-server",
+          "lspIds": ["html"],
+          "sizeEstimateMb": 12
+        },
+        {
+          "id": "vscode-css",
+          "label": "CSS",
+          "description": "CSS/SCSS/LESS language server",
+          "kind": "npm",
+          "npmPackage": "vscode-langservers-extracted",
+          "npmVersion": "4.10.0",
+          "commandToken": "$minnow:vscode-css-language-server",
+          "lspIds": ["css"],
+          "sizeEstimateMb": 12
+        },
+        {
+          "id": "graphql",
+          "label": "GraphQL",
+          "description": "GraphQL schema and operation validation",
+          "kind": "npm",
+          "npmPackage": "graphql-language-service-cli",
+          "npmVersion": "3.3.0",
+          "commandToken": "$minnow:graphql-lsp",
+          "lspIds": ["graphql"],
+          "sizeEstimateMb": 8
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "label": "Python",
+      "bundles": [
+        {
+          "id": "pyright",
+          "label": "Pyright",
+          "description": "Fast Python type checker and language server",
+          "kind": "npm",
+          "npmPackage": "pyright",
+          "npmVersion": "1.1.400",
+          "commandToken": "$minnow:pyright-langserver",
+          "lspIds": ["pyright"],
+          "sizeEstimateMb": 15,
+          "prebundled": true
+        }
+      ]
+    },
+    {
+      "id": "systems",
+      "label": "Systems",
+      "bundles": [
+        {
+          "id": "rust-analyzer",
+          "label": "rust-analyzer",
+          "description": "Rust IDE support (GitHub release binary)",
+          "kind": "binary",
+          "binaryName": "rust-analyzer",
+          "lspIds": ["rust"],
+          "sizeEstimateMb": 45,
+          "github": {
+            "owner": "rust-lang",
+            "repo": "rust-analyzer",
+            "version": "2024-12-16"
+          }
+        },
+        {
+          "id": "gopls",
+          "label": "gopls",
+          "description": "Official Go language server",
+          "kind": "binary",
+          "binaryName": "gopls",
+          "lspIds": ["gopls"],
+          "sizeEstimateMb": 35,
+          "github": {
+            "owner": "golang",
+            "repo": "tools",
+            "version": "v0.30.0",
+            "assetSubpath": "gopls"
+          }
+        },
+        {
+          "id": "clangd",
+          "label": "clangd",
+          "description": "C/C++ language server (LLVM release)",
+          "kind": "binary",
+          "binaryName": "clangd",
+          "lspIds": ["clangd"],
+          "sizeEstimateMb": 80,
+          "github": {
+            "owner": "clangd",
+            "repo": "clangd",
+            "version": "19.1.2"
+          }
+        },
+        {
+          "id": "lua-language-server",
+          "label": "Lua Language Server",
+          "description": "Lua analysis and completion",
+          "kind": "binary",
+          "binaryName": "lua-language-server",
+          "lspIds": ["lua-ls"],
+          "sizeEstimateMb": 25,
+          "github": {
+            "owner": "LuaLS",
+            "repo": "lua-language-server",
+            "version": "3.13.2"
+          }
+        },
+        {
+          "id": "zls",
+          "label": "Zig Language Server",
+          "description": "Zig LSP (zls)",
+          "kind": "binary",
+          "binaryName": "zls",
+          "lspIds": ["zls"],
+          "sizeEstimateMb": 12,
+          "github": {
+            "owner": "zigtools",
+            "repo": "zls",
+            "version": "0.13.0"
+          }
+        },
+        {
+          "id": "terraform-ls",
+          "label": "Terraform LS",
+          "description": "HashiCorp Terraform language server",
+          "kind": "binary",
+          "binaryName": "terraform-ls",
+          "lspIds": ["terraform"],
+          "sizeEstimateMb": 30,
+          "github": {
+            "owner": "hashicorp",
+            "repo": "terraform-ls",
+            "version": "v0.36.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "jvm",
+      "label": "JVM",
+      "bundles": []
+    },
+    {
+      "id": "scripting",
+      "label": "Scripting",
+      "bundles": [
+        {
+          "id": "yaml-language-server",
+          "label": "YAML",
+          "description": "YAML validation and schema support",
+          "kind": "npm",
+          "npmPackage": "yaml-language-server",
+          "npmVersion": "1.15.0",
+          "commandToken": "$minnow:yaml-language-server",
+          "lspIds": ["yaml-ls"],
+          "sizeEstimateMb": 10,
+          "prebundled": true
+        },
+        {
+          "id": "bash-language-server",
+          "label": "Bash",
+          "description": "Shell script intelligence",
+          "kind": "npm",
+          "npmPackage": "bash-language-server",
+          "npmVersion": "5.4.2",
+          "commandToken": "$minnow:bash-language-server",
+          "lspIds": ["bash"],
+          "sizeEstimateMb": 18,
+          "prebundled": true
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "bundles": [
+        {
+          "id": "dockerfile-language-server",
+          "label": "Dockerfile",
+          "description": "Dockerfile linting and navigation",
+          "kind": "npm",
+          "npmPackage": "dockerfile-language-server-nodejs",
+          "npmVersion": "0.14.0",
+          "commandToken": "$minnow:docker-langserver",
+          "lspIds": ["dockerfile"],
+          "sizeEstimateMb": 6,
+          "prebundled": true
+        }
+      ]
+    }
+  ]
+}

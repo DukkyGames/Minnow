@@ -1,0 +1,154 @@
+/* Quick Edit panel (Mod-K) — inline diff + accept/reject */
+
+.editor-quick-edit-panel {
+  position: fixed;
+  z-index: 1200;
+  width: min(520px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 12px;
+  background: var(--mn-surface-2, var(--mn-surface-1));
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md, 10px);
+  box-shadow: var(--mn-shadow-lg, 0 8px 32px rgb(0 0 0 / 0.25));
+  font-size: 13px;
+  color: var(--mn-fg);
+}
+
+.editor-quick-edit-panel.hidden {
+  display: none;
+}
+
+.editor-quick-edit-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.editor-quick-edit-panel__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.editor-quick-edit-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-quick-edit-stats__add {
+  color: var(--mn-success);
+}
+
+.editor-quick-edit-stats__del {
+  color: var(--mn-danger);
+}
+
+.editor-quick-edit-panel__form {
+  margin-bottom: 8px;
+}
+
+.editor-quick-edit-panel__input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--mn-fg);
+  background: var(--mn-surface-1);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 8px);
+  resize: vertical;
+}
+
+.editor-quick-edit-panel__input:focus {
+  outline: 2px solid color-mix(in srgb, var(--mn-accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.editor-quick-edit-diff {
+  margin: 8px 0;
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 8px);
+}
+
+.editor-quick-edit-diff__line {
+  padding: 1px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.editor-quick-edit-diff__line--add {
+  background: color-mix(in srgb, var(--mn-success) 12%, transparent);
+  color: var(--mn-success);
+}
+
+.editor-quick-edit-diff__line--remove {
+  background: color-mix(in srgb, var(--mn-danger) 10%, transparent);
+  color: var(--mn-danger);
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+.editor-quick-edit-diff__line--unchanged {
+  color: var(--mn-fg-muted);
+}
+
+.editor-quick-edit-panel__pending,
+.editor-quick-edit-panel__error {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.editor-quick-edit-panel__error {
+  color: var(--mn-danger);
+}
+
+.editor-quick-edit-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.editor-quick-edit-btn {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  border-radius: var(--mn-radius-sm, 8px);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+.editor-quick-edit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.editor-quick-edit-btn--accept {
+  background: color-mix(in srgb, var(--mn-accent) 18%, var(--mn-surface-1));
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, var(--mn-border));
+}
+
+.editor-quick-edit-btn--reject:hover:not(:disabled),
+.editor-quick-edit-btn--retry:hover:not(:disabled) {
+  background: var(--mn-surface-2);
+}
+
+.editor-quick-edit-btn--accept:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-accent) 28%, var(--mn-surface-1));
+}
