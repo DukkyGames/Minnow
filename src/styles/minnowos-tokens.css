@@ -1,0 +1,97 @@
+/* MinnowOS — design tokens aliased to Minnow --mn-* palette (see tokens.css). */
+
+.mn-os {
+  /* core aliases */
+  --os-bg: var(--mn-bg);
+  --os-surface-0: var(--mn-surface-0);
+  --os-surface-1: var(--mn-surface-1);
+  --os-surface-2: var(--mn-surface-2);
+  --os-surface-3: color-mix(in srgb, var(--mn-surface-2) 72%, var(--mn-bg) 28%);
+  --os-raise: var(--mn-surface-elevated);
+
+  --os-text: var(--mn-fg);
+  --os-text-dim: var(--mn-fg-muted);
+  --os-text-faint: var(--mn-fg-subtle);
+
+  --os-border: var(--mn-border);
+  --os-border-strong: var(--mn-border-strong);
+
+  --os-accent: var(--mn-accent);
+  --os-accent-2: var(--mn-accent-ink);
+  --os-on-accent: var(--mn-fg-on-accent);
+  --os-accent-soft: var(--mn-accent-soft);
+  --os-accent-glow: var(--mn-accent-border);
+
+  /* motion + radii (prototype values, aligned where Minnow matches) */
+  --os-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --os-ease-out: var(--ease-out);
+  --os-r-sm: var(--radius-sm);
+  --os-r-md: 9px;
+  --os-r-lg: var(--radius-lg);
+  --os-r-xl: 20px;
+
+  /* wallpaper defaults — overridden per theme below */
+  --os-wall-a: var(--mn-bg);
+  --os-wall-b: var(--mn-surface-0);
+  --os-wall-c: color-mix(in srgb, var(--mn-bg) 62%, var(--mn-accent) 38%);
+
+  color: var(--os-text);
+}
+
+/* ---------- wallpaper tints per Minnow theme ---------- */
+
+:root[data-theme='sage-dark'] .mn-os,
+:root[data-theme='sage-dark'] {
+  --os-wall-a: #0c100e;
+  --os-wall-b: #0a0d0c;
+  --os-wall-c: #11201a;
+}
+
+:root[data-theme='sage-light'] .mn-os,
+:root[data-theme='sage-light'] {
+  --os-wall-a: #eef2ee;
+  --os-wall-b: #e6ebe6;
+  --os-wall-c: #dfeae0;
+}
+
+:root[data-theme='amber-dark'] .mn-os,
+:root[data-theme='amber-dark'] {
+  --os-wall-a: #100c08;
+  --os-wall-b: #0c0a07;
+  --os-wall-c: #211810;
+}
+
+:root[data-theme='amber-light'] .mn-os,
+:root[data-theme='amber-light'] {
+  --os-wall-a: #f3ede2;
+  --os-wall-b: #ebe4d6;
+  --os-wall-c: #ede0cc;
+}
+
+:root[data-theme='cyan-dark'] .mn-os,
+:root[data-theme='cyan-dark'] {
+  --os-wall-a: #0a1118;
+  --os-wall-b: #070b10;
+  --os-wall-c: #0c2029;
+}
+
+:root[data-theme='cyan-light'] .mn-os,
+:root[data-theme='cyan-light'] {
+  --os-wall-a: #e8eef4;
+  --os-wall-b: #dfe7ef;
+  --os-wall-c: #d8eaf0;
+}
+
+:root[data-theme='coral-dark'] .mn-os,
+:root[data-theme='coral-dark'] {
+  --os-wall-a: #120f0e;
+  --os-wall-b: #0c0a0a;
+  --os-wall-c: #231413;
+}
+
+:root[data-theme='coral-light'] .mn-os,
+:root[data-theme='coral-light'] {
+  --os-wall-a: #f5f0ef;
+  --os-wall-b: #ede8e7;
+  --os-wall-c: #f0e0de;
+}

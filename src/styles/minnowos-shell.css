@@ -1,0 +1,351 @@
+@import './minnowos-tokens.css';
+
+/* ============================================================
+   MinnowOS — shell, menubar, stage, boot splash, transitions
+   ============================================================ */
+
+.mn-os {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: var(--os-bg);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- menubar ---------- */
+
+.mn-os-menubar {
+  height: 46px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--os-surface-1) 86%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--os-border);
+  position: relative;
+  z-index: 40;
+}
+
+.mn-os-mb-left,
+.mn-os-mb-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mn-os-mb-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  box-shadow:
+    0 0 0 1px var(--os-accent-glow),
+    0 4px 14px -4px var(--os-accent-glow);
+}
+
+.mn-os-mb-brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-size: 15px;
+}
+
+.mn-os-mb-desktop {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  border: 1px solid var(--os-border-strong);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: 0.16s var(--os-ease);
+}
+
+.mn-os-mb-desktop:hover {
+  background: var(--os-surface-3);
+  border-color: var(--os-accent-glow);
+}
+
+.mn-os-mb-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--os-border-strong);
+}
+
+.mn-os-mb-appname {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--os-text-dim);
+}
+
+.mn-os-mb-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--os-surface-2);
+  border: 1px solid var(--os-border);
+  color: var(--os-text-dim);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+.mn-os-mb-icon,
+.mn-os-mb-bell {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--os-text-dim);
+  transition: 0.14s var(--os-ease);
+}
+
+.mn-os-mb-icon:hover,
+.mn-os-mb-bell:hover {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+}
+
+.mn-os-mb-bell.is-on {
+  color: var(--os-accent);
+}
+
+.mn-os-bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--os-surface-1);
+}
+
+.mn-os-mb-time {
+  font-size: 12.5px;
+  color: var(--os-text-dim);
+  min-width: 56px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.mn-os-ws-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--os-text-faint);
+  display: inline-block;
+}
+
+.mn-os-ws-dot.is-ok {
+  background: var(--os-accent);
+  box-shadow: 0 0 8px var(--os-accent-glow);
+}
+
+/* ---------- stage + app transitions ---------- */
+
+.mn-os-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.mn-os-desktop-layer {
+  position: absolute;
+  inset: 0;
+  transition:
+    filter 0.45s var(--os-ease-out),
+    transform 0.45s var(--os-ease-out),
+    opacity 0.45s var(--os-ease-out);
+}
+
+.mn-os-stage.is-in-app .mn-os-desktop-layer {
+  transform: scale(0.965);
+  filter: blur(7px) brightness(0.6);
+  opacity: 0.5;
+}
+
+.mn-os-apps-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mn-os-app-layer {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.3s var(--os-ease-out);
+  background: var(--os-bg);
+  overflow: hidden;
+}
+
+.mn-os-app-layer.is-active {
+  animation: mn-os-app-in 0.35s var(--os-ease-out);
+}
+
+@keyframes mn-os-app-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- boot splash ---------- */
+
+.mn-os-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--os-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  animation: mn-os-boot-out 0.4s var(--os-ease) forwards;
+  animation-delay: 1s;
+}
+
+@keyframes mn-os-boot-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.mn-os-boot-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  animation: mn-os-bob 2s var(--os-ease) infinite;
+}
+
+@keyframes mn-os-bob {
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.mn-os-boot-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mn-os-boot-bar {
+  width: 130px;
+  height: 3px;
+  border-radius: 9px;
+  background: var(--os-surface-3);
+  overflow: hidden;
+}
+
+.mn-os-boot-bar span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--os-accent);
+  border-radius: 9px;
+  animation: mn-os-load 1.1s var(--os-ease) infinite;
+}
+
+@keyframes mn-os-load {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(330%);
+  }
+}
+
+/* ---------- utilities ---------- */
+
+.mn-os-mono {
+  font-family: var(--font-mono);
+}
+
+.mn-os-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  background: var(--os-accent);
+  margin-left: 2px;
+  vertical-align: -2px;
+  animation: mn-os-blink 1s steps(2) infinite;
+}
+
+@keyframes mn-os-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.mn-os-accent-text {
+  color: var(--os-accent);
+}
+
+.mn-os-dim-text {
+  color: var(--os-text-dim);
+}
+
+/* light theme menubar logo shadow tweak */
+:root[data-theme$='-light'] .mn-os-mb-logo,
+:root[data-theme$='-light'] .mn-os-boot-logo {
+  box-shadow: 0 4px 14px -4px var(--os-accent-glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-os-desktop-layer,
+  .mn-os-app-layer,
+  .mn-os-mb-desktop,
+  .mn-os-mb-icon,
+  .mn-os-mb-bell {
+    transition-duration: 0.001ms !important;
+  }
+
+  .mn-os-boot,
+  .mn-os-boot-logo,
+  .mn-os-boot-bar span,
+  .mn-os-app-layer.is-active,
+  .mn-os-caret {
+    animation: none !important;
+  }
+
+  .mn-os-stage.is-in-app .mn-os-desktop-layer {
+    transform: none;
+    filter: brightness(0.6);
+  }
+}
