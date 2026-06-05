@@ -97,11 +97,29 @@ export interface ToolImageAttachment {
   alt?: string;
 }
 
-/** Per file-mutation tool: line adds/deletes (GitHub-style). */
+/** How line stats were produced (UI tooltips / backfill accuracy). */
+export type CodeChangeSource =
+  | 'file-tool'
+  | 'git-commit'
+  | 'command-snapshot'
+  | 'command-heuristic'
+  | 'backfill';
+
+/** Unified diff line for tool expando (matches prompt diff renderer). */
+export interface CodeChangeDiffLine {
+  type: 'unchanged' | 'add' | 'remove';
+  text: string;
+}
+
+/** Per mutation tool: line adds/deletes (GitHub-style) plus optional diff body. */
 export interface CodeChangeStats {
   additions: number;
   deletions: number;
   path?: string;
+  paths?: string[];
+  source?: CodeChangeSource;
+  diffLines?: CodeChangeDiffLine[];
+  diffTruncated?: boolean;
 }
 
 /** Cumulative line stats for one chat (file-write tools only). */
@@ -518,8 +536,10 @@ export interface Chat {
   reefArtifactIds?: string[];
   /** Cumulative token usage and optional USD cost (Feature #14). */
   tokenLedger?: ChatTokenLedger;
-  /** Cumulative line add/delete from file-mutation tools in this chat. */
+  /** Cumulative line add/delete from agent mutations in this chat. */
   codeChangeTotals?: ChatCodeChangeTotals;
+  /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
+  codeChangeBackfillAt?: number;
 }
 
 export type {
@@ -551,6 +571,8 @@ export interface SessionState {
   activeBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
+  /** Cumulative agent line stats keyed by normalized workspace path. */
+  codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
 }
 
 /** Built-in system prompt template for the settings drawer. */

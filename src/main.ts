@@ -15,6 +15,7 @@ import './styles/message-actions.css';
 import './styles/branch-picker.css';
 import './styles/thoughts.css';
 import './styles/code-change-strip.css';
+import './styles/tool-call-diff.css';
 import './styles/input.css';
 import './styles/code-ref-link.css';
 import './styles/context-usage.css';

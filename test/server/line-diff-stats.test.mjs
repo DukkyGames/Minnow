@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 const {
+  buildAddOnlyDiffLines,
+  buildDiffLines,
   codeChangeFromDiff,
   countAppendLineStats,
   countLineChangeStats,
@@ -48,5 +50,19 @@ describe('line-diff-stats', () => {
     assert.equal(change.path, 'src/x.ts');
     assert.equal(change.additions, 1);
     assert.equal(change.deletions, 1);
+    assert.ok(Array.isArray(change.diffLines));
+    assert.ok(change.diffLines.some((l) => l.type === 'add'));
+  });
+
+  test('buildDiffLines returns add/remove rows', () => {
+    const { lines } = buildDiffLines('old', 'new');
+    assert.ok(lines.some((l) => l.type === 'remove' && l.text === 'old'));
+    assert.ok(lines.some((l) => l.type === 'add' && l.text === 'new'));
+  });
+
+  test('buildAddOnlyDiffLines is add-only', () => {
+    const { lines } = buildAddOnlyDiffLines('one\ntwo');
+    assert.equal(lines.length, 2);
+    assert.ok(lines.every((l) => l.type === 'add'));
   });
 });

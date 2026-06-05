@@ -52,10 +52,19 @@ import {
   getArtifactWithCurrentBody,
 } from '../reef/artifact-store.js';
 import {
+  buildAddOnlyDiffLines,
+  buildCodeChangePayload,
+  buildRemoveOnlyDiffLines,
   codeChangeFromDiff,
   countAppendLineStats,
   countLinesInText,
 } from '../tools/line-diff-stats.js';
+import { codeChangeForGitCommit } from '../tools/git-change-stats.js';
+import {
+  captureWorkspaceSnapshot,
+  readHeuristicFileSnapshot,
+  resolveExecuteCommandCodeChange,
+} from '../tools/workspace-change-snapshot.js';
 import { runGrepSearch } from '../tools/grep.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
 import { pathAccessStore, resolveSafePath } from './path-access.js';
@@ -267,11 +276,22 @@ async function toolAppendFile(args) {
     return 'Error: content is required';
   }
   const rel = toRelativePath(filePath);
-  const appendStats = countAppendLineStats(String(args.content));
+  const content = String(args.content);
+  const appendStats = countAppendLineStats(content);
+  const { lines, truncated } = buildAddOnlyDiffLines(content);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.appendFile(filePath, String(args.content), 'utf8');
+  await fs.appendFile(filePath, content, 'utf8');
   const message = `Appended to ${rel}`;
-  return withCodeChange(message, { ...appendStats, path: rel });
+  return withCodeChange(
+    message,
+    buildCodeChangePayload({
+      ...appendStats,
+      path: rel,
+      source: 'file-tool',
+      diffLines: lines,
+      diffTruncated: truncated,
+    }),
+  );
 }
 
 async function toolInsertAtLine(args) {
@@ -284,15 +304,26 @@ async function toolInsertAtLine(args) {
     return 'Error: content is required';
   }
   const rel = toRelativePath(filePath);
-  const insertStats = countAppendLineStats(String(args.content));
+  const content = String(args.content);
+  const insertStats = countAppendLineStats(content);
+  const { lines: diffLines, truncated } = buildAddOnlyDiffLines(content);
   const existing = await fs.readFile(filePath, 'utf8');
   const lines = existing.split(/\r?\n/);
-  const insertLines = String(args.content).split(/\r?\n/);
+  const insertLines = content.split(/\r?\n/);
   const index = Math.min(lineNumber - 1, lines.length);
   lines.splice(index, 0, ...insertLines);
   await fs.writeFile(filePath, lines.join('\n'), 'utf8');
   const message = `Inserted ${insertLines.length} line(s) at line ${lineNumber} in ${rel}`;
-  return withCodeChange(message, { ...insertStats, path: rel });
+  return withCodeChange(
+    message,
+    buildCodeChangePayload({
+      ...insertStats,
+      path: rel,
+      source: 'file-tool',
+      diffLines,
+      diffTruncated: truncated,
+    }),
+  );
 }
 
 async function toolReplaceTextInFile(args) {
@@ -411,10 +442,21 @@ async function toolDeletePath(args) {
   }
   const content = await fs.readFile(target, 'utf8');
   const deletions = countLinesInText(content);
+  const { lines, truncated } = buildRemoveOnlyDiffLines(content);
   await fs.unlink(target);
   const message = `Deleted ${rel}`;
   if (deletions === 0) return message;
-  return withCodeChange(message, { additions: 0, deletions, path: rel });
+  return withCodeChange(
+    message,
+    buildCodeChangePayload({
+      additions: 0,
+      deletions,
+      path: rel,
+      source: 'file-tool',
+      diffLines: lines,
+      diffTruncated: truncated,
+    }),
+  );
 }
 
 async function toolFindFiles(args) {
@@ -541,7 +583,12 @@ async function toolGitCommit(args) {
   if (!message || typeof message !== 'string') {
     return 'Error: message is required';
   }
-  return runGit(['commit', '-m', message]);
+  const result = await runGit(['commit', '-m', message]);
+  if (String(result).trimStart().startsWith('Error')) {
+    return result;
+  }
+  const codeChange = await codeChangeForGitCommit(getWorkspaceRoot());
+  return withCodeChange(String(result), codeChange);
 }
 
 async function toolGitCheckout(args) {
@@ -642,14 +689,37 @@ async function toolExecuteCommand(args) {
   const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
   const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
 
+  const workspaceRoot = getWorkspaceRoot();
+  const beforeSnapshot = await captureWorkspaceSnapshot(workspaceRoot);
+  const beforeFileContents = new Map();
+  const heuristicRel = String(command).match(
+    /\bsed\s+(?:-[^\s]+\s+)*['"]?([^'"\s|>]+)['"]?/i,
+  )?.[1];
+  if (heuristicRel) {
+    beforeFileContents.set(
+      heuristicRel,
+      await readHeuristicFileSnapshot(workspaceRoot, heuristicRel),
+    );
+  }
+
   try {
-    return await executeCommandBlocking({
+    const output = await executeCommandBlocking({
       command,
       cwd,
       shell: process.platform === 'win32',
       chatId,
       toolCallId,
     });
+    if (String(output).trimStart().startsWith('Error')) {
+      return output;
+    }
+    const codeChange = await resolveExecuteCommandCodeChange({
+      cwd: workspaceRoot,
+      command,
+      beforeSnapshot,
+      beforeFileContents,
+    });
+    return withCodeChange(String(output), codeChange);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return `Error: ${message}`;
@@ -905,6 +975,27 @@ export function createToolsMiddleware() {
       return;
     }
 
+    if (url === '/api/tools/code-change-for-commit' && req.method === 'POST') {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const body = await readJsonBody(req);
+        const sha = typeof body?.sha === 'string' ? body.sha.trim() : '';
+        if (!sha) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Missing or invalid "sha"' }));
+          return;
+        }
+        const codeChange = await codeChangeForGitCommit(getWorkspaceRoot(), sha);
+        res.statusCode = 200;
+        res.end(JSON.stringify({ codeChange: codeChange ?? null }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: message }));
+      }
+      return;
+    }
+
     if (url === '/api/tools' && req.method === 'POST') {
       res.setHeader('Content-Type', 'application/json');
       try {
@@ -928,6 +1019,9 @@ export function createToolsMiddleware() {
         const payload = { result: String(out.result ?? '') };
         if (Array.isArray(out.attachments) && out.attachments.length > 0) {
           payload.attachments = out.attachments;
+        }
+        if (out.codeChange && typeof out.codeChange === 'object') {
+          payload.codeChange = out.codeChange;
         }
         res.end(JSON.stringify(payload));
       } catch (err) {

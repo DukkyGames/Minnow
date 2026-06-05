@@ -2,7 +2,8 @@
  * Tool-call / tool-result bubbles in the chat transcript (SA-8).
  */
 
-import type { CodeChangeStats, ToolImageAttachment } from '../types';
+import type { CodeChangeDiffLine, CodeChangeStats, ToolImageAttachment } from '../types';
+import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 import { formatAskQuestionResultAsListItems } from './format-ask-question-result';
 
 /** Max characters shown in expanded result <pre> blocks. */
@@ -42,6 +43,48 @@ function appendCodeChangeBadge(summary: Element, codeChange?: CodeChangeStats): 
   }
 
   summary.appendChild(badge);
+}
+
+/** Mount unified diff lines in the tool expando when present. */
+function appendCodeChangeDiffPanel(body: Element, codeChange?: CodeChangeStats): void {
+  body.querySelector('.tool-call-diff')?.remove();
+  const lines = codeChange?.diffLines;
+  if (!lines?.length) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'tool-call-diff';
+
+  const header = document.createElement('div');
+  header.className = 'tool-call-diff__header';
+  const pathLabel =
+    codeChange.path ??
+    (codeChange.paths?.length ? codeChange.paths.join(', ') : 'Changes');
+  const sourceHint =
+    codeChange.source === 'backfill'
+      ? ' (approximate from history)'
+      : codeChange.source === 'command-heuristic'
+        ? ' (estimated)'
+        : '';
+  header.textContent = `${pathLabel}${sourceHint}`;
+  panel.appendChild(header);
+
+  const host = document.createElement('div');
+  renderUnifiedPromptDiff(host, lines as CodeChangeDiffLine[]);
+  panel.appendChild(host);
+
+  if (codeChange.diffTruncated) {
+    const note = document.createElement('p');
+    note.className = 'settings-field-hint prompt-diff__truncated';
+    note.textContent = 'Diff truncated for display.';
+    panel.appendChild(note);
+  }
+
+  const resultPre = body.querySelector('.tool-call-pre--result');
+  if (resultPre) {
+    body.insertBefore(panel, resultPre);
+  } else {
+    body.appendChild(panel);
+  }
 }
 
 /** Truncate long tool output for the UI while keeping the full string in history. */
@@ -225,6 +268,10 @@ export function renderToolResult(
     resultPre.textContent = capDisplayText(result);
     body.appendChild(resultLabel);
     body.appendChild(resultPre);
+  }
+
+  if (!failed) {
+    appendCodeChangeDiffPanel(body, codeChange);
   }
 
   if (attachments?.length) {

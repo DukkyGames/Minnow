@@ -16,6 +16,7 @@ import type { Chat } from '../types';
 import { setChatMode } from './mode-selector';
 import { intentPrefill, mapIntentModeId, type HubIntentId } from './hub-intents';
 import { switchChat } from './sidebar';
+import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import {
   initHubDevServer,
   teardownHubDevServer,
@@ -323,6 +324,8 @@ function updateHubDom(activeChat: Chat): void {
       locCache.lines != null ? formatCompactCount(locCache.lines) : '—';
   }
 
+  updateWorkspaceCodeChangeDisplay();
+
   const sessionsEl = document.getElementById('hubSessionsValue');
   if (sessionsEl && sessionState) {
     const count = getChatsForWorkspace(getWorkspacePath(), sessionState).length;
@@ -389,6 +392,10 @@ function buildHubDom(activeChat: Chat): HTMLElement {
     <div class="hub-strip__cell">
       <span class="hub-strip__label">Lines of code</span>
       <span class="hub-strip__value" id="hubLocValue">—</span>
+    </div>
+    <div class="hub-strip__cell">
+      <span class="hub-strip__label">Agent changes</span>
+      <span class="hub-strip__value hub-strip__value--accent" id="hubAgentChangesValue">—</span>
     </div>
     <div class="hub-strip__cell">
       <span class="hub-strip__label">Sessions</span>

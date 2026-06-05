@@ -23,8 +23,11 @@ import {
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
 import { findChatById } from '../state/sessions';
-import { recordCodeChange } from '../usage/code-change-ledger';
+import { normalizeCodeChangePayload } from '../usage/code-change-payload';
+import { recordCodeChange, recordWorkspaceCodeChange } from '../usage/code-change-ledger';
+import { sessionState } from '../state/sessions';
 import { updateCodeChangeStrip } from '../ui/code-change-strip';
+import { updateWorkspaceCodeChangeDisplay } from '../ui/workspace-code-change';
 import {
   BUILT_IN_TOOLS,
   type OpenAIFunctionDefinition,
@@ -670,6 +673,10 @@ async function executeServerTool(
     const chat = findChatById(context.chatId);
     if (chat) {
       recordCodeChange(chat, codeChange);
+      if (sessionState) {
+        recordWorkspaceCodeChange(sessionState, chat.workspacePath, codeChange);
+        updateWorkspaceCodeChangeDisplay();
+      }
       updateCodeChangeStrip(chat);
     }
   }
@@ -680,18 +687,6 @@ async function executeServerTool(
   return base;
 }
 
-/** Validate server codeChange stats before recording or displaying. */
-function normalizeCodeChangePayload(
-  raw: CodeChangeStats | undefined,
-): CodeChangeStats | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const additions = Number(raw.additions);
-  const deletions = Number(raw.deletions);
-  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return undefined;
-  if (additions === 0 && deletions === 0) return undefined;
-  const path = typeof raw.path === 'string' && raw.path.trim() ? raw.path.trim() : undefined;
-  return { additions, deletions, ...(path ? { path } : {}) };
-}
 
 /** Resolves catalog entry by OpenAI function name. */
 function findToolByFunctionName(name: string): ToolDefinition | undefined {
