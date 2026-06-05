@@ -40,7 +40,7 @@ import {
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
-import { isOsShellEnabled } from '../os/page-bridge';
+import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 
 /** How a benchmark run was started from the run bar. */
@@ -1411,6 +1411,7 @@ function onHashChange(): void {
     openBenchmark();
     return;
   }
+  if (isOsShellEnabled() && isOsAppHash(hash)) return;
   const root = getBenchmarkRoot();
   if (root?.classList.contains('is-open')) {
     closeBenchmark();

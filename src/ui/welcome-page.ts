@@ -46,7 +46,9 @@ export function isOtherFullPageHash(hash: string): boolean {
     hash.startsWith('#/bugs') ||
     hash.startsWith('#/benchmark') ||
     hash.startsWith('#/expert-lab') ||
-    hash.startsWith('#/experts')
+    hash.startsWith('#/experts') ||
+    hash.startsWith('#/app/') ||
+    hash.startsWith('#/desktop')
   );
 }
 
@@ -403,8 +405,13 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
 
   root.hidden = false;
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  getTopbar()?.classList.add('topbar--welcome');
+  if (!isOsShellEnabled()) {
+    shell.classList.add('hidden');
+    getTopbar()?.classList.add('topbar--welcome');
+  } else {
+    // Inside MinnowOS Code app — overlay welcome without hiding the workspace shell.
+    root.classList.add('welcome-page--os-overlay');
+  }
   setWelcomePending(false);
 
   syncServerAvailabilityUi();
@@ -412,7 +419,7 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
   showCreatePanel(false);
 
   const nextHash = '#/welcome';
-  if (!options?.skipHash && window.location.hash !== nextHash) {
+  if (!options?.skipHash && !isOsShellEnabled() && window.location.hash !== nextHash) {
     window.location.hash = nextHash;
   }
 }
@@ -427,12 +434,15 @@ export function closeWelcome(options?: { skipHash?: boolean }): void {
 
   root.classList.remove('is-open');
   root.hidden = true;
-  shell.classList.remove('hidden');
-  getTopbar()?.classList.remove('topbar--welcome');
+  root.classList.remove('welcome-page--os-overlay');
+  if (!isOsShellEnabled()) {
+    shell.classList.remove('hidden');
+    getTopbar()?.classList.remove('topbar--welcome');
+  }
   setWelcomePending(false);
   showCreatePanel(false);
 
-  if (!options?.skipHash && window.location.hash.startsWith('#/welcome')) {
+  if (!options?.skipHash && !isOsShellEnabled() && window.location.hash.startsWith('#/welcome')) {
     window.location.hash = '#/';
   }
 

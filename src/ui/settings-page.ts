@@ -25,15 +25,11 @@ import {
 } from './settings-page-types';
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
-import { isOsShellEnabled } from '../os/page-bridge';
+import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId } from './settings-page-types';
-
-/** Whether settings is hosted inside the MinnowOS shell. */
-export function isOsEmbedded(): boolean {
-  return isOsShellEnabled();
-}
+export { isOsEmbedded };
 
 const SECTIONS = SETTINGS_SECTIONS;
 
@@ -70,9 +66,11 @@ function setActiveSection(section: SettingsSectionId): void {
       nav.setAttribute('aria-current', id === section ? 'page' : 'false');
     }
   }
-  const nextHash = `#/settings/${section}`;
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
+  if (!isOsEmbedded()) {
+    const nextHash = `#/settings/${section}`;
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
   }
   void refreshSettingsSection(section);
   void detectLocalServer().then(() => refreshPromptTokenEstimate());
@@ -271,6 +269,9 @@ function onHashChange(): void {
       if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
     });
     openSettings(parseHashSection());
+    return;
+  }
+  if (isOsEmbedded() && isOsAppHash(hash)) {
     return;
   }
   if (getSettingsRoot()?.classList.contains('is-open')) {

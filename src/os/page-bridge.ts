@@ -6,6 +6,17 @@ export function isOsShellEnabled(): boolean {
   return true;
 }
 
+/** Whether the hash belongs to the MinnowOS shell (desktop or foreground app). */
+export function isOsAppHash(hash?: string): boolean {
+  const h = hash ?? window.location.hash;
+  return h === '#/desktop' || h.startsWith('#/app/');
+}
+
+/** Settings embedded in the OS apps layer (not legacy full-page swap). */
+export function isOsEmbedded(): boolean {
+  return isOsShellEnabled();
+}
+
 /** True when the legacy chat workspace (`#appBody`) should be hidden. */
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;

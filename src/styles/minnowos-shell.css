@@ -231,6 +231,16 @@
   min-height: 0;
 }
 
+/* Welcome workspace picker overlays Code app when OS shell is active. */
+.mn-os-code-layer .welcome-page.welcome-page--os-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  flex: none;
+  min-height: 0;
+  height: 100%;
+}
+
 html.minnow-os-enabled body {
   padding-top: 0;
 }

@@ -28,7 +28,7 @@ import {
   getActiveChat,
   scheduleSaveSessions,
 } from '../state/sessions';
-import { isOsShellEnabled } from '../os/page-bridge';
+import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 
 type ResearchPanelTab = 'run' | 'library';
@@ -423,6 +423,7 @@ function onHashChange(): void {
     openResearch();
     return;
   }
+  if (isOsShellEnabled() && isOsAppHash(hash)) return;
   if (isResearchPageOpen()) {
     closeResearch();
   }

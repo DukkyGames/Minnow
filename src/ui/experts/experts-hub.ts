@@ -40,7 +40,7 @@ import {
   teardownExpertScopeShell,
 } from './experts-scope';
 import { appendChatRow } from '../sidebar';
-import { isOsShellEnabled } from '../../os/page-bridge';
+import { isOsAppHash, isOsShellEnabled } from '../../os/page-bridge';
 import { navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -758,10 +758,12 @@ function bindStaticControls(): void {
 }
 
 function onHashChange(): void {
-  if (window.location.hash.startsWith('#/experts')) {
+  const hash = window.location.hash;
+  if (hash.startsWith('#/experts')) {
     openExperts();
     return;
   }
+  if (isOsShellEnabled() && isOsAppHash(hash)) return;
   if (isExpertsPageOpen()) {
     closeExpertsHub();
   }

@@ -70,6 +70,8 @@ function mountAppLayers(): void {
     codeWrap.dataset.osApp = 'code';
     if (topbar) codeWrap.appendChild(topbar);
     codeWrap.appendChild(appBody);
+    const welcome = document.getElementById('welcomeView');
+    if (welcome) codeWrap.appendChild(welcome);
     appsLayer.appendChild(codeWrap);
   }
 
@@ -141,8 +143,11 @@ async function openAppPage(appId: AppId, seed?: string): Promise<void> {
       const { isDefaultWorkspace } = await import('../state/workspace');
       if (welcome.isWelcomePageOpen()) {
         welcome.closeWelcome({ skipHash: true });
-      } else if (isDefaultWorkspace() && !welcome.isWelcomeDismissedForSession()) {
-        welcome.openWelcome();
+      } else if (
+        isDefaultWorkspace() &&
+        !welcome.isWelcomeDismissedForSession()
+      ) {
+        welcome.openWelcome({ skipHash: true });
       }
       break;
     }
