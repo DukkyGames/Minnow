@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { DEFAULT_SEARCH_CONFIG } from '../../src/config/search-config.ts';
 import {
   hasBraveApiKey,
   hasTavilyApiKey,
@@ -133,12 +134,39 @@ describe('resolveWebSearchExecution', () => {
     );
     assert.equal(route.kind, 'error');
   });
+
+  it('prefers search.json provider over tools.json', () => {
+    const route = resolveWebSearchExecution(
+      config({
+        webSearchProvider: 'brave',
+        keys: { braveApiKey: 'brave-test', tavilyApiKey: '' },
+      }),
+      {},
+      true,
+      { ...DEFAULT_SEARCH_CONFIG, provider: 'duckduckgo' },
+    );
+    assert.equal(route.kind, 'ddg');
+  });
+
+  it('errors when search.json provider is disabled', () => {
+    const route = resolveWebSearchExecution(
+      config({ webSearchProvider: 'duckduckgo' }),
+      {},
+      true,
+      { ...DEFAULT_SEARCH_CONFIG, provider: 'disabled' },
+    );
+    assert.equal(route.kind, 'error');
+    if (route.kind === 'error') {
+      assert.match(route.message, /disabled/i);
+    }
+  });
 });
 
 describe('hasBraveApiKey / hasTavilyApiKey', () => {
   it('detects brave key from config and args', () => {
-    assert.equal(hasBraveApiKey({}, config({ keys: { braveApiKey: 'x', tavilyApiKey: '' } })), true);
-    assert.equal(hasBraveApiKey({ api_key: 'y' }, config()), true);
-    assert.equal(hasTavilyApiKey(config({ keys: { braveApiKey: '', tavilyApiKey: 'z' } })), true);
+    const keys = { braveApiKey: 'x', tavilyApiKey: '' };
+    assert.equal(hasBraveApiKey({}, keys), true);
+    assert.equal(hasBraveApiKey({ api_key: 'y' }, { braveApiKey: '', tavilyApiKey: '' }), true);
+    assert.equal(hasTavilyApiKey({ braveApiKey: '', tavilyApiKey: 'z' }), true);
   });
 });

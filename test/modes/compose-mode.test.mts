@@ -56,10 +56,10 @@ describe('composeSystemPrompt mode part', () => {
       enabledToolIds: [],
       infoPresetId: null,
     });
-    const researchOut = composeSystemPrompt({
+    const planOut = composeSystemPrompt({
       profile: 'full',
       cwd: '/test',
-      modeId: 'research',
+      modeId: 'plan',
       expertId: null,
       workAgentId: null,
       skillBody: null,
@@ -67,9 +67,9 @@ describe('composeSystemPrompt mode part', () => {
       enabledToolIds: [],
       infoPresetId: null,
     });
-    assert.notEqual(buildOut, researchOut);
+    assert.notEqual(buildOut, planOut);
     assert.match(buildOut, /build full/);
-    assert.match(researchOut, /research full/);
+    assert.match(planOut, /plan full/);
   });
 
   test('general full includes general marker', async () => {

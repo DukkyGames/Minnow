@@ -39,7 +39,10 @@ const SECTION_SEARCH_ALIASES: Partial<
   memory: ['memories', 'recall'],
   'model-routing': ['models', 'routing', 'bindings'],
   providers: ['api', 'lm studio', 'openai'],
-  tools: ['permissions', 'web search', 'brave', 'tavily'],
+  search: ['web search', 'brave', 'tavily', 'searxng', 'duckduckgo', 'ddg'],
+  'deep-research': ['research', 'iterresearch', 'deep research', 'engine'],
+  servers: ['searxng', 'managed server', 'local search', 'metasearch', 'install searxng'],
+  tools: ['permissions', 'tool cache'],
   'sub-agents': ['subagent', 'sub agent', 'spawn'],
   'work-agents': ['work agent', 'worker'],
   mcp: ['model context protocol'],
@@ -86,7 +89,7 @@ function toolCategoryEntries(): SettingsSearchEntry[] {
   return [...seen].map((category) => ({
     id: `tool-category:${category}`,
     label: TOOL_CATEGORY_LABELS[category],
-    sectionId: 'tools' as const,
+    sectionId: category === 'web' ? ('search' as const) : ('tools' as const),
     kind: 'tool-category' as const,
     searchKey: `tools.category.${category}`,
     keywords: [category, 'tools', TOOL_CATEGORY_LABELS[category].toLowerCase()],
@@ -98,7 +101,7 @@ function toolEntries(): SettingsSearchEntry[] {
   return BUILT_IN_TOOLS.map((tool) => ({
     id: `tool:${tool.id}`,
     label: tool.label,
-    sectionId: 'tools' as const,
+    sectionId: tool.category === 'web' ? ('search' as const) : ('tools' as const),
     kind: 'tool' as const,
     searchKey: `tools.item.${tool.id}`,
     keywords: [

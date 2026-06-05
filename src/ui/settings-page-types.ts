@@ -17,6 +17,9 @@ export type SettingsSectionId =
   | 'work-agents'
   | 'agent-packs'
   | 'sub-agents'
+  | 'search'
+  | 'deep-research'
+  | 'servers'
   | 'tools'
   | 'mcp'
   | 'lsp'
@@ -41,6 +44,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   'work-agents': 'Work agents',
   'agent-packs': 'Agent packs',
   'sub-agents': 'Sub-agents',
+  search: 'Search',
+  'deep-research': 'Deep Research',
+  servers: 'Servers',
   tools: 'Tools',
   mcp: 'MCP servers',
   lsp: 'Language servers',
@@ -91,7 +97,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['tools', 'mcp', 'lsp', 'editor', 'skills'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills'],
   },
   {
     id: 'advanced',

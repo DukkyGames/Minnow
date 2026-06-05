@@ -147,7 +147,6 @@ const CODING_DESCRIPTIONS: Record<string, Omit<BenchmarkTestDescription, 'testId
 /** Mirrors negative probes in suites/modes.ts (keep in sync). */
 const MODE_NEGATIVE: Partial<Record<ModeId, { forbiddenTool: string }>> = {
   plan: { forbiddenTool: 'delete_path' },
-  research: { forbiddenTool: 'git_commit' },
 };
 
 /** Mirrors positive probes in suites/modes.ts (keep in sync). */
@@ -155,7 +154,6 @@ const MODE_POSITIVE: Partial<Record<ModeId, { expectedTool: string }>> = {
   general: { expectedTool: 'read_file' },
   build: { expectedTool: 'list_directory' },
   plan: { expectedTool: 'read_file' },
-  research: { expectedTool: 'web_search' },
   orchestrate: { expectedTool: 'list_directory' },
   reef: { expectedTool: 'get_datetime' },
 };

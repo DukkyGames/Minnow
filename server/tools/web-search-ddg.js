@@ -2,7 +2,16 @@
  * DuckDuckGo HTML search helpers — classify responses and parse result markup.
  */
 
+import {
+  formatSearchResults,
+  normalizeSearchResults,
+} from './search-result.js';
+
 const DDG_MAX_SNIPPETS = 8;
+
+/** User-Agent shared with fetch_web_content / DDG HTML search. */
+export const DDG_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 /** Strip HTML tags from a snippet of DDG result HTML. */
 function stripHtml(fragment) {
@@ -52,12 +61,11 @@ export function classifyDdgHtml(status, html) {
 }
 
 /**
- * Parse DDG HTML into numbered result lines (titles, URLs, snippets).
+ * Parse DDG HTML into structured search rows.
  * @param {string} html
- * @param {string} query
- * @returns {string[]}
+ * @returns {import('./search-result.js').SearchResult[]}
  */
-export function parseDdgHtmlResults(html, query) {
+export function parseDdgHtmlStructured(html) {
   const blocks = String(html).split(/class="result\s/);
   const results = [];
 
@@ -71,10 +79,70 @@ export function parseDdgHtmlResults(html, query) {
     const title = stripHtml(titleMatch[2]);
     const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i);
     const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : '';
-    results.push(`${results.length + 1}. ${title}\n   ${href}\n   ${snippet}`);
+    results.push({ title, url: href, snippet });
   }
 
-  return results;
+  return normalizeSearchResults(results);
+}
+
+/**
+ * Parse DDG HTML into numbered result lines (titles, URLs, snippets).
+ * @param {string} html
+ * @param {string} query
+ * @returns {string[]}
+ */
+export function parseDdgHtmlResults(html, query) {
+  const structured = parseDdgHtmlStructured(html);
+  if (!structured.length) {
+    return [];
+  }
+  const text = formatSearchResults('DuckDuckGo', query, structured);
+  return text
+    .replace(/^DuckDuckGo search results for "[^"]*":\n\n/, '')
+    .split('\n\n');
+}
+
+/**
+ * Format structured DDG rows for the model.
+ * @param {string} query
+ * @param {import('./search-result.js').SearchResult[]} results
+ * @returns {string}
+ */
+export function formatDdgSearchResults(query, results) {
+  return formatSearchResults('DuckDuckGo', query, results);
+}
+
+/**
+ * Run DuckDuckGo HTML search and return structured rows.
+ * @param {string} query
+ * @returns {Promise<{ results: import('./search-result.js').SearchResult[]; error?: string }>}
+ */
+export async function searchDdgStructured(query) {
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': DDG_USER_AGENT,
+      Accept: 'text/html',
+    },
+  });
+
+  const html = await response.text();
+  const classification = classifyDdgHtml(response.status, html);
+
+  if (classification === 'challenge') {
+    return { results: [], error: DDG_BOT_CHALLENGE_MESSAGE };
+  }
+
+  if (!response.ok) {
+    return { results: [], error: `Error: DuckDuckGo returned HTTP ${response.status}` };
+  }
+
+  const results = parseDdgHtmlStructured(html);
+  if (!results.length) {
+    return { results: [], error: `No DuckDuckGo results found for: ${query}` };
+  }
+
+  return { results };
 }
 
 /** User-facing message when DDG serves a bot challenge instead of results. */

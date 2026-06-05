@@ -10,8 +10,10 @@ import { createBrowserScreenshotMiddleware } from '../browser-screenshot-middlew
 import { createConfigMiddleware } from '../config/middleware.js';
 import { createEvalsMiddleware } from '../evals/middleware.js';
 import { createGenerationsMiddleware } from '../generations/routes.js';
+import { createResearchMiddleware } from '../research/routes.js';
 import { createLspMiddleware } from '../lsp/middleware.js';
 import { createMcpMiddleware } from '../mcp/middleware.js';
+import { createServersMiddleware } from '../servers/index.js';
 import { createMemoryMiddleware } from '../memory/middleware.js';
 import { createPreviewMiddleware } from '../preview/middleware.js';
 import { createProfilesMiddleware } from '../profiles/middleware.js';
@@ -47,11 +49,13 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createReefMiddleware());
   connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));
   connectApp.use(createMcpMiddleware());
+  connectApp.use(createServersMiddleware());
   connectApp.use(createPluginsMiddleware());
   connectApp.use(createPromptConfigsMiddleware());
   connectApp.use(createProfilesMiddleware());
   connectApp.use(createProviderMiddleware());
   connectApp.use(createGenerationsMiddleware());
+  connectApp.use(createResearchMiddleware());
   connectApp.use(createWorkAgentsMiddleware());
   connectApp.use(createAgentPacksMiddleware());
   connectApp.use(createBrowserScreenshotMiddleware());

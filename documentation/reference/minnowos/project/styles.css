@@ -1,0 +1,151 @@
+/* ============================================================
+   MinnowOS — design tokens extracted from product screenshots
+   Slate · Sage default, with Stone/Cyan/Graphite palette families.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* radii */
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  /* motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+}
+
+/* ---------- Slate · Sage (default, dark) ---------- */
+[data-theme='sage'] {
+  --bg:        #090b0a;
+  --bg-1:      #0e1110;
+  --bg-2:      #141817;
+  --bg-3:      #1b201e;
+  --raise:     #1f2522;
+  --border:    rgba(255,255,255,.075);
+  --border-2:  rgba(255,255,255,.13);
+  --text:      #e7ece9;
+  --text-dim:  #8b948f;
+  --text-faint:#5a625e;
+  --accent:    #b3cf9e;
+  --accent-2:  #cfe3bf;
+  --on-accent: #14210f;
+  --accent-soft: rgba(179,207,158,.14);
+  --accent-glow: rgba(179,207,158,.30);
+  --wall-a: #0c100e;
+  --wall-b: #0a0d0c;
+  --wall-c: #11201a;
+}
+
+/* ---------- Stone · Amber ---------- */
+[data-theme='amber'] {
+  --bg:        #0c0a08;
+  --bg-1:      #12100c;
+  --bg-2:      #191510;
+  --bg-3:      #201b14;
+  --raise:     #251f17;
+  --border:    rgba(255,255,255,.075);
+  --border-2:  rgba(255,255,255,.13);
+  --text:      #ece7df;
+  --text-dim:  #968d80;
+  --text-faint:#625c50;
+  --accent:    #e6b873;
+  --accent-2:  #f3d29b;
+  --on-accent: #271a08;
+  --accent-soft: rgba(230,184,115,.14);
+  --accent-glow: rgba(230,184,115,.30);
+  --wall-a: #100c08;
+  --wall-b: #0c0a07;
+  --wall-c: #211810;
+}
+
+/* ---------- Cyan · Midnight ---------- */
+[data-theme='cyan'] {
+  --bg:        #07090c;
+  --bg-1:      #0b0f14;
+  --bg-2:      #10161d;
+  --bg-3:      #161e26;
+  --raise:     #1a232c;
+  --border:    rgba(255,255,255,.08);
+  --border-2:  rgba(255,255,255,.14);
+  --text:      #e2ebf0;
+  --text-dim:  #8693a0;
+  --text-faint:#566270;
+  --accent:    #6fd6e6;
+  --accent-2:  #a4e7f2;
+  --on-accent: #062028;
+  --accent-soft: rgba(111,214,230,.14);
+  --accent-glow: rgba(111,214,230,.30);
+  --wall-a: #0a1118;
+  --wall-b: #070b10;
+  --wall-c: #0c2029;
+}
+
+/* ---------- Graphite · Coral ---------- */
+[data-theme='coral'] {
+  --bg:        #0a0909;
+  --bg-1:      #0f0e0e;
+  --bg-2:      #161414;
+  --bg-3:      #1d1a1a;
+  --raise:     #221e1e;
+  --border:    rgba(255,255,255,.075);
+  --border-2:  rgba(255,255,255,.13);
+  --text:      #ece8e7;
+  --text-dim:  #968d8c;
+  --text-faint:#625b5a;
+  --accent:    #f0a191;
+  --accent-2:  #f7c2b6;
+  --on-accent: #2a1310;
+  --accent-soft: rgba(240,161,145,.14);
+  --accent-glow: rgba(240,161,145,.30);
+  --wall-a: #120f0e;
+  --wall-b: #0c0a0a;
+  --wall-c: #231413;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#root { height: 100vh; }
+
+::selection { background: var(--accent-glow); color: var(--text); }
+
+/* scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: content-box; }
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; }
+
+.mono { font-family: var(--mono); }
+
+/* utility focus ring */
+.focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}

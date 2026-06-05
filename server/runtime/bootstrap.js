@@ -7,6 +7,7 @@ import { ensureAgentPacksLayout } from '../agent-packs/registry.js';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
 import { initLspConfig } from '../lsp/middleware.js';
 import { initMcpApi } from '../mcp/middleware.js';
+import { initServersApi } from '../servers/index.js';
 import { initMemoryApi } from '../memory/routes.js';
 import { ensureProviderRegistry } from '../providers/store.js';
 import { syncReefWidgetTemplates } from '../reef/sync-widgets.js';
@@ -26,6 +27,7 @@ export async function bootstrapMinnowRuntime() {
   await initMemoryApi();
   await initLspConfig();
   await initMcpApi();
+  await initServersApi();
   await initPluginsApi();
   const homePath = getMinnowHome();
   return {
