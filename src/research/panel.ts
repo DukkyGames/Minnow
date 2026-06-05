@@ -28,6 +28,8 @@ import {
   getActiveChat,
   scheduleSaveSessions,
 } from '../state/sessions';
+import { isOsShellEnabled } from '../os/page-bridge';
+import { navigateToDesktop } from '../os/router';
 
 type ResearchPanelTab = 'run' | 'library';
 
@@ -375,16 +377,20 @@ export function isResearchPageOpen(): boolean {
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
-/** Close Deep Research and return to chat. */
-export function closeResearch(): void {
+/** Close Deep Research and return to chat or desktop. */
+export function closeResearch(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
   void cancelActiveRun();
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  if (window.location.hash.startsWith('#/research')) {
-    window.location.hash = '#/';
+  if (!isOsShellEnabled()) {
+    shell.classList.remove('hidden');
+    if (!options?.skipNavigate && window.location.hash.startsWith('#/research')) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
   }
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -400,8 +406,10 @@ export function openResearch(): void {
 
   closeOtherOverlays();
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  window.location.hash = '#/research';
+  if (!isOsShellEnabled()) {
+    shell.classList.add('hidden');
+    window.location.hash = '#/research';
+  }
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -421,7 +429,10 @@ function onHashChange(): void {
 }
 
 function bindStaticControls(): void {
-  document.getElementById('btnResearchPageBack')?.addEventListener('click', () => closeResearch());
+  document.getElementById('btnResearchPageBack')?.addEventListener('click', () => {
+    if (isOsShellEnabled()) navigateToDesktop();
+    else closeResearch();
+  });
   document.getElementById('btnResearchStart')?.addEventListener('click', () => {
     void startResearchRun();
   });

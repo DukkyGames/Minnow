@@ -9,6 +9,21 @@
   inset: 0;
 }
 
+.mn-os-desktop-wall {
+  position: absolute;
+  inset: 0;
+}
+
+.mn-os-desktop-previews {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mn-os-desktop-previews > * {
+  pointer-events: auto;
+}
+
 .mn-os-desk-stage {
   position: absolute;
   inset: 0;

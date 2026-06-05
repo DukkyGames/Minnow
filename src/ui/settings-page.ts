@@ -25,8 +25,15 @@ import {
 } from './settings-page-types';
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
+import { isOsShellEnabled } from '../os/page-bridge';
+import { navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId } from './settings-page-types';
+
+/** Whether settings is hosted inside the MinnowOS shell. */
+export function isOsEmbedded(): boolean {
+  return isOsShellEnabled();
+}
 
 const SECTIONS = SETTINGS_SECTIONS;
 
@@ -207,8 +214,10 @@ export function openSettings(section?: SettingsSectionId): void {
   const wasAlreadyOpen = root.classList.contains('is-open');
 
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  document.querySelector('header.topbar')?.classList.add('hidden');
+  if (!isOsEmbedded()) {
+    shell.classList.add('hidden');
+    document.querySelector('header.topbar')?.classList.add('hidden');
+  }
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -229,15 +238,21 @@ export function openSettings(section?: SettingsSectionId): void {
   setActiveSection(target);
 }
 
-/** Close settings and return to chat. */
-export function closeSettings(): void {
+/** Close settings and return to chat or desktop. */
+export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
-  window.location.hash = '#/';
+  if (!isOsEmbedded()) {
+    shell.classList.remove('hidden');
+    document.querySelector('header.topbar')?.classList.remove('hidden');
+    if (!options?.skipNavigate && window.location.hash.startsWith('#/settings')) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
+  }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -270,7 +285,10 @@ export function initSettingsPage(): void {
 
   document
     .getElementById('btnSettingsPageBack')
-    ?.addEventListener('click', () => closeSettings());
+    ?.addEventListener('click', () => {
+      if (isOsEmbedded()) navigateToDesktop();
+      else closeSettings();
+    });
 
   for (const id of SECTIONS) {
     document

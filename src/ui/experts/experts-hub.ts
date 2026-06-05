@@ -40,6 +40,8 @@ import {
   teardownExpertScopeShell,
 } from './experts-scope';
 import { appendChatRow } from '../sidebar';
+import { isOsShellEnabled } from '../../os/page-bridge';
+import { navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
 
@@ -534,7 +536,7 @@ export async function refreshExpertsEnabledState(): Promise<void> {
 
 export { isExpertsPageOpen };
 
-export function closeExpertsHub(): void {
+export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
@@ -545,8 +547,15 @@ export function closeExpertsHub(): void {
 
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
+  if (!isOsShellEnabled()) {
+    shell.classList.remove('hidden');
+    document.querySelector('header.topbar')?.classList.remove('hidden');
+    if (!options?.skipNavigate && window.location.hash.startsWith('#/experts')) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
+  }
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -576,10 +585,6 @@ export function closeExpertsHub(): void {
   editExpertId = null;
   editDirty = false;
   closeTileMenus();
-
-  if (window.location.hash.startsWith('#/experts')) {
-    window.location.hash = '#/';
-  }
 }
 
 export interface OpenExpertsOptions {
@@ -610,9 +615,15 @@ export function openExperts(options?: OpenExpertsOptions): void {
 
   setExpertsPageOpen(true);
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  document.querySelector('header.topbar')?.classList.add('hidden');
-  document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
+  if (!isOsShellEnabled()) {
+    shell.classList.add('hidden');
+    document.querySelector('header.topbar')?.classList.add('hidden');
+    document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
+    const nextHash = '#/experts';
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
+  }
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -625,11 +636,6 @@ export function openExperts(options?: OpenExpertsOptions): void {
   } else {
     setStep(step);
     if (step === 'gallery') renderGallery();
-  }
-
-  const nextHash = '#/experts';
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
   }
 }
 
@@ -672,7 +678,8 @@ function bindStaticControls(): void {
       setStep('gallery');
       return;
     }
-    closeExpertsHub();
+    if (isOsShellEnabled()) navigateToDesktop();
+    else closeExpertsHub();
   });
 
   document.getElementById('btnExpertsDetailBack')?.addEventListener('click', () => {

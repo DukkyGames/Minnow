@@ -204,6 +204,54 @@
 
 .mn-os-app-layer.is-active {
   animation: mn-os-app-in 0.35s var(--os-ease-out);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.mn-os-app-layer:not(.is-active) {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.mn-os-apps-layer .mn-os-app-layer.is-active {
+  display: flex;
+  flex-direction: column;
+}
+
+.mn-os-code-layer.is-active {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mn-os-code-layer.is-active .app-body {
+  flex: 1;
+  min-height: 0;
+}
+
+html.minnow-os-enabled body {
+  padding-top: 0;
+}
+
+html.minnow-os-enabled #minnowOsRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+html.minnow-os-enabled #osAppsLayer .settings-page,
+html.minnow-os-enabled #osAppsLayer .benchmark-page,
+html.minnow-os-enabled #osAppsLayer .research-page,
+html.minnow-os-enabled #osAppsLayer .experts-page {
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+html.minnow-os-enabled header.topbar.hidden {
+  display: none !important;
 }
 
 @keyframes mn-os-app-in {

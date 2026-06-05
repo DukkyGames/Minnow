@@ -40,6 +40,8 @@ import {
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
+import { isOsShellEnabled } from '../os/page-bridge';
+import { navigateToDesktop } from '../os/router';
 
 /** How a benchmark run was started from the run bar. */
 export type BenchmarkStartMode = 'quick' | 'full' | 'selected';
@@ -1367,8 +1369,10 @@ export function openBenchmark(): void {
   });
 
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  window.location.hash = '#/benchmark';
+  if (!isOsShellEnabled()) {
+    shell.classList.add('hidden');
+    window.location.hash = '#/benchmark';
+  }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -1376,15 +1380,19 @@ export function openBenchmark(): void {
   syncBenchmarkPageOnOpen();
 }
 
-export function closeBenchmark(): void {
+export function closeBenchmark(options?: { skipNavigate?: boolean }): void {
   const root = getBenchmarkRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
   closeBenchmarkTranscriptDrawer();
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  if (window.location.hash.startsWith('#/benchmark')) {
-    window.location.hash = '#/';
+  if (!isOsShellEnabled()) {
+    shell.classList.remove('hidden');
+    if (!options?.skipNavigate && window.location.hash.startsWith('#/benchmark')) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
   }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -1416,7 +1424,10 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
 }
 
 export function initBenchmarkPage(): void {
-  document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => closeBenchmark());
+  document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => {
+    if (isOsShellEnabled()) navigateToDesktop();
+    else closeBenchmark();
+  });
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
   });

@@ -13,6 +13,7 @@ import {
 } from '../config/workspace-api';
 import { isDefaultWorkspace } from '../state/workspace';
 import { getLocalServerAvailable } from '../tools/client';
+import { isOsShellEnabled } from '../os/page-bridge';
 import { applyWorkspaceSwitch } from './workspace-button';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import { setStatus } from './status';
@@ -49,8 +50,14 @@ export function isOtherFullPageHash(hash: string): boolean {
   );
 }
 
+/** Whether the user dismissed welcome for this session. */
+export function isWelcomeDismissedForSession(): boolean {
+  return welcomeDismissedForSession;
+}
+
 /** Whether welcome should open after init when workspace sync completes. */
 export function shouldShowWelcomeOnBoot(): boolean {
+  if (isOsShellEnabled()) return false;
   const hash = window.location.hash;
   if (hash.startsWith('#/welcome')) {
     return isDefaultWorkspace();
