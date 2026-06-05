@@ -372,8 +372,8 @@ function closePeerFullPageViews(): void {
       m.closeBenchmark();
     }
   });
-  void import('./expert-lab-page').then((m) => {
-    if (m.isExpertLabPageOpen()) {
+  void import('./experts/experts-hub').then((m) => {
+    if (m.isExpertsPageOpen()) {
       m.closeExpertLab();
     }
   });

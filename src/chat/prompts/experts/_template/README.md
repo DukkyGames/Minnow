@@ -14,20 +14,20 @@ Each expert folder needs:
 - `expert.full.md` — full profile body + YAML front matter
 - `expert.lite.md` — shorter body for Lite profile
 
-## Auto vs manual
+## Summoning
 
-- **Auto** — rules router scores keywords/regex on each send; optional LLM classifier when `experts.classifier` is `llm` or `rules+llm` in `config.json`.
-- **Manual** — composer dropdown picks an expert; that id is used on every send until you switch back to Auto.
+Open **Experts** (`#/experts`, top bar flask icon), pick a specialist, and run a brief. Disable the feature in Settings → Experts with **Enable experts**.
 
-## Front matter (routing)
+## Front matter
 
-Use flat lists in YAML (see `EXPERT_TEMPLATE.md`):
+Use flat scalars in YAML (see `EXPERT_TEMPLATE.md`):
 
-- `keywords` — substring matches (+2 each)
-- `negativeKeywords` — penalty (-10)
-- `regex` — optional patterns (+5 each, max 3)
-- `priority` — tie-break integer
-- `default: true` — fallback when Auto has no winner
-- `classifierHint` — one line for optional LLM classifier
+- `description` — one-line picker summary
+- `tagline` — short subtitle under the label on tiles
+- `greeting` — opening line when the expert is summoned
+- `icon` — emoji or short glyph (optional)
+- `accent` — theme token: `sage`, `amber`, `cyan`, `coral`, `violet`, `rose`
+
+Do **not** add Auto-routing fields (`keywords`, `regex`, `negativeKeywords`, `classifierHint`, `priority`, `default`) or `version` on new experts.
 
 Copy `example.full.md` / `example.lite.md`, rename folder to your `id`, and restart or refresh the app.

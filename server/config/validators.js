@@ -369,8 +369,6 @@ function ensureChatShape(raw) {
       typeof row.modeId === 'string' ? row.modeId : undefined,
     ),
     expertSelection: ensureExpertSelection(row.expertSelection),
-    lastResolvedExpertId:
-      typeof row.lastResolvedExpertId === 'string' ? row.lastResolvedExpertId : null,
     ...(orchestratePlanPath ? { orchestratePlanPath } : {}),
     ...(typeof row.groupId === 'string' && row.groupId.trim()
       ? { groupId: row.groupId.trim() }

@@ -107,7 +107,7 @@ body {
 .benchmark-page { display: none; }
 .research-page { display: none; }
 .global-bugs-page { display: none; }
-.expert-lab-page { display: none; }
+.experts-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

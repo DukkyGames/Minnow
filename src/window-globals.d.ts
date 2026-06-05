@@ -20,6 +20,7 @@ declare global {
     openResearchFromTopbar: () => void;
     openExpertLabFromTopbar: () => void;
     openExpertLab?: () => void;
+    openExperts?: () => void;
     closeDrawer: () => void;
     onDrawerKeydown: (e: KeyboardEvent) => void;
     clearChat: () => void;

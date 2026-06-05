@@ -249,7 +249,7 @@
     <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
-    <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Expert Lab" title="Expert Lab" onclick="openExpertLabFromTopbar()">
+    <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts" onclick="openExpertLabFromTopbar()">
       <img class="icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
     <button class="icon-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false" onclick="toggleOrchestrateHubFromTopbar()">
@@ -301,8 +301,7 @@
           Enable experts
         </label>
       </div>
-      <p class="field-hint">Pick specialists in <button type="button" class="settings-inline-link" onclick="openExpertLabFromTopbar()">Expert Lab</button>. Built-in ids:</p>
-      <div id="expertsBuiltinList"></div>
+      <p class="field-hint">When enabled, summon specialists from <button type="button" class="settings-inline-link" onclick="openExpertLabFromTopbar()">Experts</button> (top bar flask icon).</p>
     </section>
     <section class="tools-section" id="toolsSection" aria-labelledby="toolsSectionTitle">
       <h2 class="tools-section-title" id="toolsSectionTitle">Tools</h2>
@@ -989,136 +988,114 @@
   </div>
 </main>
 
-<main id="expertLabView" class="expert-lab-page" data-step="pick" aria-label="Expert Lab">
-  <header class="expert-lab-page-header">
-    <button class="icon-btn" type="button" id="btnExpertLabPageBack" aria-label="Back">
+<main id="expertsView" class="experts-page" data-step="gallery" aria-label="Experts">
+  <header class="experts-page-header">
+    <button class="icon-btn" type="button" id="btnExpertsPageBack" aria-label="Back">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
-    <h1>Expert Lab</h1>
+    <h1>Experts</h1>
   </header>
-  <div class="expert-lab-body">
-    <div id="expertLabDisabled" class="expert-lab-empty hidden" role="status">
+  <div class="experts-body">
+    <div id="expertsDisabled" class="experts-empty hidden" role="status">
       <p>Experts are turned off. Enable them in Settings → Experts, then return here.</p>
     </div>
-    <section class="expert-lab-step expert-lab-step--pick" aria-label="Choose an expert">
-      <p class="expert-lab-intro">Pick a specialist, describe your request, and watch a step-by-step run with clarifying questions when needed.</p>
-      <div id="expertLabGrid" class="expert-lab-grid" role="list"></div>
+    <section class="experts-step experts-step--gallery" aria-label="Choose an expert">
+      <p class="experts-intro">Pick a specialist to start a focused chat, or create your own expert persona.</p>
+      <div id="expertsGrid" class="experts-grid" role="list"></div>
     </section>
-    <section class="expert-lab-step expert-lab-step--create" aria-label="Make your own expert">
-      <p class="expert-lab-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Expert Lab.</p>
-      <div class="expert-lab-brief-form">
-        <label for="expertLabCreateInput">Expert description</label>
-        <textarea id="expertLabCreateInput" class="expert-lab-brief-input" rows="6" placeholder="e.g. A patent attorney who explains claims in plain English…"></textarea>
-        <p id="expertLabCreateError" class="expert-lab-form-error hidden" role="alert"></p>
-        <div class="expert-lab-actions">
-          <button type="button" class="settings-inline-btn" id="btnExpertLabCreateCancel">Cancel</button>
-          <button type="button" class="is-primary" id="btnExpertLabCreate">Create expert</button>
+    <section class="experts-step experts-step--chats" aria-label="Expert chats">
+      <div class="experts-detail-header">
+        <span id="expertsDetailChip" class="experts-chip expert-accent-sage"></span>
+        <button type="button" class="settings-inline-btn" id="btnExpertsDetailBack">All experts</button>
+      </div>
+      <div id="expertsChatList" class="experts-chat-list chat-list" role="list"></div>
+      <button type="button" class="chat-new-wide experts-new-chat-wide" id="btnExpertsNewChat">+ New chat</button>
+    </section>
+    <section class="experts-step experts-step--create" aria-label="Make your own expert">
+      <p class="experts-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Experts.</p>
+      <div class="experts-brief-form">
+        <label for="expertsCreateInput">Expert description</label>
+        <textarea id="expertsCreateInput" class="experts-brief-input" rows="6" placeholder="e.g. A patent attorney who explains claims in plain English…"></textarea>
+        <p id="expertsCreateError" class="experts-form-error hidden" role="alert"></p>
+        <div class="experts-actions">
+          <button type="button" class="settings-inline-btn" id="btnExpertsCreateCancel">Cancel</button>
+          <button type="button" class="is-primary" id="btnExpertsCreate">Create expert</button>
         </div>
       </div>
     </section>
-    <section class="expert-lab-step expert-lab-step--edit" aria-label="Edit expert">
-      <p class="expert-lab-intro">Update your custom expert’s details and prompt.</p>
-      <form id="expertLabEditForm" class="expert-lab-edit-form">
-        <div class="expert-lab-edit-row">
-          <label for="expertLabEditLabel">Label</label>
-          <input type="text" id="expertLabEditLabel" class="expert-lab-edit-input" autocomplete="off" />
+    <section class="experts-step experts-step--edit" aria-label="Edit expert">
+      <p class="experts-intro">Update your custom expert’s details and prompt.</p>
+      <form id="expertsEditForm" class="experts-edit-form">
+        <div class="experts-edit-row">
+          <label for="expertsEditLabel">Label</label>
+          <input type="text" id="expertsEditLabel" class="experts-edit-input" autocomplete="off" />
         </div>
-        <div class="expert-lab-edit-row">
-          <label for="expertLabEditDescription">Description</label>
-          <input type="text" id="expertLabEditDescription" class="expert-lab-edit-input" autocomplete="off" />
+        <div class="experts-edit-row">
+          <label for="expertsEditDescription">Description</label>
+          <input type="text" id="expertsEditDescription" class="experts-edit-input" autocomplete="off" />
         </div>
-        <div class="expert-lab-edit-row expert-lab-edit-row--split">
+        <div class="experts-edit-row experts-edit-row--split">
           <div>
-            <label for="expertLabEditIcon">Icon</label>
-            <input type="text" id="expertLabEditIcon" class="expert-lab-edit-input expert-lab-edit-input--icon" maxlength="4" autocomplete="off" />
+            <label for="expertsEditIcon">Icon</label>
+            <input type="text" id="expertsEditIcon" class="experts-edit-input experts-edit-input--icon" maxlength="4" autocomplete="off" />
           </div>
           <div>
-            <label for="expertLabEditAccent">Accent</label>
-            <select id="expertLabEditAccent" class="expert-lab-edit-input"></select>
+            <label for="expertsEditAccent">Accent</label>
+            <select id="expertsEditAccent" class="experts-edit-input"></select>
           </div>
         </div>
-        <div class="expert-lab-edit-profile-tabs" role="tablist" aria-label="Prompt profile">
-          <button type="button" class="expert-lab-profile-tab is-active" data-profile="full" role="tab" aria-selected="true">Full</button>
-          <button type="button" class="expert-lab-profile-tab" data-profile="lite" role="tab" aria-selected="false">Lite</button>
+        <div class="experts-edit-row">
+          <label for="expertsEditTagline">Tagline</label>
+          <input type="text" id="expertsEditTagline" class="experts-edit-input" maxlength="60" autocomplete="off" />
         </div>
-        <div class="expert-lab-edit-row">
-          <label for="expertLabEditBody">Prompt body</label>
-          <textarea id="expertLabEditBody" class="expert-lab-brief-input expert-lab-edit-body" rows="12"></textarea>
+        <div class="experts-edit-row">
+          <label for="expertsEditGreeting">Greeting</label>
+          <input type="text" id="expertsEditGreeting" class="experts-edit-input" autocomplete="off" />
         </div>
-        <p id="expertLabEditError" class="expert-lab-form-error hidden" role="alert"></p>
-        <div class="expert-lab-actions">
-          <button type="button" class="settings-inline-btn" id="btnExpertLabEditCancel">Cancel</button>
-          <button type="submit" class="is-primary" id="btnExpertLabEditSave">Save changes</button>
+        <div class="experts-edit-profile-tabs" role="tablist" aria-label="Prompt profile">
+          <button type="button" class="experts-profile-tab is-active" data-profile="full" role="tab" aria-selected="true">Full</button>
+          <button type="button" class="experts-profile-tab" data-profile="lite" role="tab" aria-selected="false">Lite</button>
+        </div>
+        <div class="experts-edit-row">
+          <label for="expertsEditBody">Prompt body</label>
+          <textarea id="expertsEditBody" class="experts-brief-input experts-edit-body" rows="12"></textarea>
+        </div>
+        <p id="expertsEditError" class="experts-form-error hidden" role="alert"></p>
+        <div class="experts-actions">
+          <button type="button" class="settings-inline-btn" id="btnExpertsEditCancel">Cancel</button>
+          <button type="submit" class="is-primary" id="btnExpertsEditSave">Save changes</button>
         </div>
       </form>
-    </section>
-    <section class="expert-lab-step expert-lab-step--brief" aria-label="Your brief">
-      <div class="expert-lab-brief-header">
-        <span id="expertLabBriefChip" class="expert-lab-chip expert-accent-sage"></span>
-        <button type="button" class="settings-inline-btn" id="btnExpertLabBriefBack">Change expert</button>
-      </div>
-      <div class="expert-lab-brief-form">
-        <label for="expertLabBriefInput">Your request</label>
-        <textarea id="expertLabBriefInput" class="expert-lab-brief-input" rows="6" placeholder="Describe what you need…"></textarea>
-        <div class="expert-lab-actions">
-          <button type="button" class="is-primary" id="btnExpertLabRun">Run</button>
-        </div>
-      </div>
-    </section>
-    <section class="expert-lab-step expert-lab-step--run" aria-label="Run timeline">
-      <div class="expert-lab-run-header">
-        <span id="expertLabRunChip" class="expert-lab-chip expert-accent-sage"></span>
-        <button type="button" class="settings-inline-btn expert-lab-open-chat-btn" id="btnExpertLabOpenChat" hidden>Open chat</button>
-      </div>
-      <div id="expertLabTimeline" class="expert-lab-timeline expert-accent-sage">
-        <article class="expert-lab-phase" data-phase="understanding">
-          <div class="expert-lab-phase-head">
-            <span class="expert-lab-phase-num">1</span>
-            <span class="expert-lab-phase-title">Understanding</span>
-            <span class="expert-lab-phase-status">Pending</span>
-          </div>
-          <div class="expert-lab-phase-body">
-            <pre id="expertLabRequestPreview" class="expert-lab-request-preview"></pre>
-          </div>
-        </article>
-        <article class="expert-lab-phase" data-phase="clarifying" hidden>
-          <div class="expert-lab-phase-head">
-            <span class="expert-lab-phase-num">2</span>
-            <span class="expert-lab-phase-title">Clarifying questions</span>
-            <span class="expert-lab-phase-status">Pending</span>
-          </div>
-          <div class="expert-lab-phase-body expert-lab-clarifying-slot" id="expertLabClarifyingBody"></div>
-        </article>
-        <article class="expert-lab-phase" data-phase="working">
-          <div class="expert-lab-phase-head">
-            <span class="expert-lab-phase-num">3</span>
-            <span class="expert-lab-phase-title">Working</span>
-            <span class="expert-lab-phase-status">Pending</span>
-          </div>
-          <div class="expert-lab-phase-body">
-            <div class="expert-lab-working-meta">
-              <span class="expert-lab-spinner" aria-hidden="true"></span>
-              <span id="expertLabWorkingCount">0 tokens</span>
-            </div>
-          </div>
-        </article>
-        <article class="expert-lab-phase" data-phase="output">
-          <div class="expert-lab-phase-head">
-            <span class="expert-lab-phase-num">4</span>
-            <span class="expert-lab-phase-title">Output</span>
-            <span class="expert-lab-phase-status">Pending</span>
-          </div>
-          <div class="expert-lab-phase-body">
-            <div id="expertLabOutputBubble" class="expert-lab-output-bubble msg-bubble--md"></div>
-          </div>
-        </article>
-      </div>
     </section>
   </div>
 </main>
 
+<div id="expertsSummon" class="experts-summon hidden" aria-hidden="true" role="status">
+  <div class="experts-summon-card expert-accent-sage">
+    <span id="expertsSummonIcon" class="experts-summon-icon" aria-hidden="true"></span>
+    <span id="expertsSummonLabel" class="experts-summon-label"></span>
+    <span class="experts-summon-status">Opening chat…</span>
+    <span class="experts-summon-spinner" aria-hidden="true"></span>
+  </div>
+</div>
+
 <div class="app-body" id="appBody">
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
+    <div id="expertScopeChrome" class="expert-scope-chrome hidden" hidden>
+      <div class="expert-scope-header">
+        <button type="button" class="expert-scope-back" id="btnExpertScopeBack" aria-label="Back to Experts">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <span class="expert-scope-back-label">Experts</span>
+        </button>
+        <div id="expertScopeIdentity" class="expert-scope-identity">
+          <span id="expertScopeIcon" class="expert-scope-icon" aria-hidden="true"></span>
+          <span id="expertScopeTitle" class="expert-scope-title"></span>
+        </div>
+      </div>
+      <button type="button" class="chat-new-wide" id="btnExpertScopeNewChat">+ New chat</button>
+      <div id="expertScopeChatList" class="chat-list" role="list"></div>
+    </div>
+    <div id="chatSidebarMain" class="chat-sidebar-main">
     <div class="chat-sidebar-header">
       <span class="chat-sidebar-title">Chats</span>
       <button class="icon-btn" type="button" id="btnSidebarCollapse" aria-label="Collapse sidebar" onclick="toggleSidebarCollapsed()">
@@ -1132,6 +1109,7 @@
       <span class="chat-new-group-label">New group</span>
     </button>
     <div class="chat-list" id="chatList" role="list"></div>
+    </div>
     <div class="chat-sidebar-footer">
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnAllBugs" aria-label="All bugs" title="All bugs">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>

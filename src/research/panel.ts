@@ -365,8 +365,8 @@ function closeOtherOverlays(): void {
   void import('../ui/welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });
-  void import('../ui/expert-lab-page').then((m) => {
-    if (m.isExpertLabPageOpen()) m.closeExpertLab();
+  void import('../ui/experts/experts-hub').then((m) => {
+    if (m.isExpertsPageOpen()) m.closeExpertsHub();
   });
 }
 

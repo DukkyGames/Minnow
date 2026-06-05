@@ -8,9 +8,9 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
-/** Expert Lab owns a hidden chat that must not appear in the sidebar. */
+/** Expert threads and legacy Expert Lab chats stay out of the main sidebar. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
-  return chat.kind !== 'expert-lab';
+  return chat.kind !== 'expert-lab' && chat.kind !== 'expert';
 }
 
 /** Sidebar / prune ordering: last committed message, else legacy `updatedAt`. */

@@ -189,7 +189,7 @@ function registerWindowHandlers(): void {
     void import('./research/panel').then((m) => m.openResearchFromTopbar());
   };
   window.openExpertLabFromTopbar = () => {
-    void import('./ui/expert-lab-page').then((m) => m.openExpertLabFromTopbar());
+    void import('./ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
   };
   window.closeDrawer = closeDrawer;
   window.onDrawerKeydown = onDrawerKeydown;
@@ -306,8 +306,8 @@ export async function initApp(): Promise<void> {
   researchPage.initResearchPage();
   const globalBugsPage = await import('./ui/global-bugs-page');
   globalBugsPage.initGlobalBugsPage();
-  const expertLabPage = await import('./ui/expert-lab-page');
-  expertLabPage.initExpertLabPage();
+  const expertsHub = await import('./ui/experts/experts-hub');
+  expertsHub.initExpertsHub();
   globalBugsPage.refreshGlobalBugsSidebarBadge();
   await fetchModels();
   syncModelSelectForActiveChat();

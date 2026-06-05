@@ -1,5 +1,5 @@
 /**
- * Save and delete user-owned experts (Expert Lab CRUD).
+ * Save and delete user-owned experts (Experts hub CRUD).
  */
 
 import {
@@ -23,6 +23,8 @@ export interface SaveUserExpertInput {
   description?: string;
   icon?: string;
   accent?: ExpertAccent;
+  tagline?: string;
+  greeting?: string;
   fullBody: string;
   liteBody: string;
   liteEdited: boolean;
@@ -36,19 +38,24 @@ export async function saveUserExpert(input: SaveUserExpertInput): Promise<void> 
   }
 
   const meta: ExpertMeta = {
-    ...(record?.meta ?? {
-      id: input.id,
-      label: input.label,
-      kind: 'expert',
-      version: '1',
-    }),
     id: input.id,
     label: input.label.trim() || input.id,
     kind: 'expert',
-    version: record?.meta.version ?? '1',
     description: input.description?.trim() || undefined,
+    tagline: input.tagline?.trim() || undefined,
+    greeting: input.greeting?.trim() || undefined,
     icon: input.icon?.trim() || undefined,
     accent: input.accent,
+  };
+
+  const markdownMeta = {
+    id: meta.id,
+    label: meta.label,
+    description: meta.description,
+    tagline: meta.tagline,
+    greeting: meta.greeting,
+    icon: meta.icon,
+    accent: meta.accent,
   };
 
   const liteBody =
@@ -56,8 +63,8 @@ export async function saveUserExpert(input: SaveUserExpertInput): Promise<void> 
       ? input.liteBody.trim()
       : input.liteBody.trim() || record?.liteBody?.trim() || input.fullBody.slice(0, 500);
 
-  const fullMarkdown = buildExpertMarkdown(meta, input.fullBody, 'full');
-  const liteMarkdown = buildExpertMarkdown(meta, liteBody, 'lite');
+  const fullMarkdown = buildExpertMarkdown(markdownMeta, input.fullBody, 'full');
+  const liteMarkdown = buildExpertMarkdown(markdownMeta, liteBody, 'lite');
 
   const fullSaved = await savePromptFileOverride('experts', input.id, 'full', fullMarkdown);
   const liteSaved = await savePromptFileOverride('experts', input.id, 'lite', liteMarkdown);

@@ -456,14 +456,16 @@ export interface TurnRunRecord {
   parentTurnId?: string;
 }
 
-/** Hidden session used by Expert Lab (filtered from sidebar). */
-export type ChatKind = 'expert-lab';
+/** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
+export type ChatKind = 'expert' | 'expert-lab';
 
 export interface Chat {
   id: string;
   name: string;
-  /** When set to expert-lab, chat is owned by Expert Lab and hidden from the sidebar. */
+  /** expert = per-expert thread; expert-lab = legacy hidden session (migrated away). */
   kind?: ChatKind;
+  /** Specialist id when kind === 'expert'. */
+  expertId?: string;
   /** Normalized absolute workspace root at chat creation; '' = unassigned (legacy). */
   workspacePath: string;
   modelId: string;
@@ -481,8 +483,6 @@ export interface Chat {
   reefWidgetModelId?: string;
   /** Expert auto/manual selection (Step 06). */
   expertSelection?: ExpertSelection;
-  /** Last auto-routed expert id (UI hint / debug). */
-  lastResolvedExpertId?: string | null;
   /** Tri-state thinking override for this chat (inherit uses work-agent / global stack). */
   thinkingMode?: ThinkingTriState;
   /** Active Work Agent; null = default / auto from mode (Step 08). */

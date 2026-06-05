@@ -2,7 +2,7 @@
  * Production TitleProviderPort — Step 03 provider registry + non-streaming POST.
  */
 
-import { postChatCompletions } from '../../providers/fetch-chat';
+import { completeNonStreamingViaGenerations } from '../../providers/fetch-chat';
 import { getActiveProvider } from '../../providers/store';
 import type { TitleProviderPort } from './types';
 
@@ -12,16 +12,11 @@ export function createTitleProviderPort(providerId?: string): TitleProviderPort 
     async complete(body, signal) {
       const provider = await getActiveProvider(providerId);
       const abortSignal = signal ?? new AbortController().signal;
-      const res = await postChatCompletions(
+      return completeNonStreamingViaGenerations(
         provider,
-        { ...body, stream: false },
+        body,
         abortSignal,
-        { stream: false },
       );
-      if (!res.ok) {
-        throw new Error(`Title HTTP ${res.status}`);
-      }
-      return res.json() as Promise<import('../../types').ChatCompletionChunk>;
     },
   };
 }

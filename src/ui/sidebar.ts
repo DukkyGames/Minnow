@@ -15,12 +15,19 @@ import {
   getActiveChat,
   getChatsForWorkspace,
   getUnassignedChats,
+  isHiddenFromMainSidebar,
   onWorkspaceChanged,
   sessionState,
   touchChat,
   recordChatMessage,
   scheduleSaveSessions,
 } from '../state/sessions';
+import {
+  getExpertScopeId,
+  isExpertScopeActive,
+  renderExpertScopeChatList,
+  renderExpertScopeHeader,
+} from './experts/experts-scope';
 import { getWorkspacePath } from '../state/workspace';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
@@ -148,6 +155,8 @@ interface AppendChatRowOptions {
   draggable?: boolean;
   /** Compact name-only row when listed under a sidebar group. */
   inGroup?: boolean;
+  /** Override default switchChat activation (e.g. Experts hub before shell opens). */
+  onActivate?: (chat: Chat) => void;
 }
 
 /** Sidebar row highlight id; suppressed while a board folder owns the main column. */
@@ -188,7 +197,8 @@ function appendChatListSection(
   }
 }
 
-function appendChatRow(
+/** Shared session row builder (main sidebar + expert-scoped list). */
+export function appendChatRow(
   list: HTMLElement,
   chat: Chat,
   highlightChatId: string | null,
@@ -216,12 +226,20 @@ function appendChatRow(
   }
   row.addEventListener('click', (e) => {
     if ((e.target as Element).closest('.chat-item-actions')) return;
+    if (options?.onActivate) {
+      options.onActivate(chat);
+      return;
+    }
     switchChat(chat.id);
   });
   row.addEventListener('keydown', (e) => {
     if ((e.target as Element).closest('.chat-item-actions')) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      if (options?.onActivate) {
+        options.onActivate(chat);
+        return;
+      }
       switchChat(chat.id);
     }
   });
@@ -475,12 +493,24 @@ export function wireSidebarNewGroupButton(): void {
 
 /** Rebuild the session list in the left sidebar (workspace-scoped + Unassigned). */
 export function renderSidebar(): void {
+  if (isExpertScopeActive() && sessionState) {
+    const expertId = getExpertScopeId();
+    if (expertId) {
+      renderExpertScopeHeader(expertId);
+      renderExpertScopeChatList(expertId, getActiveChat().id);
+    }
+    void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
+    return;
+  }
+
   const list = document.getElementById('chatList');
   if (!list || !sessionState) return;
   list.innerHTML = '';
 
   const ws = getWorkspacePath();
-  const workspaceChats = getChatsForWorkspace(ws, sessionState);
+  const workspaceChats = getChatsForWorkspace(ws, sessionState).filter(
+    (c) => !isHiddenFromMainSidebar(c),
+  );
   const groupedIds = new Set<string>();
   const highlightChatId = sidebarHighlightChatId();
 
@@ -510,7 +540,9 @@ export function renderSidebar(): void {
     appendChatRow(list, chat, highlightChatId);
   }
 
-  const unassigned = getUnassignedChats(sessionState);
+  const unassigned = getUnassignedChats(sessionState).filter(
+    (c) => !isHiddenFromMainSidebar(c),
+  );
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());

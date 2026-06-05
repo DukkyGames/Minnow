@@ -2,11 +2,11 @@
 id: _example-expert
 kind: expert
 label: Example (not registered)
-version: 1
 description: Copy-paste starter only
-priority: 0
-keywords:
-  - example
+tagline: Template expert for new personas
+greeting: Replace this greeting when you create a real expert.
+icon: "📎"
+accent: sage
 ---
 
 [[EXPERT:_example-expert]]
