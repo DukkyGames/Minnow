@@ -38,7 +38,7 @@ Server:
 
 Agent / model:
   --agent <id>          Work agent id (e.g. builder, planner)
-  --mode <id>           build | plan | orchestrate | research | reef (default build)
+  --mode <id>           general | build | plan | orchestrate | reef | debug (default build)
   --provider <id>       Override provider id
   --model <id>          Override model id
 

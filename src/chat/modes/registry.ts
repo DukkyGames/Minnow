@@ -29,14 +29,6 @@ const PLAN_DENIED_TOOLS: string[] = [
   'git_checkout',
 ];
 
-/** Additional write/mutate tools denied in Research (read-only emphasis). */
-const RESEARCH_EXTRA_DENIED_TOOLS: string[] = [
-  'save_file',
-  'make_directory',
-  'copy_file',
-  'write_clipboard',
-];
-
 function denyListToolPolicy(denied: string[]): ModeToolPolicy {
   const tools: Record<string, 'deny'> = {};
   for (const id of denied) {
@@ -76,16 +68,6 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: { default: 'allow' },
   },
   {
-    id: 'research',
-    label: 'Research',
-    description: 'Read, search, and gather information with minimal writes.',
-    promptId: 'research',
-    toolPolicy: denyListToolPolicy([
-      ...PLAN_DENIED_TOOLS,
-      ...RESEARCH_EXTRA_DENIED_TOOLS,
-    ]),
-  },
-  {
     id: 'reef',
     label: 'Reef',
     description: 'Build interactive widgets inline in chat.',
@@ -102,7 +84,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
   },
 ];
 
-/** Fixed seven modes in display order (General first). */
+/** Fixed six modes in display order (General first). */
 export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }

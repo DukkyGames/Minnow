@@ -147,6 +147,9 @@ export function openGlobalBugs(): void {
     const benchmarkRoot = document.getElementById('benchmarkView');
     if (benchmarkRoot?.classList.contains('is-open')) m.closeBenchmark();
   });
+  void import('../research/panel').then((m) => {
+    if (m.isResearchPageOpen()) m.closeResearch();
+  });
   root.classList.add('is-open');
   shell.classList.add('hidden');
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');

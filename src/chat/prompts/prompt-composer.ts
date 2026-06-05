@@ -35,7 +35,6 @@ const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'general',
   'plan',
   'build',
-  'research',
   'orchestrate',
   'reef',
 ]);

@@ -13,7 +13,7 @@
         "lite": "prompts/helper.lite.md"
       },
       "allowedTools": ["read_file", "find_files", "list_directory"],
-      "defaultForModes": ["research"]
+      "defaultForModes": ["general"]
     }
   ],
   "defaults": {

@@ -17,6 +17,7 @@ declare global {
     toggleDrawer: () => void;
     openSettingsFromTopbar: () => void;
     openBenchmarkFromTopbar: () => void;
+    openResearchFromTopbar: () => void;
     openExpertLabFromTopbar: () => void;
     openExpertLab?: () => void;
     closeDrawer: () => void;

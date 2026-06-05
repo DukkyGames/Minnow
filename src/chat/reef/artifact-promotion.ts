@@ -20,7 +20,7 @@ export interface ArtifactPromotionConfig {
 export const DEFAULT_ARTIFACT_PROMOTION: ArtifactPromotionConfig = {
   minChars: 4000,
   toolAllowlist: ['read_file', 'grep', 'list_directory', 'spawn_sub_agent'],
-  modeAllowlist: ['reef', 'build', 'research', 'plan', 'orchestrate'],
+  modeAllowlist: ['reef', 'build', 'plan', 'orchestrate'],
 };
 
 export interface ArtifactPromotionContext {

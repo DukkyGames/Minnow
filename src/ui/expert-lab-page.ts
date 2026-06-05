@@ -811,6 +811,9 @@ export function openExpertLab(): void {
   closeSettings();
   closeGlobalBugs();
   closeBenchmark();
+  void import('../research/panel').then((m) => {
+    if (m.isResearchPageOpen()) m.closeResearch();
+  });
   void import('./welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });

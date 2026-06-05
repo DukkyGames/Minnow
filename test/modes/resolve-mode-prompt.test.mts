@@ -47,23 +47,19 @@ describe('resolveModePromptPath', () => {
     );
   });
 
-  test('research full', () => {
-    assert.ok(
-      resolveModePromptPath('research', 'full').endsWith('modes/research.full.md'),
-    );
-  });
-
-  test('research lite', () => {
-    assert.ok(
-      resolveModePromptPath('research', 'lite').endsWith('modes/research.lite.md'),
-    );
-  });
-
   test('reef full', () => {
     assert.ok(resolveModePromptPath('reef', 'full').endsWith('modes/reef.full.md'));
   });
 
   test('reef lite', () => {
     assert.ok(resolveModePromptPath('reef', 'lite').endsWith('modes/reef.lite.md'));
+  });
+
+  test('debug full', () => {
+    assert.ok(resolveModePromptPath('debug', 'full').endsWith('modes/debug.full.md'));
+  });
+
+  test('debug lite', () => {
+    assert.ok(resolveModePromptPath('debug', 'lite').endsWith('modes/debug.lite.md'));
   });
 });

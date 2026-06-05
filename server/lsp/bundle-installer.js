@@ -127,7 +127,7 @@ export function resetLspBundleSpawnOverride() {
   spawnOverride = null;
 }
 
-function runProcess(command, args, options = {}) {
+export function runProcess(command, args, options = {}) {
   const spawnFn = spawnOverride ?? spawn;
   const { shell = false, ...spawnOpts } = options;
   return new Promise((resolve, reject) => {
@@ -434,7 +434,7 @@ async function fetchJson(url) {
   return res.json();
 }
 
-async function downloadToFile(url, dest, onProgress) {
+export async function downloadToFile(url, dest, onProgress) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'minnow-lsp-bundle-installer' },
   });
@@ -462,7 +462,7 @@ async function downloadToFile(url, dest, onProgress) {
   });
 }
 
-async function verifySha256(filePath, expectedHex) {
+export async function verifySha256(filePath, expectedHex) {
   const hash = createHash('sha256');
   const stream = fs.createReadStream(filePath);
   for await (const chunk of stream) {
@@ -474,7 +474,7 @@ async function verifySha256(filePath, expectedHex) {
   }
 }
 
-async function extractArchive(archivePath, destDir) {
+export async function extractArchive(archivePath, destDir) {
   await fsp.mkdir(destDir, { recursive: true });
   if (archivePath.endsWith('.zip')) {
     await runProcess(

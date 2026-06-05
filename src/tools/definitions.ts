@@ -261,7 +261,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Research, Reef) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Reef, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -270,7 +270,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'research', 'reef', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -290,7 +290,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'build', 'plan', 'orchestrate', 'research', 'reef', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {

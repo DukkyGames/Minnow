@@ -4,6 +4,7 @@ import {
   classifyDdgHtml,
   DDG_BOT_CHALLENGE_MESSAGE,
   parseDdgHtmlResults,
+  parseDdgHtmlStructured,
 } from '../../server/tools/web-search-ddg.js';
 
 describe('classifyDdgHtml', () => {
@@ -37,6 +38,23 @@ describe('classifyDdgHtml', () => {
 
   it('returns empty when no results or challenge', () => {
     assert.equal(classifyDdgHtml(200, '<html><body>no hits</body></html>'), 'empty');
+  });
+});
+
+describe('parseDdgHtmlStructured', () => {
+  it('returns structured title, url, and snippet rows', () => {
+    const html = `
+      <div class="result ">
+        <a class="result__a" href="https://example.com">Example &amp; Co</a>
+        <a class="result__snippet">A short snippet</a>
+      </div>`;
+    const rows = parseDdgHtmlStructured(html);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0], {
+      title: 'Example & Co',
+      url: 'https://example.com',
+      snippet: 'A short snippet',
+    });
   });
 });
 

@@ -243,6 +243,9 @@
     <button class="icon-btn" type="button" id="btnPreviewToggle" aria-label="Preview browser" title="Preview browser" onclick="togglePreviewFromTopbar()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
     </button>
+    <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research" onclick="openResearchFromTopbar()">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+    </button>
     <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
@@ -443,6 +446,9 @@
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavIntegrations">
         <p id="settingsNavIntegrations" class="settings-nav-group__label">Tools &amp; integrations</p>
+        <button type="button" data-settings-nav="search">Search</button>
+        <button type="button" data-settings-nav="deep-research">Deep Research</button>
+        <button type="button" data-settings-nav="servers">Servers</button>
         <button type="button" data-settings-nav="tools">Tools</button>
         <button type="button" data-settings-nav="mcp">MCP servers</button>
         <button type="button" data-settings-nav="lsp">Language servers</button>
@@ -653,7 +659,7 @@
       </section>
       <section id="settingsSection-modes" class="settings-section">
         <h2>Modes</h2>
-        <p class="settings-lead">Build, Plan, Orchestrate, Research, and Reef — tool policy and mode-specific options. Edit prompts in <strong>Prompts</strong>.</p>
+        <p class="settings-lead">General, Build, Plan, Orchestrate, Reef, and Debug — tool policy and mode-specific options. Edit prompts in <strong>Prompts</strong>.</p>
         <div id="settingsModesBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-experts" class="settings-section">
@@ -676,9 +682,24 @@
         <p class="settings-lead">Background workers (explore, shell, research, …): concurrency, timeouts, and tool policy. Prompts and models live in <strong>Prompts</strong> and <strong>Models</strong>.</p>
         <div id="settingsSubAgentsBody" class="settings-section-body"></div>
       </section>
+      <section id="settingsSection-search" class="settings-section">
+        <h2>Search</h2>
+        <p class="settings-lead">Web search provider, SearXNG URL, API keys, and the Deep Research fallback chain. Controls <code>web_search</code> and future research runs.</p>
+        <div id="settingsSearchBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-deep-research" class="settings-section">
+        <h2>Deep Research</h2>
+        <p class="settings-lead">Dedicated model binding and IterResearch engine limits (<code>research.json</code>). Empty model uses the active chat model.</p>
+        <div id="settingsDeepResearchBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-servers" class="settings-section">
+        <h2>Servers</h2>
+        <p class="settings-lead">Managed local services (SearXNG) under <code>~/.minnow/servers/</code>. When enabled and running, Search and Deep Research use the managed instance instead of the SearXNG URL in <code>search.json</code>.</p>
+        <div id="settingsServersBody" class="settings-section-body"></div>
+      </section>
       <section id="settingsSection-tools" class="settings-section">
         <h2>Tools</h2>
-        <p class="settings-lead">Built-in tool permissions, filesystem policy, browser allowlist, and API keys. Server tools need <code>npm start</code>.</p>
+        <p class="settings-lead">Built-in tool permissions, filesystem policy, and browser allowlist. Search provider and API keys are under <strong>Search</strong>. Server tools need <code>npm start</code>.</p>
         <div id="settingsToolsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-mcp" class="settings-section">
@@ -808,6 +829,84 @@
     <button type="button" class="welcome-page__continue" id="btnWelcomeContinueMinnow">
       Continue in Minnow folder
     </button>
+  </div>
+</main>
+
+<main id="researchView" class="research-page" aria-label="Deep Research">
+  <header class="research-page-header">
+    <button class="icon-btn" type="button" id="btnResearchPageBack" aria-label="Back to chat">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="research-page-heading">
+      <h1>Deep Research</h1>
+      <p class="research-page-lede">Iterative web research with a live report</p>
+    </div>
+    <button type="button" class="research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
+  </header>
+  <div class="research-page-body">
+    <div class="research-page-inner">
+      <div class="research-tabs" role="tablist" aria-label="Research views">
+        <button type="button" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
+        <button type="button" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
+      </div>
+      <div id="researchPanelRun" role="tabpanel">
+        <label class="research-field-label" for="researchQuery">Research question</label>
+        <textarea id="researchQuery" class="research-query" rows="4" placeholder="What do you want to research?"></textarea>
+        <div class="research-run-options">
+          <div>
+            <label class="research-field-label" for="researchMaxRounds">Rounds</label>
+            <select id="researchMaxRounds" class="research-select">
+              <option value="auto">Auto</option>
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+          <div>
+            <label class="research-field-label" for="researchCategory">Category</label>
+            <select id="researchCategory" class="research-select">
+              <option value="">Auto</option>
+              <option value="product">Product</option>
+              <option value="comparison">Comparison</option>
+              <option value="howto">How-to</option>
+              <option value="factcheck">Fact-check</option>
+            </select>
+          </div>
+          <div>
+            <label class="research-field-label" for="researchSearchProvider">Search</label>
+            <select id="researchSearchProvider" class="research-select">
+              <option value="">Default (Settings)</option>
+              <option value="searxng">SearXNG</option>
+              <option value="tavily">Tavily</option>
+              <option value="brave">Brave</option>
+              <option value="duckduckgo">DuckDuckGo</option>
+            </select>
+          </div>
+          <div>
+            <label class="research-field-label" for="researchProviderOverride">Provider override</label>
+            <select id="researchProviderOverride" class="research-select">
+              <option value="">(from settings)</option>
+            </select>
+          </div>
+          <div>
+            <label class="research-field-label" for="researchModelOverride">Model override</label>
+            <input type="text" id="researchModelOverride" class="research-input" placeholder="(from settings)" />
+          </div>
+        </div>
+        <div class="research-run-actions">
+          <button type="button" class="research-btn research-btn--primary" id="btnResearchStart">Start research</button>
+          <button type="button" class="research-btn" id="btnResearchCancel" hidden>Cancel</button>
+        </div>
+        <div id="researchSynapseMount" aria-live="polite"></div>
+        <div id="researchResultMount"></div>
+      </div>
+      <div id="researchPanelLibrary" class="hidden" role="tabpanel">
+        <div id="researchLibraryMount" class="research-library"></div>
+      </div>
+    </div>
   </div>
 </main>
 

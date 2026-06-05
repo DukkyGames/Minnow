@@ -78,6 +78,116 @@ describe('config API CRUD', () => {
     assert.deepEqual(get.json, expected);
   });
 
+  test('GET search seeds from tools.json when missing', async () => {
+    const tools = {
+      enabled: { web_search: true },
+      permissions: { default: { web_search: 'ask' }, perAgent: {}, patterns: [] },
+      keys: { braveApiKey: 'brave-seed', tavilyApiKey: 'tvly-seed' },
+      webSearchProvider: 'tavily',
+    };
+    const toolsPut = await httpRequest(baseUrl, 'PUT', '/api/config/tools', tools);
+    assert.equal(toolsPut.status, 200);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/search');
+    assert.equal(get.status, 200);
+    assert.equal(get.json.provider, 'tavily');
+    assert.equal(get.json.keys.braveApiKey, 'brave-seed');
+    assert.equal(get.json.keys.tavilyApiKey, 'tvly-seed');
+    assert.ok(Array.isArray(get.json.fallbackChain));
+  });
+
+  test('PUT search round-trip normalizes', async () => {
+    const payload = {
+      provider: 'brave',
+      fallbackChain: ['duckduckgo', 'tavily', 'brave'],
+      searxngUrl: 'http://127.0.0.1:9999/',
+      keys: { braveApiKey: 'k1', tavilyApiKey: 'k2' },
+      resultCount: 99,
+    };
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/search', payload);
+    assert.equal(put.status, 200);
+    assert.equal(put.json.data.provider, 'brave');
+    assert.equal(put.json.data.resultCount, 50);
+    assert.deepEqual(put.json.data.fallbackChain, ['duckduckgo', 'tavily', 'brave']);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/search');
+    assert.equal(get.json.provider, 'brave');
+    assert.equal(get.json.searxngUrl, 'http://127.0.0.1:9999');
+  });
+
+  test('GET servers returns default searxng entry', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/config/servers');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.searxng.enabled, false);
+    assert.equal(res.json.searxng.autoStart, true);
+    assert.equal(res.json.searxng.port, 8899);
+  });
+
+  test('PUT servers round-trip normalizes ports and booleans', async () => {
+    const payload = {
+      searxng: {
+        enabled: true,
+        autoStart: false,
+        port: 9123,
+      },
+    };
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/servers', payload);
+    assert.equal(put.status, 200);
+    assert.equal(put.json.data.searxng.enabled, true);
+    assert.equal(put.json.data.searxng.autoStart, false);
+    assert.equal(put.json.data.searxng.port, 9123);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/servers');
+    assert.equal(get.json.searxng.enabled, true);
+    assert.equal(get.json.searxng.autoStart, false);
+    assert.equal(get.json.searxng.port, 9123);
+  });
+
+  test('PUT servers clamps sub-minimum port to 1024', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/servers', {
+      searxng: { enabled: false, autoStart: true, port: 500 },
+    });
+    assert.equal(put.status, 200);
+    assert.equal(put.json.data.searxng.port, 1024);
+  });
+
+  test('PUT servers clamps high port to 65535', async () => {
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/servers', {
+      searxng: { enabled: false, autoStart: true, port: 70000 },
+    });
+    assert.equal(put.status, 200);
+    assert.equal(put.json.data.searxng.port, 65535);
+  });
+
+  test('PUT research round-trip normalizes', async () => {
+    const payload = {
+      model: { providerId: 'lm-studio', model: 'test-model' },
+      searchProvider: '',
+      maxRounds: 99,
+      minRounds: 2,
+      maxTimeSeconds: 10,
+      runTimeoutSeconds: 999999,
+      maxReportTokens: 500,
+      extractionTimeoutSeconds: 5,
+      extractionConcurrency: 0,
+      maxUrlsPerRound: 100,
+      maxContentChars: 500,
+      synthesisWindow: 0,
+      maxEmptyRounds: 0,
+    };
+    const put = await httpRequest(baseUrl, 'PUT', '/api/config/research', payload);
+    assert.equal(put.status, 200);
+    assert.equal(put.json.data.maxRounds, 20);
+    assert.equal(put.json.data.minRounds, 2);
+    assert.equal(put.json.data.maxTimeSeconds, 30);
+    assert.equal(put.json.data.runTimeoutSeconds, 86400);
+    assert.equal(put.json.data.extractionConcurrency, 1);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/research');
+    assert.equal(get.json.model.providerId, 'lm-studio');
+    assert.equal(get.json.maxRounds, 20);
+  });
+
   test('GET file API rejects traversal key', async () => {
     const res = await httpRequest(
       baseUrl,

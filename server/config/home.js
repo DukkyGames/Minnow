@@ -7,6 +7,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { ALL_TOOL_IDS } from './tool-ids.js';
+import { defaultServersConfig } from './validators.js';
 
 /** Cached resolved home path for this process. */
 let cachedHome = null;
@@ -71,7 +72,9 @@ const SCAFFOLD_DIRS = [
   'agent-packs',
   'backups',
   'logs/sub-agents',
+  'logs/servers',
   'logs/terminal',
+  'servers',
   'screenshots',
   'reef/widgets',
   'reef/modules',
@@ -80,6 +83,8 @@ const SCAFFOLD_DIRS = [
   'evals',
   'evals/packs',
   'evals/runs',
+  'research',
+  'research/cache',
 ];
 
 const DEFAULT_META = {
@@ -317,6 +322,7 @@ export async function ensureMinnowLayout() {
     { rel: 'config.json', data: DEFAULT_META },
     { rel: 'sessions/state.json', data: defaultSessionStateJson() },
     { rel: 'tools.json', data: defaultToolsJson() },
+    { rel: 'servers.json', data: defaultServersConfig() },
     { rel: 'skills.json', data: defaultSkillsJson() },
     { rel: 'system-prompt.json', data: DEFAULT_SYSTEM_PROMPT },
     { rel: 'rules.json', data: DEFAULT_RULES },
