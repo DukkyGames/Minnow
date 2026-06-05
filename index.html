@@ -909,10 +909,8 @@
         <span id="expertsDetailChip" class="experts-chip expert-accent-sage"></span>
         <button type="button" class="settings-inline-btn" id="btnExpertsDetailBack">All experts</button>
       </div>
-      <div id="expertsChatList" class="experts-chat-list" role="list"></div>
-      <div class="experts-actions">
-        <button type="button" class="is-primary" id="btnExpertsNewChat">New chat</button>
-      </div>
+      <div id="expertsChatList" class="experts-chat-list chat-list" role="list"></div>
+      <button type="button" class="chat-new-wide experts-new-chat-wide" id="btnExpertsNewChat">+ New chat</button>
     </section>
     <section class="experts-step experts-step--create" aria-label="Make your own expert">
       <p class="experts-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Experts.</p>
@@ -986,14 +984,17 @@
   <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat sessions">
     <div id="expertScopeChrome" class="expert-scope-chrome hidden" hidden>
       <div class="expert-scope-header">
-        <button type="button" class="expert-scope-back" id="btnExpertScopeBack">← Experts</button>
-        <div class="expert-scope-identity">
+        <button type="button" class="expert-scope-back" id="btnExpertScopeBack" aria-label="Back to Experts">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <span class="expert-scope-back-label">Experts</span>
+        </button>
+        <div id="expertScopeIdentity" class="expert-scope-identity">
           <span id="expertScopeIcon" class="expert-scope-icon" aria-hidden="true"></span>
           <span id="expertScopeTitle" class="expert-scope-title"></span>
         </div>
-        <button type="button" class="expert-scope-new" id="btnExpertScopeNewChat">New chat</button>
       </div>
-      <div id="expertScopeChatList" class="expert-scope-chat-list" role="list"></div>
+      <button type="button" class="chat-new-wide" id="btnExpertScopeNewChat">+ New chat</button>
+      <div id="expertScopeChatList" class="chat-list" role="list"></div>
     </div>
     <div id="chatSidebarMain" class="chat-sidebar-main">
     <div class="chat-sidebar-header">

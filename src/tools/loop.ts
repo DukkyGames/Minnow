@@ -40,6 +40,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
@@ -60,6 +61,7 @@ import {
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
+  isExpertChat,
   scheduleSaveSessions,
   touchChat,
   recordChatMessage,
@@ -422,6 +424,8 @@ export interface RunChatTurnOptions {
   validAttachments: Attachment[];
   titleSeed?: string;
   shouldScheduleTitle?: boolean;
+  /** Expert chats: run title job after the first turn so LM Studio is not double-booked. */
+  deferTitleUntilTurnEnd?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
   /** Re-subscribe to an existing backend generation (boot resume); skips POST. */
@@ -506,7 +510,7 @@ export function buildApiMessages(
     messages.push({ role: 'user', content: continueLine });
   }
 
-  return messages;
+  return foldLeadingAssistantPreamble(messages);
 }
 
 interface StreamTurnResult {
@@ -695,6 +699,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     validAttachments,
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
+    deferTitleUntilTurnEnd = false,
     skillBody: presetSkillBody = null,
     resumeGenerationId,
     ownsGlobalStreaming = true,
@@ -1753,6 +1758,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     thinkingTracker?.abort();
     if (completedNormally) {
       clearAttachments();
+      if (deferTitleUntilTurnEnd) {
+        const seed = titleSeed?.trim() || userText?.trim() || rawText?.trim();
+        if (seed) {
+          scheduleChatTitleGeneration(chat.id, seed, {
+            modelId: chat.modelId?.trim() || undefined,
+            providerId: chat.providerId?.trim() || undefined,
+          });
+        }
+      }
     }
     clearMainTurnActivity(chat.id);
     if (ownsGlobalStreaming) {
@@ -2006,7 +2020,8 @@ export async function sendMessageWithTools(): Promise<void> {
     : userText || rawText;
   const historyContent = buildHistoryUserContent(displayText, validAttachments);
   const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
-  const shouldScheduleTitle = isFirstUserMessagePending(chat);
+  const firstUserPending = isFirstUserMessagePending(chat);
+  const deferTitleUntilTurnEnd = firstUserPending && isExpertChat(chat);
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
@@ -2021,7 +2036,8 @@ export async function sendMessageWithTools(): Promise<void> {
     historyContent,
     validAttachments,
     titleSeed,
-    shouldScheduleTitle,
+    shouldScheduleTitle: firstUserPending && !deferTitleUntilTurnEnd,
+    deferTitleUntilTurnEnd,
     skillBody,
   });
 }

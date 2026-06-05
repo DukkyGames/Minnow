@@ -8,11 +8,12 @@ import { bootGenerationResumeForChat } from '../../chat/generation-resume';
 import { setExpertsPageOpen } from '../../app-state';
 import { activateChatById, getExpertChats } from '../../state/sessions';
 import type { Chat } from '../../types';
-import { recordChatOpened } from '../chat-item-dot';
+import { recordChatOpened, syncChatItemDotsInDom } from '../chat-item-dot';
+import { appendChatRow } from '../sidebar';
 import { renderChatFromHistory, renderStatsForChat } from '../messages';
-import { syncModelSelectForActiveChat } from '../sidebar';
 import { syncComposerFromStreamingState } from '../composer-send';
 import { syncModeSelectorFromActiveChat } from '../mode-selector';
+import { syncModelSelectForActiveChat } from '../sidebar';
 
 let expertScopeId: string | null = null;
 
@@ -81,21 +82,14 @@ export function renderExpertScopeHeader(expertId: string): void {
   const expert = getExpert(expertId);
   const iconEl = document.getElementById('expertScopeIcon');
   const titleEl = document.getElementById('expertScopeTitle');
+  const identityEl = document.getElementById('expertScopeIdentity');
   if (!expert) return;
   const accent = expertAccent(expert.meta);
   if (iconEl) {
     iconEl.textContent = expertIcon(expert.meta);
-    applyAccentToElement(iconEl, accent);
   }
   if (titleEl) titleEl.textContent = expert.meta.label;
-}
-
-function formatScopeChatTime(epochMs: number): string {
-  const delta = Date.now() - epochMs;
-  if (delta < 60_000) return 'Just now';
-  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m`;
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h`;
-  return `${Math.floor(delta / 86_400_000)}d`;
+  if (identityEl) applyAccentToElement(identityEl, accent);
 }
 
 /** Rebuild expert-scoped chat rows in the sidebar. */
@@ -104,27 +98,9 @@ export function renderExpertScopeChatList(expertId: string, activeChatId: string
   if (!list) return;
   list.replaceChildren();
   for (const chat of getExpertChats(expertId)) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chat-item';
-    if (chat.id === activeChatId) btn.classList.add('active');
-    btn.dataset.chatId = chat.id;
-
-    const name = document.createElement('span');
-    name.className = 'chat-item-name';
-    name.textContent = chat.name;
-
-    const time = document.createElement('span');
-    time.className = 'chat-item-time';
-    time.textContent = formatScopeChatTime(chat.lastMessageAt ?? chat.updatedAt);
-
-    btn.appendChild(name);
-    btn.appendChild(time);
-    btn.addEventListener('click', () => {
-      void openExpertChatInShell(chat);
-    });
-    list.appendChild(btn);
+    appendChatRow(list, chat, activeChatId, { draggable: false });
   }
+  syncChatItemDotsInDom();
 }
 
 /** Activate chat in expert-scoped shell (sidebar + main column). */

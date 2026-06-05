@@ -782,6 +782,7 @@ export function createExpertChat(expertId: string, modelId = ''): Chat {
   chat.kind = 'expert';
   chat.expertId = trimmedId;
   chat.expertSelection = { mode: 'manual', expertId: trimmedId };
+  chat.modeId = 'general';
   chat.name = PLACEHOLDER_CHAT_NAME;
   state.chats.push(chat);
   touchChat(chat);

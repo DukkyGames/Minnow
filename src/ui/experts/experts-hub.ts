@@ -39,6 +39,7 @@ import {
   openExpertChatInShell,
   teardownExpertScopeShell,
 } from './experts-scope';
+import { appendChatRow } from '../sidebar';
 
 export { openExpertChatInShell } from './experts-scope';
 
@@ -107,14 +108,6 @@ function setFormError(elementId: string, message: string | null): void {
   el.classList.remove('hidden');
 }
 
-function formatRelativeTime(epochMs: number): string {
-  const delta = Date.now() - epochMs;
-  if (delta < 60_000) return 'Just now';
-  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m ago`;
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h ago`;
-  return `${Math.floor(delta / 86_400_000)}d ago`;
-}
-
 function renderMakeExpertTile(grid: HTMLElement): void {
   const tile = document.createElement('button');
   tile.type = 'button';
@@ -126,6 +119,9 @@ function renderMakeExpertTile(grid: HTMLElement): void {
   iconEl.textContent = '+';
   iconEl.setAttribute('aria-hidden', 'true');
 
+  const copy = document.createElement('div');
+  copy.className = 'experts-tile-copy';
+
   const label = document.createElement('span');
   label.className = 'experts-tile-label';
   label.textContent = 'Make your own expert';
@@ -134,9 +130,10 @@ function renderMakeExpertTile(grid: HTMLElement): void {
   desc.className = 'experts-tile-desc';
   desc.textContent = 'Describe a specialist and Minnow will draft a custom expert for you.';
 
+  copy.appendChild(label);
+  copy.appendChild(desc);
   tile.appendChild(iconEl);
-  tile.appendChild(label);
-  tile.appendChild(desc);
+  tile.appendChild(copy);
   tile.addEventListener('click', () => openCreateExpertStep());
   grid.appendChild(tile);
 }
@@ -210,18 +207,13 @@ export function renderGallery(): void {
     tile.className = `experts-tile ${accentClassName(accent)}`;
     tile.dataset.expertId = expert.meta.id;
 
-    if (chatCount > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'experts-tile-badge';
-      badge.textContent = String(chatCount);
-      badge.setAttribute('aria-label', `${chatCount} chat${chatCount === 1 ? '' : 's'}`);
-      tile.appendChild(badge);
-    }
-
     const iconEl = document.createElement('span');
     iconEl.className = 'experts-tile-icon';
     iconEl.textContent = expertIcon(expert.meta);
     iconEl.setAttribute('aria-hidden', 'true');
+
+    const copy = document.createElement('div');
+    copy.className = 'experts-tile-copy';
 
     const label = document.createElement('span');
     label.className = 'experts-tile-label';
@@ -231,9 +223,18 @@ export function renderGallery(): void {
     desc.className = 'experts-tile-desc';
     desc.textContent = expert.meta.description ?? '';
 
+    copy.appendChild(label);
+    copy.appendChild(desc);
     tile.appendChild(iconEl);
-    tile.appendChild(label);
-    tile.appendChild(desc);
+    tile.appendChild(copy);
+
+    if (chatCount > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'experts-tile-badge';
+      badge.textContent = String(chatCount);
+      badge.setAttribute('aria-label', `${chatCount} chat${chatCount === 1 ? '' : 's'}`);
+      tile.appendChild(badge);
+    }
 
     if (isUserOwnedExpert(expert, builtinIds)) {
       renderExpertTileMenu(tile, expert.meta.id, expert.meta.label);
@@ -282,27 +283,13 @@ export function renderExpertChatList(expertId: string): void {
   }
 
   for (const chat of chats) {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'experts-chat-row';
-    row.dataset.chatId = chat.id;
-
-    const title = document.createElement('span');
-    title.className = 'experts-chat-row-title';
-    title.textContent = chat.name;
-
-    const meta = document.createElement('span');
-    meta.className = 'experts-chat-row-meta';
-    const at = chat.lastMessageAt ?? chat.updatedAt;
-    meta.textContent = formatRelativeTime(at);
-
-    row.appendChild(title);
-    row.appendChild(meta);
-    row.addEventListener('click', () => {
-      selectedExpertId = expertId;
-      void openExpertChatInShell(chat);
+    appendChatRow(list, chat, null, {
+      draggable: false,
+      onActivate: (c) => {
+        selectedExpertId = expertId;
+        void openExpertChatInShell(c);
+      },
     });
-    list.appendChild(row);
   }
 }
 

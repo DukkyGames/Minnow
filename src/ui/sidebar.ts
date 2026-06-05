@@ -149,6 +149,8 @@ interface AppendChatRowOptions {
   draggable?: boolean;
   /** Compact name-only row when listed under a sidebar group. */
   inGroup?: boolean;
+  /** Override default switchChat activation (e.g. Experts hub before shell opens). */
+  onActivate?: (chat: Chat) => void;
 }
 
 /** Sidebar row highlight id; suppressed while a board folder owns the main column. */
@@ -189,7 +191,8 @@ function appendChatListSection(
   }
 }
 
-function appendChatRow(
+/** Shared session row builder (main sidebar + expert-scoped list). */
+export function appendChatRow(
   list: HTMLElement,
   chat: Chat,
   highlightChatId: string | null,
@@ -217,12 +220,20 @@ function appendChatRow(
   }
   row.addEventListener('click', (e) => {
     if ((e.target as Element).closest('.chat-item-actions')) return;
+    if (options?.onActivate) {
+      options.onActivate(chat);
+      return;
+    }
     switchChat(chat.id);
   });
   row.addEventListener('keydown', (e) => {
     if ((e.target as Element).closest('.chat-item-actions')) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      if (options?.onActivate) {
+        options.onActivate(chat);
+        return;
+      }
       switchChat(chat.id);
     }
   });

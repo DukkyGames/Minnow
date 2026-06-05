@@ -11,6 +11,7 @@ import { listComposerModes, listModes } from '../chat/modes/registry';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   getActiveChat,
+  isExpertChat,
   scheduleSaveSessions,
   touchChat,
 } from '../state/sessions';
@@ -36,6 +37,11 @@ function getModeSelectorEl(): HTMLElement | null {
 export function syncModeSelectorFromActiveChat(): void {
   const root = getModeSelectorEl();
   if (!root) return;
+
+  const chat = getActiveChat();
+  if (isExpertChat(chat) && chat.modeId !== 'general') {
+    setChatMode('general');
+  }
 
   const activeId = getActiveChat().modeId ?? 'build';
   const buttons = root.querySelectorAll<HTMLButtonElement>('[data-mode-id]');
@@ -92,6 +98,12 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
   }
 
   const chat = getActiveChat();
+  if (isExpertChat(chat)) {
+    if (modeId !== 'general') {
+      return { ok: false, error: 'Expert chats use General mode' };
+    }
+  }
+
   const normalized = modeId;
   if (chat.modeId === normalized) {
     const mode = listModes().find((m) => m.id === normalized);

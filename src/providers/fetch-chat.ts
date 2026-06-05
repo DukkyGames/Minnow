@@ -10,6 +10,8 @@ import {
   type GenerationEndEvent,
 } from '../api/generations';
 import type { ChatCompletionBody } from '../api/chat';
+import { parseCompletionResponseBody } from '../api/sse-parse';
+import type { ChatCompletionChunk } from '../types';
 import type { ProviderPublic } from './types';
 import { resolveProviderEndpoints } from './resolve';
 
@@ -93,6 +95,28 @@ export async function postChatCompletions(
     status: 200,
     headers: { 'Content-Type': 'text/event-stream' },
   });
+}
+
+/**
+ * Non-streaming completion via backend generations (read body as text, then parse).
+ * Never call Response.json() on the SSE shim — see BUG-016 / parseCompletionResponseBody.
+ */
+export async function completeNonStreamingViaGenerations(
+  provider: ProviderPublic,
+  body: ChatCompletionBody,
+  signal: AbortSignal,
+): Promise<ChatCompletionChunk> {
+  const res = await postChatCompletions(
+    provider,
+    { ...body, stream: false },
+    signal,
+    { stream: false },
+  );
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  return parseCompletionResponseBody(text);
 }
 
 /** Re-export for callers that need URLs without posting. */
