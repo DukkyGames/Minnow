@@ -361,14 +361,14 @@ async function cancelActiveRun(): Promise<void> {
 }
 
 function closeOtherOverlays(): void {
-  closeSettings();
+  closeSettings({ skipNavigate: true });
   closeGlobalBugs();
-  closeBenchmark();
+  closeBenchmark({ skipNavigate: true });
   void import('../ui/welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });
   void import('../ui/experts/experts-hub').then((m) => {
-    if (m.isExpertsPageOpen()) m.closeExpertsHub();
+    if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
   });
 }
 

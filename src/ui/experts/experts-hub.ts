@@ -598,9 +598,9 @@ export function openExperts(options?: OpenExpertsOptions): void {
   const shell = getChatShell();
   if (!root || !shell) return;
 
-  closeSettings();
+  closeSettings({ skipNavigate: true });
   closeGlobalBugs();
-  closeBenchmark();
+  closeBenchmark({ skipNavigate: true });
   void import('../welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });

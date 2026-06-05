@@ -368,8 +368,8 @@ function startApp(): void {
       window.location.replace('#/desktop');
     }
     initOsPageBridge();
-    initOsRouter();
     initOsShell();
+    initOsRouter();
   }
   void initApp();
 }

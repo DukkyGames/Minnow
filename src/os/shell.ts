@@ -93,6 +93,8 @@ export function initOsShell(): void {
   const cleanupDesktop = renderDesktop(desktopLayer);
   const cleanupMenubar = renderMenubar(menubar);
   initAppHost();
+  // Re-apply route now that app layers are mounted (router may have queued an app open).
+  void import('./router').then((m) => m.syncOsRouteFromHash());
 
   window.addEventListener(
     'beforeunload',

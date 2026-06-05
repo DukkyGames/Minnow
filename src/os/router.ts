@@ -157,9 +157,14 @@ export function isOsRouterInitialized(): boolean {
   return initialized;
 }
 
+/** Re-sync shell UI from the current hash without changing it. */
+export function syncOsRouteFromHash(): void {
+  applyRouteFromHash();
+}
+
 /** Re-sync from hash without changing it (tests). */
 export function syncOsRouteFromHashForTests(): void {
-  applyRouteFromHash();
+  syncOsRouteFromHash();
 }
 
 /** Reset router module state (tests). */

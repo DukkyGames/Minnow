@@ -1356,7 +1356,7 @@ export function openBenchmark(): void {
   }
 
   void import('./experts/experts-hub').then((m) => {
-    if (m.isExpertsPageOpen()) m.closeExpertsHub();
+    if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
   });
   void import('./global-bugs-page').then((m) => {
     if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
@@ -1365,7 +1365,7 @@ export function openBenchmark(): void {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });
   void import('../research/panel').then((m) => {
-    if (m.isResearchPageOpen()) m.closeResearch();
+    if (m.isResearchPageOpen()) m.closeResearch({ skipNavigate: true });
   });
 
   root.classList.add('is-open');

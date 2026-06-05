@@ -251,13 +251,15 @@ html.minnow-os-enabled #minnowOsRoot {
   z-index: 20;
 }
 
-html.minnow-os-enabled #osAppsLayer .settings-page,
-html.minnow-os-enabled #osAppsLayer .benchmark-page,
-html.minnow-os-enabled #osAppsLayer .research-page,
-html.minnow-os-enabled #osAppsLayer .experts-page {
+html.minnow-os-enabled #osAppsLayer .settings-page.is-open,
+html.minnow-os-enabled #osAppsLayer .benchmark-page.is-open,
+html.minnow-os-enabled #osAppsLayer .research-page.is-open,
+html.minnow-os-enabled #osAppsLayer .experts-page.is-open {
+  display: flex !important;
   height: 100%;
   flex: 1;
   min-height: 0;
+  width: 100%;
 }
 
 html.minnow-os-enabled header.topbar.hidden {
