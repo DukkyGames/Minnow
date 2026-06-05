@@ -32,13 +32,15 @@ interface LlmExpertPayload {
   id?: string;
   label?: string;
   description?: string;
+  tagline?: string;
+  greeting?: string;
   icon?: string;
   accent?: string;
   fullMarkdown?: string;
   liteMarkdown?: string;
 }
 
-const FALLBACK_CREATOR_SYSTEM = `You create custom Expert Lab personas. Output only JSON with keys: id, label, description, icon, accent, fullMarkdown, liteMarkdown. No routing keywords.`;
+const FALLBACK_CREATOR_SYSTEM = `You create custom Experts for Minnow. Output only JSON with keys: id, label, description, tagline, greeting, icon, accent, fullMarkdown, liteMarkdown. No version or routing fields (keywords, regex, classifierHint, priority, default).`;
 
 function stripJsonFences(text: string): string {
   const trimmed = text.trim();

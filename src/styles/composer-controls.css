@@ -225,6 +225,12 @@
   cursor: not-allowed;
 }
 
+/* Expert-scoped shell: General mode only — hide mode picker and thinking toggle. */
+#appBody[data-scope='expert'] #modeSelector,
+#appBody[data-scope='expert'] #composerThinkingWrap {
+  display: none;
+}
+
 @media (max-width: 600px) {
   .thinking-control-wrap {
     flex: 1 1 100%;

@@ -1,46 +1,44 @@
 /**
- * Experts settings panel helpers (formerly in expert-select.ts).
+ * Experts settings panel helpers.
  */
 
-import { listExperts } from '../chat/experts/registry';
+import { syncExpertRegistryFromServer } from '../chat/experts/registry';
 import { loadExpertsConfig, saveExpertsConfig } from '../config/experts-config';
 
-/** Hint payload after auto-routing on send (chat composer path). */
-export interface ExpertHintContext {
-  expertId: string | null;
-  expertLabel: string | null;
-}
-
-/** Read-only expert id list for settings drawer. */
-export function renderExpertsReadOnlyList(container: HTMLElement): void {
-  container.replaceChildren();
-  const ul = document.createElement('ul');
-  ul.className = 'experts-id-list';
-  for (const expert of listExperts()) {
-    const li = document.createElement('li');
-    li.textContent = expert.meta.id;
-    ul.appendChild(li);
+/** Refresh Experts empty state vs gallery when experts.enabled toggles. */
+export async function refreshExpertsEnabledState(): Promise<void> {
+  const config = await loadExpertsConfig();
+  const empty = document.getElementById('expertsDisabled');
+  const pickStep = document.querySelector('.experts-step--gallery');
+  if (!empty || !pickStep) return;
+  if (config.enabled) {
+    empty.classList.add('hidden');
+    pickStep.classList.remove('hidden-by-disabled');
+    await syncExpertRegistryFromServer();
+    try {
+      const hub = await import('./experts/experts-hub');
+      hub.renderGallery();
+    } catch {
+      /* Experts hub not loaded yet */
+    }
+  } else {
+    empty.classList.remove('hidden');
+    pickStep.classList.add('hidden-by-disabled');
   }
-  container.appendChild(ul);
 }
 
 /** Bind experts enabled checkbox in settings drawer. */
 export async function bindExpertsSettingsCheckbox(): Promise<void> {
   const checkbox = document.getElementById('expertsEnabled') as HTMLInputElement | null;
-  const listHost = document.getElementById('expertsBuiltinList');
   if (!checkbox) return;
 
   const config = await loadExpertsConfig();
   checkbox.checked = config.enabled;
 
-  if (listHost) renderExpertsReadOnlyList(listHost);
-
   if (checkbox.dataset.bound === '1') return;
   checkbox.dataset.bound = '1';
 
   checkbox.addEventListener('change', () => {
-    void saveExpertsConfig({ enabled: checkbox.checked }).then(() => {
-      void import('./expert-lab-page').then((m) => m.refreshExpertLabEnabledState());
-    });
+    void saveExpertsConfig({ enabled: checkbox.checked }).then(() => refreshExpertsEnabledState());
   });
 }

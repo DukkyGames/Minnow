@@ -747,7 +747,7 @@ async function renderExpertsSection(): Promise<void> {
   labLink.className = 'settings-action-btn';
   labLink.textContent = 'Open Expert Lab';
   labLink.addEventListener('click', () => {
-    void import('./expert-lab-page').then((m) => m.openExpertLabFromTopbar());
+    void import('./experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
   });
   labBody.appendChild(labLink);
 

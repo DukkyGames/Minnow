@@ -131,7 +131,7 @@ describe('streaming-state helpers', () => {
     assert.equal(isActiveChatStreaming(), false);
   });
 
-  test('expert lab chat streams in chat shell when Expert Lab page is closed', () => {
+  test('expert thread streams in chat shell when Experts hub is closed', () => {
     const lab = createEmptyChatObject('');
     lab.id = EXPERT_LAB_CHAT_ID;
     lab.kind = 'expert-lab';

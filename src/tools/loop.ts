@@ -40,6 +40,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
@@ -60,7 +61,7 @@ import {
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
   getActiveChat,
-  isExpertLabChat,
+  isExpertChat,
   scheduleSaveSessions,
   touchChat,
   recordChatMessage,
@@ -98,14 +99,6 @@ import {
   syncSteerQueuedHint,
 } from '../ui/composer-send';
 import { registerStreamDomRemount } from './stream-chat-dom';
-import {
-  notifyExpertLabFirstToken,
-  notifyExpertLabPartialText,
-  notifyExpertLabRunEnd,
-  notifyExpertLabRunError,
-  notifyExpertLabRunStart,
-  notifyExpertLabToolRound,
-} from '../ui/expert-lab-stream';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
@@ -431,6 +424,8 @@ export interface RunChatTurnOptions {
   validAttachments: Attachment[];
   titleSeed?: string;
   shouldScheduleTitle?: boolean;
+  /** Expert chats: run title job after the first turn so LM Studio is not double-booked. */
+  deferTitleUntilTurnEnd?: boolean;
   /** Pre-resolved skill body when skillId is set (composer path). */
   skillBody?: string | null;
   /** Re-subscribe to an existing backend generation (boot resume); skips POST. */
@@ -515,7 +510,7 @@ export function buildApiMessages(
     messages.push({ role: 'user', content: continueLine });
   }
 
-  return messages;
+  return foldLeadingAssistantPreamble(messages);
 }
 
 interface StreamTurnResult {
@@ -704,6 +699,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     validAttachments,
     titleSeed = userText || rawText,
     shouldScheduleTitle = false,
+    deferTitleUntilTurnEnd = false,
     skillBody: presetSkillBody = null,
     resumeGenerationId,
     ownsGlobalStreaming = true,
@@ -895,9 +891,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? ` (${activeWorkAgent.label})`
       : '';
 
-  if (isExpertLabChat(chat)) {
-    notifyExpertLabRunStart(chat.id);
-  }
 
   if (ownsGlobalStreaming) {
     setStreaming(true, chat.id);
@@ -1211,15 +1204,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           domVisible,
           () => {
             revealProse();
-            if (isExpertLabChat(chat)) {
-              notifyExpertLabFirstToken(chat.id);
-            }
           },
           (text) => {
             livePartialText = text;
-            if (isExpertLabChat(chat)) {
-              notifyExpertLabPartialText(chat.id, text);
-            }
           },
           undefined,
           () => {
@@ -1382,9 +1369,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
           const toolName = tc.function.name;
-          if (isExpertLabChat(chat) && toolName === 'ask_question') {
-            notifyExpertLabToolRound(chat.id, toolName);
-          }
           const toolOut = planBlock
             ? { content: planBlock }
             : await executeTool(toolName, args, {
@@ -1393,9 +1377,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
               });
-          if (isExpertLabChat(chat) && toolName !== 'ask_question') {
-            notifyExpertLabToolRound(chat.id, toolName);
-          }
           let toolContent = toolOut.content;
           try {
             const promoted = await maybePromoteToolResultToArtifact({
@@ -1655,9 +1636,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncTurnContextUsage(chat.id, '', thoughtController);
         recordAssistantReplyOnChat(chat);
         recordChatMessage(chat);
-        if (isExpertLabChat(chat)) {
-          notifyExpertLabRunEnd(chat.id, finalContent);
-        }
         if (isStreamDomVisible(chat.id)) {
           appendStats(lastWrap, meta.stats, meta.usage);
           if (thinkingNorm.length > 0) {
@@ -1739,12 +1717,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return;
     }
     turnRunStatus = 'failed';
-    if (isExpertLabChat(chat)) {
-      notifyExpertLabRunError(
-        chat.id,
-        e instanceof Error ? e.message : String(e),
-      );
-    }
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
@@ -1786,6 +1758,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     thinkingTracker?.abort();
     if (completedNormally) {
       clearAttachments();
+      if (deferTitleUntilTurnEnd) {
+        const seed = titleSeed?.trim() || userText?.trim() || rawText?.trim();
+        if (seed) {
+          scheduleChatTitleGeneration(chat.id, seed, {
+            modelId: chat.modelId?.trim() || undefined,
+            providerId: chat.providerId?.trim() || undefined,
+          });
+        }
+      }
     }
     clearMainTurnActivity(chat.id);
     if (ownsGlobalStreaming) {
@@ -2039,7 +2020,8 @@ export async function sendMessageWithTools(): Promise<void> {
     : userText || rawText;
   const historyContent = buildHistoryUserContent(displayText, validAttachments);
   const titleSeed = userText || rawText || validAttachments[0]?.name || 'Attachment';
-  const shouldScheduleTitle = isFirstUserMessagePending(chat);
+  const firstUserPending = isFirstUserMessagePending(chat);
+  const deferTitleUntilTurnEnd = firstUserPending && isExpertChat(chat);
 
   syncComposerPinnedSkillFromActiveChat();
   scheduleSaveSessions();
@@ -2054,7 +2036,8 @@ export async function sendMessageWithTools(): Promise<void> {
     historyContent,
     validAttachments,
     titleSeed,
-    shouldScheduleTitle,
+    shouldScheduleTitle: firstUserPending && !deferTitleUntilTurnEnd,
+    deferTitleUntilTurnEnd,
     skillBody,
   });
 }

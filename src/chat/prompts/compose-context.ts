@@ -7,7 +7,6 @@ import {
   resolveActiveWorkAgentId,
 } from '../../agents/resolve-work-agent';
 import { listExperts } from '../experts/registry';
-import { resolveExpertForTurn } from '../experts/resolve';
 import { normalizeModeId } from '../modes/types';
 import { loadExpertsConfig } from '../../config/experts-config';
 import { loadPromptMetaSettings } from '../../config/prompt-meta';
@@ -16,13 +15,9 @@ import {
   loadUserRules,
 } from '../../config/user-rules';
 import { getExpertSelection } from '../../state/sessions';
-import type { ExpertHintContext } from '../../ui/experts-settings';
-
-/** No-op: expert Auto hint UI removed (Expert Lab replaces composer dropdown). */
-function updateExpertAutoHint(_ctx: ExpertHintContext): void {}
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
-import { isLocalServerAvailable, loadToolConfig } from '../../tools/config';
+import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
@@ -163,34 +158,38 @@ export async function buildComposeContext(
 }
 
 /**
- * Resolve expert for this turn (rules-first; LLM classifier skipped on send for latency).
+ * Resolve expert for send: manual selection or expert-thread chat only (no auto-routing).
  */
 export async function resolveExpertContextForSend(
   chat: Chat,
-  userText: string,
+  _userText: string,
 ): Promise<ResolvedExpertContext> {
   const expertsConfig = await loadExpertsConfig();
   if (!expertsConfig.enabled) {
     return { expertId: null, expertLabel: null, routeSource: 'none' };
   }
 
-  const registry = listExperts();
+  const threadExpertId =
+    chat.kind === 'expert' && chat.expertId?.trim() ? chat.expertId.trim() : null;
   const selection = getExpertSelection(chat);
-  const route = resolveExpertForTurn({
-    selection,
-    userText,
-    registry,
-    config: expertsConfig,
-  });
+  const manualId =
+    selection.mode === 'manual' && selection.expertId?.trim()
+      ? selection.expertId.trim()
+      : null;
+  const expertId = threadExpertId ?? manualId;
+  if (!expertId) {
+    return { expertId: null, expertLabel: null, routeSource: 'none' };
+  }
 
-  if (selection.mode === 'auto') {
-    chat.lastResolvedExpertId = route.expertId;
+  const expert = listExperts().find((r) => r.meta.id === expertId);
+  if (!expert) {
+    return { expertId: null, expertLabel: null, routeSource: 'none' };
   }
 
   return {
-    expertId: route.expertId,
-    expertLabel: route.label ?? route.expertId,
-    routeSource: route.source,
+    expertId: expert.meta.id,
+    expertLabel: expert.meta.label,
+    routeSource: 'manual',
   };
 }
 
@@ -208,7 +207,6 @@ export async function resolveComposedSystemPrompt(
   '';
 
   const expertCtx = await resolveExpertContextForSend(chat, routeText);
-  updateExpertAutoHint(expertCtx);
 
   const activeWorkAgent = resolveActiveWorkAgent(chat);
   const workAgentId = resolveActiveWorkAgentId(chat);

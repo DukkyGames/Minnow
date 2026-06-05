@@ -18,6 +18,8 @@ export interface ExpertMarkdownMetaInput {
   label: string;
   version?: string;
   description?: string;
+  tagline?: string;
+  greeting?: string;
   icon?: string;
   accent?: ExpertAccent;
 }
@@ -35,10 +37,18 @@ function formatFrontMatter(meta: ExpertMarkdownMetaInput): string {
     `id: ${meta.id}`,
     'kind: expert',
     `label: ${quoteYaml(meta.label)}`,
-    `version: ${meta.version ?? '1'}`,
   ];
+  if (meta.version?.trim()) {
+    lines.push(`version: ${meta.version.trim()}`);
+  }
   if (meta.description?.trim()) {
     lines.push(`description: ${quoteYaml(meta.description.trim())}`);
+  }
+  if (meta.tagline?.trim()) {
+    lines.push(`tagline: ${quoteYaml(meta.tagline.trim())}`);
+  }
+  if (meta.greeting?.trim()) {
+    lines.push(`greeting: ${quoteYaml(meta.greeting.trim())}`);
   }
   if (meta.icon?.trim()) {
     lines.push(`icon: ${quoteYaml(meta.icon.trim())}`);

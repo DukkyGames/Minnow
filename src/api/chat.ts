@@ -59,12 +59,14 @@ import {
   syncChatItemDotsInDom,
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
-import { postChatCompletions } from '../providers/fetch-chat';
+import {
+  completeNonStreamingViaGenerations,
+  postChatCompletions,
+} from '../providers/fetch-chat';
 import {
   createSseEventBuffer,
   feedSseEventBuffer,
   flushSseEventBuffer,
-  parseCompletionResponseBody,
   parseSsePayloads,
 } from './sse-parse';
 import { setStatus } from '../ui/status';
@@ -352,12 +354,7 @@ export async function tryNonStreamingFallback(
   chatProviderId?: string,
 ): Promise<ChatCompletionChunk> {
   const provider = await getActiveProvider(chatProviderId);
-  const res = await postChatCompletions(provider, { ...body, stream: false }, signal, {
-    stream: false,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  return parseCompletionResponseBody(text);
+  return completeNonStreamingViaGenerations(provider, body, signal);
 }
 
 /** Send the composer text to LM Studio with SSE streaming and optional JSON fallback. */
