@@ -110,9 +110,20 @@ export function workspacePreviewUrl(relativePath: string, cacheBust?: number): s
   return `${base}${sep}v=${cacheBust}`;
 }
 
+/**
+ * Root-relative paths (e.g. `/api/research/report/…`) must be absolute before
+ * Electron `loadURL`; otherwise Chromium treats them as local file paths.
+ */
+function resolveRootRelativeUrl(url: string): string {
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return `${window.location.origin}${url}`;
+  }
+  return url;
+}
+
 /** Absolute URL passed to the preview guest (Electron or iframe with full origin). */
 export function resolvePreviewLoadUrl(source: PreviewSource, cacheBust?: number): string {
-  if (source.kind === 'url') return source.url;
+  if (source.kind === 'url') return resolveRootRelativeUrl(source.url);
   const path = workspacePreviewUrl(source.path, cacheBust);
   return `${window.location.origin}${path}`;
 }
@@ -319,10 +330,7 @@ async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): P
   setPreviewLoading(true);
   // Workspace files go through /api/preview/file/ on the renderer's server so the
   // server's workspaceRoot (not the Electron main process's process.cwd) is the resolver.
-  const url =
-    source.kind === 'workspace'
-      ? resolvePreviewLoadUrl(source, cacheBust)
-      : source.url;
+  const url = resolvePreviewLoadUrl(source, cacheBust);
   if (api.loadSource) {
     await api.loadSource({ kind: 'url', url, cacheBust });
     return;

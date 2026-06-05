@@ -56,10 +56,14 @@ function escapeHtml(s: string): string {
 
 /** Open visual report in Electron preview or a new browser tab. */
 export function openResearchReport(researchId: string): void {
-  const url = researchReportUrl(researchId);
+  const path = researchReportUrl(researchId);
+  const url =
+    path.startsWith('/') && !path.startsWith('//')
+      ? `${window.location.origin}${path}`
+      : path;
   void import('../ui/preview-panel').then((m) => {
     if (typeof window.minnow?.preview !== 'undefined') {
-      m.openPreviewPanel({ kind: 'url', url });
+      void m.openUrlInPreviewPanel(url);
       return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');
