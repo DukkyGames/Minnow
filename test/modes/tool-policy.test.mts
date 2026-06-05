@@ -29,16 +29,6 @@ describe('filterToolsByMode', () => {
     assert.equal(filtered.length, 1);
   });
 
-  test('research excludes save_file', () => {
-    const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'research');
-    assert.ok(!filtered.some((t) => t.id === 'save_file'));
-  });
-
-  test('research includes web_search when in catalog list', () => {
-    const filtered = filterToolsByMode([findTool('web_search')], 'research');
-    assert.equal(filtered.length, 1);
-  });
-
   test('general includes execute_command and save_file like build', () => {
     const filtered = filterToolsByMode(BUILT_IN_TOOLS, 'general');
     assert.ok(filtered.some((t) => t.id === 'execute_command'));

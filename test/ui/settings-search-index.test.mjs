@@ -30,11 +30,20 @@ describe('settings-search-index', () => {
     assert.ok(features.keywords?.includes('orchestration'));
   });
 
+  test('servers section includes searxng and managed server keywords', () => {
+    const index = buildSettingsSearchIndex();
+    const servers = index.find((e) => e.id === 'section:servers');
+    assert.ok(servers);
+    assert.equal(servers.sectionId, 'servers');
+    assert.ok(servers.keywords?.includes('searxng'));
+    assert.ok(servers.keywords?.includes('managed server'));
+  });
+
   test('includes built-in tool entries', () => {
     const index = buildSettingsSearchIndex();
     const webSearch = index.find((e) => e.id === 'tool:web_search');
     assert.ok(webSearch);
-    assert.equal(webSearch.sectionId, 'tools');
+    assert.equal(webSearch.sectionId, 'search');
     assert.equal(webSearch.searchKey, 'tools.item.web_search');
   });
 

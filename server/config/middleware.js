@@ -189,7 +189,7 @@ export async function handleConfigRequest(req, res, pathname) {
     }
 
     const resourceMatch = pathname.match(
-      /^\/api\/config\/(sessions|tools|skills|system-prompt|rules|sub-agents|bugs|meta)$/,
+      /^\/api\/config\/(sessions|tools|search|servers|research|skills|system-prompt|rules|sub-agents|bugs|meta)$/,
     );
     if (resourceMatch) {
       const resource = resourceMatch[1];

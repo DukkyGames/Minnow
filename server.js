@@ -12,6 +12,7 @@ import { deleteGenerationsForProviderShutdown } from './server/generations/store
 import { getAppRoot } from './server/workspace/root.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
+import { shutdownAllServers } from './server/servers/index.js';
 import {
   resolveSafePath,
   runWithPathAccess,
@@ -79,19 +80,31 @@ async function main() {
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Generations API: ${localUrl.replace(/\/$/, '')}/api/generations`);
+  console.log(`Research API: ${localUrl.replace(/\/$/, '')}/api/research`);
   console.log(`Work agents API: ${localUrl.replace(/\/$/, '')}/api/work-agents`);
   console.log(`Agent packs API: ${localUrl.replace(/\/$/, '')}/api/agent-packs`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
+  console.log(`Servers API: ${localUrl.replace(/\/$/, '')}/api/servers/ping`);
   console.log(`Skills API: ${localUrl.replace(/\/$/, '')}/api/skills`);
   console.log(`Preview API: ${localUrl.replace(/\/$/, '')}/api/preview/ping`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
-  process.on('exit', () => {
+  const onShutdown = () => {
+    shutdownAllServers();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
+  };
+  process.on('exit', onShutdown);
+  process.on('SIGINT', () => {
+    onShutdown();
+    process.exit(0);
+  });
+  process.on('SIGTERM', () => {
+    onShutdown();
+    process.exit(0);
   });
   // Skip auto-open for CI / headless CLI / when Electron is already the host.
   if (process.env.MINNOW_HEADLESS === '1') {

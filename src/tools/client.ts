@@ -48,9 +48,9 @@ import { maybeBlockToolForUserApproval } from './permission-gate';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
 import { validateToolRequiredArgs } from './validate-tool-required-args';
+import { loadSearchConfig, mergeWebSearchSettings } from '../config/search-config';
 import {
   hasBraveApiKey,
-  normalizeWebSearchProvider,
   resolveWebSearchExecution,
 } from './web-search-routing';
 
@@ -328,10 +328,12 @@ async function executeToolInner(
     );
     if (blocked) return blocked;
 
+    const searchConfig = await loadSearchConfig();
     const route = resolveWebSearchExecution(
       config,
       enrichedArgs,
       isLocalServerAvailable(),
+      searchConfig,
     );
     if (route.kind === 'error') {
       return { content: route.message };
@@ -705,13 +707,14 @@ function mergeConfigKeysIntoArgs(
   if (name !== 'web_search') {
     return args;
   }
-  if (normalizeWebSearchProvider(config.webSearchProvider) !== 'brave') {
+  const effective = mergeWebSearchSettings(undefined, config);
+  if (effective.provider !== 'brave') {
     return args;
   }
-  if (hasBraveApiKey(args, config)) {
+  if (hasBraveApiKey(args, effective.keys)) {
     return args;
   }
-  const saved = config.keys.braveApiKey?.trim();
+  const saved = effective.keys.braveApiKey?.trim();
   if (!saved) {
     return args;
   }

@@ -23,6 +23,9 @@ const SETTINGS_SECTION_IDS = [
   'work-agents',
   'agent-packs',
   'sub-agents',
+  'search',
+  'deep-research',
+  'servers',
   'tools',
   'mcp',
   'lsp',
@@ -42,6 +45,9 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsWorkAgentsBody',
   'settingsAgentPacksBody',
   'settingsSubAgentsBody',
+  'settingsSearchBody',
+  'settingsDeepResearchBody',
+  'settingsServersBody',
   'settingsToolsBody',
   'settingsSkillsBody',
   'settingsUsageBody',
@@ -104,7 +110,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 21);
+    assert.equal(SETTINGS_SECTION_IDS.length, 24);
   });
 
   test('prompts hub mount exists in index.html', () => {

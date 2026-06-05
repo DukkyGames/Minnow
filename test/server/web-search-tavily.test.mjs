@@ -8,7 +8,7 @@ describe('formatTavilySearchResults', () => {
       {
         title: 'Minnow',
         url: 'https://example.com/minnow',
-        content: 'Local AI chat client.',
+        snippet: 'Local AI chat client.',
       },
     ]);
     assert.match(text, /Tavily search results for "minnow chat"/);
