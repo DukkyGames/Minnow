@@ -14,6 +14,28 @@ Sub-agent edits roll up to the parent chat via `parentChatId` on `executeTool`.
 
 ## Status
 
+Implemented on this branch (PR #162).
+
+## Mutation sources (in scope)
+
+| Source | Mechanism |
+|--------|-----------|
+| File tools | `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `delete_path`, `move_file`, `copy_file` — before/after content diff on server |
+| `git_commit` | `git show --numstat` / patch for HEAD after successful commit |
+| `execute_command` | Git working-tree snapshot before/after; fallback heuristics for `sed -i`, `patch`, redirects |
+| Backfill | Scan `chat.history` + `subAgentRuns.messages`; parse tool args; optional `git show` for known SHAs |
+
+## UI surfaces
+
+| Surface | Location |
+|---------|----------|
+| Per-tool badge | `src/ui/tool-messages.ts` summary row |
+| Unified diff expando | Same file — reuse `src/ui/prompt-diff-unified.ts` |
+| Chat totals strip | `index.html` `#codeChangeStrip`, `src/ui/code-change-strip.ts` |
+| Workspace totals | `SessionState.codeChangeTotalsByWorkspace`, `src/ui/hub.ts` (and optional sidebar) |
+
+## Key modules (planned)
+
 | Area | Location |
 |------|----------|
 | Server file diff | `server/tools/line-diff-stats.js`, `server/runtime/tools-middleware.js` |
@@ -24,6 +46,7 @@ Sub-agent edits roll up to the parent chat via `parentChatId` on `executeTool`.
 | Ledger + workspace | `src/usage/code-change-ledger.ts` |
 | Backfill | `src/usage/code-change-backfill.ts`, session load in `src/state/sessions.ts` |
 | Recording | `src/tools/client.ts` |
+| History | `src/tools/loop.ts`, `src/agents/sub-agent-runner.ts`, `src/state/sessions.ts` |
 | UI badges + diff | `src/ui/tool-messages.ts`, `src/styles/tool-call-diff.css` |
 | Composer strip | `#codeChangeStrip`, `src/ui/code-change-strip.ts` |
 | Workspace display | `src/ui/workspace-code-change.ts`, hub **Agent changes**, sidebar stats |
@@ -45,6 +68,12 @@ Sub-agent edits roll up to the parent chat via `parentChatId` on `executeTool`.
 - Background `execute_command` not snapshotted in v1 (foreground only)
 - Backfill does not re-run shell; `git_commit` needs SHA in result for remote numstat
 - Sub-agent history is not double-counted (parent chat totals only)
+
+## Accuracy notes
+
+- File tools and git commit stats are authoritative at execution time.
+- Command snapshot depends on a git repo; heuristics are best-effort and labeled in metadata.
+- Backfill may be approximate for overwrites (`save_file` without stored before-content); use `source: 'backfill'`.
 
 ## Todos
 

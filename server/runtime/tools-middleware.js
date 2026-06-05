@@ -26,14 +26,13 @@ import {
   toolFetchWebContent,
   toolRagWebContent,
 } from '../tools/fetch-web-content.js';
-import { readConfigJson } from '../config/store.js';
-import { normalizeToolConfig } from '../config/validators.js';
 import {
-  classifyDdgHtml,
-  DDG_BOT_CHALLENGE_MESSAGE,
-  parseDdgHtmlResults,
+  formatDdgSearchResults,
+  searchDdgStructured,
 } from '../tools/web-search-ddg.js';
 import { runTavilySearch } from '../tools/web-search-tavily.js';
+import { runSearxngSearch } from '../tools/web-search-searxng.js';
+import { loadSearchSettings } from '../research/search.js';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
 import { callMcpTool, isMcpToolName } from '../mcp/registry.js';
 import { callPluginTool, isPluginToolName } from '../tools/loader.js';
@@ -138,11 +137,10 @@ function globToRegExp(globPattern) {
 
 // --- Web tools ---
 
-/** Read Tavily API key from persisted tools.json (server-side only). */
+/** Read Tavily API key from search.json with tools.json fallback. */
 async function readTavilyApiKeyFromConfig() {
-  const raw = (await readConfigJson('tools.json')) ?? {};
-  const config = normalizeToolConfig(raw);
-  return config.keys?.tavilyApiKey?.trim() ?? '';
+  const settings = await loadSearchSettings();
+  return settings.tavilyApiKey;
 }
 
 /** DuckDuckGo HTML search (no API key); detects bot challenges before parsing. */
@@ -152,35 +150,14 @@ async function toolWebSearchDdg(args) {
     return 'Error: query is required';
   }
 
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      Accept: 'text/html',
-    },
-  });
-
-  const html = await response.text();
-  const classification = classifyDdgHtml(response.status, html);
-
-  if (classification === 'challenge') {
-    return DDG_BOT_CHALLENGE_MESSAGE;
+  const { results, error } = await searchDdgStructured(query);
+  if (error) {
+    return error;
   }
-
-  if (!response.ok) {
-    return `Error: DuckDuckGo returned HTTP ${response.status}`;
-  }
-
-  const results = parseDdgHtmlResults(html, query);
-  if (results.length === 0) {
-    return `No DuckDuckGo results found for: ${query}`;
-  }
-
-  return `DuckDuckGo results for "${query}":\n\n${results.join('\n\n')}`;
+  return formatDdgSearchResults(query, results);
 }
 
-/** Tavily Search API (requires tavilyApiKey in tools.json). */
+/** Tavily Search API (requires tavilyApiKey in search.json or tools.json). */
 async function toolWebSearchTavily(args) {
   const query = args?.query;
   if (!query || typeof query !== 'string') {
@@ -193,6 +170,17 @@ async function toolWebSearchTavily(args) {
   }
 
   return runTavilySearch(query, apiKey);
+}
+
+/** SearXNG JSON search (requires searxngUrl in search.json). */
+async function toolWebSearchSearxng(args) {
+  const query = args?.query;
+  if (!query || typeof query !== 'string') {
+    return 'Error: query is required';
+  }
+
+  const settings = await loadSearchSettings();
+  return runSearxngSearch(query, settings.searxngUrl);
 }
 
 // --- File tools ---
@@ -855,6 +843,7 @@ async function toolSendNotification(args) {
 const SERVER_TOOL_HANDLERS = {
   web_search_ddg: toolWebSearchDdg,
   web_search_tavily: toolWebSearchTavily,
+  web_search_searxng: toolWebSearchSearxng,
   fetch_web_content: toolFetchWebContent,
   rag_web_content: toolRagWebContent,
   list_directory: toolListDirectory,

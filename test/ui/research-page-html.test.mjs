@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, test } from 'node:test';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const html = readFileSync(join(root, 'index.html'), 'utf8');
+
+const RESEARCH_IDS = [
+  'btnResearch',
+  'researchView',
+  'btnResearchPageBack',
+  'researchQuery',
+  'researchMaxRounds',
+  'researchCategory',
+  'btnResearchStart',
+  'btnResearchCancel',
+  'researchSynapseMount',
+  'researchResultMount',
+  'researchTabRun',
+  'researchTabLibrary',
+  'researchLibraryMount',
+];
+
+describe('research page HTML', () => {
+  for (const id of RESEARCH_IDS) {
+    test(`#${id} exists in index.html`, () => {
+      assert.match(html, new RegExp(`id="${id}"`));
+    });
+  }
+
+  test('topbar button calls openResearchFromTopbar', () => {
+    assert.match(html, /id="btnResearch"[^>]*onclick="openResearchFromTopbar\(\)"/);
+  });
+
+  test('research view is before appBody', () => {
+    const research = html.indexOf('id="researchView"');
+    const app = html.indexOf('id="appBody"');
+    assert.ok(research > 0 && app > research);
+  });
+});

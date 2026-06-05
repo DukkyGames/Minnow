@@ -14,7 +14,6 @@ const MODE_POSITIVE: Record<string, string> = {
   general: 'read_file',
   build: 'list_directory',
   plan: 'read_file',
-  research: 'web_search',
   orchestrate: 'list_directory',
   reef: 'get_datetime',
 };

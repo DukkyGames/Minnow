@@ -1,8 +1,9 @@
 /**
- * web_search provider routing — respects user-selected provider without silent fallback.
+ * web_search provider routing — respects search.json (then tools.json) without silent fallback.
  */
 
 import type { ToolConfig, WebSearchProvider } from './tool-settings-types';
+import { mergeWebSearchSettings } from '../config/search-config';
 
 export type WebSearchExecution =
   | { kind: 'brave' }
@@ -21,49 +22,76 @@ export function normalizeWebSearchProvider(value: unknown): WebSearchProvider {
 /** True when Brave search can run (arg or saved key). */
 export function hasBraveApiKey(
   args: Record<string, unknown>,
-  config: ToolConfig,
+  keys: { braveApiKey?: string },
 ): boolean {
   const fromArgs =
     (typeof args.api_key === 'string' && args.api_key.trim()) ||
     (typeof args.braveApiKey === 'string' && args.braveApiKey.trim()) ||
     '';
-  const fromConfig = config.keys.braveApiKey?.trim() ?? '';
+  const fromConfig = keys.braveApiKey?.trim() ?? '';
   return Boolean(fromArgs || fromConfig);
 }
 
-/** True when a Tavily API key is available in tool config. */
-export function hasTavilyApiKey(config: ToolConfig): boolean {
-  return Boolean(config.keys.tavilyApiKey?.trim());
+/** True when a Tavily API key is available. */
+export function hasTavilyApiKey(keys: { tavilyApiKey?: string }): boolean {
+  return Boolean(keys.tavilyApiKey?.trim());
 }
 
 /**
  * Resolve how `web_search` should run for the current settings.
- * Does not silently fall back when the selected provider cannot run.
+ * Prefers search.json via {@link mergeWebSearchSettings}; tools.json is the fallback.
  */
 export function resolveWebSearchExecution(
-  config: ToolConfig,
+  toolsConfig: ToolConfig,
   args: Record<string, unknown>,
   serverAvailable: boolean,
+  searchConfig?: Parameters<typeof mergeWebSearchSettings>[0],
 ): WebSearchExecution {
-  const provider = normalizeWebSearchProvider(config.webSearchProvider);
+  const effective = mergeWebSearchSettings(searchConfig, toolsConfig);
+  const provider = effective.provider;
 
-  if (provider === 'brave') {
-    if (!hasBraveApiKey(args, config)) {
+  if (provider === 'disabled') {
+    return {
+      kind: 'error',
+      message:
+        'Error: Web search is disabled. Enable a provider in Settings → Search.',
+    };
+  }
+
+  if (provider === 'searxng') {
+    if (!serverAvailable) {
       return {
         kind: 'error',
         message:
-          'Error: Brave is selected as the web search provider but no Brave Search API key is configured. Add one in Settings → Tools.',
+          'Error: SearXNG web search requires the local tool server. Run npm start (not npm run dev).',
+      };
+    }
+    return {
+      kind: 'error',
+      message:
+        'Error: SearXNG search is not wired to web_search yet. Use DuckDuckGo, Tavily, or Brave in Settings → Search, or wait for the Deep Research search phase.',
+    };
+  }
+
+  const legacy = normalizeWebSearchProvider(provider);
+
+  if (legacy === 'brave') {
+    if (!hasBraveApiKey(args, effective.keys)) {
+      return {
+        kind: 'error',
+        message:
+          'Error: Brave is selected as the web search provider but no Brave Search API key is configured. Add one in Settings → Search.',
       };
     }
     return { kind: 'brave' };
   }
 
-  if (provider === 'tavily') {
-    if (!hasTavilyApiKey(config)) {
+  if (legacy === 'tavily') {
+    if (!hasTavilyApiKey(effective.keys)) {
       return {
         kind: 'error',
         message:
-          'Error: Tavily is selected as the web search provider but no Tavily API key is configured. Add one in Settings → Tools.',
+          'Error: Tavily is selected as the web search provider but no Tavily API key is configured. Add one in Settings → Search.',
       };
     }
     if (!serverAvailable) {

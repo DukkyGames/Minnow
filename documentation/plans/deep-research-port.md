@@ -1,6 +1,6 @@
 # Deep Research — Port Plan (Odysseus → Minnow)
 
-> **Status:** Ready to implement. This is a self-contained spec for an LLM/engineer to
+> **Status:** Implemented (v1, 2026-06-04). Phase 5b (OG images) remains fast-follow. This is a self-contained spec for an LLM/engineer to
 > build Minnow's **Deep Research** feature, ported from Odysseus's IterResearch engine.
 >
 > **Both repos are on this machine:**

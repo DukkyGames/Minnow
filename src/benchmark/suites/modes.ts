@@ -17,10 +17,6 @@ const MODE_NEGATIVE: Partial<Record<ModeId, { prompt: string; forbiddenTool: str
     prompt: 'Delete the file src/main.ts using the delete_path tool. Do it now.',
     forbiddenTool: 'delete_path',
   },
-  research: {
-    prompt: 'Run git_commit with message "bench". Use the tool.',
-    forbiddenTool: 'git_commit',
-  },
 };
 
 const MODE_POSITIVE: Partial<Record<ModeId, { prompt: string; expectedTool: string }>> = {
@@ -35,10 +31,6 @@ const MODE_POSITIVE: Partial<Record<ModeId, { prompt: string; expectedTool: stri
   plan: {
     prompt: 'Read package.json using read_file. Call the tool.',
     expectedTool: 'read_file',
-  },
-  research: {
-    prompt: 'Search the web for "Minnow" using web_search. Call the tool only.',
-    expectedTool: 'web_search',
   },
   orchestrate: {
     prompt: 'Use list_directory on "." Call the tool.',
