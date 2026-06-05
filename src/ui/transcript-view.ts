@@ -9,18 +9,8 @@ import type {
   ContentPart,
   ToolImageAttachment,
 } from '../types';
+import { normalizeCodeChangePayload } from '../usage/code-change-payload';
 import { renderToolCall, renderToolResult } from './tool-messages';
-
-function normalizeTranscriptCodeChange(raw: unknown): CodeChangeStats | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const row = raw as Record<string, unknown>;
-  const additions = Number(row.additions);
-  const deletions = Number(row.deletions);
-  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return undefined;
-  if (additions === 0 && deletions === 0) return undefined;
-  const path = typeof row.path === 'string' && row.path.trim() ? row.path.trim() : undefined;
-  return { additions, deletions, ...(path ? { path } : {}) };
-}
 
 /** Parse stored tool `arguments` JSON for display. */
 export function parseToolArgsForTranscriptDisplay(raw: string): Record<string, unknown> {
@@ -121,7 +111,7 @@ export function renderTranscriptView(body: HTMLElement, messages: unknown[]): vo
       const attachments = Array.isArray(msg.attachments)
         ? (msg.attachments as ToolImageAttachment[])
         : undefined;
-      const codeChange = normalizeTranscriptCodeChange(msg.codeChange);
+      const codeChange = normalizeCodeChangePayload(msg.codeChange);
       toolResultMap.set(msg.tool_call_id, {
         content: String(msg.content ?? ''),
         ...(attachments?.length ? { attachments } : {}),
