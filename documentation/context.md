@@ -40,6 +40,10 @@ Assignable pack: [`documentation/plans/product_backlog_agents_48a41af9.plan.md`]
 
 **Integration QA (2026-05-21):** Reef widget chart templates/snippets use theme tokens only (`var(--mn-accent)`, `color-mix(in srgb, var(--mn-accent) …)` for multi-series/heatmap levels — no hex). `node --test test/chat/reef/*.test.mjs` convention suites pass (24 tests). Full `npm test` may still report unrelated failures (e.g. `messages-stream-row` session init).
 
+## MinnowOS shell (desktop launcher)
+
+Shipped on branch `cursor/minnowos-redesign-30a6`. Wraps the SPA in an OS-style shell: menubar, desktop (concierge + dock/grid launcher), app instances with mini-previews, and hash routes `#/desktop` / `#/app/{code|chat|research|experts|bench|settings}`. **Code app** reparents existing `#appBody` + topbar into `#osAppsLayer`; Settings, Research, Experts, and Benchmark reuse their full-page `<main>` elements inside the app layer. Concierge keyword routing: [`src/os/intent-routing.ts`](../src/os/intent-routing.ts). Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` → `initOsShell()` → `initOsRouter()` in [`src/main.ts`](../src/main.ts). CSS: `src/styles/minnowos-*.css`. Design prototype: [`documentation/reference/minnowos/`](../reference/minnowos/). Plan: [`documentation/plans/minnowos-redesign.md`](plans/minnowos-redesign.md). Tests: `test/os/*.test.mts`.
+
 ## Theme system (palette tokens)
 
 Eight composed themes on `<html data-theme="{family}-{mode}">` (families: **sage**, **amber**, **cyan**, **coral**; modes: **dark**, **light**). Palette hex/rgba lives only in [`src/styles/tokens.css`](../src/styles/tokens.css); the rest of the app uses **`--mn-*`** CSS variables (22 core tokens per theme plus extended semantics derived with `color-mix`).
