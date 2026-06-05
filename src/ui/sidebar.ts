@@ -42,6 +42,12 @@ import {
   renderStatsForChat,
   showCachedModelInfo,
 } from './messages';
+import { updateCodeChangeStrip } from './code-change-strip';
+import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
+import {
+  formatCodeChangeTotalsText,
+  hasCodeChangeTotals,
+} from '../usage/code-change-ledger';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncThinkingControlFromActiveChat } from './composer-thinking';
@@ -301,7 +307,11 @@ export function appendChatRow(
 
     const statsEl = document.createElement('div');
     statsEl.className = 'chat-item-stats';
-    statsEl.textContent = formatSidebarStatsPreview(chat.lastStats);
+    const statsParts = [formatSidebarStatsPreview(chat.lastStats)];
+    if (hasCodeChangeTotals(chat.codeChangeTotals)) {
+      statsParts.push(formatCodeChangeTotalsText(chat.codeChangeTotals!));
+    }
+    statsEl.textContent = statsParts.filter(Boolean).join(' · ');
 
     row.appendChild(modelEl);
     row.appendChild(statsEl);
@@ -666,6 +676,12 @@ export function switchChat(id: string): void {
   recordChatOpened(id);
   syncModelSelectForActiveChat();
   renderChatFromHistory(chat);
+  void import('../usage/code-change-backfill').then((m) =>
+    m.ensureChatCodeChangeBackfillOnSwitch(chat).then(() => {
+      updateCodeChangeStrip(chat);
+      updateWorkspaceCodeChangeDisplay();
+    }),
+  );
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();

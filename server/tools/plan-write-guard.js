@@ -6,7 +6,7 @@ const ORCHESTRATE_PLANS_PREFIX = 'documentation/plans/';
 const PLANS_ROOT = ORCHESTRATE_PLANS_PREFIX.replace(/\/$/, '');
 const PLANS_PREFIX_LOWER = ORCHESTRATE_PLANS_PREFIX.toLowerCase();
 
-const MODE_IDS = new Set(['build', 'plan', 'orchestrate', 'research', 'reef']);
+const MODE_IDS = new Set(['build', 'plan', 'orchestrate', 'reef']);
 
 const PLAN_SCOPED_WRITE_TOOLS = new Set(['save_file', 'make_directory']);
 
@@ -33,7 +33,7 @@ const TOOL_PATH_ARG_KEYS = {
 
 /**
  * @param {string | null | undefined} value
- * @returns {'build' | 'plan' | 'orchestrate' | 'research' | 'reef'}
+ * @returns {'build' | 'plan' | 'orchestrate' | 'reef'}
  */
 export function normalizeModeId(value) {
   if (typeof value === 'string' && MODE_IDS.has(value)) {

@@ -1362,6 +1362,9 @@ export function openBenchmark(): void {
   void import('./welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
   });
+  void import('../research/panel').then((m) => {
+    if (m.isResearchPageOpen()) m.closeResearch();
+  });
 
   root.classList.add('is-open');
   shell.classList.add('hidden');

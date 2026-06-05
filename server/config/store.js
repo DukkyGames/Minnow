@@ -9,6 +9,13 @@ import { ensureMinnowLayout } from './home.js';
 import {
   mergeConfigMeta,
   normalizeToolConfig,
+  normalizeSearchConfig,
+  normalizeServersConfig,
+  normalizeResearchConfig,
+  seedSearchConfigFromTools,
+  defaultSearchConfig,
+  defaultServersConfig,
+  defaultResearchConfig,
   normalizeSkillConfig,
   normalizeSubAgentsConfig,
   validateSessionState,
@@ -107,7 +114,7 @@ async function writeConfigJsonUnlocked(relativeKey, data) {
   const body = `${JSON.stringify(data, null, 2)}\n`;
   await fs.writeFile(tmp, body, 'utf8');
   await fs.rename(tmp, full);
-  if (relativeKey === 'tools.json') {
+  if (relativeKey === 'tools.json' || relativeKey === 'search.json') {
     await chmodSecretFile(full);
   }
 }
@@ -138,6 +145,25 @@ export async function readResource(resource) {
   if (resource === 'tools') {
     const data = await readConfigJson(key);
     return data ?? defaultToolsJson();
+  }
+  if (resource === 'search') {
+    let data = await readConfigJson(key);
+    if (data === null) {
+      const toolsRaw = (await readConfigJson('tools.json')) ?? defaultToolsJson();
+      const tools = normalizeToolConfig(toolsRaw);
+      const seeded = seedSearchConfigFromTools(tools);
+      await writeConfigJson(key, seeded);
+      data = seeded;
+    }
+    return normalizeSearchConfig(data);
+  }
+  if (resource === 'servers') {
+    const data = await readConfigJson(key);
+    return normalizeServersConfig(data);
+  }
+  if (resource === 'research') {
+    const data = await readConfigJson(key);
+    return data ?? defaultResearchConfig();
   }
   if (resource === 'skills') {
     const data = await readConfigJson(key);
@@ -214,6 +240,21 @@ export async function writeResource(resource, body) {
   }
   if (resource === 'tools') {
     const normalized = normalizeToolConfig(body);
+    await writeConfigJson(key, normalized);
+    return normalized;
+  }
+  if (resource === 'search') {
+    const normalized = normalizeSearchConfig(body);
+    await writeConfigJson(key, normalized);
+    return normalized;
+  }
+  if (resource === 'servers') {
+    const normalized = normalizeServersConfig(body);
+    await writeConfigJson(key, normalized);
+    return normalized;
+  }
+  if (resource === 'research') {
+    const normalized = normalizeResearchConfig(body);
     await writeConfigJson(key, normalized);
     return normalized;
   }

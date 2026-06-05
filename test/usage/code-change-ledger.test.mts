@@ -5,13 +5,17 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Chat } from '../../src/types.ts';
+import type { SessionState } from '../../src/types.ts';
 import {
   EMPTY_CODE_CHANGE_TOTALS,
   ensureCodeChangeTotals,
   formatCodeChangeTotalsText,
+  getWorkspaceCodeChangeTotals,
   hasCodeChangeTotals,
   recordCodeChange,
+  recordWorkspaceCodeChange,
   resetCodeChangeTotals,
+  sumChatCodeChangeTotalsForWorkspace,
 } from '../../src/usage/code-change-ledger.ts';
 
 function makeChat(): Chat {
@@ -62,5 +66,30 @@ describe('code-change-ledger', () => {
       '+10 −2',
     );
     assert.equal(hasCodeChangeTotals({ additions: 1, deletions: 0 }), true);
+  });
+
+  test('recordWorkspaceCodeChange and sum across chats', () => {
+    const state: SessionState = {
+      version: 5,
+      activeId: null,
+      sidebarCollapsed: false,
+      chats: [],
+    };
+    recordWorkspaceCodeChange(state, '/proj', { additions: 3, deletions: 1 });
+    assert.deepEqual(getWorkspaceCodeChangeTotals(state, '/proj'), {
+      additions: 3,
+      deletions: 1,
+    });
+
+    const chatA = makeChat();
+    chatA.workspacePath = '/proj';
+    chatA.codeChangeTotals = { additions: 2, deletions: 0 };
+    const chatB = { ...makeChat(), id: 'b', codeChangeTotals: { additions: 1, deletions: 2 } };
+    chatB.workspacePath = '/proj';
+    state.chats = [chatA, chatB];
+    assert.deepEqual(sumChatCodeChangeTotalsForWorkspace(state, '/proj'), {
+      additions: 3,
+      deletions: 2,
+    });
   });
 });

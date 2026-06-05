@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { workspacePreviewUrl } from '../../src/ui/preview-panel.ts';
+import { resolvePreviewLoadUrl, workspacePreviewUrl } from '../../src/ui/preview-panel.ts';
 
 describe('preview panel helpers', () => {
   test('workspacePreviewUrl encodes path segments', () => {
@@ -16,5 +16,25 @@ describe('preview panel helpers', () => {
       workspacePreviewUrl('app.js', 12345),
       '/api/preview/file/app.js?v=12345',
     );
+  });
+
+  test('resolvePreviewLoadUrl absolutizes root-relative API paths for Electron', () => {
+    const prev = globalThis.window;
+    globalThis.window = { location: { origin: 'http://127.0.0.1:5173' } } as Window & typeof globalThis;
+    try {
+      assert.equal(
+        resolvePreviewLoadUrl({
+          kind: 'url',
+          url: '/api/research/report/rs-24552c627990',
+        }),
+        'http://127.0.0.1:5173/api/research/report/rs-24552c627990',
+      );
+      assert.equal(
+        resolvePreviewLoadUrl({ kind: 'url', url: 'https://example.com/page' }),
+        'https://example.com/page',
+      );
+    } finally {
+      globalThis.window = prev;
+    }
   });
 });

@@ -105,6 +105,7 @@ body {
    this prevents FOUC between markAppReady and initApp dynamic imports). */
 .settings-page { display: none; }
 .benchmark-page { display: none; }
+.research-page { display: none; }
 .global-bugs-page { display: none; }
 .experts-page { display: none; }
 

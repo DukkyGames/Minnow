@@ -1109,6 +1109,55 @@
   gap: 0;
 }
 
+.settings-server-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings-server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-server-port-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.settings-server-port-field .settings-input {
+  width: 7rem;
+}
+
+.settings-server-logs {
+  margin-top: 8px;
+}
+
+.settings-server-logs__body {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--mn-surface-0);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-search-managed-note .settings-inline-link {
+  display: inline;
+  margin: 0 0.15em;
+}
+
 .settings-mcp-row,
 .settings-lsp-row,
 .settings-lsp-list__item,

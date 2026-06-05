@@ -1,5 +1,5 @@
 /**
- * Operating mode segmented control (General / Build / Plan / Orchestrate / Research / Reef / Debug).
+ * Operating mode segmented control (General / Build / Plan / Orchestrate / Reef / Debug).
  */
 
 import { isActiveChatStreaming } from '../chat/streaming-state';

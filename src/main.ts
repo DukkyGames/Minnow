@@ -15,6 +15,7 @@ import './styles/message-actions.css';
 import './styles/branch-picker.css';
 import './styles/thoughts.css';
 import './styles/code-change-strip.css';
+import './styles/tool-call-diff.css';
 import './styles/input.css';
 import './styles/code-ref-link.css';
 import './styles/context-usage.css';
@@ -184,6 +185,9 @@ function registerWindowHandlers(): void {
   window.openBenchmarkFromTopbar = () => {
     void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
   };
+  window.openResearchFromTopbar = () => {
+    void import('./research/panel').then((m) => m.openResearchFromTopbar());
+  };
   window.openExpertLabFromTopbar = () => {
     void import('./ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
   };
@@ -298,6 +302,8 @@ export async function initApp(): Promise<void> {
   settingsPage.initSettingsPage();
   const benchmarkPage = await import('./ui/benchmark-page');
   benchmarkPage.initBenchmarkPage();
+  const researchPage = await import('./research/panel');
+  researchPage.initResearchPage();
   const globalBugsPage = await import('./ui/global-bugs-page');
   globalBugsPage.initGlobalBugsPage();
   const expertsHub = await import('./ui/experts/experts-hub');

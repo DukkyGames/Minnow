@@ -43,7 +43,9 @@ import { closeDrawer } from './settings';
 import { setStatus } from './status';
 import { updateStrip } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
-import { resetCodeChangeTotals } from '../usage/code-change-ledger';
+import { resetCodeChangeTotals, recomputeWorkspaceCodeChangeTotals } from '../usage/code-change-ledger';
+import { sessionState } from '../state/sessions';
+import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
 import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
@@ -568,6 +570,11 @@ export function clearChat(): void {
   chat.history = [];
   resetTokenLedger(chat);
   resetCodeChangeTotals(chat);
+  updateCodeChangeStrip(chat);
+  if (sessionState) {
+    recomputeWorkspaceCodeChangeTotals(sessionState, chat.workspacePath);
+    updateWorkspaceCodeChangeDisplay();
+  }
   chat.lastStats = null;
   chat.modelInfo = {};
   chat.lastMessageAt = 0;

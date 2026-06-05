@@ -50,7 +50,7 @@ function ensureLastActiveMap(raw) {
 }
 
 /** Valid operating mode ids (mirror src/chat/modes/types.ts). */
-const MODE_IDS = ['general', 'build', 'plan', 'orchestrate', 'research', 'reef', 'debug'];
+const MODE_IDS = ['general', 'build', 'plan', 'orchestrate', 'reef', 'debug'];
 const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
@@ -1473,4 +1473,269 @@ export function normalizeSubAgentsConfig(body) {
   }
 
   return { config: base, warnings };
+}
+
+const SEARCH_PROVIDERS = new Set([
+  'searxng',
+  'tavily',
+  'brave',
+  'duckduckgo',
+  'disabled',
+]);
+const SEARCH_FALLBACK_PROVIDERS = new Set(['tavily', 'brave', 'duckduckgo']);
+
+/**
+ * Default search.json (Deep Research provider chain + web_search prefs).
+ * @returns {object}
+ */
+export function defaultSearchConfig() {
+  return {
+    provider: 'searxng',
+    fallbackChain: ['tavily', 'brave', 'duckduckgo'],
+    searxngUrl: 'http://localhost:8080',
+    keys: { braveApiKey: '', tavilyApiKey: '' },
+    resultCount: 10,
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} min
+ * @param {number} max
+ * @param {number} fallback
+ * @returns {number}
+ */
+function clampInt(value, min, max, fallback) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  const rounded = Math.round(value);
+  return Math.min(max, Math.max(min, rounded));
+}
+
+/**
+ * Normalize search.json (whitelist providers, clamp result count).
+ * @param {unknown} raw
+ * @returns {object}
+ */
+export function normalizeSearchConfig(raw) {
+  const config = defaultSearchConfig();
+  if (!raw || typeof raw !== 'object') return config;
+
+  const stored = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof stored.provider === 'string' && SEARCH_PROVIDERS.has(stored.provider)) {
+    config.provider = stored.provider;
+  }
+
+  if (Array.isArray(stored.fallbackChain)) {
+    const chain = [];
+    for (const item of stored.fallbackChain) {
+      if (typeof item === 'string' && SEARCH_FALLBACK_PROVIDERS.has(item) && !chain.includes(item)) {
+        chain.push(item);
+      }
+    }
+    if (chain.length > 0) {
+      config.fallbackChain = chain;
+    }
+  }
+
+  if (typeof stored.searxngUrl === 'string') {
+    const trimmed = stored.searxngUrl.trim();
+    if (trimmed) {
+      config.searxngUrl = trimmed.replace(/\/+$/, '');
+    }
+  }
+
+  if (stored.keys && typeof stored.keys === 'object') {
+    const keysMap = /** @type {Record<string, unknown>} */ (stored.keys);
+    if (typeof keysMap.braveApiKey === 'string') {
+      config.keys.braveApiKey = keysMap.braveApiKey;
+    }
+    if (typeof keysMap.tavilyApiKey === 'string') {
+      config.keys.tavilyApiKey = keysMap.tavilyApiKey;
+    }
+  }
+
+  config.resultCount = clampInt(stored.resultCount, 1, 50, config.resultCount);
+  return config;
+}
+
+/**
+ * Build initial search.json from legacy tools.json web search fields.
+ * @param {object} toolsConfig normalized tools.json
+ * @returns {object}
+ */
+export function seedSearchConfigFromTools(toolsConfig) {
+  const providerByTools = {
+    brave: 'brave',
+    tavily: 'tavily',
+    duckduckgo: 'duckduckgo',
+  };
+  const toolsProvider =
+    toolsConfig && typeof toolsConfig.webSearchProvider === 'string'
+      ? toolsConfig.webSearchProvider
+      : 'duckduckgo';
+  const mapped = providerByTools[toolsProvider] ?? 'duckduckgo';
+  const keys =
+    toolsConfig?.keys && typeof toolsConfig.keys === 'object'
+      ? toolsConfig.keys
+      : { braveApiKey: '', tavilyApiKey: '' };
+  return normalizeSearchConfig({
+    provider: mapped,
+    keys: {
+      braveApiKey: typeof keys.braveApiKey === 'string' ? keys.braveApiKey : '',
+      tavilyApiKey: typeof keys.tavilyApiKey === 'string' ? keys.tavilyApiKey : '',
+    },
+  });
+}
+
+/**
+ * Default research.json engine parameters.
+ * @returns {object}
+ */
+export function defaultResearchConfig() {
+  return {
+    model: { providerId: '', model: '' },
+    searchProvider: '',
+    maxRounds: 0,
+    minRounds: 3,
+    maxTimeSeconds: 300,
+    runTimeoutSeconds: 1800,
+    maxReportTokens: 16384,
+    extractionTimeoutSeconds: 90,
+    extractionConcurrency: 3,
+    maxUrlsPerRound: 3,
+    maxContentChars: 15000,
+    synthesisWindow: 10,
+    maxEmptyRounds: 2,
+  };
+}
+
+/**
+ * Normalize research.json (clamp numeric engine limits).
+ * @param {unknown} raw
+ * @returns {object}
+ */
+export function normalizeResearchConfig(raw) {
+  const config = defaultResearchConfig();
+  if (!raw || typeof raw !== 'object') return config;
+
+  const stored = /** @type {Record<string, unknown>} */ (raw);
+
+  if (stored.model && typeof stored.model === 'object') {
+    const model = /** @type {Record<string, unknown>} */ (stored.model);
+    if (typeof model.providerId === 'string') {
+      config.model.providerId = model.providerId.trim();
+    }
+    if (typeof model.model === 'string') {
+      config.model.model = model.model.trim();
+    }
+  }
+
+  if (typeof stored.searchProvider === 'string') {
+    const trimmed = stored.searchProvider.trim();
+    if (!trimmed || SEARCH_PROVIDERS.has(trimmed)) {
+      config.searchProvider = trimmed;
+    }
+  }
+
+  config.maxRounds = clampInt(stored.maxRounds, 0, 20, config.maxRounds);
+  config.minRounds = clampInt(stored.minRounds, 1, 20, config.minRounds);
+  config.maxTimeSeconds = clampInt(stored.maxTimeSeconds, 30, 3600, config.maxTimeSeconds);
+  config.runTimeoutSeconds = clampInt(
+    stored.runTimeoutSeconds,
+    0,
+    86_400,
+    config.runTimeoutSeconds,
+  );
+  config.maxReportTokens = clampInt(
+    stored.maxReportTokens,
+    1024,
+    131_072,
+    config.maxReportTokens,
+  );
+  config.extractionTimeoutSeconds = clampInt(
+    stored.extractionTimeoutSeconds,
+    10,
+    600,
+    config.extractionTimeoutSeconds,
+  );
+  config.extractionConcurrency = clampInt(
+    stored.extractionConcurrency,
+    1,
+    20,
+    config.extractionConcurrency,
+  );
+  config.maxUrlsPerRound = clampInt(stored.maxUrlsPerRound, 1, 20, config.maxUrlsPerRound);
+  config.maxContentChars = clampInt(
+    stored.maxContentChars,
+    1000,
+    100_000,
+    config.maxContentChars,
+  );
+  config.synthesisWindow = clampInt(stored.synthesisWindow, 1, 50, config.synthesisWindow);
+  config.maxEmptyRounds = clampInt(stored.maxEmptyRounds, 1, 10, config.maxEmptyRounds);
+
+  return config;
+}
+
+/** Managed local server ids allowed in servers.json (Phase 0: searxng only). */
+const MANAGED_SERVER_IDS = ['searxng'];
+
+const DEFAULT_SERVER_PORTS = {
+  searxng: 8899,
+};
+
+/**
+ * Default servers.json (managed SearXNG and future local servers).
+ * @returns {Record<string, { enabled: boolean, autoStart: boolean, port: number }>}
+ */
+export function defaultServersConfig() {
+  return {
+    searxng: {
+      enabled: false,
+      autoStart: true,
+      port: DEFAULT_SERVER_PORTS.searxng,
+    },
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @param {boolean} fallback
+ * @returns {boolean}
+ */
+function coerceBool(value, fallback) {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true' || value === 1) return true;
+  if (value === 'false' || value === 0) return false;
+  return fallback;
+}
+
+/**
+ * Normalize servers.json (catalog ids only, clamp ports, coerce booleans).
+ * @param {unknown} raw
+ * @returns {Record<string, { enabled: boolean, autoStart: boolean, port: number }>}
+ */
+export function normalizeServersConfig(raw) {
+  const config = defaultServersConfig();
+  if (!raw || typeof raw !== 'object') return config;
+
+  const stored = /** @type {Record<string, unknown>} */ (raw);
+  for (const id of MANAGED_SERVER_IDS) {
+    const entry = stored[id];
+    if (!entry || typeof entry !== 'object') continue;
+
+    const row = /** @type {Record<string, unknown>} */ (entry);
+    const base = config[id];
+    const defaultPort = DEFAULT_SERVER_PORTS[id] ?? 8899;
+
+    config[id] = {
+      enabled: coerceBool(row.enabled, base.enabled),
+      autoStart: coerceBool(row.autoStart, base.autoStart),
+      port: clampInt(row.port, 1024, 65_535, defaultPort),
+    };
+  }
+
+  return config;
 }

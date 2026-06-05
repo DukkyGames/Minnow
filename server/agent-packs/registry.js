@@ -116,7 +116,7 @@ async function scaffoldTemplatePack(templateDir) {
           lite: 'prompts/example.lite.md',
         },
         allowedTools: ['read_file', 'find_files', 'list_directory'],
-        defaultForModes: ['research'],
+        defaultForModes: ['general'],
         contextStrategy: { policy: 'inherit', maxInputTokens: null },
       },
     ],
