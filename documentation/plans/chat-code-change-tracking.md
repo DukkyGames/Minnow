@@ -2,33 +2,57 @@
 
 ## Goal
 
-Track line additions/deletions for agent file-mutation tools (server-side diff), show GitHub-style `+`/`-` on each tool bubble, roll up totals on the parent chat (including sub-agents), and display cumulative stats in a strip above the composer.
+Track line additions/deletions when the agent mutates the workspace; show GitHub-style `+`/`-` on tool rows, a **unified diff** in the expanded tool body, **per-chat** totals above the composer, **per-workspace** rollups (hub/sidebar), and **backfill** totals from existing history without re-running tools.
+
+Sub-agent mutations roll up to the parent chat and workspace.
 
 ## Status
 
+Planning complete — implementation pending.
+
+## Mutation sources (in scope)
+
+| Source | Mechanism |
+|--------|-----------|
+| File tools | `save_file`, `append_file`, `insert_at_line`, `replace_text_in_file`, `delete_path`, `move_file`, `copy_file` — before/after content diff on server |
+| `git_commit` | `git show --numstat` / patch for HEAD after successful commit |
+| `execute_command` | Git working-tree snapshot before/after; fallback heuristics for `sed -i`, `patch`, redirects |
+| Backfill | Scan `chat.history` + `subAgentRuns.messages`; parse tool args; optional `git show` for known SHAs |
+
+## UI surfaces
+
+| Surface | Location |
+|---------|----------|
+| Per-tool badge | `src/ui/tool-messages.ts` summary row |
+| Unified diff expando | Same file — reuse `src/ui/prompt-diff-unified.ts` |
+| Chat totals strip | `index.html` `#codeChangeStrip`, `src/ui/code-change-strip.ts` |
+| Workspace totals | `SessionState.codeChangeTotalsByWorkspace`, `src/ui/hub.ts` (and optional sidebar) |
+
+## Key modules (planned)
+
 | Area | Location |
 |------|----------|
-| Server diff | `server/tools/line-diff-stats.js`, wired in `server/runtime/tools-middleware.js` |
+| Server line diff | `server/tools/line-diff-stats.js` |
+| Git / command delta | `server/tools/workspace-change-snapshot.js` |
+| Middleware wiring | `server/runtime/tools-middleware.js` |
 | Types + ledger | `src/types.ts`, `src/usage/code-change-ledger.ts` |
-| Recording | `src/tools/client.ts` (`executeServerTool` + `recordCodeChange`) |
+| Backfill | `src/usage/code-change-backfill.ts` |
+| Recording | `src/tools/client.ts` |
 | History | `src/tools/loop.ts`, `src/agents/sub-agent-runner.ts`, `src/state/sessions.ts` |
-| UI badges | `src/ui/tool-messages.ts`, `src/ui/messages.ts`, `src/ui/transcript-view.ts` |
-| Composer strip | `index.html` `#codeChangeStrip`, `src/ui/code-change-strip.ts`, `src/styles/code-change-strip.css` |
-| Client diff helper | `src/chat/prompts/text-diff.ts` → `countLineChangeStats` |
-| Tests | `test/server/line-diff-stats.test.mjs`, `test/usage/code-change-ledger.test.mts`, `test/ui/tool-messages-code-change.test.mjs`, `test/prompts/text-diff.test.mjs` |
-
-## Out of scope (v1)
-
-- `execute_command`, `git_commit`, patch inference
-- Unified diff in tool expando (badge only)
-- Cross-chat aggregates
-- Backfilling old chats without re-running tools
 
 ## Todos
 
-- [x] Server diff stats + middleware `codeChange` payloads
-- [x] Types, ledger, `executeTool` / client parsing
-- [x] Persist on tool history + sub-agent messages; file-tree `chatId`
-- [x] Per-tool badge + history replay
-- [x] Composer strip + chat switch refresh
-- [x] Tests + `documentation/context.md`
+- [ ] Server diff stats + file-tool `codeChange` + capped `diffLines`
+- [ ] `git_commit` numstat + `execute_command` snapshot / heuristics
+- [ ] Types, chat + workspace ledger, `executeTool` parsing
+- [ ] Persist on tool history + sub-agent messages
+- [ ] History backfill on session/chat load
+- [ ] Tool badge + unified diff expando
+- [ ] Chat composer strip + workspace aggregate UI
+- [ ] Tests + `documentation/context.md`
+
+## Accuracy notes
+
+- File tools and git commit stats are authoritative at execution time.
+- Command snapshot depends on a git repo; heuristics are best-effort and labeled in metadata.
+- Backfill may be approximate for overwrites (`save_file` without stored before-content); use `source: 'backfill'`.
