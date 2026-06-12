@@ -8,10 +8,11 @@ export type ResearchStatus = 'running' | 'done' | 'error' | 'cancelled';
 /** Report category override or auto-detect (empty = auto). */
 export type ResearchCategory =
   | ''
-  | 'product'
-  | 'comparison'
-  | 'howto'
-  | 'factcheck';
+  | 'technical'
+  | 'academic'
+  | 'news'
+  | 'market'
+  | 'general';
 
 /** SSE progress events from `server/research/engine.js` `_emit`. */
 export type ResearchProgress =
@@ -114,6 +115,9 @@ export interface ResearchLibraryItem {
   startedAt?: string;
   completedAt?: string;
   summary?: string;
+  sourceCount?: number;
+  rounds?: number | string;
+  duration?: string;
 }
 
 /** GET /api/research/library response. */

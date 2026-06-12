@@ -15,7 +15,7 @@ const RESEARCH_IDS = [
   'researchCategory',
   'btnResearchStart',
   'btnResearchCancel',
-  'researchSynapseMount',
+  'researchProgressMount',
   'researchResultMount',
   'researchTabRun',
   'researchTabLibrary',

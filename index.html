@@ -836,65 +836,78 @@
   </div>
 </main>
 
-<main id="researchView" class="research-page" aria-label="Deep Research">
-  <div class="research-page-body">
-    <div class="research-page-inner">
-      <div class="research-tabs" role="tablist" aria-label="Research views">
-        <button type="button" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
-        <button type="button" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
-      </div>
+<main id="researchView" class="research-page dr" aria-label="Deep Research">
+  <div class="dr-tabs research-tabs" role="tablist" aria-label="Research views">
+    <button type="button" class="dr-tab on" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
+    <button type="button" class="dr-tab" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
+  </div>
+  <div class="dr-scroll research-page-body">
+    <div class="dr-col research-page-inner">
       <div id="researchPanelRun" role="tabpanel">
-        <label class="research-field-label" for="researchQuery">Research question</label>
-        <textarea id="researchQuery" class="research-query" rows="4" placeholder="What do you want to research?"></textarea>
-        <div class="research-run-options">
-          <div>
-            <label class="research-field-label" for="researchMaxRounds">Rounds</label>
-            <select id="researchMaxRounds" class="research-select">
-              <option value="auto">Auto</option>
-              <option value="1">1</option>
-              <option value="3">3</option>
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-              <option value="20">20</option>
-            </select>
+        <div class="dr-form">
+          <label class="dr-flabel research-mono" for="researchQuery">RESEARCH QUESTION</label>
+          <textarea id="researchQuery" class="dr-q research-query" rows="3" placeholder="What should I research? Be as specific as you like — e.g. 'research the new Fable 5 model: benchmarks, pricing, and how it compares to Qwen3.6.'"></textarea>
+          <div class="dr-controls research-run-options">
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">ROUNDS</span>
+              <div class="dr-select">
+                <select id="researchMaxRounds" class="research-select">
+                  <option value="auto">Auto</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">CATEGORY</span>
+              <div class="dr-select">
+                <select id="researchCategory" class="research-select">
+                  <option value="">Auto</option>
+                  <option value="technical">Technical</option>
+                  <option value="academic">Academic</option>
+                  <option value="news">News</option>
+                  <option value="market">Market</option>
+                  <option value="general">General</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">SEARCH</span>
+              <div class="dr-select">
+                <select id="researchSearchProvider" class="research-select">
+                  <option value="">Default (Settings)</option>
+                  <option value="searxng">SearXNG</option>
+                  <option value="tavily">Tavily</option>
+                  <option value="brave">Brave</option>
+                  <option value="duckduckgo">DuckDuckGo</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">PROVIDER OVERRIDE</span>
+              <div class="dr-select">
+                <select id="researchProviderOverride" class="research-select">
+                  <option value="">(from settings)</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">MODEL OVERRIDE</span>
+              <input type="text" id="researchModelOverride" class="dr-input research-input" placeholder="(from settings)" />
+            </label>
           </div>
-          <div>
-            <label class="research-field-label" for="researchCategory">Category</label>
-            <select id="researchCategory" class="research-select">
-              <option value="">Auto</option>
-              <option value="product">Product</option>
-              <option value="comparison">Comparison</option>
-              <option value="howto">How-to</option>
-              <option value="factcheck">Fact-check</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchSearchProvider">Search</label>
-            <select id="researchSearchProvider" class="research-select">
-              <option value="">Default (Settings)</option>
-              <option value="searxng">SearXNG</option>
-              <option value="tavily">Tavily</option>
-              <option value="brave">Brave</option>
-              <option value="duckduckgo">DuckDuckGo</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchProviderOverride">Provider override</label>
-            <select id="researchProviderOverride" class="research-select">
-              <option value="">(from settings)</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchModelOverride">Model override</label>
-            <input type="text" id="researchModelOverride" class="research-input" placeholder="(from settings)" />
+          <div class="dr-actions research-run-actions">
+            <button type="button" class="dr-run" id="btnResearchStart">
+              <svg class="dr-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              Research
+            </button>
+            <button type="button" class="dr-cancel" id="btnResearchCancel" hidden>Cancel</button>
           </div>
         </div>
-        <div class="research-run-actions">
-          <button type="button" class="research-btn research-btn--primary" id="btnResearchStart">Start research</button>
-          <button type="button" class="research-btn" id="btnResearchCancel" hidden>Cancel</button>
-        </div>
-        <div id="researchSynapseMount" aria-live="polite"></div>
+        <div id="researchProgressMount" aria-live="polite"></div>
         <div id="researchResultMount"></div>
       </div>
       <div id="researchPanelLibrary" class="hidden" role="tabpanel">
@@ -902,8 +915,8 @@
       </div>
     </div>
   </div>
-  <footer class="research-page-footer">
-    <button type="button" class="research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
+  <footer class="dr-foot research-page-footer">
+    <button type="button" class="dr-eng research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
   </footer>
 </main>
 

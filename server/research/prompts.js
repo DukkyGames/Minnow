@@ -123,37 +123,67 @@ Requirements:
 `;
 
 export const CATEGORY_PROMPTS = {
-  product: `IMPORTANT FORMAT OVERRIDE — this is a PRODUCT research report:
-- Structure as a RANKED LIST of products/options (best first)
-- For EACH product include: name as ### heading, approximate price, 2-3 sentence summary, **Pros:** bullet list, **Cons:** bullet list, **Where to buy:** URLs as links
-- Start with a quick-compare markdown table of top picks (columns: Name, Price, Best For, Rating)
-- End with a ## Verdict section picking Best Overall and Best Value
-- Still include source citations inline`,
+  technical: `IMPORTANT FORMAT OVERRIDE — this is a TECHNICAL research brief:
+- Start with ## TL;DR (3–5 sentences) then ## Key findings with ### subsections per theme
+- Emphasize specs, benchmarks, architecture, implementation detail, and trade-offs
+- Include comparison tables when multiple tools/models/frameworks are involved
+- Use inline [n] citation markers tied to the source list
+- End with ## Suggested follow-ups (3 short research questions)`,
 
-  comparison: `IMPORTANT FORMAT OVERRIDE — this is a COMPARISON report:
-- Create a ## Comparison Table as a markdown table comparing ALL options across key criteria (rows = criteria, columns = options)
-- Use checkmarks, ratings, or short values in cells
-- Write a ## section per option with its strengths, weaknesses, and ideal use case
-- End with ## Best For verdicts (e.g., "**Best for small teams:** Option A because...")
-- Include a ## Shared Considerations section for things that apply to all options`,
+  academic: `IMPORTANT FORMAT OVERRIDE — this is an ACADEMIC research brief:
+- Start with ## TL;DR then ## Key findings organized by theme or paper cluster
+- Prioritize peer-reviewed sources, preprints, and primary methodology
+- Note agreement/disagreement across studies; call out sample size and limitations
+- Use formal but readable tone with inline [n] citations
+- End with ## Suggested follow-ups for open research questions`,
 
-  howto: `IMPORTANT FORMAT OVERRIDE — this is a HOW-TO guide:
-- Start with ## Quick Guide — a super concise numbered list (one line per step, no details, just the action). Example: 1. Install X  2. Run Y  3. Configure Z
-- Then ## Prerequisites listing what's needed before starting
-- Then the detailed steps: ## Step 1: ..., ## Step 2: ...
-- Each step should have a clear heading and detailed instructions
-- Use blockquotes (> ) for tips and warnings: > **Tip:** ... or > **Warning:** ...
-- End with ## Common Mistakes section
-- Add estimated time and difficulty level near the top`,
+  news: `IMPORTANT FORMAT OVERRIDE — this is a NEWS / current-events brief:
+- Start with ## TL;DR emphasizing what changed recently and why it matters now
+- Organize ## Key findings chronologically or by stakeholder
+- Weight recency; distinguish reporting from primary sources
+- Flag unverified claims; use inline [n] citations
+- End with ## Suggested follow-ups on developing story angles`,
 
-  factcheck: `IMPORTANT FORMAT OVERRIDE — this is a FACT-CHECK report:
-- Start with ## The Claim restating what's being checked
-- Create ## Evidence For and ## Evidence Against sections
-- Each piece of evidence should be a ### with source name, what it found, and how strong the evidence is
-- Include a ## Verdict section with one of: **Supported**, **Mixed Evidence**, or **Unsupported**
-- End with ## Nuance & Caveats for important context and limitations
-- Be balanced and cite sources for every claim`,
+  market: `IMPORTANT FORMAT OVERRIDE — this is a MARKET / competitive landscape brief:
+- Start with ## TL;DR on positioning, pricing, and market dynamics
+- Include a ## Comparison table when comparing vendors/products
+- Cover pricing, GTM, differentiation, and trends per ### player or segment
+- Use inline [n] citations; note where data is vendor-reported vs independent
+- End with ## Suggested follow-ups on market gaps or risks`,
+
+  general: `IMPORTANT FORMAT OVERRIDE — this is a GENERAL research brief:
+- Start with ## TL;DR (executive summary) then ## Key findings with clear ### headings
+- Balance breadth and depth; synthesize across source types
+- Use inline [n] citation markers
+- End with ## Suggested follow-ups (3 concrete next questions)`,
 };
+
+/** Map legacy persisted categories to the current taxonomy. */
+export const LEGACY_CATEGORY_ALIASES = {
+  product: 'technical',
+  comparison: 'market',
+  howto: 'technical',
+  factcheck: 'news',
+};
+
+/**
+ * @param {string | null | undefined} category
+ * @returns {string}
+ */
+export function normalizeResearchCategory(category) {
+  const raw = String(category ?? '').trim().toLowerCase();
+  if (!raw) {
+    return '';
+  }
+  const legacy = /** @type {Record<string, string>} */ (LEGACY_CATEGORY_ALIASES)[raw];
+  if (legacy) {
+    return legacy;
+  }
+  if (raw in CATEGORY_PROMPTS) {
+    return raw;
+  }
+  return 'general';
+}
 
 export const EXTRACTOR_PROMPT = `Please process the following webpage content and user goal to extract relevant information:
 

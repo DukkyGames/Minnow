@@ -7,7 +7,10 @@ const MOCK_ITEMS = [
     id: 'rs-aaaaaaaaaaaa',
     query: 'Best local LLM stacks',
     status: 'done' as const,
-    category: 'comparison',
+    category: 'market',
+    sourceCount: 11,
+    rounds: 3,
+    duration: '2:48',
     startedAt: '2026-01-01T12:00:00.000Z',
     completedAt: '2026-01-01T12:30:00.000Z',
   },
@@ -41,7 +44,7 @@ describe('research library', () => {
     document.body.innerHTML = '';
   });
 
-  test('renders mock library rows', async () => {
+  test('renders mock library cards', async () => {
     const mount = document.getElementById('researchLibraryMount') as HTMLElement;
     await renderResearchLibrary({
       mount,
@@ -50,10 +53,10 @@ describe('research library', () => {
       onDiscuss: () => {},
       onRefine: () => {},
     });
-    const list = mount.querySelector('#researchLibraryList');
-    assert.ok(list);
-    assert.match(list?.innerHTML ?? '', /Best local LLM stacks/);
-    assert.match(list?.innerHTML ?? '', /data-research-id="rs-aaaaaaaaaaaa"/);
+    const grid = mount.querySelector('#researchLibraryGrid');
+    assert.ok(grid);
+    assert.match(grid?.innerHTML ?? '', /Best local LLM stacks/);
+    assert.match(grid?.innerHTML ?? '', /data-research-id="rs-aaaaaaaaaaaa"/);
     const empty = mount.querySelector('#researchLibraryEmpty');
     assert.ok(empty?.classList.contains('hidden'));
   });

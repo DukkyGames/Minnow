@@ -1,5 +1,5 @@
 /**
- * Deep Research full-page panel (#/research) — query, run, synapse, result, library.
+ * Deep Research full-page panel — query, progress stepper, structured brief, library.
  */
 
 import '../styles/research-page.css';
@@ -7,6 +7,7 @@ import '../styles/research-page.css';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
 import { loadResearchConfig } from '../config/research-config';
+import { noteAgentMessage } from '../os/instances';
 import {
   cancelResearch,
   fetchResearchResult,
@@ -15,7 +16,8 @@ import {
   subscribeToResearchStream,
 } from './client';
 import { renderResearchLibrary } from './library';
-import { ResearchSynapse } from './synapse';
+import { ResearchProgressPanel } from './progress-panel';
+import { renderResearchResultFromMarkdown } from './report-view';
 import type { ResearchCategory, ResearchStartRequest } from './types';
 import { closeBenchmark } from '../ui/benchmark-page';
 import { closeGlobalBugs } from '../ui/global-bugs-page';
@@ -33,12 +35,14 @@ import { navigateToDesktop } from '../os/router';
 
 type ResearchPanelTab = 'run' | 'library';
 
-let synapse: ResearchSynapse | null = null;
+let progressPanel: ResearchProgressPanel | null = null;
 let streamUnsubscribe: (() => void) | null = null;
 let runAbort: AbortController | null = null;
 let activeResearchId: string | null = null;
 let running = false;
 let currentTab: ResearchPanelTab = 'run';
+let pendingAutoRun = false;
+let lastRunRound = 1;
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('researchView');
@@ -46,14 +50,6 @@ function getRoot(): HTMLElement | null {
 
 function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 /** Open visual report in Electron preview or a new browser tab. */
@@ -81,22 +77,30 @@ function setRunningState(isRunning: boolean): void {
   const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
   if (startBtn) {
     startBtn.disabled = isRunning;
-    startBtn.textContent = isRunning ? 'Running…' : 'Start research';
+    startBtn.classList.toggle('busy', isRunning);
+    if (isRunning) {
+      startBtn.innerHTML = '<span class="dr-spinner"></span> Running…';
+    } else {
+      startBtn.innerHTML =
+        '<svg class="dr-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg> Research';
+    }
   }
   if (cancelBtn) {
     cancelBtn.hidden = !isRunning;
     cancelBtn.disabled = !isRunning;
   }
-  if (queryInput) queryInput.disabled = isRunning;
+  if (queryInput) {
+    queryInput.disabled = isRunning;
+  }
   for (const el of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-    '#researchView .research-run-options input, #researchView .research-run-options select',
+    '#researchView .dr-controls input, #researchView .dr-controls select',
   )) {
     el.disabled = isRunning;
   }
 }
 
-function getSynapseMount(): HTMLElement | null {
-  return document.getElementById('researchSynapseMount');
+function getProgressMount(): HTMLElement | null {
+  return document.getElementById('researchProgressMount');
 }
 
 function getResultMount(): HTMLElement | null {
@@ -105,10 +109,12 @@ function getResultMount(): HTMLElement | null {
 
 function setPanelTab(tab: ResearchPanelTab): void {
   currentTab = tab;
-  document.getElementById('researchTabRun')?.setAttribute('aria-selected', tab === 'run' ? 'true' : 'false');
-  document
-    .getElementById('researchTabLibrary')
-    ?.setAttribute('aria-selected', tab === 'library' ? 'true' : 'false');
+  const runTab = document.getElementById('researchTabRun');
+  const libTab = document.getElementById('researchTabLibrary');
+  runTab?.setAttribute('aria-selected', tab === 'run' ? 'true' : 'false');
+  libTab?.setAttribute('aria-selected', tab === 'library' ? 'true' : 'false');
+  runTab?.classList.toggle('on', tab === 'run');
+  libTab?.classList.toggle('on', tab === 'library');
   document.getElementById('researchPanelRun')?.classList.toggle('hidden', tab !== 'run');
   document.getElementById('researchPanelLibrary')?.classList.toggle('hidden', tab !== 'library');
   if (tab === 'library') {
@@ -118,9 +124,12 @@ function setPanelTab(tab: ResearchPanelTab): void {
 
 async function refreshLibraryPanel(): Promise<void> {
   const mount = document.getElementById('researchLibraryMount');
-  if (!mount) return;
+  if (!mount) {
+    return;
+  }
   await renderResearchLibrary({
     mount,
+    onNewResearch: () => setPanelTab('run'),
     onOpenDetail: (id) => {
       setPanelTab('run');
       void showResultForId(id);
@@ -132,7 +141,9 @@ async function refreshLibraryPanel(): Promise<void> {
     onRefine: (id, query) => {
       setPanelTab('run');
       const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-      if (queryInput && query.trim()) queryInput.value = query;
+      if (queryInput && query.trim()) {
+        queryInput.value = query;
+      }
       void startResearchRun({ continueFrom: id });
     },
   });
@@ -191,63 +202,70 @@ function teardownStream(): void {
   runAbort = null;
 }
 
+function resetRunUi(): void {
+  const progressMount = getProgressMount();
+  if (progressMount) {
+    progressPanel?.destroy();
+    progressPanel = null;
+    progressMount.innerHTML = '';
+  }
+  const resultMount = getResultMount();
+  if (resultMount) {
+    resultMount.innerHTML = '';
+  }
+  activeResearchId = null;
+}
+
 async function showResultForId(researchId: string): Promise<void> {
   const mount = getResultMount();
-  if (!mount) return;
-  mount.innerHTML = '<p class="research-result-loading">Loading result…</p>';
+  if (!mount) {
+    return;
+  }
+  mount.innerHTML = '<p class="dr-rep-stats research-mono">Loading result…</p>';
   try {
     const data = await fetchResearchResult(researchId);
-    renderResult(mount, researchId, data.result, data.sources ?? [], data.category);
+    const query =
+      (document.getElementById('researchQuery') as HTMLTextAreaElement | null)?.value?.trim() ??
+      '';
+    renderResearchResultFromMarkdown(
+      mount,
+      data.result,
+      data.sources ?? [],
+      query,
+      data.stats,
+      lastRunRound,
+      {
+        onExport: () => openResearchReport(researchId),
+        onRunAgain: () => {
+          resetRunUi();
+          const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+          if (queryInput) {
+            queryInput.focus();
+          }
+        },
+        onDiscuss: () => {
+          void discussResearchReport(researchId);
+        },
+        onRefine: () => {
+          void startResearchRun({ continueFrom: researchId });
+        },
+        onFollowUp: (q) => {
+          const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+          if (queryInput) {
+            queryInput.value = q;
+          }
+          void startResearchRun({ continueFrom: researchId });
+        },
+        onViewLibrary: () => setPanelTab('library'),
+      },
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Could not load result';
-    mount.innerHTML = `<p class="research-result-error">${escapeHtml(msg)}</p>`;
+    mount.innerHTML = `<p class="dr-rep-stats">${msg}</p>`;
   }
 }
 
-function renderResult(
-  mount: HTMLElement,
-  researchId: string,
-  markdown: string,
-  sources: { url: string; title?: string }[],
-  category?: string,
-): void {
-  const summary = markdown.trim().slice(0, 1200);
-  const sourcesHtml = sources.length
-    ? `<ul class="research-sources">${sources
-        .slice(0, 24)
-        .map(
-          (s) =>
-            `<li><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.title?.trim() || s.url)}</a></li>`,
-        )
-        .join('')}</ul>`
-    : '<p class="research-sources-empty">No sources recorded.</p>';
-
-  mount.innerHTML = `
-    <section class="research-result" aria-label="Research result">
-      ${category ? `<p class="research-result-cat">${escapeHtml(category)}</p>` : ''}
-      <div class="research-result-body">${escapeHtml(summary)}${markdown.length > summary.length ? '…' : ''}</div>
-      <h3 class="research-result-sources-title">Sources</h3>
-      ${sourcesHtml}
-      <div class="research-result-actions">
-        <button type="button" class="research-btn research-btn--primary" id="btnResearchOpenReport">Open visual report</button>
-        <button type="button" class="research-btn" id="btnResearchDiscuss">Discuss</button>
-        <button type="button" class="research-btn" id="btnResearchRefine">Refine</button>
-      </div>
-    </section>
-  `;
-
-  document.getElementById('btnResearchOpenReport')?.addEventListener('click', () => {
-    openResearchReport(researchId);
-  });
-  document.getElementById('btnResearchDiscuss')?.addEventListener('click', () => {
-    void discussResearchReport(researchId);
-  });
-  document.getElementById('btnResearchRefine')?.addEventListener('click', () => {
-    void startResearchRun({ continueFrom: researchId });
-  });
-}
-
-/** Client spinoff: new chat seeded with the report (user message; history has no system role). */
+/** Client spinoff: new chat seeded with the report. */
 export async function discussResearchReport(researchId: string): Promise<void> {
   try {
     const data = await fetchResearchResult(researchId);
@@ -275,7 +293,9 @@ export async function discussResearchReport(researchId: string): Promise<void> {
 }
 
 async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<void> {
-  if (running) return;
+  if (running) {
+    return;
+  }
   const query = (
     document.getElementById('researchQuery') as HTMLTextAreaElement | null
   )?.value?.trim();
@@ -288,11 +308,11 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
   setRunningState(true);
   activeResearchId = null;
 
-  const synapseMount = getSynapseMount();
-  if (synapseMount) {
-    synapse?.destroy();
-    synapse = new ResearchSynapse(synapseMount);
-    synapse.reset();
+  const progressMount = getProgressMount();
+  if (progressMount) {
+    progressPanel?.destroy();
+    progressPanel = new ResearchProgressPanel(progressMount);
+    progressPanel.reset();
   }
   const resultMount = getResultMount();
   if (resultMount) {
@@ -315,14 +335,26 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
     streamUnsubscribe = subscribeToResearchStream(researchId, {
       signal: runAbort.signal,
       onProgress: (event) => {
-        synapse?.applyProgress(event);
+        progressPanel?.apply(event);
+        if (event.phase === 'searching' && event.round) {
+          lastRunRound = event.round;
+        }
       },
       onEnd: (endEvent) => {
         setRunningState(false);
         const status = endEvent?.status ?? 'done';
-        synapse?.complete(status, endEvent?.message);
+        progressPanel?.complete(status, endEvent?.message);
         if (status === 'done') {
           void showResultForId(researchId);
+          const scanned = progressPanel?.getScanned() ?? 0;
+          void fetchResearchResult(researchId).then((data) => {
+            const sources = data.sources?.length ?? scanned;
+            const title = query.slice(0, 60);
+            noteAgentMessage(
+              'research',
+              `Your research brief on ${title}${query.length > 60 ? '…' : ''} is ready — ${sources} sources.`,
+            );
+          });
           setStatus('ok', 'Research complete');
         } else if (status === 'cancelled') {
           setStatus('ok', 'Research cancelled');
@@ -334,7 +366,7 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
       onTransportError: (err) => {
         setRunningState(false);
         const msg = err instanceof Error ? err.message : 'Stream error';
-        synapse?.complete('error', msg);
+        progressPanel?.complete('error', msg);
         setStatus('err', msg);
         teardownStream();
       },
@@ -342,14 +374,16 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
   } catch (err) {
     setRunningState(false);
     const msg = err instanceof Error ? err.message : 'Could not start research';
-    synapse?.complete('error', msg);
+    progressPanel?.complete('error', msg);
     setStatus('err', msg);
     teardownStream();
   }
 }
 
 async function cancelActiveRun(): Promise<void> {
-  if (!activeResearchId) return;
+  if (!activeResearchId) {
+    return;
+  }
   try {
     await cancelResearch(activeResearchId);
   } catch {
@@ -357,7 +391,7 @@ async function cancelActiveRun(): Promise<void> {
   }
   teardownStream();
   setRunningState(false);
-  synapse?.complete('cancelled');
+  progressPanel?.complete('cancelled');
 }
 
 function closeOtherOverlays(): void {
@@ -365,10 +399,14 @@ function closeOtherOverlays(): void {
   closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
   void import('../ui/welcome-page').then((m) => {
-    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+    if (m.isWelcomePageOpen()) {
+      m.closeWelcome({ skipHash: true });
+    }
   });
   void import('../ui/experts/experts-hub').then((m) => {
-    if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
+    if (m.isExpertsPageOpen()) {
+      m.closeExpertsHub({ skipNavigate: true });
+    }
   });
 }
 
@@ -381,7 +419,9 @@ export function isResearchPageOpen(): boolean {
 export function closeResearch(options?: { skipNavigate?: boolean }): void {
   const root = getRoot();
   const shell = getChatShell();
-  if (!root || !shell) return;
+  if (!root || !shell) {
+    return;
+  }
   void cancelActiveRun();
   root.classList.remove('is-open');
   if (!isOsShellEnabled()) {
@@ -397,12 +437,21 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
   );
 }
 
-/** Open Deep Research (`#/research`). */
-export function openResearch(): void {
+export interface OpenResearchOptions {
+  seed?: string;
+  autoRun?: boolean;
+}
+
+/** Open Deep Research (`#/research` or OS `#/app/research`). */
+export function openResearch(options?: OpenResearchOptions): void {
   const root = getRoot();
   const shell = getChatShell();
-  if (!root || !shell) return;
-  if (window.location.hash.startsWith('#/settings')) return;
+  if (!root || !shell) {
+    return;
+  }
+  if (window.location.hash.startsWith('#/settings')) {
+    return;
+  }
 
   closeOtherOverlays();
   root.classList.add('is-open');
@@ -414,16 +463,31 @@ export function openResearch(): void {
     m.syncElectronPreviewHostVisibility(),
   );
   setPanelTab(currentTab);
+
+  if (options?.seed) {
+    const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    if (query) {
+      query.value = options.seed;
+    }
+  }
+  if (options?.autoRun || pendingAutoRun) {
+    pendingAutoRun = false;
+    void startResearchRun();
+  }
 }
 
 function onHashChange(): void {
   const hash = window.location.hash;
-  if (hash.startsWith('#/settings')) return;
+  if (hash.startsWith('#/settings')) {
+    return;
+  }
   if (hash === '#/research' || hash.startsWith('#/research/')) {
     openResearch();
     return;
   }
-  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isOsShellEnabled() && isOsAppHash(hash)) {
+    return;
+  }
   if (isResearchPageOpen()) {
     closeResearch();
   }
@@ -458,6 +522,11 @@ export function openResearchFromTopbar(): void {
   openResearch();
 }
 
+/** Queue auto-run after open (concierge seed). */
+export function queueResearchAutoRun(): void {
+  pendingAutoRun = true;
+}
+
 /** Test hook: whether Start is disabled during a run. */
 export function isResearchStartDisabledForTests(): boolean {
   const btn = document.getElementById('btnResearchStart') as HTMLButtonElement | null;
@@ -469,12 +538,12 @@ export function setResearchRunningForTests(isRunning: boolean): void {
   setRunningState(isRunning);
 }
 
-/** Test hook: apply mock progress to synapse without a server. */
-export function applySynapseProgressForTests(
+/** Test hook: apply mock progress without a server. */
+export function applyProgressForTests(
   mount: HTMLElement,
-  event: Parameters<ResearchSynapse['applyProgress']>[0],
+  event: Parameters<ResearchProgressPanel['apply']>[0],
 ): void {
-  const syn = new ResearchSynapse(mount);
-  syn.reset();
-  syn.applyProgress(event);
+  const panel = new ResearchProgressPanel(mount);
+  panel.reset();
+  panel.apply(event);
 }

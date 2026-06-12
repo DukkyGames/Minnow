@@ -7,6 +7,7 @@ import { parseJsonArray, parseJsonObject } from './json-parse.js';
 import { llmCall as defaultLlmCall } from './llm.js';
 import {
   CATEGORY_PROMPTS,
+  normalizeResearchCategory,
   QUERY_GEN_PROMPT,
   RESEARCH_PLAN_PROMPT,
   SYNTHESIZE_PROMPT,
@@ -103,7 +104,7 @@ export class DeepResearcher {
     this.providerId = options.providerId;
     this.model = options.model;
     this.searchProviderOverride = options.searchProvider?.trim() ?? '';
-    this.category = options.category?.trim() ?? '';
+    this.category = normalizeResearchCategory(options.category?.trim() ?? '');
     this.maxRounds =
       options.maxRounds && options.maxRounds > 0 ? options.maxRounds : AUTO_MAX_ROUNDS;
     this.maxTime = options.maxTimeSeconds ?? 300;
@@ -408,6 +409,7 @@ export class DeepResearcher {
     const prompt =
       `Classify this research question into exactly ONE category.\n` +
       `Categories: ${valid}\n` +
+      `Valid categories: technical, academic, news, market, general.\n` +
       `If none fit well, respond with: general\n\n` +
       `Question: ${question}\n\n` +
       `Respond with ONLY the category name, nothing else.`;
@@ -421,15 +423,7 @@ export class DeepResearcher {
       });
       const cat = (result || '').trim().toLowerCase();
       const first = cat.split(/\s+/)[0]?.replace(/[.,"'*:]/g, '') ?? '';
-      if (first && first in CATEGORY_PROMPTS) {
-        return first;
-      }
-      for (const key of Object.keys(CATEGORY_PROMPTS)) {
-        if (cat.includes(key)) {
-          return key;
-        }
-      }
-      return null;
+      return normalizeResearchCategory(first || cat) || 'general';
     } catch {
       return null;
     }

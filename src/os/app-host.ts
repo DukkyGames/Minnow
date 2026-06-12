@@ -92,11 +92,7 @@ async function openAppPage(appId: AppId, seed?: string): Promise<void> {
     }
     case 'research': {
       const { openResearch } = await import('../research/panel');
-      openResearch();
-      if (seed) {
-        const query = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-        if (query && !query.value.trim()) query.value = seed;
-      }
+      openResearch({ seed, autoRun: Boolean(seed?.trim()) });
       break;
     }
     case 'bench': {
