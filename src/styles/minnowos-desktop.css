@@ -216,17 +216,116 @@
   border-color: var(--os-border-strong);
 }
 
-/* ---------- dock ---------- */
+/* ---------- dock shell (stage overlay) ---------- */
 
-.mn-os-dock {
+.mn-os-dock-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.mn-os-dock-reveal,
+.mn-os-dock-panel,
+.mn-os-dock-hide {
+  pointer-events: auto;
+}
+
+.mn-os-dock-reveal,
+.mn-os-dock-hide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-1) 88%, transparent);
+  backdrop-filter: blur(16px);
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition:
+    color 0.16s var(--os-ease),
+    border-color 0.16s var(--os-ease),
+    background 0.16s var(--os-ease),
+    transform 0.2s var(--os-ease-out);
+}
+
+.mn-os-dock-reveal {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 -8px 24px -12px rgba(0, 0, 0, 0.55);
+}
+
+.mn-os-dock-reveal:hover,
+.mn-os-dock-hide:hover {
+  color: var(--os-text);
+  border-color: var(--os-accent-glow);
+  background: var(--os-surface-2);
+}
+
+.mn-os-dock-reveal:focus-visible,
+.mn-os-dock-hide:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 2px;
+}
+
+.mn-os-dock-panel {
   position: absolute;
   bottom: 22px;
   left: 50%;
   transform: translateX(-50%);
+  transition:
+    transform 0.28s var(--os-ease-out),
+    opacity 0.24s var(--os-ease-out);
+}
+
+.mn-os-dock-hide {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 10px 10px 0 0;
+  border-bottom: none;
+  z-index: 1;
+}
+
+.mn-os-dock-shell[data-shell-view='desktop'] .mn-os-dock-reveal,
+.mn-os-dock-shell[data-shell-view='desktop'] .mn-os-dock-hide {
+  display: none;
+}
+
+.mn-os-dock-shell[data-shell-view='app'][data-dock-open='false'] .mn-os-dock-panel {
+  transform: translate(-50%, calc(100% + 40px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mn-os-dock-shell[data-shell-view='app'][data-dock-open='false'] .mn-os-dock-hide {
+  display: none;
+}
+
+.mn-os-dock-shell[data-shell-view='app'][data-dock-open='true'] .mn-os-dock-reveal {
+  display: none;
+}
+
+/* `display: flex` on buttons can override the native [hidden] rule */
+.mn-os-dock-reveal[hidden],
+.mn-os-dock-hide[hidden] {
+  display: none !important;
+}
+
+/* ---------- dock ---------- */
+
+.mn-os-dock {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 10px;
-  z-index: 10;
   background: color-mix(in srgb, var(--os-surface-1) 72%, transparent);
   backdrop-filter: blur(22px);
   border: 1px solid var(--os-border-strong);
@@ -234,6 +333,12 @@
   box-shadow:
     0 20px 60px -24px rgba(0, 0, 0, 0.8),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* `display: flex` / `display: grid` override the native [hidden] rule */
+.mn-os-dock[hidden],
+.mn-os-app-grid[hidden] {
+  display: none !important;
 }
 
 .mn-os-tile-dock {
@@ -555,6 +660,9 @@
   .mn-os-cc-input,
   .mn-os-cc-send,
   .mn-os-cc-chip,
+  .mn-os-dock-panel,
+  .mn-os-dock-reveal,
+  .mn-os-dock-hide,
   .mn-os-tile-dock,
   .mn-os-tile-grid,
   .mn-os-mini-card,

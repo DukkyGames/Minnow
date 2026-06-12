@@ -122,15 +122,15 @@ export function renderMenubar(root: HTMLElement): () => void {
   settingsSlot.id = 'osMenubarSettingsSearchSlot';
   settingsSlot.className = 'mn-os-mb-settings-slot';
 
+  center.append(settingsSlot);
+
+  const right = document.createElement('div');
+  right.className = 'mn-os-mb-right';
+
   const workspaceSlot = document.createElement('div');
   workspaceSlot.id = 'osMenubarWorkspaceSlot';
   workspaceSlot.className = 'mn-os-mb-workspace-slot';
   workspaceSlot.hidden = true;
-
-  center.append(settingsSlot, workspaceSlot);
-
-  const right = document.createElement('div');
-  right.className = 'mn-os-mb-right';
 
   const modelChip = document.createElement('button');
   modelChip.type = 'button';
@@ -163,7 +163,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(modelChip, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChip, bell, settingsBtn, timeEl);
   root.append(left, center, right);
 
   function syncMenubar(): void {

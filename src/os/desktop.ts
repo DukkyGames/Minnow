@@ -1,9 +1,7 @@
-import { APPS } from './app-registry';
 import { loadDesktopPrefs, subscribeDesktopPrefs } from './desktop-prefs';
 import { closeInstance, getInstanceSnapshot, subscribeInstances } from './instances';
 import { launchApp } from './router';
 import { renderConcierge } from './concierge';
-import { createOsIcon } from './icons';
 import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper } from './wallpaper';
 import type { AppId } from './types';
@@ -24,35 +22,7 @@ function formatDateTime(d: Date): { time: string; date: string } {
   };
 }
 
-function buildAppTile(
-  app: (typeof APPS)[number],
-  onLaunch: (appId: AppId) => void,
-): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'mn-os-tile-grid';
-  btn.title = app.tag;
-
-  const ico = document.createElement('span');
-  ico.className = 'mn-os-tile-ico';
-  ico.appendChild(createOsIcon(app.icon as 'code', { size: 26 }));
-  btn.appendChild(ico);
-
-  const name = document.createElement('span');
-  name.className = 'mn-os-tile-name';
-  name.textContent = app.name;
-  btn.appendChild(name);
-
-  const tag = document.createElement('span');
-  tag.className = 'mn-os-tile-tag';
-  tag.textContent = app.description;
-  btn.appendChild(tag);
-
-  btn.addEventListener('click', () => onLaunch(app.id));
-  return btn;
-}
-
-/** Render the MinnowOS desktop (greeting, concierge, launcher, mini-previews). */
+/** Render the MinnowOS desktop (greeting, concierge, mini-previews). */
 export function renderDesktop(root: HTMLElement): () => void {
   root.replaceChildren();
   root.className = 'mn-os-desktop';
@@ -91,14 +61,6 @@ export function renderDesktop(root: HTMLElement): () => void {
   renderConcierge(conciergeMount, onLaunch);
   hero.appendChild(conciergeMount);
   stage.appendChild(hero);
-
-  const gridMount = document.createElement('div');
-  gridMount.className = 'mn-os-app-grid';
-  gridMount.hidden = prefs.desktopLayout !== 'grid';
-  for (const app of APPS) {
-    gridMount.appendChild(buildAppTile(app, (id) => launchApp(id)));
-  }
-  stage.appendChild(gridMount);
   root.appendChild(stage);
 
   const previewsMount = document.createElement('div');
@@ -118,10 +80,6 @@ export function renderDesktop(root: HTMLElement): () => void {
     );
   }
 
-  function applyLayout(layout: 'concierge' | 'grid'): void {
-    gridMount.hidden = layout !== 'grid';
-  }
-
   function applyWallpaper(mode: ReturnType<typeof loadDesktopPrefs>['wallpaper']): void {
     renderWallpaper(wallpaperMount, mode);
   }
@@ -130,7 +88,6 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const unsubInstances = subscribeInstances(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
-    applyLayout(p.desktopLayout);
     applyWallpaper(p.wallpaper);
     refreshPreviews();
   });

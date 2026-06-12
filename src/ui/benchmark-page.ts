@@ -5,6 +5,28 @@
 import '../styles/benchmark-page.css';
 import '../styles/sub-agent-drawer.css';
 
+import type { BenchmarkTier, CampaignProgressEvent, ModelAggregate } from '../benchmark/campaign-types.ts';
+import { runBenchmarkCampaign } from '../benchmark/campaign-runner.ts';
+import {
+  addTargetToRoster,
+  getActiveTargetFromDom,
+  loadRoster,
+  removeTargetFromRoster,
+  saveRoster,
+} from '../benchmark/roster.ts';
+import {
+  initBenchmarkApp,
+  navigateBenchmarkTab,
+  notifyCampaignComplete,
+  onBenchmarkHashChange,
+} from './benchmark/benchmark-app.ts';
+import {
+  refreshOverviewPanel,
+  setOverviewRunState,
+  updateOverviewLiveAggregates,
+} from './benchmark/overview-panel.ts';
+import { CAMPAIGN_STEPS } from './benchmark/animations.ts';
+
 import { aggregateRunScore, computeSuiteResultStats } from '../benchmark/scoring.ts';
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
 import {
@@ -782,6 +804,107 @@ function renderSuites(run: BenchmarkRun): void {
     .join('');
 }
 
+function getStandardPackToggles(): string[] {
+  const group = document.getElementById('benchmarkStandardToggles');
+  if (!group) return [];
+  return [...group.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')]
+    .filter((btn) => btn.getAttribute('aria-pressed') === 'true')
+    .map((btn) => btn.dataset.packId ?? '')
+    .filter(Boolean);
+}
+
+function getStandardTier(): BenchmarkTier {
+  const sel = document.getElementById('benchmarkStandardTier') as HTMLSelectElement | null;
+  return sel?.value === 'full' ? 'full' : 'mini';
+}
+
+function renderRosterList(): void {
+  const mount = document.getElementById('benchmarkRosterList');
+  if (!mount) return;
+  const roster = loadRoster();
+  if (!roster.length) {
+    mount.innerHTML = '<p class="benchmark-empty">No models in roster. Add the active model or enter provider/model ids.</p>';
+    return;
+  }
+  mount.innerHTML = roster
+    .map(
+      (t) =>
+        `<div class="benchmark-roster-chip" data-provider="${escapeHtml(t.providerId)}" data-model="${escapeHtml(t.modelId)}">
+          <span>${escapeHtml(t.label ?? `${t.providerId} / ${t.modelId}`)}</span>
+          <button type="button" class="benchmark-roster-remove" aria-label="Remove">×</button>
+        </div>`,
+    )
+    .join('');
+  for (const btn of mount.querySelectorAll<HTMLButtonElement>('.benchmark-roster-remove')) {
+    btn.addEventListener('click', () => {
+      const chip = btn.closest('.benchmark-roster-chip');
+      const providerId = chip?.getAttribute('data-provider') ?? '';
+      const modelId = chip?.getAttribute('data-model') ?? '';
+      removeTargetFromRoster(providerId, modelId);
+      renderRosterList();
+      refreshOverviewPanel();
+    });
+  }
+}
+
+function updateCampaignStepper(phase: string): void {
+  const mount = document.getElementById('benchmarkCampaignStepper');
+  if (!(mount instanceof HTMLElement)) return;
+  const idx = CAMPAIGN_STEPS.findIndex((s) => s.id === phase);
+  if (idx < 0) {
+    mount.hidden = true;
+    return;
+  }
+  mount.hidden = false;
+  mount.innerHTML = CAMPAIGN_STEPS.map((step, i) => {
+    const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
+    return `<div class="benchmark-step benchmark-step--${state}">
+      <span class="benchmark-step-mark">${state === 'done' ? '✓' : state === 'active' ? '<span class="benchmark-step-dot"></span>' : i + 1}</span>
+      <div class="benchmark-step-txt"><b>${escapeHtml(step.label)}</b><i class="dim">${escapeHtml(step.detail)}</i></div>
+    </div>`;
+  }).join('');
+}
+
+const liveCampaignAggregates: ModelAggregate[] = [];
+
+function onCampaignProgress(event: CampaignProgressEvent): void {
+  if (event.type === 'phase') {
+    updateCampaignStepper(event.phase);
+    setOverviewRunState('running');
+    return;
+  }
+  if (event.type === 'target-done') {
+    const existing = liveCampaignAggregates.findIndex(
+      (a) => a.targetKey === event.targetKey,
+    );
+    if (existing >= 0) liveCampaignAggregates[existing] = event.aggregate;
+    else liveCampaignAggregates.push(event.aggregate);
+    updateOverviewLiveAggregates([...liveCampaignAggregates]);
+    refreshOverviewPanel();
+  }
+  if (event.type === 'integration-progress') {
+    onBenchmarkProgress(event.event);
+  }
+  if (event.type === 'campaign-done') {
+    updateCampaignStepper('done');
+    setOverviewRunState('done', 100);
+    updateOverviewLiveAggregates(event.campaign.aggregates);
+    notifyCampaignComplete();
+    document.getElementById('benchmarkCampaignStepper')?.setAttribute('hidden', '');
+    if (event.campaign.runs[0]) {
+      lastRun = event.campaign.runs[0];
+      renderSummary(lastRun);
+      renderSuites(lastRun);
+    }
+    void refreshHistorySelect();
+    setStatus('ok', `Campaign done · ${event.campaign.targets.length} models`);
+  }
+  if (event.type === 'campaign-cancelled') {
+    setOverviewRunState('idle');
+    document.getElementById('benchmarkCampaignStepper')?.setAttribute('hidden', '');
+  }
+}
+
 function getSuiteToggleButtons(): HTMLButtonElement[] {
   const group = document.getElementById('benchmarkSuiteToggles');
   if (!group) return [];
@@ -1062,6 +1185,79 @@ async function executeBenchmarkRun(options: {
 }): Promise<void> {
   const { mode, suiteIds, preset, resume } = options;
 
+  if (resume) {
+    await executeLegacyBenchmarkRun(options);
+    return;
+  }
+
+  const targets = loadRoster();
+  if (!targets.length) {
+    setStatus('err', 'Add at least one model to the roster.');
+    return;
+  }
+
+  abortController?.abort();
+  const generation = ++benchmarkRunGeneration;
+  abortController = new AbortController();
+  const runSignal = abortController.signal;
+  setRunning(true);
+  setStatus('ok', runningStatusLabel(mode));
+  liveCampaignAggregates.length = 0;
+
+  const modelId = targets[0]?.modelId ?? 'unknown';
+  const startedAt = new Date().toISOString();
+  liveRunId = startedAt.replace(/[:.]/g, '-');
+  liveStartMode = mode;
+  liveRunDrawerMeta = { preset, modelId, startedAt };
+
+  initLiveRunUI(mode, suiteIds);
+  navigateBenchmarkTab('run', { replace: true });
+  setOverviewRunState('running', 0);
+  updateCampaignStepper('planning');
+  document.getElementById('benchmarkCampaignStepper')?.removeAttribute('hidden');
+
+  const standardPackIds = getStandardPackToggles();
+
+  try {
+    await runBenchmarkCampaign({
+      targets,
+      integrationSuites: suiteIds,
+      standardPackIds,
+      standardTier: getStandardTier(),
+      preset,
+      signal: runSignal,
+      persistPartialOnCancel: true,
+      onProgress: (event) => {
+        if (generation !== benchmarkRunGeneration) return;
+        onCampaignProgress(event);
+      },
+    });
+  } catch (err) {
+    if (generation !== benchmarkRunGeneration) return;
+    const aborted = runSignal.aborted;
+    finishLiveRunUI({ markCurrentStopped: aborted, commitPartial: aborted });
+    if (aborted) {
+      setStatus('ok', 'Benchmark cancelled.');
+      setOverviewRunState('idle');
+    } else {
+      setStatus('err', err instanceof Error ? err.message : String(err));
+    }
+  } finally {
+    if (generation !== benchmarkRunGeneration) return;
+    liveRunId = null;
+    setRunning(false);
+    abortController = null;
+  }
+}
+
+async function executeLegacyBenchmarkRun(options: {
+  mode: BenchmarkStartMode;
+  suiteIds: SuiteId[];
+  preset: BenchmarkPreset;
+  resume?: ActiveBenchmarkSession;
+}): Promise<void> {
+  const { mode, suiteIds, preset, resume } = options;
+
   abortController?.abort();
   const generation = ++benchmarkRunGeneration;
   abortController = new AbortController();
@@ -1167,9 +1363,15 @@ async function executeBenchmarkRun(options: {
 }
 
 async function startRun(mode: BenchmarkStartMode): Promise<void> {
-  if (!getActiveModelIdFromDom()) {
+  const roster = loadRoster();
+  if (!roster.length && !getActiveTargetFromDom()) {
     setStatus('err', 'Load a model before running Benchmark.');
     return;
+  }
+  if (!roster.length) {
+    const active = getActiveTargetFromDom();
+    if (active) saveRoster([active]);
+    renderRosterList();
   }
 
   applyStartModeToToggles(mode);
@@ -1332,7 +1534,9 @@ export function isBackToCurrentVisibleForTests(): boolean {
 }
 
 function syncBenchmarkPageOnOpen(): void {
+  renderRosterList();
   void refreshHistorySelect();
+  refreshOverviewPanel();
   if (browsingHistory) {
     updateBackToCurrentControl();
     return;
@@ -1378,6 +1582,7 @@ export function openBenchmark(): void {
   );
 
   syncBenchmarkPageOnOpen();
+  initBenchmarkApp();
 }
 
 export function closeBenchmark(options?: { skipNavigate?: boolean }): void {
@@ -1407,7 +1612,8 @@ export function isBenchmarkRunningInBackground(): boolean {
 function onHashChange(): void {
   const hash = window.location.hash;
   if (hash.startsWith('#/settings')) return;
-  if (hash === '#/benchmark' || hash.startsWith('#/benchmark/')) {
+  onBenchmarkHashChange();
+  if (hash === '#/benchmark' || hash.startsWith('#/benchmark/') || hash.startsWith('#/app/bench')) {
     openBenchmark();
     return;
   }
@@ -1446,6 +1652,42 @@ export function initBenchmarkPage(): void {
   document.getElementById('btnBenchmarkClearHistory')?.addEventListener('click', () => {
     void onClearHistoryClick();
   });
+
+  document.getElementById('btnBenchmarkAddTarget')?.addEventListener('click', () => {
+    const providerId = (
+      document.getElementById('benchmarkRosterProvider') as HTMLInputElement
+    )?.value.trim();
+    const modelId = (
+      document.getElementById('benchmarkRosterModel') as HTMLInputElement
+    )?.value.trim();
+    if (!providerId || !modelId) {
+      setStatus('err', 'Enter provider id and model id.');
+      return;
+    }
+    addTargetToRoster({ providerId, modelId });
+    renderRosterList();
+    refreshOverviewPanel();
+  });
+
+  document.getElementById('btnBenchmarkAddActiveModel')?.addEventListener('click', () => {
+    const active = getActiveTargetFromDom();
+    if (!active) {
+      setStatus('err', 'No active model in the top bar.');
+      return;
+    }
+    addTargetToRoster(active);
+    renderRosterList();
+    refreshOverviewPanel();
+  });
+
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('.benchmark-standard-toggle')) {
+    btn.addEventListener('click', () => {
+      const pressed = btn.getAttribute('aria-pressed') === 'true';
+      btn.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+    });
+  }
+
+  renderRosterList();
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);

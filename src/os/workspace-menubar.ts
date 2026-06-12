@@ -21,7 +21,7 @@ function getMenubarSlot(): HTMLElement | null {
   return document.getElementById(MENUBAR_SLOT_ID);
 }
 
-/** True when workspace controls should live in the menubar center slot. */
+/** True when workspace controls should live in the menubar right slot. */
 export function shouldMountWorkspaceInMenubar(): boolean {
   if (!isOsShellEnabled()) return false;
   if (getOsView() !== 'app') return false;

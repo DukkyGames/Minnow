@@ -18,9 +18,9 @@ describe('menubar chat toggle visibility', () => {
     assert.equal(isChatToggleVisible('chat'), true);
   });
 
-  test('center slot hidden for chat (no workspace picker)', () => {
+  test('center slot visible only for settings search', () => {
     assert.equal(isMenubarCenterVisible('chat'), false);
-    assert.equal(isMenubarCenterVisible('code'), true);
+    assert.equal(isMenubarCenterVisible('code'), false);
     assert.equal(isMenubarCenterVisible('settings'), true);
   });
 

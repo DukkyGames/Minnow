@@ -15,11 +15,15 @@ export function renderMiniPreviews(
   onRestore: (id: string) => void,
   onClose: (id: string) => void,
 ): void {
+  container.replaceChildren();
+
+  // Mini-stack cards belong on the desktop launcher only — not over foreground apps.
+  if (snapshot.view === 'app') return;
+
   const minimized = snapshot.instances.filter(
     (i) => i.id !== snapshot.foregroundId || snapshot.view === 'desktop',
   );
 
-  container.replaceChildren();
   if (minimized.length === 0) return;
 
   const stack = document.createElement('div');

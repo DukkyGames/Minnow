@@ -5,6 +5,7 @@ import '../styles/minnowos-apps.css';
 
 import { initAppHost } from './app-host';
 import { renderDesktop } from './desktop';
+import { initDockLauncher } from './dock-launcher';
 import { renderMenubar } from './menubar';
 import { createOsIcon } from './icons';
 import { isOsShellEnabled } from './page-bridge';
@@ -17,6 +18,7 @@ function ensureShellDom(): {
   root: HTMLElement;
   menubar: HTMLElement;
   desktopLayer: HTMLElement;
+  dockLayer: HTMLElement;
 } {
   let root = document.getElementById('minnowOsRoot');
   if (!root) {
@@ -56,7 +58,14 @@ function ensureShellDom(): {
     stage.appendChild(appsLayer);
   }
 
-  return { root, menubar, desktopLayer };
+  let dockLayer = document.getElementById('osDockLayer');
+  if (!dockLayer) {
+    dockLayer = document.createElement('div');
+    dockLayer.id = 'osDockLayer';
+    stage.appendChild(dockLayer);
+  }
+
+  return { root, menubar, desktopLayer, dockLayer };
 }
 
 function showBootSplash(root: HTMLElement): void {
@@ -91,13 +100,15 @@ export function initOsShell(): void {
 
   document.documentElement.classList.add('minnow-os-enabled');
 
-  const { root, menubar, desktopLayer } = ensureShellDom();
+  const { root, menubar, desktopLayer, dockLayer } = ensureShellDom();
   showBootSplash(root);
 
   const cleanupDesktop = renderDesktop(desktopLayer);
+  const cleanupDock = initDockLauncher(dockLayer);
   const cleanupMenubar = renderMenubar(menubar);
   shellCleanup = () => {
     cleanupDesktop();
+    cleanupDock();
     cleanupMenubar();
   };
 

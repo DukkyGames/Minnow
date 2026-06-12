@@ -3,6 +3,7 @@
  */
 
 import type { ApiMessage, Stats, Usage } from '../types.ts';
+import type { BenchmarkBinding } from './resolve-binding.ts';
 
 /** Suite identifiers for the benchmark runner. */
 export type SuiteId =
@@ -125,6 +126,9 @@ export type BenchmarkProgressEvent =
   | { type: 'suite-start'; suiteId: SuiteId; label: string }
   | { type: 'test-start'; suiteId: SuiteId; testId: string; label: string }
   | { type: 'test-done'; result: TestResult }
+  | { type: 'target-start'; targetKey: string }
+  | { type: 'target-done'; targetKey: string }
+  | { type: 'metric-sample'; targetKey: string; tokPerSec?: number; ttftMs?: number }
   | { type: 'run-cancelled' }
   | { type: 'run-done'; run: BenchmarkRun };
 
@@ -144,4 +148,10 @@ export interface RunBenchmarkOptions {
   resume?: BenchmarkResumeState;
   /** Override generated run id (must match session when resuming). */
   runId?: string;
+  /** Explicit provider/model (multi-model campaigns). */
+  binding?: BenchmarkBinding;
+  /** When false, caller persists (campaign save). Default true. */
+  saveToHistory?: boolean;
+  /** Per-test timeout for tools suite (BUG-006 mitigation). */
+  perTestTimeoutMs?: number;
 }

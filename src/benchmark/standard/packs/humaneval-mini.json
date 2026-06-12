@@ -1,0 +1,46 @@
+{
+  "id": "humaneval-mini",
+  "label": "HumanEval Mini",
+  "category": "coding",
+  "description": "Short Python function synthesis with unit tests (HumanEval-style).",
+  "scoring": "code",
+  "miniCount": 3,
+  "fullCount": 164,
+  "license": "MIT",
+  "source": "HumanEval (Chen et al., 2021)",
+  "items": [
+    {
+      "id": "he-1",
+      "prompt": "Write a JavaScript function named `add` that takes two numbers and returns their sum. Reply with a fenced ```javascript code block only.",
+      "groundTruth": "function add(a,b){return a+b}",
+      "category": "coding",
+      "metadata": {
+        "source": "HumanEval",
+        "tier": "mini",
+        "tests": "assert(add(2,3)===5); assert(add(-1,1)===0);"
+      }
+    },
+    {
+      "id": "he-2",
+      "prompt": "Write a JavaScript function named `isEven` that returns true when n is even. Reply with a fenced ```javascript code block only.",
+      "groundTruth": "function isEven(n){return n%2===0}",
+      "category": "coding",
+      "metadata": {
+        "source": "HumanEval",
+        "tier": "mini",
+        "tests": "assert(isEven(4)===true); assert(isEven(3)===false);"
+      }
+    },
+    {
+      "id": "he-3",
+      "prompt": "Write a JavaScript function named `reverseString` that reverses a string. Reply with a fenced ```javascript code block only.",
+      "groundTruth": "function reverseString(s){return s.split('').reverse().join('')}",
+      "category": "coding",
+      "metadata": {
+        "source": "HumanEval",
+        "tier": "mini",
+        "tests": "assert(reverseString('abc')==='cba'); assert(reverseString('')==='');"
+      }
+    }
+  ]
+}

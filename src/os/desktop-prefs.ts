@@ -9,7 +9,7 @@ export const DESKTOP_PREFS_KEYS = {
 } as const;
 
 export const DEFAULT_DESKTOP_PREFS: DesktopPrefs = {
-  desktopLayout: 'concierge',
+  desktopLayout: 'dock',
   wallpaper: 'underwater',
   previewStyle: 'card',
 };
@@ -36,8 +36,8 @@ function writeStorage(key: string, value: string): void {
 }
 
 function normalizeLayout(value: string | null): DesktopPrefs['desktopLayout'] {
-  if (value === 'grid') return 'grid';
-  // Legacy `dock` layout is no longer shown on the home screen.
+  // Grid launcher was replaced by the bottom dock; migrate any stored value.
+  if (value === 'grid' || value === 'concierge' || value === 'dock') return 'dock';
   return DEFAULT_DESKTOP_PREFS.desktopLayout;
 }
 
@@ -53,8 +53,16 @@ function normalizePreviewStyle(value: string | null): DesktopPrefs['previewStyle
 /** Load desktop prefs from localStorage (cached after first read). */
 export function loadDesktopPrefs(): DesktopPrefs {
   if (cachedPrefs) return { ...cachedPrefs };
+
+  const rawLayout = readStorage(DESKTOP_PREFS_KEYS.desktopLayout);
+  const desktopLayout = normalizeLayout(rawLayout);
+  // Rewrite legacy `grid` / `concierge` values so the dock layout sticks after refresh.
+  if (rawLayout && rawLayout !== desktopLayout) {
+    writeStorage(DESKTOP_PREFS_KEYS.desktopLayout, desktopLayout);
+  }
+
   const prefs: DesktopPrefs = {
-    desktopLayout: normalizeLayout(readStorage(DESKTOP_PREFS_KEYS.desktopLayout)),
+    desktopLayout,
     wallpaper: normalizeWallpaper(readStorage(DESKTOP_PREFS_KEYS.wallpaper)),
     previewStyle: normalizePreviewStyle(readStorage(DESKTOP_PREFS_KEYS.previewStyle)),
   };

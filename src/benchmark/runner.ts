@@ -104,7 +104,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
   const startedAt = options.resume?.startedAt ?? new Date().toISOString();
   const runId = options.runId ?? options.resume?.runId ?? newRunId();
 
-  const binding = await resolveBenchmarkBinding();
+  const binding = options.binding ?? (await resolveBenchmarkBinding());
   const localServer = await detectLocalServer();
   const ctx: BenchmarkRunContext = {
     providerId: binding.providerId,
@@ -210,7 +210,9 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       suites: suiteResults,
     };
 
-    await saveRun(run);
+    if (options.saveToHistory !== false) {
+      await saveRun(run);
+    }
     onProgress?.({ type: 'run-done', run });
     return run;
   } catch (err) {
