@@ -2,11 +2,19 @@
  * Benchmark Charts tab — SVG analytics (no React mount; lazy optional Recharts later).
  */
 
-import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
+import type { BenchmarkCampaign, ModelAggregate } from '../../benchmark/campaign-types.ts';
 import { loadCampaign, listCampaignSummaries } from '../../benchmark/campaign-persistence.ts';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+}
+
+/** Short model id for chart axis labels (provider is omitted). */
+function chartModelLabel(aggregate: ModelAggregate): string {
+  const name = aggregate.modelId.trim();
+  if (!name) return '—';
+  if (name.length > 12) return `${name.slice(0, 10)}…`;
+  return name;
 }
 
 async function loadLatestCampaign(): Promise<BenchmarkCampaign | null> {
@@ -31,9 +39,7 @@ function renderGroupedBarSvg(
       const x = 40 + i * (barW * 2 + gap);
       const tpsH = ((a.headlineTokPerSec || 0) / maxTps) * chartH;
       const qualH = ((a.totalScore || 0) * maxQual / maxQual) * chartH;
-      const label = escapeHtml(
-        a.label.length > 10 ? `${a.label.slice(0, 8)}…` : a.label,
-      );
+      const label = escapeHtml(chartModelLabel(a));
       return `
         <rect x="${x}" y="${baseY - tpsH}" width="${barW}" height="${tpsH}" class="benchmark-chart-bar benchmark-chart-bar--tps" />
         <rect x="${x + barW + 4}" y="${baseY - qualH}" width="${barW}" height="${qualH}" class="benchmark-chart-bar benchmark-chart-bar--qual" />

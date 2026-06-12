@@ -96,6 +96,7 @@ body {
 .sub-agent-drawer__scroll,
 .tool-approval-host,
 .question-host,
+.benchmark-page-body,
 .composer-tools-popover .tools-list--composer,
 .kanban-column__list {
   scrollbar-gutter: stable;

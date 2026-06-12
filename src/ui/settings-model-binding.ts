@@ -8,19 +8,27 @@ import { isProvidersApiAvailable, listProviders } from '../providers/store';
 /** Label for empty model option (inherits active chat model at runtime). */
 export const MODEL_SELECT_EMPTY_LABEL = '(use chat default)';
 
-/** Populate model &lt;select&gt; for a provider (empty option = chat default). */
+/** Populate model &lt;select&gt; for a provider (empty option = chat default when enabled). */
 export async function fillModelSelect(
   select: HTMLSelectElement,
   providerId: string,
   selectedModelId: string,
+  options?: { includeEmptyOption?: boolean },
 ): Promise<void> {
+  const includeEmpty = options?.includeEmptyOption !== false;
   select.replaceChildren();
+
   const empty = document.createElement('option');
   empty.value = '';
   empty.textContent = MODEL_SELECT_EMPTY_LABEL;
-  select.appendChild(empty);
 
   if (!providerId || !isProvidersApiAvailable()) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = isProvidersApiAvailable()
+      ? 'Select a provider'
+      : 'Providers unavailable';
+    select.appendChild(includeEmpty ? empty : placeholder);
     select.disabled = true;
     return;
   }
@@ -28,6 +36,10 @@ export async function fillModelSelect(
   const { providers } = await listProviders();
   const provider = providers.find((p) => p.id === providerId);
   if (!provider) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Unknown provider';
+    select.appendChild(includeEmpty ? empty : placeholder);
     select.disabled = true;
     return;
   }
@@ -38,20 +50,42 @@ export async function fillModelSelect(
     const controller = new AbortController();
     const models = await fetchModelsForProvider(provider, controller.signal);
     select.replaceChildren();
-    select.appendChild(empty);
+    if (includeEmpty) {
+      select.appendChild(empty);
+    }
+    let added = 0;
     for (const m of models) {
       if (m.type !== 'llm' && m.type !== 'vlm') continue;
       const opt = document.createElement('option');
       opt.value = m.id;
       opt.textContent = m.id;
       select.appendChild(opt);
+      added += 1;
+    }
+    if (!includeEmpty && added === 0) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'No models found';
+      select.appendChild(placeholder);
+      select.disabled = true;
+      return;
     }
     select.value = selectedModelId || '';
+    if (!select.value && !includeEmpty && select.options.length > 0) {
+      select.selectedIndex = 0;
+    }
     select.disabled = false;
   } catch {
     select.replaceChildren();
-    select.appendChild(empty);
-    select.disabled = false;
+    if (includeEmpty) {
+      select.appendChild(empty);
+    } else {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Could not load models';
+      select.appendChild(placeholder);
+    }
+    select.disabled = !includeEmpty;
   }
 }
 

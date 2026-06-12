@@ -27,14 +27,14 @@ export const APPS: readonly AppDefinition[] = [
   },
   {
     id: 'research',
-    name: 'Deep Research',
+    name: 'Research',
     icon: 'research',
     tag: 'Send a sub-agent to dig deep',
     description: 'Multi-step web + source synthesis',
   },
   {
     id: 'experts',
-    name: "Experts' Lab",
+    name: "Experts",
     icon: 'flask',
     tag: 'Compose & test expert agents',
     description: 'Personas, tools, eval harness',

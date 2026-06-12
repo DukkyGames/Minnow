@@ -976,17 +976,6 @@
 </main>
 
 <main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
-  <header class="benchmark-hdr">
-    <span class="benchmark-hdr-ico" aria-hidden="true">
-      <img src="/icons/benchmark.png" width="20" height="20" alt="" />
-    </span>
-    <div class="benchmark-hdr-txt">
-      <h2>Benchmarking</h2>
-      <span class="dim">Measure models head-to-head</span>
-    </div>
-    <div class="benchmark-hdr-spacer"></div>
-    <button type="button" class="benchmark-hdr-btn is-primary" id="btnBenchmarkHeaderRun">Run benchmark</button>
-  </header>
   <nav class="benchmark-tabs" role="tablist" aria-label="Benchmark sections">
     <button type="button" class="benchmark-tab is-active" role="tab" data-tab="overview" aria-selected="true" id="benchmarkTabBtnOverview">Overview</button>
     <button type="button" class="benchmark-tab" role="tab" data-tab="charts" aria-selected="false" id="benchmarkTabBtnCharts">Charts</button>
@@ -1004,9 +993,11 @@
         <span class="benchmark-field-label">Models</span>
         <div id="benchmarkRosterList" class="benchmark-roster-list"></div>
         <div class="benchmark-roster-add">
-          <input type="text" id="benchmarkRosterProvider" placeholder="provider id" aria-label="Provider id" />
-          <input type="text" id="benchmarkRosterModel" placeholder="model id" aria-label="Model id" />
-          <button type="button" id="btnBenchmarkAddTarget">Add model</button>
+          <div class="benchmark-roster-picker">
+            <select id="benchmarkRosterProvider" aria-label="Provider"></select>
+            <select id="benchmarkRosterModel" aria-label="Model"></select>
+          </div>
+          <button type="button" class="is-primary" id="btnBenchmarkAddTarget">Add model</button>
           <button type="button" id="btnBenchmarkAddActiveModel">Add active</button>
         </div>
       </section>

@@ -217,11 +217,13 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
           )
           .join('')}
       </div>
-      <button type="button" class="benchmark-tests-new" id="btnBenchmarkNewCustomPack">New custom pack</button>
-      <label class="benchmark-tests-import">
-        <span class="benchmark-field-label">Import full dataset</span>
-        <input type="file" id="benchmarkDatasetImport" accept=".json,application/json" />
-      </label>
+      <div class="benchmark-tests-actions">
+        <button type="button" class="benchmark-tests-new is-primary" id="btnBenchmarkNewCustomPack">New custom pack</button>
+        <label class="benchmark-tests-import">
+          <input type="file" id="benchmarkDatasetImport" class="benchmark-tests-import-input" accept=".json,application/json" />
+          <span class="benchmark-tests-import-btn">Import dataset</span>
+        </label>
+      </div>
     </div>
     <ul class="benchmark-catalog-list" id="benchmarkCatalogList"></ul>`;
 
@@ -234,7 +236,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
         <button type="button" class="benchmark-catalog-item-btn">
           <span class="benchmark-catalog-badge">${escapeHtml(entry.family)}</span>
           <strong>${escapeHtml(entry.label)}</strong>
-          <span class="dim">${escapeHtml(entry.category)}</span>
+          <span class="benchmark-muted">${escapeHtml(entry.category)}</span>
         </button>`;
       li.querySelector('button')?.addEventListener('click', () => openCatalogDrawer(entry));
       list.appendChild(li);

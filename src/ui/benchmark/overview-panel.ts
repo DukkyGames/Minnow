@@ -103,7 +103,7 @@ function renderGrid(mount: HTMLElement, rows: ReturnType<typeof mergeRows>): voi
 
   const progHtml =
     runPhase === 'running'
-      ? `<div class="bench-prog" role="status"><div class="bench-prog-track"><div class="bench-prog-fill" style="width:${runProgressPct}%"></div></div><span class="bench-prog-label mono">${runProgressPct}% · streaming tokens…</span></div>`
+      ? `<div class="bench-prog" role="status"><div class="bench-prog-track"><div class="bench-prog-fill" style="width:${runProgressPct}%"></div></div><span class="bench-prog-label benchmark-mono">${runProgressPct}% · streaming tokens…</span></div>`
       : '';
 
   const gridRows = rows
@@ -113,17 +113,17 @@ function renderGrid(mount: HTMLElement, rows: ReturnType<typeof mergeRows>): voi
         : 0;
       const qualPct = showValues && row.totalScore > 0 ? row.totalScore * 100 : 0;
       return `<div class="bench-row" data-target-key="${escapeHtml(row.targetKey)}">
-        <div class="bench-model"><span class="bench-dot" aria-hidden="true"></span><b>${escapeHtml(row.label)}</b><span class="mono dim">${escapeHtml(row.modelId)}</span></div>
-        <div class="bench-bar"><div class="bar" data-tps-bar style="width:${showValues ? tpsPct : 0}%"></div><span class="mono">${showValues ? formatTps(row.headlineTokPerSec) : '—'}</span></div>
-        <div class="mono bench-ttft">${showValues ? formatTtft(row.headlineTtftMs) : '—'}</div>
-        <div class="bench-qual"><div class="qual-track"><div class="qual-fill" data-qual-bar style="width:${showValues ? qualPct : 0}%"></div></div><span class="mono">${showValues ? formatQuality(row.totalScore) : '—'}</span></div>
+        <div class="bench-model"><span class="bench-dot" aria-hidden="true"></span><b>${escapeHtml(row.label)}</b><span class="benchmark-mono benchmark-muted">${escapeHtml(row.modelId)}</span></div>
+        <div class="bench-bar"><div class="bar" data-tps-bar style="width:${showValues ? tpsPct : 0}%"></div><span class="benchmark-mono">${showValues ? formatTps(row.headlineTokPerSec) : '—'}</span></div>
+        <div class="benchmark-mono bench-ttft">${showValues ? formatTtft(row.headlineTtftMs) : '—'}</div>
+        <div class="bench-qual"><div class="qual-track"><div class="qual-fill" data-qual-bar style="width:${showValues ? qualPct : 0}%"></div></div><span class="benchmark-mono">${showValues ? formatQuality(row.totalScore) : '—'}</span></div>
       </div>`;
     })
     .join('');
 
   mount.innerHTML = `${progHtml}
     <div class="bench-grid">
-      <div class="bench-row bench-head mono dim"><span>MODEL</span><span>TOK/S</span><span>TTFT</span><span>QUALITY</span></div>
+      <div class="bench-row bench-head"><span>MODEL</span><span>TOK/S</span><span>TTFT</span><span>QUALITY</span></div>
       ${gridRows || '<p class="benchmark-empty">Add models in the Run tab, then start a campaign.</p>'}
     </div>`;
 

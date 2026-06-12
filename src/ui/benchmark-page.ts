@@ -15,6 +15,11 @@ import {
   saveRoster,
 } from '../benchmark/roster.ts';
 import {
+  initBenchmarkRosterPicker,
+  readBenchmarkRosterPickerSelection,
+  refreshBenchmarkRosterPicker,
+} from './benchmark/roster-picker.ts';
+import {
   initBenchmarkApp,
   navigateBenchmarkTab,
   notifyCampaignComplete,
@@ -860,7 +865,7 @@ function updateCampaignStepper(phase: string): void {
     const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
     return `<div class="benchmark-step benchmark-step--${state}">
       <span class="benchmark-step-mark">${state === 'done' ? '✓' : state === 'active' ? '<span class="benchmark-step-dot"></span>' : i + 1}</span>
-      <div class="benchmark-step-txt"><b>${escapeHtml(step.label)}</b><i class="dim">${escapeHtml(step.detail)}</i></div>
+      <div class="benchmark-step-txt"><b>${escapeHtml(step.label)}</b><i class="benchmark-muted">${escapeHtml(step.detail)}</i></div>
     </div>`;
   }).join('');
 }
@@ -1535,6 +1540,7 @@ export function isBackToCurrentVisibleForTests(): boolean {
 
 function syncBenchmarkPageOnOpen(): void {
   renderRosterList();
+  void refreshBenchmarkRosterPicker();
   void refreshHistorySelect();
   refreshOverviewPanel();
   if (browsingHistory) {
@@ -1654,17 +1660,12 @@ export function initBenchmarkPage(): void {
   });
 
   document.getElementById('btnBenchmarkAddTarget')?.addEventListener('click', () => {
-    const providerId = (
-      document.getElementById('benchmarkRosterProvider') as HTMLInputElement
-    )?.value.trim();
-    const modelId = (
-      document.getElementById('benchmarkRosterModel') as HTMLInputElement
-    )?.value.trim();
-    if (!providerId || !modelId) {
-      setStatus('err', 'Enter provider id and model id.');
+    const picked = readBenchmarkRosterPickerSelection();
+    if (!picked) {
+      setStatus('err', 'Select a provider and model.');
       return;
     }
-    addTargetToRoster({ providerId, modelId });
+    addTargetToRoster(picked);
     renderRosterList();
     refreshOverviewPanel();
   });
@@ -1688,6 +1689,7 @@ export function initBenchmarkPage(): void {
   }
 
   renderRosterList();
+  initBenchmarkRosterPicker();
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);

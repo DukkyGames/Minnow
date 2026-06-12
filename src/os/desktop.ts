@@ -22,6 +22,11 @@ function formatDateTime(d: Date): { time: string; date: string } {
   };
 }
 
+/** Milliseconds until the next wall-clock minute (for aligned tick updates). */
+function msUntilNextMinute(d: Date): number {
+  return (60 - d.getSeconds()) * 1000 - d.getMilliseconds();
+}
+
 /** Render the MinnowOS desktop (greeting, concierge, mini-previews). */
 export function renderDesktop(root: HTMLElement): () => void {
   root.replaceChildren();
@@ -86,6 +91,19 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   refreshPreviews();
 
+  function refreshGreetingClock(): void {
+    const d = new Date();
+    const formatted = formatDateTime(d);
+    greetTime.textContent = `${formatted.time} · ${formatted.date}`;
+    greet.textContent = `${greetingFor(d)}.`;
+  }
+
+  let clockInterval: ReturnType<typeof setInterval> | undefined;
+  const clockAlignTimeout = window.setTimeout(() => {
+    refreshGreetingClock();
+    clockInterval = window.setInterval(refreshGreetingClock, 60_000);
+  }, msUntilNextMinute(new Date()));
+
   const unsubInstances = subscribeInstances(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
     applyWallpaper(p.wallpaper);
@@ -93,6 +111,8 @@ export function renderDesktop(root: HTMLElement): () => void {
   });
 
   return () => {
+    clearTimeout(clockAlignTimeout);
+    if (clockInterval !== undefined) clearInterval(clockInterval);
     unsubInstances();
     unsubPrefs();
   };

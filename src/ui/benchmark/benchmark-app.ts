@@ -85,11 +85,6 @@ export function initBenchmarkApp(): void {
     });
   }
 
-  document.getElementById('btnBenchmarkHeaderRun')?.addEventListener('click', () => {
-    navigateBenchmarkTab('run');
-    document.getElementById('btnBenchmarkRun')?.click();
-  });
-
   setTabButtonState(activeTab);
   showTabPanel(activeTab);
   void renderTabContent(activeTab);
