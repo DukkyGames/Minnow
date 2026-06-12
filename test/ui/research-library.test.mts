@@ -60,4 +60,19 @@ describe('research library', () => {
     const empty = mount.querySelector('#researchLibraryEmpty');
     assert.ok(empty?.classList.contains('hidden'));
   });
+
+  test('toolbar uses dr-field pattern for sort select', async () => {
+    const mount = document.getElementById('researchLibraryMount') as HTMLElement;
+    await renderResearchLibrary({
+      mount,
+      onOpenDetail: () => {},
+      onOpenReport: () => {},
+      onDiscuss: () => {},
+      onRefine: () => {},
+    });
+    const sortWrap = mount.querySelector('#researchLibrarySort')?.closest('.dr-select');
+    assert.ok(sortWrap, 'sort select should be wrapped in .dr-select');
+    assert.ok(mount.querySelector('.dr-lib-field-sort .dr-flabel'));
+    assert.ok(mount.querySelector('#researchLibraryArchived.dr-switch__input'));
+  });
 });

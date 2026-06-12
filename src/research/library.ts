@@ -145,15 +145,41 @@ export async function renderResearchLibrary(options: ResearchLibraryMountOptions
   const { mount, onOpenDetail, onOpenReport, onDiscuss, onRefine, onNewResearch } = options;
   mount.innerHTML = `
     <div class="dr-lib-toolbar">
-      <input type="search" id="researchLibrarySearch" class="dr-input research-input" placeholder="Search…" aria-label="Search library" />
-      <select id="researchLibrarySort" class="dr-select research-select" aria-label="Sort library">
-        <option value="newest">Newest</option>
-        <option value="oldest">Oldest</option>
-        <option value="query">A–Z</option>
-      </select>
-      <label class="research-mono" style="font-size:12px;color:var(--mn-fg-muted)">
-        <input type="checkbox" id="researchLibraryArchived" /> Archived
+      <label class="dr-lib-field dr-lib-field-search" for="researchLibrarySearch">
+        <span class="dr-flabel research-mono">SEARCH</span>
+        <input
+          type="search"
+          id="researchLibrarySearch"
+          class="dr-input research-input"
+          placeholder="Filter saved reports…"
+          aria-label="Search library"
+        />
       </label>
+      <label class="dr-lib-field dr-lib-field-sort" for="researchLibrarySort">
+        <span class="dr-flabel research-mono">SORT</span>
+        <div class="dr-select">
+          <select id="researchLibrarySort" class="research-select" aria-label="Sort library">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="query">A–Z</option>
+          </select>
+        </div>
+      </label>
+      <div class="dr-lib-field dr-lib-field-archived">
+        <span class="dr-flabel research-mono" id="researchLibraryArchivedLabel">ARCHIVED</span>
+        <label class="dr-switch" for="researchLibraryArchived">
+          <input
+            type="checkbox"
+            id="researchLibraryArchived"
+            class="dr-switch__input"
+            role="switch"
+            aria-labelledby="researchLibraryArchivedLabel"
+          />
+          <span class="dr-switch__track" aria-hidden="true">
+            <span class="dr-switch__thumb"></span>
+          </span>
+        </label>
+      </div>
     </div>
     <div class="dr-lib-head">
       <div class="dr-lib-count research-mono" id="researchLibraryCount">0 saved reports</div>
@@ -187,7 +213,7 @@ export async function renderResearchLibrary(options: ResearchLibraryMountOptions
       const { items } = await fetchResearchLibrary({
         search: searchValue,
         sort: sortParam,
-        archived: showArchived ? undefined : false,
+        archived: showArchived,
       });
       lastLibraryItems = items;
       countEl.textContent = `${items.length} saved report${items.length === 1 ? '' : 's'}`;

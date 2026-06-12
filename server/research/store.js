@@ -919,6 +919,38 @@ export async function getResearchDetail(id) {
 }
 
 /**
+ * Coerce persisted research timestamps to sortable epoch milliseconds.
+ * ISO strings (normal on disk) must not be passed through Number() — that yields NaN.
+ * @param {unknown} value
+ * @returns {number}
+ */
+function researchTimestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Best-effort sort key: completed time first, then started time.
+ * @param {{ completed_at?: unknown; started_at?: unknown }} row
+ * @returns {number}
+ */
+function researchListSortTime(row) {
+  const completed = researchTimestampMs(row.completed_at);
+  if (completed > 0) {
+    return completed;
+  }
+  return researchTimestampMs(row.started_at);
+}
+
+/**
  * @param {{ search?: string; sort?: string; limit?: number; archived?: boolean }} [opts]
  * @returns {Promise<{ research: object[]; total: number }>}
  */
@@ -980,15 +1012,9 @@ export async function listResearchLibrary(opts = {}) {
   }
 
   if (sort === 'recent') {
-    items.sort(
-      (a, b) =>
-        Number(b.completed_at || 0) - Number(a.completed_at || 0),
-    );
+    items.sort((a, b) => researchListSortTime(b) - researchListSortTime(a));
   } else if (sort === 'oldest') {
-    items.sort(
-      (a, b) =>
-        Number(a.completed_at || 0) - Number(b.completed_at || 0),
-    );
+    items.sort((a, b) => researchListSortTime(a) - researchListSortTime(b));
   } else if (sort === 'most-messages') {
     items.sort((a, b) => Number(b.source_count || 0) - Number(a.source_count || 0));
   } else if (sort === 'alpha') {

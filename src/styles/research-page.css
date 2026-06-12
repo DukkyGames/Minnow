@@ -782,11 +782,96 @@
 }
 
 #researchView .dr-lib-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 132px) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  #researchView .dr-lib-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #researchView .dr-lib-field-search {
+    grid-column: 1 / -1;
+  }
+}
+
+#researchView .dr-lib-field {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+#researchView .dr-lib-field-archived {
+  align-items: flex-start;
+}
+
+#researchView .dr-lib-field-archived .dr-switch {
+  min-height: 35px;
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 12px;
+}
+
+/* Library toolbar toggle — matches settings switch, scoped to research view */
+#researchView .dr-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  min-width: 40px;
+  min-height: 24px;
+}
+
+#researchView .dr-switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#researchView .dr-switch__track {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--mn-border-strong, var(--mn-border));
+  transition: background 0.2s var(--ease-out, ease);
+}
+
+#researchView .dr-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--mn-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  transition: transform 0.2s var(--ease-out, ease);
+}
+
+#researchView .dr-switch__input:checked + .dr-switch__track {
+  background: var(--mn-accent);
+}
+
+#researchView .dr-switch__input:checked + .dr-switch__track .dr-switch__thumb {
+  transform: translateX(18px);
+}
+
+#researchView .dr-switch__input:focus-visible + .dr-switch__track {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
 }
 
 #researchView .dr-lib-count {
