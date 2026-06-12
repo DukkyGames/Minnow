@@ -12,7 +12,7 @@ import {
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
 import { isDefaultWorkspace } from '../state/workspace';
-import { getLocalServerAvailable } from '../tools/client';
+import { detectLocalServer, getLocalServerAvailable } from '../tools/client';
 import { isOsShellEnabled } from '../os/page-bridge';
 import { applyWorkspaceSwitch } from './workspace-button';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
@@ -82,6 +82,7 @@ function setWelcomePending(pending: boolean): void {
   document.documentElement.classList.toggle('welcome-pending', pending);
 }
 
+/** Sync banner + disabled state for open/create controls (call after detectLocalServer). */
 function syncServerAvailabilityUi(): void {
   const available = getLocalServerAvailable();
   const banner = document.getElementById('welcomeServerBanner');
@@ -100,6 +101,14 @@ function syncServerAvailabilityUi(): void {
       btn.disabled = !available;
     }
   }
+}
+
+/** Refresh welcome server banner/buttons when tool-server ping result changes. */
+export function onWelcomeServerAvailabilityChanged(): void {
+  if (!isWelcomePageOpen()) {
+    return;
+  }
+  syncServerAvailabilityUi();
 }
 
 function updateParentPathLabel(): void {
@@ -405,17 +414,22 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
 
   root.hidden = false;
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
-    shell.classList.add('hidden');
-    getTopbar()?.classList.add('topbar--welcome');
-  } else {
-    // Inside MinnowOS Code app — overlay welcome without hiding the workspace shell.
+  // Hide sidebar/chat shell so welcome fills the Code app (not only the main column).
+  shell.classList.add('hidden');
+  const topbar = getTopbar();
+  if (isOsShellEnabled()) {
     root.classList.add('welcome-page--os-overlay');
+  } else {
+    topbar?.classList.add('topbar--welcome');
   }
   setWelcomePending(false);
 
+  // Re-probe in case welcome opened before initApp finished detectLocalServer (MinnowOS Code app).
   syncServerAvailabilityUi();
-  void loadWizardParentFromServer().then(() => renderRecentsList());
+  void detectLocalServer().then(() => {
+    syncServerAvailabilityUi();
+    void loadWizardParentFromServer().then(() => renderRecentsList());
+  });
   showCreatePanel(false);
 
   const nextHash = '#/welcome';
@@ -435,9 +449,11 @@ export function closeWelcome(options?: { skipHash?: boolean }): void {
   root.classList.remove('is-open');
   root.hidden = true;
   root.classList.remove('welcome-page--os-overlay');
+  shell.classList.remove('hidden');
+  const topbar = getTopbar();
+  topbar?.classList.remove('topbar--welcome');
   if (!isOsShellEnabled()) {
-    shell.classList.remove('hidden');
-    getTopbar()?.classList.remove('topbar--welcome');
+    topbar?.classList.remove('hidden');
   }
   setWelcomePending(false);
   showCreatePanel(false);

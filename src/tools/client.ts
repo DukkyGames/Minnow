@@ -48,6 +48,8 @@ import {
 } from './mode-handoff-tools';
 import { validateAskQuestionArgs, stringifyAskQuestionResult } from './ask-question-types';
 import { maybeBlockToolForUserApproval } from './permission-gate';
+import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
 import { validateToolRequiredArgs } from './validate-tool-required-args';
@@ -606,7 +608,14 @@ async function executeStreamingCodeTool(
   }
 }
 
-/** POST { name, args, modeId? } to the Node tools middleware. */
+/** Chats sandbox root when the Chat app is foreground; otherwise server default workspace. */
+async function resolveToolWorkspaceRoot(): Promise<string | undefined> {
+  if (!isChatAppForeground()) return undefined;
+  const path = await getChatsWorkspacePath();
+  return path ?? undefined;
+}
+
+/** POST { name, args, modeId?, workspaceRoot? } to the Node tools middleware. */
 async function executeServerTool(
   name: string,
   args: Record<string, unknown>,
@@ -614,13 +623,18 @@ async function executeServerTool(
   context?: ExecuteToolContext,
 ): Promise<ToolExecutionResult> {
   let response: Response;
+  const workspaceRoot = await resolveToolWorkspaceRoot();
   const payload: {
     name: string;
     args: Record<string, unknown>;
     modeId?: string;
+    workspaceRoot?: string;
   } = { name, args };
   if (modeId != null && String(modeId).trim()) {
     payload.modeId = String(modeId).trim();
+  }
+  if (workspaceRoot) {
+    payload.workspaceRoot = workspaceRoot;
   }
   try {
     response = await fetch('/api/tools', {

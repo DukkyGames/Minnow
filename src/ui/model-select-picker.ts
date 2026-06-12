@@ -47,7 +47,8 @@ function toggleModelSelectMenu(): void {
   else openModelSelectMenu();
 }
 
-function pickModel(modelId: string): void {
+/** Select a model in the native picker and notify listeners (top bar or OS menubar). */
+export function selectModelInPicker(modelId: string): void {
   const { sel } = getElements();
   if (!sel || !modelId) return;
   closeModelSelectMenu();
@@ -57,6 +58,10 @@ function pickModel(modelId: string): void {
   }
   sel.value = modelId;
   sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function pickModel(modelId: string): void {
+  selectModelInPicker(modelId);
 }
 
 /** Canonical model id for capability tooltip lines (strip composite select encoding). */
@@ -131,6 +136,31 @@ function appendModelOptionRow(
   menu.appendChild(li);
 }
 
+/** Rebuild model list rows into any menu element (shared by top bar and OS menubar). */
+export function renderModelSelectMenuRows(
+  menu: HTMLUListElement,
+  sel: HTMLSelectElement,
+): void {
+  const selectedValue = sel.value;
+  menu.innerHTML = '';
+  for (const child of [...sel.children]) {
+    if (child instanceof HTMLOptGroupElement) {
+      const header = document.createElement('li');
+      header.className = 'model-select-optgroup-label';
+      header.textContent = child.label || '';
+      header.setAttribute('role', 'presentation');
+      menu.appendChild(header);
+      for (const el of [...child.children]) {
+        if (el instanceof HTMLOptionElement) {
+          appendModelOptionRow(menu, el, selectedValue);
+        }
+      }
+    } else if (child instanceof HTMLOptionElement) {
+      appendModelOptionRow(menu, child, selectedValue);
+    }
+  }
+}
+
 /** Rebuild menu rows and trigger label from the native select + model cache. */
 export function syncModelSelectPicker(): void {
   const { sel, trigger, triggerText, menu } = getElements();
@@ -150,23 +180,7 @@ export function syncModelSelectPicker(): void {
     [...sel.options].some((o) => o.value.trim() !== '') && !sel.disabled;
   trigger.disabled = !hasSelectable;
 
-  menu.innerHTML = '';
-  for (const child of [...sel.children]) {
-    if (child instanceof HTMLOptGroupElement) {
-      const header = document.createElement('li');
-      header.className = 'model-select-optgroup-label';
-      header.textContent = child.label || '';
-      header.setAttribute('role', 'presentation');
-      menu.appendChild(header);
-      for (const el of [...child.children]) {
-        if (el instanceof HTMLOptionElement) {
-          appendModelOptionRow(menu, el, selectedValue);
-        }
-      }
-    } else if (child instanceof HTMLOptionElement) {
-      appendModelOptionRow(menu, child, selectedValue);
-    }
-  }
+  renderModelSelectMenuRows(menu, sel);
 }
 
 /** Bind trigger, outside click, and escape for the model combobox. */

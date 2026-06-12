@@ -9,7 +9,7 @@ export const DESKTOP_PREFS_KEYS = {
 } as const;
 
 export const DEFAULT_DESKTOP_PREFS: DesktopPrefs = {
-  desktopLayout: 'dock',
+  desktopLayout: 'concierge',
   wallpaper: 'underwater',
   previewStyle: 'card',
 };
@@ -36,7 +36,9 @@ function writeStorage(key: string, value: string): void {
 }
 
 function normalizeLayout(value: string | null): DesktopPrefs['desktopLayout'] {
-  return value === 'grid' ? 'grid' : DEFAULT_DESKTOP_PREFS.desktopLayout;
+  if (value === 'grid') return 'grid';
+  // Legacy `dock` layout is no longer shown on the home screen.
+  return DEFAULT_DESKTOP_PREFS.desktopLayout;
 }
 
 function normalizeWallpaper(value: string | null): DesktopPrefs['wallpaper'] {

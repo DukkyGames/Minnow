@@ -143,6 +143,25 @@ export function getTotalUnread(): number {
   return instances.reduce((sum, i) => sum + i.unread, 0);
 }
 
+/** Drop concierge seed on the foreground instance after it has been consumed. */
+export function clearForegroundSeed(): void {
+  if (!foregroundId) return;
+  const inst = instances.find((i) => i.id === foregroundId);
+  if (!inst?.seed) return;
+  inst.seed = undefined;
+  emit();
+}
+
+/** Clear unread badges on all instances without changing the foreground app. */
+export function clearAllUnread(): void {
+  const hasUnread = instances.some((i) => i.unread > 0);
+  if (!hasUnread) return;
+  instances = instances.map((inst) =>
+    inst.unread > 0 ? { ...inst, unread: 0 } : inst,
+  );
+  emit();
+}
+
 /** Reset module state (tests). */
 export function resetInstancesForTests(): void {
   uidCounter = 0;

@@ -22,6 +22,8 @@
   --os-accent-soft: var(--mn-accent-soft);
   --os-accent-glow: var(--mn-accent-border);
 
+  --os-menubar-h: 46px;
+
   /* motion + radii (prototype values, aligned where Minnow matches) */
   --os-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --os-ease-out: var(--ease-out);

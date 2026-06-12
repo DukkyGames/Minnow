@@ -26,17 +26,16 @@ function formatDateTime(d: Date): { time: string; date: string } {
 
 function buildAppTile(
   app: (typeof APPS)[number],
-  variant: 'dock' | 'grid',
   onLaunch: (appId: AppId) => void,
 ): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = variant === 'dock' ? 'mn-os-tile-dock' : 'mn-os-tile-grid';
+  btn.className = 'mn-os-tile-grid';
   btn.title = app.tag;
 
   const ico = document.createElement('span');
   ico.className = 'mn-os-tile-ico';
-  ico.appendChild(createOsIcon(app.icon as 'code', { size: variant === 'dock' ? 24 : 26 }));
+  ico.appendChild(createOsIcon(app.icon as 'code', { size: 26 }));
   btn.appendChild(ico);
 
   const name = document.createElement('span');
@@ -44,12 +43,10 @@ function buildAppTile(
   name.textContent = app.name;
   btn.appendChild(name);
 
-  if (variant === 'grid') {
-    const tag = document.createElement('span');
-    tag.className = 'mn-os-tile-tag';
-    tag.textContent = app.tag;
-    btn.appendChild(tag);
-  }
+  const tag = document.createElement('span');
+  tag.className = 'mn-os-tile-tag';
+  tag.textContent = app.description;
+  btn.appendChild(tag);
 
   btn.addEventListener('click', () => onLaunch(app.id));
   return btn;
@@ -99,18 +96,10 @@ export function renderDesktop(root: HTMLElement): () => void {
   gridMount.className = 'mn-os-app-grid';
   gridMount.hidden = prefs.desktopLayout !== 'grid';
   for (const app of APPS) {
-    gridMount.appendChild(buildAppTile(app, 'grid', (id) => launchApp(id)));
+    gridMount.appendChild(buildAppTile(app, (id) => launchApp(id)));
   }
   stage.appendChild(gridMount);
   root.appendChild(stage);
-
-  const dock = document.createElement('div');
-  dock.className = 'mn-os-dock';
-  dock.hidden = prefs.desktopLayout !== 'dock';
-  for (const app of APPS) {
-    dock.appendChild(buildAppTile(app, 'dock', (id) => launchApp(id)));
-  }
-  root.appendChild(dock);
 
   const previewsMount = document.createElement('div');
   previewsMount.className = 'mn-os-desktop-previews';
@@ -129,8 +118,7 @@ export function renderDesktop(root: HTMLElement): () => void {
     );
   }
 
-  function applyLayout(layout: 'dock' | 'grid'): void {
-    dock.hidden = layout !== 'dock';
+  function applyLayout(layout: 'concierge' | 'grid'): void {
     gridMount.hidden = layout !== 'grid';
   }
 

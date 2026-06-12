@@ -11,7 +11,7 @@ import type { SettingsSectionId } from '../ui/settings-page-types';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
-  chat: 'osAppLayer-chat',
+  chat: 'chatView',
   settings: 'settingsView',
   research: 'researchView',
   bench: 'benchmarkView',
@@ -20,7 +20,6 @@ const APP_LAYER_IDS: Record<AppId, string> = {
 
 let initialized = false;
 let lastForegroundApp: AppId | null = null;
-let chatLayerEl: HTMLElement | null = null;
 
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
@@ -28,31 +27,6 @@ function getAppsLayer(): HTMLElement | null {
 
 function getStage(): HTMLElement | null {
   return document.getElementById('osStage');
-}
-
-function ensureChatPlaceholder(): HTMLElement {
-  if (chatLayerEl) return chatLayerEl;
-  const layer = document.createElement('div');
-  layer.id = 'osAppLayer-chat';
-  layer.className = 'mn-os-app-layer mn-os-chat-placeholder';
-  layer.dataset.osApp = 'chat';
-  layer.innerHTML = `
-    <div class="mn-os-app-page">
-      <header class="mn-os-app-hdr">
-        <div class="mn-os-app-hdr-ico" aria-hidden="true"></div>
-        <div class="mn-os-app-hdr-txt">
-          <h2>Chat</h2>
-          <span>Pure conversation — no repo, no tools</span>
-        </div>
-      </header>
-      <div class="mn-os-app-scroll">
-        <p class="mn-os-dim-text" style="padding: 24px;">Use Code for the full workspace. Concierge seeds appear in the composer when you launch from desktop.</p>
-      </div>
-    </div>
-  `;
-  getAppsLayer()?.appendChild(layer);
-  chatLayerEl = layer;
-  return layer;
 }
 
 function mountAppLayers(): void {
@@ -76,7 +50,7 @@ function mountAppLayers(): void {
   }
 
   for (const [appId, elId] of Object.entries(APP_LAYER_IDS)) {
-    if (appId === 'code' || appId === 'chat') continue;
+    if (appId === 'code') continue;
     const el = document.getElementById(elId);
     if (el) {
       el.classList.add('mn-os-app-layer');
@@ -84,12 +58,9 @@ function mountAppLayers(): void {
       appsLayer.appendChild(el);
     }
   }
-
-  ensureChatPlaceholder();
 }
 
 function layerForApp(appId: AppId): HTMLElement | null {
-  if (appId === 'chat') return ensureChatPlaceholder();
   return document.getElementById(APP_LAYER_IDS[appId]);
 }
 
@@ -105,7 +76,7 @@ function hideAllLayers(): void {
 }
 
 function closeAllAppPages(): void {
-  for (const id of ['settingsView', 'benchmarkView', 'researchView', 'expertsView']) {
+  for (const id of ['settingsView', 'benchmarkView', 'researchView', 'expertsView', 'chatView']) {
     document.getElementById(id)?.classList.remove('is-open');
   }
 }
@@ -152,13 +123,8 @@ async function openAppPage(appId: AppId, seed?: string): Promise<void> {
       break;
     }
     case 'chat': {
-      if (seed) {
-        const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-        if (input && !input.value.trim()) {
-          input.value = seed;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      }
+      const { openChatApp } = await import('../ui/chat-app');
+      await openChatApp(seed);
       break;
     }
     default:
@@ -212,7 +178,6 @@ export function initAppHost(): void {
 export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
-  chatLayerEl = null;
   const appsLayer = getAppsLayer();
   if (appsLayer) delete appsLayer.dataset.mounted;
 }

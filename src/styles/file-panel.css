@@ -628,11 +628,13 @@
   overflow: hidden;
 }
 
-/* Collapsed rail: center controls; 40px icon-btn + 20px padding overflows 48px width */
+/* Collapsed rail: stack collapse + preview toggles; 32px buttons fit 48px width */
 .file-sidebar.collapsed .file-sidebar-header {
+  flex-direction: column;
+  align-items: center;
   padding: 8px 4px;
-  justify-content: center;
-  gap: 0;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .file-sidebar.collapsed .file-sidebar-header .icon-btn {
@@ -668,6 +670,11 @@
 .file-sidebar.collapsed .file-tree-move-confirm,
 .file-sidebar.collapsed .file-tree-refresh {
   display: none;
+}
+
+.file-sidebar-preview-toggle.is-active {
+  color: var(--mn-accent);
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
 }
 
 .file-tree-search-wrap {
@@ -1038,6 +1045,14 @@
 
   .file-sidebar.collapsed.mobile-open {
     width: min(280px, calc(100vw - 24px));
+  }
+
+  .file-sidebar.collapsed.mobile-open .file-sidebar-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 10px 10px 8px;
+    gap: 6px;
   }
 
   #btnFileSidebarCollapse {

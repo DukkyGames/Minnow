@@ -45,6 +45,10 @@ function setupSettingsHeaderDom() {
   title.textContent = 'Settings';
   header.appendChild(title);
 
+  const homeSlot = document.createElement('div');
+  homeSlot.id = 'settingsSearchFinderSlot';
+  homeSlot.className = 'settings-search-finder-slot';
+
   const finder = document.createElement('div');
   finder.id = 'settingsSearchFinder';
   finder.className = 'settings-search-finder';
@@ -64,7 +68,8 @@ function setupSettingsHeaderDom() {
   results.hidden = true;
   finder.appendChild(results);
 
-  header.appendChild(finder);
+  homeSlot.appendChild(finder);
+  header.appendChild(homeSlot);
 
   const estimate = document.createElement('span');
   estimate.id = 'settingsPromptTokenEstimate';

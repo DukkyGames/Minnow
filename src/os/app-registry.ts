@@ -23,7 +23,7 @@ export const APPS: readonly AppDefinition[] = [
     name: 'Chat',
     icon: 'chat',
     tag: 'Just talk to your model',
-    description: 'No repo, no tools — pure conversation',
+    description: 'General assistant — tools, files, and app routing',
   },
   {
     id: 'research',

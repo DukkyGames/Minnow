@@ -13,6 +13,8 @@ let initialized = false;
 let applyingRoute = false;
 let lastForegroundApp: AppId | null = null;
 let pendingSettingsSection: string | undefined;
+/** Preserves launch options (e.g. concierge seed) across hash-only navigation. */
+let pendingLaunchOptions: LaunchOptions | undefined;
 
 /** Map legacy hashes to MinnowOS routes before parsing. */
 export function resolveLegacyHash(hash: string): { hash: string; settingsSection?: string } {
@@ -111,7 +113,9 @@ function applyRouteFromHash(): void {
       return;
     }
     pendingSettingsSection = legacy.settingsSection ?? pendingSettingsSection;
-    applyRoute(parseOsHash(raw));
+    const opts = pendingLaunchOptions;
+    pendingLaunchOptions = undefined;
+    applyRoute(parseOsHash(raw), opts);
   } finally {
     applyingRoute = false;
   }
@@ -138,6 +142,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   }
   const next = `#/app/${appId}`;
   if (window.location.hash !== next) {
+    pendingLaunchOptions = options;
     window.location.hash = next;
     return;
   }
@@ -176,6 +181,7 @@ export function resetOsRouterForTests(): void {
   applyingRoute = false;
   lastForegroundApp = null;
   pendingSettingsSection = undefined;
+  pendingLaunchOptions = undefined;
 }
 
 /** Expose snapshot helpers for page bridge / shell UI. */

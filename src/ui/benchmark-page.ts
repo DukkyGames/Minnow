@@ -1425,10 +1425,6 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
 }
 
 export function initBenchmarkPage(): void {
-  document.getElementById('btnBenchmarkPageBack')?.addEventListener('click', () => {
-    if (isOsShellEnabled()) navigateToDesktop();
-    else closeBenchmark();
-  });
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
   });

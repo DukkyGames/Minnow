@@ -26,6 +26,10 @@ import {
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import {
+  mountSettingsSearchToMenubar,
+  unmountSettingsSearchFromMenubar,
+} from '../os/settings-search-menubar';
 import { navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId } from './settings-page-types';
@@ -212,6 +216,7 @@ export function openSettings(section?: SettingsSectionId): void {
   const wasAlreadyOpen = root.classList.contains('is-open');
 
   root.classList.add('is-open');
+  mountSettingsSearchToMenubar();
   if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
@@ -242,6 +247,7 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const shell = getChatShell();
   if (!root || !shell) return;
   root.classList.remove('is-open');
+  unmountSettingsSearchFromMenubar();
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     document.querySelector('header.topbar')?.classList.remove('hidden');

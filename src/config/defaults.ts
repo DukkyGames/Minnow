@@ -28,6 +28,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'set_chat_mode',
   'create_chat_with_mode',
   'propose_mode_switch',
+  'launch_minnow_app',
 ]);
 
 /** Default tool toggles for new `tools.json` (matches server seed). */
@@ -76,6 +77,7 @@ export function defaultSessionState(): SessionState {
     activeId: chatId,
     sidebarCollapsed: false,
     lastActiveChatIdByWorkspace: {},
+    lastActiveChatIdByApp: {},
     chats: [
       {
         id: chatId,

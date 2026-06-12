@@ -23,7 +23,7 @@ flowchart TB
   AL --> RES[Deep Research]
   AL --> EXP[Experts]
   AL --> BENCH[Benchmark]
-  AL --> CHAT[Chat placeholder]
+    AL --> CHAT[Chat app]
 ```
 
 ## Shipped modules (`src/os/`)
@@ -58,7 +58,7 @@ flowchart TB
 |------|------|
 | `#/desktop` | Desktop home |
 | `#/app/code` | Code workspace |
-| `#/app/chat` | Pure chat (placeholder) |
+| `#/app/chat` | Chat app (General assistant, `~/.minnow/chats` sandbox) |
 | `#/app/research` | Deep Research |
 | `#/app/experts` | Experts' Lab |
 | `#/app/bench` | Benchmarking |
@@ -76,12 +76,17 @@ Legacy hashes (`#/settings/*`, `#/benchmark`, `#/research`, `#/experts`) redirec
 ## Tests
 
 - `test/os/intent-routing.test.mts`
-- `test/os/router.test.mts`
+- `test/os/router.test.mts` — `launchApp('chat')` seed on foreground instance
+- `test/ui/chat-app-lifecycle.test.mjs` — open/close + seed wiring contracts
+- `test/ui/chat-app-html.test.mjs`
+- `test/state/chat-app-sessions.test.mts`
+- `test/chats-workspace/api.test.mjs`
+- `test/tools/launch-minnow-app.test.mts`
 
 ## Todos (follow-ups)
 
 - [ ] Desktop prefs UI in Settings → General (wallpaper, dock/grid, preview style)
-- [ ] Pure Chat app (dedicated session scope)
+- [x] Pure Chat app (dedicated session scope)
 - [ ] Notification bridge (research/bench completion → unread badges)
 - [ ] Global bugs as Code sub-route or separate app tile
 - [ ] Feature flag `config.features.minnowOsShell` for gradual rollout

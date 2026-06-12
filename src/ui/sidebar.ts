@@ -1,4 +1,5 @@
-﻿import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
+import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import {
   createGroup,
@@ -508,9 +509,11 @@ export function renderSidebar(): void {
   list.innerHTML = '';
 
   const ws = getWorkspacePath();
-  const workspaceChats = getChatsForWorkspace(ws, sessionState).filter(
-    (c) => !isHiddenFromMainSidebar(c),
-  );
+  const excludeAssistantChats = (chat: { workspacePath?: string }) =>
+    !isChatsWorkspacePath(chat.workspacePath ?? '');
+  const workspaceChats = getChatsForWorkspace(ws, sessionState)
+    .filter((c) => !isHiddenFromMainSidebar(c))
+    .filter(excludeAssistantChats);
   const groupedIds = new Set<string>();
   const highlightChatId = sidebarHighlightChatId();
 
@@ -540,9 +543,9 @@ export function renderSidebar(): void {
     appendChatRow(list, chat, highlightChatId);
   }
 
-  const unassigned = getUnassignedChats(sessionState).filter(
-    (c) => !isHiddenFromMainSidebar(c),
-  );
+  const unassigned = getUnassignedChats(sessionState)
+    .filter((c) => !isHiddenFromMainSidebar(c))
+    .filter(excludeAssistantChats);
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());

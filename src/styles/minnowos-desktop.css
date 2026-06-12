@@ -109,6 +109,11 @@
   flex: none;
 }
 
+.mn-os-cc-fish .minnow-glyph {
+  width: 22px;
+  height: 22px;
+}
+
 .mn-os-cc-field {
   flex: 1;
   background: none;

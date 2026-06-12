@@ -34,9 +34,15 @@ function applyUserPromptLock(): void {
   const locked = lockDepth > 0;
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
+  const chatInput = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  const chatSendBtn = document.getElementById('chatAppSendBtn') as HTMLButtonElement | null;
+  const chatStopBtn = document.getElementById('btnChatAppStop') as HTMLButtonElement | null;
   if (locked) {
     if (msgInput) msgInput.disabled = true;
     if (sendBtn) sendBtn.disabled = true;
+    if (chatInput) chatInput.disabled = true;
+    if (chatSendBtn) chatSendBtn.disabled = true;
+    if (chatStopBtn) chatStopBtn.disabled = true;
     return;
   }
   syncComposerFromStreamingState();

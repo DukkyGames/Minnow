@@ -2,7 +2,8 @@
  * Bottom strip for structured ask_question UI (between tool approval and composer).
  */
 
-.main-column.main-column--question-pending .input-bar {
+.main-column.main-column--question-pending .input-bar,
+.chat-app-composer.main-column--question-pending .chat-app-input {
   display: none;
 }
 

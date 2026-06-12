@@ -4,6 +4,7 @@
  */
 
 import { ensureAgentPacksLayout } from '../agent-packs/registry.js';
+import { ensureChatsWorkspace } from '../chats-workspace/paths.js';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
 import { initLspConfig } from '../lsp/middleware.js';
 import { initMcpApi } from '../mcp/middleware.js';
@@ -20,6 +21,7 @@ import { initWorkspaceRoot } from '../workspace/root.js';
  */
 export async function bootstrapMinnowRuntime() {
   await ensureMinnowLayout();
+  await ensureChatsWorkspace();
   await ensureAgentPacksLayout();
   const reefSync = await syncReefWidgetTemplates();
   const workspacePath = await initWorkspaceRoot();

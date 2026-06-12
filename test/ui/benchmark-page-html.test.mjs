@@ -10,7 +10,6 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const BENCHMARK_IDS = [
   'btnBenchmark',
   'benchmarkView',
-  'btnBenchmarkPageBack',
   'btnBenchmarkQuick',
   'btnBenchmarkFull',
   'btnBenchmarkRun',
@@ -71,6 +70,11 @@ describe('benchmark page HTML', () => {
     }
     const toggleMatches = html.match(/class="benchmark-suite-toggle"/g);
     assert.equal(toggleMatches?.length, 6);
+  });
+
+  test('page sub-header removed (OS menubar supplies navigation)', () => {
+    assert.doesNotMatch(html, /class="benchmark-page-header"/);
+    assert.doesNotMatch(html, /id="btnBenchmarkPageBack"/);
   });
 
   test('separate Stop button removed', () => {

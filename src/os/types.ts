@@ -6,7 +6,8 @@ export type OsView = 'desktop' | 'app';
 
 /** Persisted desktop appearance (localStorage `minnow.os.*`). */
 export interface DesktopPrefs {
-  desktopLayout: 'dock' | 'grid';
+  /** `concierge` = home shows only the concierge bar; `grid` = app tile grid below hero. */
+  desktopLayout: 'concierge' | 'grid';
   wallpaper: 'flat' | 'gradient' | 'underwater';
   previewStyle: 'card' | 'tile';
 }

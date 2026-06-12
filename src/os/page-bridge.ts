@@ -49,6 +49,8 @@ export function syncLegacyChromeVisibility(): void {
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
+
+  void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 }
 
 /** Called when an app becomes foreground — sync DOM + dataset for page modules. */

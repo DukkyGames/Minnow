@@ -19,7 +19,7 @@
 /* ---------- menubar ---------- */
 
 .mn-os-menubar {
-  height: 46px;
+  height: var(--os-menubar-h);
   flex: none;
   display: flex;
   align-items: center;
@@ -33,10 +33,108 @@
 }
 
 .mn-os-mb-left,
+.mn-os-mb-center,
 .mn-os-mb-right {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.mn-os-mb-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(28rem, 44vw);
+  min-width: 12rem;
+  z-index: 1;
+}
+
+.mn-os-mb-center[hidden] {
+  display: none !important;
+}
+
+.mn-os-mb-settings-slot,
+.mn-os-mb-workspace-slot {
+  width: 100%;
+  min-width: 0;
+}
+
+.mn-os-mb-workspace-slot[hidden] {
+  display: none !important;
+}
+
+.mn-os-mb-center:has(.workspace-control.is-in-menubar) {
+  width: min(40rem, 55vw);
+}
+
+.mn-os-mb-workspace-slot .workspace-control {
+  width: 100%;
+  max-width: none;
+  justify-content: center;
+}
+
+.mn-os-mb-workspace-slot .workspace-path-label {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* Match menubar bell / settings icon chrome (32px ghost tile) */
+.mn-os-mb-workspace-slot .workspace-btn.icon-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--os-text-dim);
+  transition: 0.14s var(--os-ease);
+}
+
+.mn-os-mb-workspace-slot .workspace-btn.icon-btn:hover {
+  background: var(--os-surface-2);
+  border-color: transparent;
+  color: var(--os-text);
+}
+
+.mn-os-mb-workspace-slot .workspace-btn.icon-btn:active {
+  background: var(--os-surface-2);
+}
+
+.mn-os-mb-workspace-slot .workspace-btn.icon-btn[aria-expanded='true'] {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  box-shadow: 0 0 0 2px var(--os-accent-glow);
+}
+
+.mn-os-mb-workspace-slot .workspace-btn .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mn-os-mb-center .settings-search-finder {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+.mn-os-mb-center .settings-search-finder__input {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border-color: var(--os-border-strong);
+  background: var(--os-surface-2);
+  font-size: 13px;
+}
+
+.mn-os-mb-center .settings-search-finder__input:focus {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 1px;
+}
+
+.mn-os-mb-center .settings-search-finder__results {
+  z-index: 60;
 }
 
 .mn-os-mb-logo {
@@ -50,6 +148,11 @@
   box-shadow:
     0 0 0 1px var(--os-accent-glow),
     0 4px 14px -4px var(--os-accent-glow);
+}
+
+.mn-os-mb-logo .minnow-glyph {
+  width: 18px;
+  height: 18px;
 }
 
 .mn-os-mb-brand {
@@ -70,6 +173,21 @@
   font-size: 13px;
   font-weight: 500;
   transition: 0.16s var(--os-ease);
+}
+
+/* `display: flex` on buttons can override the native [hidden] rule — hide via view + attribute */
+.mn-os-menubar[data-view='desktop'] .mn-os-mb-desktop,
+.mn-os-menubar[data-view='desktop'] .mn-os-mb-sep,
+.mn-os-menubar[data-view='desktop'] .mn-os-mb-appname,
+.mn-os-mb-desktop[hidden],
+.mn-os-mb-sep[hidden],
+.mn-os-mb-appname[hidden] {
+  display: none !important;
+}
+
+.mn-os-menubar[data-view='app'] .mn-os-mb-brand,
+.mn-os-mb-brand[hidden] {
+  display: none !important;
 }
 
 .mn-os-mb-desktop:hover {
@@ -95,12 +213,107 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  max-width: min(22rem, 42vw);
   background: var(--os-surface-2);
   border: 1px solid var(--os-border);
   color: var(--os-text-dim);
   border-radius: 8px;
   padding: 6px 11px;
   font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.14s var(--os-ease),
+    border-color 0.14s var(--os-ease),
+    color 0.14s var(--os-ease);
+}
+
+.mn-os-mb-chip:hover {
+  background: var(--os-surface-3);
+  border-color: var(--os-border-strong);
+  color: var(--os-text);
+}
+
+.mn-os-mb-chip.is-open {
+  border-color: var(--os-accent);
+  box-shadow: 0 0 0 2px var(--os-accent-glow);
+  color: var(--os-text);
+}
+
+.mn-os-mb-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* OS menubar model picker popover */
+.mn-os-model-menu {
+  position: fixed;
+  z-index: 55;
+  width: max-content;
+  min-width: min(20rem, calc(100vw - 1rem));
+  max-width: min(32rem, calc(100vw - 1rem));
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
+}
+
+.mn-os-model-menu.hidden {
+  display: none;
+}
+
+.mn-os-model-menu__list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: min(16rem, 50vh);
+  overflow-y: auto;
+}
+
+.mn-os-model-menu__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.mn-os-model-menu__action {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out);
+}
+
+.mn-os-model-menu__action:hover:not(:disabled) {
+  background: var(--mn-surface-0);
+  border-color: var(--mn-border-strong);
+}
+
+.mn-os-model-menu__action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mn-os-model-menu__action--primary {
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-accent);
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.mn-os-model-menu__action--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-accent) 18%, var(--mn-bg));
 }
 
 .mn-os-mb-icon,
@@ -127,6 +340,179 @@
   color: var(--os-accent);
 }
 
+.mn-os-mb-bell.is-open {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  box-shadow: 0 0 0 2px var(--os-accent-glow);
+}
+
+/* OS menubar notifications popover */
+.mn-os-notif-menu {
+  position: fixed;
+  z-index: 55;
+  width: min(22rem, calc(100vw - 1rem));
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  color: var(--mn-fg);
+  overflow: hidden;
+}
+
+.mn-os-notif-menu.hidden {
+  display: none;
+}
+
+.mn-os-notif-menu__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.mn-os-notif-menu__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-os-notif-menu__clear {
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-accent);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out);
+}
+
+.mn-os-notif-menu__clear:hover {
+  background: var(--mn-accent-soft);
+}
+
+.mn-os-notif-menu__list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: min(18rem, 50vh);
+  overflow-y: auto;
+}
+
+.mn-os-notif-item__btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out);
+}
+
+.mn-os-notif-item__btn:hover {
+  background: var(--mn-surface-0);
+}
+
+.mn-os-notif-item__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--mn-surface-1);
+  color: var(--mn-accent);
+}
+
+.mn-os-notif-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mn-os-notif-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mn-os-notif-item__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-os-notif-item__badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--mn-accent);
+  color: var(--os-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.mn-os-notif-item__preview {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mn-fg-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.mn-os-notif-menu__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 20px 24px;
+  text-align: center;
+}
+
+.mn-os-notif-menu__empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg-muted);
+  margin-bottom: 4px;
+}
+
+.mn-os-notif-menu__empty-text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mn-fg);
+}
+
+.mn-os-notif-menu__empty-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+  max-width: 16rem;
+}
+
 .mn-os-bell-badge {
   position: absolute;
   top: -2px;
@@ -142,6 +528,11 @@
   display: grid;
   place-items: center;
   border: 2px solid var(--os-surface-1);
+}
+
+/* `display: grid` above overrides the native [hidden] rule — force hide when empty */
+.mn-os-bell-badge[hidden] {
+  display: none !important;
 }
 
 .mn-os-mb-time {
@@ -231,14 +622,22 @@
   min-height: 0;
 }
 
-/* Welcome workspace picker overlays Code app when OS shell is active. */
+/* Code app: menubar only — legacy topbar stays in DOM for model select wiring. */
+html.minnow-os-enabled .mn-os-code-layer > header.topbar {
+  display: none !important;
+}
+
+/* Fixed drawers use --topbar-h; align to menubar when Code is foreground. */
+html.minnow-os-enabled:has(.mn-os-code-layer.is-active) {
+  --topbar-h: var(--os-menubar-h);
+}
+
+/* Welcome workspace picker fills the Code app below the menubar. */
 .mn-os-code-layer .welcome-page.welcome-page--os-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  flex: none;
+  flex: 1;
   min-height: 0;
-  height: 100%;
+  width: 100%;
+  overflow: auto;
 }
 
 html.minnow-os-enabled body {
@@ -254,7 +653,8 @@ html.minnow-os-enabled #minnowOsRoot {
 html.minnow-os-enabled #osAppsLayer .settings-page.is-open,
 html.minnow-os-enabled #osAppsLayer .benchmark-page.is-open,
 html.minnow-os-enabled #osAppsLayer .research-page.is-open,
-html.minnow-os-enabled #osAppsLayer .experts-page.is-open {
+html.minnow-os-enabled #osAppsLayer .experts-page.is-open,
+html.minnow-os-enabled #osAppsLayer .chat-app-page.is-open {
   display: flex !important;
   height: 100%;
   flex: 1;
@@ -264,6 +664,18 @@ html.minnow-os-enabled #osAppsLayer .experts-page.is-open {
 
 html.minnow-os-enabled header.topbar.hidden {
   display: none !important;
+}
+
+/* Mobile Code app: chat drawer toggle (replaces topbar hamburger). */
+.mn-os-mb-chat-toggle {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .mn-os-mb-chat-toggle:not([hidden]) {
+    display: grid;
+    place-items: center;
+  }
 }
 
 @keyframes mn-os-app-in {

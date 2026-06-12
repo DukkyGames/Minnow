@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { resetInstancesForTests } from '../../src/os/instances.ts';
+import { resetChatsWorkspacePathCache } from '../../src/lib/chats-workspace.ts';
+import { initAppHost, resetAppHostForTests } from '../../src/os/app-host.ts';
+import { getInstanceSnapshot, resetInstancesForTests } from '../../src/os/instances.ts';
+import { initOsPageBridge, resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   getCurrentRoute,
   initOsRouter,
@@ -11,7 +14,27 @@ import {
   resolveLegacyHash,
   syncOsRouteFromHashForTests,
 } from '../../src/os/router.ts';
-import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
+import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
+
+const CHATS_WS = '/home/user/.minnow/chats';
+
+function setupChatAppDom(win: import('happy-dom').Window): void {
+  win.document.body.innerHTML = `
+    <header class="topbar"></header>
+    <div id="osStage">
+      <div id="osAppsLayer"></div>
+    </div>
+    <main id="chatView" class="chat-app-page">
+      <div id="chatAppSessionList" class="chat-app-rail-list"></div>
+      <div id="chatAppArea"></div>
+      <h1 id="chatAppTitle">Chat</h1>
+      <textarea id="chatAppInput"></textarea>
+      <button type="button" id="chatAppSendBtn"></button>
+      <aside id="chatAppFiles"><div id="chatAppFilesBody"></div></aside>
+    </main>
+    <div id="appBody"></div>
+  `;
+}
 
 describe('resolveLegacyHash', () => {
   test('redirects settings paths to the settings app', () => {
@@ -89,6 +112,19 @@ describe('os router navigation', () => {
     assert.equal(route.appId, 'code');
   });
 
+  test('launchApp(chat) stores seed on the foreground instance', () => {
+    window.location.hash = '#/app/chat';
+    syncOsRouteFromHashForTests();
+    launchApp('chat', { seed: 'summarize my notes' });
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.view, 'app');
+    const inst = snap.instances.find((i) => i.appId === 'chat');
+    assert.ok(inst);
+    assert.equal(inst?.seed, 'summarize my notes');
+    assert.equal(window.location.hash, '#/app/chat');
+    assert.equal(getCurrentRoute().appId, 'chat');
+  });
+
   test('navigateToDesktop returns to desktop view', () => {
     launchApp('chat');
     syncOsRouteFromHashForTests();
@@ -112,5 +148,137 @@ describe('os router navigation', () => {
     assert.equal(window.location.hash, '#/app/settings');
     syncOsRouteFromHashForTests();
     assert.equal(getCurrentRoute().settingsSection, 'modes');
+  });
+});
+
+describe('chat app OS integration', () => {
+  beforeEach(async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const g = globalThis as typeof globalThis & {
+      window: Window;
+      document: Document;
+      HTMLElement: typeof HTMLElement;
+      fetch: typeof fetch;
+    };
+    g.window = win as unknown as Window & typeof globalThis.window;
+    g.document = win.document;
+    g.HTMLElement = win.HTMLElement;
+    setupChatAppDom(win);
+    win.location.hash = '#/desktop';
+
+    g.fetch = (async (url: RequestInfo | URL) => {
+      const path = String(url);
+      if (path.includes('/api/chats-workspace/list')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, entries: [] }),
+        } as Response;
+      }
+      if (path.includes('/api/chats-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: CHATS_WS, fileCount: 0 }),
+        } as Response;
+      }
+      // Provider/tools offline — concierge seed stays in composer for manual send.
+      return {
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'offline' }),
+      } as Response;
+    }) as typeof fetch;
+
+    resetChatsWorkspacePathCache();
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'chat-test-id',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      lastActiveChatIdByApp: {},
+      chats: [
+        {
+          ...createEmptyChatObject('chat-test-id'),
+          name: 'Assistant',
+          workspacePath: CHATS_WS,
+          modeId: 'general',
+          workAgentAuto: true,
+        },
+      ],
+    });
+
+    resetInstancesForTests();
+    resetOsRouterForTests();
+    resetOsPageBridgeForTests();
+    resetAppHostForTests();
+    initOsPageBridge();
+    initAppHost();
+    initOsRouter();
+
+    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+    if (input) input.value = '';
+    document.getElementById('chatView')?.classList.remove('is-open');
+  });
+
+  afterEach(async () => {
+    const { closeChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+    if (isChatAppOpen()) closeChatApp({ skipNavigate: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resetOsRouterForTests();
+    resetInstancesForTests();
+    resetOsPageBridgeForTests();
+    resetAppHostForTests();
+    resetChatsWorkspacePathCache();
+    setSessionStateForTests(null);
+  });
+
+  test('launchApp(chat) from desktop stores seed on the foreground instance', async () => {
+    launchApp('chat', { seed: 'summarize my notes' });
+    syncOsRouteFromHashForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.view, 'app');
+    const inst = snap.instances.find((i) => i.appId === 'chat');
+    assert.ok(inst);
+    assert.equal(inst?.seed, 'summarize my notes');
+    assert.equal(window.location.hash, '#/app/chat');
+  });
+
+  test('openChatApp applies seed to composer when empty', async () => {
+    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+    await openChatApp('draft a friendly email');
+    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+    assert.equal(input?.value, 'draft a friendly email');
+    assert.equal(isChatAppOpen(), true);
+  });
+
+  test('openChatApp does not overwrite non-empty composer', async () => {
+    const { openChatApp } = await import('../../src/ui/chat-app.ts');
+    const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+    if (input) input.value = 'existing prompt';
+    await openChatApp('ignored seed');
+    assert.equal(input?.value, 'existing prompt');
+  });
+
+  test('closeChatApp clears open state and returns to desktop', async () => {
+    const { openChatApp, closeChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+    await openChatApp();
+    assert.equal(isChatAppOpen(), true);
+    closeChatApp();
+    assert.equal(isChatAppOpen(), false);
+    assert.equal(window.location.hash, '#/desktop');
+  });
+
+  test('navigateToDesktop returns to desktop route after chat launch', async () => {
+    const { openChatApp, isChatAppOpen } = await import('../../src/ui/chat-app.ts');
+
+    launchApp('chat');
+    syncOsRouteFromHashForTests();
+    await openChatApp();
+    assert.equal(isChatAppOpen(), true);
+    navigateToDesktop();
+    syncOsRouteFromHashForTests();
+    assert.equal(getCurrentRoute().view, 'desktop');
+    assert.equal(window.location.hash, '#/desktop');
   });
 });

@@ -1,26 +1,59 @@
-import { APPS, getAppById } from './app-registry';
+import { getAppById } from './app-registry';
 import {
   getForegroundAppId,
-  getInstanceSnapshot,
   getOsView,
   getTotalUnread,
   subscribeInstances,
 } from './instances';
 import { launchApp, navigateToDesktop } from './router';
+import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createOsIcon } from './icons';
-import type { AppId } from './types';
-
-const CLOCK_INTERVAL_MS = 30_000;
+import { initOsModelChipMenu } from './model-chip-menu';
+import {
+  chatToggleAriaLabel,
+  isChatToggleVisible,
+  isMenubarCenterVisible,
+} from './menubar-visibility';
+import { initOsNotificationsMenu } from './notifications-menu';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-function syncModelChipText(chipText: HTMLElement): void {
-  const source = document.getElementById('modelSelectTriggerText');
-  if (source) {
-    chipText.textContent = source.textContent?.trim() || 'No model';
-  }
+/** Tick the menubar clock on minute boundaries and when the window becomes visible again. */
+function startMenubarClock(el: HTMLElement): () => void {
+  const tick = () => {
+    el.textContent = formatClock(new Date());
+  };
+
+  tick();
+
+  let minuteTimer: number | undefined;
+
+  const scheduleNextMinute = () => {
+    const now = new Date();
+    const msUntilNextMinute =
+      (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 50;
+    minuteTimer = window.setTimeout(() => {
+      tick();
+      scheduleNextMinute();
+    }, msUntilNextMinute);
+  };
+
+  scheduleNextMinute();
+
+  const onVisibility = () => {
+    if (document.visibilityState !== 'visible') return;
+    tick();
+    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
+    scheduleNextMinute();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+
+  return () => {
+    if (minuteTimer !== undefined) clearTimeout(minuteTimer);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
 }
 
 /** Render the MinnowOS menubar. Returns cleanup function. */
@@ -33,7 +66,7 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   const logo = document.createElement('div');
   logo.className = 'mn-os-mb-logo';
-  logo.appendChild(createOsIcon('fish', { size: 18 }));
+  logo.innerHTML = MINNOW_GLYPH_HEADER_HTML;
   left.appendChild(logo);
 
   const brand = document.createElement('span');
@@ -56,7 +89,45 @@ export function renderMenubar(root: HTMLElement): () => void {
   appName.className = 'mn-os-mb-appname';
   appName.hidden = true;
 
-  left.append(brand, desktopBtn, sep, appName);
+  const chatToggle = document.createElement('button');
+  chatToggle.type = 'button';
+  chatToggle.className = 'mn-os-mb-icon mn-os-mb-chat-toggle';
+  chatToggle.setAttribute('aria-label', 'Chat sessions');
+  chatToggle.hidden = true;
+  chatToggle.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+  chatToggle.addEventListener('click', () => {
+    const fg = getForegroundAppId();
+    if (fg === 'chat') {
+      void import('../ui/chat-app').then((m) => {
+        m.toggleChatAppSessionRail();
+        chatToggle.setAttribute(
+          'aria-pressed',
+          m.isChatAppSessionRailHidden() ? 'false' : 'true',
+        );
+      });
+      return;
+    }
+    void import('../ui/layout').then((m) => m.toggleSidebarLayout());
+  });
+
+  left.append(brand, desktopBtn, sep, appName, chatToggle);
+
+  const center = document.createElement('div');
+  center.id = 'osMenubarCenter';
+  center.className = 'mn-os-mb-center';
+  center.hidden = true;
+
+  const settingsSlot = document.createElement('div');
+  settingsSlot.id = 'osMenubarSettingsSearchSlot';
+  settingsSlot.className = 'mn-os-mb-settings-slot';
+
+  const workspaceSlot = document.createElement('div');
+  workspaceSlot.id = 'osMenubarWorkspaceSlot';
+  workspaceSlot.className = 'mn-os-mb-workspace-slot';
+  workspaceSlot.hidden = true;
+
+  center.append(settingsSlot, workspaceSlot);
 
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
@@ -64,12 +135,11 @@ export function renderMenubar(root: HTMLElement): () => void {
   const modelChip = document.createElement('button');
   modelChip.type = 'button';
   modelChip.className = 'mn-os-mb-chip';
-  const wsDot = document.createElement('span');
-  wsDot.className = 'mn-os-ws-dot is-ok';
-  wsDot.setAttribute('aria-hidden', 'true');
+  const chipDot = document.createElement('span');
   const chipText = document.createElement('span');
-  modelChip.append(wsDot, chipText);
-  syncModelChipText(chipText);
+  chipText.className = 'mn-os-mb-chip-text';
+  modelChip.append(chipDot, chipText);
+  const cleanupModelChip = initOsModelChipMenu(modelChip, chipDot, chipText);
 
   const bell = document.createElement('button');
   bell.type = 'button';
@@ -80,11 +150,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   bellBadge.className = 'mn-os-bell-badge';
   bellBadge.hidden = true;
   bell.appendChild(bellBadge);
-  bell.addEventListener('click', () => {
-    const snap = getInstanceSnapshot();
-    const unreadInst = snap.instances.find((i) => i.unread > 0);
-    if (unreadInst) launchApp(unreadInst.appId);
-  });
+  const cleanupNotifications = initOsNotificationsMenu(bell);
 
   const settingsBtn = document.createElement('button');
   settingsBtn.type = 'button';
@@ -98,13 +164,14 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.textContent = formatClock(new Date());
 
   right.append(modelChip, bell, settingsBtn, timeEl);
-  root.append(left, right);
+  root.append(left, center, right);
 
   function syncMenubar(): void {
     const view = getOsView();
     const fgApp = getForegroundAppId();
     const onDesktop = view === 'desktop';
 
+    root.dataset.view = view;
     brand.hidden = !onDesktop;
     desktopBtn.hidden = onDesktop;
     sep.hidden = onDesktop;
@@ -119,6 +186,25 @@ export function renderMenubar(root: HTMLElement): () => void {
       }
     }
 
+    center.hidden = !isMenubarCenterVisible(fgApp);
+    chatToggle.hidden = !isChatToggleVisible(fgApp);
+    const toggleLabel = chatToggleAriaLabel(fgApp);
+    if (toggleLabel) {
+      chatToggle.setAttribute('aria-label', toggleLabel);
+    }
+    if (fgApp === 'chat') {
+      void import('../ui/chat-app').then((m) => {
+        chatToggle.setAttribute(
+          'aria-pressed',
+          m.isChatAppSessionRailHidden() ? 'false' : 'true',
+        );
+      });
+    } else {
+      chatToggle.removeAttribute('aria-pressed');
+    }
+
+    void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
+
     const unread = getTotalUnread();
     bell.classList.toggle('is-on', unread > 0);
     if (unread > 0) {
@@ -126,34 +212,19 @@ export function renderMenubar(root: HTMLElement): () => void {
       bellBadge.textContent = String(unread);
     } else {
       bellBadge.hidden = true;
+      bellBadge.textContent = '';
     }
   }
 
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
 
-  const clockIv = window.setInterval(() => {
-    timeEl.textContent = formatClock(new Date());
-  }, CLOCK_INTERVAL_MS);
-
-  const modelSource = document.getElementById('modelSelectTriggerText');
-  let modelObserver: MutationObserver | null = null;
-  let modelPoll: number | undefined;
-  if (modelSource) {
-    modelObserver = new MutationObserver(() => syncModelChipText(chipText));
-    modelObserver.observe(modelSource, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-  } else {
-    modelPoll = window.setInterval(() => syncModelChipText(chipText), 2000);
-  }
+  const stopClock = startMenubarClock(timeEl);
 
   return () => {
     unsub();
-    clearInterval(clockIv);
-    modelObserver?.disconnect();
-    if (modelPoll !== undefined) clearInterval(modelPoll);
+    stopClock();
+    cleanupModelChip();
+    cleanupNotifications();
   };
 }

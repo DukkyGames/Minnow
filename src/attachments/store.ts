@@ -159,24 +159,31 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   return chip;
 }
 
-/** Renders chips into #attachPreview when the markup exists (SA-15). */
+/** Composer preview strip ids (Code + Chat app share one pending list). */
+const ATTACH_PREVIEW_IDS = ['attachPreview', 'chatAppAttachPreview'] as const;
+
+/** Renders chips into composer preview strips when markup exists (SA-15). */
 export function renderAttachPreview(): void {
-  const container = document.getElementById('attachPreview');
-  if (!container) return;
+  const containers = ATTACH_PREVIEW_IDS.map((id) => document.getElementById(id)).filter(
+    (el): el is HTMLElement => el != null,
+  );
+  if (!containers.length) return;
 
-  container.replaceChildren();
-
-  if (pendingAttachments.length === 0) {
-    container.classList.add('hidden');
-    return;
+  const hasAttachments = pendingAttachments.length > 0;
+  for (const container of containers) {
+    container.replaceChildren();
+    if (!hasAttachments) {
+      container.classList.add('hidden');
+      continue;
+    }
+    container.classList.remove('hidden');
+    for (const attachment of pendingAttachments) {
+      container.appendChild(createAttachChip(attachment));
+    }
   }
-
-  container.classList.remove('hidden');
-
-  for (const attachment of pendingAttachments) {
-    container.appendChild(createAttachChip(attachment));
+  if (hasAttachments) {
+    scheduleContextUsageRefresh();
   }
-  scheduleContextUsageRefresh();
 }
 
 /** Handles change on the hidden #fileInput (also exposed on window for inline HTML). */
@@ -203,6 +210,11 @@ export function initAttachments(): void {
 
   if (attachBtn && fileInput) {
     attachBtn.addEventListener('click', () => fileInput.click());
+  }
+
+  const chatAttachBtn = document.getElementById('btnChatAppAttach');
+  if (chatAttachBtn && fileInput) {
+    chatAttachBtn.addEventListener('click', () => fileInput.click());
   }
 
   renderAttachPreview();

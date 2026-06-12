@@ -108,6 +108,7 @@ body {
 .research-page { display: none; }
 .global-bugs-page { display: none; }
 .experts-page { display: none; }
+.chat-app-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

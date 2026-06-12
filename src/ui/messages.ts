@@ -35,9 +35,12 @@ import {
   scrollChatToBottom,
 } from './chat-scroll';
 import {
-  getOrchestrateChatMountElement,
-  isOrchestrateBoardInitSplitActive,
-} from './orchestrate-board-init-split';
+  getActiveChatMountElement,
+  isCodeChatMount,
+  resolveChatMount,
+  runWithChatMount,
+} from './chat-mount';
+import { isOrchestrateBoardInitSplitActive } from './orchestrate-board-init-split';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
@@ -128,28 +131,29 @@ export function renderStatsForChat(chat: Chat): void {
   if (isHubMounted()) refreshHubLiveData();
 }
 
-export function renderChatFromHistory(chat: Chat): void {
+export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
+  const area = resolveChatMount(mount);
+  const codeMount = isCodeChatMount(mount);
+
+  runWithChatMount(area, () => {
   updateCodeChangeStrip(chat);
-  if (isOrchestrateHubMounted()) {
+  if (codeMount && isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }
-  if (isOrchestratePlanScreenSuspendedForChat(chat)) {
+  if (codeMount && isOrchestratePlanScreenSuspendedForChat(chat)) {
     teardownHub();
-    const area = document.getElementById('chatArea');
-    if (area) {
-      area.innerHTML = '';
-      showOrchestratePlanScreenSuspendedBanner(area, chat);
-    }
+    area.innerHTML = '';
+    showOrchestratePlanScreenSuspendedBanner(area, chat);
     renderPersistedSubAgentCardsForChat(chat);
     refreshContextUsageRing();
     return;
   }
-  if (!isOrchestratePlanScreenSessionActive(chat)) {
+  if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
     teardownOrchestratePlanScreen();
-  } else if (isOrchestratePlanScreenMounted()) {
+  } else if (codeMount && isOrchestratePlanScreenMounted()) {
     teardownOrchestratePlanScreenDom();
   }
-  const boardGroup = getActiveBoardGroup();
+  const boardGroup = codeMount ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
     void import('./orchestrate-board').then((m) => {
@@ -159,15 +163,20 @@ export function renderChatFromHistory(chat: Chat): void {
     return;
   }
   clearSubAgentCardDomRegistry();
-  const area = document.getElementById('chatArea')!;
   if (!chat.history.length) {
-    renderHub(chat);
-    renderPersistedSubAgentCardsForChat(chat);
+    if (codeMount) {
+      renderHub(chat);
+      renderPersistedSubAgentCardsForChat(chat);
+    } else {
+      area.innerHTML = '';
+    }
     scrollChatToBottom();
     refreshContextUsageRing();
     return;
   }
-  teardownHub();
+  if (codeMount) {
+    teardownHub();
+  }
   area.innerHTML = '';
   const toolResultMap = new Map<
     string,
@@ -295,6 +304,7 @@ export function renderChatFromHistory(chat: Chat): void {
   renderPersistedSubAgentCardsForChat(chat);
   scrollChatToBottom();
   refreshContextUsageRing();
+  });
 }
 
 /** Optional history index for message action menus. */
@@ -384,7 +394,7 @@ export function appendBubble(
 
   wrap.appendChild(label);
   wrap.appendChild(bubble);
-  getOrchestrateChatMountElement().appendChild(wrap);
+  getActiveChatMountElement().appendChild(wrap);
   if (role === 'user') {
     scrollChatToBottom();
   } else {
@@ -489,7 +499,7 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   const streamStatus = attachStreamStatus(wrap);
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
-  getOrchestrateChatMountElement().appendChild(wrap);
+  getActiveChatMountElement().appendChild(wrap);
   pinChatScroll();
   scrollChatToBottom();
   return { wrap, bubble, cursor, streamStatus };

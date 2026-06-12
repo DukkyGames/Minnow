@@ -21,6 +21,9 @@ export function getChatLastMessageAt(chat: Chat): number {
   return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
 }
 
+/** MinnowOS Chat app id stored in `lastActiveChatIdByApp`. */
+export const CHAT_APP_ID = 'chat';
+
 /** Raw session JSON from disk or API (may be schema v1 or v2). */
 export type RawSessionJson = {
   version?: number;
@@ -28,6 +31,7 @@ export type RawSessionJson = {
   sidebarCollapsed?: boolean;
   chats?: unknown[];
   lastActiveChatIdByWorkspace?: Record<string, string>;
+  lastActiveChatIdByApp?: Record<string, string>;
 };
 
 function ensureLastActiveMap(raw: unknown): Record<string, string> {
@@ -36,6 +40,17 @@ function ensureLastActiveMap(raw: unknown): Record<string, string> {
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof key === 'string' && typeof value === 'string' && value.trim()) {
       out[normalizeWorkspacePath(key)] = value.trim();
+    }
+  }
+  return out;
+}
+
+function ensureLastActiveAppMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key === 'string' && key.trim() && typeof value === 'string' && value.trim()) {
+      out[key.trim()] = value.trim();
     }
   }
   return out;
@@ -55,6 +70,7 @@ export function migrateSessionStateV1ToV2(
     activeId: typeof parsed.activeId === 'string' ? parsed.activeId : '',
     sidebarCollapsed: !!parsed.sidebarCollapsed,
     lastActiveChatIdByWorkspace: ensureLastActiveMap(parsed.lastActiveChatIdByWorkspace),
+    lastActiveChatIdByApp: ensureLastActiveAppMap(parsed.lastActiveChatIdByApp),
     chats: chats.length ? chats : [seedEmptyChat()],
   };
   if (!state.chats.some((c) => c.id === state.activeId)) {
@@ -74,6 +90,112 @@ export function getChatsForWorkspace(workspacePath: string, state: SessionState)
         normalizeWorkspacePath(c.workspacePath ?? '') === key,
     )
     .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+}
+
+/** True when the chat belongs to the MinnowOS Chat app (chats workspace sandbox). */
+export function isAssistantChat(chat: Chat, chatsWorkspacePath: string): boolean {
+  const key = normalizeWorkspacePath(chatsWorkspacePath);
+  if (!key) return false;
+  return normalizeWorkspacePath(chat.workspacePath ?? '') === key;
+}
+
+/** Chats bound to the chats workspace (newest first). */
+export function getChatsForChatsWorkspace(
+  state: SessionState,
+  chatsWorkspacePath: string,
+): Chat[] {
+  const key = normalizeWorkspacePath(chatsWorkspacePath);
+  if (!key) return [];
+  return [...state.chats]
+    .filter((c) => normalizeWorkspacePath(c.workspacePath ?? '') === key)
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+}
+
+/** Sidebar-visible assistant chats for the chats workspace (newest first). */
+export function getAssistantChats(state: SessionState, chatsWorkspacePath: string): Chat[] {
+  return getChatsForChatsWorkspace(state, chatsWorkspacePath).filter(isSidebarVisibleChat);
+}
+
+/** Remember the last active chat for a MinnowOS app (e.g. Chat). */
+export function rememberActiveChatForApp(
+  state: SessionState,
+  appId: string,
+  chatId: string,
+): void {
+  const id = appId.trim();
+  const chat = chatId.trim();
+  if (!id || !chat) return;
+  if (!state.lastActiveChatIdByApp) {
+    state.lastActiveChatIdByApp = {};
+  }
+  state.lastActiveChatIdByApp[id] = chat;
+}
+
+/** Read the remembered active chat id for a MinnowOS app. */
+export function getLastActiveChatIdForApp(state: SessionState, appId: string): string | undefined {
+  const id = appId.trim();
+  if (!id) return undefined;
+  return state.lastActiveChatIdByApp?.[id];
+}
+
+/** New assistant chat defaults for the Chat app (general mode, chats workspace). */
+export function createAssistantChat(
+  chatsWorkspacePath: string,
+  chatId: string,
+  modelId = '',
+): Chat {
+  const now = Date.now();
+  return {
+    id: chatId,
+    name: PLACEHOLDER_CHAT_NAME,
+    workspacePath: normalizeWorkspacePath(chatsWorkspacePath),
+    modelId: modelId || '',
+    modeId: 'general',
+    workAgentAuto: true,
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: now,
+    lastMessageAt: now,
+  };
+}
+
+/**
+ * Pick the active assistant chat: remembered app id, else newest assistant chat,
+ * else create a new assistant chat bound to the chats workspace.
+ */
+export function resolveActiveAssistantChatId(
+  chatsWorkspacePath: string,
+  state: SessionState,
+  createScopedAssistantChat: (chatsWorkspacePath: string) => Chat,
+): string {
+  const key = normalizeWorkspacePath(chatsWorkspacePath);
+  if (!key) {
+    const fresh = createScopedAssistantChat('');
+    state.chats.unshift(fresh);
+    const now = Date.now();
+    fresh.updatedAt = now;
+    fresh.lastMessageAt = now;
+    return fresh.id;
+  }
+
+  const remembered = getLastActiveChatIdForApp(state, CHAT_APP_ID);
+  if (remembered) {
+    const chat = state.chats.find(
+      (c) => c.id === remembered && isAssistantChat(c, key),
+    );
+    if (chat) return chat.id;
+  }
+
+  const scoped = getAssistantChats(state, key);
+  if (scoped.length) return scoped[0].id;
+
+  const fresh = createScopedAssistantChat(key);
+  state.chats.unshift(fresh);
+  const now = Date.now();
+  fresh.updatedAt = now;
+  fresh.lastMessageAt = now;
+  return fresh.id;
 }
 
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */

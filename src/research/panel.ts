@@ -430,10 +430,6 @@ function onHashChange(): void {
 }
 
 function bindStaticControls(): void {
-  document.getElementById('btnResearchPageBack')?.addEventListener('click', () => {
-    if (isOsShellEnabled()) navigateToDesktop();
-    else closeResearch();
-  });
   document.getElementById('btnResearchStart')?.addEventListener('click', () => {
     void startResearchRun();
   });

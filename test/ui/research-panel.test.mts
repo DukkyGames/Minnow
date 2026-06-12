@@ -9,7 +9,6 @@ import {
 function buildResearchPageHtml(): string {
   return `
     <main id="researchView" class="research-page">
-      <button type="button" id="btnResearchPageBack"></button>
       <textarea id="researchQuery"></textarea>
       <select id="researchMaxRounds"><option value="auto">Auto</option></select>
       <select id="researchCategory"><option value="">Auto</option></select>

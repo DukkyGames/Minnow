@@ -1,5 +1,6 @@
 import { getAppById } from './app-registry';
 import { CONCIERGE_LINES, routeIntent } from './intent-routing';
+import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createOsIcon } from './icons';
 import type { AppId } from './types';
 
@@ -29,7 +30,7 @@ export function renderConcierge(
 
   const fish = document.createElement('div');
   fish.className = 'mn-os-cc-fish';
-  fish.appendChild(createOsIcon('fish', { size: 22 }));
+  fish.innerHTML = MINNOW_GLYPH_HEADER_HTML;
   inputWrap.appendChild(fish);
 
   const field = document.createElement('input');

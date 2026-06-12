@@ -222,6 +222,21 @@ function resolveAskQuestionEnforcementBody(ctx: ComposeContext, profile: PromptP
   return loaded?.body?.trim() ?? '';
 }
 
+function contextHasLaunchMinnowAppTool(ctx: ComposeContext): boolean {
+  return (ctx.enabledToolIds ?? []).includes('launch_minnow_app');
+}
+
+/** General-mode MinnowOS app routing when launch_minnow_app is enabled. */
+function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
+  const modeId = ctx.modeId ?? '';
+  if (modeId !== 'general' || !contextHasLaunchMinnowAppTool(ctx)) {
+    return '';
+  }
+  const loadProfile = profile === 'lite' ? 'lite' : 'full';
+  const loaded = loadPromptById('tool-usage', 'launch-minnow-app', loadProfile);
+  return loaded?.body?.trim() ?? '';
+}
+
 function buildInterpolationVars(ctx: ComposeContext, profile: PromptProfile): InterpolationVars {
   const includeSummary =
     profile !== 'lite' || ctx.includeChatHistorySummary === true;
@@ -299,6 +314,13 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const askInterpolated = interpolatePromptBody(askQuestionRaw, vars);
         if (askInterpolated.trim()) {
           sections.push(askInterpolated.trim());
+        }
+      }
+      const launchAppRaw = resolveLaunchMinnowAppBody(ctx, profileKey);
+      if (launchAppRaw.trim()) {
+        const launchInterpolated = interpolatePromptBody(launchAppRaw, vars);
+        if (launchInterpolated.trim()) {
+          sections.push(launchInterpolated.trim());
         }
       }
     }

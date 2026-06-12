@@ -50,6 +50,7 @@ import './styles/minnowos-shell.css';
 import './styles/minnowos-desktop.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
+import './styles/chat-app.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -163,6 +164,7 @@ import { initWorkspaceButton, refreshWorkspaceUi } from './ui/workspace-button';
 import {
   initWelcomePage,
   markWelcomePendingIfNeeded,
+  onWelcomeServerAvailabilityChanged,
   openWelcome,
   shouldShowWelcomeOnBoot,
 } from './ui/welcome-page';
@@ -264,6 +266,7 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
   await refreshWorkspaceUi();
@@ -311,6 +314,8 @@ export async function initApp(): Promise<void> {
   benchmarkPage.initBenchmarkPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
+  const chatApp = await import('./ui/chat-app');
+  chatApp.initChatApp();
   const globalBugsPage = await import('./ui/global-bugs-page');
   globalBugsPage.initGlobalBugsPage();
   const expertsHub = await import('./ui/experts/experts-hub');

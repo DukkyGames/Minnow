@@ -11,6 +11,8 @@ import { isOsShellEnabled } from './page-bridge';
 
 const BOOT_MS = 1300;
 
+let shellCleanup: (() => void) | null = null;
+
 function ensureShellDom(): {
   root: HTMLElement;
   menubar: HTMLElement;
@@ -85,6 +87,8 @@ function showBootSplash(root: HTMLElement): void {
 export function initOsShell(): void {
   if (!isOsShellEnabled()) return;
 
+  shellCleanup?.();
+
   document.documentElement.classList.add('minnow-os-enabled');
 
   const { root, menubar, desktopLayer } = ensureShellDom();
@@ -92,15 +96,26 @@ export function initOsShell(): void {
 
   const cleanupDesktop = renderDesktop(desktopLayer);
   const cleanupMenubar = renderMenubar(menubar);
+  shellCleanup = () => {
+    cleanupDesktop();
+    cleanupMenubar();
+  };
+
   initAppHost();
   // Re-apply route now that app layers are mounted (router may have queued an app open).
-  void import('./router').then((m) => m.syncOsRouteFromHash());
+  void import('./router').then(async (m) => {
+    m.syncOsRouteFromHash();
+    if (document.getElementById('settingsView')?.classList.contains('is-open')) {
+      const { mountSettingsSearchToMenubar } = await import('./settings-search-menubar');
+      mountSettingsSearchToMenubar();
+    }
+  });
 
   window.addEventListener(
     'beforeunload',
     () => {
-      cleanupDesktop();
-      cleanupMenubar();
+      shellCleanup?.();
+      shellCleanup = null;
     },
     { once: true },
   );
