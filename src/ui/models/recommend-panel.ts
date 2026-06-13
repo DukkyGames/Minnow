@@ -1,10 +1,17 @@
 /**
- * Models → What fits — hardware card + ranked catalog.
+ * Models → What fits — hardware card + ranked catalog with download actions.
  */
 
 import { fetchHardware } from '../../models/hardware-client';
 import { rankModels } from '../../models/fit';
+import {
+  resolveDownloadRepo,
+  startModelDownload,
+  subscribeDownloadProgress,
+} from '../../models/api-client';
+import { getModels } from '../../models/catalog';
 import type { HardwareSnapshot, ModelFitResult } from '../../models/types';
+import { setStatus } from '../status';
 
 const FIT_BADGE_CLASS: Record<string, string> = {
   perfect: 'models-fit-badge--perfect',
@@ -24,10 +31,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function catalogEntryForRow(row: ModelFitResult) {
+  return getModels().find((m) => m.name === row.name) ?? null;
+}
+
 function renderHardwareCard(root: HTMLElement, hw: HardwareSnapshot): void {
   const card = el('div', 'models-hardware-card');
-  const title = el('h3', 'models-hardware-card__title', 'Your computer');
-  card.appendChild(title);
+  card.appendChild(el('h3', 'models-hardware-card__title', 'Your computer'));
 
   const grid = el('div', 'models-hardware-grid');
   const rows: Array<[string, string]> = [
@@ -61,10 +71,43 @@ function renderHardwareCard(root: HTMLElement, hw: HardwareSnapshot): void {
   root.appendChild(card);
 }
 
+function attachDownloadButton(row: ModelFitResult, item: HTMLElement): void {
+  const entry = catalogEntryForRow(row);
+  const repoId = entry ? resolveDownloadRepo(entry) : null;
+  if (!repoId) return;
+
+  const btn = el('button', 'models-inline-btn', 'Download');
+  btn.type = 'button';
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    void startModelDownload({ repoId, quant: row.quant })
+      .then((job) => {
+        setStatus('ok', `Download started: ${job.repoId}`);
+        btn.textContent = 'Downloading…';
+        subscribeDownloadProgress(job.id, (event) => {
+          if (event.status === 'completed') {
+            btn.textContent = 'Downloaded';
+            setStatus('ok', `Download complete: ${job.filename}`);
+          } else if (event.status === 'failed' || event.status === 'cancelled') {
+            btn.textContent = 'Download';
+            btn.disabled = false;
+            setStatus('err', event.error || `Download ${event.status}`);
+          }
+        });
+      })
+      .catch((err) => {
+        btn.disabled = false;
+        btn.textContent = 'Download';
+        setStatus('err', err instanceof Error ? err.message : 'Download failed');
+      });
+  });
+  item.appendChild(btn);
+}
+
 function renderRecommendations(root: HTMLElement, rows: ModelFitResult[]): void {
   const list = el('div', 'models-recommend-list');
-  const heading = el('h3', 'models-section-subtitle', 'What fits');
-  root.appendChild(heading);
+  root.appendChild(el('h3', 'models-section-subtitle', 'What fits'));
 
   if (!rows.length) {
     root.appendChild(el('p', 'models-muted', 'No models matched this hardware profile.'));
@@ -84,12 +127,15 @@ function renderRecommendations(root: HTMLElement, rows: ModelFitResult[]): void 
     );
     item.appendChild(head);
 
-    const meta = el(
-      'p',
-      'models-recommend-meta',
-      `${row.params_b}B · ${row.quant} · ${row.required_gb} GB · ~${row.speed_tps} tok/s · score ${row.score}`,
+    item.appendChild(
+      el(
+        'p',
+        'models-recommend-meta',
+        `${row.params_b}B · ${row.quant} · ${row.required_gb} GB · ~${row.speed_tps} tok/s · score ${row.score}`,
+      ),
     );
-    item.appendChild(meta);
+
+    attachDownloadButton(row, item);
     list.appendChild(item);
   }
 
@@ -107,7 +153,7 @@ export async function mountRecommendSection(fresh = false): Promise<void> {
     const hardware = await fetchHardware({ fresh });
     mount.replaceChildren();
     renderHardwareCard(mount, hardware);
-    const ranked = rankModels(hardware, { limit: 40 });
+    const ranked = rankModels(hardware, { limit: 40, fitOnly: true });
     renderRecommendations(mount, ranked);
   } catch (err) {
     mount.replaceChildren();

@@ -17,7 +17,7 @@ export interface CatalogModel {
   release_date?: string;
   is_moe?: boolean;
   is_gguf?: boolean;
-  gguf_sources?: string[];
+  gguf_sources?: Array<{ repo: string; provider?: string }>;
   format?: string;
   _discovered?: boolean;
 }
@@ -68,7 +68,7 @@ export interface ModelFitResult {
   speed_tps: number;
   score: number;
   scores: { quality: number; speed: number; fit: number; context: number };
-  gguf_sources: string[];
+  gguf_sources: string[] | Array<{ repo: string; provider?: string }>;
   context_length: number;
   release_date?: string;
   target_context?: number | null;

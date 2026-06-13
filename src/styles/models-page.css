@@ -226,6 +226,86 @@
   display: block;
 }
 
-.models-section .settings-lead {
-  margin-bottom: 16px;
+.models-inline-btn.is-primary {
+  border-color: color-mix(in srgb, var(--mn-accent) 45%, var(--mn-border));
+  color: var(--mn-accent);
+}
+
+.models-inline-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.models-installed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.models-installed-row {
+  padding: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.models-installed-row__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.models-installed-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.models-installed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.models-download-progress {
+  margin-top: 8px;
+  height: 8px;
+  background: color-mix(in srgb, var(--mn-border) 70%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.models-download-progress__bar {
+  height: 100%;
+  background: var(--mn-accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.models-download-progress__bar.is-indeterminate {
+  width: 40% !important;
+  animation: models-indeterminate 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes models-indeterminate {
+  from { margin-left: 0; }
+  to { margin-left: 60%; }
+}
+
+.models-download-progress__label {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.models-download-status--completed {
+  color: #22c55e;
+}
+
+.models-download-status--failed,
+.models-download-status--cancelled {
+  color: #ef4444;
 }
