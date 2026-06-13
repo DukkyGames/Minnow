@@ -17,6 +17,7 @@ import { SHIPPED_SUB_AGENT_PROMPTS } from './shipped-sub-agent-prompts';
 import { getWorkAgentPromptOverride } from './work-agent-registry';
 import { fetchWorkAgentPrompt } from './work-agent-prompt-api';
 import type { SubAgentTypeConfig } from './types';
+import { UNTRUSTED_CONTEXT_POLICY_LITE } from '../lib/untrusted.mjs';
 
 /** Load shipped sub-agent prompt body for a type. */
 function loadShippedSubAgentPrompt(typeId: string, profile: 'full' | 'lite'): string {
@@ -59,6 +60,11 @@ export async function resolveSubAgentBasePrompt(
 /**
  * Full system prompt with task envelope for the sub-agent runner.
  */
+const SUB_AGENT_UNTRUSTED_POLICY = `
+
+### Untrusted external data
+${UNTRUSTED_CONTEXT_POLICY_LITE}`;
+
 const SUB_AGENT_ASK_QUESTION_RULES = `
 
 ### User choices (sub-agent)
@@ -173,5 +179,6 @@ ${task}`;
     enabledToolNames,
     parentChat,
   );
-  return appendSubAgentAskQuestionRules(withMemory, enabledToolNames);
+  const withUntrustedPolicy = `${withMemory}${SUB_AGENT_UNTRUSTED_POLICY}`;
+  return appendSubAgentAskQuestionRules(withUntrustedPolicy, enabledToolNames);
 }

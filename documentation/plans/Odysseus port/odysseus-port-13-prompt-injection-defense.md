@@ -3,7 +3,7 @@
 Tier: 4  
 Effort: S  
 Priority: Do first  
-Status: Planned  
+Status: Shipped (MIN-124)  
 Linear: [MIN-124](https://linear.app/minnowai/issue/MIN-124/odysseus-port-13-prompt-injection-defense)
 
 ## Goal
@@ -162,19 +162,19 @@ Apply wrappers in this order (each with a focused test):
 
 ## Implementation TODOs
 
-- [ ] Add `server/security/untrusted.js`
-- [ ] Add unit tests for deterministic wrapping, double-wrap avoidance, source escaping, and sentinel stripping
-- [ ] Update `src/chat/prompts/base/default.full.md`, `default.lite.md`, and sub-agent base prompts with the untrusted-context policy
-- [ ] Wrap `formatMemoryBlock()` output in `server/memory/retrieve.js`
-- [ ] Wrap `toolFetchWebContent()` and `toolRagWebContent()` output in `server/tools/fetch-web-content.js`
-- [ ] Wrap extracted page content in `server/research/extractor.js` before model prompts see it
-- [ ] Audit `server/tools/read-document.js` and the composer attachment path for untrusted document text
-- [ ] Wrap research report discussion context in `src/research/panel.ts`
-- [ ] Wrap server tool results at a shared boundary in `server/runtime/tools-middleware.js` where possible
-- [ ] Audit MCP tool results, browser tool output, skill body injection, and sub-agent result push for untrusted text boundaries
-- [ ] Port Odysseus's fuller untrusted-context policy language into both full and lite base prompts where appropriate
-- [ ] Add tests that verify memory and web-fetch results include the wrapper
-- [ ] Update `documentation/context.md` with the convention and injection sites
+- [x] Add `server/security/untrusted.js`
+- [x] Add unit tests for deterministic wrapping, double-wrap avoidance, source escaping, and sentinel stripping
+- [x] Update `src/chat/prompts/base/default.full.md`, `default.lite.md`, and sub-agent base prompts with the untrusted-context policy
+- [x] Wrap `formatMemoryBlock()` output in `server/memory/retrieve.js`
+- [x] Wrap `toolFetchWebContent()` and `toolRagWebContent()` output in `server/tools/fetch-web-content.js`
+- [x] Wrap extracted page content in `server/research/extractor.js` before model prompts see it
+- [x] Audit `server/tools/read-document.js` and the composer attachment path for untrusted document text
+- [x] Wrap research report discussion context in `src/research/panel.ts`
+- [x] Wrap server tool results at a shared boundary in `server/runtime/tools-middleware.js` where possible
+- [x] Audit MCP tool results, browser tool output, skill body injection, and sub-agent result push for untrusted text boundaries
+- [x] Port Odysseus's fuller untrusted-context policy language into both full and lite base prompts where appropriate
+- [x] Add tests that verify memory and web-fetch results include the wrapper
+- [x] Update `documentation/context.md` with the convention and injection sites
 - [ ] (Recommended) Move memory injection to user-role context message before #1 ships
 
 ## Odysseus Tests to Port

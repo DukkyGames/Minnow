@@ -9,6 +9,7 @@ import {
   truncateUtf8,
   WEB_TEXT_MAX_BYTES,
 } from '../../src/lib/fetch-web-content.mjs';
+import { wrapUntrusted } from '../security/untrusted.js';
 
 /**
  * @param {Record<string, unknown>} args
@@ -25,7 +26,8 @@ export async function toolFetchWebContent(args) {
     return fetchResult;
   }
 
-  return truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  const text = truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  return wrapUntrusted(text, { source: `web:${url}` });
 }
 
 /**
@@ -56,5 +58,6 @@ export async function toolRagWebContent(args) {
   }
 
   const header = `Relevant excerpts from ${url} for "${query}":\n\n`;
-  return header + snippets.map((s, i) => `${i + 1}. ${s}`).join('\n\n');
+  const body = header + snippets.map((s, i) => `${i + 1}. ${s}`).join('\n\n');
+  return wrapUntrusted(body, { source: `web-rag:${url}` });
 }
