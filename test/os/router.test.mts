@@ -121,8 +121,18 @@ describe('os router navigation', () => {
     const inst = snap.instances.find((i) => i.appId === 'chat');
     assert.ok(inst);
     assert.equal(inst?.seed, 'summarize my notes');
+    assert.deepEqual(inst?.launchOptions, { seed: 'summarize my notes' });
     assert.equal(window.location.hash, '#/app/chat');
     assert.equal(getCurrentRoute().appId, 'chat');
+  });
+
+  test('launchApp(research) stores autoRun in launch options', () => {
+    launchApp('research', { seed: 'Apple stock', autoRun: true });
+    syncOsRouteFromHashForTests();
+    const inst = getInstanceSnapshot().instances.find((i) => i.appId === 'research');
+    assert.ok(inst);
+    assert.equal(inst?.launchOptions?.autoRun, true);
+    assert.equal(inst?.launchOptions?.seed, 'Apple stock');
   });
 
   test('navigateToDesktop returns to desktop view', () => {

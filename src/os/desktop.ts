@@ -4,7 +4,7 @@ import { launchApp } from './router';
 import { renderConcierge } from './concierge';
 import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper } from './wallpaper';
-import type { AppId } from './types';
+import type { AppId, LaunchOptions } from './types';
 
 function greetingFor(d: Date): string {
   const h = d.getHours();
@@ -62,7 +62,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   hero.append(greetTime, greet, greetSub);
 
   const conciergeMount = document.createElement('div');
-  const onLaunch = (appId: AppId, seed: string) => launchApp(appId, { seed });
+  const onLaunch = (appId: AppId, options: LaunchOptions) => launchApp(appId, options);
   renderConcierge(conciergeMount, onLaunch);
   hero.appendChild(conciergeMount);
   stage.appendChild(hero);

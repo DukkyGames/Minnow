@@ -75,12 +75,18 @@ export function showDesktop(): void {
   emit();
 }
 
+function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions): void {
+  if (!options) return;
+  inst.launchOptions = { ...options };
+  if (options.seed) inst.seed = options.seed;
+}
+
 /** Launch or foreground an app; returns the active instance id. */
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
   const existing = instances.find((i) => i.appId === appId);
   if (existing) {
     foregroundId = existing.id;
-    if (options?.seed) existing.seed = options.seed;
+    applyLaunchOptionsToInstance(existing, options);
     existing.unread = 0;
     view = 'app';
     emit();
@@ -91,6 +97,7 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     id: uid(),
     appId,
     seed: options?.seed,
+    launchOptions: options ? { ...options } : undefined,
     unread: 0,
     msg: '',
   };
@@ -147,8 +154,9 @@ export function getTotalUnread(): number {
 export function clearForegroundSeed(): void {
   if (!foregroundId) return;
   const inst = instances.find((i) => i.id === foregroundId);
-  if (!inst?.seed) return;
+  if (!inst?.seed && !inst?.launchOptions) return;
   inst.seed = undefined;
+  inst.launchOptions = undefined;
   emit();
 }
 

@@ -6,7 +6,7 @@ import {
   type InstanceSnapshot,
 } from './instances';
 import { getCurrentRoute } from './router';
-import type { AppId } from './types';
+import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
@@ -81,18 +81,23 @@ function closeAllAppPages(): void {
   }
 }
 
-async function openAppPage(appId: AppId, seed?: string): Promise<void> {
+async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void> {
   const route = getCurrentRoute();
+  const settingsSection =
+    options?.settingsSection ?? route.settingsSection ?? 'general';
 
   switch (appId) {
     case 'settings': {
       const { openSettings } = await import('../ui/settings-page');
-      openSettings((route.settingsSection ?? 'general') as SettingsSectionId);
+      openSettings(settingsSection as SettingsSectionId);
       break;
     }
     case 'research': {
       const { openResearch } = await import('../research/panel');
-      openResearch({ seed, autoRun: Boolean(seed?.trim()) });
+      openResearch({
+        seed: options?.seed,
+        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+      });
       break;
     }
     case 'bench': {
@@ -112,15 +117,20 @@ async function openAppPage(appId: AppId, seed?: string): Promise<void> {
         welcome.closeWelcome({ skipHash: true });
       } else if (
         isDefaultWorkspace() &&
-        !welcome.isWelcomeDismissedForSession()
+        !welcome.isWelcomeDismissedForSession() &&
+        !options?.workspacePath?.trim()
       ) {
         welcome.openWelcome({ skipHash: true });
+      }
+      if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
+        const { applyCodeLaunchOptions } = await import('./code-launch');
+        await applyCodeLaunchOptions(options);
       }
       break;
     }
     case 'chat': {
       const { openChatApp } = await import('../ui/chat-app');
-      await openChatApp(seed);
+      await openChatApp(options?.seed);
       break;
     }
     default:
@@ -132,6 +142,12 @@ async function openAppPage(appId: AppId, seed?: string): Promise<void> {
 export function showAppLayer(appId: AppId): void {
   hideAllLayers();
   setLayerActive(layerForApp(appId), true);
+}
+
+function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | undefined {
+  const inst = snapshot.instances.find((i) => i.id === snapshot.foregroundId);
+  if (!inst) return undefined;
+  return inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
 }
 
 function syncFromSnapshot(snapshot: InstanceSnapshot): void {
@@ -150,14 +166,14 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const appId = getForegroundAppId();
   if (!appId) return;
 
-  const seed = snapshot.instances.find((i) => i.id === snapshot.foregroundId)?.seed;
+  const options = launchOptionsFromSnapshot(snapshot);
 
   if (appId !== lastForegroundApp) {
     showAppLayer(appId);
-    void openAppPage(appId, seed);
+    void openAppPage(appId, options);
     lastForegroundApp = appId;
-  } else if (seed && appId === 'chat') {
-    void openAppPage('chat', seed);
+  } else if (options && (appId === 'chat' || appId === 'code' || appId === 'research')) {
+    void openAppPage(appId, options);
   }
 }
 

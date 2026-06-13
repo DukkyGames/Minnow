@@ -3,6 +3,11 @@ import { describe, test } from 'node:test';
 import { CONCIERGE_LINES, routeIntent } from '../../src/os/intent-routing.ts';
 
 describe('routeIntent', () => {
+  test('routes bug hunts to code', () => {
+    assert.equal(routeIntent('Find bugs in my finance app'), 'code');
+    assert.equal(routeIntent('look for issues in the repo'), 'code');
+  });
+
   test('routes coding intents to code', () => {
     assert.equal(routeIntent('help me refactor this component'), 'code');
     assert.equal(routeIntent('fix the dev server'), 'code');

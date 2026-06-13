@@ -1,8 +1,9 @@
+import { resolveConciergePlan } from './concierge-agent';
 import { getAppById } from './app-registry';
-import { CONCIERGE_LINES, routeIntent } from './intent-routing';
+import { CONCIERGE_LINES } from './intent-routing';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createOsIcon } from './icons';
-import type { AppId } from './types';
+import type { AppId, LaunchOptions } from './types';
 
 const CONCIERGE_CHIPS = [
   'Build a feature',
@@ -16,14 +17,14 @@ type ConciergePhase = 'idle' | 'thinking' | 'done';
 /** Render the desktop concierge input + chips. */
 export function renderConcierge(
   container: HTMLElement,
-  onLaunch: (appId: AppId, seed: string) => void,
+  onLaunch: (appId: AppId, options: LaunchOptions) => void,
 ): void {
   container.replaceChildren();
   container.className = 'mn-os-concierge';
 
   let phase: ConciergePhase = 'idle';
   let lineText = '';
-  const timers: ReturnType<typeof setTimeout>[] = [];
+  let whimsicalTimer: ReturnType<typeof setTimeout> | undefined;
 
   const inputWrap = document.createElement('div');
   inputWrap.className = 'mn-os-cc-input';
@@ -61,9 +62,11 @@ export function renderConcierge(
   const chipsWrap = document.createElement('div');
   chipsWrap.className = 'mn-os-cc-chips';
 
-  function clearTimers(): void {
-    for (const t of timers) clearTimeout(t);
-    timers.length = 0;
+  function clearWhimsicalTimer(): void {
+    if (whimsicalTimer !== undefined) {
+      clearTimeout(whimsicalTimer);
+      whimsicalTimer = undefined;
+    }
   }
 
   function syncUi(): void {
@@ -75,54 +78,54 @@ export function renderConcierge(
     chipsWrap.hidden = phase !== 'idle';
   }
 
-  function submit(text?: string): void {
+  function showWhimsicalLine(): void {
+    const pick = CONCIERGE_LINES[Math.floor(Math.random() * CONCIERGE_LINES.length)];
+    lineText = pick ?? 'Understanding your request…';
+    syncUi();
+  }
+
+  async function submit(text?: string): Promise<void> {
     const q = (text ?? field.value).trim();
     if (!q || phase === 'thinking') return;
 
-    const appId = routeIntent(q);
-    const app = getAppById(appId);
-    if (!app) return;
-
     phase = 'thinking';
-    clearTimers();
+    clearWhimsicalTimer();
+    lineText = 'Understanding your request…';
     syncUi();
+    showWhimsicalLine();
+    whimsicalTimer = setTimeout(showWhimsicalLine, 900);
 
-    const seq = [...CONCIERGE_LINES].sort(() => Math.random() - 0.5).slice(0, 3);
-    seq.forEach((l, i) => {
-      timers.push(
-        setTimeout(() => {
-          lineText = l;
-          syncUi();
-        }, i * 620),
-      );
-    });
+    try {
+      const plan = await resolveConciergePlan(q);
+      const app = getAppById(plan.appId);
+      clearWhimsicalTimer();
+      lineText = app ? `Opening ${app.name}…` : 'Opening app…';
+      phase = 'done';
+      syncUi();
 
-    const doneAt = seq.length * 620;
-    timers.push(
-      setTimeout(() => {
-        lineText = `Opening ${app.name}…`;
-        phase = 'done';
-        syncUi();
-      }, doneAt),
-    );
-
-    timers.push(
-      setTimeout(() => {
-        onLaunch(appId, q);
-        field.value = '';
-        phase = 'idle';
-        lineText = '';
-        clearTimers();
-        syncUi();
-      }, doneAt + 720),
-    );
+      const { appId, ...options } = plan;
+      onLaunch(appId, options);
+      field.value = '';
+    } catch {
+      clearWhimsicalTimer();
+      lineText = 'Could not plan — opening Chat…';
+      phase = 'done';
+      syncUi();
+      onLaunch('chat', { seed: q });
+      field.value = '';
+    } finally {
+      phase = 'idle';
+      lineText = '';
+      clearWhimsicalTimer();
+      syncUi();
+    }
   }
 
   field.addEventListener('input', () => syncUi());
   field.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') submit();
+    if (e.key === 'Enter') void submit();
   });
-  sendBtn.addEventListener('click', () => submit());
+  sendBtn.addEventListener('click', () => void submit());
 
   for (const label of CONCIERGE_CHIPS) {
     const chip = document.createElement('button');
@@ -132,7 +135,7 @@ export function renderConcierge(
     chip.addEventListener('click', () => {
       field.value = label;
       syncUi();
-      submit(label);
+      void submit(label);
     });
     chipsWrap.appendChild(chip);
   }
