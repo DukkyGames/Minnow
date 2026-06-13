@@ -2,8 +2,10 @@
  * HTTP middleware for /api/generations (backend-owned LLM streams).
  */
 
-import { getProviderRuntime } from '../providers/store.js';
 import { validateProviderId } from '../providers/validate.js';
+import { readConfigJson } from '../config/store.js';
+import { listProviders } from '../providers/store.js';
+import { resolveFallbackChain } from './fallback.js';
 import { pumpUpstream } from './upstream.js';
 import {
   addSubscriber,
@@ -85,16 +87,42 @@ export async function handleGenerationsRequest(req, res, pathname) {
         return true;
       }
 
-      const runtime = await getProviderRuntime(providerId);
-      const url = `${runtime.profile.baseUrl}${runtime.paths.chatCompletionsPath}`;
+      const bodyObj =
+        payload.body && typeof payload.body === 'object'
+          ? /** @type {{ model?: string }} */ (payload.body)
+          : {};
+      const primaryModelId = typeof bodyObj.model === 'string' ? bodyObj.model : '';
+      const fallbackRole =
+        typeof payload.fallbackRole === 'string' && payload.fallbackRole.trim()
+          ? payload.fallbackRole.trim()
+          : null;
+
+      const config = (await readConfigJson('config.json')) ?? {};
+      const { providers } = await listProviders();
+      const enabledProviderIds = new Set(
+        providers.filter((p) => p.enabled !== false).map((p) => p.id),
+      );
+      const candidates = resolveFallbackChain({
+        role: fallbackRole ?? 'default',
+        primaryProviderId: providerId,
+        primaryModelId,
+        config,
+        enabledProviderIds,
+      });
+
       const state = createGenerationState({
         providerId,
         body: payload.body,
         persist: payload.persist === true,
+        candidates,
+        fallbackRole,
       });
 
-      pumpUpstream({ state, url, headers: runtime.headers });
-      sendJson(res, 201, { generationId: state.id });
+      pumpUpstream({ state });
+      sendJson(res, 201, {
+        generationId: state.id,
+        candidateCount: candidates.length,
+      });
       return true;
     }
 
@@ -167,6 +195,9 @@ export async function handleGenerationsRequest(req, res, pathname) {
         startedAt: state.startedAt,
         finishedAt: state.finishedAt,
         errorMessage: state.errorMessage,
+        fallbackUsed: state.fallbackUsed,
+        chosenProviderId: state.chosenProviderId,
+        chosenModelId: state.chosenModelId,
       });
       return true;
     }

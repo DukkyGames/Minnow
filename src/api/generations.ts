@@ -10,7 +10,13 @@ import type { ChatCompletionChunk } from '../types';
 export interface GenerationEndEvent {
   status: 'complete' | 'error' | 'cancelled';
   errorMessage?: string;
+  fallbackUsed?: boolean;
+  chosenProviderId?: string;
+  chosenModelId?: string;
 }
+
+/** Role key for server-side fallback chain lookup. */
+export type FallbackRole = 'default' | 'utility' | 'vision' | 'research';
 
 export class GenerationNotFoundError extends Error {
   constructor() {
@@ -44,6 +50,8 @@ export function formatGenerationErrorMessage(message: string): string {
 export interface CreateGenerationOptions {
   /** When true, generation state survives 5 minutes after terminal (main chat). */
   persist?: boolean;
+  /** Optional role for server-side fallback chain resolution. */
+  fallbackRole?: FallbackRole;
 }
 
 /**
@@ -61,6 +69,7 @@ export async function createGeneration(
       providerId,
       body,
       persist: options.persist === true,
+      ...(options.fallbackRole ? { fallbackRole: options.fallbackRole } : {}),
     }),
   });
 

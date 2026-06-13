@@ -554,7 +554,10 @@ async function streamCompletionTurn(
   let generationId = resumeGenerationId;
 
   if (!generationId) {
-    const created = await createGeneration(provider.id, body, { persist: true });
+    const created = await createGeneration(provider.id, body, {
+      persist: true,
+      fallbackRole: 'default',
+    });
     generationId = created.generationId;
     chat.currentGenerationId = generationId;
     if (turnRunId) {
@@ -612,6 +615,13 @@ async function streamCompletionTurn(
               reject(new Error(event.errorMessage ?? 'Generation failed')),
             );
             return;
+          }
+          if (event?.fallbackUsed && event.chosenProviderId) {
+            const modelLabel = event.chosenModelId?.trim() || '(request model)';
+            setStatus(
+              'ok',
+              `Replied via fallback provider ${event.chosenProviderId} · ${modelLabel}`,
+            );
           }
           finish(resolve);
         },

@@ -1315,10 +1315,100 @@ export function mergeConfigMeta(existing, patch) {
   if (p.memory && typeof p.memory === 'object') {
     base.memory = normalizeMemoryConfig(
       p.memory,
-      base.memory && typeof base.memory === 'object'
+      base.memory && typeof p.memory === 'object'
         ? /** @type {Record<string, unknown>} */ (base.memory)
         : {},
     );
+  }
+
+  if (p.fallbackChains !== undefined) {
+    base.fallbackChains = normalizeFallbackChainsConfig(
+      p.fallbackChains,
+      base.fallbackChains && typeof base.fallbackChains === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.fallbackChains)
+        : {},
+    );
+  }
+
+  return base;
+}
+
+/**
+ * Default fallback chain config for new homes and merge fallbacks.
+ * @returns {object}
+ */
+export function defaultFallbackChainsConfig() {
+  return {
+    enabled: false,
+    cooldownSeconds: 60,
+    maxChainLength: 4,
+    roles: {
+      default: [],
+      utility: [],
+      research: [],
+      vision: [],
+    },
+  };
+}
+
+/**
+ * Normalize fallback chain config from config.json meta.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ */
+export function normalizeFallbackChainsConfig(raw, existing = {}) {
+  const base = {
+    ...defaultFallbackChainsConfig(),
+    ...(existing && typeof existing === 'object' ? existing : {}),
+    roles: {
+      ...defaultFallbackChainsConfig().roles,
+      ...(existing?.roles && typeof existing.roles === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.roles)
+        : {}),
+    },
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return base;
+  }
+
+  const patch = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof patch.enabled === 'boolean') {
+    base.enabled = patch.enabled;
+  }
+  if (typeof patch.cooldownSeconds === 'number' && Number.isFinite(patch.cooldownSeconds)) {
+    base.cooldownSeconds = Math.min(3600, Math.max(10, Math.round(patch.cooldownSeconds)));
+  }
+  if (typeof patch.maxChainLength === 'number' && Number.isFinite(patch.maxChainLength)) {
+    base.maxChainLength = Math.min(8, Math.max(1, Math.round(patch.maxChainLength)));
+  }
+
+  if (patch.roles && typeof patch.roles === 'object') {
+    const roles = { ...base.roles };
+    for (const [role, entries] of Object.entries(
+      /** @type {Record<string, unknown>} */ (patch.roles),
+    )) {
+      if (!Array.isArray(entries)) continue;
+      const normalized = [];
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') continue;
+        const row = /** @type {Record<string, unknown>} */ (entry);
+        if (typeof row.providerId !== 'string' || !row.providerId.trim()) continue;
+        let providerId;
+        try {
+          providerId = row.providerId.trim();
+        } catch {
+          continue;
+        }
+        normalized.push({
+          providerId,
+          modelId: typeof row.modelId === 'string' ? row.modelId : '',
+        });
+        if (normalized.length >= base.maxChainLength) break;
+      }
+      roles[role] = normalized;
+    }
+    base.roles = roles;
   }
 
   return base;
