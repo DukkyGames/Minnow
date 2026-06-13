@@ -209,6 +209,17 @@ const DEFAULT_META = {
     generationIdleTimeoutMs: 25 * 60_000,
     generationMaxDurationMs: 3_600_000,
   },
+  fallbackChains: {
+    enabled: false,
+    cooldownSeconds: 60,
+    maxChainLength: 4,
+    roles: {
+      default: [],
+      utility: [],
+      research: [],
+      vision: [],
+    },
+  },
   editorAiCompletion: {
     enabled: false,
     debounceMs: 450,

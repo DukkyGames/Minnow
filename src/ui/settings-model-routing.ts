@@ -7,6 +7,14 @@ import type { ThinkingTriState } from '../agents/thinking-types';
 import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-agent-config';
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
+import {
+  FALLBACK_ROLE_KEYS,
+  loadFallbackChainsConfig,
+  saveFallbackChainsConfig,
+  type FallbackChainCandidate,
+  type FallbackChainsConfig,
+  type FallbackRole,
+} from '../config/fallback-chains-meta';
 import { saveSamplerMeta } from '../config/sampler-meta';
 import { isServerStorageMode } from '../config/storage-mode';
 import {
@@ -377,6 +385,183 @@ function appendRoutingRow(
   tableBody.appendChild(tr);
 }
 
+const FALLBACK_ROLE_LABELS: Record<FallbackRole, string> = {
+  default: 'Main chat & sub-agents',
+  utility: 'Background / titles',
+  research: 'Deep research',
+  vision: 'Vision',
+};
+
+interface FallbackRoleEditor {
+  role: FallbackRole;
+  list: HTMLElement;
+  candidates: FallbackChainCandidate[];
+}
+
+async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
+  const config = await loadFallbackChainsConfig();
+  const section = el('section', 'settings-routing-group settings-fallback-chains');
+  section.appendChild(el('h3', 'settings-routing-group__title', 'Fallback chains'));
+  section.appendChild(
+    el(
+      'p',
+      'settings-routing-group__lead',
+      'When enabled, Minnow tries the next provider/model only before the first token arrives. Dead hosts are skipped until cooldown expires.',
+    ),
+  );
+
+  const { row: enabledRow, input: enabledInput } = createSettingsToggleRow(
+    'Enable model fallback chains',
+    { checked: config.enabled },
+  );
+  enabledRow.classList.add('settings-toggle-row--compact');
+  section.appendChild(enabledRow);
+
+  const cooldownRow = el('div', 'settings-field-row');
+  cooldownRow.appendChild(el('label', 'settings-field-label', 'Dead-host cooldown (seconds)'));
+  const cooldownInput = el('input', 'settings-input settings-input--narrow') as HTMLInputElement;
+  cooldownInput.type = 'number';
+  cooldownInput.min = '10';
+  cooldownInput.max = '3600';
+  cooldownInput.step = '1';
+  cooldownInput.value = String(config.cooldownSeconds);
+  cooldownRow.appendChild(cooldownInput);
+  section.appendChild(cooldownRow);
+
+  const roleEditors: FallbackRoleEditor[] = [];
+
+  for (const role of FALLBACK_ROLE_KEYS) {
+    const roleSection = el('div', 'settings-fallback-role');
+    roleSection.appendChild(
+      el('h4', 'settings-fallback-role__title', FALLBACK_ROLE_LABELS[role]),
+    );
+    roleSection.appendChild(
+      el(
+        'p',
+        'settings-fallback-role__hint',
+        'Ordered fallbacks after the request primary. Leave model blank to reuse the request model.',
+      ),
+    );
+
+    const list = el('div', 'settings-fallback-role__list');
+    const editor: FallbackRoleEditor = {
+      role,
+      list,
+      candidates: config.roles[role].map((c) => ({ ...c })),
+    };
+    roleEditors.push(editor);
+    roleSection.appendChild(list);
+    renderFallbackCandidateRows(editor);
+
+    const addBtn = el('button', 'settings-action-btn', 'Add candidate');
+    addBtn.type = 'button';
+    addBtn.addEventListener('click', () => {
+      editor.candidates.push({ providerId: '', modelId: '' });
+      renderFallbackCandidateRows(editor);
+    });
+    roleSection.appendChild(addBtn);
+    section.appendChild(roleSection);
+  }
+
+  const healthHost = el('div', 'settings-fallback-health');
+  section.appendChild(healthHost);
+  void refreshHostHealthPanel(healthHost);
+
+  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save fallback chains');
+  saveBtn.type = 'button';
+  saveBtn.addEventListener('click', () => {
+    void (async () => {
+      const roles = { ...config.roles };
+      for (const editor of roleEditors) {
+        roles[editor.role] = editor.candidates
+          .map((row) => ({
+            providerId: row.providerId.trim(),
+            modelId: row.modelId.trim(),
+          }))
+          .filter((row) => row.providerId);
+      }
+      await saveFallbackChainsConfig({
+        enabled: enabledInput.checked,
+        cooldownSeconds: Number(cooldownInput.value),
+        roles,
+      });
+      setStatus('ok', 'Fallback chains saved');
+      void refreshHostHealthPanel(healthHost);
+    })();
+  });
+  section.appendChild(saveBtn);
+
+  mount.appendChild(section);
+}
+
+function renderFallbackCandidateRows(editor: FallbackRoleEditor): void {
+  editor.list.replaceChildren();
+  editor.candidates.forEach((candidate, index) => {
+    const row = el('div', 'settings-fallback-candidate');
+    const ids = {
+      provider: `fallback-${editor.role}-${index}-provider`,
+      model: `fallback-${editor.role}-${index}-model`,
+    };
+    const bindingHost = el('div', 'settings-routing-row__selects');
+    const { providerSelect, modelSelect } = appendProviderModelFields(
+      bindingHost,
+      ids,
+      undefined,
+      'inline',
+    );
+    void fillProviderSelect(providerSelect, candidate.providerId, { includeEmptyOption: true }).then(
+      () => fillModelSelect(modelSelect, providerSelect.value || candidate.providerId, candidate.modelId),
+    );
+    providerSelect.addEventListener('change', () => {
+      candidate.providerId = providerSelect.value;
+      void fillModelSelect(modelSelect, providerSelect.value, candidate.modelId);
+    });
+    modelSelect.addEventListener('change', () => {
+      candidate.modelId = modelSelect.value;
+    });
+    providerSelect.value = candidate.providerId;
+    candidate.providerId = providerSelect.value;
+    candidate.modelId = modelSelect.value;
+
+    const removeBtn = el('button', 'settings-action-btn', 'Remove');
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', () => {
+      editor.candidates.splice(index, 1);
+      renderFallbackCandidateRows(editor);
+    });
+
+    row.appendChild(bindingHost);
+    row.appendChild(removeBtn);
+    editor.list.appendChild(row);
+  });
+}
+
+async function refreshHostHealthPanel(host: HTMLElement): Promise<void> {
+  host.replaceChildren();
+  host.appendChild(el('h4', 'settings-fallback-health__title', 'Dead hosts (diagnostics)'));
+  try {
+    const res = await fetch('/api/system/host-health', { cache: 'no-store' });
+    if (!res.ok) {
+      host.appendChild(el('p', 'settings-fallback-health__empty', 'Host health unavailable.'));
+      return;
+    }
+    const payload = (await res.json()) as { hosts?: { origin: string; expiresAt: string }[] };
+    const hosts = payload.hosts ?? [];
+    if (hosts.length === 0) {
+      host.appendChild(el('p', 'settings-fallback-health__empty', 'No hosts in cooldown.'));
+      return;
+    }
+    const list = el('ul', 'settings-fallback-health__list');
+    for (const row of hosts) {
+      const item = el('li', '', `${row.origin} — retry after ${row.expiresAt}`);
+      list.appendChild(item);
+    }
+    host.appendChild(list);
+  } catch {
+    host.appendChild(el('p', 'settings-fallback-health__empty', 'Host health unavailable.'));
+  }
+}
+
 function renderGroup(
   mount: HTMLElement,
   group: ModelRoutingGroup,
@@ -513,6 +698,8 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     if (groupRows.length === 0) continue;
     renderGroup(mount, group, groupRows);
   }
+
+  await renderFallbackChainsSection(mount);
 }
 
 /** Re-render when catalog may be stale (after save). */

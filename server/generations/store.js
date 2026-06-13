@@ -9,6 +9,12 @@ import { randomUUID } from 'node:crypto';
 /** @typedef {import('http').ServerResponse} ServerResponse */
 
 /**
+ * @typedef {object} FallbackCandidate
+ * @property {string} providerId
+ * @property {string} modelId
+ */
+
+/**
  * @typedef {object} GenerationState
  * @property {string} id
  * @property {string} providerId
@@ -23,6 +29,13 @@ import { randomUUID } from 'node:crypto';
  * @property {string} startedAt
  * @property {string | null} finishedAt
  * @property {string | null} errorMessage
+ * @property {FallbackCandidate[]} candidates
+ * @property {number} activeCandidateIndex
+ * @property {boolean} failoverDisabled
+ * @property {boolean} fallbackUsed
+ * @property {string} chosenProviderId
+ * @property {string} chosenModelId
+ * @property {string | null} fallbackRole
  */
 
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -71,6 +84,11 @@ function terminalEventPayload(state) {
   const payload = { status: state.status };
   if (state.errorMessage) {
     payload.errorMessage = state.errorMessage;
+  }
+  if (state.fallbackUsed) {
+    payload.fallbackUsed = true;
+    payload.chosenProviderId = state.chosenProviderId;
+    payload.chosenModelId = state.chosenModelId;
   }
   return payload;
 }
@@ -232,12 +250,31 @@ function scheduleEviction(state) {
 }
 
 /**
- * @param {{ providerId: string, body: unknown, persist?: boolean }} params
+ * @param {{
+ *   providerId: string,
+ *   body: unknown,
+ *   persist?: boolean,
+ *   candidates?: FallbackCandidate[],
+ *   fallbackRole?: string | null,
+ * }} params
  * @returns {GenerationState}
  */
-export function createGenerationState({ providerId, body, persist = false }) {
+export function createGenerationState({
+  providerId,
+  body,
+  persist = false,
+  candidates,
+  fallbackRole = null,
+}) {
   const id = randomUUID();
   const requestBody = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
+  const parsedBody = body && typeof body === 'object' ? /** @type {{ model?: string }} */ (body) : {};
+  const primaryModelId = typeof parsedBody.model === 'string' ? parsedBody.model : '';
+  const chain =
+    Array.isArray(candidates) && candidates.length > 0
+      ? candidates
+      : [{ providerId, modelId: primaryModelId }];
+  const first = chain[0];
   /** @type {GenerationState} */
   const state = {
     id,
@@ -253,6 +290,13 @@ export function createGenerationState({ providerId, body, persist = false }) {
     startedAt: new Date().toISOString(),
     finishedAt: null,
     errorMessage: null,
+    candidates: chain,
+    activeCandidateIndex: 0,
+    failoverDisabled: false,
+    fallbackUsed: false,
+    chosenProviderId: first.providerId,
+    chosenModelId: first.modelId,
+    fallbackRole: typeof fallbackRole === 'string' ? fallbackRole : null,
   };
   generations.set(id, state);
   return state;
@@ -273,6 +317,20 @@ export function markStreaming(state) {
   if (state.status === 'pending') {
     state.status = 'streaming';
   }
+}
+
+/**
+ * Lock failover after the first upstream byte is emitted.
+ * @param {GenerationState} state
+ * @param {{ providerId: string, modelId: string, index: number }} selection
+ */
+export function noteGenerationCandidateChosen(state, selection) {
+  state.failoverDisabled = true;
+  state.activeCandidateIndex = selection.index;
+  state.chosenProviderId = selection.providerId;
+  state.chosenModelId = selection.modelId;
+  state.fallbackUsed = selection.index > 0;
+  state.providerId = selection.providerId;
 }
 
 /**

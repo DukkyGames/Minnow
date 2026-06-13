@@ -163,7 +163,7 @@ async function streamSubAgentTurn(
   tEnd: number;
 }> {
   const provider = await resolveProvider(providerId);
-  const res = await postChatCompletions(provider, body, signal);
+  const res = await postChatCompletions(provider, body, signal, { fallbackRole: 'default' });
 
   if (!res.ok) {
     const err = await res.text();

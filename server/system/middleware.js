@@ -3,6 +3,7 @@
  */
 
 import { probeVram } from './vram.js';
+import { listDeadHosts } from '../generations/host-cooldown.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -34,6 +35,11 @@ export async function handleSystemRequest(req, res, pathname) {
   if (pathname === '/api/system/vram' && req.method === 'GET') {
     const payload = await probeVram();
     sendJson(res, 200, payload);
+    return true;
+  }
+
+  if (pathname === '/api/system/host-health' && req.method === 'GET') {
+    sendJson(res, 200, { hosts: listDeadHosts() });
     return true;
   }
 

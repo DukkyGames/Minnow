@@ -8,6 +8,7 @@ import {
   createGeneration,
   subscribeToGenerationRaw,
   type GenerationEndEvent,
+  type FallbackRole,
 } from '../api/generations';
 import type { ChatCompletionBody } from '../api/chat';
 import { parseCompletionResponseBody } from '../api/sse-parse';
@@ -17,6 +18,7 @@ import { resolveProviderEndpoints } from './resolve';
 
 export interface PostChatOptions {
   stream?: boolean;
+  fallbackRole?: FallbackRole;
 }
 
 /**
@@ -34,7 +36,10 @@ export async function postChatCompletions(
     stream: options.stream ?? body.stream ?? true,
   };
 
-  const { generationId } = await createGeneration(provider.id, payload, { persist: false });
+  const { generationId } = await createGeneration(provider.id, payload, {
+    persist: false,
+    fallbackRole: options.fallbackRole,
+  });
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -105,12 +110,13 @@ export async function completeNonStreamingViaGenerations(
   provider: ProviderPublic,
   body: ChatCompletionBody,
   signal: AbortSignal,
+  options: Pick<PostChatOptions, 'fallbackRole'> = {},
 ): Promise<ChatCompletionChunk> {
   const res = await postChatCompletions(
     provider,
     { ...body, stream: false },
     signal,
-    { stream: false },
+    { stream: false, fallbackRole: options.fallbackRole },
   );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
