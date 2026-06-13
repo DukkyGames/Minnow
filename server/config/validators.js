@@ -1343,6 +1343,7 @@ export function defaultFallbackChainsConfig() {
     cooldownSeconds: 60,
     maxChainLength: 4,
     roles: {
+      _global: [],
       default: [],
       utility: [],
       research: [],

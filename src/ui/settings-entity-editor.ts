@@ -23,7 +23,7 @@ import {
 import { mountPromptDiffControls } from './prompt-diff-panel';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
-import { isProvidersApiAvailable, listProviders } from '../providers/store';
+import { listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
 import { createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
@@ -473,11 +473,6 @@ export function mountWorkAgentEditor(
 
   const fillProviders = async () => {
     providerSel.replaceChildren();
-    if (!isProvidersApiAvailable()) {
-      providerSel.disabled = true;
-      modelSel.disabled = true;
-      return;
-    }
     const { providers } = await listProviders();
     for (const p of providers) {
       if (p.enabled === false) continue;

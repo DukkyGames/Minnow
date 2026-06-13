@@ -3,7 +3,7 @@
  */
 
 import { getAppById } from './app-registry';
-import { createOsIcon } from './icons';
+import { createAppIcon, createOsIcon } from './icons';
 import {
   clearAllUnread,
   getInstanceSnapshot,
@@ -61,7 +61,7 @@ function rebuildList(): void {
 
     const icon = document.createElement('span');
     icon.className = 'mn-os-notif-item__icon';
-    icon.appendChild(createOsIcon(app.icon as 'code', { size: 16 }));
+    icon.appendChild(createAppIcon(app.icon as 'code', { size: 16 }));
     btn.appendChild(icon);
 
     const body = document.createElement('span');

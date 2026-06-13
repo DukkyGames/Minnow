@@ -47,6 +47,13 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Throughput, latency, quality',
   },
   {
+    id: 'compare',
+    name: 'Compare',
+    icon: 'compare',
+    tag: 'Blind A/B model preference',
+    description: 'Side-by-side votes, reveal, win rates',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',

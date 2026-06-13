@@ -15,8 +15,8 @@ export interface GenerationEndEvent {
   chosenModelId?: string;
 }
 
-/** Role key for server-side fallback chain lookup. */
-export type FallbackRole = 'default' | 'utility' | 'vision' | 'research';
+/** Role or routing-row key for server-side fallback chain lookup. */
+export type FallbackRole = string;
 
 export class GenerationNotFoundError extends Error {
   constructor() {

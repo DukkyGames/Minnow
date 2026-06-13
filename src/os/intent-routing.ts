@@ -29,8 +29,12 @@ const INTENT_RULES: ReadonlyArray<{ id: AppId; re: RegExp }> = [
     re: /(expert|persona|agent|lab|harness|eval|prompt design)/,
   },
   {
+    id: 'compare',
+    re: /(blind compare|a\/b test|side.by.side|model preference|which (model|response)|vote on|prefer)/,
+  },
+  {
     id: 'bench',
-    re: /(benchmark|measure|throughput|latency|speed|tok\/s|compare models|fastest)/,
+    re: /(benchmark|measure|throughput|latency|speed|tok\/s|fastest)/,
   },
   {
     id: 'settings',

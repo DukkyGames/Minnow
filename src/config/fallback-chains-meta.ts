@@ -4,7 +4,11 @@
 
 import { detectConfigServer } from './storage-mode';
 
+/** Legacy coarse roles still accepted at API boundaries for backward compatibility. */
 export type FallbackRole = 'default' | 'utility' | 'vision' | 'research';
+
+/** Any routing row id or legacy role key used in config.json → fallbackChains.roles. */
+export type FallbackChainKey = string;
 
 export interface FallbackChainCandidate {
   providerId: string;
@@ -15,16 +19,26 @@ export interface FallbackChainsConfig {
   enabled: boolean;
   cooldownSeconds: number;
   maxChainLength: number;
-  roles: Record<FallbackRole, FallbackChainCandidate[]>;
+  roles: Record<FallbackChainKey, FallbackChainCandidate[]>;
 }
 
+/** Map legacy role keys to Settings → Models routing row ids. */
+export const LEGACY_FALLBACK_KEY_ALIASES: Record<string, string> = {
+  default: 'main-chat',
+  utility: 'chat-titles',
+};
+
 const STORAGE_KEY = 'minnow.fallbackChainsMeta';
+
+/** Reserved config key for the last-resort global fallback chain. */
+export const GLOBAL_FALLBACK_CHAIN_KEY = '_global';
 
 export const DEFAULT_FALLBACK_CHAINS_CONFIG: FallbackChainsConfig = {
   enabled: false,
   cooldownSeconds: 60,
   maxChainLength: 4,
   roles: {
+    [GLOBAL_FALLBACK_CHAIN_KEY]: [],
     default: [],
     utility: [],
     research: [],
@@ -58,18 +72,57 @@ function parseCandidate(raw: unknown): FallbackChainCandidate | null {
   };
 }
 
-function parseRoles(raw: unknown): Record<FallbackRole, FallbackChainCandidate[]> {
-  const roles = { ...DEFAULT_FALLBACK_CHAINS_CONFIG.roles };
+function parseRoles(raw: unknown): Record<FallbackChainKey, FallbackChainCandidate[]> {
+  const roles: Record<FallbackChainKey, FallbackChainCandidate[]> = {
+    ...DEFAULT_FALLBACK_CHAINS_CONFIG.roles,
+  };
   if (!raw || typeof raw !== 'object') return roles;
   const block = raw as Record<string, unknown>;
-  for (const role of ROLE_KEYS) {
-    const entries = block[role];
+  for (const [role, entries] of Object.entries(block)) {
     if (!Array.isArray(entries)) continue;
     roles[role] = entries
       .map((entry) => parseCandidate(entry))
       .filter((entry): entry is FallbackChainCandidate => entry !== null);
   }
   return roles;
+}
+
+/** Normalize a legacy role or routing row id to the canonical config key. */
+export function normalizeFallbackChainKey(key: string): string {
+  const trimmed = key.trim();
+  if (!trimmed) return 'main-chat';
+  return LEGACY_FALLBACK_KEY_ALIASES[trimmed] ?? trimmed;
+}
+
+/** Read the ordered global last-resort fallback chain. */
+export function getGlobalFallbackCandidates(
+  config: FallbackChainsConfig,
+): FallbackChainCandidate[] {
+  return getFallbackCandidatesForKey(config, GLOBAL_FALLBACK_CHAIN_KEY);
+}
+
+/** Read ordered fallback candidates for a routing row (includes legacy role aliases). */
+export function getFallbackCandidatesForKey(
+  config: FallbackChainsConfig,
+  key: string,
+): FallbackChainCandidate[] {
+  const normalized = normalizeFallbackChainKey(key);
+  const direct = config.roles[normalized];
+  if (direct?.length) {
+    return direct.map((candidate) => ({ ...candidate }));
+  }
+  const legacy = config.roles[key];
+  if (legacy?.length && key !== normalized) {
+    return legacy.map((candidate) => ({ ...candidate }));
+  }
+  for (const [legacyKey, mapped] of Object.entries(LEGACY_FALLBACK_KEY_ALIASES)) {
+    if (mapped !== normalized) continue;
+    const fromLegacy = config.roles[legacyKey];
+    if (fromLegacy?.length) {
+      return fromLegacy.map((candidate) => ({ ...candidate }));
+    }
+  }
+  return [];
 }
 
 function parseFallbackChainsBlock(raw: unknown): FallbackChainsConfig {

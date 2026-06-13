@@ -1,5 +1,5 @@
 import { APPS } from './app-registry';
-import { createOsIcon } from './icons';
+import { createAppIcon, createOsIcon } from './icons';
 import { getOsView, subscribeInstances } from './instances';
 import { launchApp } from './router';
 import type { AppId } from './types';
@@ -16,7 +16,7 @@ function buildDockTile(
 
   const ico = document.createElement('span');
   ico.className = 'mn-os-tile-ico';
-  ico.appendChild(createOsIcon(app.icon as 'code', { size: 24 }));
+  ico.appendChild(createAppIcon(app.icon as 'code', { size: 24 }));
   btn.appendChild(ico);
 
   const name = document.createElement('span');

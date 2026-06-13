@@ -3,7 +3,8 @@
  */
 
 import { fetchModelsForProvider } from '../providers/fetch-models';
-import { isProvidersApiAvailable, listProviders } from '../providers/store';
+import { listProviders } from '../providers/store';
+import { formatModelLabel } from '../lib/format-model-label';
 
 /** Label for empty model option (inherits active chat model at runtime). */
 export const MODEL_SELECT_EMPTY_LABEL = '(use chat default)';
@@ -22,12 +23,10 @@ export async function fillModelSelect(
   empty.value = '';
   empty.textContent = MODEL_SELECT_EMPTY_LABEL;
 
-  if (!providerId || !isProvidersApiAvailable()) {
+  if (!providerId) {
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = isProvidersApiAvailable()
-      ? 'Select a provider'
-      : 'Providers unavailable';
+    placeholder.textContent = 'Select a provider';
     select.appendChild(includeEmpty ? empty : placeholder);
     select.disabled = true;
     return;
@@ -58,7 +57,13 @@ export async function fillModelSelect(
       if (m.type !== 'llm' && m.type !== 'vlm') continue;
       const opt = document.createElement('option');
       opt.value = m.id;
-      opt.textContent = m.id;
+      const { optionText, title } = formatModelLabel({
+        id: m.id,
+        quantization: m.quantization,
+        state: m.state,
+      });
+      opt.textContent = optionText;
+      opt.title = title;
       select.appendChild(opt);
       added += 1;
     }
@@ -103,20 +108,24 @@ export async function fillProviderSelect(
     select.appendChild(defaultOpt);
   }
 
-  if (!isProvidersApiAvailable()) {
-    select.disabled = true;
-    return;
-  }
-
   const { providers } = await listProviders();
+  let added = 0;
   for (const p of providers) {
     if (p.enabled === false) continue;
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.label || p.id;
     select.appendChild(opt);
+    added += 1;
+  }
+  if (added === 0) {
+    select.disabled = true;
+    return;
   }
   select.value = selectedId || '';
+  if (!select.value && select.options.length > 0) {
+    select.selectedIndex = 0;
+  }
   select.disabled = false;
 }
 

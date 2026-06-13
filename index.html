@@ -1156,6 +1156,39 @@
   <div id="benchmarkCatalogDrawerBackdrop" class="benchmark-catalog-drawer-backdrop" hidden></div>
 </main>
 
+<main id="compareView" class="compare-page" aria-label="Compare models">
+  <div class="compare-body">
+    <div class="compare-prompt-row">
+      <label for="comparePrompt">Prompt</label>
+      <textarea id="comparePrompt" rows="3" placeholder="Ask every model the same question…" aria-label="Compare prompt"></textarea>
+    </div>
+    <div class="compare-controls-row">
+      <div id="comparePickers" class="compare-pickers" aria-label="Model pickers"></div>
+      <div class="compare-controls-side">
+        <button type="button" id="btnCompareAddModel" class="compare-add-model">Add model</button>
+        <button type="button" id="btnCompareParallelToggle" class="compare-parallel-toggle is-active" title="Run all models at once">Parallel</button>
+      </div>
+    </div>
+    <div class="compare-run-actions">
+      <button type="button" class="is-primary" id="btnCompareRun">Run comparison</button>
+      <button type="button" id="btnCompareStop">Stop all</button>
+    </div>
+    <p id="compareStatus" class="compare-status" role="status" aria-live="polite"></p>
+    <div id="compareColumns" class="compare-columns" aria-label="Response columns"></div>
+    <div id="compareVoteBar" class="compare-vote-bar" aria-label="Vote for the best response"></div>
+    <div class="compare-side-panels">
+      <section class="compare-panel" aria-label="Compare history">
+        <h3>History</h3>
+        <div id="compareHistoryList" class="compare-history-list"></div>
+      </section>
+      <section class="compare-panel" aria-label="Win rates">
+        <h3>Win rates</h3>
+        <div id="compareWinRates" class="compare-win-rates">Win rates appear after your first vote.</div>
+      </section>
+    </div>
+  </div>
+</main>
+
 <main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
   <header class="experts-hdr">
     <span class="experts-hdr-ico" aria-hidden="true">

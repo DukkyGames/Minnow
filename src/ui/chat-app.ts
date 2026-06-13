@@ -23,6 +23,7 @@ import {
 } from '../state/sessions';
 import { refreshChatAppOutputsPanel } from './chat-app-outputs';
 import { closeBenchmark } from './benchmark-page';
+import { closeCompare } from './compare-page';
 import { syncChatItemDotsInDom } from './chat-item-dot';
 import {
   handleComposerPrimaryAction,
@@ -55,6 +56,7 @@ function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
   closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
+  closeCompare({ skipNavigate: true });
   void import('../research/panel').then((m) => {
     if (m.isResearchPageOpen()) m.closeResearch({ skipNavigate: true });
   });

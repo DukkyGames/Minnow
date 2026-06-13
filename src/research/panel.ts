@@ -21,6 +21,7 @@ import { ResearchProgressPanel } from './progress-panel';
 import { renderResearchResultFromMarkdown } from './report-view';
 import type { ResearchCategory, ResearchStartRequest } from './types';
 import { closeBenchmark } from '../ui/benchmark-page';
+import { closeCompare } from '../ui/compare-page';
 import { closeGlobalBugs } from '../ui/global-bugs-page';
 import { renderChatFromHistory } from '../ui/messages';
 import { closeSettings } from '../ui/settings-page';
@@ -399,6 +400,7 @@ function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
   closeGlobalBugs();
   closeBenchmark({ skipNavigate: true });
+  closeCompare({ skipNavigate: true });
   void import('../ui/welcome-page').then((m) => {
     if (m.isWelcomePageOpen()) {
       m.closeWelcome({ skipHash: true });
