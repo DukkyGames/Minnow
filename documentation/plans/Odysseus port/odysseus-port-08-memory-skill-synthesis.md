@@ -3,7 +3,7 @@
 Tier: 2  
 Effort: M  
 Priority: Medium  
-Status: Planned  
+Status: Shipped (MIN-127)  
 Depends on: #1 and #13  
 Linear: [MIN-127](https://linear.app/minnowai/issue/MIN-127/odysseus-port-08-memory-synthesis-and-skill-auto-learning)
 
@@ -192,19 +192,19 @@ Cap pending proposals: 100 total; prune oldest rejected after 30 days (configura
 
 ## Implementation TODOs
 
-- [ ] Add `server/memory/synthesis.js` for fact proposal generation
-- [ ] Add `server/memory/proposals.js` for proposal persistence
-- [ ] Add `server/memory/skill-synthesis.js` for skill proposal generation
-- [ ] Add API routes for listing, accepting, editing, and rejecting proposals
-- [ ] Add a post-turn hook near the `completedNormally` completion path in `src/tools/loop.ts`
-- [ ] Add throttling similar to Odysseus's every-fourth-message-pair extraction cadence
-- [ ] Gate skill synthesis when `round_count >= 2` or `tool_count >= 2`; do not require both
-- [ ] Pass `getAppRoot()` into `createUserSkill(projectRoot, id, label)` when accepting skill proposals
-- [ ] Add an explicit deferred phase for LLM memory tidy/audit/consolidation
-- [ ] Add settings: enabled, confirmation required, confidence threshold, max proposals per turn
-- [ ] Add a review UI in Memory settings or a small notifications-backed panel
-- [ ] Ensure accepted facts call `createEntry()` and accepted skills call `saveUserSkillContent()`
-- [ ] Update `documentation/context.md`
+- [x] Add `server/memory/synthesis.js` for fact proposal generation
+- [x] Add `server/memory/proposals.js` for proposal persistence
+- [x] Add `server/memory/skill-synthesis.js` for skill proposal generation
+- [x] Add API routes for listing, accepting, editing, and rejecting proposals
+- [x] Add a post-turn hook near the `completedNormally` completion path in `src/tools/loop.ts`
+- [x] Add throttling similar to Odysseus's every-fourth-message-pair extraction cadence
+- [x] Gate skill synthesis when `round_count >= 2` or `tool_count >= 2`; do not require both
+- [x] Pass `getAppRoot()` into `createUserSkill(projectRoot, id, label)` when accepting skill proposals
+- [x] Add an explicit deferred phase for LLM memory tidy/audit/consolidation
+- [x] Add settings: enabled, confirmation required, confidence threshold, max proposals per turn
+- [x] Add a review UI in Memory settings or a small notifications-backed panel
+- [x] Ensure accepted facts call `createEntry()` and accepted skills call `saveUserSkillContent()`
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

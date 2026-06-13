@@ -1234,6 +1234,63 @@ label.settings-action-btn {
   color: var(--mn-danger);
 }
 
+.settings-proposals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.settings-proposal-card {
+  border: 1px solid color-mix(in srgb, var(--mn-border) 80%, transparent);
+  border-radius: var(--mn-radius-md, 8px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-proposal-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-proposal-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-proposal-body {
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+}
+
+.settings-proposal-excerpt-pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--mn-radius-sm, 6px);
+  background: color-mix(in srgb, var(--mn-bg-elevated) 90%, var(--mn-fg) 2%);
+  font-family: var(--mn-font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.settings-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-memory-synthesis .settings-input--narrow {
+  width: 5rem;
+}
+
 .settings-memory-offline.hidden,
 .settings-mcp-list,
 .settings-lsp-list {

@@ -1315,8 +1315,17 @@ export function mergeConfigMeta(existing, patch) {
   if (p.memory && typeof p.memory === 'object') {
     base.memory = normalizeMemoryConfig(
       p.memory,
-      base.memory && typeof p.memory === 'object'
+      base.memory && typeof base.memory === 'object'
         ? /** @type {Record<string, unknown>} */ (base.memory)
+        : {},
+    );
+  }
+
+  if (p.synthesis && typeof p.synthesis === 'object') {
+    base.synthesis = normalizeSynthesisConfig(
+      p.synthesis,
+      base.synthesis && typeof base.synthesis === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.synthesis)
         : {},
     );
   }
@@ -1499,6 +1508,65 @@ export function normalizeMemoryConfig(raw, existing = {}) {
   }
 
   base.embeddings = existingEmb;
+  return base;
+}
+
+/**
+ * Normalize synthesis config for memory/skill auto-learning proposals.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ */
+export function normalizeSynthesisConfig(raw, existing = {}) {
+  const base = {
+    enabled: true,
+    requireConfirmation: true,
+    confidenceThreshold: 0.6,
+    maxProposalsPerTurn: 3,
+    throttleMessagePairs: 4,
+    skillMinRounds: 2,
+    skillMinToolCalls: 2,
+    utilityProviderId: '',
+    utilityModelId: '',
+    maxPendingProposals: 100,
+    rejectedRetentionDays: 30,
+    ...existing,
+  };
+
+  if (!raw || typeof raw !== 'object') return base;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+
+  if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
+  if (typeof row.requireConfirmation === 'boolean') {
+    base.requireConfirmation = row.requireConfirmation;
+  }
+  if (typeof row.confidenceThreshold === 'number' && Number.isFinite(row.confidenceThreshold)) {
+    base.confidenceThreshold = Math.min(1, Math.max(0, row.confidenceThreshold));
+  }
+  if (typeof row.maxProposalsPerTurn === 'number' && Number.isFinite(row.maxProposalsPerTurn)) {
+    base.maxProposalsPerTurn = Math.min(10, Math.max(1, Math.floor(row.maxProposalsPerTurn)));
+  }
+  if (typeof row.throttleMessagePairs === 'number' && Number.isFinite(row.throttleMessagePairs)) {
+    base.throttleMessagePairs = Math.min(20, Math.max(1, Math.floor(row.throttleMessagePairs)));
+  }
+  if (typeof row.skillMinRounds === 'number' && Number.isFinite(row.skillMinRounds)) {
+    base.skillMinRounds = Math.min(10, Math.max(1, Math.floor(row.skillMinRounds)));
+  }
+  if (typeof row.skillMinToolCalls === 'number' && Number.isFinite(row.skillMinToolCalls)) {
+    base.skillMinToolCalls = Math.min(20, Math.max(1, Math.floor(row.skillMinToolCalls)));
+  }
+  if (typeof row.utilityProviderId === 'string') {
+    base.utilityProviderId = row.utilityProviderId.trim();
+  }
+  if (typeof row.utilityModelId === 'string') {
+    base.utilityModelId = row.utilityModelId.trim();
+  }
+  if (typeof row.maxPendingProposals === 'number' && Number.isFinite(row.maxPendingProposals)) {
+    base.maxPendingProposals = Math.min(500, Math.max(10, Math.floor(row.maxPendingProposals)));
+  }
+  if (typeof row.rejectedRetentionDays === 'number' && Number.isFinite(row.rejectedRetentionDays)) {
+    base.rejectedRetentionDays = Math.min(365, Math.max(1, Math.floor(row.rejectedRetentionDays)));
+  }
+
   return base;
 }
 
