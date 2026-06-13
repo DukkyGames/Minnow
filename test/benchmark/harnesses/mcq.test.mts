@@ -1,12 +1,12 @@
 /**
- * Tests for standard benchmark scorers.
+ * Tests for MCQ harness (migrated from standard-scorers).
  */
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { scoreGsm8k, scoreMcq, scoreRegex } from '../../src/benchmark/standard/harnesses/index.ts';
+import { scoreMcq } from '../../../src/benchmark/standard/harnesses/mcq.ts';
 
-describe('standard scorers', () => {
+describe('mcq harness', () => {
   test('scoreMcq matches letter answers', () => {
     const item = {
       id: 't1',
@@ -38,25 +38,16 @@ describe('standard scorers', () => {
     assert.equal(scoreMcq(item, reasoning.replace('Construct Final Response: B', '')).passed, true);
   });
 
-  test('scoreGsm8k extracts final number via fallback', () => {
+  test('scoreMcq flags out-of-range extracted letters when choices provided', () => {
     const item = {
-      id: 't2',
+      id: 't1c',
       prompt: 'q',
-      groundTruth: '42',
-      category: 'math' as const,
+      groundTruth: 'B',
+      choices: ['one', 'two'],
+      category: 'reasoning' as const,
     };
-    assert.equal(scoreGsm8k(item, 'Therefore the answer is 42.').passed, true);
-    assert.equal(scoreGsm8k(item, '41').passed, false);
-  });
-
-  test('scoreRegex matches pattern', () => {
-    const item = {
-      id: 't3',
-      prompt: 'q',
-      groundTruth: '(?i)\\bno\\b',
-      category: 'safety' as const,
-    };
-    assert.equal(scoreRegex(item, 'No, that is a myth.').passed, true);
-    assert.equal(scoreRegex(item, 'Yes').passed, false);
+    const result = scoreMcq(item, 'The answer is E');
+    assert.equal(result.passed, false);
+    assert.match(result.details ?? '', /out of range/i);
   });
 });

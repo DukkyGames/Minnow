@@ -33,8 +33,8 @@ import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const DEFAULT_TEMPERATURE = 0.2;
-/** Fallback when callers omit maxTokens (ChatCompletionBody requires max_tokens). */
-const DEFAULT_MAX_TOKENS = 4096;
+/** Benchmark completions use the sampler ceiling — no artificial short caps. */
+export const BENCHMARK_MAX_TOKENS = 131_072;
 
 export interface OneShotInput {
   providerId: string;
@@ -140,7 +140,7 @@ async function streamTurn(
     provider,
     {
       ...body,
-      max_tokens: body.max_tokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: body.max_tokens ?? BENCHMARK_MAX_TOKENS,
       stream_options: { include_usage: true },
     },
     signal,

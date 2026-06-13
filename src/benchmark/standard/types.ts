@@ -22,6 +22,12 @@ export interface StandardBenchmarkItem {
     source?: string;
     license?: string;
     tier?: 'mini' | 'full';
+    /** HumanEval function name for check(candidate) harness. */
+    entryPoint?: string;
+    /** HumanEval check(candidate) block appended at runtime. */
+    tests?: string;
+    /** Function stub without the trailing completion instruction (optional). */
+    promptPrefix?: string;
   };
 }
 

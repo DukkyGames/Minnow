@@ -14,6 +14,7 @@ import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, '../src/benchmark/standard/packs/full');
+const MINI_DIR = path.join(__dirname, '../src/benchmark/standard/packs');
 const HF_PARQUET = 'https://datasets-server.huggingface.co/parquet';
 const REQUEST_DELAY_MS = 150;
 
@@ -67,8 +68,8 @@ function extractGsmAnswer(raw) {
   return nums ? nums[nums.length - 1] : '';
 }
 
-function writePack(filename, pack) {
-  const outPath = path.join(OUT_DIR, filename);
+function writePack(filename, pack, outDir = OUT_DIR) {
+  const outPath = path.join(outDir, filename);
   if (!force && existsSync(outPath)) {
     console.log(`  skip ${filename} (exists; use --force to overwrite)`);
     return;
@@ -223,6 +224,27 @@ async function buildHumaneval() {
     source: 'HumanEval (Chen et al., 2021)',
     items,
   });
+
+  const miniSlice = items.slice(0, 5).map((item) => ({
+    ...item,
+    metadata: { ...item.metadata, tier: 'mini' },
+  }));
+  writePack(
+    'humaneval-mini.json',
+    {
+      id: 'humaneval-mini',
+      label: 'HumanEval Mini',
+      category: 'coding',
+      description: 'Short Python function synthesis with unit tests (HumanEval-style).',
+      scoring: 'code',
+      miniCount: miniSlice.length,
+      fullCount: items.length,
+      license: 'MIT',
+      source: 'HumanEval (Chen et al., 2021)',
+      items: miniSlice,
+    },
+    MINI_DIR,
+  );
 }
 
 async function buildTruthfulqa() {

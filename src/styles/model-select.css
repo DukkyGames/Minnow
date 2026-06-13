@@ -78,7 +78,7 @@
   display: none;
 }
 
-/* Non-interactive provider group heading in the custom picker (native <optgroup> mirror). */
+/* Legacy endpoint optgroup label — kept for backward compatibility; producer headers replace it. */
 .model-select-optgroup-label {
   padding: 6px 12px 4px;
   font-family: var(--font-ui);
@@ -90,6 +90,77 @@
   list-style: none;
   cursor: default;
   user-select: none;
+}
+
+/* Collapsible model-producer group header (Qwen, Google, Llama, …). */
+.model-select-producer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .model-select-producer-header:hover {
+    background: color-mix(in srgb, var(--mn-fg-muted) 8%, transparent);
+    color: var(--mn-fg);
+  }
+}
+
+.model-select-producer-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0.55;
+  transition: transform 0.15s var(--ease-out);
+}
+
+.model-select-producer-chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
+.model-select-producer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-select-producer-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.45;
+}
+
+.model-producer-logo {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}
+
+.model-producer-logo svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.model-select-option--grouped {
+  padding-left: 20px;
 }
 
 .model-select-option {

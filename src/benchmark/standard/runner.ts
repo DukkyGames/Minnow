@@ -8,14 +8,26 @@ import { buildCellId, targetKeyFromTarget, targetLabel } from '../model-key.ts';
 import { buildTestResult } from '../test-result.ts';
 import type { SuiteId } from '../types.ts';
 import { getStandardPack, resolveStandardItems } from './pack-loader.ts';
-import { scoreStandardItem } from './scorers.ts';
+import { scoreStandardItemHarness } from './harnesses/index.ts';
 import type { StandardBenchmarkItem } from './types.ts';
 
 /** Placeholder suite id — Academic cells use pack labels in the transcript drawer. */
 const STANDARD_TRANSCRIPT_SUITE = 'capability' as SuiteId;
 
-/** Enough budget for a short letter answer after reasoning on thinking models. */
-const STANDARD_ITEM_MAX_TOKENS = 1024;
+/** Prefer reasoning when length-truncated thinking models emit a stub letter in content. */
+function responseTextForScoring(turn: {
+  contentText: string;
+  reasoningText: string;
+  text: string;
+  finishReason?: string;
+}): string {
+  const content = turn.contentText.trim();
+  const reasoning = turn.reasoningText.trim();
+  if (turn.finishReason === 'length' && reasoning.length > 0) {
+    return reasoning.length > content.length ? reasoning : `${reasoning}\n${content}`;
+  }
+  return content || turn.text;
+}
 
 export interface RunStandardPackOptions {
   target: BenchmarkTarget;
@@ -46,10 +58,8 @@ async function runOneStandardItem(
       modelId: target.modelId,
       messages: [{ role: 'user', content: item.prompt }],
       signal,
-      maxTokens: STANDARD_ITEM_MAX_TOKENS,
     });
-    // Prefer main content for scoring; fall back to merged text (reasoning channel).
-    response = turn.contentText.trim() || turn.text;
+    response = responseTextForScoring(turn);
     ttftMs = turn.timing.ttftMs ?? undefined;
     tokPerSec = turn.timing.tokPerSec ?? undefined;
   } catch (err) {
@@ -87,7 +97,12 @@ async function runOneStandardItem(
     return cell;
   }
 
-  const scored = scoreStandardItem(pack?.scoring ?? 'mcq', item, response);
+  const scored = await scoreStandardItemHarness({
+    kind: pack?.scoring ?? 'mcq',
+    item,
+    response,
+    signal,
+  });
   const durationMs = Math.round(performance.now() - t0);
   const withTranscript = buildTestResult(
     {

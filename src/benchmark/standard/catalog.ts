@@ -59,10 +59,12 @@ export function listStandardCatalogEntries(): StandardCatalogEntry[] {
       pack.scoring === 'mcq'
         ? 'Correct multiple-choice letter'
         : pack.scoring === 'numeric'
-          ? 'Numeric answer matches ground truth'
+          ? '#### numeric answer matches ground truth'
           : pack.scoring === 'code'
-            ? 'Generated code passes unit tests'
-            : 'Response matches truthfulness pattern',
+            ? 'Python unit tests via check()'
+            : pack.id === 'truthfulqa-mini'
+              ? 'Response matches truthfulness regex (lightweight proxy, not paper generative metric)'
+              : 'Response matches truthfulness pattern',
     tier: 'mini',
     itemCount: pack.miniCount,
     promptPreview: pack.items[0]?.prompt.slice(0, 120) ?? '',
