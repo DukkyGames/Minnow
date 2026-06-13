@@ -12,12 +12,16 @@ export interface DesktopPrefs {
   previewStyle: 'card' | 'tile';
 }
 
+import type { ModeId } from '../chat/modes/types';
+
 /** One running app instance (may share an appId with other closed/reopened windows). */
 export interface AppInstance {
   id: string;
   appId: AppId;
   /** Optional concierge seed text passed when launching chat/research. */
   seed?: string;
+  /** Full launch payload from concierge or router (consumed once by app-host). */
+  launchOptions?: LaunchOptions;
   unread: number;
   /** Latest background notification snippet for dock previews. */
   msg: string;
@@ -28,6 +32,12 @@ export interface LaunchOptions {
   seed?: string;
   /** Settings section slug when opening from legacy `#/settings/…` redirects. */
   settingsSection?: string;
+  /** Code app: composer mode to activate. */
+  modeId?: ModeId;
+  /** Code app: absolute workspace path from the recent-workspace list. */
+  workspacePath?: string;
+  /** Research: start a run immediately when a seed is present. */
+  autoRun?: boolean;
 }
 
 /** Parsed hash route consumed by the OS shell and page bridge. */
