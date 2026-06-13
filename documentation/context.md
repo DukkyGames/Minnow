@@ -8,7 +8,7 @@ User-facing setup and quick start: [`README.md`](../README.md).
 
 ## Odysseus port plan pack
 
-Implementation-ready plans for the 13 selected Odysseus-to-Minnow candidate ports live in [`documentation/plans/Odysseus port/`](plans/Odysseus%20port/). Start with the folder [`README.md`](plans/Odysseus%20port/README.md) for dependency order and Linear tracking ([project](https://linear.app/minnowai/project/odysseus-to-minnow-port-9e0acc5cf9c9)). **Prompt-injection defense (shipped MIN-124):** [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs) + [`server/security/untrusted.js`](../server/security/untrusted.js) fence untrusted text with `<<<UNTRUSTED_SOURCE_DATA source="…">>>` … `<<<END_UNTRUSTED_SOURCE_DATA>>>`; policy in [`default.full.md`](../src/chat/prompts/base/default.full.md) / [`default.lite.md`](../src/chat/prompts/base/default.lite.md) and sub-agent prompts. Injection sites: memory retrieve (`server/memory/retrieve.js`), web fetch/RAG (`server/tools/fetch-web-content.js`), Deep Research extraction (`server/research/extractor.js`), `read_document` + composer text attachments, research report discuss (`src/research/panel.ts`), and server tool middleware (`server/runtime/tools-middleware.js` for web/search/MCP). Deferred v1: skill body injection, browser CDP text, sub-agent structured outcomes. Tests: `test/security/untrusted.test.mjs`, `test/memory/untrusted.test.mjs`. Encrypted secrets (`odysseus-port-12`) is next.
+Implementation-ready plans for the 13 selected Odysseus-to-Minnow candidate ports live in [`documentation/plans/Odysseus port/`](plans/Odysseus%20port/). Start with the folder [`README.md`](plans/Odysseus%20port/README.md) for dependency order and Linear tracking ([project](https://linear.app/minnowai/project/odysseus-to-minnow-port-9e0acc5cf9c9)). **Prompt-injection defense (shipped MIN-124):** [`src/lib/untrusted.mjs`](../src/lib/untrusted.mjs) + [`server/security/untrusted.js`](../server/security/untrusted.js) fence untrusted text with `<<<UNTRUSTED_SOURCE_DATA source="…">>>` … `<<<END_UNTRUSTED_SOURCE_DATA>>>`; policy in [`default.full.md`](../src/chat/prompts/base/default.full.md) / [`default.lite.md`](../src/chat/prompts/base/default.lite.md) and sub-agent prompts. Injection sites: memory retrieve (`server/memory/retrieve.js`), web fetch/RAG (`server/tools/fetch-web-content.js`), Deep Research extraction (`server/research/extractor.js`), `read_document` + composer text attachments, research report discuss (`src/research/panel.ts`), and server tool middleware (`server/runtime/tools-middleware.js` for web/search/MCP). Deferred v1: skill body injection, browser CDP text, sub-agent structured outcomes. Tests: `test/security/untrusted.test.mjs`, `test/memory/untrusted.test.mjs`. **Encrypted credential storage (shipped MIN-117):** [`server/security/secret-box.js`](../server/security/secret-box.js) — AES-256-GCM envelopes for secrets at rest; file key at `~/.minnow/.key` (`0o600` on Unix). Provider `secrets.json` files migrate from plaintext on first read via [`server/providers/store.js`](../server/providers/store.js). Shared helpers: `readEncryptedJsonFile` / `writeEncryptedJsonFile` for downstream webhook/email/calendar/voice/image stores. **Key loss:** deleting or rotating `.key` makes encrypted secrets unrecoverable — re-enter credentials in Settings → Providers. Tests: `test/security/secret-box.test.mjs`, `test/security/secret-migration.test.mjs`.
 
 ## Product backlog (features 01–29)
 
@@ -168,6 +168,7 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
 
 ```text
 ~/.minnow/
+  .key                     # AES-256 secret-box key (32 random bytes, base64, 0o600; never in git)
   config.json              # schemaVersion, activeProviderId, toolSecurity.filesystemAccess, …
   sessions/state.json      # full SessionState blob (all chats — canonical)
   tools.json               # ToolConfig (permissions, mirrored enabled; legacy webSearchProvider + keys)
@@ -180,7 +181,7 @@ On first `npm start`, the server logs `Minnow data: <path>` and creates the layo
   providers/               # one dir per provider (Step 03)
     lm-studio-local/
       profile.json         # label, baseUrl, apiKind, paths, optional constrainedToolCalls override
-      secrets.json         # apiKey, bearerToken (0o600 on Unix; never in git)
+      secrets.json         # encrypted envelope (AES-256-GCM via secret-box; 0o600 on Unix; never in git)
       capabilities.json    # per-model matrix (MIN-48) + structured-output flags (#10)
   mcp/                     # scaffold (Step 18)
   lsp/                     # scaffold (Step 17)
@@ -930,7 +931,7 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 | `POST` | `/api/providers` | Create provider dir + `profile.json` |
 | `PUT` | `/api/providers/:id` | Update profile (non-secret) |
 | `DELETE` | `/api/providers/:id` | Remove provider (**409** if last) |
-| `PUT` | `/api/providers/:id/secrets` | Update `secrets.json`; response redacts values |
+| `PUT` | `/api/providers/:id/secrets` | Update encrypted `secrets.json`; response redacts values |
 | `POST` | `/api/providers/:id/set-active` | Sets `config.json` `activeProviderId` |
 | `GET` | `/api/providers/:id/models` | Proxy upstream models (auth injected) |
 | `POST` | `/api/providers/:id/models/load` | Proxy model load (LM Studio v0) |

@@ -391,7 +391,9 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
   const keyHint = el(
     'p',
     'field-hint',
-    provider.hasApiKey ? 'A key is saved on the server (not shown here).' : 'No API key saved yet.',
+    provider.hasApiKey
+      ? 'A key is saved on the server (not shown here). Keys are encrypted at rest; deleting ~/.minnow/.key makes them unrecoverable.'
+      : 'No API key saved yet. Keys are encrypted at rest under ~/.minnow/.key.',
   );
   keyField.append(keyHint);
   form.append(keyField);

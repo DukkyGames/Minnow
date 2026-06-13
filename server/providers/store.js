@@ -6,6 +6,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
+import {
+  readEncryptedJsonFile,
+  writeEncryptedJsonFile,
+} from '../security/secret-box.js';
 import { buildAuthHeaders, secretsFlags } from './auth-headers.js';
 import { getDefaultPaths, getProviderCapabilities } from './paths.js';
 import {
@@ -91,17 +95,26 @@ async function readProfile(id) {
   return JSON.parse(raw);
 }
 
+const EMPTY_SECRETS = { apiKey: '', bearerToken: '', headerOverrides: {} };
+
 /**
  * @param {string} id
  */
 async function readSecrets(id) {
   const file = path.join(providerDir(id), 'secrets.json');
   try {
-    const raw = await fs.readFile(file, 'utf8');
-    return JSON.parse(raw);
+    const secrets = await readEncryptedJsonFile(file, EMPTY_SECRETS);
+    return {
+      apiKey: typeof secrets.apiKey === 'string' ? secrets.apiKey : '',
+      bearerToken: typeof secrets.bearerToken === 'string' ? secrets.bearerToken : '',
+      headerOverrides:
+        secrets.headerOverrides && typeof secrets.headerOverrides === 'object'
+          ? secrets.headerOverrides
+          : {},
+    };
   } catch (err) {
     if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') {
-      return { apiKey: '', bearerToken: '', headerOverrides: {} };
+      return { ...EMPTY_SECRETS };
     }
     throw err;
   }
@@ -128,9 +141,7 @@ async function writeSecrets(id, secrets) {
   const dir = providerDir(id);
   await fs.mkdir(dir, { recursive: true });
   const file = path.join(dir, 'secrets.json');
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeFile(tmp, `${JSON.stringify(secrets, null, 2)}\n`, 'utf8');
-  await fs.rename(tmp, file);
+  await writeEncryptedJsonFile(file, secrets);
   await chmodSecrets(file);
 }
 
