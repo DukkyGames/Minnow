@@ -11,8 +11,9 @@ import type {
   CampaignProgressEvent,
   ModelAggregate,
 } from '../benchmark/campaign-types.ts';
-import { getStandardPack, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
+import { getStandardPack, hasFullTierPack, preloadBundledFullPacks, resolveStandardItems } from '../benchmark/standard/pack-loader.ts';
 import { runBenchmarkCampaign } from '../benchmark/campaign-runner.ts';
+import { loadImportedStandardDatasets } from '../benchmark/campaign-persistence.ts';
 import {
   addTargetToRoster,
   getActiveTargetFromDom,
@@ -1113,6 +1114,17 @@ function countStandardItems(packIds: string[], tier: BenchmarkTier): number {
   return total;
 }
 
+function validateFullTierSelection(
+  standardPackIds: string[],
+  tier: BenchmarkTier,
+): string | null {
+  if (tier !== 'full' || !standardPackIds.length) return null;
+  const missing = standardPackIds.filter((id) => !hasFullTierPack(id));
+  if (!missing.length) return null;
+  const labels = missing.map((id) => standardPackLabel(id)).join(', ');
+  return `Full dataset unavailable for ${labels}.`;
+}
+
 function standardCellProgressPercent(done: number): number {
   if (liveStandardTotal <= 0) return Math.min(95, done * 8);
   return Math.min(98, (done / liveStandardTotal) * 100);
@@ -1678,6 +1690,18 @@ async function executeBenchmarkRun(options: {
     return;
   }
 
+  const standardPackIds = getStandardPackToggles();
+  const standardTier = getStandardTier();
+  if (standardTier === 'full' && standardPackIds.length) {
+    await preloadBundledFullPacks();
+    await loadImportedStandardDatasets();
+  }
+  const fullTierError = validateFullTierSelection(standardPackIds, standardTier);
+  if (fullTierError) {
+    setStatus('err', fullTierError);
+    return;
+  }
+
   abortController?.abort();
   const generation = ++benchmarkRunGeneration;
   abortController = new AbortController();
@@ -1707,8 +1731,6 @@ async function executeBenchmarkRun(options: {
   navigateBenchmarkTab('run', { replace: true });
   setOverviewRunState('running', 0);
 
-  const standardPackIds = getStandardPackToggles();
-  const standardTier = getStandardTier();
   liveStandardPackIds = [...standardPackIds];
   liveStandardTotal = countStandardItems(standardPackIds, standardTier);
   liveStandardCells.clear();
@@ -2212,6 +2234,7 @@ export function initBenchmarkPage(): void {
   renderRosterList();
   initBenchmarkRosterPicker();
   initModelRunCards((session) => showSessionInMainPanel(session));
+  void preloadBundledFullPacks().then(() => loadImportedStandardDatasets());
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);

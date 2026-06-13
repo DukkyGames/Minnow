@@ -5,7 +5,7 @@
   "description": "Grade-school math word problems (GSM8K-style).",
   "scoring": "numeric",
   "miniCount": 4,
-  "fullCount": 8500,
+  "fullCount": 8792,
   "license": "MIT",
   "source": "GSM8K (Cobbe et al., 2021)",
   "items": [

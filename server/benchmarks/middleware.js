@@ -7,6 +7,7 @@ import path from 'node:path';
 import { ensureMinnowLayout, getMinnowHome } from '../config/home.js';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_DATASET_BYTES = 64 * 1024 * 1024;
 const LIST_CAP = 20;
 const CAMPAIGN_LIST_CAP = 50;
 
@@ -34,13 +35,13 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         reject(new Error('Body too large'));
         req.destroy();
         return;
@@ -297,6 +298,31 @@ async function handleGetModels(_req, res) {
   sendJson(res, 200, { models });
 }
 
+async function handleGetDatasets(res) {
+  const dir = datasetsDir();
+  let entries = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    sendJson(res, 200, { datasets: [] });
+    return;
+  }
+
+  const datasets = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const packId = safeRunId(entry.name.replace(/\.json$/, ''));
+    if (!packId) continue;
+    try {
+      const raw = await fs.readFile(path.join(dir, entry.name), 'utf8');
+      datasets.push(JSON.parse(raw));
+    } catch {
+      /* skip corrupt file */
+    }
+  }
+  sendJson(res, 200, { datasets });
+}
+
 async function handlePostDataset(body, res) {
   await ensureMinnowLayout();
   const packId = typeof body?.id === 'string' ? body.id.trim() : '';
@@ -351,8 +377,13 @@ export function createBenchmarksMiddleware() {
         return;
       }
 
+      if (url === '/api/benchmarks/datasets' && req.method === 'GET') {
+        await handleGetDatasets(res);
+        return;
+      }
+
       if (url === '/api/benchmarks/datasets' && req.method === 'POST') {
-        const body = await readJsonBody(req);
+        const body = await readJsonBody(req, MAX_DATASET_BYTES);
         await handlePostDataset(body, res);
         return;
       }

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/generate-skills-manifest.mjs",
+    "build:benchmark-packs": "node scripts/build-benchmark-packs.mjs",
     "build": "tsc && vite build",
     "postinstall": "node scripts/sync-impeccable-skill.mjs",
     "impeccable:sync": "node scripts/sync-impeccable-skill.mjs",
@@ -115,6 +116,7 @@
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
     "happy-dom": "^20.9.0",
+    "hyparquet": "^1.26.0",
     "impeccable": "^2.1.9",
     "tsx": "^4.19.2",
     "vite": "^6.2.5",

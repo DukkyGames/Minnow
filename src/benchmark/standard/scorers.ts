@@ -88,9 +88,9 @@ export function scoreRegex(item: StandardBenchmarkItem, response: string): Stand
   }
 }
 
-/** Extract fenced JavaScript from model response. */
-export function extractJavascriptBlock(text: string): string {
-  const fence = text.match(/```(?:javascript|js)?\s*([\s\S]*?)```/i);
+/** Extract fenced code from model response (JavaScript or Python). */
+export function extractCodeBlock(text: string): string {
+  const fence = text.match(/```(?:javascript|js|python|py)?\s*([\s\S]*?)```/i);
   if (fence) return fence[1]!.trim();
   return text.trim();
 }
@@ -104,8 +104,9 @@ export function scoreStandardItem(
   if (kind === 'numeric') return scoreNumeric(item, response);
   if (kind === 'regex') return scoreRegex(item, response);
   if (kind === 'code') {
-    const code = extractJavascriptBlock(response);
-    const passed = code.length > 8 && /function\s+\w+/.test(code);
+    const code = extractCodeBlock(response);
+    const passed =
+      code.length > 8 && (/function\s+\w+/.test(code) || /def\s+\w+/.test(code));
     return {
       passed,
       score: passed ? 1 : 0,

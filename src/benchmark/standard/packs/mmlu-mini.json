@@ -5,7 +5,7 @@
   "description": "Sample multiple-choice questions across STEM and humanities (MMLU-style).",
   "scoring": "mcq",
   "miniCount": 5,
-  "fullCount": 15700,
+  "fullCount": 14042,
   "license": "MIT",
   "source": "MMLU (Hendrycks et al., 2020)",
   "items": [

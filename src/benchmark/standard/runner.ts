@@ -28,10 +28,11 @@ export interface RunStandardPackOptions {
 async function runOneStandardItem(
   target: BenchmarkTarget,
   packId: string,
+  tier: BenchmarkTier,
   item: StandardBenchmarkItem,
   signal: AbortSignal,
 ): Promise<BenchmarkCellResult> {
-  const pack = getStandardPack(packId);
+  const pack = getStandardPack(packId, tier);
   const targetKey = targetKeyFromTarget(target);
   const t0 = performance.now();
   let response = '';
@@ -134,6 +135,7 @@ export async function runStandardPackForTarget(
     const cell = await runOneStandardItem(
       options.target,
       options.packId,
+      options.tier,
       item,
       options.signal,
     );

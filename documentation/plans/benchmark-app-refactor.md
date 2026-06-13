@@ -33,4 +33,4 @@ Implemented unified Benchmarking lab per the approved plan.
 }
 ```
 
-Full-tier: import JSON via Tests tab or `POST /api/benchmarks/datasets`. Helper: `node scripts/fetch-benchmark-dataset.mjs`.
+Full-tier: bundled under `src/benchmark/standard/packs/full/` (regenerate: `npm run build:benchmark-packs`). Optional override via Tests tab import or `POST /api/benchmarks/datasets`.

@@ -139,3 +139,23 @@ export async function importStandardDataset(
   }
   registerImportedStandardPack(pack);
 }
+
+/** Load user-imported full-tier packs from the tool server into memory. */
+export async function loadImportedStandardDatasets(): Promise<number> {
+  const serverUp = await detectLocalServer();
+  if (!serverUp) return 0;
+  try {
+    const res = await fetch('/api/benchmarks/datasets', { cache: 'no-store' });
+    if (!res.ok) return 0;
+    const data = (await res.json()) as { datasets?: StandardBenchmarkPack[] };
+    const datasets = Array.isArray(data.datasets) ? data.datasets : [];
+    for (const pack of datasets) {
+      if (pack?.id && Array.isArray(pack.items)) {
+        registerImportedStandardPack(pack);
+      }
+    }
+    return datasets.length;
+  } catch {
+    return 0;
+  }
+}
