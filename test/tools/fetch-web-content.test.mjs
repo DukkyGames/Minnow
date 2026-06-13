@@ -133,7 +133,8 @@ describe('toolFetchWebContent', () => {
     try {
       const result = await toolFetchWebContent({ url: 'https://example.com/' });
       assert.ok(!result.startsWith('Error:'));
-      assert.ok(result.length <= WEB_TEXT_MAX_BYTES + 80);
+      assert.match(result, /<<<UNTRUSTED_SOURCE_DATA source="web:https:\/\/example\.com\/">>>/);
+      assert.ok(result.includes('[truncated to 8192 bytes]'));
     } finally {
       globalThis.fetch = original;
     }
@@ -159,6 +160,7 @@ describe('toolRagWebContent', () => {
         url: 'https://example.com/docs',
         query: 'minnow research',
       });
+      assert.match(result, /<<<UNTRUSTED_SOURCE_DATA source="web-rag:https:\/\/example\.com\/docs">>>/);
       assert.match(result, /Relevant excerpts/);
       assert.match(result, /1\./);
       assert.match(result, /minnow/i);

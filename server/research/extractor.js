@@ -13,6 +13,7 @@ import { llmCall as defaultLlmCall } from './llm.js';
 import { parseJsonObject } from './json-parse.js';
 import { EXTRACTOR_PROMPT, formatPrompt } from './prompts.js';
 import { isLowQuality } from './strip-thinking.js';
+import { wrapUntrusted } from '../security/untrusted.js';
 
 /** Injectable deps for unit tests. */
 export const extractorDeps = {
@@ -142,7 +143,7 @@ export async function fetchAndExtract({
   }
 
   const prompt = formatPrompt(EXTRACTOR_PROMPT, {
-    webpage_content: page.content,
+    webpage_content: wrapUntrusted(page.content, { source: `research-page:${url}` }),
     goal: question,
   });
 

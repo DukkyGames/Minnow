@@ -68,6 +68,7 @@ import {
 import { runGrepSearch } from '../tools/grep.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
+import { wrapServerToolResult } from '../security/untrusted.js';
 import {
   getEffectiveWorkspaceRoot,
   resolveSafePath,
@@ -913,11 +914,11 @@ export async function executeServerTool(name, args, options = {}) {
     try {
       if (isPluginToolName(name)) {
         const result = await callPluginTool(name, args ?? {});
-        return { result: String(result) };
+        return { result: wrapServerToolResult(name, args ?? {}, String(result)) };
       }
       if (isMcpToolName(name)) {
         const result = await callMcpTool(name, args ?? {});
-        return { result: String(result) };
+        return { result: wrapServerToolResult(name, args ?? {}, String(result)) };
       }
       const handler = SERVER_TOOL_HANDLERS[name];
       if (!handler) {
@@ -925,9 +926,12 @@ export async function executeServerTool(name, args, options = {}) {
       }
       const out = await handler(args ?? {});
       if (out && typeof out === 'object' && 'result' in out) {
-        return out;
+        return {
+          ...out,
+          result: wrapServerToolResult(name, args ?? {}, String(out.result)),
+        };
       }
-      return { result: String(out) };
+      return { result: wrapServerToolResult(name, args ?? {}, String(out)) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { result: `Error: ${message}` };
