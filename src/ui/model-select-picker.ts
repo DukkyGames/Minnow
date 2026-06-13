@@ -182,6 +182,7 @@ function getTopBarModelPopover(): HTMLElement | null {
 
 /** Close the model list popover. */
 export function closeModelSelectMenu(): void {
+  closeAuxiliaryModelSelectMenu();
   const { root, trigger, menu } = getElements();
   open = false;
   root?.classList.remove('is-open');
@@ -193,6 +194,7 @@ export function closeModelSelectMenu(): void {
 function openModelSelectMenu(): void {
   const { root, trigger, menu, sel } = getElements();
   if (!root || !trigger || !menu || !sel || trigger.disabled) return;
+  closeAuxiliaryModelSelectMenu();
   open = true;
   root.classList.add('is-open');
   getTopBarModelPopover()?.classList.remove('hidden');
@@ -222,6 +224,133 @@ function pickModel(modelId: string): void {
   selectModelInPicker(modelId);
 }
 
+type ModelSelectPickHandler = (modelId: string) => void;
+
+interface AuxiliaryModelSelectPicker {
+  root: HTMLDivElement;
+  trigger: HTMLButtonElement;
+  triggerText: HTMLSpanElement;
+  menu: HTMLUListElement;
+}
+
+const auxiliaryPickers = new WeakMap<HTMLSelectElement, AuxiliaryModelSelectPicker>();
+let openAuxiliaryPicker: AuxiliaryModelSelectPicker | null = null;
+let auxiliaryPickerGlobalsBound = false;
+
+function closeAuxiliaryModelSelectMenu(): void {
+  if (!openAuxiliaryPicker) return;
+  openAuxiliaryPicker.root.classList.remove('is-open');
+  openAuxiliaryPicker.menu.classList.add('hidden');
+  openAuxiliaryPicker.trigger.setAttribute('aria-expanded', 'false');
+  openAuxiliaryPicker = null;
+}
+
+function ensureAuxiliaryPickerGlobals(): void {
+  if (auxiliaryPickerGlobalsBound) return;
+  auxiliaryPickerGlobalsBound = true;
+
+  document.addEventListener('mousedown', (e) => {
+    if (!openAuxiliaryPicker) return;
+    const target = e.target as Node;
+    if (!openAuxiliaryPicker.root.contains(target)) closeAuxiliaryModelSelectMenu();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && openAuxiliaryPicker) closeAuxiliaryModelSelectMenu();
+  });
+}
+
+/** Sync trigger label and custom menu rows for a mounted auxiliary model combobox. */
+export function syncAuxiliaryModelSelectCombobox(select: HTMLSelectElement): void {
+  const picker = auxiliaryPickers.get(select);
+  if (!picker) return;
+
+  const selectedOpt = select.options[select.selectedIndex];
+  picker.triggerText.textContent =
+    selectedOpt?.text?.trim() || selectedOpt?.label?.trim() || 'Select model';
+
+  const triggerTitle = selectedOpt?.title?.trim() || select.value.trim() || '';
+  if (triggerTitle) picker.triggerText.title = triggerTitle;
+  else picker.triggerText.removeAttribute('title');
+
+  const hasSelectable =
+    [...select.options].some((o) => o.value.trim() !== '') && !select.disabled;
+  picker.trigger.disabled = !hasSelectable;
+
+  renderModelSelectMenuRows(picker.menu, select, (modelId) => {
+    closeAuxiliaryModelSelectMenu();
+    closeModelSelectMenu();
+    if (select.value === modelId) {
+      syncAuxiliaryModelSelectCombobox(select);
+      return;
+    }
+    select.value = modelId;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+/**
+ * Wrap a native model &lt;select&gt; with the same custom list UI as the top-bar picker.
+ * Safe to call once per element; subsequent calls are no-ops.
+ */
+export function mountAuxiliaryModelSelectCombobox(select: HTMLSelectElement): void {
+  if (auxiliaryPickers.has(select)) return;
+  ensureAuxiliaryPickerGlobals();
+
+  const root = document.createElement('div');
+  root.className = 'model-select-inner';
+
+  const parent = select.parentElement;
+  if (!parent) return;
+  parent.insertBefore(root, select);
+  root.appendChild(select);
+
+  select.classList.add('model-select-native');
+  select.tabIndex = -1;
+  select.setAttribute('aria-hidden', 'true');
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'model-select-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+
+  const triggerText = document.createElement('span');
+  triggerText.className = 'model-select-trigger-text';
+  triggerText.textContent = 'Select model';
+  trigger.appendChild(triggerText);
+
+  const menu = document.createElement('ul');
+  menu.className = 'model-select-menu hidden';
+  menu.setAttribute('role', 'listbox');
+
+  const labelledBy = select.getAttribute('aria-label')?.trim();
+  if (labelledBy) menu.setAttribute('aria-label', labelledBy);
+
+  root.appendChild(trigger);
+  root.appendChild(menu);
+
+  const picker: AuxiliaryModelSelectPicker = { root, trigger, triggerText, menu };
+  auxiliaryPickers.set(select, picker);
+
+  trigger.addEventListener('click', () => {
+    if (trigger.disabled) return;
+    if (openAuxiliaryPicker === picker) {
+      closeAuxiliaryModelSelectMenu();
+      return;
+    }
+    closeModelSelectMenu();
+    closeAuxiliaryModelSelectMenu();
+    openAuxiliaryPicker = picker;
+    picker.root.classList.add('is-open');
+    picker.menu.classList.remove('hidden');
+    picker.trigger.setAttribute('aria-expanded', 'true');
+    syncAuxiliaryModelSelectCombobox(select);
+  });
+
+  syncAuxiliaryModelSelectCombobox(select);
+}
+
 /** Canonical model id for capability tooltip lines (strip composite select encoding). */
 function tooltipModelIdForOptionValue(value: string): string {
   return decodeModelSelectKey(value)?.modelId ?? value;
@@ -244,6 +373,7 @@ function appendModelOptionRow(
   opt: HTMLOptionElement,
   selectedValue: string,
   indented = false,
+  onSelect?: ModelSelectPickHandler,
 ): void {
   const id = opt.value.trim();
   if (!id) return;
@@ -305,7 +435,8 @@ function appendModelOptionRow(
   }
   li.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    pickModel(id);
+    if (onSelect) onSelect(id);
+    else pickModel(id);
   });
 
   menu.appendChild(li);
@@ -397,6 +528,7 @@ function appendProducerHeader(
 export function renderModelSelectMenuRows(
   menu: HTMLUListElement,
   sel: HTMLSelectElement,
+  onSelect?: ModelSelectPickHandler,
 ): void {
   const selectedValue = sel.value;
   const scrollTop = menu.scrollTop;
@@ -422,13 +554,13 @@ export function renderModelSelectMenuRows(
     if (collapsed.has(slug)) collapsed.delete(slug);
     else collapsed.add(slug);
     saveCollapsedProducers(collapsed);
-    renderModelSelectMenuRows(menu, sel);
+    renderModelSelectMenuRows(menu, sel, onSelect);
     menu.scrollTop = scrollTop;
   };
 
   if (options.length <= BROWSE_ALL_LIMIT) {
     for (const opt of options) {
-      appendModelOptionRow(menu, opt, selectedValue);
+      appendModelOptionRow(menu, opt, selectedValue, false, onSelect);
     }
     return;
   }
@@ -453,7 +585,7 @@ export function renderModelSelectMenuRows(
 
     if (!collapsed.has(slug)) {
       for (const opt of groupOptions) {
-        appendModelOptionRow(menu, opt, selectedValue, true);
+        appendModelOptionRow(menu, opt, selectedValue, true, onSelect);
       }
     }
   }

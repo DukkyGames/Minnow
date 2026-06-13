@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-06-04T07:37:50.889Z",
+  "createdAt": "2026-06-13T19:25:42.734Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -98,7 +98,16 @@
     "maxInjectCharsFull": 4000,
     "maxInjectCharsLite": 800,
     "retrieveLimit": 20,
-    "defaultTags": []
+    "defaultTags": [],
+    "embeddings": {
+      "enabled": false,
+      "backend": "local",
+      "modelId": "Xenova/all-MiniLM-L6-v2",
+      "providerId": "",
+      "blendWeight": 0.5,
+      "queryTimeoutMs": 3000,
+      "reindexNeeded": false
+    }
   },
   "planning": {
     "granularity": "medium"
@@ -107,6 +116,18 @@
     "maxToolTurns": 100,
     "generationIdleTimeoutMs": 1500000,
     "generationMaxDurationMs": 3600000
+  },
+  "fallbackChains": {
+    "enabled": false,
+    "cooldownSeconds": 60,
+    "maxChainLength": 4,
+    "roles": {
+      "_global": [],
+      "default": [],
+      "utility": [],
+      "research": [],
+      "vision": []
+    }
   },
   "editorAiCompletion": {
     "enabled": false,
@@ -132,9 +153,9 @@
     "renderWhitespace": false
   },
   "workspace": {
-    "path": "/tmp/minnow-ts-lsp-n3MEcy",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-LUaszj",
     "recentPaths": [
-      "/tmp/minnow-ts-lsp-n3MEcy"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-LUaszj"
     ]
   }
 }

@@ -3,6 +3,7 @@
  */
 
 import '../styles/compare.css';
+import '../styles/settings-page.css';
 
 import { humanizeModelSlug, slugFromModelId } from '../lib/format-model-label';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
@@ -19,6 +20,10 @@ import type {
 import { aggregateWinRates } from '../compare/win-rates';
 import { cancelGeneration } from '../api/generations';
 import { fillModelSelect, fillProviderSelect } from './settings-model-binding';
+import {
+  mountAuxiliaryModelSelectCombobox,
+  syncAuxiliaryModelSelectCombobox,
+} from './model-select-picker';
 
 type ColumnSide = 'left' | 'right';
 
@@ -37,6 +42,24 @@ let leftColumn: ColumnState | null = null;
 let rightColumn: ColumnState | null = null;
 let runAbort: AbortController | null = null;
 let initialized = false;
+let modelComboboxesMounted = false;
+
+function ensureCompareModelComboboxes(): void {
+  if (modelComboboxesMounted) return;
+  const leftModel = el<HTMLSelectElement>('compareLeftModel');
+  const rightModel = el<HTMLSelectElement>('compareRightModel');
+  if (!leftModel || !rightModel) return;
+  mountAuxiliaryModelSelectCombobox(leftModel);
+  mountAuxiliaryModelSelectCombobox(rightModel);
+  modelComboboxesMounted = true;
+}
+
+function syncCompareModelComboboxes(): void {
+  const leftModel = el<HTMLSelectElement>('compareLeftModel');
+  const rightModel = el<HTMLSelectElement>('compareRightModel');
+  if (leftModel) syncAuxiliaryModelSelectCombobox(leftModel);
+  if (rightModel) syncAuxiliaryModelSelectCombobox(rightModel);
+}
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('compareView');
@@ -144,6 +167,7 @@ function updateVoteBar(): void {
 }
 
 async function refreshModelPickers(): Promise<void> {
+  ensureCompareModelComboboxes();
   const leftProvider = el<HTMLSelectElement>('compareLeftProvider');
   const leftModel = el<HTMLSelectElement>('compareLeftModel');
   const rightProvider = el<HTMLSelectElement>('compareRightProvider');
@@ -158,6 +182,7 @@ async function refreshModelPickers(): Promise<void> {
       await fillModelSelect(model, provider.value, model.value, {
         includeEmptyOption: false,
       });
+      syncAuxiliaryModelSelectCombobox(model);
     };
     provider.onchange = () => void refresh();
     await refresh();
@@ -165,6 +190,7 @@ async function refreshModelPickers(): Promise<void> {
 
   await wireModel(leftProvider, leftModel);
   await wireModel(rightProvider, rightModel);
+  syncCompareModelComboboxes();
 }
 
 function resetRunUi(): void {

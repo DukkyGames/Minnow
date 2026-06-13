@@ -70,17 +70,18 @@
 }
 
 .compare-picker label {
-  font-size: 0.8rem;
-  color: color-mix(in srgb, var(--mn-fg) 70%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
 }
 
-.compare-picker select {
+.compare-picker .settings-select {
+  max-width: none;
+}
+
+.compare-picker .model-select-inner {
+  position: relative;
   width: 100%;
-  border-radius: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
-  background: var(--mn-surface);
-  color: var(--mn-fg);
-  padding: 0.4rem 0.5rem;
 }
 
 .compare-run-actions {
