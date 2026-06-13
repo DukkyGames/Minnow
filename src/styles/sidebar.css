@@ -30,6 +30,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   z-index: 36;
 }
 
@@ -54,6 +55,15 @@
   width: 32px;
   height: 32px;
   flex-shrink: 0;
+}
+
+/* Scrollable session list lives here; footer stays pinned on .chat-sidebar */
+.chat-sidebar-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-sidebar-header {
@@ -373,7 +383,8 @@
 /* Metrics + terminal toggles: pinned bottom-left of the session sidebar */
 .chat-sidebar-footer {
   flex-shrink: 0;
-  margin-top: auto;
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: row;
   align-items: center;

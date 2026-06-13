@@ -5,6 +5,7 @@
 
 import { streaming } from '../app-state';
 import type { ToolApprovalRequest } from '../tools/tool-approval-types';
+import { isChatAppForeground } from './chat-mount';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 import {
@@ -16,7 +17,20 @@ import {
 export type ToolApprovalModalResult = 'allow-once' | 'always-allow' | 'cancel';
 
 function getToolApprovalHost(): HTMLElement | null {
+  if (isChatAppForeground()) {
+    return (
+      document.getElementById('chatAppToolApprovalHost') ??
+      document.getElementById('toolApprovalHost')
+    );
+  }
   return document.getElementById('toolApprovalHost');
+}
+
+function getPromptComposerShell(): HTMLElement | null {
+  if (isChatAppForeground()) {
+    return document.querySelector('.chat-app-composer');
+  }
+  return document.getElementById('mainColumn');
 }
 
 /**
@@ -79,16 +93,24 @@ export function showToolApprovalModal(
       return;
     }
 
-    /** Hides the composer row (`.input-bar`) via CSS while the approval strip is visible (see `tool-approval.css`). */
-    const mainColumn = document.getElementById('mainColumn');
+    /** Hides the composer row via CSS while the approval strip is visible (see `tool-approval.css`). */
+    const composerShell = getPromptComposerShell();
 
-    const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-    const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
+    const msgInput = (
+      isChatAppForeground()
+        ? document.getElementById('chatAppInput')
+        : document.getElementById('msgInput')
+    ) as HTMLTextAreaElement | null;
+    const sendBtn = (
+      isChatAppForeground()
+        ? document.getElementById('chatAppSendBtn')
+        : document.getElementById('sendBtn')
+    ) as HTMLButtonElement | null;
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
     acquireUserPromptLock();
 
-    mainColumn?.classList.add('main-column--tool-approval-pending');
+    composerShell?.classList.add('main-column--tool-approval-pending');
     host.hidden = false;
     host.replaceChildren();
 
@@ -232,7 +254,7 @@ export function showToolApprovalModal(
       settled = true;
       document.removeEventListener('keydown', onDocKeyDown, true);
       panel.removeEventListener('keydown', onPanelKeyDown);
-      mainColumn?.classList.remove('main-column--tool-approval-pending');
+      composerShell?.classList.remove('main-column--tool-approval-pending');
       host.replaceChildren();
       host.hidden = true;
       setSidebarInputPendingForActiveChat(false);

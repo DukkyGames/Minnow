@@ -4,7 +4,8 @@
  */
 
 /* While approval is open, hide the composer (textarea + send) so only actions + metrics show below the strip. */
-.main-column.main-column--tool-approval-pending .input-bar {
+.main-column.main-column--tool-approval-pending .input-bar,
+.chat-app-composer.main-column--tool-approval-pending .chat-app-input {
   display: none;
 }
 

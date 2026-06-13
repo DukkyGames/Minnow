@@ -10,13 +10,12 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const RESEARCH_IDS = [
   'btnResearch',
   'researchView',
-  'btnResearchPageBack',
   'researchQuery',
   'researchMaxRounds',
   'researchCategory',
   'btnResearchStart',
   'btnResearchCancel',
-  'researchSynapseMount',
+  'researchProgressMount',
   'researchResultMount',
   'researchTabRun',
   'researchTabLibrary',
@@ -38,5 +37,10 @@ describe('research page HTML', () => {
     const research = html.indexOf('id="researchView"');
     const app = html.indexOf('id="appBody"');
     assert.ok(research > 0 && app > research);
+  });
+
+  test('page sub-header removed (OS menubar supplies navigation)', () => {
+    assert.doesNotMatch(html, /class="research-page-header"/);
+    assert.doesNotMatch(html, /id="btnResearchPageBack"/);
   });
 });

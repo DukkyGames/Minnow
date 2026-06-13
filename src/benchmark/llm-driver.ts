@@ -33,8 +33,8 @@ import type { LlmTurnTiming } from './types.ts';
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const DEFAULT_TEMPERATURE = 0.2;
-/** Fallback when callers omit maxTokens (ChatCompletionBody requires max_tokens). */
-const DEFAULT_MAX_TOKENS = 4096;
+/** Benchmark completions use the sampler ceiling — no artificial short caps. */
+export const BENCHMARK_MAX_TOKENS = 131_072;
 
 export interface OneShotInput {
   providerId: string;
@@ -48,6 +48,10 @@ export interface OneShotInput {
 
 export interface OneShotResult {
   text: string;
+  /** Main assistant `content` only (excludes reasoning-channel fallback). */
+  contentText: string;
+  /** Reasoning / thinking channel text when the provider emits it. */
+  reasoningText: string;
   toolCalls: ToolCall[];
   finishReason?: string;
   timing: LlmTurnTiming;
@@ -121,6 +125,8 @@ async function streamTurn(
   signal: AbortSignal,
 ): Promise<{
   fullText: string;
+  contentText: string;
+  reasoningText: string;
   toolCalls: ToolCall[];
   finishReason?: string;
   streamMeta: StreamMetaAccumulator;
@@ -134,7 +140,7 @@ async function streamTurn(
     provider,
     {
       ...body,
-      max_tokens: body.max_tokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: body.max_tokens ?? BENCHMARK_MAX_TOKENS,
       stream_options: { include_usage: true },
     },
     signal,
@@ -191,8 +197,12 @@ async function streamTurn(
     streamMeta.finish_reason ||
     (toolCalls.length > 0 ? 'tool_calls' : undefined);
 
+  const contentText = textAcc.getText();
+  const reasoningText = reasoningAcc.getText();
   return {
-    fullText: resolveBenchmarkCompletionText(textAcc.getText(), reasoningAcc.getText()),
+    fullText: resolveBenchmarkCompletionText(contentText, reasoningText),
+    contentText,
+    reasoningText,
     toolCalls,
     finishReason,
     streamMeta,
@@ -252,6 +262,8 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
 
   let turn = await streamTurn(input.providerId, streamBodyFor(messages), input.signal);
   let text = turn.fullText.trim();
+  let contentText = turn.contentText.trim();
+  let reasoningText = turn.reasoningText.trim();
   let finishReason = turn.finishReason;
   let toolCalls = turn.toolCalls;
   let fallbackMessages = messages;
@@ -267,14 +279,17 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
     if (fb.toolCalls?.length) toolCalls = fb.toolCalls;
   }
 
-  const usedReasoningBudget =
-    !text && (turn.timing.usage?.completion_tokens ?? 0) > 0;
-  if (usedReasoningBudget) {
+  const mainContentMissing =
+    !contentText &&
+    (reasoningText.length > 0 || (turn.timing.usage?.completion_tokens ?? 0) > 0);
+  if (mainContentMissing) {
     fallbackMessages = applyBenchmarkSystemPrompt([...input.messages], {
       extraSystem: REASONING_ONLY_RETRY_SYSTEM,
     });
     turn = await streamTurn(input.providerId, streamBodyFor(fallbackMessages), input.signal);
     text = turn.fullText.trim();
+    contentText = turn.contentText.trim();
+    reasoningText = turn.reasoningText.trim();
     finishReason = turn.finishReason ?? finishReason;
     toolCalls = turn.toolCalls.length > 0 ? turn.toolCalls : toolCalls;
   }
@@ -292,6 +307,8 @@ async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
 
   return {
     text,
+    contentText,
+    reasoningText,
     toolCalls,
     finishReason,
     timing: turn.timing,
@@ -335,6 +352,8 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     stats: {},
   };
   let lastText = '';
+  let lastContentText = '';
+  let lastReasoningText = '';
   let lastToolCalls: ToolCall[] = [];
   let lastFinish: string | undefined;
 
@@ -355,6 +374,8 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
 
     lastTiming = turn.timing;
     lastText = turn.fullText.trim();
+    lastContentText = turn.contentText.trim();
+    lastReasoningText = turn.reasoningText.trim();
     lastToolCalls = preserveLastToolCalls(lastToolCalls, turn.toolCalls);
     lastFinish = turn.finishReason;
 
@@ -403,6 +424,8 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
 
   return {
     text: lastText,
+    contentText: lastContentText || lastText,
+    reasoningText: lastReasoningText,
     toolCalls: lastToolCalls,
     finishReason: lastFinish,
     timing: lastTiming,

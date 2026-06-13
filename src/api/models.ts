@@ -408,6 +408,7 @@ export async function fetchModels(): Promise<void> {
     renderSidebar();
     scheduleSaveSessions();
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
+    void import('../ui/benchmark/roster-picker.ts').then((m) => m.refreshBenchmarkRosterPicker());
   } catch (err) {
     const e = err as { name?: string };
     if (e && e.name === 'AbortError') return;

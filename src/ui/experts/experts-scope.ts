@@ -14,6 +14,8 @@ import { renderChatFromHistory, renderStatsForChat } from '../messages';
 import { syncComposerFromStreamingState } from '../composer-send';
 import { syncModeSelectorFromActiveChat } from '../mode-selector';
 import { syncModelSelectForActiveChat } from '../sidebar';
+import { isOsShellEnabled } from '../../os/page-bridge';
+import { launchApp } from '../../os/router';
 
 let expertScopeId: string | null = null;
 
@@ -120,8 +122,14 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
 
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
+
+  // Expert chats run in the Code workspace (#appBody); foreground that app under MinnowOS.
+  if (isOsShellEnabled()) {
+    launchApp('code');
+  } else {
+    shell.classList.remove('hidden');
+    document.querySelector('header.topbar')?.classList.remove('hidden');
+  }
 
   activateChatById(chat.id);
   recordChatOpened(chat.id);

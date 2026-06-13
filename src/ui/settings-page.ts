@@ -25,8 +25,15 @@ import {
 } from './settings-page-types';
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
+import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import {
+  mountSettingsSearchToMenubar,
+  unmountSettingsSearchFromMenubar,
+} from '../os/settings-search-menubar';
+import { navigateToDesktop } from '../os/router';
 
 export type { SettingsSectionId } from './settings-page-types';
+export { isOsEmbedded };
 
 const SECTIONS = SETTINGS_SECTIONS;
 
@@ -63,9 +70,11 @@ function setActiveSection(section: SettingsSectionId): void {
       nav.setAttribute('aria-current', id === section ? 'page' : 'false');
     }
   }
-  const nextHash = `#/settings/${section}`;
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
+  if (!isOsEmbedded()) {
+    const nextHash = `#/settings/${section}`;
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
   }
   void refreshSettingsSection(section);
   void detectLocalServer().then(() => refreshPromptTokenEstimate());
@@ -207,8 +216,11 @@ export function openSettings(section?: SettingsSectionId): void {
   const wasAlreadyOpen = root.classList.contains('is-open');
 
   root.classList.add('is-open');
-  shell.classList.add('hidden');
-  document.querySelector('header.topbar')?.classList.add('hidden');
+  mountSettingsSearchToMenubar();
+  if (!isOsEmbedded()) {
+    shell.classList.add('hidden');
+    document.querySelector('header.topbar')?.classList.add('hidden');
+  }
   document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -229,15 +241,22 @@ export function openSettings(section?: SettingsSectionId): void {
   setActiveSection(target);
 }
 
-/** Close settings and return to chat. */
-export function closeSettings(): void {
+/** Close settings and return to chat or desktop. */
+export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
   root.classList.remove('is-open');
-  shell.classList.remove('hidden');
-  document.querySelector('header.topbar')?.classList.remove('hidden');
-  window.location.hash = '#/';
+  unmountSettingsSearchFromMenubar();
+  if (!isOsEmbedded()) {
+    shell.classList.remove('hidden');
+    document.querySelector('header.topbar')?.classList.remove('hidden');
+    if (!options?.skipNavigate && window.location.hash.startsWith('#/settings')) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
+  }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
   );
@@ -258,6 +277,9 @@ function onHashChange(): void {
     openSettings(parseHashSection());
     return;
   }
+  if (isOsEmbedded() && isOsAppHash(hash)) {
+    return;
+  }
   if (getSettingsRoot()?.classList.contains('is-open')) {
     closeSettings();
   }
@@ -270,7 +292,10 @@ export function initSettingsPage(): void {
 
   document
     .getElementById('btnSettingsPageBack')
-    ?.addEventListener('click', () => closeSettings());
+    ?.addEventListener('click', () => {
+      if (isOsEmbedded()) navigateToDesktop();
+      else closeSettings();
+    });
 
   for (const id of SECTIONS) {
     document

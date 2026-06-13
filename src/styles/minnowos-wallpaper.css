@@ -1,0 +1,159 @@
+@import './minnowos-tokens.css';
+
+/* ============================================================
+   MinnowOS — wallpaper modes: flat, gradient, underwater
+   ============================================================ */
+
+.mn-os-wall {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--os-bg);
+}
+
+.mn-os-wall-gradient,
+.mn-os-wall-underwater {
+  background:
+    radial-gradient(120% 90% at 50% -10%, var(--os-wall-c), transparent 55%),
+    radial-gradient(
+      100% 80% at 80% 110%,
+      color-mix(in srgb, var(--os-accent) 9%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(180deg, var(--os-wall-a), var(--os-wall-b));
+}
+
+.mn-os-wall-flat {
+  background: var(--os-bg);
+}
+
+.mn-os-wall-glow {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  width: 70vw;
+  height: 60vh;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, var(--os-accent-soft), transparent 70%);
+  filter: blur(40px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* caustics (underwater) */
+
+.mn-os-caustic {
+  position: absolute;
+  inset: -20%;
+  opacity: 0.05;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(40% 18% at 30% 30%, var(--os-accent), transparent 60%),
+    radial-gradient(35% 16% at 70% 50%, var(--os-accent-2), transparent 60%),
+    radial-gradient(30% 20% at 50% 75%, var(--os-accent), transparent 60%);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.mn-os-caustic-a {
+  animation: mn-os-drift-1 26s linear infinite;
+}
+
+.mn-os-caustic-b {
+  animation: mn-os-drift-2 34s linear infinite;
+  opacity: 0.04;
+}
+
+@keyframes mn-os-drift-1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(4%, 3%) scale(1.1);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes mn-os-drift-2 {
+  0% {
+    transform: translate(0, 0) scale(1.1);
+  }
+
+  50% {
+    transform: translate(-5%, -2%) scale(1);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1.1);
+  }
+}
+
+/* bubbles (underwater) */
+
+.mn-os-bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mn-os-bubbles span {
+  position: absolute;
+  bottom: -20px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--os-accent-2),
+    var(--os-accent) 60%,
+    transparent
+  );
+  animation-name: mn-os-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes mn-os-rise {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(var(--os-bubble-drift, 0px), -104vh);
+    opacity: 0;
+  }
+}
+
+.mn-os-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 120% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+:root[data-theme$='-light'] .mn-os-vignette {
+  background: radial-gradient(130% 120% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.12));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-os-caustic-a,
+  .mn-os-caustic-b,
+  .mn-os-bubbles span {
+    animation: none !important;
+  }
+
+  .mn-os-bubbles span {
+    display: none;
+  }
+}

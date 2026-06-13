@@ -18,6 +18,7 @@ import {
   truncateUtf8,
   WEB_TEXT_MAX_BYTES,
 } from '../lib/fetch-web-content.mjs';
+import { toolLaunchMinnowApp } from './os-launch-tool';
 
 /** Allowed characters for safe math evaluation (digits, operators, whitespace, commas). */
 const SAFE_CALC_CHARS = /^[0-9+\-*/().%\s,]+$/;
@@ -53,6 +54,8 @@ export async function executeBrowserTool(
         return await toolWriteClipboard(args);
       case 'get_system_info':
         return toolGetSystemInfo();
+      case 'launch_minnow_app':
+        return toolLaunchMinnowApp(args);
       default:
         return `Error: unknown browser tool "${name}"`;
     }

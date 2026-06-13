@@ -21,6 +21,7 @@ export const FILE_TREE_MUTATING_TOOLS = new Set<string>([
 /** Debounce window so rapid multi-file agent edits coalesce into one tree reload. */
 export const FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS = 300;
 
+import { scheduleChatAppOutputsRefreshAfterTool } from './chat-app-outputs';
 import { refreshFileTreeViaBridge } from './file-tree-refresh-bridge';
 
 const defaultRefreshRunner = async (): Promise<void> => {
@@ -84,6 +85,7 @@ export async function runWithFileTreeAutoRefresh<T extends ToolExecutionResult>(
 ): Promise<T> {
   const result = await fn();
   scheduleFileTreeRefreshAfterTool(toolName, result);
+  scheduleChatAppOutputsRefreshAfterTool(toolName, result);
   return result;
 }
 

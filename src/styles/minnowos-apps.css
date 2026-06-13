@@ -1,0 +1,111 @@
+@import './minnowos-tokens.css';
+
+/* ============================================================
+   MinnowOS — generic app page chrome
+   ============================================================ */
+
+.mn-os-app-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--os-bg);
+}
+
+.mn-os-app-hdr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--os-border);
+  flex: none;
+}
+
+.mn-os-app-hdr-ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--os-accent-soft);
+  color: var(--os-accent);
+  border: 1px solid var(--os-accent-glow);
+}
+
+.mn-os-app-hdr-txt h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mn-os-app-hdr-txt span {
+  font-size: 12.5px;
+  color: var(--os-text-dim);
+}
+
+.mn-os-app-hdr-spacer {
+  flex: 1;
+}
+
+.mn-os-hdr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--os-surface-2);
+  border: 1px solid var(--os-border-strong);
+  color: var(--os-text);
+  border-radius: 9px;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: 0.15s var(--os-ease);
+}
+
+.mn-os-hdr-btn:hover {
+  background: var(--os-surface-3);
+}
+
+.mn-os-hdr-btn.is-primary {
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  border-color: transparent;
+}
+
+.mn-os-hdr-btn.is-primary:hover {
+  filter: brightness(1.06);
+}
+
+.mn-os-app-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 28px 24px 60px;
+}
+
+.mn-os-app-col {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* shared badge / pop-in used by app interiors */
+
+.mn-os-pop-in {
+  animation: mn-os-app-pop-in 0.3s var(--os-ease-out) both;
+}
+
+@keyframes mn-os-app-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-os-hdr-btn,
+  .mn-os-pop-in {
+    transition-duration: 0.001ms !important;
+    animation: none !important;
+  }
+}

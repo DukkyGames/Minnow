@@ -221,11 +221,51 @@ export function promoteBoldHeadings(markdown) {
  * @param {string | null | undefined} category
  * @returns {string}
  */
-export function categoryCss(category) {
-  if (!category) {
+/** Visual-report style key (legacy CSS blocks) for normalized categories. */
+const CATEGORY_VISUAL_KEYS = {
+  technical: 'product',
+  academic: 'landscape',
+  news: 'factcheck',
+  market: 'comparison',
+  general: 'landscape',
+  product: 'product',
+  comparison: 'comparison',
+  howto: 'howto',
+  factcheck: 'factcheck',
+  landscape: 'landscape',
+};
+
+/**
+ * @param {string | null | undefined} category
+ * @returns {string}
+ */
+export function normalizeResearchCategory(category) {
+  const raw = String(category ?? '').trim().toLowerCase();
+  const legacy = {
+    product: 'technical',
+    comparison: 'market',
+    howto: 'technical',
+    factcheck: 'news',
+  };
+  if (!raw) {
     return '';
   }
-  return CATEGORY_PALETTES + (CATEGORY_STYLES[category] ?? '');
+  if (legacy[raw]) {
+    return legacy[raw];
+  }
+  if (['technical', 'academic', 'news', 'market', 'general'].includes(raw)) {
+    return raw;
+  }
+  return 'general';
+}
+
+export function categoryCss(category) {
+  const normalized = normalizeResearchCategory(category);
+  if (!normalized) {
+    return '';
+  }
+  const visualKey = CATEGORY_VISUAL_KEYS[normalized] ?? normalized;
+  return CATEGORY_PALETTES + (CATEGORY_STYLES[visualKey] ?? '');
 }
 
 /**
@@ -372,7 +412,11 @@ export function generateVisualReport(
     minute: '2-digit',
   });
 
-  const bodyClass = category ? `category-${escapeHtml(String(category))}` : '';
+  const normalizedCategory = normalizeResearchCategory(category);
+  const visualKey = normalizedCategory
+    ? CATEGORY_VISUAL_KEYS[normalizedCategory] ?? normalizedCategory
+    : '';
+  const bodyClass = visualKey ? `category-${escapeHtml(String(visualKey))}` : '';
 
   const html = fillTemplate(HTML_TEMPLATE, {
     title: escapeHtml(titleText),

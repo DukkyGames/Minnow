@@ -3,6 +3,11 @@ import { enqueueSteerMessage } from '../chat/steer-message';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat } from '../state/sessions';
+import {
+  clearComposerInput,
+  getActiveComposerSurface,
+} from './composer-surface';
+import { isChatAppForeground } from './chat-mount';
 import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
@@ -14,8 +19,7 @@ let recoveryBlocked = false;
 /** Block composer send while Continue / Discard banner is visible. */
 export function setComposerRecoveryBlocked(blocked: boolean): void {
   recoveryBlocked = blocked;
-  const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  const { sendBtnEl: sendBtn, inputEl: input } = getActiveComposerSurface();
   if (sendBtn && !isActiveChatStreaming()) {
     sendBtn.disabled = blocked;
   }
@@ -30,13 +34,12 @@ export function isComposerRecoveryBlocked(): boolean {
 }
 
 function composerInputHasText(): boolean {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  return Boolean(input?.value.trim());
+  return Boolean(getActiveComposerSurface().inputEl?.value.trim());
 }
 
 /** Update primary button label during streaming from composer text (steer vs stop). */
 export function refreshComposerStreamingAffordance(): void {
-  const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
+  const sendBtn = getActiveComposerSurface().sendBtnEl;
   if (!sendBtn || sendBtn.dataset.mode !== 'stop') return;
 
   const hasText = composerInputHasText();
@@ -47,17 +50,39 @@ export function refreshComposerStreamingAffordance(): void {
   sendBtn.dataset.steerReady = hasText ? 'true' : 'false';
 }
 
+/** Show or hide the Chat app dedicated stop control (#btnChatAppStop). */
+function syncChatAppStopButton(streaming: boolean): void {
+  const stopBtn = document.getElementById('btnChatAppStop') as HTMLButtonElement | null;
+  if (!stopBtn) return;
+  stopBtn.hidden = !streaming;
+  stopBtn.classList.toggle('hidden', !streaming);
+  stopBtn.disabled = !streaming;
+}
+
 /** Toggle send vs stop affordance on the composer primary button. */
 export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
-  const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
+  const { sendBtnEl: sendBtn, inputEl: input } = getActiveComposerSurface();
   if (!sendBtn) return;
+
+  const isStreaming = mode === 'streaming';
+  const chatApp = isChatAppForeground();
+
+  if (chatApp) {
+    syncChatAppStopButton(isStreaming);
+    sendBtn.disabled = isStreaming ? false : recoveryBlocked;
+    sendBtn.setAttribute('aria-busy', isStreaming ? 'true' : 'false');
+    sendBtn.dataset.mode = 'send';
+    sendBtn.classList.remove('send-btn--stop');
+    sendBtn.removeAttribute('data-steer-ready');
+    sendBtn.setAttribute('aria-label', 'Send message');
+    if (input) input.disabled = recoveryBlocked;
+    return;
+  }
 
   const sendIcon = document.getElementById('sendIcon');
   const sendStopIcon = document.getElementById('sendStopIcon');
   const sendSpinner = document.getElementById('sendSpinner');
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
 
-  const isStreaming = mode === 'streaming';
   sendBtn.disabled = false;
   sendBtn.setAttribute('aria-busy', isStreaming ? 'true' : 'false');
   sendBtn.dataset.mode = isStreaming ? 'stop' : 'send';
@@ -113,16 +138,13 @@ export function syncComposerFromStreamingState(): void {
 }
 
 function submitSteerFromComposer(): void {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+  const input = getActiveComposerSurface().inputEl;
   const text = input?.value.trim() ?? '';
   if (!text) return;
   const chat = getActiveChat();
   const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
   if (!enqueueSteerMessage(chat, text)) return;
-  if (input) {
-    input.value = '';
-    input.style.height = 'auto';
-  }
+  clearComposerInput(input);
   setStatus(
     'ok',
     hadPrior
@@ -146,9 +168,9 @@ export function handleComposerPrimaryAction(): void {
   void import('../chat/messaging').then((m) => m.sendMessage());
 }
 
-/** Wire composer input listener for streaming steer/stop aria labels (call once at init). */
-export function initComposerSteerInputListener(): void {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
+/** Wire composer input listener for streaming steer/stop aria labels (call once per textarea). */
+export function initComposerSteerInputListener(inputEl?: HTMLTextAreaElement | null): void {
+  const input = inputEl ?? getActiveComposerSurface().inputEl;
   if (!input || input.dataset.steerListener === '1') return;
   input.dataset.steerListener = '1';
   input.addEventListener('input', () => {

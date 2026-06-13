@@ -1,0 +1,59 @@
+/**
+ * Chat transcript mount resolution for Code (#chatArea) vs Chat app (#chatAppArea).
+ */
+
+import { getForegroundAppId } from '../os/instances';
+import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
+
+/** True when the Chat app page is the active UI (OS shell or `#/app/chat` hash). */
+export function isChatAppForeground(): boolean {
+  if (getForegroundAppId() === 'chat') return true;
+  return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
+}
+
+let mountOverride: HTMLElement | null = null;
+
+/** Resolve a mount selector or element; falls back to orchestrate / #chatArea. */
+export function resolveChatMount(mount?: string | HTMLElement): HTMLElement {
+  if (mount instanceof HTMLElement) return mount;
+  const id = (typeof mount === 'string' ? mount : 'chatArea').replace(/^#/, '');
+  return document.getElementById(id) ?? getOrchestrateChatMountElement();
+}
+
+/** True when rendering into the Code app main transcript (#chatArea or split pane). */
+export function isCodeChatMount(mount?: string | HTMLElement): boolean {
+  if (!mount) return true;
+  if (mount instanceof HTMLElement) {
+    return mount.id === 'chatArea' || mount.dataset.testid === 'orchestrate-chat-pane';
+  }
+  const normalized = mount.replace(/^#/, '');
+  return normalized === 'chatArea';
+}
+
+/** Inner message column inside the Chat app scroll viewport. */
+function getChatAppMessageCol(): HTMLElement | null {
+  return document.getElementById('chatAppMessageCol');
+}
+
+/** Active transcript root: override, Chat app column, or Code orchestrate mount. */
+export function getActiveChatMountElement(): HTMLElement {
+  if (mountOverride) return mountOverride;
+  if (isChatAppForeground()) {
+    const col = getChatAppMessageCol();
+    if (col) return col;
+    const chatAppArea = document.getElementById('chatAppArea');
+    if (chatAppArea) return chatAppArea;
+  }
+  return getOrchestrateChatMountElement();
+}
+
+/** Temporarily pin bubble / stream append targets during a history re-render. */
+export function runWithChatMount(mount: HTMLElement, fn: () => void): void {
+  const prev = mountOverride;
+  mountOverride = mount;
+  try {
+    fn();
+  } finally {
+    mountOverride = prev;
+  }
+}

@@ -41,11 +41,20 @@
   letter-spacing: -0.02em;
 }
 
+.settings-search-finder-slot:empty {
+  display: none;
+}
+
 .settings-search-finder {
   position: relative;
   flex: 1 1 12rem;
   min-width: 0;
   max-width: 28rem;
+}
+
+.settings-search-finder.is-in-menubar {
+  flex: none;
+  max-width: none;
 }
 
 .settings-search-finder__field {
@@ -124,6 +133,7 @@
 
 .settings-prompt-estimate {
   flex-shrink: 0;
+  margin-left: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   color: var(--mn-fg-muted);

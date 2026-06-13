@@ -5,8 +5,8 @@ import { Window } from 'happy-dom';
 function setupExpertsHubDom() {
   const window = new Window();
   globalThis.document = window.document;
-  document.body.innerHTML = `<main id="expertsView" class="experts-page" data-step="gallery">
-    <section class="experts-step experts-step--gallery"></section>
+  document.body.innerHTML = `<main id="expertsView" class="experts-page" data-step="browse">
+    <section class="experts-step experts-step--browse"></section>
     <section class="experts-step experts-step--create"></section>
     <section class="experts-step experts-step--edit"></section>
   </main>`;

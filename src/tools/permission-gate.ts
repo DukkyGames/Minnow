@@ -31,6 +31,10 @@ export async function maybeBlockToolForUserApproval(
   context: ToolApprovalContext,
   displayToolName?: string,
 ): Promise<ToolExecutionResult | null> {
+  if (context.benchmarkAutonomous) {
+    return null;
+  }
+
   if (typeof document === 'undefined') {
     return null;
   }
@@ -50,7 +54,7 @@ export async function maybeBlockToolForUserApproval(
 
   await loadToolSecurityMeta().catch(() => undefined);
   const fsMeta = getToolSecurityMetaCached();
-  const workspaceRoot = getWorkspacePath();
+  const workspaceRoot = context.workspaceRoot?.trim() || getWorkspacePath();
   const execName = displayToolName ?? permissionToolId;
   const pathStrings = extractPathLikeArgs(execName, args);
   const pathsOutsideWorkspace =

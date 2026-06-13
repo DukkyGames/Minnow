@@ -98,6 +98,14 @@ import {
   syncComposerFromStreamingState,
   syncSteerQueuedHint,
 } from '../ui/composer-send';
+import {
+  clearComposerInput,
+  resolveComposerSurface,
+  type ComposerSurface,
+} from '../ui/composer-surface';
+
+export type { ComposerSurface } from '../ui/composer-surface';
+import { getActiveChatMountElement } from '../ui/chat-mount';
 import { registerStreamDomRemount } from './stream-chat-dom';
 import { refreshModeSelectorDisabled } from '../ui/mode-selector';
 import { refreshThinkingControlDisabled } from '../ui/composer-thinking';
@@ -108,7 +116,6 @@ import {
   renderBoardView,
 } from '../ui/orchestrate-board';
 import {
-  getOrchestrateChatMountElement,
   isOrchestrateBoardInitSplitActive,
   isOrchestrateInitSplitChromeActive,
   syncOrchestrateInitSplitChrome,
@@ -442,6 +449,8 @@ export interface RunChatTurnOptions {
   composedSystemPromptOverride?: string;
   /** Push user text to history without showing a user bubble (sub-agent completion resume). */
   suppressUserEcho?: boolean;
+  /** Composer input/send override (defaults to foreground app surface). */
+  composerSurface?: Partial<ComposerSurface>;
 }
 
 /**
@@ -796,9 +805,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         historyIndex: userIdx,
         turnKind: 'user',
       });
-      const input = document.getElementById('msgInput') as HTMLTextAreaElement;
-      input.value = '';
-      input.style.height = 'auto';
+      clearComposerInput(
+        resolveComposerSurface(options.composerSurface).inputEl,
+      );
     }
   }
 
@@ -1297,7 +1306,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
         patchMainTurnActivity(chat.id, { phase: 'tools' });
 
-        const area = getOrchestrateChatMountElement();
+        const area = getActiveChatMountElement();
         const paintToolCallsInChat = isStreamDomVisible(chat.id);
         const STOPPED_TOOL_MSG = 'Stopped by user.';
         for (let ti = 0; ti < turnResult.toolCalls.length; ti++) {
@@ -1853,8 +1862,14 @@ export async function resumeParentChatWithMessage(
 }
 
 /** Send the composer text with tool calling (SSE loop; max rounds from Settings → Tools / `chat.maxToolTurns`, default {@link MAX_TOOL_TURNS}). */
-export async function sendMessageWithTools(): Promise<void> {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+export async function sendMessageWithTools(
+  composer?: Partial<ComposerSurface>,
+): Promise<void> {
+  const { inputEl: input } = resolveComposerSurface(composer);
+  if (!input) {
+    setStatus('err', 'Composer is not available');
+    return;
+  }
   const rawTextEarly = input.value.trim();
   if (isActiveChatStreaming()) {
     if (!rawTextEarly) return;
@@ -1867,8 +1882,7 @@ export async function sendMessageWithTools(): Promise<void> {
     const chat = getActiveChat();
     const hadPrior = Boolean(chat.pendingSteerMessage?.trim());
     if (enqueueSteerMessage(chat, rawTextEarly)) {
-      input.value = '';
-      input.style.height = 'auto';
+      clearComposerInput(input);
       setStatus(
         'ok',
         hadPrior
@@ -1891,8 +1905,7 @@ export async function sendMessageWithTools(): Promise<void> {
   );
   const pendingEdit = consumePendingMessageEdit();
   if (pendingEdit) {
-    input.value = '';
-    input.style.height = 'auto';
+    clearComposerInput(input);
     await completePendingMessageEdit(
       pendingEdit.chatId,
       pendingEdit.historyIndex,
@@ -2039,5 +2052,6 @@ export async function sendMessageWithTools(): Promise<void> {
     shouldScheduleTitle: firstUserPending && !deferTitleUntilTurnEnd,
     deferTitleUntilTurnEnd,
     skillBody,
+    composerSurface: composer,
   });
 }

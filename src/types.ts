@@ -571,6 +571,8 @@ export interface SessionState {
   activeBoardGroupId?: string;
   /** Last selected chat per normalized workspace key ('' = unassigned bucket). */
   lastActiveChatIdByWorkspace?: Record<string, string>;
+  /** Last selected chat per MinnowOS app id (e.g. `{ chat: '…' }` for the Chat app). */
+  lastActiveChatIdByApp?: Record<string, string>;
   /** Cumulative agent line stats keyed by normalized workspace path. */
   codeChangeTotalsByWorkspace?: Record<string, ChatCodeChangeTotals>;
 }

@@ -9,7 +9,7 @@ import { loadExpertsConfig, saveExpertsConfig } from '../config/experts-config';
 export async function refreshExpertsEnabledState(): Promise<void> {
   const config = await loadExpertsConfig();
   const empty = document.getElementById('expertsDisabled');
-  const pickStep = document.querySelector('.experts-step--gallery');
+  const pickStep = document.querySelector('.experts-step--browse');
   if (!empty || !pickStep) return;
   if (config.enabled) {
     empty.classList.add('hidden');

@@ -46,6 +46,11 @@ import './styles/bug-board.css';
 import './styles/hub.css';
 import './styles/orchestrate-hub.css';
 import './styles/orchestrate-plan-screen.css';
+import './styles/minnowos-shell.css';
+import './styles/minnowos-desktop.css';
+import './styles/minnowos-wallpaper.css';
+import './styles/minnowos-apps.css';
+import './styles/chat-app.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -159,6 +164,7 @@ import { initWorkspaceButton, refreshWorkspaceUi } from './ui/workspace-button';
 import {
   initWelcomePage,
   markWelcomePendingIfNeeded,
+  onWelcomeServerAvailabilityChanged,
   openWelcome,
   shouldShowWelcomeOnBoot,
 } from './ui/welcome-page';
@@ -171,6 +177,9 @@ import {
   registerTerminalKeyboardShortcut,
 } from './ui/terminal-panel';
 import { scheduleMarkAppReady } from './boot/app-ready';
+import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
+import { initOsRouter } from './os/router';
+import { initOsShell } from './os/shell';
 
 /** Expose inline HTML event handlers on `window` for the static markup. */
 function registerWindowHandlers(): void {
@@ -257,6 +266,7 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
   await refreshWorkspaceUi();
@@ -304,6 +314,8 @@ export async function initApp(): Promise<void> {
   benchmarkPage.initBenchmarkPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
+  const chatApp = await import('./ui/chat-app');
+  chatApp.initChatApp();
   const globalBugsPage = await import('./ui/global-bugs-page');
   globalBugsPage.initGlobalBugsPage();
   const expertsHub = await import('./ui/experts/experts-hub');
@@ -355,6 +367,15 @@ export async function initApp(): Promise<void> {
 
 /** Start init once the document is ready (module scripts often run after `load`). */
 function startApp(): void {
+  if (isOsShellEnabled()) {
+    const hash = window.location.hash;
+    if (hash === '' || hash === '#' || hash === '#/') {
+      window.location.replace('#/desktop');
+    }
+    initOsPageBridge();
+    initOsShell();
+    initOsRouter();
+  }
   void initApp();
 }
 
