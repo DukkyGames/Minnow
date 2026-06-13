@@ -44,6 +44,7 @@ describe('memory retrieve', () => {
       limit: 4,
       maxChars: 4000,
     });
+    assert.match(block, /<<<UNTRUSTED_SOURCE_DATA source="memory">>>/);
     assert.match(block, /npm workflow/);
     assert.match(block, /Python only/);
     assert.equal(ids.length, 2);
@@ -59,6 +60,7 @@ describe('memory retrieve', () => {
       limit: 4,
       maxChars: 4000,
     });
+    assert.match(block, /<<<UNTRUSTED_SOURCE_DATA source="memory">>>/);
     assert.match(block, /npm workflow/);
     assert.doesNotMatch(block, /Python only/);
     assert.ok(ids.includes(META_A.id));

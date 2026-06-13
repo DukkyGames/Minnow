@@ -3,6 +3,7 @@
  */
 
 import { getLocalServerAvailable } from '../tools/client';
+import { wrapUntrusted } from '../lib/untrusted.mjs';
 import { isOfficeExtension, OFFICE_EXTENSIONS } from './document-extensions.mjs';
 import type { Attachment } from './types';
 
@@ -250,7 +251,9 @@ export async function processFile(file: File): Promise<Attachment> {
     }
 
     if (isTextFile(file)) {
-      const text = await readFileAsText(file);
+      const text = wrapUntrusted(await readFileAsText(file), {
+        source: `attachment:${file.name}`,
+      });
       const largeTextWarning = text.length > LARGE_TEXT_WARN_BYTES;
       return { ...base, kind: 'text', text, largeTextWarning };
     }

@@ -8,6 +8,8 @@ import {
   isOfficeExtension,
   OFFICE_EXTENSIONS,
 } from '../../src/attachments/document-extensions.mjs';
+import path from 'node:path';
+import { wrapUntrusted } from '../security/untrusted.js';
 
 export { OFFICE_EXTENSIONS, isOfficeExtension };
 
@@ -251,7 +253,8 @@ export async function toolReadDocument(args) {
   }
 
   try {
-    return await extractDocumentText(buffer, filename);
+    const text = await extractDocumentText(buffer, filename);
+    return wrapUntrusted(text, { source: `document:${path.basename(filename)}` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.startsWith('Error:')) {

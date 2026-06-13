@@ -2,6 +2,8 @@
  * Keyword-based memory retrieval and injection block formatting (v1, no embeddings).
  */
 
+import { wrapUntrusted } from '../security/untrusted.js';
+
 /**
  * Tokenize query into lowercase words (length >= 3).
  * @param {string} query
@@ -104,8 +106,9 @@ export function retrieveMemoryBlock(allEntries, opts = {}) {
   });
 
   const top = ranked.slice(0, limit).map(({ meta, body }) => ({ meta, body }));
+  const block = formatMemoryBlock(top, maxChars);
   return {
-    block: formatMemoryBlock(top, maxChars),
+    block: block ? wrapUntrusted(block, { source: 'memory' }) : '',
     ids: top.map((t) => t.meta.id),
   };
 }

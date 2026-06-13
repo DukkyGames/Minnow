@@ -5,6 +5,7 @@
 import '../styles/research-page.css';
 
 import { decodeModelSelectKey } from '../lib/model-select-key';
+import { wrapUntrusted } from '../lib/untrusted.mjs';
 import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
 import { loadResearchConfig } from '../config/research-config';
 import { noteAgentMessage } from '../os/instances';
@@ -278,7 +279,7 @@ export async function discussResearchReport(researchId: string): Promise<void> {
     const report = data.result?.trim() ?? '';
     const spinoffBody =
       'The following is a Deep Research report. Use it as context when answering my questions.\n\n' +
-      report;
+      wrapUntrusted(report, { source: 'research-report' });
     chat.history.push({ role: 'user', content: spinoffBody });
     chat.name = 'Research discussion';
     scheduleSaveSessions();
