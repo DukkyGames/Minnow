@@ -6,6 +6,9 @@
 import { modelCache } from '../app-state';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
+  isKnownLocalProviderId,
+} from '../providers/provider-host';
+import {
   formatCapabilityBadges,
   formatCapabilityTooltip,
 } from '../providers/capability-badges';
@@ -22,9 +25,20 @@ import { resolveModelState } from './model-state-dot';
 const BROWSE_ALL_LIMIT = 12;
 
 const COLLAPSED_STORAGE_KEY = 'minnow-model-producer-collapsed';
+const HOST_FILTER_STORAGE_KEY = 'minnow-model-host-filter';
+
+/** Filter models by provider host: all, loopback/local, or remote/cloud APIs. */
+export type ModelHostFilter = 'all' | 'local' | 'cloud';
+
+const HOST_FILTER_CHOICES: { id: ModelHostFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'local', label: 'Local' },
+  { id: 'cloud', label: 'Cloud' },
+];
 
 let pickerBound = false;
 let open = false;
+let hostFilter: ModelHostFilter = loadModelHostFilter();
 
 function getElements() {
   const root = document.querySelector('.model-select-inner');
@@ -54,11 +68,124 @@ function saveCollapsedProducers(slugs: Set<string>): void {
   }
 }
 
+function loadModelHostFilter(): ModelHostFilter {
+  try {
+    const raw = localStorage.getItem(HOST_FILTER_STORAGE_KEY);
+    if (raw === 'all' || raw === 'local' || raw === 'cloud') return raw;
+  } catch {
+    /* ignore private mode */
+  }
+  return 'all';
+}
+
+/** Active local/cloud filter for model picker menus (persisted in localStorage). */
+export function getModelHostFilter(): ModelHostFilter {
+  return hostFilter;
+}
+
+export function setModelHostFilter(filter: ModelHostFilter): void {
+  hostFilter = filter;
+  try {
+    localStorage.setItem(HOST_FILTER_STORAGE_KEY, filter);
+  } catch {
+    /* ignore quota / private mode */
+  }
+  syncAllModelHostFilterBars();
+}
+
+function syncAllModelHostFilterBars(): void {
+  const current = getModelHostFilter();
+  for (const bar of document.querySelectorAll('.model-select-host-filter')) {
+    for (const btn of bar.querySelectorAll<HTMLButtonElement>('.model-host-filter-segment')) {
+      const id = btn.dataset.filter as ModelHostFilter | undefined;
+      btn.setAttribute('aria-checked', id === current ? 'true' : 'false');
+    }
+  }
+}
+
+function providerIdForOption(opt: HTMLOptionElement): string {
+  const fromAttr = opt.getAttribute('data-provider-id')?.trim();
+  if (fromAttr) return fromAttr;
+  return decodeModelSelectKey(opt.value)?.providerId ?? '';
+}
+
+function isLocalProviderId(providerId: string, opt?: HTMLOptionElement): boolean {
+  const hostAttr = opt?.getAttribute('data-provider-host');
+  if (hostAttr === 'local') return true;
+  if (hostAttr === 'cloud') return false;
+
+  const id = providerId.trim();
+  if (!id) return true;
+  if (isKnownLocalProviderId(id)) return true;
+  return false;
+}
+
+function optionMatchesHostFilter(opt: HTMLOptionElement, filter: ModelHostFilter): boolean {
+  if (filter === 'all') return true;
+  const isLocal = isLocalProviderId(providerIdForOption(opt), opt);
+  return filter === 'local' ? isLocal : !isLocal;
+}
+
+function filterOptionsByHost(
+  options: HTMLOptionElement[],
+  filter: ModelHostFilter,
+): HTMLOptionElement[] {
+  if (filter === 'all') return options;
+  return options.filter((opt) => optionMatchesHostFilter(opt, filter));
+}
+
+function emptyFilterMessage(filter: ModelHostFilter): string {
+  if (filter === 'local') return 'No local models';
+  if (filter === 'cloud') return 'No cloud models';
+  return 'No models';
+}
+
+/** Mount All / Local / Cloud segments; returns the filter bar root. */
+export function mountModelHostFilterBar(
+  parent: HTMLElement,
+  onChange: () => void,
+  extraClass = '',
+): HTMLDivElement {
+  const bar = document.createElement('div');
+  bar.className = ['model-select-host-filter', extraClass].filter(Boolean).join(' ');
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', 'Model host filter');
+
+  const segments = document.createElement('div');
+  segments.className = 'model-host-filter-segmented';
+
+  for (const { id, label } of HOST_FILTER_CHOICES) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'model-host-filter-segment';
+    btn.textContent = label;
+    btn.dataset.filter = id;
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', getModelHostFilter() === id ? 'true' : 'false');
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setModelHostFilter(id);
+      onChange();
+    });
+    segments.appendChild(btn);
+  }
+
+  bar.appendChild(segments);
+  parent.appendChild(bar);
+  return bar;
+}
+
+function getTopBarModelPopover(): HTMLElement | null {
+  return document.querySelector('.model-select-inner .model-select-popover');
+}
+
 /** Close the model list popover. */
 export function closeModelSelectMenu(): void {
   const { root, trigger, menu } = getElements();
   open = false;
   root?.classList.remove('is-open');
+  getTopBarModelPopover()?.classList.add('hidden');
   menu?.classList.add('hidden');
   trigger?.setAttribute('aria-expanded', 'false');
 }
@@ -68,6 +195,7 @@ function openModelSelectMenu(): void {
   if (!root || !trigger || !menu || !sel || trigger.disabled) return;
   open = true;
   root.classList.add('is-open');
+  getTopBarModelPopover()?.classList.remove('hidden');
   menu.classList.remove('hidden');
   trigger.setAttribute('aria-expanded', 'true');
 }
@@ -187,14 +315,15 @@ function appendModelOptionRow(
 function collectSelectOptions(sel: HTMLSelectElement): HTMLOptionElement[] {
   const options: HTMLOptionElement[] = [];
   for (const child of [...sel.children]) {
-    if (child instanceof HTMLOptGroupElement) {
+    const tag = child.tagName;
+    if (tag === 'OPTGROUP') {
       for (const el of [...child.children]) {
-        if (el instanceof HTMLOptionElement && el.value.trim()) {
-          options.push(el);
+        if (el.tagName === 'OPTION' && (el as HTMLOptionElement).value.trim()) {
+          options.push(el as HTMLOptionElement);
         }
       }
-    } else if (child instanceof HTMLOptionElement && child.value.trim()) {
-      options.push(child);
+    } else if (tag === 'OPTION' && (child as HTMLOptionElement).value.trim()) {
+      options.push(child as HTMLOptionElement);
     }
   }
   return options;
@@ -273,8 +402,19 @@ export function renderModelSelectMenuRows(
   const scrollTop = menu.scrollTop;
   menu.innerHTML = '';
 
-  const options = collectSelectOptions(sel);
-  if (options.length === 0) return;
+  const allOptions = collectSelectOptions(sel);
+  if (allOptions.length === 0) return;
+
+  const hostFilter = getModelHostFilter();
+  const options = filterOptionsByHost(allOptions, hostFilter);
+  if (options.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'model-select-empty-filter';
+    empty.setAttribute('role', 'presentation');
+    empty.textContent = emptyFilterMessage(hostFilter);
+    menu.appendChild(empty);
+    return;
+  }
 
   const collapsed = loadCollapsedProducers();
 
@@ -342,12 +482,30 @@ export function syncModelSelectPicker(): void {
 }
 
 /** Bind trigger, outside click, and escape for the model combobox. */
+function ensureTopBarHostFilterBar(): void {
+  const root = document.querySelector('.model-select-inner');
+  const menu = document.getElementById('modelSelectMenu');
+  if (!root || !menu || root.querySelector('.model-select-popover')) return;
+
+  const shell = document.createElement('div');
+  shell.className = 'model-select-popover hidden';
+  menu.parentNode?.insertBefore(shell, menu);
+  shell.appendChild(menu);
+
+  mountModelHostFilterBar(shell, () => {
+    const { sel, menu: menuEl } = getElements();
+    if (sel && menuEl) renderModelSelectMenuRows(menuEl, sel);
+  });
+}
+
 export function initModelSelectPicker(): void {
   if (pickerBound) return;
   pickerBound = true;
 
   const { trigger } = getElements();
   if (!trigger) return;
+
+  ensureTopBarHostFilterBar();
 
   trigger.addEventListener('click', () => {
     toggleModelSelectMenu();

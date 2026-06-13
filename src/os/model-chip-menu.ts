@@ -14,6 +14,7 @@ import { isModelLoaded, resolveModelState } from '../ui/model-state-dot';
 import { modelCache } from '../app-state';
 import {
   closeModelSelectMenu,
+  mountModelHostFilterBar,
   renderModelSelectMenuRows,
   syncModelSelectPicker,
 } from '../ui/model-select-picker';
@@ -157,6 +158,8 @@ function ensurePanel(): HTMLDivElement {
   panelEl.className = 'mn-os-model-menu hidden';
   panelEl.setAttribute('role', 'dialog');
   panelEl.setAttribute('aria-label', 'Model picker');
+
+  mountModelHostFilterBar(panelEl, () => rebuildMenuList(), 'mn-os-model-menu__filter');
 
   listEl = document.createElement('ul');
   listEl.className = 'mn-os-model-menu__list';

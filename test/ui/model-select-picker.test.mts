@@ -160,6 +160,56 @@ describe('syncModelSelectPicker', () => {
     }
   });
 
+  test('filters models by local vs cloud provider host', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <div class="model-select-inner">
+        <select id="modelSelect" class="model-select-native">
+          <option value="lm-studio-local/local-model" data-provider-id="lm-studio-local" data-provider-host="local">Local model — LM Studio</option>
+          <option value="openrouter/cloud-model" data-provider-id="openrouter" data-provider-host="cloud">Cloud model — OpenRouter</option>
+        </select>
+        <button type="button" id="modelSelectTrigger"><span id="modelSelectTriggerText"></span></button>
+        <ul id="modelSelectMenu" class="model-select-menu hidden" role="listbox"></ul>
+      </div>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    const prevLocalStorage = globalThis.localStorage;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+    (globalThis as { localStorage: Storage }).localStorage = win.localStorage;
+
+    try {
+      const { renderModelSelectMenuRows, setModelHostFilter } = await import(
+        '../../src/ui/model-select-picker.ts'
+      );
+
+      const sel = doc.getElementById('modelSelect') as HTMLSelectElement;
+      const menu = doc.getElementById('modelSelectMenu') as HTMLUListElement;
+
+      setModelHostFilter('local');
+      renderModelSelectMenuRows(menu, sel);
+      assert.equal(menu.querySelectorAll('.model-select-option').length, 1);
+      assert.match(menu.textContent ?? '', /Local model/);
+
+      setModelHostFilter('cloud');
+      renderModelSelectMenuRows(menu, sel);
+      assert.equal(menu.querySelectorAll('.model-select-option').length, 1);
+      assert.match(menu.textContent ?? '', /Cloud model/);
+
+      setModelHostFilter('all');
+      renderModelSelectMenuRows(menu, sel);
+      assert.equal(menu.querySelectorAll('.model-select-option').length, 2);
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+      (globalThis as { localStorage: Storage }).localStorage = prevLocalStorage;
+    }
+  });
+
   test('menu rows keep full optionText for long labels (BUG-017)', async () => {
     const longLabel =
       'Qwen3.6 35B A3b · Q4_K_M · extended context variant name';

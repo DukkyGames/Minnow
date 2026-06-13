@@ -78,6 +78,97 @@
   display: none;
 }
 
+/* Popover shell: host filter + list (top bar picker). */
+.model-select-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 60;
+  width: max-content;
+  min-width: max(100%, 20rem);
+  max-width: min(90vw, 32rem);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover-soft);
+  overflow: hidden;
+}
+
+.model-select-popover.hidden {
+  display: none;
+}
+
+.model-select-popover .model-select-menu {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.model-select-host-filter {
+  padding: 8px 10px;
+}
+
+.model-host-filter-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-0);
+  border: 1px solid var(--mn-border);
+}
+
+.model-host-filter-segment {
+  flex: 1;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 5px 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition:
+    background 0.14s var(--ease-out),
+    color 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .model-host-filter-segment:hover:not([aria-checked='true']) {
+    background: var(--mn-bg);
+    color: var(--mn-fg);
+    border-color: var(--mn-border);
+  }
+}
+
+.model-host-filter-segment[aria-checked='true'] {
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+  border-color: var(--mn-accent);
+}
+
+.model-host-filter-segment:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.model-select-empty-filter {
+  padding: 12px;
+  text-align: center;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  list-style: none;
+}
+
 /* Legacy endpoint optgroup label — kept for backward compatibility; producer headers replace it. */
 .model-select-optgroup-label {
   padding: 6px 12px 4px;

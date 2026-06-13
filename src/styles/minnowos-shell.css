@@ -260,6 +260,10 @@
   display: none;
 }
 
+.mn-os-model-menu__filter {
+  border-bottom: 1px solid var(--mn-border);
+}
+
 .mn-os-model-menu__list {
   margin: 0;
   padding: 4px 0;
