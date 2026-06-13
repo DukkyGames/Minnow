@@ -2,7 +2,8 @@
  * Synthesis settings from ~/.minnow/config.json → synthesis block.
  */
 
-import { readConfigJson } from '../config/store.js';
+import { readConfigJson, writeConfigJson } from '../config/store.js';
+import { normalizeSynthesisConfig } from '../config/validators.js';
 import { getActiveProviderId } from '../providers/store.js';
 
 /** Default synthesis configuration (suggest-and-confirm, not auto-save). */
@@ -34,6 +35,22 @@ export async function loadSynthesisConfig() {
     ...DEFAULT_SYNTHESIS_CONFIG,
     ...raw,
   };
+}
+
+/**
+ * Persist partial synthesis settings into config.json.
+ * @param {Partial<typeof DEFAULT_SYNTHESIS_CONFIG>} partial
+ * @returns {Promise<typeof DEFAULT_SYNTHESIS_CONFIG>}
+ */
+export async function saveSynthesisConfig(partial) {
+  const config = (await readConfigJson('config.json')) ?? {};
+  const existing =
+    config.synthesis && typeof config.synthesis === 'object'
+      ? { ...DEFAULT_SYNTHESIS_CONFIG, ...config.synthesis }
+      : { ...DEFAULT_SYNTHESIS_CONFIG };
+  config.synthesis = normalizeSynthesisConfig(partial ?? {}, existing);
+  await writeConfigJson('config.json', config);
+  return config.synthesis;
 }
 
 /**

@@ -1287,6 +1287,10 @@ label.settings-action-btn {
   align-items: center;
 }
 
+.settings-memory-synthesis .settings-input--narrow {
+  width: 5rem;
+}
+
 .settings-memory-offline.hidden,
 .settings-mcp-list,
 .settings-lsp-list {

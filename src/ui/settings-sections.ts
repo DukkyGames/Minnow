@@ -58,6 +58,7 @@ import {
 import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
 import { mountMemoryEmbeddingsPanel } from './settings-memory-embeddings';
+import { mountMemorySynthesisSettingsPanel } from './settings-memory-synthesis';
 import { mountMemoryProposalsPanel } from './memory-proposals-panel';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
@@ -1900,11 +1901,15 @@ async function renderMemorySection(): Promise<void> {
   const offlineEl = document.getElementById('settingsMemoryOffline');
   const addPanel = document.getElementById('settingsMemoryAddPanel');
   const embeddingsPanel = document.getElementById('settingsMemoryEmbeddingsPanel');
+  const synthesisPanel = document.getElementById('settingsMemorySynthesisPanel');
   const proposalsPanel = document.getElementById('settingsMemoryProposalsPanel');
   if (!countEl || !hintEl || !listEl) return;
 
   if (embeddingsPanel) {
     mountMemoryEmbeddingsPanel(embeddingsPanel, setStatus);
+  }
+  if (synthesisPanel) {
+    mountMemorySynthesisSettingsPanel(synthesisPanel, setStatus);
   }
   if (proposalsPanel) {
     await mountMemoryProposalsPanel(proposalsPanel, setStatus);

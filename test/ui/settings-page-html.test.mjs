@@ -100,6 +100,12 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsMemoryProposalsBadge"/);
   });
 
+  test('memory synthesis settings panel exists in index.html', () => {
+    assert.match(html, /id="settingsMemorySynthesisPanel"/);
+    assert.match(html, /id="settingsMemorySynthesisThrottle"/);
+    assert.match(html, /id="settingsMemorySynthesisSave"/);
+  });
+
   test('prompt token estimate elements exist in index.html', () => {
     assert.match(html, /id="settingsPromptTokenEstimate"/);
     assert.match(html, /id="settingsPromptTokenBreakdown"/);

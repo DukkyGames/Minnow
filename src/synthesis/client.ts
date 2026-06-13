@@ -48,6 +48,20 @@ export interface SynthesisStatus {
   totalPending: number;
 }
 
+export interface SynthesisConfig {
+  enabled: boolean;
+  requireConfirmation: boolean;
+  confidenceThreshold: number;
+  maxProposalsPerTurn: number;
+  throttleMessagePairs: number;
+  skillMinRounds: number;
+  skillMinToolCalls: number;
+  utilityProviderId: string;
+  utilityModelId: string;
+  maxPendingProposals: number;
+  rejectedRetentionDays: number;
+}
+
 async function synthesisFetch<T>(
   path: string,
   init?: RequestInit,
@@ -64,6 +78,34 @@ async function synthesisFetch<T>(
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Load synthesis settings from the server. */
+export async function fetchSynthesisConfig(): Promise<SynthesisConfig | null> {
+  const data = await synthesisFetch<{ synthesis: SynthesisConfig }>(
+    '/api/memory/synthesis/config',
+  );
+  return data?.synthesis ?? null;
+}
+
+/** Save partial synthesis settings. */
+export async function saveSynthesisConfig(
+  partial: Partial<SynthesisConfig>,
+): Promise<SynthesisConfig | null> {
+  const ok = await detectLocalServer();
+  if (!ok) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/memory/synthesis/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { synthesis: SynthesisConfig };
+    return data.synthesis ?? null;
   } catch {
     return null;
   }

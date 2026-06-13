@@ -6,7 +6,7 @@ import { createEntry } from './store.js';
 import { createUserSkill, saveUserSkillContent } from '../skills/user-skills.js';
 import { parseSkillFrontmatter } from '../skills/parse-frontmatter.js';
 import { getAppRoot } from '../workspace/root.js';
-import { loadSynthesisConfig } from './synthesis-config.js';
+import { loadSynthesisConfig, saveSynthesisConfig } from './synthesis-config.js';
 import { runMemorySynthesis } from './synthesis.js';
 import { runSkillSynthesis } from './skill-synthesis.js';
 import { incrementMessagePairs } from './synthesis-state.js';
@@ -73,6 +73,13 @@ export async function handleSynthesisRequest(req, res, pathname) {
   try {
     if (pathname === '/api/memory/synthesis/config' && req.method === 'GET') {
       const synthesis = await loadSynthesisConfig();
+      sendJson(res, 200, { synthesis });
+      return true;
+    }
+
+    if (pathname === '/api/memory/synthesis/config' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const synthesis = await saveSynthesisConfig(body);
       sendJson(res, 200, { synthesis });
       return true;
     }
