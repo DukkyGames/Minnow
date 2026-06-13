@@ -2,6 +2,8 @@
  * Derive human-readable model labels from canonical LM Studio ids (top-bar picker).
  */
 
+import { isKnownLocalProviderId, isLocalProviderBaseUrl } from '../providers/provider-host';
+
 /** Input for one model row in the picker. */
 export interface ModelLabelInput {
   id: string;
@@ -162,6 +164,8 @@ export interface TopBarModelOptionInput {
   providerId: string;
   /** Whether this provider exposes LM Studio-style load/unload (for button state without extra fetches). */
   supportsModelLoadUnload: boolean;
+  /** Provider upstream base URL — used for local/cloud picker filtering. */
+  providerBaseUrl?: string;
 }
 
 /**
@@ -178,5 +182,9 @@ export function buildTopBarModelOptionHtml(input: TopBarModelOptionInput): strin
   const escapedText = escapeHtml(displayText);
   const escapedPid = escapeHtml(input.providerId);
   const loadAttr = input.supportsModelLoadUnload ? ' data-supports-load-unload="1"' : '';
-  return `<option value="${escapedValue}" title="${escapedTitle}" data-provider-id="${escapedPid}"${loadAttr}>${escapedText}</option>`;
+  const isLocal =
+    isKnownLocalProviderId(input.providerId) ||
+    (input.providerBaseUrl ? isLocalProviderBaseUrl(input.providerBaseUrl) : false);
+  const hostAttr = ` data-provider-host="${isLocal ? 'local' : 'cloud'}"`;
+  return `<option value="${escapedValue}" title="${escapedTitle}" data-provider-id="${escapedPid}"${hostAttr}${loadAttr}>${escapedText}</option>`;
 }

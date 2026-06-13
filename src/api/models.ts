@@ -269,6 +269,7 @@ function buildMultiProviderModelSelectInnerHtml(results: ProviderModelsResult[])
           value: encodeModelSelectKey(provider.id, m.id),
           providerId: provider.id,
           providerLabel: provider.label,
+          providerBaseUrl: provider.baseUrl,
           supportsModelLoadUnload: providerSupportsModelLoadUnload(provider),
           model: { id: m.id, quantization: m.quantization, state: m.state },
         }),
