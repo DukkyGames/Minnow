@@ -1811,7 +1811,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           messages: buildSynthesisMessages(chat),
           roundCount: synthesisRoundCount,
           toolCount: synthesisToolCount,
-          sourceExcerpt: buildSynthesisExcerpt(chat, userText),
+          sourceExcerpt: buildSynthesisExcerpt(chat),
           assistantText,
         });
       }
