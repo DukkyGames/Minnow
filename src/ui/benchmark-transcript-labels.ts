@@ -9,6 +9,5 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   speed: 'Speed',
   tools: 'Tools',
   skills: 'Skills',
-  modes: 'Modes',
   coding: 'Coding',
 };

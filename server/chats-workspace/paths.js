@@ -5,6 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { getBenchmarkWorkspacePath } from '../benchmark-workspace/paths.js';
 import { getMinnowHome } from '../config/home.js';
 import {
   getWorkspaceRoot,
@@ -19,7 +20,7 @@ const README_BODY = `# Minnow Chats Workspace
 This directory is a sandbox for chat-scoped files (attachments, exports, and session artifacts).
 
 - Files here stay separate from your active Code workspace unless tools are explicitly pointed at this path.
-- The server only allows tool \`workspaceRoot\` overrides for your Code workspace or this chats folder.
+- The server only allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, or benchmark workspace.
 - Do not store secrets here if you sync or share ~/.minnow.
 `;
 
@@ -47,7 +48,7 @@ export async function ensureChatsWorkspace() {
 }
 
 /**
- * True when rootPath is the active Code workspace or the chats sandbox.
+ * True when rootPath is the active Code workspace, chats sandbox, or benchmark workspace.
  * @param {string} rootPath
  */
 export function isAllowedWorkspaceRoot(rootPath) {
@@ -58,7 +59,8 @@ export function isAllowedWorkspaceRoot(rootPath) {
   const key = normalizeWorkspacePathKey(resolved);
   const codeKey = normalizeWorkspacePathKey(getWorkspaceRoot());
   const chatsKey = normalizeWorkspacePathKey(getChatsWorkspacePath());
-  return key === codeKey || key === chatsKey;
+  const benchmarkKey = normalizeWorkspacePathKey(getBenchmarkWorkspacePath());
+  return key === codeKey || key === chatsKey || key === benchmarkKey;
 }
 
 /**
@@ -68,7 +70,9 @@ export function isAllowedWorkspaceRoot(rootPath) {
  */
 export async function validateAllowedWorkspaceRoot(rootPath) {
   if (!isAllowedWorkspaceRoot(rootPath)) {
-    throw new Error('workspaceRoot is not in the allowlist (Code workspace or chats workspace)');
+    throw new Error(
+      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, or benchmark workspace)',
+    );
   }
   const resolved = path.resolve(String(rootPath).trim());
   let stat;

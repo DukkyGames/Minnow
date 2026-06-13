@@ -27,11 +27,3 @@ export function animateBarWidth(
     el.style.width = `${percent}%`;
   });
 }
-
-export const CAMPAIGN_STEPS = [
-  { id: 'planning', label: 'Planning campaign', detail: 'Selecting suites and models' },
-  { id: 'warming', label: 'Warming models', detail: 'Binding providers' },
-  { id: 'running', label: 'Running suites', detail: 'Streaming tokens and scoring probes' },
-  { id: 'aggregating', label: 'Aggregating results', detail: 'Building comparison grid' },
-  { id: 'done', label: 'Complete', detail: 'Campaign saved' },
-] as const;

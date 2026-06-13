@@ -117,6 +117,10 @@ export interface ExecuteToolContext {
   subAgentType?: string;
   /** Active work agent on the parent chat (main loop tool calls). */
   workAgentId?: string | null;
+  /** Override server workspace root (chats sandbox, benchmark workspace, etc.). */
+  workspaceRoot?: string;
+  /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
+  benchmarkAutonomous?: boolean;
 }
 
 const STREAMING_TOOL_NAMES = new Set([
@@ -286,7 +290,7 @@ async function executeToolInner(
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    return executeServerTool(name, args, context.modeId);
+    return executeServerTool(name, args, context.modeId, context);
   }
 
   if (
@@ -623,7 +627,8 @@ async function executeServerTool(
   context?: ExecuteToolContext,
 ): Promise<ToolExecutionResult> {
   let response: Response;
-  const workspaceRoot = await resolveToolWorkspaceRoot();
+  const workspaceRoot =
+    context?.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
   const payload: {
     name: string;
     args: Record<string, unknown>;

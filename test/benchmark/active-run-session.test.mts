@@ -15,7 +15,7 @@ const SAMPLE_SESSION: ActiveBenchmarkSession = {
   startedAt: '2026-05-25T12:00:00.000Z',
   preset: 'quick',
   startMode: 'quick',
-  suiteIds: ['capability', 'speed', 'modes'],
+  suiteIds: ['capability', 'speed'],
   modelId: 'test-model',
   completedSuites: [
     {
@@ -61,7 +61,7 @@ describe('active benchmark session', () => {
 
   test('remainingSuiteIds skips completed suites', () => {
     const remaining = remainingSuiteIds(SAMPLE_SESSION);
-    assert.deepEqual(remaining, ['speed', 'modes'] as SuiteId[]);
+    assert.deepEqual(remaining, ['speed'] as SuiteId[]);
   });
 
   test('clear removes persisted session', () => {

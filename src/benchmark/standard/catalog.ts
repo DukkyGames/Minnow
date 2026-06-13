@@ -25,7 +25,6 @@ const INTEGRATION_SUITE_CATEGORIES: Record<SuiteId, string> = {
   speed: 'integration',
   tools: 'integration',
   skills: 'integration',
-  modes: 'integration',
   coding: 'integration',
 };
 

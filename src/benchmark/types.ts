@@ -11,7 +11,6 @@ export type SuiteId =
   | 'speed'
   | 'tools'
   | 'skills'
-  | 'modes'
   | 'coding';
 
 /** quick/full = preset runs; custom = user-selected suite subset via Run. */

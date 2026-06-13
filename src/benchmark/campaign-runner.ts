@@ -22,13 +22,12 @@ import { runStandardPackForTarget } from './standard/runner.ts';
 import type { SuiteId } from './types.ts';
 import { saveCampaign } from './campaign-persistence.ts';
 
-const QUICK_SUITES: SuiteId[] = ['capability', 'speed', 'modes'];
+const QUICK_SUITES: SuiteId[] = ['capability', 'speed'];
 const FULL_SUITES: SuiteId[] = [
   'capability',
   'speed',
   'tools',
   'skills',
-  'modes',
   'coding',
 ];
 

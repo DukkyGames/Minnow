@@ -3,8 +3,10 @@ import { describe, test } from 'node:test';
 
 import {
   createBenchmarkExecuteToolFn,
+  executeBenchmarkTool,
   isBenchmarkStubbedTool,
 } from '../../src/benchmark/execute-tool-sandbox.ts';
+import { maybeBlockToolForUserApproval } from '../../src/tools/permission-gate.ts';
 
 describe('benchmark execute-tool sandbox', () => {
   test('ask_question is stubbed and does not open UI', async () => {
@@ -34,5 +36,25 @@ describe('benchmark execute-tool sandbox', () => {
     const parsed = JSON.parse(out.content) as { benchmark?: boolean; stubbed?: string };
     assert.equal(parsed.benchmark, true);
     assert.equal(parsed.stubbed, 'spawn_sub_agent');
+  });
+
+  test('request_browser_origin_access is stubbed during benchmarks', async () => {
+    assert.equal(isBenchmarkStubbedTool('request_browser_origin_access'), true);
+    const out = await executeBenchmarkTool('request_browser_origin_access', {
+      url: 'https://example.com',
+      decision: 'once',
+    });
+    const parsed = JSON.parse(out.content) as { stubbed?: string };
+    assert.equal(parsed.stubbed, 'request_browser_origin_access');
+  });
+
+  test('benchmarkAutonomous skips permission approval gate', async () => {
+    const blocked = await maybeBlockToolForUserApproval(
+      'read_file',
+      { path: 'package.json' },
+      { benchmarkAutonomous: true },
+      'read_file',
+    );
+    assert.equal(blocked, null);
   });
 });

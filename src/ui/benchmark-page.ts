@@ -30,15 +30,30 @@ import {
   setOverviewRunState,
   updateOverviewLiveAggregates,
 } from './benchmark/overview-panel.ts';
-import { CAMPAIGN_STEPS } from './benchmark/animations.ts';
+import {
+  attachCompletedRun,
+  clearMultiModelCampaign,
+  findSessionByTestId,
+  getAllTargetSessions,
+  getCampaignMaxConcurrency,
+  getSelectedTargetKey,
+  getTargetSession,
+  initModelRunCards,
+  initMultiModelCampaign,
+  isMultiModelCampaignActive,
+  markTargetDone,
+  markTargetRunning,
+  markTargetStopped,
+  renderModelCards,
+  setScheduleTogglesDisabled,
+  syncScheduleSectionVisibility,
+  targetKeyForRun,
+  updateTargetProgress,
+  type TargetLiveSession,
+} from './benchmark/model-run-cards.ts';
 
 import { aggregateRunScore, computeSuiteResultStats } from '../benchmark/scoring.ts';
 import { runBenchmark, resolveBenchmarkSuites } from '../benchmark/runner.ts';
-import {
-  formatTestCardDescription,
-  resolveTestDescription,
-  SUITE_INTROS,
-} from '../benchmark/test-catalog.ts';
 import {
   clearActiveBenchmarkSession,
   loadActiveBenchmarkSession,
@@ -82,7 +97,6 @@ const SUITE_TOGGLE_ORDER: SuiteId[] = [
   'speed',
   'tools',
   'skills',
-  'modes',
   'coding',
 ];
 
@@ -184,22 +198,20 @@ function testCardDomId(testId: string, suffix: string): string {
   return `benchmark-${suffix}-${slug}`;
 }
 
+function setSummaryVisible(visible: boolean): void {
+  const el = document.getElementById('benchmarkSummary');
+  if (el instanceof HTMLElement) {
+    el.hidden = !visible;
+  }
+}
+
 function renderStoppedTestCard(testId: string, suite: SuiteId, label: string): string {
   const titleId = testCardDomId(testId, 'title');
-  const descId = testCardDomId(testId, 'desc');
-  const catalogDesc = resolveTestDescription(testId, suite, label);
-  const descriptionHtml = catalogDesc
-    ? `<p class="benchmark-test-card-desc" id="${escapeHtml(descId)}">${escapeHtml(formatTestCardDescription(catalogDesc))}</p>`
-    : '';
-  const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
-  const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
-
   const ariaLabel = `View transcript: ${label}, stopped`;
-  return `<article class="benchmark-test-card is-stopped is-fail" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
+  return `<article class="benchmark-test-card is-stopped is-fail" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}" aria-labelledby="${escapeHtml(titleId)}">
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg('fail')}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
-      ${descriptionHtml}
     </div>
     <p class="benchmark-test-card-meta">Stopped</p>
   </article>`;
@@ -207,20 +219,11 @@ function renderStoppedTestCard(testId: string, suite: SuiteId, label: string): s
 
 function renderRunningTestCard(testId: string, suite: SuiteId, label: string): string {
   const titleId = testCardDomId(testId, 'title');
-  const descId = testCardDomId(testId, 'desc');
-  const catalogDesc = resolveTestDescription(testId, suite, label);
-  const descriptionHtml = catalogDesc
-    ? `<p class="benchmark-test-card-desc" id="${escapeHtml(descId)}">${escapeHtml(formatTestCardDescription(catalogDesc))}</p>`
-    : '';
-  const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
-  const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
-
   const ariaLabel = `View transcript: ${label}, running`;
-  return `<article class="benchmark-test-card is-running is-current" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-busy="true" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
+  return `<article class="benchmark-test-card is-running is-current" data-test-id="${escapeHtml(testId)}" role="button" tabindex="0" aria-busy="true" aria-label="${escapeHtml(ariaLabel)}" aria-labelledby="${escapeHtml(titleId)}">
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg('running')}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(label)}</h3>
-      ${descriptionHtml}
     </div>
     <p class="benchmark-test-card-meta">Running…</p>
   </article>`;
@@ -229,31 +232,15 @@ function renderRunningTestCard(testId: string, suite: SuiteId, label: string): s
 function renderTestCard(result: TestResult, animate = false): string {
   const state = cardState(result);
   const icon = cardIconKind(result);
-  const judged = result.judged ? ' · judged' : '';
-  const details = result.details?.trim();
-  const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result)}${judged}`;
+  const meta = `${formatDurationMs(result.durationMs)} · ${statusText(result)}`;
 
   const titleId = testCardDomId(result.testId, 'title');
-  const descId = testCardDomId(result.testId, 'desc');
-  const catalogDesc = resolveTestDescription(result.testId, result.suite, result.label);
-  const descriptionHtml = catalogDesc
-    ? `<p class="benchmark-test-card-desc" id="${escapeHtml(descId)}">${escapeHtml(formatTestCardDescription(catalogDesc))}</p>`
-    : '';
-
   const ariaLabel = `View transcript: ${result.label}, ${statusText(result)}`;
-  const describedBy = catalogDesc ? ` aria-describedby="${escapeHtml(descId)}"` : '';
-  const labelledBy = ` aria-labelledby="${escapeHtml(titleId)}"`;
 
-  const detailsHtml = details
-    ? `<p class="benchmark-test-card-details">${escapeHtml(details.slice(0, 120))}</p>`
-    : '';
-
-  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"${labelledBy}${describedBy}>
+  return `<article class="benchmark-test-card ${state}${animate ? ' is-entering' : ''}" data-test-id="${escapeHtml(result.testId)}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}" aria-labelledby="${escapeHtml(titleId)}">
     <div class="benchmark-test-card-status" aria-hidden="true">${iconSvg(icon)}</div>
     <div class="benchmark-test-card-body">
       <h3 class="benchmark-test-card-title" id="${escapeHtml(titleId)}">${escapeHtml(result.label)}</h3>
-      ${descriptionHtml}
-      ${detailsHtml}
     </div>
     <p class="benchmark-test-card-meta">${escapeHtml(meta)}</p>
   </article>`;
@@ -305,6 +292,14 @@ function syntheticRunningResult(testId: string, suite: SuiteId, label: string): 
 
 /** Resolve a test for transcript drill-down (live map, then saved run). */
 export function resolveTestForTranscript(testId: string): TestResult | null {
+  if (isMultiModelCampaignActive()) {
+    const session = findSessionByTestId(testId);
+    const fromSession = session?.testResults.get(testId);
+    if (fromSession) return fromSession;
+    if (session?.completedRun) {
+      return resolveTestResultForCard(session.completedRun, testId);
+    }
+  }
   const live = liveTestResults.get(testId);
   if (live) return live;
   return resolveTestResultForCard(lastRun, testId);
@@ -333,6 +328,11 @@ function resolveTestFromCard(card: HTMLElement): TestResult | null {
 }
 
 function transcriptRunMeta(): BenchmarkTranscriptRunMeta | null {
+  if (isMultiModelCampaignActive()) {
+    const key = getSelectedTargetKey();
+    const session = key ? getTargetSession(key) : null;
+    if (session?.drawerMeta) return session.drawerMeta;
+  }
   if (liveRunDrawerMeta) return liveRunDrawerMeta;
   if (!lastRun) return null;
   return {
@@ -373,7 +373,7 @@ function buildPartialBenchmarkRun(
     totalScore: suites.length ? aggregateRunScore(suites) : 0,
     headlineTtftMs: 0,
     headlineTokPerSec: 0,
-    modeMatrixPassed: suites.find((s) => s.id === 'modes')?.passed ?? 0,
+    modeMatrixPassed: 0,
     toolsPassed: suites.find((s) => s.id === 'tools')?.passed ?? 0,
     skillsPassed: suites.find((s) => s.id === 'skills')?.passed ?? 0,
     suites,
@@ -491,10 +491,7 @@ function ensureSuiteSection(suiteId: SuiteId, running = false): HTMLElement | nu
     section.dataset.suite = suiteId;
     section.innerHTML = `
       <header class="benchmark-suite-block-header">
-        <div class="benchmark-suite-block-heading">
-          <h2>${escapeHtml(SUITE_LABELS[suiteId])}</h2>
-          <p class="benchmark-suite-block-intro">${escapeHtml(SUITE_INTROS[suiteId])}</p>
-        </div>
+        <h2>${escapeHtml(SUITE_LABELS[suiteId])}</h2>
         <span class="benchmark-suite-block-score" data-suite-score>—</span>
       </header>
       <div class="benchmark-test-grid" data-suite-tests></div>
@@ -642,11 +639,7 @@ function initLiveRunUI(mode: BenchmarkStartMode, suiteIds: SuiteId[]): void {
     mount.classList.add('is-live');
   }
 
-  const summary = document.getElementById('benchmarkSummary');
-  if (summary) {
-    summary.innerHTML =
-      '<p class="benchmark-empty benchmark-empty--live">Scoring the active model…</p>';
-  }
+  setSummaryVisible(false);
 
   setProgressVisible(true);
   updateProgressBar(0, progressStartLabel(mode));
@@ -669,6 +662,12 @@ function finishLiveRunUI(options?: {
   setProgressVisible(false);
   document.getElementById('benchmarkSuites')?.classList.remove('is-live');
 
+  if (lastRun) {
+    renderSummary(lastRun);
+  } else if (options?.markCurrentStopped || options?.commitPartial) {
+    renderSummary(null);
+  }
+
   for (const section of document.querySelectorAll('.benchmark-suite-block.is-active')) {
     section.classList.remove('is-active');
   }
@@ -683,6 +682,215 @@ function liveProgressPercent(): number {
       ? Math.min(suiteSlice * 0.92, (liveTestsInSuite / (liveTestsInSuite + 1)) * suiteSlice)
       : suiteSlice * 0.08;
   return Math.min(98, suiteBase + within);
+}
+
+function sessionProgressPercent(session: TargetLiveSession): number {
+  const suiteCount = Math.max(session.suiteIds.length, 1);
+  const suiteBase = (session.suiteIndex / suiteCount) * 100;
+  const suiteSlice = 100 / suiteCount;
+  const within =
+    session.testsInSuite > 0
+      ? Math.min(
+          suiteSlice * 0.92,
+          (session.testsInSuite / (session.testsInSuite + 1)) * suiteSlice,
+        )
+      : suiteSlice * 0.08;
+  return Math.min(98, suiteBase + within);
+}
+
+function showSessionInMainPanel(session: TargetLiveSession): void {
+  if (session.completedRun) {
+    lastRun = session.completedRun;
+    liveRunDrawerMeta = session.drawerMeta;
+    setSummaryVisible(true);
+    renderSummary(session.completedRun);
+    renderSuites(session.completedRun);
+    return;
+  }
+  lastRun = null;
+  liveRunDrawerMeta = session.drawerMeta;
+  setSummaryVisible(false);
+  renderSuitesFromSession(session);
+}
+
+function renderSuitesFromSession(session: TargetLiveSession): void {
+  const mount = document.getElementById('benchmarkSuites');
+  if (!mount) return;
+
+  mount.innerHTML = '';
+  mount.classList.add('is-live');
+
+  for (const suiteId of session.suiteIds) {
+    const suiteTests = [...session.testResults.values()].filter((t) => t.suite === suiteId);
+    const grid = ensureSuiteSection(suiteId, session.currentTestMeta?.suite === suiteId);
+    if (!grid) continue;
+
+    for (const result of suiteTests) {
+      if (result.testId === session.currentTestId) continue;
+      grid.insertAdjacentHTML('beforeend', renderTestCard(result, false));
+    }
+
+    if (session.currentTestMeta?.suite === suiteId) {
+      const { testId, suite, label } = session.currentTestMeta;
+      grid.insertAdjacentHTML(
+        'beforeend',
+        renderRunningTestCard(testId, suite, label),
+      );
+      const card = grid.querySelector<HTMLElement>(`[data-test-id="${CSS.escape(testId)}"]`);
+      card?.classList.add('is-current');
+    }
+
+    const stats = suiteStatsFromTests(suiteTests);
+    const total =
+      stats.passed +
+      stats.failed +
+      stats.skipped +
+      (session.currentTestMeta?.suite === suiteId ? 1 : 0);
+    updateSuiteScore(suiteId, stats.passed, Math.max(total, 1), stats.score);
+  }
+}
+
+function markSessionCurrentTestStopped(session: TargetLiveSession): void {
+  const meta = session.currentTestMeta;
+  if (!meta) return;
+  session.testResults.set(
+    meta.testId,
+    syntheticStoppedResult(meta.testId, meta.suite, meta.label),
+  );
+  session.currentTestId = null;
+  session.currentTestMeta = null;
+  if (session.targetKey === getSelectedTargetKey()) {
+    const grid = document.querySelector<HTMLElement>(
+      `[data-suite="${meta.suite}"] [data-suite-tests]`,
+    );
+    const existing = grid?.querySelector(`[data-test-id="${CSS.escape(meta.testId)}"]`);
+    const html = renderStoppedTestCard(meta.testId, meta.suite, meta.label);
+    if (existing) existing.outerHTML = html;
+    else grid?.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+function upsertSessionRunningCard(session: TargetLiveSession, suiteId: SuiteId, testId: string, label: string): void {
+  session.currentTestId = testId;
+  session.currentTestMeta = { testId, suite: suiteId, label };
+  if (session.targetKey !== getSelectedTargetKey()) return;
+
+  const mount = document.getElementById('benchmarkSuites');
+  if (!mount?.classList.contains('is-live')) {
+    renderSuitesFromSession(session);
+  }
+
+  const grid = ensureSuiteSection(suiteId, true);
+  if (!grid) return;
+  const existing = grid.querySelector(`[data-test-id="${CSS.escape(testId)}"]`);
+  const html = renderRunningTestCard(testId, suiteId, label);
+  if (existing) existing.outerHTML = html;
+  else grid.insertAdjacentHTML('beforeend', html);
+  grid.querySelector<HTMLElement>(`[data-test-id="${CSS.escape(testId)}"]`)?.classList.add('is-current');
+}
+
+function upsertSessionLiveCard(session: TargetLiveSession, result: TestResult): void {
+  if (session.currentTestId === result.testId) {
+    session.currentTestId = null;
+    session.currentTestMeta = null;
+  }
+  if (session.targetKey !== getSelectedTargetKey()) return;
+
+  const grid = ensureSuiteSection(result.suite, true);
+  if (!grid) return;
+  const existing = grid.querySelector(`[data-test-id="${CSS.escape(result.testId)}"]`);
+  const html = renderTestCard(result, true);
+  if (existing) existing.outerHTML = html;
+  else grid.insertAdjacentHTML('beforeend', html);
+}
+
+function onBenchmarkProgressForTarget(
+  targetKey: string,
+  event: BenchmarkProgressEvent,
+): void {
+  const session = getTargetSession(targetKey);
+  if (!session) return;
+
+  if (event.type === 'test-done') {
+    session.testResults.set(event.result.testId, event.result);
+  }
+
+  if (browsingHistory || !liveRunActive) return;
+
+  if (event.type === 'suite-start') {
+    session.suiteIndex = session.suiteIds.indexOf(event.suiteId);
+    session.testsInSuite = 0;
+    const pct = sessionProgressPercent(session);
+    session.progressPct = pct;
+    session.progressLabel = `${event.label} suite`;
+    updateTargetProgress(targetKey, pct, session.progressLabel);
+    if (session.targetKey === getSelectedTargetKey()) {
+      ensureSuiteSection(event.suiteId, true);
+      updateProgressBar(pct, session.progressLabel);
+    }
+    return;
+  }
+
+  if (event.type === 'test-start') {
+    upsertSessionRunningCard(session, event.suiteId, event.testId, event.label);
+    const pct = sessionProgressPercent(session);
+    const label = runningTestProgressLabel(event.suiteId, event.label);
+    session.progressPct = pct;
+    session.progressLabel = label;
+    updateTargetProgress(targetKey, pct, label);
+    if (session.targetKey === getSelectedTargetKey()) {
+      updateProgressBar(pct, label);
+    }
+    return;
+  }
+
+  if (event.type === 'test-done') {
+    session.testsDone += 1;
+    session.testsInSuite += 1;
+    upsertSessionLiveCard(session, event.result);
+    const suiteTests = [...session.testResults.values()].filter(
+      (t) => t.suite === event.result.suite,
+    );
+    const stats = suiteStatsFromTests(suiteTests);
+    const total = stats.passed + stats.failed + stats.skipped;
+    if (session.targetKey === getSelectedTargetKey()) {
+      updateSuiteScore(event.result.suite, stats.passed, Math.max(total, 1), stats.score);
+    }
+    const pct = sessionProgressPercent(session);
+    const label = `${SUITE_LABELS[event.result.suite]} · ${event.result.label}`;
+    session.progressPct = pct;
+    session.progressLabel = label;
+    updateTargetProgress(targetKey, pct, label);
+    if (session.targetKey === getSelectedTargetKey()) {
+      updateProgressBar(pct, label);
+    }
+    return;
+  }
+
+  if (event.type === 'run-cancelled') {
+    markSessionCurrentTestStopped(session);
+    markTargetStopped(targetKey);
+    return;
+  }
+
+  if (event.type === 'run-done') {
+    session.completedRun = event.run;
+    session.progressPct = 100;
+    session.progressLabel = 'Complete';
+    updateTargetProgress(targetKey, 100, session.progressLabel);
+    if (session.targetKey === getSelectedTargetKey()) {
+      for (const suite of event.run.suites) {
+        updateSuiteScore(
+          suite.id,
+          suite.passed,
+          suite.passed + suite.failed + suite.skipped,
+          suite.score,
+        );
+        document.querySelector(`[data-suite="${suite.id}"]`)?.classList.remove('is-active');
+      }
+      updateProgressBar(100, 'Complete');
+    }
+  }
 }
 
 function onBenchmarkProgress(event: BenchmarkProgressEvent): void {
@@ -757,9 +965,10 @@ function onBenchmarkProgress(event: BenchmarkProgressEvent): void {
 function renderSummary(run: BenchmarkRun | null): void {
   const root = document.getElementById('benchmarkSummary');
   if (!root) return;
+  setSummaryVisible(true);
   if (!run) {
     root.innerHTML =
-      '<p class="benchmark-empty">Choose suites in the deck above, then Run. Quick and Full apply a preset first.</p>';
+      '<p class="benchmark-empty">Select suites, then Run. Quick and Full set presets.</p>';
     return;
   }
   const scoreClass =
@@ -797,10 +1006,7 @@ function renderSuites(run: BenchmarkRun): void {
       const total = suite.passed + suite.failed + suite.skipped;
       return `<section class="benchmark-suite-block" data-suite="${suite.id}">
         <header class="benchmark-suite-block-header">
-          <div class="benchmark-suite-block-heading">
-            <h2>${escapeHtml(suite.label)}</h2>
-            <p class="benchmark-suite-block-intro">${escapeHtml(SUITE_INTROS[suite.id])}</p>
-          </div>
+          <h2>${escapeHtml(suite.label)}</h2>
           <span class="benchmark-suite-block-score">${suite.passed}/${total} · ${formatScore(suite.score)}</span>
         </header>
         <div class="benchmark-test-grid">${cards}</div>
@@ -828,7 +1034,7 @@ function renderRosterList(): void {
   if (!mount) return;
   const roster = loadRoster();
   if (!roster.length) {
-    mount.innerHTML = '<p class="benchmark-empty">No models in roster. Add the active model or enter provider/model ids.</p>';
+    mount.innerHTML = '<p class="benchmark-empty">No models yet. Add from the picker or active model.</p>';
     return;
   }
   mount.innerHTML = roster
@@ -840,6 +1046,7 @@ function renderRosterList(): void {
         </div>`,
     )
     .join('');
+  syncScheduleSectionVisibility(roster.length);
   for (const btn of mount.querySelectorAll<HTMLButtonElement>('.benchmark-roster-remove')) {
     btn.addEventListener('click', () => {
       const chip = btn.closest('.benchmark-roster-chip');
@@ -852,30 +1059,19 @@ function renderRosterList(): void {
   }
 }
 
-function updateCampaignStepper(phase: string): void {
-  const mount = document.getElementById('benchmarkCampaignStepper');
-  if (!(mount instanceof HTMLElement)) return;
-  const idx = CAMPAIGN_STEPS.findIndex((s) => s.id === phase);
-  if (idx < 0) {
-    mount.hidden = true;
-    return;
-  }
-  mount.hidden = false;
-  mount.innerHTML = CAMPAIGN_STEPS.map((step, i) => {
-    const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
-    return `<div class="benchmark-step benchmark-step--${state}">
-      <span class="benchmark-step-mark">${state === 'done' ? '✓' : state === 'active' ? '<span class="benchmark-step-dot"></span>' : i + 1}</span>
-      <div class="benchmark-step-txt"><b>${escapeHtml(step.label)}</b><i class="benchmark-muted">${escapeHtml(step.detail)}</i></div>
-    </div>`;
-  }).join('');
-}
-
 const liveCampaignAggregates: ModelAggregate[] = [];
 
 function onCampaignProgress(event: CampaignProgressEvent): void {
   if (event.type === 'phase') {
-    updateCampaignStepper(event.phase);
     setOverviewRunState('running');
+    return;
+  }
+  if (event.type === 'target-start') {
+    markTargetRunning(event.targetKey);
+    if (isMultiModelCampaignActive() && event.targetKey === getSelectedTargetKey()) {
+      const session = getTargetSession(event.targetKey);
+      if (session) showSessionInMainPanel(session);
+    }
     return;
   }
   if (event.type === 'target-done') {
@@ -886,27 +1082,59 @@ function onCampaignProgress(event: CampaignProgressEvent): void {
     else liveCampaignAggregates.push(event.aggregate);
     updateOverviewLiveAggregates([...liveCampaignAggregates]);
     refreshOverviewPanel();
+    markTargetDone(event.targetKey, event.aggregate);
+    return;
   }
   if (event.type === 'integration-progress') {
-    onBenchmarkProgress(event.event);
+    if (isMultiModelCampaignActive()) {
+      onBenchmarkProgressForTarget(event.targetKey, event.event);
+    } else {
+      onBenchmarkProgress(event.event);
+    }
+    return;
   }
   if (event.type === 'campaign-done') {
-    updateCampaignStepper('done');
     setOverviewRunState('done', 100);
     updateOverviewLiveAggregates(event.campaign.aggregates);
     notifyCampaignComplete();
-    document.getElementById('benchmarkCampaignStepper')?.setAttribute('hidden', '');
-    if (event.campaign.runs[0]) {
+    for (const run of event.campaign.runs) {
+      attachCompletedRun(targetKeyForRun(run), run);
+    }
+    if (isMultiModelCampaignActive()) {
+      const key =
+        getSelectedTargetKey() ??
+        (event.campaign.runs[0] ? targetKeyForRun(event.campaign.runs[0]) : null);
+      const session = key ? getTargetSession(key) : null;
+      if (session) showSessionInMainPanel(session);
+      else if (event.campaign.runs[0]) {
+        lastRun = event.campaign.runs[0];
+        renderSummary(lastRun);
+        renderSuites(lastRun);
+      }
+      renderModelCards();
+    } else if (event.campaign.runs[0]) {
       lastRun = event.campaign.runs[0];
+      setSummaryVisible(true);
       renderSummary(lastRun);
       renderSuites(lastRun);
     }
     void refreshHistorySelect();
     setStatus('ok', `Campaign done · ${event.campaign.targets.length} models`);
+    return;
   }
   if (event.type === 'campaign-cancelled') {
     setOverviewRunState('idle');
-    document.getElementById('benchmarkCampaignStepper')?.setAttribute('hidden', '');
+    if (isMultiModelCampaignActive()) {
+      for (const session of getAllTargetSessions()) {
+        if (session.status !== 'done') {
+          markSessionCurrentTestStopped(session);
+          markTargetStopped(session.targetKey);
+        }
+      }
+      const selected = getSelectedTargetKey();
+      const session = selected ? getTargetSession(selected) : null;
+      if (session) showSessionInMainPanel(session);
+    }
   }
 }
 
@@ -958,6 +1186,7 @@ function setRunning(running: boolean): void {
   full?.toggleAttribute('disabled', running);
   updateRunStopButton(running);
   setSuiteTogglesDisabled(running);
+  setScheduleTogglesDisabled(running);
   root?.classList.toggle('is-running', running);
   syncClearHistoryButton();
 }
@@ -985,11 +1214,7 @@ function renderLiveRunFromState(): void {
   mount.innerHTML = '';
   mount.classList.add('is-live');
 
-  const summary = document.getElementById('benchmarkSummary');
-  if (summary) {
-    summary.innerHTML =
-      '<p class="benchmark-empty benchmark-empty--live">Scoring the active model…</p>';
-  }
+  setSummaryVisible(false);
 
   for (const suiteId of liveSuiteIds) {
     const suiteTests = [...liveTestResults.values()].filter((t) => t.suite === suiteId);
@@ -1124,6 +1349,7 @@ async function onClearHistoryClick(): Promise<void> {
   if (select) select.value = '';
 
   closeBenchmarkTranscriptDrawer();
+  clearMultiModelCampaign();
   renderSummary(null);
   const mount = document.getElementById('benchmarkSuites');
   if (mount) {
@@ -1209,17 +1435,26 @@ async function executeBenchmarkRun(options: {
   setStatus('ok', runningStatusLabel(mode));
   liveCampaignAggregates.length = 0;
 
-  const modelId = targets[0]?.modelId ?? 'unknown';
   const startedAt = new Date().toISOString();
+  if (targets.length > 1) {
+    initMultiModelCampaign({ targets, suiteIds, preset, startedAt });
+  } else {
+    clearMultiModelCampaign();
+  }
+
+  const modelId = targets[0]?.modelId ?? 'unknown';
   liveRunId = startedAt.replace(/[:.]/g, '-');
   liveStartMode = mode;
   liveRunDrawerMeta = { preset, modelId, startedAt };
 
   initLiveRunUI(mode, suiteIds);
+  if (isMultiModelCampaignActive()) {
+    const first = getSelectedTargetKey();
+    const session = first ? getTargetSession(first) : null;
+    if (session) showSessionInMainPanel(session);
+  }
   navigateBenchmarkTab('run', { replace: true });
   setOverviewRunState('running', 0);
-  updateCampaignStepper('planning');
-  document.getElementById('benchmarkCampaignStepper')?.removeAttribute('hidden');
 
   const standardPackIds = getStandardPackToggles();
 
@@ -1231,6 +1466,7 @@ async function executeBenchmarkRun(options: {
       standardTier: getStandardTier(),
       preset,
       signal: runSignal,
+      maxConcurrency: getCampaignMaxConcurrency(targets.length),
       persistPartialOnCancel: true,
       onProgress: (event) => {
         if (generation !== benchmarkRunGeneration) return;
@@ -1428,6 +1664,17 @@ function stopRun(): void {
   abortController = null;
   clearActiveRunPersistence();
   liveRunId = null;
+  if (isMultiModelCampaignActive()) {
+    for (const session of getAllTargetSessions()) {
+      if (session.status === 'running') {
+        markSessionCurrentTestStopped(session);
+        markTargetStopped(session.targetKey);
+      }
+    }
+    const selected = getSelectedTargetKey();
+    const session = selected ? getTargetSession(selected) : null;
+    if (session) showSessionInMainPanel(session);
+  }
   finishLiveRunUI({ markCurrentStopped: true, commitPartial: true });
   setRunning(false);
   setStatus('ok', 'Stopping benchmark…');
@@ -1540,6 +1787,7 @@ export function isBackToCurrentVisibleForTests(): boolean {
 
 function syncBenchmarkPageOnOpen(): void {
   renderRosterList();
+  syncScheduleSectionVisibility(loadRoster().length);
   void refreshBenchmarkRosterPicker();
   void refreshHistorySelect();
   refreshOverviewPanel();
@@ -1690,6 +1938,7 @@ export function initBenchmarkPage(): void {
 
   renderRosterList();
   initBenchmarkRosterPicker();
+  initModelRunCards((session) => showSessionInMainPanel(session));
 
   const suitesMount = document.getElementById('benchmarkSuites');
   suitesMount?.addEventListener('click', onBenchmarkTestCardClick);

@@ -988,8 +988,7 @@
       <section id="benchmarkTabCharts" class="benchmark-tab-panel" data-tab="charts" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnCharts"></section>
       <section id="benchmarkTabTests" class="benchmark-tab-panel" data-tab="tests" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnTests"></section>
       <section id="benchmarkTabRun" class="benchmark-tab-panel" data-tab="run" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnRun">
-      <div id="benchmarkCampaignStepper" class="benchmark-campaign-stepper" hidden aria-live="polite"></div>
-      <section class="benchmark-roster" aria-label="Model roster">
+      <section class="benchmark-run-section benchmark-roster" aria-label="Model roster">
         <span class="benchmark-field-label">Models</span>
         <div id="benchmarkRosterList" class="benchmark-roster-list"></div>
         <div class="benchmark-roster-add">
@@ -997,28 +996,34 @@
             <select id="benchmarkRosterProvider" aria-label="Provider"></select>
             <select id="benchmarkRosterModel" aria-label="Model"></select>
           </div>
-          <button type="button" class="is-primary" id="btnBenchmarkAddTarget">Add model</button>
-          <button type="button" id="btnBenchmarkAddActiveModel">Add active</button>
+          <button type="button" class="is-primary" id="btnBenchmarkAddTarget">Add</button>
+          <button type="button" id="btnBenchmarkAddActiveModel">Active model</button>
         </div>
       </section>
-      <section class="benchmark-standard-toggles" aria-label="Standard benchmarks">
-        <span class="benchmark-field-label">Standard suites (mini tier)</span>
-        <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group">
-          <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false">MMLU</button>
-          <button type="button" class="benchmark-standard-toggle" data-pack-id="arc-challenge-mini" aria-pressed="false">ARC</button>
-          <button type="button" class="benchmark-standard-toggle" data-pack-id="gsm8k-mini" aria-pressed="false">GSM8K</button>
-          <button type="button" class="benchmark-standard-toggle" data-pack-id="humaneval-mini" aria-pressed="false">HumanEval</button>
-          <button type="button" class="benchmark-standard-toggle" data-pack-id="truthfulqa-mini" aria-pressed="false">TruthfulQA</button>
+      <section id="benchmarkScheduleSection" class="benchmark-run-section" hidden aria-label="Multi-model run order">
+        <span class="benchmark-field-label">Run order</span>
+        <div id="benchmarkScheduleToggles" class="benchmark-suite-toggles" role="group" aria-label="Run models in parallel or one at a time">
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="parallel" aria-pressed="true">Parallel</button>
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="sequential" aria-pressed="false">Sequential</button>
         </div>
-        <label class="benchmark-tier-field">
-          <span class="benchmark-field-label">Tier</span>
-          <select id="benchmarkStandardTier" aria-label="Standard benchmark tier">
-            <option value="mini" selected>Mini (bundled samples)</option>
-            <option value="full">Full (imported dataset)</option>
+      </section>
+      <section class="benchmark-run-section benchmark-standard-toggles" aria-label="Standard benchmarks">
+        <span class="benchmark-field-label">Standard</span>
+        <div class="benchmark-run-row">
+          <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group" aria-label="Standard benchmark packs">
+            <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false">MMLU</button>
+            <button type="button" class="benchmark-standard-toggle" data-pack-id="arc-challenge-mini" aria-pressed="false">ARC</button>
+            <button type="button" class="benchmark-standard-toggle" data-pack-id="gsm8k-mini" aria-pressed="false">GSM8K</button>
+            <button type="button" class="benchmark-standard-toggle" data-pack-id="humaneval-mini" aria-pressed="false">HumanEval</button>
+            <button type="button" class="benchmark-standard-toggle" data-pack-id="truthfulqa-mini" aria-pressed="false">TruthfulQA</button>
+          </div>
+          <select id="benchmarkStandardTier" class="benchmark-tier-select" aria-label="Standard benchmark tier">
+            <option value="mini" selected>Mini</option>
+            <option value="full">Full</option>
           </select>
-        </label>
+        </div>
       </section>
-      <section class="benchmark-deck" aria-label="Run configuration">
+      <section class="benchmark-run-section benchmark-deck" aria-label="Run configuration">
         <div class="benchmark-deck-grid">
           <div class="benchmark-deck-field benchmark-deck-field--presets">
             <span class="benchmark-field-label" id="benchmarkPresetLabel">Preset</span>
@@ -1028,7 +1033,7 @@
             </div>
           </div>
           <div class="benchmark-deck-field benchmark-deck-field--suites">
-            <span class="benchmark-field-label" id="benchmarkSuitesLabel">Suites</span>
+            <span class="benchmark-field-label" id="benchmarkSuitesLabel">Integration suites</span>
             <div class="benchmark-suites-row">
               <div
                 id="benchmarkSuiteToggles"
@@ -1040,7 +1045,6 @@
                 <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
                 <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
                 <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
                 <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
               </div>
               <div class="benchmark-run-actions benchmark-run-actions--suites">
@@ -1059,8 +1063,9 @@
           <div id="benchmarkProgressFill" class="benchmark-progress-fill"></div>
         </div>
       </div>
+      <div id="benchmarkModelCards" class="benchmark-model-cards" hidden aria-label="Model progress"></div>
       <div id="benchmarkSummary" class="benchmark-summary" aria-live="polite">
-        <p class="benchmark-empty">Choose suites in the deck above, then Run. Quick and Full apply a preset first.</p>
+        <p class="benchmark-empty">Select suites, then Run. Quick and Full set presets.</p>
       </div>
       <div class="benchmark-history-bar">
         <label class="benchmark-history-field" for="benchmarkHistorySelect">

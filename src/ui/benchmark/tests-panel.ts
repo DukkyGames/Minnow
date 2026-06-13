@@ -26,7 +26,6 @@ const ALL_INTEGRATION_SUITES: SuiteId[] = [
   'speed',
   'tools',
   'skills',
-  'modes',
   'coding',
 ];
 

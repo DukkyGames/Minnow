@@ -70,13 +70,13 @@ describe('benchmark suite toggles', () => {
     assert.equal(tools.getAttribute('aria-pressed'), 'false');
   });
 
-  test('Quick preset selects capability, speed, and modes', () => {
+  test('Quick preset selects capability and speed', () => {
     setAllToggles(false);
     applyPresetToTogglesForTests('quick');
     assert.deepEqual(pressedSuiteIds(), QUICK_SUITES);
   });
 
-  test('Full preset selects all six suites', () => {
+  test('Full preset selects all five suites', () => {
     setAllToggles(false);
     applyPresetToTogglesForTests('full');
     assert.deepEqual(pressedSuiteIds(), FULL_SUITES);
