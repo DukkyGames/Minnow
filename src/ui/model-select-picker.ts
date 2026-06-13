@@ -260,12 +260,22 @@ function ensureAuxiliaryPickerGlobals(): void {
   });
 }
 
+/** Resolve the active option for a native model select (value is authoritative). */
+function selectedOptionForSelect(select: HTMLSelectElement): HTMLOptionElement | undefined {
+  const value = select.value.trim();
+  if (value) {
+    const match = [...select.options].find((o) => o.value === value);
+    if (match) return match;
+  }
+  return select.options[select.selectedIndex];
+}
+
 /** Sync trigger label and custom menu rows for a mounted auxiliary model combobox. */
 export function syncAuxiliaryModelSelectCombobox(select: HTMLSelectElement): void {
   const picker = auxiliaryPickers.get(select);
   if (!picker) return;
 
-  const selectedOpt = select.options[select.selectedIndex];
+  const selectedOpt = selectedOptionForSelect(select);
   picker.triggerText.textContent =
     selectedOpt?.text?.trim() || selectedOpt?.label?.trim() || 'Select model';
 
@@ -332,6 +342,10 @@ export function mountAuxiliaryModelSelectCombobox(select: HTMLSelectElement): vo
 
   const picker: AuxiliaryModelSelectPicker = { root, trigger, triggerText, menu };
   auxiliaryPickers.set(select, picker);
+
+  select.addEventListener('change', () => {
+    syncAuxiliaryModelSelectCombobox(select);
+  });
 
   trigger.addEventListener('click', () => {
     if (trigger.disabled) return;

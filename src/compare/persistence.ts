@@ -3,6 +3,7 @@
  */
 
 import { detectLocalServer } from '../tools/client';
+import { normalizeCompareVote } from './win-rates';
 import type { CompareVote, CompareVoteReveal, CompareWinner } from './types';
 
 const LOCAL_KEY = 'minnow.compare.history';
@@ -34,6 +35,7 @@ export function mergeCompareVotes(server: CompareVote[], local: CompareVote[]): 
     if (row?.id) byId.set(row.id, row);
   }
   return [...byId.values()]
+    .map((vote) => normalizeCompareVote(vote))
     .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
     .slice(0, LIST_CAP);
 }
@@ -73,16 +75,39 @@ export async function submitCompareVote(
     throw new Error(err || `Vote failed (${res.status})`);
   }
   const payload = (await res.json()) as CompareVoteReveal;
-  const localVote: CompareVote = {
+  const normalizedReveal: CompareVoteReveal = {
+    ...payload,
+    slots:
+      Array.isArray(payload.slots) && payload.slots.length > 0
+        ? payload.slots
+        : normalizeCompareVote({
+            id: sessionId,
+            startedAt: '',
+            completedAt: '',
+            prompt: '',
+            slots: [],
+            winner: payload.winner,
+            revealed: true,
+            left: payload.left,
+            right: payload.right,
+            assignment: payload.assignment,
+          }).slots,
+  };
+  const localVote: CompareVote = normalizeCompareVote({
     id: sessionId,
     startedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
     prompt: '',
-    ...payload,
-  };
+    slots: normalizedReveal.slots,
+    winner: normalizedReveal.winner,
+    revealed: true,
+    left: normalizedReveal.left,
+    right: normalizedReveal.right,
+    assignment: normalizedReveal.assignment,
+  });
   const existing = readLocalVotes();
   writeLocalVotes([localVote, ...existing.filter((v) => v.id !== sessionId)]);
-  return payload;
+  return normalizedReveal;
 }
 
 /** Mirror a server vote into localStorage (after successful server vote with full prompt). */

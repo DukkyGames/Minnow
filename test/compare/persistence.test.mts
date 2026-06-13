@@ -13,6 +13,10 @@ const BASE_VOTE: CompareVote = {
   startedAt: '2026-06-01T12:00:00.000Z',
   completedAt: '2026-06-01T12:01:00.000Z',
   prompt: 'Hello',
+  slots: [
+    { providerId: 'local', modelId: 'alpha', alias: 'A' },
+    { providerId: 'cloud', modelId: 'beta', alias: 'B' },
+  ],
   left: { providerId: 'local', modelId: 'alpha' },
   right: { providerId: 'cloud', modelId: 'beta' },
   assignment: { leftAlias: 'A', rightAlias: 'B' },
@@ -59,5 +63,27 @@ describe('compare win rates', () => {
     assert.equal(beta.wins, 1);
     assert.equal(beta.losses, 1);
     assert.equal(alpha.winRate, 0.5);
+  });
+
+  test('aggregates n-way slot-index winners', () => {
+    const votes: CompareVote[] = [
+      {
+        ...BASE_VOTE,
+        id: 'vote-4',
+        slots: [
+          { providerId: 'local', modelId: 'alpha', alias: 'A' },
+          { providerId: 'cloud', modelId: 'beta', alias: 'B' },
+          { providerId: 'edge', modelId: 'gamma', alias: 'C' },
+        ],
+        winner: 2,
+      },
+    ];
+    const rows = aggregateWinRates(votes);
+    const gamma = rows.find((r) => r.modelId === 'gamma');
+    const alpha = rows.find((r) => r.modelId === 'alpha');
+    assert.ok(gamma);
+    assert.ok(alpha);
+    assert.equal(gamma.wins, 1);
+    assert.equal(alpha.losses, 1);
   });
 });

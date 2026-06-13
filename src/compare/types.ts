@@ -2,27 +2,53 @@
  * Types for blind model compare sessions and votes.
  */
 
-export type CompareAlias = 'A' | 'B';
+/** Blind label — letters (A, B, …) in parallel mode, numbers (1, 2, …) in sequential. */
+export type CompareAlias = string;
 
-export type CompareWinner = 'left' | 'right' | 'tie' | 'both_bad';
+/** Winner: screen slot index, legacy left/right (2-up), or shared outcomes. */
+export type CompareWinner =
+  | number
+  | 'left'
+  | 'right'
+  | 'tie'
+  | 'both_bad';
 
 export interface CompareModelRef {
   providerId: string;
   modelId: string;
 }
 
+export interface CompareSlotPublic {
+  generationId: string;
+  label: CompareAlias;
+  /** Present once the slot generation has been started (sequential mode). */
+  activated?: boolean;
+}
+
 export interface CompareStartResponse {
   sessionId: string;
-  left: { generationId: string; label: CompareAlias };
-  right: { generationId: string; label: CompareAlias };
+  parallel: boolean;
+  slots: CompareSlotPublic[];
+  /** @deprecated Use `slots[0]` — kept for backward compatibility. */
+  left?: { generationId: string; label: CompareAlias };
+  /** @deprecated Use `slots[1]` — kept for backward compatibility. */
+  right?: { generationId: string; label: CompareAlias };
+}
+
+export interface CompareSlotRef extends CompareModelRef {
+  alias: CompareAlias;
 }
 
 export interface CompareVoteReveal {
   revealed: true;
-  left: CompareModelRef;
-  right: CompareModelRef;
+  slots: CompareSlotRef[];
   winner: CompareWinner;
-  assignment: { leftAlias: CompareAlias; rightAlias: CompareAlias };
+  /** @deprecated Use `slots` — kept for 2-up legacy votes. */
+  left?: CompareModelRef;
+  /** @deprecated Use `slots` — kept for 2-up legacy votes. */
+  right?: CompareModelRef;
+  /** @deprecated Use `slots[].alias` — kept for 2-up legacy votes. */
+  assignment?: { leftAlias: CompareAlias; rightAlias: CompareAlias };
 }
 
 export interface CompareVote {
@@ -30,12 +56,17 @@ export interface CompareVote {
   startedAt: string;
   completedAt: string;
   prompt: string;
-  left: CompareModelRef;
-  right: CompareModelRef;
-  assignment: { leftAlias: CompareAlias; rightAlias: CompareAlias };
+  slots: CompareSlotRef[];
   winner: CompareWinner;
   revealed: boolean;
+  parallel?: boolean;
   notes?: string;
+  /** @deprecated Legacy 2-up shape — normalized at read time when possible. */
+  left?: CompareModelRef;
+  /** @deprecated Legacy 2-up shape. */
+  right?: CompareModelRef;
+  /** @deprecated Legacy 2-up shape. */
+  assignment?: { leftAlias: CompareAlias; rightAlias: CompareAlias };
 }
 
 export interface CompareWinRateRow {
@@ -49,3 +80,7 @@ export interface CompareWinRateRow {
   total: number;
   winRate: number;
 }
+
+/** Minimum and maximum model slots in one compare run. */
+export const COMPARE_MIN_SLOTS = 2;
+export const COMPARE_MAX_SLOTS = 6;

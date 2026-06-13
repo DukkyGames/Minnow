@@ -7,7 +7,7 @@ import {
 } from './instances';
 import { launchApp, navigateToDesktop } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
-import { createOsIcon } from './icons';
+import { createAppIcon, createOsIcon } from './icons';
 import { initOsModelChipMenu } from './model-chip-menu';
 import {
   chatToggleAriaLabel,
@@ -181,7 +181,7 @@ export function renderMenubar(root: HTMLElement): () => void {
       const meta = getAppById(fgApp);
       appName.replaceChildren();
       if (meta) {
-        appName.appendChild(createOsIcon(meta.icon as 'code', { size: 14 }));
+        appName.appendChild(createAppIcon(meta.icon as 'code', { size: 14 }));
         appName.appendChild(document.createTextNode(` ${meta.name}`));
       }
     }

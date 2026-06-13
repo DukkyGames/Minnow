@@ -39,9 +39,10 @@ describe('compare markup contract', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="compareView"/);
     assert.match(html, /id="comparePrompt"/);
-    assert.match(html, /id="compareLeftPane"/);
-    assert.match(html, /id="compareRightPane"/);
-    assert.match(html, /id="btnCompareVoteLeft"/);
+    assert.match(html, /id="comparePickers"/);
+    assert.match(html, /id="compareColumns"/);
+    assert.match(html, /id="compareVoteBar"/);
+    assert.match(html, /id="btnCompareParallelToggle"/);
     assert.match(html, /id="compareHistoryList"/);
   });
 });

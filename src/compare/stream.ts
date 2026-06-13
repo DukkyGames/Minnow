@@ -44,12 +44,15 @@ function parseEndEventBlock(block: string): GenerationEndEvent | null {
   return null;
 }
 
+/** Stream key: numeric screen index or legacy left/right aliases. */
+export type CompareStreamKey = number | 'left' | 'right';
+
 /**
  * Subscribe to a compare column stream via the redacting compare proxy route.
  */
 export function subscribeToCompareStream(
   sessionId: string,
-  side: 'left' | 'right',
+  side: CompareStreamKey,
   handlers: CompareStreamHandlers,
 ): () => void {
   const controller = new AbortController();
@@ -61,8 +64,9 @@ export function subscribeToCompareStream(
 
   void (async () => {
     try {
+      const streamKey = typeof side === 'number' ? String(side) : side;
       const res = await fetch(
-        `/api/compare/${encodeURIComponent(sessionId)}/stream/${side}`,
+        `/api/compare/${encodeURIComponent(sessionId)}/stream/${streamKey}`,
         { method: 'GET', signal: combined },
       );
       if (!res.ok) {

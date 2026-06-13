@@ -15,26 +15,6 @@
   display: flex;
 }
 
-.compare-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--mn-fg) 12%, transparent);
-}
-
-.compare-header h2 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.compare-header p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: color-mix(in srgb, var(--mn-fg) 65%, transparent);
-}
-
 .compare-body {
   flex: 1;
   min-height: 0;
@@ -57,16 +37,64 @@
   font: inherit;
 }
 
-.compare-pickers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.compare-controls-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
+  align-items: flex-start;
+}
+
+.compare-pickers {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 1rem;
+  min-width: 0;
+}
+
+.compare-controls-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .compare-picker {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  padding: 0.65rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 12%, transparent);
+  background: color-mix(in srgb, var(--mn-surface) 92%, var(--mn-bg));
+}
+
+.compare-picker-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.compare-picker-hdr label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+}
+
+.compare-picker-remove {
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--mn-fg) 55%, transparent);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+}
+
+.compare-picker-remove:hover {
+  color: var(--mn-fg);
+  background: color-mix(in srgb, var(--mn-fg) 8%, transparent);
 }
 
 .compare-picker label {
@@ -82,6 +110,23 @@
 .compare-picker .model-select-inner {
   position: relative;
   width: 100%;
+}
+
+.compare-add-model,
+.compare-parallel-toggle {
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  background: var(--mn-surface);
+  color: var(--mn-fg);
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.compare-parallel-toggle.is-active {
+  background: color-mix(in srgb, var(--mn-accent) 16%, var(--mn-surface));
+  border-color: color-mix(in srgb, var(--mn-accent) 35%, transparent);
+  color: var(--mn-accent);
 }
 
 .compare-run-actions {
@@ -112,7 +157,7 @@
 
 .compare-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
   min-height: 12rem;
 }
@@ -125,6 +170,11 @@
   border: 1px solid color-mix(in srgb, var(--mn-fg) 14%, transparent);
   background: var(--mn-surface);
   overflow: hidden;
+  transition: opacity 0.35s ease;
+}
+
+.compare-column.is-dimmed {
+  opacity: 0.38;
 }
 
 .compare-column-hdr {
@@ -138,8 +188,9 @@
 
 .compare-column-label {
   font-weight: 700;
-  width: 1.75rem;
+  min-width: 1.75rem;
   height: 1.75rem;
+  padding: 0 0.35rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -161,7 +212,6 @@
   line-height: 1.45;
 }
 
-/* Reuse chat markdown typography; compare panes are full column width. */
 .compare-column-body.msg-bubble--md {
   white-space: normal;
   max-width: none;
@@ -258,9 +308,12 @@
 }
 
 @media (max-width: 900px) {
-  .compare-pickers,
-  .compare-columns,
+  .compare-controls-row,
   .compare-side-panels {
+    flex-direction: column;
+  }
+
+  .compare-pickers {
     grid-template-columns: 1fr;
   }
 }

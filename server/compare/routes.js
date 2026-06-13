@@ -14,6 +14,8 @@ import {
 } from '../generations/store.js';
 import { pumpUpstream } from '../generations/upstream.js';
 import {
+  activateSlotGeneration,
+  assignPickGenerations,
   createSession,
   deleteSession,
   getSession,
@@ -21,10 +23,13 @@ import {
   listHistory,
   loadPersistedSessions,
   recordVote,
+  resolveStreamSlotIndex,
 } from './store.js';
 
 const SESSION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MIN_SLOTS = 2;
+const MAX_SLOTS = 6;
 
 let storeLoaded = false;
 
@@ -68,6 +73,32 @@ function parseModelRef(value) {
   const modelId = typeof row.modelId === 'string' ? row.modelId.trim() : '';
   if (!providerId || !modelId) return null;
   return { providerId, modelId };
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {{ picks: { providerId: string; modelId: string }[]; parallel: boolean } | { error: string }}
+ */
+function parseStartPayload(payload) {
+  const parallel = payload.parallel !== false;
+
+  if (Array.isArray(payload.models)) {
+    const picks = payload.models.map(parseModelRef);
+    if (picks.some((pick) => !pick)) {
+      return { error: 'Each model entry needs providerId and modelId' };
+    }
+    if (picks.length < MIN_SLOTS || picks.length > MAX_SLOTS) {
+      return { error: `Provide ${MIN_SLOTS}–${MAX_SLOTS} models` };
+    }
+    return { picks, parallel };
+  }
+
+  const pickLeft = parseModelRef(payload.left);
+  const pickRight = parseModelRef(payload.right);
+  if (!pickLeft || !pickRight) {
+    return { error: 'models[] or left/right provider/model are required' };
+  }
+  return { picks: [pickLeft, pickRight], parallel };
 }
 
 /**
@@ -115,6 +146,63 @@ async function startCompareGeneration(providerId, modelId, prompt, sampler) {
   });
   pumpUpstream({ state });
   return state.id;
+}
+
+/**
+ * Start generations after blind slot assignment exists on the session.
+ *
+ * @param {import('./store.js').CompareSession} session
+ * @param {unknown} sampler
+ */
+async function kickoffSessionGenerations(session, sampler) {
+  const pickCount = Math.max(...session.slots.map((slot) => slot.pickIndex)) + 1;
+  /** @type {import('./store.js').CompareModelRef[]} */
+  const picksByUserOrder = Array(pickCount);
+  for (const slot of session.slots) {
+    picksByUserOrder[slot.pickIndex] = slot.model;
+  }
+
+  if (session.parallel) {
+    const started = await Promise.all(
+      picksByUserOrder.map((pick) =>
+        startCompareGeneration(pick.providerId, pick.modelId, session.prompt, sampler),
+      ),
+    );
+    assignPickGenerations(session.id, started);
+    return;
+  }
+
+  const firstSlot = session.slots.find((slot) => slot.screenIndex === 0);
+  if (!firstSlot) return;
+  const generationId = await startCompareGeneration(
+    firstSlot.model.providerId,
+    firstSlot.model.modelId,
+    session.prompt,
+    sampler,
+  );
+  activateSlotGeneration(session.id, 0, generationId);
+}
+
+/**
+ * @param {import('./store.js').CompareSession} session
+ * @returns {object}
+ */
+function buildStartResponse(session) {
+  const slots = session.slots.map((slot) => ({
+    generationId: slot.generationId,
+    label: slot.alias,
+    activated: slot.activated,
+  }));
+  const payload = {
+    sessionId: session.id,
+    parallel: session.parallel,
+    slots,
+  };
+  if (session.slots.length === 2) {
+    payload.left = slots[0];
+    payload.right = slots[1];
+  }
+  return payload;
 }
 
 /**
@@ -183,43 +271,28 @@ export async function handleCompareRequest(req, res, pathname) {
     if (pathname === '/api/compare/start' && req.method === 'POST') {
       const payload = await readJsonBody(req);
       const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
-      const pickLeft = parseModelRef(payload.left);
-      const pickRight = parseModelRef(payload.right);
       if (!prompt) {
         sendJson(res, 400, { error: 'prompt is required' });
         return true;
       }
-      if (!pickLeft || !pickRight) {
-        sendJson(res, 400, { error: 'left and right provider/model are required' });
+
+      const parsed = parseStartPayload(payload);
+      if ('error' in parsed) {
+        sendJson(res, 400, { error: parsed.error });
         return true;
       }
 
-      const leftGenerationId = await startCompareGeneration(
-        pickLeft.providerId,
-        pickLeft.modelId,
-        prompt,
-        payload.sampler,
-      );
-      const rightGenerationId = await startCompareGeneration(
-        pickRight.providerId,
-        pickRight.modelId,
-        prompt,
-        payload.sampler,
-      );
-
       const session = createSession({
         prompt,
-        pickLeft,
-        pickRight,
-        leftGenerationId,
-        rightGenerationId,
+        picks: parsed.picks,
+        generationIds: parsed.picks.map(() => ''),
+        parallel: parsed.parallel,
       });
 
-      sendJson(res, 201, {
-        sessionId: session.id,
-        left: { generationId: session.leftGenerationId, label: session.leftAlias },
-        right: { generationId: session.rightGenerationId, label: session.rightAlias },
-      });
+      await kickoffSessionGenerations(session, payload.sampler);
+
+      const refreshed = getSession(session.id) ?? session;
+      sendJson(res, 201, buildStartResponse(refreshed));
       return true;
     }
 
@@ -232,10 +305,10 @@ export async function handleCompareRequest(req, res, pathname) {
       return true;
     }
 
-    const streamMatch = pathname.match(/^\/api\/compare\/([^/]+)\/stream\/(left|right)$/);
-    if (streamMatch && req.method === 'GET') {
-      const sessionId = streamMatch[1];
-      const side = streamMatch[2];
+    const activateMatch = pathname.match(/^\/api\/compare\/([^/]+)\/activate-slot\/(\d+)$/);
+    if (activateMatch && req.method === 'POST') {
+      const sessionId = activateMatch[1];
+      const screenIndex = Number(activateMatch[2]);
       if (!SESSION_ID_RE.test(sessionId)) {
         sendJson(res, 400, { error: 'Invalid session id' });
         return true;
@@ -245,9 +318,65 @@ export async function handleCompareRequest(req, res, pathname) {
         sendJson(res, 404, { error: 'Session not found' });
         return true;
       }
-      const generationId =
-        side === 'left' ? session.leftGenerationId : session.rightGenerationId;
-      return pipeGenerationStream(req, res, generationId);
+      const slot = session.slots.find((row) => row.screenIndex === screenIndex);
+      if (!slot) {
+        sendJson(res, 400, { error: 'Invalid slot index' });
+        return true;
+      }
+      if (slot.activated && slot.generationId) {
+        sendJson(res, 200, {
+          generationId: slot.generationId,
+          label: slot.alias,
+          activated: true,
+        });
+        return true;
+      }
+
+      const payload = await readJsonBody(req);
+      const sampler = payload.sampler;
+      const generationId = await startCompareGeneration(
+        slot.model.providerId,
+        slot.model.modelId,
+        session.prompt,
+        sampler,
+      );
+      const result = activateSlotGeneration(sessionId, screenIndex, generationId);
+      if ('error' in result) {
+        sendJson(res, 404, { error: result.error });
+        return true;
+      }
+      sendJson(res, 201, {
+        generationId: result.slot.generationId,
+        label: result.slot.alias,
+        activated: true,
+      });
+      return true;
+    }
+
+    const streamMatch = pathname.match(/^\/api\/compare\/([^/]+)\/stream\/([^/]+)$/);
+    if (streamMatch && req.method === 'GET') {
+      const sessionId = streamMatch[1];
+      const streamKey = streamMatch[2];
+      if (!SESSION_ID_RE.test(sessionId)) {
+        sendJson(res, 400, { error: 'Invalid session id' });
+        return true;
+      }
+      const session = getSession(sessionId);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return true;
+      }
+      const slotIndex = resolveStreamSlotIndex(session, streamKey);
+      if (slotIndex === null) {
+        sendJson(res, 400, { error: 'Invalid stream side' });
+        return true;
+      }
+      const slot = session.slots.find((row) => row.screenIndex === slotIndex);
+      if (!slot?.generationId) {
+        sendJson(res, 409, { error: 'Slot generation not started yet' });
+        return true;
+      }
+      return pipeGenerationStream(req, res, slot.generationId);
     }
 
     const voteMatch = pathname.match(/^\/api\/compare\/([^/]+)\/vote$/);
@@ -258,12 +387,16 @@ export async function handleCompareRequest(req, res, pathname) {
         return true;
       }
       const payload = await readJsonBody(req);
-      const winner = payload.winner;
+      let winner = payload.winner;
+      if (typeof winner === 'string' && /^\d+$/.test(winner)) {
+        winner = Number(winner);
+      }
       if (
         winner !== 'left' &&
         winner !== 'right' &&
         winner !== 'tie' &&
-        winner !== 'both_bad'
+        winner !== 'both_bad' &&
+        !(typeof winner === 'number' && Number.isInteger(winner))
       ) {
         sendJson(res, 400, { error: 'Invalid winner' });
         return true;
@@ -275,16 +408,25 @@ export async function handleCompareRequest(req, res, pathname) {
         sendJson(res, status, { error: result.error });
         return true;
       }
-      sendJson(res, 200, {
+      const slotRefs = result.session.slots.map((slot) => ({
+        providerId: slot.model.providerId,
+        modelId: slot.model.modelId,
+        alias: slot.alias,
+      }));
+      const response = {
         revealed: true,
-        left: result.session.left,
-        right: result.session.right,
+        slots: slotRefs,
         winner: result.session.winner,
-        assignment: {
-          leftAlias: result.session.leftAlias,
-          rightAlias: result.session.rightAlias,
-        },
-      });
+      };
+      if (result.session.slots.length === 2 && result.session.left && result.session.right) {
+        response.left = result.session.left;
+        response.right = result.session.right;
+        response.assignment = {
+          leftAlias: result.session.leftAlias ?? result.session.slots[0].alias,
+          rightAlias: result.session.rightAlias ?? result.session.slots[1].alias,
+        };
+      }
+      sendJson(res, 200, response);
       return true;
     }
 

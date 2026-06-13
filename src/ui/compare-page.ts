@@ -1,5 +1,5 @@
 /**
- * Blind A/B model compare — dual streaming panes, vote, reveal, history.
+ * Blind model compare — multi-column streaming, vote, reveal, history.
  */
 
 import '../styles/compare.css';
@@ -17,7 +17,11 @@ import type {
   CompareVote,
   CompareWinner,
 } from '../compare/types';
-import { aggregateWinRates } from '../compare/win-rates';
+import {
+  COMPARE_MAX_SLOTS,
+  COMPARE_MIN_SLOTS,
+} from '../compare/types';
+import { aggregateWinRates, formatCompareWinnerLabel, voteSlotRefs } from '../compare/win-rates';
 import { cancelGeneration } from '../api/generations';
 import { ASSISTANT_RENDER_DEBOUNCE_MS } from '../constants';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -27,102 +31,49 @@ import {
   syncAuxiliaryModelSelectCombobox,
 } from './model-select-picker';
 
-type ColumnSide = 'left' | 'right';
+const PARALLEL_PREF_KEY = 'minnow.compare.parallel';
+
+interface PickerSlot {
+  id: number;
+}
 
 interface ColumnState {
+  screenIndex: number;
   label: CompareAlias;
   generationId: string;
   text: string;
-  status: 'idle' | 'streaming' | 'complete' | 'error' | 'cancelled';
+  status: 'idle' | 'streaming' | 'complete' | 'error' | 'cancelled' | 'waiting';
   error?: string;
   unsubscribe: (() => void) | null;
 }
 
 let sessionId: string | null = null;
 let revealed = false;
-let leftColumn: ColumnState | null = null;
-let rightColumn: ColumnState | null = null;
+let runParallel = readParallelPref();
+let pickerSlots: PickerSlot[] = [{ id: 0 }, { id: 1 }];
+let nextPickerId = 2;
+let columns: ColumnState[] = [];
 let runAbort: AbortController | null = null;
 let initialized = false;
-let modelComboboxesMounted = false;
 
-/** Per-column debounce so dual streams do not share the chat-wide render timer. */
-const columnRenderTimers: Record<ColumnSide, ReturnType<typeof setTimeout> | null> = {
-  left: null,
-  right: null,
-};
+/** Per-column debounce timers keyed by screen index. */
+const columnRenderTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const columnStreamCursors = new Map<number, HTMLDivElement>();
 
-/** Streaming carets reused for each compare column body. */
-const columnStreamCursors: Record<ColumnSide, HTMLDivElement | null> = {
-  left: null,
-  right: null,
-};
-
-function ensureColumnStreamCursor(side: ColumnSide): HTMLDivElement {
-  if (!columnStreamCursors[side]) {
-    const cursor = document.createElement('div');
-    cursor.className = 'cursor cursor--prose';
-    cursor.setAttribute('aria-hidden', 'true');
-    columnStreamCursors[side] = cursor;
-  }
-  return columnStreamCursors[side]!;
-}
-
-function cancelColumnRenderDebounce(side: ColumnSide): void {
-  const timer = columnRenderTimers[side];
-  if (timer != null) {
-    clearTimeout(timer);
-    columnRenderTimers[side] = null;
+function readParallelPref(): boolean {
+  try {
+    return localStorage.getItem(PARALLEL_PREF_KEY) !== '0';
+  } catch {
+    return true;
   }
 }
 
-function cancelAllColumnRenderDebounces(): void {
-  cancelColumnRenderDebounce('left');
-  cancelColumnRenderDebounce('right');
-}
-
-/** Paint compare column prose with the same markdown pipeline as chat bubbles. */
-function renderColumnBodyMarkdown(
-  side: ColumnSide,
-  body: HTMLElement,
-  markdown: string,
-  streaming: boolean,
-): void {
-  body.classList.add('msg-bubble');
-  if (streaming) {
-    const cursor = ensureColumnStreamCursor(side);
-    cancelColumnRenderDebounce(side);
-    columnRenderTimers[side] = setTimeout(() => {
-      columnRenderTimers[side] = null;
-      setAssistantBubbleContent(body, markdown, { streaming: true, streamCursor: cursor });
-    }, ASSISTANT_RENDER_DEBOUNCE_MS);
-    return;
+function writeParallelPref(parallel: boolean): void {
+  try {
+    localStorage.setItem(PARALLEL_PREF_KEY, parallel ? '1' : '0');
+  } catch {
+    /* ignore */
   }
-  cancelColumnRenderDebounce(side);
-  setAssistantBubbleContent(body, markdown, { streaming: false });
-}
-
-function clearColumnBody(side: ColumnSide, body: HTMLElement): void {
-  cancelColumnRenderDebounce(side);
-  body.innerHTML = '';
-  body.classList.remove('msg-bubble', 'msg-bubble--md');
-}
-
-function ensureCompareModelComboboxes(): void {
-  if (modelComboboxesMounted) return;
-  const leftModel = el<HTMLSelectElement>('compareLeftModel');
-  const rightModel = el<HTMLSelectElement>('compareRightModel');
-  if (!leftModel || !rightModel) return;
-  mountAuxiliaryModelSelectCombobox(leftModel);
-  mountAuxiliaryModelSelectCombobox(rightModel);
-  modelComboboxesMounted = true;
-}
-
-function syncCompareModelComboboxes(): void {
-  const leftModel = el<HTMLSelectElement>('compareLeftModel');
-  const rightModel = el<HTMLSelectElement>('compareRightModel');
-  if (leftModel) syncAuxiliaryModelSelectCombobox(leftModel);
-  if (rightModel) syncAuxiliaryModelSelectCombobox(rightModel);
 }
 
 function getRoot(): HTMLElement | null {
@@ -137,48 +88,239 @@ function el<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
 
-function setVoteEnabled(enabled: boolean): void {
-  for (const id of [
-    'btnCompareVoteLeft',
-    'btnCompareVoteRight',
-    'btnCompareVoteTie',
-    'btnCompareVoteBothBad',
-  ]) {
-    const btn = el<HTMLButtonElement>(id);
-    if (btn) btn.disabled = !enabled;
+function ensureColumnStreamCursor(screenIndex: number): HTMLDivElement {
+  let cursor = columnStreamCursors.get(screenIndex);
+  if (!cursor) {
+    cursor = document.createElement('div');
+    cursor.className = 'cursor cursor--prose';
+    cursor.setAttribute('aria-hidden', 'true');
+    columnStreamCursors.set(screenIndex, cursor);
+  }
+  return cursor;
+}
+
+function cancelColumnRenderDebounce(screenIndex: number): void {
+  const timer = columnRenderTimers.get(screenIndex);
+  if (timer != null) {
+    clearTimeout(timer);
+    columnRenderTimers.delete(screenIndex);
   }
 }
 
-function columnEls(side: ColumnSide): {
-  pane: HTMLElement | null;
-  label: HTMLElement | null;
-  body: HTMLElement | null;
-  status: HTMLElement | null;
-  reveal: HTMLElement | null;
-} {
-  const prefix = side === 'left' ? 'compareLeft' : 'compareRight';
-  return {
-    pane: el(`${prefix}Pane`),
-    label: el(`${prefix}Label`),
-    body: el(`${prefix}Body`),
-    status: el(`${prefix}Status`),
-    reveal: el(`${prefix}Reveal`),
-  };
+function cancelAllColumnRenderDebounces(): void {
+  for (const screenIndex of columnRenderTimers.keys()) {
+    cancelColumnRenderDebounce(screenIndex);
+  }
 }
 
-function renderColumn(side: ColumnSide, col: ColumnState | null): void {
-  const { label, body, status, reveal } = columnEls(side);
-  if (!label || !body || !status) return;
-  if (!col) {
-    label.textContent = side === 'left' ? 'A' : 'B';
-    clearColumnBody(side, body);
-    status.textContent = 'Waiting…';
-    if (reveal) reveal.textContent = '';
+function renderColumnBodyMarkdown(
+  screenIndex: number,
+  body: HTMLElement,
+  markdown: string,
+  streaming: boolean,
+): void {
+  body.classList.add('msg-bubble');
+  if (streaming) {
+    const cursor = ensureColumnStreamCursor(screenIndex);
+    cancelColumnRenderDebounce(screenIndex);
+    columnRenderTimers.set(
+      screenIndex,
+      setTimeout(() => {
+        columnRenderTimers.delete(screenIndex);
+        setAssistantBubbleContent(body, markdown, { streaming: true, streamCursor: cursor });
+      }, ASSISTANT_RENDER_DEBOUNCE_MS),
+    );
     return;
   }
+  cancelColumnRenderDebounce(screenIndex);
+  setAssistantBubbleContent(body, markdown, { streaming: false });
+}
+
+function clearColumnBody(screenIndex: number, body: HTMLElement): void {
+  cancelColumnRenderDebounce(screenIndex);
+  body.innerHTML = '';
+  body.classList.remove('msg-bubble', 'msg-bubble--md');
+}
+
+function pickerProviderId(slotId: number): string {
+  return `comparePicker${slotId}Provider`;
+}
+
+function pickerModelId(slotId: number): string {
+  return `comparePicker${slotId}Model`;
+}
+
+function readPickerSelections(): {
+  providerId: string;
+  modelId: string;
+}[] {
+  return pickerSlots.map((slot) => ({
+    providerId: el<HTMLSelectElement>(pickerProviderId(slot.id))?.value ?? '',
+    modelId: el<HTMLSelectElement>(pickerModelId(slot.id))?.value ?? '',
+  }));
+}
+
+function buildPickerRow(slot: PickerSlot, index: number): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'compare-picker';
+  row.dataset.pickerId = String(slot.id);
+
+  const hdr = document.createElement('div');
+  hdr.className = 'compare-picker-hdr';
+  const title = document.createElement('label');
+  title.textContent = `Model ${index + 1}`;
+  title.setAttribute('for', pickerProviderId(slot.id));
+  hdr.appendChild(title);
+
+  if (pickerSlots.length > COMPARE_MIN_SLOTS) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'compare-picker-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.setAttribute('aria-label', `Remove model ${index + 1}`);
+    removeBtn.addEventListener('click', () => removePickerSlot(slot.id));
+    hdr.appendChild(removeBtn);
+  }
+
+  const providerLabel = document.createElement('label');
+  providerLabel.setAttribute('for', pickerProviderId(slot.id));
+  providerLabel.textContent = 'Provider';
+
+  const provider = document.createElement('select');
+  provider.id = pickerProviderId(slot.id);
+  provider.className = 'settings-select';
+  provider.setAttribute('aria-label', `Model ${index + 1} provider`);
+
+  const modelLabel = document.createElement('label');
+  modelLabel.setAttribute('for', pickerModelId(slot.id));
+  modelLabel.textContent = 'Model';
+
+  const model = document.createElement('select');
+  model.id = pickerModelId(slot.id);
+  model.setAttribute('aria-label', `Model ${index + 1}`);
+
+  row.append(hdr, providerLabel, provider, modelLabel, model);
+  return row;
+}
+
+function renderPickerGrid(): void {
+  const host = el('comparePickers');
+  if (!host) return;
+  host.replaceChildren();
+  pickerSlots.forEach((slot, index) => {
+    host.appendChild(buildPickerRow(slot, index));
+  });
+
+  const addBtn = el<HTMLButtonElement>('btnCompareAddModel');
+  if (addBtn) {
+    addBtn.disabled = pickerSlots.length >= COMPARE_MAX_SLOTS;
+  }
+}
+
+function addPickerSlot(): void {
+  if (pickerSlots.length >= COMPARE_MAX_SLOTS) return;
+  pickerSlots.push({ id: nextPickerId });
+  nextPickerId += 1;
+  renderPickerGrid();
+  void refreshModelPickers();
+}
+
+function removePickerSlot(slotId: number): void {
+  if (pickerSlots.length <= COMPARE_MIN_SLOTS) return;
+  pickerSlots = pickerSlots.filter((slot) => slot.id !== slotId);
+  renderPickerGrid();
+  void refreshModelPickers();
+}
+
+async function wirePickerRow(provider: HTMLSelectElement, model: HTMLSelectElement): Promise<void> {
+  mountAuxiliaryModelSelectCombobox(model);
+  const refresh = async () => {
+    await fillModelSelect(model, provider.value, model.value, {
+      includeEmptyOption: false,
+    });
+    syncAuxiliaryModelSelectCombobox(model);
+  };
+  provider.onchange = () => void refresh();
+  await refresh();
+}
+
+async function refreshModelPickers(): Promise<void> {
+  renderPickerGrid();
+  for (const slot of pickerSlots) {
+    const provider = el<HTMLSelectElement>(pickerProviderId(slot.id));
+    const model = el<HTMLSelectElement>(pickerModelId(slot.id));
+    if (!provider || !model) continue;
+    await fillProviderSelect(provider, provider.value, { includeEmptyOption: false });
+    await wirePickerRow(provider, model);
+  }
+}
+
+function buildColumnShell(screenIndex: number): HTMLElement {
+  const pane = document.createElement('section');
+  pane.className = 'compare-column';
+  pane.dataset.screenIndex = String(screenIndex);
+  pane.setAttribute('aria-label', `Response column ${screenIndex + 1}`);
+
+  const hdr = document.createElement('div');
+  hdr.className = 'compare-column-hdr';
+
+  const label = document.createElement('span');
+  label.className = 'compare-column-label';
+  label.id = `compareColumnLabel${screenIndex}`;
+
+  const status = document.createElement('span');
+  status.className = 'compare-column-status';
+  status.id = `compareColumnStatus${screenIndex}`;
+
+  hdr.append(label, status);
+
+  const body = document.createElement('div');
+  body.className = 'compare-column-body';
+  body.id = `compareColumnBody${screenIndex}`;
+
+  const reveal = document.createElement('div');
+  reveal.className = 'compare-column-reveal';
+  reveal.id = `compareColumnReveal${screenIndex}`;
+  reveal.setAttribute('aria-live', 'polite');
+
+  pane.append(hdr, body, reveal);
+  return pane;
+}
+
+function renderColumnGrid(slotCount: number): void {
+  const host = el('compareColumns');
+  if (!host) return;
+  host.replaceChildren();
+  for (let i = 0; i < slotCount; i += 1) {
+    host.appendChild(buildColumnShell(i));
+  }
+}
+
+function resetColumnByIndex(screenIndex: number): void {
+  const label = el(`compareColumnLabel${screenIndex}`);
+  const body = el(`compareColumnBody${screenIndex}`);
+  const status = el(`compareColumnStatus${screenIndex}`);
+  const reveal = el(`compareColumnReveal${screenIndex}`);
+  const pane = document.querySelector(
+    `.compare-column[data-screen-index="${screenIndex}"]`,
+  );
+  if (label) label.textContent = '—';
+  if (body) clearColumnBody(screenIndex, body);
+  if (status) status.textContent = 'Waiting…';
+  if (reveal) reveal.textContent = '';
+  pane?.classList.remove('is-dimmed');
+}
+
+function renderColumn(col: ColumnState): void {
+  const label = el(`compareColumnLabel${col.screenIndex}`);
+  const body = el(`compareColumnBody${col.screenIndex}`);
+  const status = el(`compareColumnStatus${col.screenIndex}`);
+  if (!label || !body || !status) return;
+
   label.textContent = col.label;
   const streaming = col.status === 'streaming';
-  renderColumnBodyMarkdown(side, body, col.text, streaming);
+  renderColumnBodyMarkdown(col.screenIndex, body, col.text, streaming);
+
   if (col.status === 'streaming') {
     status.textContent = 'Streaming…';
   } else if (col.status === 'complete') {
@@ -187,6 +329,8 @@ function renderColumn(side: ColumnSide, col: ColumnState | null): void {
     status.textContent = col.error ?? 'Error';
   } else if (col.status === 'cancelled') {
     status.textContent = 'Stopped';
+  } else if (col.status === 'waiting') {
+    status.textContent = 'Queued…';
   } else {
     status.textContent = 'Waiting…';
   }
@@ -198,106 +342,141 @@ function formatModelRef(providerId: string, modelId: string): string {
   return `${name} (${providerId})`;
 }
 
-function showReveal(
-  left: { providerId: string; modelId: string },
-  right: { providerId: string; modelId: string },
-): void {
-  const leftReveal = el('compareLeftReveal');
-  const rightReveal = el('compareRightReveal');
-  if (leftReveal) {
-    leftReveal.textContent =
-      left.providerId && left.modelId
-        ? formatModelRef(left.providerId, left.modelId)
-        : '';
-  }
-  if (rightReveal) {
-    rightReveal.textContent =
-      right.providerId && right.modelId
-        ? formatModelRef(right.providerId, right.modelId)
-        : '';
-  }
+function showReveal(slots: { providerId: string; modelId: string }[]): void {
+  slots.forEach((slot, index) => {
+    const reveal = el(`compareColumnReveal${index}`);
+    if (reveal) {
+      reveal.textContent =
+        slot.providerId && slot.modelId
+          ? formatModelRef(slot.providerId, slot.modelId)
+          : '';
+    }
+  });
 }
 
-function bothColumnsSettled(): boolean {
-  const settled = (col: ColumnState | null) =>
-    col &&
-    (col.status === 'complete' ||
+function allColumnsSettled(): boolean {
+  if (columns.length === 0) return false;
+  return columns.every(
+    (col) =>
+      col.status === 'complete' ||
       col.status === 'error' ||
-      col.status === 'cancelled');
-  return Boolean(settled(leftColumn) && settled(rightColumn));
+      col.status === 'cancelled',
+  );
 }
 
-function updateVoteBar(): void {
-  const enabled = !revealed && bothColumnsSettled() && Boolean(sessionId);
-  setVoteEnabled(enabled);
-  const leftBtn = el<HTMLButtonElement>('btnCompareVoteLeft');
-  const rightBtn = el<HTMLButtonElement>('btnCompareVoteRight');
-  if (leftBtn) {
-    leftBtn.textContent = leftColumn ? `${leftColumn.label} wins` : 'A wins';
+function renderVoteBar(): void {
+  const bar = el('compareVoteBar');
+  if (!bar) return;
+  bar.replaceChildren();
+
+  const enabled = !revealed && allColumnsSettled() && Boolean(sessionId);
+  for (const col of columns) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.disabled = !enabled;
+    btn.textContent = `${col.label} wins`;
+    btn.addEventListener('click', () => void handleVote(col.screenIndex));
+    bar.appendChild(btn);
   }
-  if (rightBtn) {
-    rightBtn.textContent = rightColumn ? `${rightColumn.label} wins` : 'B wins';
-  }
+
+  const tieBtn = document.createElement('button');
+  tieBtn.type = 'button';
+  tieBtn.disabled = !enabled;
+  tieBtn.textContent = 'Tie';
+  tieBtn.addEventListener('click', () => void handleVote('tie'));
+  bar.appendChild(tieBtn);
+
+  const bothBadBtn = document.createElement('button');
+  bothBadBtn.type = 'button';
+  bothBadBtn.disabled = !enabled;
+  bothBadBtn.textContent = columns.length > 2 ? 'All bad' : 'Both bad';
+  bothBadBtn.addEventListener('click', () => void handleVote('both_bad'));
+  bar.appendChild(bothBadBtn);
 }
 
-async function refreshModelPickers(): Promise<void> {
-  ensureCompareModelComboboxes();
-  const leftProvider = el<HTMLSelectElement>('compareLeftProvider');
-  const leftModel = el<HTMLSelectElement>('compareLeftModel');
-  const rightProvider = el<HTMLSelectElement>('compareRightProvider');
-  const rightModel = el<HTMLSelectElement>('compareRightModel');
-  if (!leftProvider || !leftModel || !rightProvider || !rightModel) return;
+function updateParallelToggleUi(): void {
+  const toggle = el<HTMLButtonElement>('btnCompareParallelToggle');
+  if (!toggle) return;
+  toggle.classList.toggle('is-active', runParallel);
+  toggle.textContent = runParallel ? 'Parallel' : 'Sequential';
+  toggle.title = runParallel
+    ? 'All models run at once — click for one at a time'
+    : 'One model at a time — click to run in parallel';
+}
 
-  await fillProviderSelect(leftProvider, leftProvider.value, { includeEmptyOption: false });
-  await fillProviderSelect(rightProvider, rightProvider.value, { includeEmptyOption: false });
-
-  const wireModel = async (provider: HTMLSelectElement, model: HTMLSelectElement) => {
-    const refresh = async () => {
-      await fillModelSelect(model, provider.value, model.value, {
-        includeEmptyOption: false,
-      });
-      syncAuxiliaryModelSelectCombobox(model);
-    };
-    provider.onchange = () => void refresh();
-    await refresh();
-  };
-
-  await wireModel(leftProvider, leftModel);
-  await wireModel(rightProvider, rightModel);
-  syncCompareModelComboboxes();
+function setSequentialFocus(activeIndex: number | null): void {
+  document.querySelectorAll('.compare-column').forEach((pane) => {
+    const idx = Number((pane as HTMLElement).dataset.screenIndex);
+    pane.classList.toggle('is-dimmed', activeIndex !== null && idx !== activeIndex);
+  });
 }
 
 function resetRunUi(): void {
   cancelAllColumnRenderDebounces();
-  if (leftColumn?.unsubscribe) leftColumn.unsubscribe();
-  if (rightColumn?.unsubscribe) rightColumn.unsubscribe();
+  for (const col of columns) {
+    col.unsubscribe?.();
+  }
   runAbort?.abort();
   runAbort = null;
   sessionId = null;
   revealed = false;
-  leftColumn = null;
-  rightColumn = null;
-  renderColumn('left', null);
-  renderColumn('right', null);
-  showReveal({ providerId: '', modelId: '' }, { providerId: '', modelId: '' });
-  setVoteEnabled(false);
+  columns = [];
+  renderColumnGrid(pickerSlots.length);
+  for (let i = 0; i < pickerSlots.length; i += 1) {
+    resetColumnByIndex(i);
+  }
+  showReveal([]);
+  renderVoteBar();
+  setSequentialFocus(null);
   const runBtn = el<HTMLButtonElement>('btnCompareRun');
   if (runBtn) runBtn.disabled = false;
 }
 
-function startColumnStream(
-  side: ColumnSide,
-  col: ColumnState,
-  signal: AbortSignal,
-): void {
+function waitForColumnSettled(col: ColumnState, signal: AbortSignal): Promise<void> {
+  if (
+    col.status === 'complete' ||
+    col.status === 'error' ||
+    col.status === 'cancelled'
+  ) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const timer = window.setInterval(() => {
+      if (signal.aborted) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (
+        col.status === 'complete' ||
+        col.status === 'error' ||
+        col.status === 'cancelled'
+      ) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 120);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearInterval(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function startColumnStream(col: ColumnState, signal: AbortSignal): void {
   const acc = new BenchmarkStreamTextAccumulator();
-  col.unsubscribe = subscribeToCompareStream(sessionId!, side, {
+  col.unsubscribe = subscribeToCompareStream(sessionId!, col.screenIndex, {
     signal,
     onChunk: (chunk) => {
       acc.ingestChunk(chunk);
       col.text = acc.getText();
       col.status = 'streaming';
-      renderColumn(side, col);
+      renderColumn(col);
     },
     onEnd: (event) => {
       if (event?.status === 'error') {
@@ -308,31 +487,80 @@ function startColumnStream(
       } else {
         col.status = 'complete';
       }
-      renderColumn(side, col);
-      updateVoteBar();
+      renderColumn(col);
+      renderVoteBar();
     },
     onTransportError: (err) => {
       col.status = 'error';
       col.error = err instanceof Error ? err.message : String(err);
-      renderColumn(side, col);
-      updateVoteBar();
+      renderColumn(col);
+      renderVoteBar();
     },
   });
 }
 
+async function activateCompareSlot(
+  id: string,
+  screenIndex: number,
+): Promise<{ generationId: string; label: CompareAlias }> {
+  const res = await fetch(
+    `/api/compare/${encodeURIComponent(id)}/activate-slot/${screenIndex}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    },
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || `Activate slot failed (${res.status})`);
+  }
+  return (await res.json()) as { generationId: string; label: CompareAlias };
+}
+
+async function runSequentialStreams(signal: AbortSignal): Promise<void> {
+  for (let i = 0; i < columns.length; i += 1) {
+    if (signal.aborted) return;
+    const col = columns[i];
+    setSequentialFocus(col.screenIndex);
+
+    if (!col.generationId && sessionId) {
+      col.status = 'waiting';
+      renderColumn(col);
+      try {
+        const activated = await activateCompareSlot(sessionId, col.screenIndex);
+        col.generationId = activated.generationId;
+        col.label = activated.label;
+        renderColumn(col);
+      } catch (err) {
+        col.status = 'error';
+        col.error = err instanceof Error ? err.message : String(err);
+        renderColumn(col);
+        renderVoteBar();
+        continue;
+      }
+    }
+
+    col.status = 'streaming';
+    renderColumn(col);
+    startColumnStream(col, signal);
+    await waitForColumnSettled(col, signal);
+  }
+  setSequentialFocus(null);
+  renderVoteBar();
+}
+
 async function startCompareRun(): Promise<void> {
   const prompt = el<HTMLTextAreaElement>('comparePrompt')?.value.trim() ?? '';
-  const leftProvider = el<HTMLSelectElement>('compareLeftProvider')?.value ?? '';
-  const leftModel = el<HTMLSelectElement>('compareLeftModel')?.value ?? '';
-  const rightProvider = el<HTMLSelectElement>('compareRightProvider')?.value ?? '';
-  const rightModel = el<HTMLSelectElement>('compareRightModel')?.value ?? '';
+  const models = readPickerSelections();
 
-  if (!prompt || !leftProvider || !leftModel || !rightProvider || !rightModel) {
-    setStatus('Select two models and enter a prompt.');
+  if (!prompt || models.some((row) => !row.providerId || !row.modelId)) {
+    setStatus('Select every model and enter a prompt.');
     return;
   }
 
   resetRunUi();
+  renderColumnGrid(models.length);
   const runBtn = el<HTMLButtonElement>('btnCompareRun');
   if (runBtn) runBtn.disabled = true;
 
@@ -342,8 +570,8 @@ async function startCompareRun(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt,
-        left: { providerId: leftProvider, modelId: leftModel },
-        right: { providerId: rightProvider, modelId: rightModel },
+        models,
+        parallel: runParallel,
       }),
     });
     if (!res.ok) {
@@ -354,26 +582,27 @@ async function startCompareRun(): Promise<void> {
     sessionId = payload.sessionId;
     runAbort = new AbortController();
 
-    leftColumn = {
-      label: payload.left.label,
-      generationId: payload.left.generationId,
+    columns = payload.slots.map((slot, screenIndex) => ({
+      screenIndex,
+      label: slot.label,
+      generationId: slot.generationId,
       text: '',
-      status: 'streaming',
+      status: slot.generationId ? 'streaming' : 'waiting',
       unsubscribe: null,
-    };
-    rightColumn = {
-      label: payload.right.label,
-      generationId: payload.right.generationId,
-      text: '',
-      status: 'streaming',
-      unsubscribe: null,
-    };
-    renderColumn('left', leftColumn);
-    renderColumn('right', rightColumn);
+    }));
 
-    startColumnStream('left', leftColumn, runAbort.signal);
-    startColumnStream('right', rightColumn, runAbort.signal);
-    updateVoteBar();
+    for (const col of columns) {
+      renderColumn(col);
+    }
+    renderVoteBar();
+
+    if (runParallel) {
+      for (const col of columns) {
+        startColumnStream(col, runAbort.signal);
+      }
+    } else {
+      await runSequentialStreams(runAbort.signal);
+    }
   } catch (err) {
     setStatus(err instanceof Error ? err.message : String(err));
     if (runBtn) runBtn.disabled = false;
@@ -381,7 +610,7 @@ async function startCompareRun(): Promise<void> {
 }
 
 async function stopCompareRun(): Promise<void> {
-  const ids = [leftColumn?.generationId, rightColumn?.generationId].filter(Boolean) as string[];
+  const ids = columns.map((col) => col.generationId).filter(Boolean);
   runAbort?.abort();
   for (const id of ids) {
     try {
@@ -390,11 +619,16 @@ async function stopCompareRun(): Promise<void> {
       /* ignore */
     }
   }
-  if (leftColumn && leftColumn.status === 'streaming') leftColumn.status = 'cancelled';
-  if (rightColumn && rightColumn.status === 'streaming') rightColumn.status = 'cancelled';
-  renderColumn('left', leftColumn);
-  renderColumn('right', rightColumn);
-  updateVoteBar();
+  for (const col of columns) {
+    if (col.status === 'streaming' || col.status === 'waiting') {
+      col.status = 'cancelled';
+    }
+  }
+  for (const col of columns) {
+    renderColumn(col);
+  }
+  setSequentialFocus(null);
+  renderVoteBar();
   const runBtn = el<HTMLButtonElement>('btnCompareRun');
   if (runBtn) runBtn.disabled = false;
 }
@@ -404,8 +638,8 @@ async function handleVote(winner: CompareWinner): Promise<void> {
   try {
     const reveal = await submitCompareVote(sessionId, winner);
     revealed = true;
-    showReveal(reveal.left, reveal.right);
-    setVoteEnabled(false);
+    showReveal(reveal.slots);
+    renderVoteBar();
     const prompt = el<HTMLTextAreaElement>('comparePrompt')?.value.trim() ?? '';
     await cacheVoteAfterReveal(sessionId, prompt, reveal);
     await refreshHistory();
@@ -427,7 +661,12 @@ async function cacheVoteAfterReveal(
     startedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
     prompt,
-    ...reveal,
+    slots: reveal.slots,
+    winner: reveal.winner,
+    revealed: reveal.revealed,
+    left: reveal.left,
+    right: reveal.right,
+    assignment: reveal.assignment,
   };
   await cacheCompareVote(vote);
 }
@@ -445,23 +684,16 @@ function renderHistory(votes: CompareVote[]): void {
     list.appendChild(empty);
   } else {
     for (const vote of votes) {
+      const refs = voteSlotRefs(vote);
       const row = document.createElement('article');
       row.className = 'compare-history-row';
-      const winnerLabel =
-        vote.winner === 'tie'
-          ? 'Tie'
-          : vote.winner === 'both_bad'
-            ? 'Both bad'
-            : vote.winner === 'left'
-              ? `Left (${vote.assignment.leftAlias})`
-              : `Right (${vote.assignment.rightAlias})`;
       row.innerHTML = `
         <div class="compare-history-prompt">${escapeHtml(vote.prompt.slice(0, 120))}</div>
         <div class="compare-history-meta">
-          <span>${escapeHtml(winnerLabel)}</span>
-          <span>${escapeHtml(formatModelRef(vote.left.providerId, vote.left.modelId))}</span>
-          <span>vs</span>
-          <span>${escapeHtml(formatModelRef(vote.right.providerId, vote.right.modelId))}</span>
+          <span>${escapeHtml(formatCompareWinnerLabel(vote))}</span>
+          ${refs
+            .map((ref) => `<span>${escapeHtml(formatModelRef(ref.providerId, ref.modelId))}</span>`)
+            .join('<span>vs</span>')}
         </div>`;
       list.appendChild(row);
     }
@@ -500,19 +732,26 @@ function setStatus(message: string): void {
   if (status) status.textContent = message;
 }
 
+function toggleParallelMode(): void {
+  runParallel = !runParallel;
+  writeParallelPref(runParallel);
+  updateParallelToggleUi();
+}
+
 function wireControls(): void {
   el('btnCompareRun')?.addEventListener('click', () => void startCompareRun());
   el('btnCompareStop')?.addEventListener('click', () => void stopCompareRun());
-  el('btnCompareVoteLeft')?.addEventListener('click', () => void handleVote('left'));
-  el('btnCompareVoteRight')?.addEventListener('click', () => void handleVote('right'));
-  el('btnCompareVoteTie')?.addEventListener('click', () => void handleVote('tie'));
-  el('btnCompareVoteBothBad')?.addEventListener('click', () => void handleVote('both_bad'));
+  el('btnCompareAddModel')?.addEventListener('click', () => addPickerSlot());
+  el('btnCompareParallelToggle')?.addEventListener('click', () => toggleParallelMode());
 }
 
 export function initComparePage(): void {
   if (initialized) return;
   initialized = true;
   wireControls();
+  renderPickerGrid();
+  renderColumnGrid(pickerSlots.length);
+  updateParallelToggleUi();
   void refreshModelPickers();
   void refreshHistory();
   window.addEventListener('hashchange', onHashChange);
