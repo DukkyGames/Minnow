@@ -111,6 +111,8 @@ describe('streamCompletionTestDetails', () => {
     const details = streamCompletionTestDetails(
       {
         text: 'hello world',
+        contentText: 'hello world',
+        reasoningText: '',
         toolCalls: [],
         timing: { ttftMs: 10, totalMs: 100, tokPerSec: null, usage: {}, stats: {} },
         messages: [],
@@ -124,6 +126,8 @@ describe('streamCompletionTestDetails', () => {
     const details = streamCompletionTestDetails(
       {
         text: '',
+        contentText: '',
+        reasoningText: '',
         toolCalls: [],
         finishReason: 'stop',
         timing: {

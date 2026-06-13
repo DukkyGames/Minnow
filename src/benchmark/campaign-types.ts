@@ -2,6 +2,7 @@
  * Multi-model benchmark campaign types (unified bench + eval surface).
  */
 
+import type { ApiMessage } from '../types.ts';
 import type { EvalCellResult } from '../evals/types.ts';
 import type { BenchmarkPreset, BenchmarkRun, SuiteId, TestResult } from './types.ts';
 
@@ -56,6 +57,9 @@ export interface BenchmarkCellResult {
   ttftMs?: number;
   tokPerSec?: number;
   details?: string;
+  /** Full one-shot conversation for Academic probes (same shape as integration transcripts). */
+  transcript?: ApiMessage[];
+  transcriptMeta?: TestResult['transcriptMeta'];
   integrationResult?: TestResult;
   evalResult?: EvalCellResult;
 }

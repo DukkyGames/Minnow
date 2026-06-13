@@ -20,6 +20,7 @@ import type { EvalPack, EvalPackListItem } from '../../evals/types.ts';
 import { importStandardDataset } from '../../benchmark/campaign-persistence.ts';
 import type { StandardBenchmarkPack } from '../../benchmark/standard/types.ts';
 import { isLocalServerAvailable } from '../../tools/config.ts';
+import { catalogFamilyLabel, TEST_FAMILY_LABELS } from './copy.ts';
 
 const ALL_INTEGRATION_SUITES: SuiteId[] = [
   'capability',
@@ -53,9 +54,9 @@ async function loadCatalog(): Promise<UnifiedCatalogEntry[]> {
       label: p.label,
       family: 'custom' as const,
       category: 'custom',
-      purpose: `User task pack with ${p.taskCount} tasks`,
-      method: 'LLM completion graded by rubric',
-      passCriteria: 'Rubric score threshold',
+      purpose: `Custom task pack with ${p.taskCount} graded prompts`,
+      method: 'Model reply scored against a rubric',
+      passCriteria: 'Meets the rubric threshold',
       promptPreview: p.label,
       packId: p.id,
     }));
@@ -91,17 +92,17 @@ function openCatalogDrawer(entry: UnifiedCatalogEntry): void {
 
   body.innerHTML = `
     <header class="benchmark-catalog-drawer-hdr">
-      <span class="benchmark-catalog-badge">${escapeHtml(entry.family)}</span>
+      <span class="benchmark-catalog-badge">${escapeHtml(catalogFamilyLabel(entry.family))}</span>
       <h3>${escapeHtml(entry.label)}</h3>
     </header>
     <dl class="benchmark-catalog-meta">
       <dt>Category</dt><dd>${escapeHtml(entry.category)}</dd>
-      <dt>Purpose</dt><dd>${escapeHtml(entry.purpose)}</dd>
-      <dt>Method</dt><dd>${escapeHtml(entry.method)}</dd>
-      <dt>Pass criteria</dt><dd>${escapeHtml(entry.passCriteria)}</dd>
-      ${entry.tier ? `<dt>Tier</dt><dd>${escapeHtml(entry.tier)}</dd>` : ''}
+      <dt>What it checks</dt><dd>${escapeHtml(entry.purpose)}</dd>
+      <dt>How it runs</dt><dd>${escapeHtml(entry.method)}</dd>
+      <dt>Pass rule</dt><dd>${escapeHtml(entry.passCriteria)}</dd>
+      ${entry.tier ? `<dt>Dataset size</dt><dd>${escapeHtml(entry.tier)}</dd>` : ''}
     </dl>
-    <h4 class="benchmark-field-label">Prompt preview</h4>
+    <h4 class="benchmark-field-label">Sample prompt</h4>
     ${promptBlock}`;
 
   drawer.hidden = false;
@@ -120,7 +121,7 @@ async function renderCustomEditor(
   const editor = document.createElement('div');
   editor.className = 'benchmark-custom-editor';
   editor.innerHTML = `
-    <h3 class="benchmark-custom-editor-title">${pack ? 'Edit pack' : 'New custom test pack'}</h3>
+    <h3 class="benchmark-custom-editor-title">${pack ? 'Edit custom pack' : 'New custom test pack'}</h3>
     <label class="benchmark-custom-field"><span class="benchmark-field-label">Pack ID</span>
       <input type="text" id="benchmarkCustomPackId" value="${escapeHtml(pack?.id ?? '')}" ${pack ? 'readonly' : ''} /></label>
     <label class="benchmark-custom-field"><span class="benchmark-field-label">Label</span>
@@ -129,7 +130,7 @@ async function renderCustomEditor(
       <textarea id="benchmarkCustomPackJson" rows="12" class="benchmark-custom-json"></textarea></label>
     <div class="benchmark-custom-actions">
       <button type="button" class="is-primary" id="btnBenchmarkSaveCustomPack">Save pack</button>
-      ${pack?.source === 'user' ? '<button type="button" id="btnBenchmarkDeleteCustomPack">Delete</button>' : ''}
+      ${pack?.source === 'user' ? '<button type="button" id="btnBenchmarkDeleteCustomPack">Delete pack</button>' : ''}
     </div>`;
   mount.prepend(editor);
 
@@ -194,7 +195,7 @@ function wireImportDataset(mount: HTMLElement): void {
       const text = await file.text();
       const pack = JSON.parse(text) as StandardBenchmarkPack;
       await importStandardDataset(pack);
-      alert(`Imported full-tier pack: ${pack.id}`);
+      alert(`Imported full dataset: ${pack.id}`);
       await renderTestsPanel(mount);
     })();
   });
@@ -207,12 +208,12 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
 
   mount.innerHTML = `
     <div class="benchmark-tests-toolbar">
-      <input type="search" id="benchmarkTestsSearch" class="benchmark-tests-search" placeholder="Search tests…" value="${escapeHtml(searchQuery)}" />
-      <div class="benchmark-tests-filters" role="group" aria-label="Filter by family">
+      <input type="search" id="benchmarkTestsSearch" class="benchmark-tests-search" placeholder="Search by name or category…" value="${escapeHtml(searchQuery)}" />
+      <div class="benchmark-tests-filters" role="group" aria-label="Filter by test type">
         ${(['all', 'integration', 'standard', 'custom'] as FamilyFilter[])
           .map(
             (f) =>
-              `<button type="button" class="benchmark-tests-filter${familyFilter === f ? ' is-active' : ''}" data-family="${f}">${f}</button>`,
+              `<button type="button" class="benchmark-tests-filter${familyFilter === f ? ' is-active' : ''}" data-family="${f}">${TEST_FAMILY_LABELS[f]}</button>`,
           )
           .join('')}
       </div>
@@ -220,7 +221,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
         <button type="button" class="benchmark-tests-new is-primary" id="btnBenchmarkNewCustomPack">New custom pack</button>
         <label class="benchmark-tests-import">
           <input type="file" id="benchmarkDatasetImport" class="benchmark-tests-import-input" accept=".json,application/json" />
-          <span class="benchmark-tests-import-btn">Import dataset</span>
+          <span class="benchmark-tests-import-btn">Import full dataset</span>
         </label>
       </div>
     </div>
@@ -233,7 +234,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
       li.className = 'benchmark-catalog-item';
       li.innerHTML = `
         <button type="button" class="benchmark-catalog-item-btn">
-          <span class="benchmark-catalog-badge">${escapeHtml(entry.family)}</span>
+          <span class="benchmark-catalog-badge">${escapeHtml(catalogFamilyLabel(entry.family))}</span>
           <strong>${escapeHtml(entry.label)}</strong>
           <span class="benchmark-muted">${escapeHtml(entry.category)}</span>
         </button>`;
@@ -241,7 +242,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
       list.appendChild(li);
     }
     if (!filtered.length) {
-      list.innerHTML = '<li class="benchmark-empty">No tests match your filter.</li>';
+      list.innerHTML = '<li class="benchmark-empty">No tests match this filter. Try another type or clear the search.</li>';
     }
   }
 
@@ -266,7 +267,7 @@ export async function renderTestsPanel(mount: HTMLElement): Promise<void> {
   if (!isLocalServerAvailable()) {
     const hint = document.createElement('p');
     hint.className = 'benchmark-tests-hint';
-    hint.textContent = 'Start npm start to save custom packs and import datasets.';
+    hint.textContent = 'Start the app with npm start to save custom packs or import full datasets.';
     mount.appendChild(hint);
   }
 }

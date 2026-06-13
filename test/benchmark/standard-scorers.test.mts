@@ -18,6 +18,26 @@ describe('standard scorers', () => {
     assert.equal(scoreMcq(item, 'A').passed, false);
   });
 
+  test('scoreMcq uses final letter when reasoning lists all options', () => {
+    const item = {
+      id: 't1b',
+      prompt: 'q',
+      groundTruth: 'B',
+      category: 'reasoning' as const,
+    };
+    const reasoning = [
+      'Evaluate the Options:',
+      'A) Ag - Silver',
+      'B) Au - Gold',
+      'C) Fe - Iron',
+      'D) Pb - Lead',
+      'Select the Correct Option: Option B corresponds to Au.',
+      'Construct Final Response: B',
+    ].join('\n');
+    assert.equal(scoreMcq(item, reasoning).passed, true);
+    assert.equal(scoreMcq(item, reasoning.replace('Construct Final Response: B', '')).passed, true);
+  });
+
   test('scoreNumeric extracts final number', () => {
     const item = {
       id: 't2',

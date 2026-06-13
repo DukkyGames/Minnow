@@ -151,6 +151,9 @@ export async function runBenchmarkCampaign(
   const integrationSuites = options.integrationSuites ?? suitesForPreset(options.preset ?? 'quick');
   const standardPackIds = options.standardPackIds ?? [];
   const customPackIds = options.customPackIds ?? [];
+  if (!integrationSuites.length && !standardPackIds.length && !customPackIds.length) {
+    throw new Error('Select at least one Academic benchmark and/or Minnow test to run.');
+  }
   const selectedSuites = buildSelectedSuites(options);
 
   let configConcurrency = 2;

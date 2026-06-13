@@ -6,6 +6,7 @@ import { pickCampaignInsight } from '../../benchmark/aggregates.ts';
 import type { ModelAggregate, ModelScoreIndexRow } from '../../benchmark/campaign-types.ts';
 import { fetchModelScoreIndex } from '../../benchmark/campaign-persistence.ts';
 import { loadRoster } from '../../benchmark/roster.ts';
+import { OVERVIEW_COLUMNS } from './copy.ts';
 import { animateBarWidth } from './animations.ts';
 
 let liveAggregates: ModelAggregate[] = [];
@@ -89,9 +90,9 @@ function renderInsightNote(mount: HTMLElement, aggregates: ModelAggregate[]): vo
   note.setAttribute('role', 'status');
   let text = '';
   if (fastest && quality && fastest.targetKey !== quality.targetKey) {
-    text = `<b>${escapeHtml(fastest.label)}</b> leads on throughput; <b>${escapeHtml(quality.label)}</b> wins on quality. Pick by task.`;
+    text = `<b>${escapeHtml(fastest.label)}</b> is fastest; <b>${escapeHtml(quality.label)}</b> scores highest on quality. Pick by task.`;
   } else if (quality) {
-    text = `<b>${escapeHtml(quality.label)}</b> leads this campaign.`;
+    text = `<b>${escapeHtml(quality.label)}</b> leads this run.`;
   }
   note.innerHTML = `<span class="bench-note-ico" aria-hidden="true">✦</span> ${text}`;
   mount.appendChild(note);
@@ -103,7 +104,7 @@ function renderGrid(mount: HTMLElement, rows: ReturnType<typeof mergeRows>): voi
 
   const progHtml =
     runPhase === 'running'
-      ? `<div class="bench-prog" role="status"><div class="bench-prog-track"><div class="bench-prog-fill" style="width:${runProgressPct}%"></div></div><span class="bench-prog-label benchmark-mono">${runProgressPct}% · streaming tokens…</span></div>`
+      ? `<div class="bench-prog" role="status"><div class="bench-prog-track"><div class="bench-prog-fill" style="width:${runProgressPct}%"></div></div><span class="bench-prog-label benchmark-mono">${runProgressPct}% · measuring throughput…</span></div>`
       : '';
 
   const gridRows = rows
@@ -123,8 +124,8 @@ function renderGrid(mount: HTMLElement, rows: ReturnType<typeof mergeRows>): voi
 
   mount.innerHTML = `${progHtml}
     <div class="bench-grid">
-      <div class="bench-row bench-head"><span>MODEL</span><span>TOK/S</span><span>TTFT</span><span>QUALITY</span></div>
-      ${gridRows || '<p class="benchmark-empty">Add models in the Run tab, then start a campaign.</p>'}
+      <div class="bench-row bench-head"><span>${OVERVIEW_COLUMNS.model}</span><span title="Tokens per second">${OVERVIEW_COLUMNS.tokPerSec}</span><span title="Time to first token">${OVERVIEW_COLUMNS.ttft}</span><span>${OVERVIEW_COLUMNS.quality}</span></div>
+      ${gridRows || '<p class="benchmark-empty">Add models on the Run tab, then start a benchmark.</p>'}
     </div>`;
 
   if (showValues) {

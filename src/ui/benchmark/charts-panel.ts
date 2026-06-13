@@ -49,7 +49,7 @@ function renderGroupedBarSvg(
 
   const width = 40 + aggregates.length * (barW * 2 + gap) + 20;
   return `<svg viewBox="0 0 ${width} ${baseY + 28}" class="benchmark-chart-svg" role="img" aria-label="Throughput and quality by model">
-    <text x="0" y="14" class="benchmark-chart-axis-label">tok/s (accent) · quality % (muted)</text>
+    <text x="0" y="14" class="benchmark-chart-axis-label">Left bar: tok/s · Right bar: quality %</text>
     ${bars}
   </svg>`;
 }
@@ -59,7 +59,7 @@ function renderRadarSvg(campaign: BenchmarkCampaign): string {
   const cx = 120;
   const cy = 100;
   const r = 70;
-  const axes = ['Integration', 'Standard', 'Custom'];
+  const axes = ['Minnow tests', 'Academic', 'Custom'];
   const values = aggregates.map((a) => [
     a.integrationScore,
     a.standardScore,
@@ -100,7 +100,7 @@ function renderRadarSvg(campaign: BenchmarkCampaign): string {
     )
     .join('');
 
-  return `<svg viewBox="0 0 240 200" class="benchmark-chart-svg" role="img" aria-label="Suite family radar">
+  return `<svg viewBox="0 0 240 200" class="benchmark-chart-svg" role="img" aria-label="Scores by test family">
     ${axisLines}
     ${polygons}
     ${labels}
@@ -117,7 +117,7 @@ function renderHistoryLineSvg(campaigns: BenchmarkCampaign[]): string {
     points.push({ x: 30 + i * 60, y: 140 - score * 120, label: c.startedAt.slice(0, 10) });
   });
   if (points.length < 2) {
-    return '<p class="benchmark-empty">Need more campaigns for history line.</p>';
+    return '<p class="benchmark-empty">Run at least two benchmarks to plot score history.</p>';
   }
   const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
   const dots = points
@@ -136,7 +136,7 @@ export async function renderChartsPanel(mount: HTMLElement): Promise<void> {
 
   if (!campaign?.aggregates?.length) {
     mount.innerHTML =
-      '<p class="benchmark-empty">Run a campaign to see comparison charts.</p>';
+      '<p class="benchmark-empty">Run a benchmark to see comparison charts.</p>';
     return;
   }
 
@@ -154,7 +154,7 @@ export async function renderChartsPanel(mount: HTMLElement): Promise<void> {
         ${renderGroupedBarSvg(campaign)}
       </section>
       <section class="benchmark-chart-card">
-        <h3 class="benchmark-chart-title">Suite families</h3>
+        <h3 class="benchmark-chart-title">Test families</h3>
         ${renderRadarSvg(campaign)}
       </section>
       <section class="benchmark-chart-card benchmark-chart-card--wide">

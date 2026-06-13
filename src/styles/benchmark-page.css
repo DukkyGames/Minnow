@@ -231,6 +231,138 @@
 .benchmark-deck {
   margin-top: 10px;
   margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.benchmark-deck-field--presets {
+  min-width: 0;
+}
+
+/* Academic + Minnow test pickers on one row */
+.benchmark-test-types {
+  min-width: 0;
+}
+
+.benchmark-test-types > .benchmark-field-label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+/* Labels, control rows, and Run share one grid for row alignment */
+.benchmark-test-types-inline {
+  display: grid;
+  grid-template-columns: minmax(27rem, 1.5fr) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 8px;
+  align-items: end;
+}
+
+.benchmark-test-type-group--academic,
+.benchmark-test-type-group--minnow {
+  display: contents;
+}
+
+.benchmark-test-type-group--academic .benchmark-test-type-name {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.benchmark-academic-controls {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#benchmarkStandardToggles {
+  flex-wrap: nowrap;
+  width: fit-content;
+  max-width: 100%;
+  flex-shrink: 0;
+}
+
+/* Slightly denser pills so five Academic labels fit one row at bench max-width */
+.benchmark-test-types-inline .benchmark-standard-toggle,
+.benchmark-test-types-inline .benchmark-suite-toggle {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+.benchmark-test-types-inline .benchmark-tier-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 9.5rem;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.benchmark-test-type-group--minnow .benchmark-test-type-name {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.benchmark-test-type-group--minnow .benchmark-suites-row {
+  display: contents;
+}
+
+#benchmarkSuiteToggles {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  flex-wrap: nowrap;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.benchmark-test-type-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.benchmark-run-actions--test-run {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: end;
+  margin-left: 0;
+}
+
+@media (max-width: 720px) {
+  .benchmark-test-types-inline {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    row-gap: 10px;
+  }
+
+  .benchmark-test-type-group--academic .benchmark-test-type-name,
+  .benchmark-academic-controls,
+  .benchmark-test-type-group--minnow .benchmark-test-type-name,
+  #benchmarkSuiteToggles,
+  .benchmark-run-actions--test-run {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .benchmark-test-types-inline .benchmark-tier-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .benchmark-run-actions--test-run {
+    width: 100%;
+  }
+
+  .benchmark-run-actions--test-run .is-primary {
+    width: 100%;
+  }
 }
 
 .benchmark-deck-grid {
@@ -248,10 +380,6 @@
   }
 }
 
-.benchmark-deck-field--presets {
-  min-width: 0;
-}
-
 .benchmark-deck-field--suites {
   min-width: 0;
 }
@@ -267,7 +395,8 @@
   flex: 0 0 auto;
 }
 
-.benchmark-run-actions--suites {
+.benchmark-run-actions--suites,
+.benchmark-run-actions--test-run {
   flex-shrink: 0;
 }
 
@@ -810,7 +939,7 @@
 }
 
 .benchmark-empty {
-  margin: 0;
+  margin: 10px 0;
   padding: 14px 16px;
   color: var(--mn-fg-muted);
   font-size: 13px;
@@ -1272,9 +1401,10 @@
   margin-bottom: 0;
 }
 
-.benchmark-standard-toggles > .benchmark-field-label {
-  margin-top: 4px;
-  margin-bottom: 10px;
+.benchmark-standard-toggles > .benchmark-field-label,
+.benchmark-test-type-group--academic > .benchmark-test-type-name {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .benchmark-standard-toggle {

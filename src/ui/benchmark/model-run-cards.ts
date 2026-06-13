@@ -103,7 +103,7 @@ export function initMultiModelCampaign(options: {
       label: targetLabel(target),
       status: 'queued',
       progressPct: 0,
-      progressLabel: 'Queued',
+      progressLabel: 'Waiting…',
       suiteIds: [...options.suiteIds],
       testResults: new Map(),
       currentTestId: null,
@@ -149,7 +149,7 @@ export function markTargetRunning(targetKey: string): void {
   const session = sessions.get(targetKey);
   if (!session) return;
   session.status = 'running';
-  session.progressLabel = 'Starting…';
+  session.progressLabel = 'Starting tests…';
   if (!selectedTargetKey) selectedTargetKey = targetKey;
   renderModelCards();
 }
@@ -159,7 +159,7 @@ export function markTargetDone(targetKey: string, aggregate: ModelAggregate): vo
   if (!session) return;
   session.status = 'done';
   session.progressPct = 100;
-  session.progressLabel = 'Complete';
+  session.progressLabel = 'Finished';
   session.aggregate = aggregate;
   renderModelCards();
 }
@@ -203,9 +203,9 @@ export function selectTargetCard(
 }
 
 function statusLabel(status: TargetRunStatus): string {
-  if (status === 'queued') return 'Queued';
+  if (status === 'queued') return 'Waiting';
   if (status === 'running') return 'Running';
-  if (status === 'done') return 'Done';
+  if (status === 'done') return 'Finished';
   return 'Stopped';
 }
 

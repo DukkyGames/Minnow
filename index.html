@@ -252,7 +252,7 @@
     <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research" onclick="openResearchFromTopbar()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
     </button>
-    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
+    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Compare model speed and quality" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
     <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts" onclick="openExpertLabFromTopbar()">
@@ -976,7 +976,7 @@
 </main>
 
 <main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
-  <nav class="benchmark-tabs" role="tablist" aria-label="Benchmark sections">
+  <nav class="benchmark-tabs" role="tablist" aria-label="Benchmark views">
     <button type="button" class="benchmark-tab is-active" role="tab" data-tab="overview" aria-selected="true" id="benchmarkTabBtnOverview">Overview</button>
     <button type="button" class="benchmark-tab" role="tab" data-tab="charts" aria-selected="false" id="benchmarkTabBtnCharts">Charts</button>
     <button type="button" class="benchmark-tab" role="tab" data-tab="tests" aria-selected="false" id="benchmarkTabBtnTests">Tests</button>
@@ -988,92 +988,95 @@
       <section id="benchmarkTabCharts" class="benchmark-tab-panel" data-tab="charts" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnCharts"></section>
       <section id="benchmarkTabTests" class="benchmark-tab-panel" data-tab="tests" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnTests"></section>
       <section id="benchmarkTabRun" class="benchmark-tab-panel" data-tab="run" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnRun">
-      <section class="benchmark-run-section benchmark-roster" aria-label="Model roster">
-        <span class="benchmark-field-label">Models</span>
+      <section class="benchmark-run-section benchmark-roster" aria-label="Models to compare">
+        <span class="benchmark-field-label">Models to compare</span>
         <div id="benchmarkRosterList" class="benchmark-roster-list"></div>
         <div class="benchmark-roster-add">
           <div class="benchmark-roster-picker">
             <select id="benchmarkRosterProvider" aria-label="Provider"></select>
             <select id="benchmarkRosterModel" aria-label="Model"></select>
           </div>
-          <button type="button" class="is-primary" id="btnBenchmarkAddTarget">Add</button>
-          <button type="button" id="btnBenchmarkAddActiveModel">Active model</button>
+          <button type="button" class="is-primary" id="btnBenchmarkAddTarget" title="Add the selected provider and model">Add model</button>
+          <button type="button" id="btnBenchmarkAddActiveModel" title="Add the model loaded in the top bar">Use top-bar model</button>
         </div>
       </section>
       <section id="benchmarkScheduleSection" class="benchmark-run-section" hidden aria-label="Multi-model run order">
         <span class="benchmark-field-label">Run order</span>
         <div id="benchmarkScheduleToggles" class="benchmark-suite-toggles" role="group" aria-label="Run models in parallel or one at a time">
-          <button type="button" class="benchmark-schedule-toggle" data-schedule="parallel" aria-pressed="true">Parallel</button>
-          <button type="button" class="benchmark-schedule-toggle" data-schedule="sequential" aria-pressed="false">Sequential</button>
-        </div>
-      </section>
-      <section class="benchmark-run-section benchmark-standard-toggles" aria-label="Standard benchmarks">
-        <span class="benchmark-field-label">Standard</span>
-        <div class="benchmark-run-row">
-          <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group" aria-label="Standard benchmark packs">
-            <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false">MMLU</button>
-            <button type="button" class="benchmark-standard-toggle" data-pack-id="arc-challenge-mini" aria-pressed="false">ARC</button>
-            <button type="button" class="benchmark-standard-toggle" data-pack-id="gsm8k-mini" aria-pressed="false">GSM8K</button>
-            <button type="button" class="benchmark-standard-toggle" data-pack-id="humaneval-mini" aria-pressed="false">HumanEval</button>
-            <button type="button" class="benchmark-standard-toggle" data-pack-id="truthfulqa-mini" aria-pressed="false">TruthfulQA</button>
-          </div>
-          <select id="benchmarkStandardTier" class="benchmark-tier-select" aria-label="Standard benchmark tier">
-            <option value="mini" selected>Mini</option>
-            <option value="full">Full</option>
-          </select>
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="parallel" aria-pressed="true" title="Run all models at once">Parallel</button>
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="sequential" aria-pressed="false" title="Run one model, then the next">Sequential</button>
         </div>
       </section>
       <section class="benchmark-run-section benchmark-deck" aria-label="Run configuration">
-        <div class="benchmark-deck-grid">
-          <div class="benchmark-deck-field benchmark-deck-field--presets">
-            <span class="benchmark-field-label" id="benchmarkPresetLabel">Preset</span>
-            <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
-              <button type="button" id="btnBenchmarkQuick">Quick</button>
-              <button type="button" id="btnBenchmarkFull">Full</button>
-            </div>
+        <div class="benchmark-deck-field benchmark-deck-field--presets">
+          <span class="benchmark-field-label" id="benchmarkPresetLabel">Run preset</span>
+          <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
+            <button type="button" id="btnBenchmarkQuick" title="Capability and Speed only">Quick</button>
+            <button type="button" id="btnBenchmarkFull" title="All Minnow test suites">Full</button>
           </div>
-          <div class="benchmark-deck-field benchmark-deck-field--suites">
-            <span class="benchmark-field-label" id="benchmarkSuitesLabel">Integration suites</span>
-            <div class="benchmark-suites-row">
-              <div
-                id="benchmarkSuiteToggles"
-                class="benchmark-suite-toggles"
-                role="group"
-                aria-labelledby="benchmarkSuitesLabel"
-              >
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+        </div>
+        <div class="benchmark-test-types" aria-label="Test types">
+          <span class="benchmark-field-label" id="benchmarkTestTypesLabel">Test types</span>
+          <div class="benchmark-test-types-inline" role="group" aria-labelledby="benchmarkTestTypesLabel">
+            <div class="benchmark-test-type-group benchmark-test-type-group--academic">
+              <span class="benchmark-test-type-name" id="benchmarkStandardLabel">Academic</span>
+              <div class="benchmark-academic-controls">
+                <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group" aria-label="Academic benchmarks">
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false" title="Multiple-choice knowledge (MMLU)">MMLU</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="arc-challenge-mini" aria-pressed="false" title="Science reasoning (ARC)">ARC</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="gsm8k-mini" aria-pressed="false" title="Grade-school math (GSM8K)">GSM8K</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="humaneval-mini" aria-pressed="false" title="Python coding (HumanEval)">HumanEval</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="truthfulqa-mini" aria-pressed="false" title="Factual accuracy (TruthfulQA)">TruthfulQA</button>
+                </div>
+                <select id="benchmarkStandardTier" class="benchmark-tier-select" aria-label="Dataset size: Mini sample or Full import" title="Mini uses bundled samples; Full uses imported datasets">
+                  <option value="mini" selected>Mini sample</option>
+                  <option value="full">Full dataset</option>
+                </select>
               </div>
-              <div class="benchmark-run-actions benchmark-run-actions--suites">
-                <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
+            </div>
+            <div class="benchmark-test-type-group benchmark-test-type-group--minnow">
+              <span class="benchmark-test-type-name" id="benchmarkSuitesLabel">Minnow</span>
+              <div class="benchmark-suites-row">
+                <div
+                  id="benchmarkSuiteToggles"
+                  class="benchmark-suite-toggles"
+                  role="group"
+                  aria-label="Minnow tests"
+                >
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true" title="Reasoning, JSON, and multimodal probes">Capability</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true" title="Time to first token and tokens per second">Speed</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false" title="Built-in tool calls in an isolated workspace">Tools</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false" title="Slash-command skill behavior">Skills</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false" title="Generate and run small Node scripts">Coding</button>
+                </div>
               </div>
+            </div>
+            <div class="benchmark-run-actions benchmark-run-actions--test-run">
+              <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected tests" aria-label="Run selected tests">Run</button>
             </div>
           </div>
         </div>
       </section>
       <div id="benchmarkProgress" class="benchmark-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Benchmark progress">
         <div class="benchmark-progress-meta">
-          <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting…</span>
+          <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting benchmark…</span>
           <span id="benchmarkProgressPct" class="benchmark-progress-pct" aria-hidden="true">0%</span>
         </div>
         <div class="benchmark-progress-track">
           <div id="benchmarkProgressFill" class="benchmark-progress-fill"></div>
         </div>
       </div>
-      <div id="benchmarkModelCards" class="benchmark-model-cards" hidden aria-label="Model progress"></div>
+      <div id="benchmarkModelCards" class="benchmark-model-cards" hidden aria-label="Per-model progress"></div>
       <div id="benchmarkSummary" class="benchmark-summary" aria-live="polite">
-        <p class="benchmark-empty">Select suites, then Run. Quick and Full set presets.</p>
+        <p class="benchmark-empty">Pick Academic and/or Minnow tests above, then Run. Quick and Full apply Minnow presets.</p>
       </div>
       <div class="benchmark-history-bar">
         <label class="benchmark-history-field" for="benchmarkHistorySelect">
-          <span class="benchmark-field-label">History</span>
-          <select id="benchmarkHistorySelect" aria-label="Previous benchmark run"></select>
+          <span class="benchmark-field-label">Past runs</span>
+          <select id="benchmarkHistorySelect" aria-label="Open a saved benchmark run"></select>
         </label>
-        <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden>
-          Current run
+        <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden title="Return to the run in progress">
+          Back to live run
         </button>
         <button
           type="button"
@@ -1089,7 +1092,7 @@
       </section>
     </div>
   </div>
-  <aside id="benchmarkCatalogDrawer" class="benchmark-catalog-drawer" hidden aria-label="Test details">
+  <aside id="benchmarkCatalogDrawer" class="benchmark-catalog-drawer" hidden aria-label="Test description">
     <button type="button" class="benchmark-catalog-drawer-close" id="benchmarkCatalogDrawerClose" aria-label="Close">×</button>
     <div id="benchmarkCatalogDrawerBody" class="benchmark-catalog-drawer-body"></div>
   </aside>

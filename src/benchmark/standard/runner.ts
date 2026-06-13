@@ -5,9 +5,17 @@
 import { runOneShot } from '../llm-driver.ts';
 import type { BenchmarkCellResult, BenchmarkTarget, BenchmarkTier } from '../campaign-types.ts';
 import { buildCellId, targetKeyFromTarget, targetLabel } from '../model-key.ts';
+import { buildTestResult } from '../test-result.ts';
+import type { SuiteId } from '../types.ts';
 import { getStandardPack, resolveStandardItems } from './pack-loader.ts';
 import { scoreStandardItem } from './scorers.ts';
 import type { StandardBenchmarkItem } from './types.ts';
+
+/** Placeholder suite id — Academic cells use pack labels in the transcript drawer. */
+const STANDARD_TRANSCRIPT_SUITE = 'capability' as SuiteId;
+
+/** Enough budget for a short letter answer after reasoning on thinking models. */
+const STANDARD_ITEM_MAX_TOKENS = 1024;
 
 export interface RunStandardPackOptions {
   target: BenchmarkTarget;
@@ -29,20 +37,37 @@ async function runOneStandardItem(
   let response = '';
   let ttftMs: number | undefined;
   let tokPerSec: number | undefined;
+  let turn: Awaited<ReturnType<typeof runOneShot>> | null = null;
 
   try {
-    const turn = await runOneShot({
+    turn = await runOneShot({
       providerId: target.providerId,
       modelId: target.modelId,
       messages: [{ role: 'user', content: item.prompt }],
       signal,
-      maxTokens: 256,
+      maxTokens: STANDARD_ITEM_MAX_TOKENS,
     });
-    response = turn.text;
+    // Prefer main content for scoring; fall back to merged text (reasoning channel).
+    response = turn.contentText.trim() || turn.text;
     ttftMs = turn.timing.ttftMs ?? undefined;
     tokPerSec = turn.timing.tokPerSec ?? undefined;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const durationMs = Math.round(performance.now() - t0);
+    const scored = buildTestResult(
+      {
+        testId: item.id,
+        suite: STANDARD_TRANSCRIPT_SUITE,
+        label: item.id,
+        passed: false,
+        skipped: false,
+        score: 0,
+        durationMs,
+        details: message,
+      },
+      null,
+      { error: message },
+    );
     const cell: BenchmarkCellResult = {
       cellId: buildCellId(targetKey, item.id),
       targetKey,
@@ -53,13 +78,31 @@ async function runOneStandardItem(
       passed: false,
       skipped: false,
       score: 0,
-      durationMs: Math.round(performance.now() - t0),
+      durationMs,
       details: message,
+      transcript: scored.transcript ?? [{ role: 'user', content: item.prompt }],
+      transcriptMeta: scored.transcriptMeta,
     };
     return cell;
   }
 
   const scored = scoreStandardItem(pack?.scoring ?? 'mcq', item, response);
+  const durationMs = Math.round(performance.now() - t0);
+  const withTranscript = buildTestResult(
+    {
+      testId: item.id,
+      suite: STANDARD_TRANSCRIPT_SUITE,
+      label: item.id,
+      passed: scored.passed,
+      skipped: false,
+      score: scored.score,
+      durationMs,
+      ttftMs,
+      tokPerSec,
+      details: scored.details,
+    },
+    turn,
+  );
   const cell: BenchmarkCellResult = {
     cellId: buildCellId(targetKey, item.id),
     targetKey,
@@ -70,10 +113,12 @@ async function runOneStandardItem(
     passed: scored.passed,
     skipped: false,
     score: scored.score,
-    durationMs: Math.round(performance.now() - t0),
+    durationMs,
     ttftMs,
     tokPerSec,
     details: scored.details,
+    transcript: withTranscript.transcript,
+    transcriptMeta: withTranscript.transcriptMeta,
   };
   return cell;
 }
