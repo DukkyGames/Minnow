@@ -678,6 +678,20 @@
             </div>
           </div>
         </section>
+        <section class="settings-group settings-group--flat" id="settingsMemoryProposalsPanel">
+          <h3 class="settings-group__title">
+            Suggested memories &amp; skills
+            <span id="settingsMemoryProposalsBadge" class="settings-memory-badge settings-memory-badge--pinned hidden" aria-hidden="true"></span>
+          </h3>
+          <div class="settings-group__body settings-memory-proposals">
+            <p class="settings-field-hint">After chat turns, Minnow may propose durable facts or reusable skills. Nothing is saved until you accept.</p>
+            <p id="settingsMemoryProposalsCount" class="settings-memory-stat">Pending: —</p>
+            <p id="settingsMemoryProposalsOffline" class="field-hint settings-memory-offline hidden">
+              Start with <code>npm start</code> to review proposals.
+            </p>
+            <div id="settingsMemoryProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
+          </div>
+        </section>
         <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>

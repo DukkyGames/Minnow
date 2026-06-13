@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { getSkillById, listMergedSkills, SKILL_ID_RE } from './scan.js';
 import { createUserSkill, saveUserSkillContent } from './user-skills.js';
 import { handleImpeccableReferenceRequest } from '../impeccable/reference-handler.js';
+import { handleSynthesisRequest } from '../memory/synthesis-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -53,6 +54,11 @@ export async function handleSkillsRequest(req, res, pathname) {
   }
 
   if (handleImpeccableReferenceRequest(req, res, pathname, PROJECT_ROOT)) {
+    return true;
+  }
+
+  const synthesisHandled = await handleSynthesisRequest(req, res, pathname);
+  if (synthesisHandled) {
     return true;
   }
 

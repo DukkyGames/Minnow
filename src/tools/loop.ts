@@ -66,6 +66,11 @@ import {
   touchChat,
   recordChatMessage,
 } from '../state/sessions';
+import { schedulePostTurnSynthesis } from '../synthesis/client';
+import {
+  buildSynthesisExcerpt,
+  buildSynthesisMessages,
+} from '../synthesis/post-turn';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import {
@@ -1102,6 +1107,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     scheduleSaveSessions();
   }
 
+  let synthesisRoundCount = 0;
+  let synthesisToolCount = 0;
+
   try {
     const provider = await getActiveProvider(sendProviderId);
     await loadToolCallsMeta();
@@ -1315,6 +1323,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           setStatus('spin', 'Running tools…');
         }
         patchMainTurnActivity(chat.id, { phase: 'tools' });
+
+        synthesisRoundCount += 1;
+        synthesisToolCount += turnResult.toolCalls.length;
 
         const area = getActiveChatMountElement();
         const paintToolCallsInChat = isStreamDomVisible(chat.id);
@@ -1673,6 +1684,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       renderSidebar();
       scheduleSaveSessions();
 
+      synthesisRoundCount += 1;
       completedNormally = true;
       break;
     }
@@ -1785,6 +1797,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             providerId: chat.providerId?.trim() || undefined,
           });
         }
+      }
+      if (normalizeModeId(chat.modeId) !== 'debug') {
+        const lastAssistant = [...chat.history]
+          .reverse()
+          .find((m) => m.role === 'assistant');
+        const assistantText =
+          lastAssistant && typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : '';
+        schedulePostTurnSynthesis({
+          chatId: chat.id,
+          messages: buildSynthesisMessages(chat),
+          roundCount: synthesisRoundCount,
+          toolCount: synthesisToolCount,
+          sourceExcerpt: buildSynthesisExcerpt(chat, userText),
+          assistantText,
+        });
       }
     }
     clearMainTurnActivity(chat.id);
