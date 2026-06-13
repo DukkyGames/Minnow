@@ -174,4 +174,31 @@ describe('memory API', () => {
     );
     assert.ok(res.status === 400 || res.status === 404);
   });
+
+  test('embeddings status returns defaults when disabled', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/memory/embeddings/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.enabled, false);
+    assert.equal(res.json.backend, 'local');
+    assert.equal(typeof res.json.vectorCount, 'number');
+    assert.equal(res.json.healthy, false);
+  });
+
+  test('embeddings reindex rejects when disabled', async () => {
+    const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/reindex');
+    assert.equal(res.status, 400);
+    assert.match(res.json.error, /disabled/i);
+  });
+
+  test('embeddings config can be updated', async () => {
+    const res = await httpRequest(baseUrl, 'PUT', '/api/memory/embeddings/config', {
+      enabled: false,
+      backend: 'local',
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      blendWeight: 0.75,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.embeddings.enabled, false);
+    assert.equal(res.json.embeddings.blendWeight, 0.75);
+  });
 });

@@ -19,7 +19,11 @@ export function getProviderCapabilities(apiKind) {
 export function getDefaultPaths(apiKind, overrides = {}) {
   const defaults =
     apiKind === 'openai-v1'
-      ? { modelsPath: '/v1/models', chatCompletionsPath: '/v1/chat/completions' }
+      ? {
+          modelsPath: '/v1/models',
+          chatCompletionsPath: '/v1/chat/completions',
+          embeddingsPath: '/v1/embeddings',
+        }
       : {
           modelsPath: '/api/v0/models',
           chatCompletionsPath: '/api/v0/chat/completions',
@@ -30,6 +34,7 @@ export function getDefaultPaths(apiKind, overrides = {}) {
   const out = {
     modelsPath: overrides.modelsPath || defaults.modelsPath,
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
+    embeddingsPath: overrides.embeddingsPath || defaults.embeddingsPath || '/v1/embeddings',
   };
 
   if (defaults.modelsLoadPath) {

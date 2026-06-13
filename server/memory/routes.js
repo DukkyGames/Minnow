@@ -15,10 +15,18 @@ import {
   loadAllEntriesWithBodies,
   ensureMemoryStore,
 } from './store.js';
-import { retrieveMemoryBlock } from './retrieve.js';
+import { retrieveMemoryBlock, retrieveMemoryBlockHybrid } from './retrieve.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
+import { getEmbedder, embedTexts } from './embeddings.js';
+import {
+  getVectorCount,
+  loadVectorStore,
+  isVectorStoreCompatible,
+  reindexAllMemoryEntries,
+} from './vector-store.js';
+import { clearReindexNeeded } from './vector-sync.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -154,13 +162,99 @@ export async function handleMemoryRequest(req, res, pathname) {
           ? memory.maxInjectCharsLite ?? 800
           : memory.maxInjectCharsFull ?? 4000;
       const all = await loadAllEntriesWithBodies();
-      const { block, ids } = retrieveMemoryBlock(all, {
+      const { block, ids } = await retrieveMemoryBlockHybrid(all, {
         query: body.query,
         limit: body.limit ?? 8,
         tags: body.tags,
         maxChars,
-      });
+      }, memory);
       sendJson(res, 200, { block, ids });
+      return true;
+    }
+
+    if (pathname === '/api/memory/embeddings/status' && req.method === 'GET') {
+      const memory = await loadMemoryConfig();
+      const emb = memory.embeddings ?? {};
+      const vectorCount = await getVectorCount();
+      const store = await loadVectorStore();
+      let healthy = false;
+      if (emb.enabled) {
+        try {
+          const embedder = await getEmbedder(memory);
+          healthy = isVectorStoreCompatible(store, {
+            modelId: embedder.id,
+            backend: emb.backend,
+            dim: embedder.dim,
+          });
+        } catch {
+          healthy = false;
+        }
+      }
+      sendJson(res, 200, {
+        enabled: emb.enabled === true,
+        backend: emb.backend ?? 'local',
+        model: emb.modelId ?? '',
+        providerId: emb.providerId ?? '',
+        blendWeight: typeof emb.blendWeight === 'number' ? emb.blendWeight : 0.5,
+        queryTimeoutMs: typeof emb.queryTimeoutMs === 'number' ? emb.queryTimeoutMs : 3000,
+        dim: store.dim ?? 0,
+        vectorCount,
+        reindexNeeded: emb.reindexNeeded === true,
+        healthy,
+      });
+      return true;
+    }
+
+    if (pathname === '/api/memory/embeddings/reindex' && req.method === 'POST') {
+      const started = Date.now();
+      const memory = await loadMemoryConfig();
+      const emb = memory.embeddings ?? {};
+      if (!emb.enabled) {
+        sendJson(res, 400, { error: 'Embeddings are disabled' });
+        return true;
+      }
+
+      const embedder = await getEmbedder(memory);
+      const entries = await loadAllEntriesWithBodies();
+      const result = await reindexAllMemoryEntries(
+        async (text) => {
+          const [vector] = await embedTexts(embedder, [text], emb.queryTimeoutMs);
+          return vector;
+        },
+        entries,
+        {
+          model: embedder.id,
+          backend: emb.backend,
+          dim: embedder.dim,
+        },
+      );
+      await clearReindexNeeded();
+      sendJson(res, 200, {
+        ok: true,
+        indexed: result.indexed,
+        failed: result.failed,
+        durationMs: Date.now() - started,
+      });
+      return true;
+    }
+
+    if (pathname === '/api/memory/embeddings/config' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const memory = await saveMemoryConfig({
+        embeddings: {
+          ...(body.enabled !== undefined ? { enabled: body.enabled === true } : {}),
+          ...(typeof body.backend === 'string' ? { backend: body.backend } : {}),
+          ...(typeof body.modelId === 'string' ? { modelId: body.modelId } : {}),
+          ...(typeof body.providerId === 'string' ? { providerId: body.providerId } : {}),
+          ...(typeof body.blendWeight === 'number'
+            ? { blendWeight: Math.min(1, Math.max(0, body.blendWeight)) }
+            : {}),
+          ...(typeof body.queryTimeoutMs === 'number'
+            ? { queryTimeoutMs: Math.min(60_000, Math.max(500, Math.floor(body.queryTimeoutMs))) }
+            : {}),
+        },
+      });
+      sendJson(res, 200, { embeddings: memory.embeddings });
       return true;
     }
 

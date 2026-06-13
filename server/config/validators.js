@@ -1312,6 +1312,102 @@ export function mergeConfigMeta(existing, patch) {
     );
   }
 
+  if (p.memory && typeof p.memory === 'object') {
+    base.memory = normalizeMemoryConfig(
+      p.memory,
+      base.memory && typeof base.memory === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.memory)
+        : {},
+    );
+  }
+
+  return base;
+}
+
+/**
+ * Normalize memory config including semantic embeddings subsection.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ */
+export function normalizeMemoryConfig(raw, existing = {}) {
+  const base = {
+    enabled: true,
+    maxEntries: 500,
+    maxInjectCharsFull: 4000,
+    maxInjectCharsLite: 800,
+    retrieveLimit: 20,
+    defaultTags: [],
+    embeddings: {
+      enabled: false,
+      backend: 'local',
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      providerId: '',
+      blendWeight: 0.5,
+      queryTimeoutMs: 3000,
+      reindexNeeded: false,
+    },
+    ...existing,
+  };
+
+  if (!raw || typeof raw !== 'object') return base;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+
+  if (typeof row.enabled === 'boolean') base.enabled = row.enabled;
+  if (typeof row.maxEntries === 'number' && Number.isFinite(row.maxEntries)) {
+    base.maxEntries = Math.min(5000, Math.max(1, Math.floor(row.maxEntries)));
+  }
+  if (typeof row.maxInjectCharsFull === 'number' && Number.isFinite(row.maxInjectCharsFull)) {
+    base.maxInjectCharsFull = Math.min(32_000, Math.max(200, Math.floor(row.maxInjectCharsFull)));
+  }
+  if (typeof row.maxInjectCharsLite === 'number' && Number.isFinite(row.maxInjectCharsLite)) {
+    base.maxInjectCharsLite = Math.min(8000, Math.max(100, Math.floor(row.maxInjectCharsLite)));
+  }
+  if (typeof row.retrieveLimit === 'number' && Number.isFinite(row.retrieveLimit)) {
+    base.retrieveLimit = Math.min(100, Math.max(1, Math.floor(row.retrieveLimit)));
+  }
+  if (Array.isArray(row.defaultTags)) {
+    base.defaultTags = row.defaultTags
+      .filter((tag) => typeof tag === 'string')
+      .map((tag) => tag.slice(0, 64));
+  }
+
+  const existingEmb =
+    base.embeddings && typeof base.embeddings === 'object'
+      ? { .../** @type {Record<string, unknown>} */ (base.embeddings) }
+      : {};
+  const embRaw =
+    row.embeddings && typeof row.embeddings === 'object'
+      ? /** @type {Record<string, unknown>} */ (row.embeddings)
+      : {};
+
+  if (typeof embRaw.enabled === 'boolean') existingEmb.enabled = embRaw.enabled;
+  if (embRaw.backend === 'local' || embRaw.backend === 'provider') {
+    existingEmb.backend = embRaw.backend;
+  }
+  if (typeof embRaw.modelId === 'string') existingEmb.modelId = embRaw.modelId.slice(0, 200);
+  if (typeof embRaw.providerId === 'string') existingEmb.providerId = embRaw.providerId.slice(0, 64);
+  if (typeof embRaw.blendWeight === 'number' && Number.isFinite(embRaw.blendWeight)) {
+    existingEmb.blendWeight = Math.min(1, Math.max(0, embRaw.blendWeight));
+  }
+  if (typeof embRaw.queryTimeoutMs === 'number' && Number.isFinite(embRaw.queryTimeoutMs)) {
+    existingEmb.queryTimeoutMs = Math.min(60_000, Math.max(500, Math.floor(embRaw.queryTimeoutMs)));
+  }
+  if (typeof embRaw.reindexNeeded === 'boolean') existingEmb.reindexNeeded = embRaw.reindexNeeded;
+
+  const prevEmb =
+    existing.embeddings && typeof existing.embeddings === 'object'
+      ? /** @type {Record<string, unknown>} */ (existing.embeddings)
+      : {};
+
+  if (
+    (typeof embRaw.backend === 'string' && embRaw.backend !== prevEmb.backend) ||
+    (typeof embRaw.modelId === 'string' && embRaw.modelId !== prevEmb.modelId) ||
+    (typeof embRaw.providerId === 'string' && embRaw.providerId !== prevEmb.providerId)
+  ) {
+    existingEmb.reindexNeeded = true;
+  }
+
+  base.embeddings = existingEmb;
   return base;
 }
 
