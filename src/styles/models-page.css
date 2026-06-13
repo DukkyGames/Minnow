@@ -1,0 +1,231 @@
+/**
+ * Models full-page layout — mirrors settings-page structure.
+ */
+
+.models-page {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.models-page.is-open {
+  display: flex;
+}
+
+.models-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.models-page-header__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.models-page-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.models-nav {
+  flex: 0 0 220px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--mn-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.models-nav button {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.models-nav button[aria-current='page'] {
+  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.models-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.models-section {
+  display: none;
+  max-width: 56rem;
+}
+
+.models-section.is-active {
+  display: block;
+}
+
+.models-section h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.models-lead {
+  margin: 0 0 16px;
+  color: var(--mn-fg-muted);
+}
+
+.models-muted {
+  color: var(--mn-fg-muted);
+}
+
+.models-error {
+  color: var(--mn-danger, #ef4444);
+}
+
+.models-section-subtitle {
+  margin: 20px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.models-hardware-card {
+  padding: 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  margin-bottom: 8px;
+}
+
+.models-hardware-card__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.models-hardware-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.models-hardware-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.models-hardware-label {
+  min-width: 3rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.models-hardware-value {
+  flex: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
+
+.models-inline-btn {
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.models-recommend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.models-recommend-row {
+  padding: 10px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.models-recommend-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.models-recommend-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.models-recommend-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.models-fit-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-border);
+}
+
+.models-fit-badge--perfect {
+  border-color: color-mix(in srgb, var(--mn-accent) 50%, var(--mn-border));
+  color: var(--mn-accent);
+}
+
+.models-fit-badge--good {
+  border-color: color-mix(in srgb, #22c55e 40%, var(--mn-border));
+  color: #22c55e;
+}
+
+.models-fit-badge--marginal {
+  border-color: color-mix(in srgb, #eab308 40%, var(--mn-border));
+  color: #eab308;
+}
+
+.models-fit-badge--tight {
+  border-color: color-mix(in srgb, #ef4444 40%, var(--mn-border));
+  color: #ef4444;
+}
+
+/* Reparented settings sections inherit settings styles */
+.models-section .settings-section {
+  display: block;
+}
+
+.models-section .settings-lead {
+  margin-bottom: 16px;
+}

@@ -28,6 +28,37 @@ export function parseNvidiaSmiVram(stdout) {
 }
 
 /**
+ * Parse nvidia-smi memory.total,name CSV — ports Odysseus _detect_nvidia row parser.
+ * @param {string} stdout
+ * @returns {{ available: false, unified?: Array<{ index: number, name: string }> } | { available: true, gpus: Array<{ index: number, name: string, vramGb: number }> }}
+ */
+export function parseNvidiaSmiGpu(stdout) {
+  const lines = stdout.trim().split(/\r?\n/).filter((row) => row.trim());
+  if (!lines.length) return { available: false };
+
+  /** @type {Array<{ index: number, name: string, vramGb: number }>} */
+  const gpus = [];
+  /** @type {Array<{ index: number, name: string }>} */
+  const unified = [];
+
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const parts = lines[idx].split(',').map((p) => p.trim());
+    if (parts.length < 2) continue;
+    const vramMb = Number(parts[0]);
+    const name = parts[1];
+    if (Number.isFinite(vramMb) && vramMb > 0) {
+      gpus.push({ index: idx, name, vramGb: vramMb / 1024 });
+    } else if (name) {
+      unified.push({ index: idx, name });
+    }
+  }
+
+  if (gpus.length) return { available: true, gpus };
+  if (unified.length) return { available: false, unified };
+  return { available: false };
+}
+
+/**
  * Query the first NVIDIA GPU via nvidia-smi.
  * @returns {Promise<{ available: boolean, usedMb?: number, totalMb?: number }>}
  */

@@ -1,0 +1,42 @@
+/**
+ * Reparent a settings section DOM node into the Models app while active.
+ */
+
+import { refreshSettingsSection } from '../settings-sections';
+import type { SettingsSectionId } from '../settings-page-types';
+import type { ModelsSectionId } from '../models-page';
+
+const SETTINGS_CONTENT_SELECTOR = '.settings-content';
+
+/** Track which settings sections were moved into Models panels. */
+const reparented = new Map<ModelsSectionId, HTMLElement>();
+
+/** Move settings section markup into the Models panel mount. */
+export async function reparentSettingsSectionIntoModels(
+  modelsSection: ModelsSectionId,
+  settingsSection: SettingsSectionId,
+): Promise<void> {
+  const mount = document.getElementById(`modelsSection-${modelsSection}`);
+  const settingsSectionEl = document.getElementById(`settingsSection-${settingsSection}`);
+  const settingsContent = document.querySelector(SETTINGS_CONTENT_SELECTOR);
+  if (!mount || !settingsSectionEl || !settingsContent) return;
+
+  if (!reparented.has(modelsSection)) {
+    reparented.set(modelsSection, settingsSectionEl);
+    mount.appendChild(settingsSectionEl);
+    settingsSectionEl.classList.add('is-active');
+  }
+
+  await refreshSettingsSection(settingsSection);
+}
+
+/** Restore reparented settings sections when Models app closes (optional cleanup). */
+export function restoreReparentedSettingsSections(): void {
+  const settingsContent = document.querySelector(SETTINGS_CONTENT_SELECTOR);
+  if (!settingsContent) return;
+  for (const [, el] of reparented) {
+    settingsContent.appendChild(el);
+    el.classList.remove('is-active');
+  }
+  reparented.clear();
+}

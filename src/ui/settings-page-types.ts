@@ -78,7 +78,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'models',
     label: 'Models & APIs',
-    sections: ['model-routing', 'providers', 'usage', 'sampler', 'thinking'],
+    sections: [],
   },
   {
     id: 'prompting',

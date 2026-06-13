@@ -3,6 +3,7 @@
  */
 
 import { probeVram } from './vram.js';
+import { detectHardware } from './hardware.js';
 import { listDeadHosts } from '../generations/host-cooldown.js';
 
 function setCorsHeaders(res) {
@@ -34,6 +35,14 @@ export async function handleSystemRequest(req, res, pathname) {
 
   if (pathname === '/api/system/vram' && req.method === 'GET') {
     const payload = await probeVram();
+    sendJson(res, 200, payload);
+    return true;
+  }
+
+  if (pathname === '/api/system/hardware' && req.method === 'GET') {
+    const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const fresh = parsed.searchParams.get('fresh') === '1';
+    const payload = await detectHardware({ fresh });
     sendJson(res, 200, payload);
     return true;
   }

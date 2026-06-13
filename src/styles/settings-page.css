@@ -183,6 +183,14 @@
   color: var(--mn-fg-muted);
 }
 
+.settings-nav-moved-hint {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
 .settings-nav-group + .settings-nav-group {
   padding-top: 4px;
   border-top: 1px solid var(--mn-border);

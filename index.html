@@ -439,11 +439,7 @@
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavModels">
         <p id="settingsNavModels" class="settings-nav-group__label">Models &amp; APIs</p>
-        <button type="button" data-settings-nav="model-routing">Models</button>
-        <button type="button" data-settings-nav="providers">Providers</button>
-        <button type="button" data-settings-nav="usage">Usage &amp; cost</button>
-        <button type="button" data-settings-nav="sampler">Sampler</button>
-        <button type="button" data-settings-nav="thinking">Thinking</button>
+        <p class="settings-nav-moved-hint">Providers, routing, sampler, thinking, and usage moved to the <strong>Models</strong> app.</p>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
@@ -1064,6 +1060,42 @@
           </div>
         </aside>
       </div>
+    </div>
+  </div>
+</main>
+
+<main id="modelsView" class="models-page" aria-label="Models">
+  <header class="models-page-header">
+    <button type="button" class="icon-btn" id="btnModelsPageBack" aria-label="Back">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h1 class="models-page-header__title">Models</h1>
+  </header>
+  <div class="models-page-body">
+    <nav class="models-nav" aria-label="Models sections">
+      <button type="button" data-models-nav="recommend" aria-current="page">What fits</button>
+      <button type="button" data-models-nav="installed">Installed</button>
+      <button type="button" data-models-nav="providers">Providers</button>
+      <button type="button" data-models-nav="routing">Routing</button>
+      <button type="button" data-models-nav="sampler">Sampler</button>
+      <button type="button" data-models-nav="thinking">Thinking</button>
+      <button type="button" data-models-nav="usage">Usage &amp; cost</button>
+    </nav>
+    <div class="models-content">
+      <section id="modelsSection-recommend" class="models-section is-active">
+        <h2>What fits</h2>
+        <p class="models-lead">Hardware-ranked local model recommendations from the bundled catalog.</p>
+        <div id="modelsRecommendBody"></div>
+      </section>
+      <section id="modelsSection-installed" class="models-section">
+        <h2>Installed</h2>
+        <div id="modelsInstalledBody"></div>
+      </section>
+      <section id="modelsSection-providers" class="models-section"></section>
+      <section id="modelsSection-routing" class="models-section"></section>
+      <section id="modelsSection-sampler" class="models-section"></section>
+      <section id="modelsSection-thinking" class="models-section"></section>
+      <section id="modelsSection-usage" class="models-section"></section>
     </div>
   </div>
 </main>

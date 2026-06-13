@@ -13,17 +13,36 @@ let initialized = false;
 let applyingRoute = false;
 let lastForegroundApp: AppId | null = null;
 let pendingSettingsSection: string | undefined;
+let pendingModelsSection: string | undefined;
 /** Preserves launch options (e.g. concierge seed) across hash-only navigation. */
 let pendingLaunchOptions: LaunchOptions | undefined;
 
+/** Settings sections moved into the Models app (legacy #/settings/… redirects). */
+const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
+  providers: 'providers',
+  'model-routing': 'routing',
+  usage: 'usage',
+  sampler: 'sampler',
+  thinking: 'thinking',
+};
+
 /** Map legacy hashes to MinnowOS routes before parsing. */
-export function resolveLegacyHash(hash: string): { hash: string; settingsSection?: string } {
+export function resolveLegacyHash(hash: string): {
+  hash: string;
+  settingsSection?: string;
+  modelsSection?: string;
+} {
   const trimmed = hash || '#/';
   if (trimmed.startsWith('#/settings')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^settings(?:\/([\w-]+))?/);
+    const slug = match?.[1] ?? 'general';
+    const modelsSection = MODELS_SETTINGS_REDIRECTS[slug];
+    if (modelsSection) {
+      return { hash: `#/app/models/${modelsSection}`, modelsSection };
+    }
     return {
       hash: '#/app/settings',
-      settingsSection: match?.[1] ?? 'general',
+      settingsSection: slug,
     };
   }
   if (trimmed === '#/benchmark' || trimmed.startsWith('#/benchmark/')) {
@@ -31,6 +50,11 @@ export function resolveLegacyHash(hash: string): { hash: string; settingsSection
   }
   if (trimmed === '#/compare' || trimmed.startsWith('#/compare/')) {
     return { hash: '#/app/compare' };
+  }
+  if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
+    const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
+    const section = match?.[1] ?? 'recommend';
+    return { hash: `#/app/models/${section}`, modelsSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
     return { hash: '#/app/research' };
@@ -47,11 +71,14 @@ export function parseOsHash(hash: string): OsRoute {
   if (normalized === '#/' || normalized === '#' || normalized === '#/desktop') {
     return { view: 'desktop' };
   }
-  const appMatch = normalized.match(/^#\/app\/([\w-]+)/);
+  const appMatch = normalized.match(/^#\/app\/([\w-]+)(?:\/([\w-]+))?/);
   if (appMatch && isAppId(appMatch[1])) {
     const route: OsRoute = { view: 'app', appId: appMatch[1] };
     if (route.appId === 'settings' && pendingSettingsSection) {
       route.settingsSection = pendingSettingsSection;
+    }
+    if (route.appId === 'models') {
+      route.modelsSection = appMatch[2] ?? pendingModelsSection ?? 'recommend';
     }
     return route;
   }
@@ -60,13 +87,17 @@ export function parseOsHash(hash: string): OsRoute {
 
 /** Current route derived from location hash + pending redirect state. */
 export function getCurrentRoute(): OsRoute {
-  const { hash, settingsSection } = resolveLegacyHash(window.location.hash);
+  const { hash, settingsSection, modelsSection } = resolveLegacyHash(window.location.hash);
   if (settingsSection) pendingSettingsSection = settingsSection;
+  if (modelsSection) pendingModelsSection = modelsSection;
   return parseOsHash(hash);
 }
 
 function hashForRoute(route: OsRoute): string {
   if (route.view === 'desktop') return '#/desktop';
+  if (route.appId === 'models' && route.modelsSection) {
+    return `#/app/models/${route.modelsSection}`;
+  }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
 }
@@ -99,6 +130,10 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     launchOpts.settingsSection = route.settingsSection;
     pendingSettingsSection = route.settingsSection;
   }
+  if (route.modelsSection) {
+    launchOpts.modelsSection = route.modelsSection;
+    pendingModelsSection = route.modelsSection;
+  }
 
   launchInstance(route.appId, launchOpts);
   syncForegroundLifecycle(route.appId);
@@ -112,10 +147,12 @@ function applyRouteFromHash(): void {
     const legacy = resolveLegacyHash(raw);
     if (legacy.hash !== raw) {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
+      if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
       window.location.hash = legacy.hash;
       return;
     }
     pendingSettingsSection = legacy.settingsSection ?? pendingSettingsSection;
+    pendingModelsSection = legacy.modelsSection ?? pendingModelsSection;
     const opts = pendingLaunchOptions;
     pendingLaunchOptions = undefined;
     applyRoute(parseOsHash(raw), opts);
@@ -143,13 +180,27 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;
   }
-  const next = `#/app/${appId}`;
+  if (options?.modelsSection) {
+    pendingModelsSection = options.modelsSection;
+  }
+  const next =
+    appId === 'models' && options?.modelsSection
+      ? `#/app/models/${options.modelsSection}`
+      : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
     window.location.hash = next;
     return;
   }
-  applyRoute({ view: 'app', appId, settingsSection: options?.settingsSection }, options);
+  applyRoute(
+    {
+      view: 'app',
+      appId,
+      settingsSection: options?.settingsSection,
+      modelsSection: options?.modelsSection,
+    },
+    options,
+  );
 }
 
 /** Attach the single hashchange listener and sync the initial route. */
@@ -184,6 +235,7 @@ export function resetOsRouterForTests(): void {
   applyingRoute = false;
   lastForegroundApp = null;
   pendingSettingsSection = undefined;
+  pendingModelsSection = undefined;
   pendingLaunchOptions = undefined;
 }
 
