@@ -214,6 +214,7 @@ const DEFAULT_META = {
     cooldownSeconds: 60,
     maxChainLength: 4,
     roles: {
+      _global: [],
       default: [],
       utility: [],
       research: [],

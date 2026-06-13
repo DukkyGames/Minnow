@@ -1,11 +1,15 @@
 /** Inline SVG icons for MinnowOS shell (ported from prototype icons.jsx). */
 
+/** Public path for the Compare app raster glyph. */
+export const COMPARE_ICON_SRC = '/icons/compare.png';
+
 export type OsIconName =
   | 'code'
   | 'chat'
   | 'research'
   | 'flask'
   | 'bench'
+  | 'compare'
   | 'gear'
   | 'arrowUp'
   | 'arrowDown'
@@ -14,7 +18,13 @@ export type OsIconName =
   | 'bell'
   | 'fish';
 
-const PATHS: Record<OsIconName, string> = {
+/** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
+export type RasterIconName = 'compare';
+
+/** Inline SVG icon ids (excludes raster-backed launcher icons). */
+export type SvgIconName = Exclude<OsIconName, RasterIconName>;
+
+const PATHS: Record<SvgIconName, string> = {
   code: '<path d="M8 7l-5 5 5 5"/><path d="M16 7l5 5-5 5"/><path d="M13.5 4l-3 16"/>',
   chat: '<path d="M21 12a8 8 0 0 1-11.5 7.2L4 20.5l1.3-5.4A8 8 0 1 1 21 12Z"/>',
   research: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
@@ -32,14 +42,39 @@ const PATHS: Record<OsIconName, string> = {
   fish: '<path d="M16.5 12c-2 3-5.5 4.5-9 4.5 1-1.5 1-3 1-4.5s0-3-1-4.5c3.5 0 7 1.5 9 4.5Z"/><path d="M16.5 12 21 8.5v7L16.5 12Z"/><circle cx="9.5" cy="11" r=".6" fill="currentColor" stroke="none"/>',
 };
 
+/** App launcher icons backed by a PNG mask instead of inline SVG paths. */
+const RASTER_ICON_SRC: Record<RasterIconName, string> = {
+  compare: COMPARE_ICON_SRC,
+};
+
 export interface OsIconOptions {
   size?: number;
   stroke?: number;
   className?: string;
 }
 
+/**
+ * Create a launcher icon — raster mask when available, otherwise inline SVG.
+ * Raster icons inherit `currentColor` from their parent (accent on dock tiles).
+ */
+export function createAppIcon(name: OsIconName, options: OsIconOptions = {}): HTMLSpanElement | SVGSVGElement {
+  const rasterSrc = RASTER_ICON_SRC[name as RasterIconName];
+  if (rasterSrc) {
+    const { size = 20, className } = options;
+    const span = document.createElement('span');
+    span.className = 'mn-os-icon-raster';
+    span.setAttribute('aria-hidden', 'true');
+    span.style.width = `${size}px`;
+    span.style.height = `${size}px`;
+    span.style.setProperty('--icon-mask', `url('${rasterSrc}')`);
+    if (className) span.classList.add(className);
+    return span;
+  }
+  return createOsIcon(name as SvgIconName, options);
+}
+
 /** Create an SVG icon element. */
-export function createOsIcon(name: OsIconName, options: OsIconOptions = {}): SVGSVGElement {
+export function createOsIcon(name: SvgIconName, options: OsIconOptions = {}): SVGSVGElement {
   const { size = 20, stroke = 1.6, className } = options;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('width', String(size));

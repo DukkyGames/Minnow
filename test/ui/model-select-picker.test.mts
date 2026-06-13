@@ -251,6 +251,50 @@ describe('syncModelSelectPicker', () => {
   });
 });
 
+describe('syncAuxiliaryModelSelectCombobox', () => {
+  test('updates trigger label immediately after picking a different model', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <div id="host">
+        <select id="auxModelSelect" aria-label="Compare model">
+          <option value="a/model-a">Model A · Q4</option>
+          <option value="b/model-b">Model B · Q8</option>
+        </select>
+      </div>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    try {
+      const {
+        mountAuxiliaryModelSelectCombobox,
+        setModelHostFilter,
+      } = await import('../../src/ui/model-select-picker.ts');
+
+      setModelHostFilter('all');
+
+      const select = doc.getElementById('auxModelSelect') as HTMLSelectElement;
+      select.value = 'a/model-a';
+      mountAuxiliaryModelSelectCombobox(select);
+
+      const triggerText = doc.querySelector('.model-select-trigger-text');
+      assert.equal(triggerText?.textContent, 'Model A · Q4');
+
+      select.value = 'b/model-b';
+      select.dispatchEvent(new win.Event('change', { bubbles: true }));
+      assert.equal(triggerText?.textContent, 'Model B · Q8');
+    } finally {
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+    }
+  });
+});
+
 describe('model picker truncation CSS (BUG-017)', () => {
   test('menu option labels avoid ellipsis clipping', () => {
     const block = modelSelectCss.match(/\.model-select-option-label\s*\{[^}]+\}/s);

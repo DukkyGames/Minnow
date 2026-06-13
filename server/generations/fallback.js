@@ -8,6 +8,43 @@
 
 export const FALLBACK_ROLES = ['default', 'utility', 'vision', 'research'];
 
+/** Legacy coarse roles → Settings → Models routing row ids. */
+const LEGACY_FALLBACK_KEY_ALIASES = {
+  default: 'main-chat',
+  utility: 'chat-titles',
+};
+
+/** Reserved roles key for last-resort global fallback (not a routing row id). */
+const GLOBAL_FALLBACK_CHAIN_KEY = '_global';
+
+/** Hard cap on total candidates after appending global fallbacks. */
+const ABSOLUTE_MAX_CHAIN_LENGTH = 8;
+
+/**
+ * @param {string} roleKey
+ * @param {Record<string, FallbackCandidate[]>} roles
+ * @returns {FallbackCandidate[]}
+ */
+function resolveRoleChain(roleKey, roles) {
+  const direct = roles[roleKey];
+  if (Array.isArray(direct) && direct.length > 0) {
+    return direct;
+  }
+  const normalized = LEGACY_FALLBACK_KEY_ALIASES[roleKey] ?? roleKey;
+  const fromNormalized = roles[normalized];
+  if (Array.isArray(fromNormalized) && fromNormalized.length > 0) {
+    return fromNormalized;
+  }
+  for (const [legacyKey, mapped] of Object.entries(LEGACY_FALLBACK_KEY_ALIASES)) {
+    if (mapped !== normalized) continue;
+    const fromLegacy = roles[legacyKey];
+    if (Array.isArray(fromLegacy) && fromLegacy.length > 0) {
+      return fromLegacy;
+    }
+  }
+  return [];
+}
+
 const RETRYABLE_NODE_CODES = new Set([
   'ECONNREFUSED',
   'ENOTFOUND',
@@ -111,8 +148,8 @@ export function resolveFallbackChain({
   }
 
   const enabled = toEnabledSet(enabledProviderIds);
-  const roleKey = typeof role === 'string' && role.trim() ? role.trim() : 'default';
-  const roleChain = Array.isArray(fallback.roles[roleKey]) ? fallback.roles[roleKey] : [];
+  const roleKey = typeof role === 'string' && role.trim() ? role.trim() : 'main-chat';
+  const roleChain = resolveRoleChain(roleKey, fallback.roles);
 
   /** @type {FallbackCandidate[]} */
   const ordered = [];
@@ -137,11 +174,17 @@ export function resolveFallbackChain({
     if (ordered.length >= fallback.maxChainLength) break;
   }
 
+  const globalChain = resolveRoleChain(GLOBAL_FALLBACK_CHAIN_KEY, fallback.roles);
+  for (const step of globalChain) {
+    pushCandidate(step);
+    if (ordered.length >= ABSOLUTE_MAX_CHAIN_LENGTH) break;
+  }
+
   if (ordered.length === 0) {
     return [primary];
   }
 
-  return ordered.slice(0, fallback.maxChainLength);
+  return ordered.slice(0, ABSOLUTE_MAX_CHAIN_LENGTH);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { APPS, getAppById } from './app-registry';
-import { createOsIcon } from './icons';
+import { createAppIcon, createOsIcon } from './icons';
 import type { AppInstance } from './types';
 import type { DesktopPrefs } from './types';
 
@@ -59,7 +59,7 @@ function buildTilePreview(
   btn.addEventListener('click', () => onRestore(inst.id));
 
   const iconKey = APPS.find((a) => a.id === inst.appId)?.icon ?? 'chat';
-  btn.appendChild(createOsIcon(iconKey as 'code', { size: 22 }));
+  btn.appendChild(createAppIcon(iconKey as 'code', { size: 22 }));
 
   const nameEl = document.createElement('span');
   nameEl.className = 'mn-os-mini-tile-name';
@@ -100,7 +100,7 @@ function buildCardPreview(
 
   const ico = document.createElement('span');
   ico.className = 'mn-os-mini-ico';
-  ico.appendChild(createOsIcon(app.icon as 'code', { size: 16 }));
+  ico.appendChild(createAppIcon(app.icon as 'code', { size: 16 }));
   head.appendChild(ico);
 
   const title = document.createElement('span');
@@ -138,7 +138,7 @@ function buildCardPreview(
   } else {
     const generic = document.createElement('div');
     generic.className = 'mn-os-snap-generic';
-    generic.appendChild(createOsIcon(app.icon as 'code', { size: 34 }));
+    generic.appendChild(createAppIcon(app.icon as 'code', { size: 34 }));
     snap.appendChild(generic);
   }
   body.appendChild(snap);

@@ -38,7 +38,9 @@ export async function runWidgetCompletion(
     stream: true as const,
   };
 
-  const res = await postChatCompletions(provider, body, input.signal);
+  const res = await postChatCompletions(provider, body, input.signal, {
+    fallbackRole: 'reef-widget',
+  });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`HTTP ${res.status}: ${err}`);

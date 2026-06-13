@@ -29,6 +29,9 @@ export function resolveLegacyHash(hash: string): { hash: string; settingsSection
   if (trimmed === '#/benchmark' || trimmed.startsWith('#/benchmark/')) {
     return { hash: '#/app/bench' };
   }
+  if (trimmed === '#/compare' || trimmed.startsWith('#/compare/')) {
+    return { hash: '#/app/compare' };
+  }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
     return { hash: '#/app/research' };
   }

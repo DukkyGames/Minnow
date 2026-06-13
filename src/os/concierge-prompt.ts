@@ -61,7 +61,7 @@ Recent workspaces (use workspace_index when the user refers to a project by name
 ${workspaceLines}
 
 JSON schema:
-- app_id (required): one of code|chat|research|experts|bench|settings
+- app_id (required): one of code|chat|research|experts|bench|compare|settings
 - seed (optional): concise task text for the destination app — strip filler ("let's", "please", "can you"). Omit seed (or use empty string) when the user only wants to open/switch workspace without a specific task.
 - mode_id (optional): debug|build|plan|general|orchestrate|reef — only when app_id is code
 - workspace_index (optional): integer index into the recent workspace list above
