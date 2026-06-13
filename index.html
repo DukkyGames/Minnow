@@ -192,6 +192,13 @@
   <div class="app-loader__spinner" aria-hidden="true"></div>
   <p class="app-loader__status" id="appLoaderStatus">Loading…</p>
 </div>
+<div id="minnowOsRoot" class="mn-os">
+  <div id="osMenubar" class="mn-os-menubar"></div>
+  <div id="osStage" class="mn-os-stage">
+    <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
+    <div id="osAppsLayer" class="mn-os-apps-layer"></div>
+  </div>
+</div>
 <header class="topbar">
   <div class="topbar-brand">
     <div class="logo-mark" aria-hidden="true">
@@ -234,26 +241,22 @@
     <button class="icon-btn topbar-sidebar-toggle" id="btnSidebarToggle" type="button" aria-label="Chat sessions" onclick="toggleSidebarLayout()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <div class="workspace-control">
-      <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
-      <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      </button>
+    <div id="workspaceControlSlot" class="topbar-workspace-slot">
+      <div class="workspace-control">
+        <span id="workspacePathLabel" class="workspace-path-label" hidden></span>
+        <button class="icon-btn workspace-btn" type="button" id="btnWorkspace" aria-describedby="workspacePathLabel" aria-label="Choose workspace folder" title="Choose workspace folder">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>
+      </div>
     </div>
-    <button class="icon-btn" type="button" id="btnPreviewToggle" aria-label="Preview browser" title="Preview browser" onclick="togglePreviewFromTopbar()">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-    </button>
     <button class="icon-btn" type="button" id="btnResearch" aria-label="Deep Research" title="Deep Research" onclick="openResearchFromTopbar()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
     </button>
-    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Benchmark active model" onclick="openBenchmarkFromTopbar()">
+    <button class="icon-btn" type="button" id="btnBenchmark" aria-label="Benchmark" title="Compare model speed and quality" onclick="openBenchmarkFromTopbar()">
       <img class="icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
     <button class="icon-btn" type="button" id="btnExpertLab" aria-label="Experts" title="Experts" onclick="openExpertLabFromTopbar()">
       <img class="icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">
-    </button>
-    <button class="icon-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false" onclick="toggleOrchestrateHubFromTopbar()">
-      <img class="icon-img" src="/icons/orchestrate.png" width="18" height="18" alt="" aria-hidden="true">
     </button>
     <button class="icon-btn" type="button" id="btnSettings" aria-label="Settings" onclick="openSettingsFromTopbar()">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -381,6 +384,7 @@
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
     <h1 class="settings-page-header__title">Settings</h1>
+    <div id="settingsSearchFinderSlot" class="settings-search-finder-slot">
     <div
       id="settingsSearchFinder"
       class="settings-search-finder"
@@ -406,6 +410,7 @@
         role="listbox"
         hidden
       ></div>
+    </div>
     </div>
     <span
       id="settingsPromptTokenEstimate"
@@ -831,75 +836,78 @@
   </div>
 </main>
 
-<main id="researchView" class="research-page" aria-label="Deep Research">
-  <header class="research-page-header">
-    <button class="icon-btn" type="button" id="btnResearchPageBack" aria-label="Back to chat">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <div class="research-page-heading">
-      <h1>Deep Research</h1>
-      <p class="research-page-lede">Iterative web research with a live report</p>
-    </div>
-    <button type="button" class="research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
-  </header>
-  <div class="research-page-body">
-    <div class="research-page-inner">
-      <div class="research-tabs" role="tablist" aria-label="Research views">
-        <button type="button" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
-        <button type="button" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
-      </div>
+<main id="researchView" class="research-page dr" aria-label="Deep Research">
+  <div class="dr-tabs research-tabs" role="tablist" aria-label="Research views">
+    <button type="button" class="dr-tab on" id="researchTabRun" role="tab" aria-selected="true" aria-controls="researchPanelRun">Run</button>
+    <button type="button" class="dr-tab" id="researchTabLibrary" role="tab" aria-selected="false" aria-controls="researchPanelLibrary">Library</button>
+  </div>
+  <div class="dr-scroll research-page-body">
+    <div class="dr-col research-page-inner">
       <div id="researchPanelRun" role="tabpanel">
-        <label class="research-field-label" for="researchQuery">Research question</label>
-        <textarea id="researchQuery" class="research-query" rows="4" placeholder="What do you want to research?"></textarea>
-        <div class="research-run-options">
-          <div>
-            <label class="research-field-label" for="researchMaxRounds">Rounds</label>
-            <select id="researchMaxRounds" class="research-select">
-              <option value="auto">Auto</option>
-              <option value="1">1</option>
-              <option value="3">3</option>
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-              <option value="20">20</option>
-            </select>
+        <div class="dr-form">
+          <label class="dr-flabel research-mono" for="researchQuery">RESEARCH QUESTION</label>
+          <textarea id="researchQuery" class="dr-q research-query" rows="3" placeholder="What should I research? Be as specific as you like — e.g. 'research the new Fable 5 model: benchmarks, pricing, and how it compares to Qwen3.6.'"></textarea>
+          <div class="dr-controls research-run-options">
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">ROUNDS</span>
+              <div class="dr-select">
+                <select id="researchMaxRounds" class="research-select">
+                  <option value="auto">Auto</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">CATEGORY</span>
+              <div class="dr-select">
+                <select id="researchCategory" class="research-select">
+                  <option value="">Auto</option>
+                  <option value="technical">Technical</option>
+                  <option value="academic">Academic</option>
+                  <option value="news">News</option>
+                  <option value="market">Market</option>
+                  <option value="general">General</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">SEARCH</span>
+              <div class="dr-select">
+                <select id="researchSearchProvider" class="research-select">
+                  <option value="">Default (Settings)</option>
+                  <option value="searxng">SearXNG</option>
+                  <option value="tavily">Tavily</option>
+                  <option value="brave">Brave</option>
+                  <option value="duckduckgo">DuckDuckGo</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">PROVIDER OVERRIDE</span>
+              <div class="dr-select">
+                <select id="researchProviderOverride" class="research-select">
+                  <option value="">(from settings)</option>
+                </select>
+              </div>
+            </label>
+            <label class="dr-field">
+              <span class="dr-flabel research-mono">MODEL OVERRIDE</span>
+              <input type="text" id="researchModelOverride" class="dr-input research-input" placeholder="(from settings)" />
+            </label>
           </div>
-          <div>
-            <label class="research-field-label" for="researchCategory">Category</label>
-            <select id="researchCategory" class="research-select">
-              <option value="">Auto</option>
-              <option value="product">Product</option>
-              <option value="comparison">Comparison</option>
-              <option value="howto">How-to</option>
-              <option value="factcheck">Fact-check</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchSearchProvider">Search</label>
-            <select id="researchSearchProvider" class="research-select">
-              <option value="">Default (Settings)</option>
-              <option value="searxng">SearXNG</option>
-              <option value="tavily">Tavily</option>
-              <option value="brave">Brave</option>
-              <option value="duckduckgo">DuckDuckGo</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchProviderOverride">Provider override</label>
-            <select id="researchProviderOverride" class="research-select">
-              <option value="">(from settings)</option>
-            </select>
-          </div>
-          <div>
-            <label class="research-field-label" for="researchModelOverride">Model override</label>
-            <input type="text" id="researchModelOverride" class="research-input" placeholder="(from settings)" />
+          <div class="dr-actions research-run-actions">
+            <button type="button" class="dr-run" id="btnResearchStart">
+              <svg class="dr-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              Research
+            </button>
+            <button type="button" class="dr-cancel" id="btnResearchCancel" hidden>Cancel</button>
           </div>
         </div>
-        <div class="research-run-actions">
-          <button type="button" class="research-btn research-btn--primary" id="btnResearchStart">Start research</button>
-          <button type="button" class="research-btn" id="btnResearchCancel" hidden>Cancel</button>
-        </div>
-        <div id="researchSynapseMount" aria-live="polite"></div>
+        <div id="researchProgressMount" aria-live="polite"></div>
         <div id="researchResultMount"></div>
       </div>
       <div id="researchPanelLibrary" class="hidden" role="tabpanel">
@@ -907,71 +915,168 @@
       </div>
     </div>
   </div>
+  <footer class="dr-foot research-page-footer">
+    <button type="button" class="dr-eng research-settings-link" id="btnResearchSettingsLink">Engine settings</button>
+  </footer>
+</main>
+
+<main id="chatView" class="chat-app-page" aria-label="Chat">
+  <div class="chat-app-page-body">
+    <aside class="chat-app-rail" aria-label="Chat sessions">
+      <button type="button" class="chat-app-rail-new" id="btnChatAppNewChat" aria-label="New chat" title="New chat">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div id="chatAppSessionList" class="chat-app-rail-list chat-list" role="list"></div>
+    </aside>
+    <div class="chat-app-main chat-app">
+      <header class="chat-app-top">
+        <span class="chat-app-ava" aria-hidden="true">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <h1 class="chat-app-title" id="chatAppTitle">Chat</h1>
+      </header>
+      <div class="chat-app-workspace">
+        <div class="chat-app-conversation">
+          <div id="chatAppArea" class="chat-app-scroll" role="log" aria-live="polite" aria-label="Messages">
+            <div class="chat-app-col" id="chatAppMessageCol"></div>
+          </div>
+          <footer class="chat-app-composer">
+            <div id="chatAppToolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
+            <div id="chatAppQuestionHost" class="question-host" aria-live="polite" hidden></div>
+            <div id="chatAppAttachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
+            <div class="chat-app-input">
+              <button type="button" class="chat-app-comp-btn" id="btnChatAppAttach" aria-label="Attach files" title="Attach files">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <label for="chatAppInput" class="visually-hidden">Message</label>
+              <textarea id="chatAppInput" class="chat-app-field" rows="1" placeholder="Message Minnow…"></textarea>
+              <button type="button" class="chat-app-comp-btn chat-app-stop hidden" id="btnChatAppStop" aria-label="Stop generation" hidden disabled>
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+              </button>
+              <button type="button" class="chat-app-send" id="chatAppSendBtn" aria-label="Send message">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+          </footer>
+        </div>
+        <aside id="chatAppFiles" class="chat-app-outputs" aria-label="Outputs">
+          <header class="chat-app-outputs-head">
+            <span class="chat-app-outputs-label">Outputs</span>
+            <button type="button" class="chat-app-outputs-toggle" id="btnChatAppOutputsToggle" aria-expanded="true" aria-controls="chatAppFilesBody" aria-label="Toggle outputs panel">
+              <svg class="icon-svg chat-app-outputs-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+          </header>
+          <div id="chatAppFilesBody" class="chat-app-outputs-body">
+            <p class="chat-app-outputs-empty">Files the assistant creates will appear here.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
 </main>
 
 <main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
-  <header class="benchmark-page-header">
-    <button class="icon-btn" type="button" id="btnBenchmarkPageBack" aria-label="Back to chat">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <div class="benchmark-page-heading">
-      <h1>Benchmark</h1>
-      <p class="benchmark-page-lede">Integration battery for the active model</p>
-    </div>
-  </header>
+  <nav class="benchmark-tabs" role="tablist" aria-label="Benchmark views">
+    <button type="button" class="benchmark-tab is-active" role="tab" data-tab="overview" aria-selected="true" id="benchmarkTabBtnOverview">Overview</button>
+    <button type="button" class="benchmark-tab" role="tab" data-tab="charts" aria-selected="false" id="benchmarkTabBtnCharts">Charts</button>
+    <button type="button" class="benchmark-tab" role="tab" data-tab="tests" aria-selected="false" id="benchmarkTabBtnTests">Tests</button>
+    <button type="button" class="benchmark-tab" role="tab" data-tab="run" aria-selected="false" id="benchmarkTabBtnRun">Run</button>
+  </nav>
   <div class="benchmark-page-body">
     <div class="benchmark-page-inner">
-      <section class="benchmark-deck" aria-label="Run configuration">
-        <div class="benchmark-deck-grid">
-          <div class="benchmark-deck-field benchmark-deck-field--presets">
-            <span class="benchmark-field-label" id="benchmarkPresetLabel">Preset</span>
-            <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
-              <button type="button" id="btnBenchmarkQuick">Quick</button>
-              <button type="button" id="btnBenchmarkFull">Full</button>
-            </div>
+      <section id="benchmarkTabOverview" class="benchmark-tab-panel is-active" data-tab="overview" role="tabpanel" aria-labelledby="benchmarkTabBtnOverview"></section>
+      <section id="benchmarkTabCharts" class="benchmark-tab-panel" data-tab="charts" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnCharts"></section>
+      <section id="benchmarkTabTests" class="benchmark-tab-panel" data-tab="tests" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnTests"></section>
+      <section id="benchmarkTabRun" class="benchmark-tab-panel" data-tab="run" role="tabpanel" hidden aria-labelledby="benchmarkTabBtnRun">
+      <section class="benchmark-run-section benchmark-roster" aria-label="Models to compare">
+        <span class="benchmark-field-label">Models to compare</span>
+        <div id="benchmarkRosterList" class="benchmark-roster-list"></div>
+        <div class="benchmark-roster-add">
+          <div class="benchmark-roster-picker">
+            <select id="benchmarkRosterProvider" aria-label="Provider"></select>
+            <select id="benchmarkRosterModel" aria-label="Model"></select>
           </div>
-          <div class="benchmark-deck-field benchmark-deck-field--suites">
-            <span class="benchmark-field-label" id="benchmarkSuitesLabel">Suites</span>
-            <div class="benchmark-suites-row">
-              <div
-                id="benchmarkSuiteToggles"
-                class="benchmark-suite-toggles"
-                role="group"
-                aria-labelledby="benchmarkSuitesLabel"
-              >
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true">Capability</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true">Speed</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false">Tools</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false">Skills</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="modes" aria-pressed="true">Modes</button>
-                <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false">Coding</button>
+          <button type="button" class="is-primary" id="btnBenchmarkAddTarget" title="Add the selected provider and model">Add model</button>
+          <button type="button" id="btnBenchmarkAddActiveModel" title="Add the model loaded in the top bar">Use top-bar model</button>
+        </div>
+      </section>
+      <section id="benchmarkScheduleSection" class="benchmark-run-section" hidden aria-label="Multi-model run order">
+        <span class="benchmark-field-label">Run order</span>
+        <div id="benchmarkScheduleToggles" class="benchmark-suite-toggles" role="group" aria-label="Run models in parallel or one at a time">
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="parallel" aria-pressed="true" title="Run all models at once">Parallel</button>
+          <button type="button" class="benchmark-schedule-toggle" data-schedule="sequential" aria-pressed="false" title="Run one model, then the next">Sequential</button>
+        </div>
+      </section>
+      <section class="benchmark-run-section benchmark-deck" aria-label="Run configuration">
+        <div class="benchmark-deck-field benchmark-deck-field--presets">
+          <span class="benchmark-field-label" id="benchmarkPresetLabel">Run preset</span>
+          <div class="benchmark-run-actions" role="group" aria-labelledby="benchmarkPresetLabel">
+            <button type="button" id="btnBenchmarkQuick" title="Capability and Speed only">Quick</button>
+            <button type="button" id="btnBenchmarkFull" title="All Minnow test suites">Full</button>
+          </div>
+        </div>
+        <div class="benchmark-test-types" aria-label="Test types">
+          <span class="benchmark-field-label" id="benchmarkTestTypesLabel">Test types</span>
+          <div class="benchmark-test-types-inline" role="group" aria-labelledby="benchmarkTestTypesLabel">
+            <div class="benchmark-test-type-group benchmark-test-type-group--academic">
+              <span class="benchmark-test-type-name" id="benchmarkStandardLabel">Academic</span>
+              <div class="benchmark-academic-controls">
+                <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group" aria-label="Academic benchmarks">
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false" title="Multiple-choice knowledge (MMLU)">MMLU</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="arc-challenge-mini" aria-pressed="false" title="Science reasoning (ARC)">ARC</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="gsm8k-mini" aria-pressed="false" title="Grade-school math (GSM8K)">GSM8K</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="humaneval-mini" aria-pressed="false" title="Python coding (HumanEval)">HumanEval</button>
+                  <button type="button" class="benchmark-standard-toggle" data-pack-id="truthfulqa-mini" aria-pressed="false" title="Factual accuracy (TruthfulQA)">TruthfulQA</button>
+                </div>
+                <select id="benchmarkStandardTier" class="benchmark-tier-select" aria-label="Dataset size: Mini sample or Full dataset" title="Mini uses bundled samples; Full uses complete built-in datasets">
+                  <option value="mini" selected>Mini sample</option>
+                  <option value="full">Full dataset</option>
+                </select>
               </div>
-              <div class="benchmark-run-actions benchmark-run-actions--suites">
-                <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected suites" aria-label="Run selected suites">Run</button>
+            </div>
+            <div class="benchmark-test-type-group benchmark-test-type-group--minnow">
+              <span class="benchmark-test-type-name" id="benchmarkSuitesLabel">Minnow</span>
+              <div class="benchmark-suites-row">
+                <div
+                  id="benchmarkSuiteToggles"
+                  class="benchmark-suite-toggles"
+                  role="group"
+                  aria-label="Minnow tests"
+                >
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="capability" aria-pressed="true" title="Reasoning, JSON, and multimodal probes">Capability</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="speed" aria-pressed="true" title="Time to first token and tokens per second">Speed</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="tools" aria-pressed="false" title="Built-in tool calls in an isolated workspace">Tools</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="skills" aria-pressed="false" title="Slash-command skill behavior">Skills</button>
+                  <button type="button" class="benchmark-suite-toggle" data-suite-id="coding" aria-pressed="false" title="Generate and run small Node scripts">Coding</button>
+                </div>
               </div>
+            </div>
+            <div class="benchmark-run-actions benchmark-run-actions--test-run">
+              <button type="button" class="is-primary" id="btnBenchmarkRun" title="Run selected tests" aria-label="Run selected tests">Run</button>
             </div>
           </div>
         </div>
       </section>
       <div id="benchmarkProgress" class="benchmark-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Benchmark progress">
         <div class="benchmark-progress-meta">
-          <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting…</span>
+          <span id="benchmarkProgressLabel" class="benchmark-progress-label">Starting benchmark…</span>
           <span id="benchmarkProgressPct" class="benchmark-progress-pct" aria-hidden="true">0%</span>
         </div>
         <div class="benchmark-progress-track">
           <div id="benchmarkProgressFill" class="benchmark-progress-fill"></div>
         </div>
       </div>
+      <div id="benchmarkModelCards" class="benchmark-model-cards" hidden aria-label="Per-model progress"></div>
       <div id="benchmarkSummary" class="benchmark-summary" aria-live="polite">
-        <p class="benchmark-empty">Choose suites in the deck above, then Run. Quick and Full apply a preset first.</p>
+        <p class="benchmark-empty">Pick Academic and/or Minnow tests above, then Run. Quick and Full apply Minnow presets.</p>
       </div>
       <div class="benchmark-history-bar">
         <label class="benchmark-history-field" for="benchmarkHistorySelect">
-          <span class="benchmark-field-label">History</span>
-          <select id="benchmarkHistorySelect" aria-label="Previous benchmark run"></select>
+          <span class="benchmark-field-label">Past runs</span>
+          <select id="benchmarkHistorySelect" aria-label="Open a saved benchmark run"></select>
         </label>
-        <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden>
-          Current run
+        <button type="button" id="btnBenchmarkBackToCurrent" class="benchmark-back-to-current" hidden title="Return to the run in progress">
+          Back to live run
         </button>
         <button
           type="button"
@@ -984,89 +1089,97 @@
         </button>
       </div>
       <div id="benchmarkSuites" class="benchmark-suites-mount"></div>
+      </section>
     </div>
   </div>
+  <aside id="benchmarkCatalogDrawer" class="benchmark-catalog-drawer" hidden aria-label="Test description">
+    <button type="button" class="benchmark-catalog-drawer-close" id="benchmarkCatalogDrawerClose" aria-label="Close">×</button>
+    <div id="benchmarkCatalogDrawerBody" class="benchmark-catalog-drawer-body"></div>
+  </aside>
+  <div id="benchmarkCatalogDrawerBackdrop" class="benchmark-catalog-drawer-backdrop" hidden></div>
 </main>
 
-<main id="expertsView" class="experts-page" data-step="gallery" aria-label="Experts">
-  <header class="experts-page-header">
-    <button class="icon-btn" type="button" id="btnExpertsPageBack" aria-label="Back">
-      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <h1>Experts</h1>
-  </header>
-  <div class="experts-body">
-    <div id="expertsDisabled" class="experts-empty hidden" role="status">
-      <p>Experts are turned off. Enable them in Settings → Experts, then return here.</p>
+<main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
+  <header class="experts-hdr">
+    <span class="experts-hdr-ico" aria-hidden="true">
+      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M9 3h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 14h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </span>
+    <div class="experts-hdr-txt">
+      <h2>Experts' Lab</h2>
+      <span>Compose, tune, and test expert agents</span>
     </div>
-    <section class="experts-step experts-step--gallery" aria-label="Choose an expert">
-      <p class="experts-intro">Pick a specialist to start a focused chat, or create your own expert persona.</p>
-      <div id="expertsGrid" class="experts-grid" role="list"></div>
-    </section>
-    <section class="experts-step experts-step--chats" aria-label="Expert chats">
-      <div class="experts-detail-header">
-        <span id="expertsDetailChip" class="experts-chip expert-accent-sage"></span>
-        <button type="button" class="settings-inline-btn" id="btnExpertsDetailBack">All experts</button>
+    <div class="experts-hdr-spacer"></div>
+    <button type="button" class="experts-hdr-btn" id="btnExpertsNew">
+      <svg class="icon-svg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      New expert
+    </button>
+  </header>
+  <div id="expertsDisabled" class="experts-empty hidden" role="status">
+    <p>Experts are turned off. Enable them in Settings → Experts, then return here.</p>
+  </div>
+  <div class="experts-split experts-step experts-step--browse" aria-label="Expert roster">
+    <div id="expertsList" class="experts-list" role="list"></div>
+    <div class="experts-detail">
+      <div id="expertsDetailBrowse" class="experts-detail-browse">
+        <div id="expertsDetailMount" class="experts-detail-mount"></div>
       </div>
-      <div id="expertsChatList" class="experts-chat-list chat-list" role="list"></div>
-      <button type="button" class="chat-new-wide experts-new-chat-wide" id="btnExpertsNewChat">+ New chat</button>
-    </section>
-    <section class="experts-step experts-step--create" aria-label="Make your own expert">
-      <p class="experts-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Experts.</p>
-      <div class="experts-brief-form">
-        <label for="expertsCreateInput">Expert description</label>
-        <textarea id="expertsCreateInput" class="experts-brief-input" rows="6" placeholder="e.g. A patent attorney who explains claims in plain English…"></textarea>
-        <p id="expertsCreateError" class="experts-form-error hidden" role="alert"></p>
-        <div class="experts-actions">
-          <button type="button" class="settings-inline-btn" id="btnExpertsCreateCancel">Cancel</button>
-          <button type="button" class="is-primary" id="btnExpertsCreate">Create expert</button>
-        </div>
-      </div>
-    </section>
-    <section class="experts-step experts-step--edit" aria-label="Edit expert">
-      <p class="experts-intro">Update your custom expert’s details and prompt.</p>
-      <form id="expertsEditForm" class="experts-edit-form">
-        <div class="experts-edit-row">
-          <label for="expertsEditLabel">Label</label>
-          <input type="text" id="expertsEditLabel" class="experts-edit-input" autocomplete="off" />
-        </div>
-        <div class="experts-edit-row">
-          <label for="expertsEditDescription">Description</label>
-          <input type="text" id="expertsEditDescription" class="experts-edit-input" autocomplete="off" />
-        </div>
-        <div class="experts-edit-row experts-edit-row--split">
-          <div>
-            <label for="expertsEditIcon">Icon</label>
-            <input type="text" id="expertsEditIcon" class="experts-edit-input experts-edit-input--icon" maxlength="4" autocomplete="off" />
-          </div>
-          <div>
-            <label for="expertsEditAccent">Accent</label>
-            <select id="expertsEditAccent" class="experts-edit-input"></select>
+      <section class="experts-detail-panel experts-step experts-step--create" aria-label="Make your own expert">
+        <p class="experts-panel-intro">Describe the specialist you want. Minnow will draft a custom expert you can reuse in Experts' Lab.</p>
+        <div class="experts-brief-form">
+          <label class="experts-field-label experts-mono" for="expertsCreateInput">BRIEF</label>
+          <textarea id="expertsCreateInput" class="experts-brief-input" rows="6" placeholder="e.g. A patent attorney who explains claims in plain English…"></textarea>
+          <p id="expertsCreateError" class="experts-form-error hidden" role="alert"></p>
+          <div class="experts-detail-actions">
+            <button type="button" class="experts-btn-ghost" id="btnExpertsCreateCancel">Cancel</button>
+            <button type="button" class="experts-btn-primary" id="btnExpertsCreate">Create expert</button>
           </div>
         </div>
-        <div class="experts-edit-row">
-          <label for="expertsEditTagline">Tagline</label>
-          <input type="text" id="expertsEditTagline" class="experts-edit-input" maxlength="60" autocomplete="off" />
-        </div>
-        <div class="experts-edit-row">
-          <label for="expertsEditGreeting">Greeting</label>
-          <input type="text" id="expertsEditGreeting" class="experts-edit-input" autocomplete="off" />
-        </div>
-        <div class="experts-edit-profile-tabs" role="tablist" aria-label="Prompt profile">
-          <button type="button" class="experts-profile-tab is-active" data-profile="full" role="tab" aria-selected="true">Full</button>
-          <button type="button" class="experts-profile-tab" data-profile="lite" role="tab" aria-selected="false">Lite</button>
-        </div>
-        <div class="experts-edit-row">
-          <label for="expertsEditBody">Prompt body</label>
-          <textarea id="expertsEditBody" class="experts-brief-input experts-edit-body" rows="12"></textarea>
-        </div>
-        <p id="expertsEditError" class="experts-form-error hidden" role="alert"></p>
-        <div class="experts-actions">
-          <button type="button" class="settings-inline-btn" id="btnExpertsEditCancel">Cancel</button>
-          <button type="submit" class="is-primary" id="btnExpertsEditSave">Save changes</button>
-        </div>
-      </form>
-    </section>
+      </section>
+      <section class="experts-detail-panel experts-step experts-step--edit" aria-label="Edit expert">
+        <p class="experts-panel-intro">Update your custom expert's details and prompt.</p>
+        <form id="expertsEditForm" class="experts-edit-form">
+          <div class="experts-edit-row">
+            <label class="experts-field-label experts-mono" for="expertsEditLabel">LABEL</label>
+            <input type="text" id="expertsEditLabel" class="experts-edit-input" autocomplete="off" />
+          </div>
+          <div class="experts-edit-row">
+            <label class="experts-field-label experts-mono" for="expertsEditDescription">ROLE</label>
+            <input type="text" id="expertsEditDescription" class="experts-edit-input" autocomplete="off" />
+          </div>
+          <div class="experts-edit-row experts-edit-row--split">
+            <div>
+              <label class="experts-field-label experts-mono" for="expertsEditIcon">ICON</label>
+              <input type="text" id="expertsEditIcon" class="experts-edit-input experts-edit-input--icon" maxlength="4" autocomplete="off" />
+            </div>
+            <div>
+              <label class="experts-field-label experts-mono" for="expertsEditAccent">ACCENT</label>
+              <select id="expertsEditAccent" class="experts-edit-input"></select>
+            </div>
+          </div>
+          <div class="experts-edit-row">
+            <label class="experts-field-label experts-mono" for="expertsEditTagline">TAGLINE</label>
+            <input type="text" id="expertsEditTagline" class="experts-edit-input" maxlength="60" autocomplete="off" />
+          </div>
+          <div class="experts-edit-row">
+            <label class="experts-field-label experts-mono" for="expertsEditGreeting">GREETING</label>
+            <input type="text" id="expertsEditGreeting" class="experts-edit-input" autocomplete="off" />
+          </div>
+          <div class="experts-edit-profile-tabs" role="tablist" aria-label="Prompt profile">
+            <button type="button" class="experts-profile-tab is-active" data-profile="full" role="tab" aria-selected="true">Full</button>
+            <button type="button" class="experts-profile-tab" data-profile="lite" role="tab" aria-selected="false">Lite</button>
+          </div>
+          <div class="experts-edit-row">
+            <label class="experts-field-label experts-mono" for="expertsEditBody">SYSTEM PROMPT</label>
+            <textarea id="expertsEditBody" class="experts-brief-input experts-edit-body" rows="12"></textarea>
+          </div>
+          <p id="expertsEditError" class="experts-form-error hidden" role="alert"></p>
+          <div class="experts-detail-actions">
+            <button type="button" class="experts-btn-ghost" id="btnExpertsEditCancel">Cancel</button>
+            <button type="submit" class="experts-btn-primary" id="btnExpertsEditSave">Save changes</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -1123,6 +1236,9 @@
       </button>
       <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnTerminal" aria-label="Terminal" aria-expanded="false" aria-controls="terminalPanel" title="Terminal (Ctrl+`)">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m7 15 3-3-3-3M11 15h6"/></svg>
+      </button>
+      <button class="icon-btn chat-sidebar-footer-btn" type="button" id="btnOrchestrate" aria-label="Orchestrate boards" title="Orchestrate boards" aria-pressed="false" aria-expanded="false" onclick="toggleOrchestrateHubFromTopbar()">
+        <img class="icon-img" src="/icons/orchestrate.png" width="18" height="18" alt="" aria-hidden="true">
       </button>
     </div>
   </aside>
@@ -1405,6 +1521,10 @@
       <span class="file-sidebar-title">Files</span>
       <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files" onclick="toggleFileSidebarLayout()">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+      </button>
+      <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
+        aria-label="Preview browser" title="Preview browser" onclick="togglePreviewFromTopbar()">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       </button>
       <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">

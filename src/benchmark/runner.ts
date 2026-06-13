@@ -15,7 +15,6 @@ import { runCapabilitySuite } from './suites/capability.ts';
 import { runSpeedSuite } from './suites/speed.ts';
 import { runToolsSuite } from './suites/tools.ts';
 import { runSkillsSuite } from './suites/skills.ts';
-import { runModesSuite } from './suites/modes.ts';
 import { runCodingSuite } from './suites/coding.ts';
 import type {
   BenchmarkPreset,
@@ -27,13 +26,12 @@ import type {
   SuiteResult,
 } from './types.ts';
 
-const QUICK_SUITES: SuiteId[] = ['capability', 'speed', 'modes'];
+const QUICK_SUITES: SuiteId[] = ['capability', 'speed'];
 const FULL_SUITES: SuiteId[] = [
   'capability',
   'speed',
   'tools',
   'skills',
-  'modes',
   'coding',
 ];
 
@@ -84,7 +82,6 @@ function suiteLabel(suiteId: SuiteId): string {
   if (suiteId === 'speed') return 'Speed';
   if (suiteId === 'tools') return 'Tools';
   if (suiteId === 'skills') return 'Skills';
-  if (suiteId === 'modes') return 'Modes';
   return 'Coding';
 }
 
@@ -104,7 +101,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
   const startedAt = options.resume?.startedAt ?? new Date().toISOString();
   const runId = options.runId ?? options.resume?.runId ?? newRunId();
 
-  const binding = await resolveBenchmarkBinding();
+  const binding = options.binding ?? (await resolveBenchmarkBinding());
   const localServer = await detectLocalServer();
   const ctx: BenchmarkRunContext = {
     providerId: binding.providerId,
@@ -172,13 +169,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
         continue;
       }
 
-      if (suiteId === 'modes') {
-        const suite = await runModesSuite(ctx);
-        suiteResults.push(suite);
-        if (signal.aborted) break;
-        continue;
-      }
-
       if (suiteId === 'coding') {
         const suite = await runCodingSuite(ctx);
         suiteResults.push(suite);
@@ -192,7 +182,6 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
 
     const toolsSuite = suiteResults.find((s) => s.id === 'tools');
     const skillsSuite = suiteResults.find((s) => s.id === 'skills');
-    const modesSuite = suiteResults.find((s) => s.id === 'modes');
 
     const run: BenchmarkRun = {
       id: runId,
@@ -204,13 +193,15 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}): Promise<B
       totalScore: aggregateRunScore(suiteResults),
       headlineTtftMs,
       headlineTokPerSec,
-      modeMatrixPassed: modesSuite?.passed ?? 0,
+      modeMatrixPassed: 0,
       toolsPassed: toolsSuite?.passed ?? 0,
       skillsPassed: skillsSuite?.passed ?? 0,
       suites: suiteResults,
     };
 
-    await saveRun(run);
+    if (options.saveToHistory !== false) {
+      await saveRun(run);
+    }
     onProgress?.({ type: 'run-done', run });
     return run;
   } catch (err) {

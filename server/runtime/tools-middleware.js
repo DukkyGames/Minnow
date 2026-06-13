@@ -66,8 +66,13 @@ import {
   resolveExecuteCommandCodeChange,
 } from '../tools/workspace-change-snapshot.js';
 import { runGrepSearch } from '../tools/grep.js';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
-import { pathAccessStore, resolveSafePath } from './path-access.js';
+import {
+  getEffectiveWorkspaceRoot,
+  resolveSafePath,
+  runWithToolContext,
+} from './path-access.js';
 import {
   toolStartBackgroundCommand,
   toolStopBackgroundCommand,
@@ -95,14 +100,14 @@ function toRelativePath(absPath) {
     }
     return rel ? `@minnow/reef/artifacts/${rel}` : '@minnow/reef/artifacts';
   }
-  const rel = path.relative(getWorkspaceRoot(), absPath);
+  const rel = path.relative(getEffectiveWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
 
 /** Run git with arguments in the project root. */
 async function runGit(args) {
   try {
-    const result = await runProcess('git', args, { cwd: getWorkspaceRoot() });
+    const result = await runProcess('git', args, { cwd: getEffectiveWorkspaceRoot() });
     return formatProcessOutput(`git ${args.join(' ')}`, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -374,7 +379,7 @@ async function toolGrep(args) {
   return runGrepSearch(args, {
     resolveSafePath,
     toRelativePath,
-    getWorkspaceRoot,
+    getWorkspaceRoot: getEffectiveWorkspaceRoot,
   });
 }
 
@@ -676,7 +681,7 @@ async function toolExecuteCommand(args) {
     return 'Error: command is required';
   }
 
-  let cwd = getWorkspaceRoot();
+  let cwd = getEffectiveWorkspaceRoot();
   if (typeof args?.cwd === 'string' && args.cwd.trim()) {
     try {
       cwd = resolveCommandCwd(args);
@@ -689,7 +694,7 @@ async function toolExecuteCommand(args) {
   const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
   const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
 
-  const workspaceRoot = getWorkspaceRoot();
+  const workspaceRoot = getEffectiveWorkspaceRoot();
   const beforeSnapshot = await captureWorkspaceSnapshot(workspaceRoot);
   const beforeFileContents = new Map();
   const heuristicRel = String(command).match(
@@ -761,7 +766,7 @@ async function toolRunJavascript(args) {
 
   try {
     const result = await runProcess('node', ['-e', code], {
-      cwd: getWorkspaceRoot(),
+      cwd: getEffectiveWorkspaceRoot(),
       timeout: COMMAND_TIMEOUT_MS,
     });
     return formatProcessOutput('node -e', result);
@@ -783,7 +788,7 @@ async function toolRunPython(args) {
   for (const bin of candidates) {
     try {
       const result = await runProcess(bin, ['-c', code], {
-        cwd: getWorkspaceRoot(),
+        cwd: getEffectiveWorkspaceRoot(),
         timeout: COMMAND_TIMEOUT_MS,
       });
       return formatProcessOutput(`${bin} -c`, result);
@@ -877,9 +882,10 @@ const SERVER_TOOL_HANDLERS = {
   run_python: toolRunPython,
   send_notification: toolSendNotification,
   read_document: toolReadDocument,
-  run_impeccable: (args) => toolRunImpeccable(args, getAppRoot(), getWorkspaceRoot()),
+  run_impeccable: (args) =>
+    toolRunImpeccable(args, getAppRoot(), getEffectiveWorkspaceRoot()),
   load_impeccable_context: () =>
-    toolLoadImpeccableContext(getAppRoot(), getWorkspaceRoot()),
+    toolLoadImpeccableContext(getAppRoot(), getEffectiveWorkspaceRoot()),
   get_lsp_diagnostics: async (args) => {
     const { getLspDiagnostics } = await import('../lsp/manager.js');
     return getLspDiagnostics(String(args?.path ?? ''));
@@ -895,10 +901,15 @@ const SERVER_TOOL_HANDLERS = {
  * Execute a server-side tool by name.
  * All tools return strings; errors are returned as string messages, not thrown to HTTP layer.
  */
-export async function executeServerTool(name, args) {
+/**
+ * @param {string} name
+ * @param {Record<string, unknown>} [args]
+ * @param {{ workspaceRoot?: string }} [options]
+ */
+export async function executeServerTool(name, args, options = {}) {
   const fsAccess = await getFilesystemAccessFromConfig();
   const allowOutsideWorkspace = fsAccess === 'full';
-  return pathAccessStore.run({ allowOutsideWorkspace }, async () => {
+  return runWithToolContext(async () => {
     try {
       if (isPluginToolName(name)) {
         const result = await callPluginTool(name, args ?? {});
@@ -921,6 +932,9 @@ export async function executeServerTool(name, args) {
       const message = err instanceof Error ? err.message : String(err);
       return { result: `Error: ${message}` };
     }
+  }, {
+    allowOutsideWorkspace,
+    workspaceRoot: options.workspaceRoot,
   });
 }
 
@@ -1014,7 +1028,25 @@ export function createToolsMiddleware() {
           res.end(JSON.stringify({ result: planWriteBlock }));
           return;
         }
-        const out = await executeServerTool(name, args);
+
+        let workspaceRoot;
+        if (body?.workspaceRoot != null) {
+          if (typeof body.workspaceRoot !== 'string' || !body.workspaceRoot.trim()) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Invalid workspaceRoot' }));
+            return;
+          }
+          try {
+            workspaceRoot = await validateAllowedWorkspaceRoot(body.workspaceRoot);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: message }));
+            return;
+          }
+        }
+
+        const out = await executeServerTool(name, args, { workspaceRoot });
         res.statusCode = 200;
         const payload = { result: String(out.result ?? '') };
         if (Array.isArray(out.attachments) && out.attachments.length > 0) {

@@ -1,0 +1,396 @@
+/**
+ * MinnowOS Chat app full-page UI (#/app/chat) — session rail, messaging, composer.
+ */
+
+import { sendMessage } from '../chat/messaging';
+import { stopGeneration } from '../chat/stop-generation';
+import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
+import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
+import { navigateToDesktop } from '../os/router';
+import {
+  CHAT_APP_ID,
+  createAssistantChat,
+  ensureActiveAssistantChat,
+} from '../state/chat-app-sessions';
+import {
+  getActiveChat,
+  getAssistantChats,
+  newChatId,
+  rememberActiveChatForApp,
+  scheduleSaveSessions,
+  sessionState,
+} from '../state/sessions';
+import { refreshChatAppOutputsPanel } from './chat-app-outputs';
+import { closeBenchmark } from './benchmark-page';
+import { syncChatItemDotsInDom } from './chat-item-dot';
+import {
+  handleComposerPrimaryAction,
+  initComposerSteerInputListener,
+  syncComposerFromStreamingState,
+} from './composer-send';
+import { closeGlobalBugs } from './global-bugs-page';
+import { renderChatFromHistory } from './messages';
+import { closeSettings } from './settings-page';
+import { appendChatRow } from './sidebar';
+import { setStatus } from './status';
+
+const CHAT_APP_MOUNT = '#chatAppMessageCol';
+
+let chatsWorkspacePath: string | null = null;
+let streamEndUnsubscribe: (() => void) | null = null;
+/** Mobile session rail starts hidden until the menubar toggle opens it. */
+let chatAppRailHidden = true;
+
+function getRoot(): HTMLElement | null {
+  return document.getElementById('chatView');
+}
+
+function getChatShell(): HTMLElement | null {
+  return document.getElementById('appBody');
+}
+
+/** Close other full-page overlays before opening Chat. */
+function closeOtherOverlays(): void {
+  closeSettings({ skipNavigate: true });
+  closeGlobalBugs();
+  closeBenchmark({ skipNavigate: true });
+  void import('../research/panel').then((m) => {
+    if (m.isResearchPageOpen()) m.closeResearch({ skipNavigate: true });
+  });
+  void import('./welcome-page').then((m) => {
+    if (m.isWelcomePageOpen()) m.closeWelcome({ skipHash: true });
+  });
+  void import('./experts/experts-hub').then((m) => {
+    if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
+  });
+}
+
+/** Paint the quiet empty state when the active assistant chat has no history. */
+function renderChatAppEmptyState(area: HTMLElement): void {
+  area.replaceChildren();
+  const empty = document.createElement('div');
+  empty.className = 'chat-app-empty';
+  empty.innerHTML = `
+    <div class="chat-app-empty-ico" aria-hidden="true">
+      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <h2>A quiet place to think.</h2>
+    <p>General assistant with tools, files, and app routing. Ask anything.</p>
+  `;
+  area.appendChild(empty);
+}
+
+/** Render transcript via shared history path; empty chats keep the Chat app landing copy. */
+function renderChatAppMessages(): void {
+  const chat = getActiveChat();
+  const title = document.getElementById('chatAppTitle');
+  if (title) title.textContent = chat.name || 'Chat';
+
+  if (!chat.history.length) {
+    const area =
+      document.getElementById('chatAppMessageCol') ?? document.getElementById('chatAppArea');
+    if (area) renderChatAppEmptyState(area);
+    return;
+  }
+
+  renderChatFromHistory(chat, CHAT_APP_MOUNT);
+}
+
+/** Activate an assistant chat for the Chat app without touching Code sidebar DOM. */
+function activateAssistantChat(chatId: string): void {
+  if (!sessionState) return;
+  const chat = sessionState.chats.find((c) => c.id === chatId);
+  if (!chat) return;
+  sessionState.activeId = chatId;
+  chat.unread = false;
+  rememberActiveChatForApp(CHAT_APP_ID, chatId);
+  scheduleSaveSessions();
+  renderChatAppSurface();
+}
+
+/** Public: switch session rail thread (also used by background-stream hint). */
+export function activateChatAppThread(chatId: string): void {
+  activateAssistantChat(chatId);
+}
+
+/** Create a new assistant chat and make it active. */
+async function createNewAssistantChat(): Promise<void> {
+  const path = chatsWorkspacePath ?? (await getChatsWorkspacePath());
+  if (!path || !sessionState) return;
+  chatsWorkspacePath = path;
+  const chat = createAssistantChat(path, newChatId());
+  sessionState.chats.unshift(chat);
+  activateAssistantChat(chat.id);
+}
+
+/** Render session rail threads for the chats workspace. */
+function renderSessionRail(): void {
+  const list = document.getElementById('chatAppSessionList');
+  if (!list || !sessionState) return;
+  list.replaceChildren();
+  const path = chatsWorkspacePath;
+  if (!path) return;
+  const chats = getAssistantChats(path, sessionState);
+  const activeId = sessionState.activeId;
+  for (const chat of chats) {
+    appendChatRow(list, chat, activeId, {
+      draggable: false,
+      onActivate: (item) => activateAssistantChat(item.id),
+    });
+  }
+  syncChatItemDotsInDom();
+}
+
+function syncComposerSendState(): void {
+  const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  const sendBtn = document.getElementById('chatAppSendBtn') as HTMLButtonElement | null;
+  if (!sendBtn) return;
+  if (isActiveChatStreaming()) {
+    sendBtn.disabled = false;
+    return;
+  }
+  const hasText = Boolean(input?.value.trim());
+  sendBtn.disabled = !hasText;
+}
+
+function isMobileChatAppLayout(): boolean {
+  return window.matchMedia('(max-width: 640px)').matches;
+}
+
+/** Sync session rail visibility with mobile collapse state. */
+export function applyChatAppRailVisuals(): void {
+  const root = getRoot();
+  if (!root) return;
+  if (!isMobileChatAppLayout()) {
+    root.classList.remove('is-rail-hidden');
+    return;
+  }
+  root.classList.toggle('is-rail-hidden', chatAppRailHidden);
+}
+
+/** Menubar control: show/hide the Chat app session rail on narrow viewports. */
+export function toggleChatAppSessionRail(): void {
+  if (!isMobileChatAppLayout()) return;
+  chatAppRailHidden = !chatAppRailHidden;
+  applyChatAppRailVisuals();
+}
+
+/** Whether the session rail is collapsed on mobile (menubar aria-pressed). */
+export function isChatAppSessionRailHidden(): boolean {
+  return chatAppRailHidden;
+}
+
+/** Concierge / launch_minnow_app seed: auto-send as first message when chat is empty. */
+async function applyConciergeSeed(seed?: string): Promise<void> {
+  if (!seed?.trim()) return;
+  const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  if (!input || input.value.trim()) return;
+
+  const chat = getActiveChat();
+  if (chat.history.length > 0) return;
+
+  const text = seed.trim();
+  input.value = text;
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  syncComposerSendState();
+
+  if (!(await ensureReadyForSend())) return;
+  try {
+    await sendMessage();
+    renderChatAppMessages();
+    const { clearForegroundSeed } = await import('../os/instances');
+    clearForegroundSeed();
+  } catch {
+    /* leave seed in composer for manual send when provider/tools are unavailable */
+  } finally {
+    syncComposerSendState();
+  }
+}
+
+/** Refresh rail, messages, outputs, and composer chrome. */
+function renderChatAppSurface(): void {
+  renderSessionRail();
+  renderChatAppMessages();
+  void refreshChatAppOutputsPanel();
+  syncComposerSendState();
+  syncComposerFromStreamingState();
+}
+
+async function ensureChatsWorkspaceReady(): Promise<boolean> {
+  chatsWorkspacePath = await getChatsWorkspacePath();
+  return Boolean(chatsWorkspacePath);
+}
+
+/** Ensure an assistant chat is active before send (General mode, chats workspace). */
+async function ensureReadyForSend(): Promise<boolean> {
+  try {
+    await ensureActiveAssistantChat();
+    if (!chatsWorkspacePath) {
+      chatsWorkspacePath = await getChatsWorkspacePath();
+    }
+    return true;
+  } catch {
+    setStatus('err', 'Chats workspace unavailable — run npm start');
+    return false;
+  }
+}
+
+async function handleChatAppSend(): Promise<void> {
+  if (!(await ensureReadyForSend())) return;
+  if (isActiveChatStreaming()) {
+    handleComposerPrimaryAction();
+    syncComposerSendState();
+    return;
+  }
+  await sendMessage();
+  renderChatAppMessages();
+  syncComposerSendState();
+}
+
+function onChatStreamEnded(chatId: string): void {
+  if (!isChatAppOpen()) return;
+  renderSessionRail();
+  void refreshChatAppOutputsPanel();
+  if (getActiveChat().id === chatId) {
+    renderChatAppMessages();
+    syncComposerSendState();
+    syncComposerFromStreamingState();
+  }
+}
+
+/** Whether the Chat app page is open. */
+export function isChatAppOpen(): boolean {
+  return getRoot()?.classList.contains('is-open') ?? false;
+}
+
+/** Open the Chat app (`#/app/chat`). */
+export async function openChatApp(seed?: string): Promise<void> {
+  const root = getRoot();
+  const shell = getChatShell();
+  if (!root || !shell) return;
+  if (window.location.hash.startsWith('#/settings')) return;
+
+  closeOtherOverlays();
+  root.classList.add('is-open');
+
+  if (!isOsShellEnabled()) {
+    shell.classList.add('hidden');
+    window.location.hash = '#/app/chat';
+  }
+
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
+
+  const ready = await ensureChatsWorkspaceReady();
+  if (ready) {
+    try {
+      await ensureActiveAssistantChat();
+    } catch {
+      /* server offline — still show shell */
+    }
+  }
+
+  applyChatAppRailVisuals();
+  renderChatAppSurface();
+  await applyConciergeSeed(seed);
+  syncComposerFromStreamingState();
+
+  const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  input?.focus();
+}
+
+/** Close the Chat app and return to chat workspace or desktop. */
+export function closeChatApp(options?: { skipNavigate?: boolean }): void {
+  const root = getRoot();
+  const shell = getChatShell();
+  if (!root || !shell) return;
+
+  root.classList.remove('is-open');
+
+  if (!isOsShellEnabled()) {
+    shell.classList.remove('hidden');
+    if (
+      !options?.skipNavigate &&
+      (window.location.hash === '#/app/chat' || window.location.hash.startsWith('#/app/chat/'))
+    ) {
+      window.location.hash = '#/';
+    }
+  } else if (!options?.skipNavigate) {
+    navigateToDesktop();
+  }
+
+  void import('./preview-electron-visibility').then((m) =>
+    m.syncElectronPreviewHostVisibility(),
+  );
+}
+
+function onHashChange(): void {
+  const hash = window.location.hash;
+  if (hash.startsWith('#/settings')) return;
+  if (hash === '#/app/chat' || hash.startsWith('#/app/chat/')) {
+    void openChatApp();
+    return;
+  }
+  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isChatAppOpen()) {
+    closeChatApp();
+  }
+}
+
+function autoResizeComposer(textarea: HTMLTextAreaElement): void {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+}
+
+function bindStaticControls(): void {
+  document.getElementById('btnChatAppNewChat')?.addEventListener('click', () => {
+    void createNewAssistantChat();
+  });
+
+  const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
+  initComposerSteerInputListener(input);
+  input?.addEventListener('input', () => {
+    autoResizeComposer(input);
+    syncComposerSendState();
+  });
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleChatAppSend();
+    }
+  });
+
+  document.getElementById('chatAppSendBtn')?.addEventListener('click', () => {
+    void handleChatAppSend();
+  });
+
+  document.getElementById('btnChatAppStop')?.addEventListener('click', () => {
+    stopGeneration();
+  });
+
+  document.getElementById('btnChatAppOutputsToggle')?.addEventListener('click', () => {
+    const panel = document.getElementById('chatAppFiles');
+    const btn = document.getElementById('btnChatAppOutputsToggle');
+    if (!panel || !btn) return;
+    const collapsed = panel.classList.toggle('is-collapsed');
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+}
+
+/** Wire hash routing and controls (call once from main). */
+export function initChatApp(): void {
+  bindStaticControls();
+  window.addEventListener('resize', () => {
+    if (isChatAppOpen()) applyChatAppRailVisuals();
+  });
+  if (!streamEndUnsubscribe) {
+    streamEndUnsubscribe = subscribeChatStreamEnd(onChatStreamEnded);
+  }
+  window.addEventListener('hashchange', onHashChange);
+  const hash = window.location.hash;
+  if (hash === '#/app/chat' || hash.startsWith('#/app/chat/')) {
+    void openChatApp();
+  }
+}

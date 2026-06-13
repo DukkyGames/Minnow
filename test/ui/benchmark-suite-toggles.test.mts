@@ -7,6 +7,7 @@ import {
   applyStartModeToToggles,
   getSelectedSuitesForTests,
   getSuiteToggleOrderForTests,
+  hasSelectedBenchmarkWorkForTests,
   initBenchmarkPage,
   storedPresetForStartMode,
 } from '../../src/ui/benchmark-page.ts';
@@ -28,6 +29,9 @@ function buildBenchmarkRunBarHtml(): string {
       <button type="button" id="btnBenchmarkRun">Run</button>
       <div id="benchmarkSuiteToggles" class="benchmark-suite-toggles" role="group" aria-label="Benchmark suites to run">
         ${toggles}
+      </div>
+      <div id="benchmarkStandardToggles" class="benchmark-suite-toggles" role="group" aria-label="Academic benchmarks">
+        <button type="button" class="benchmark-standard-toggle" data-pack-id="mmlu-mini" aria-pressed="false">MMLU</button>
       </div>
     </div>
   `;
@@ -70,13 +74,13 @@ describe('benchmark suite toggles', () => {
     assert.equal(tools.getAttribute('aria-pressed'), 'false');
   });
 
-  test('Quick preset selects capability, speed, and modes', () => {
+  test('Quick preset selects capability and speed', () => {
     setAllToggles(false);
     applyPresetToTogglesForTests('quick');
     assert.deepEqual(pressedSuiteIds(), QUICK_SUITES);
   });
 
-  test('Full preset selects all six suites', () => {
+  test('Full preset selects all five suites', () => {
     setAllToggles(false);
     applyPresetToTogglesForTests('full');
     assert.deepEqual(pressedSuiteIds(), FULL_SUITES);
@@ -104,5 +108,15 @@ describe('benchmark suite toggles', () => {
     assert.equal(storedPresetForStartMode('selected'), 'custom');
     assert.equal(storedPresetForStartMode('quick'), 'quick');
     assert.equal(storedPresetForStartMode('full'), 'full');
+  });
+
+  test('hasSelectedBenchmarkWork accepts Academic-only selection', () => {
+    setAllToggles(false);
+    assert.equal(hasSelectedBenchmarkWorkForTests(), false);
+    document
+      .querySelector<HTMLButtonElement>('.benchmark-standard-toggle[data-pack-id="mmlu-mini"]')
+      ?.click();
+    assert.equal(hasSelectedBenchmarkWorkForTests(), true);
+    assert.deepEqual(pressedSuiteIds(), []);
   });
 });

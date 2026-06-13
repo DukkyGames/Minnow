@@ -10,6 +10,8 @@ export interface ToolFixture {
   expectArgs?: (args: Record<string, unknown>) => boolean;
   /** Valid tool_call only; do not execute. */
   emitOnly?: boolean;
+  /** Optional post-execution content check (e.g. read_file marker). */
+  verifyExec?: (result: string) => boolean;
 }
 
 /** Tools that must not be executed during benchmark (UI / policy). */
@@ -29,18 +31,6 @@ const OVERRIDES: Record<string, ToolFixture> = {
   calculate: {
     prompt: 'Use calculate to compute (12 + 8) * 2. Call the tool.',
     expectArgs: (a) => typeof a.expression === 'string' && a.expression.length > 0,
-  },
-  read_file: {
-    prompt: 'Use read_file on package.json in the workspace root. Call the tool.',
-    expectArgs: (a) => typeof a.path === 'string',
-  },
-  list_directory: {
-    prompt: 'Use list_directory on "." Call the tool.',
-    expectArgs: (a) => typeof a.path === 'string',
-  },
-  grep: {
-    prompt: 'Use grep to search for "export" in src with pattern export. Call the tool.',
-    expectArgs: (a) => typeof a.pattern === 'string',
   },
   web_search: {
     prompt: 'Use web_search for "TypeScript". Call the tool only.',

@@ -25,17 +25,11 @@ describe('resolveTestDescription', () => {
     assert.match(desc.passCriteria, /informational|chars/i);
   });
 
-  test('tool-read_file dynamic entry', () => {
+  test('tool-read_file dynamic entry mentions benchmark workspace', () => {
     const desc = resolveTestDescription('tool-read_file', 'tools', 'Read file');
     assert.ok(desc);
-    assert.match(desc.method, /read_file/);
-    assert.match(desc.passCriteria, /read_file/);
-  });
-
-  test('mode-build-positive dynamic entry', () => {
-    const desc = resolveTestDescription('mode-build-positive', 'modes', 'Build emits list_directory');
-    assert.ok(desc);
-    assert.match(desc.passCriteria, /list_directory/);
+    assert.match(desc.method, /benchmark-workspace/i);
+    assert.match(desc.passCriteria, /MINNOW_BENCH_MARKER/);
   });
 
   test('cap-usage documents skip semantics', () => {
@@ -59,7 +53,7 @@ describe('resolveTestDescription', () => {
 
 describe('SUITE_INTROS', () => {
   test('every suite has intro copy', () => {
-    const suites = ['capability', 'speed', 'tools', 'skills', 'modes', 'coding'] as const;
+    const suites = ['capability', 'speed', 'tools', 'skills', 'coding'] as const;
     for (const id of suites) {
       assert.ok(SUITE_INTROS[id].trim().length > 20, id);
     }

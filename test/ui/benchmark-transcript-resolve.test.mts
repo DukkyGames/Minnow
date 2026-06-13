@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import {
+  clearLiveStandardCellsForTests,
   clearLiveTranscriptStateForTests,
+  resolveStandardCellForTranscript,
   resolveTestForTranscript,
   resolveTestResultForCard,
+  seedLiveStandardCellsForTests,
   seedLiveTranscriptStateForTests,
 } from '../../src/ui/benchmark-page.ts';
 import type { BenchmarkRun } from '../../src/benchmark/types.ts';
@@ -87,5 +90,39 @@ describe('resolveTestForTranscript', () => {
   test('returns null when neither live nor saved run has the test', () => {
     clearLiveTranscriptStateForTests();
     assert.equal(resolveTestForTranscript('missing'), null);
+  });
+});
+
+describe('resolveStandardCellForTranscript', () => {
+  test('finds Academic cell by cellId with transcript', () => {
+    seedLiveStandardCellsForTests([
+      {
+        cellId: 'p::m__mmlu-1',
+        targetKey: 'p::m',
+        family: 'standard',
+        suiteId: 'mmlu-mini',
+        testId: 'mmlu-1',
+        label: 'mmlu-1',
+        passed: true,
+        skipped: false,
+        score: 1,
+        durationMs: 3700,
+        transcript: [
+          { role: 'user', content: 'Question?' },
+          { role: 'assistant', content: 'A' },
+        ],
+      },
+    ]);
+
+    const cell = resolveStandardCellForTranscript('p::m__mmlu-1');
+    assert.equal(cell?.label, 'mmlu-1');
+    assert.equal(cell?.transcript?.[1]?.content, 'A');
+
+    clearLiveStandardCellsForTests();
+  });
+
+  test('returns null when cell id is missing', () => {
+    clearLiveStandardCellsForTests();
+    assert.equal(resolveStandardCellForTranscript('missing'), null);
   });
 });

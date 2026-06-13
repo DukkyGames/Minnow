@@ -307,6 +307,31 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'launch_minnow_app',
+    label: 'Launch Minnow app',
+    description:
+      'Open or foreground a MinnowOS app (Code, Chat, Research, Experts, Bench, Settings) from the assistant.',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'launch_minnow_app',
+      'Launch or foreground a MinnowOS app. Use when the user wants repo work (code), deep research (research), benchmarks (bench), settings, experts lab, or a fresh chat (chat). Pass seed to prefill concierge or research input.',
+      {
+        app_id: {
+          type: 'string',
+          enum: ['code', 'chat', 'research', 'experts', 'bench', 'settings'],
+          description: 'MinnowOS app to open',
+        },
+        seed: {
+          type: 'string',
+          description:
+            'Optional seed text (workspace path or task for code; query for research; message for chat)',
+        },
+      },
+      ['app_id'],
+    ),
+  },
+  {
     id: 'propose_mode_switch',
     label: 'Propose mode switch',
     description:

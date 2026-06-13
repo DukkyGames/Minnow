@@ -18,6 +18,10 @@ export interface ToolApprovalContext {
   workAgentId?: string | null;
   /** Active composer mode (General always prompts before tool execution). */
   modeId?: string;
+  /** Override workspace for path-outside checks (benchmark sandbox, etc.). */
+  workspaceRoot?: string;
+  /** Benchmark runs proceed without approval or path-ack modals. */
+  benchmarkAutonomous?: boolean;
 }
 
 interface Queued {

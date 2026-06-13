@@ -15,10 +15,23 @@ import {
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 
-/** Per-request flag: allow paths outside workspace when config grants full filesystem access. */
+/**
+ * Per-request tool context:
+ * - allowOutsideWorkspace: full filesystem access when true
+ * - workspaceRootOverride: optional cwd/root for chat-scoped tool runs
+ */
 export const pathAccessStore = new AsyncLocalStorage();
 
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
+
+/** Active workspace root for the current tool request (override or Code workspace). */
+export function getEffectiveWorkspaceRoot() {
+  const store = pathAccessStore.getStore();
+  if (store?.workspaceRootOverride) {
+    return store.workspaceRootOverride;
+  }
+  return getWorkspaceRoot();
+}
 
 /**
  * Resolve a user-supplied path under the workspace root unless full access is allowed
@@ -53,7 +66,7 @@ export function resolveSafePath(userPath, options = {}) {
     return reefRead;
   }
 
-  const workspaceRoot = getWorkspaceRoot();
+  const workspaceRoot = getEffectiveWorkspaceRoot();
   const resolved = path.isAbsolute(userPath)
     ? path.resolve(userPath)
     : path.resolve(workspaceRoot, userPath);
@@ -83,4 +96,22 @@ export function resolveSafePath(userPath, options = {}) {
 export async function runWithPathAccess(fn) {
   const fsAccess = await getFilesystemAccessFromConfig();
   return pathAccessStore.run({ allowOutsideWorkspace: fsAccess === 'full' }, fn);
+}
+
+/**
+ * Run tool handlers with optional workspace root override (validated by caller).
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @param {{ allowOutsideWorkspace?: boolean, workspaceRoot?: string }} [options]
+ * @returns {Promise<T>}
+ */
+export async function runWithToolContext(fn, options = {}) {
+  const fsAccess = await getFilesystemAccessFromConfig();
+  const allowOutsideWorkspace =
+    options.allowOutsideWorkspace ?? fsAccess === 'full';
+  const store = {
+    allowOutsideWorkspace,
+    ...(options.workspaceRoot ? { workspaceRootOverride: options.workspaceRoot } : {}),
+  };
+  return pathAccessStore.run(store, fn);
 }

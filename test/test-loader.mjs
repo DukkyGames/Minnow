@@ -12,9 +12,9 @@ if (!globalThis.__MINNOW_TEST_LOADER_REGISTERED) {
   register(LOADER_URL, import.meta.url);
 }
 
-/** True when Node is loading a stylesheet side-effect import in tests. */
-function isCssModuleUrl(url) {
-  const path = url.split('?')[0].split('#')[0];
+/** True when a module specifier or resolved URL refers to a CSS asset (including ?url). */
+function isCssSpecifier(specifier) {
+  const path = String(specifier).split('?')[0].split('#')[0];
   return path.endsWith('.css');
 }
 
@@ -35,16 +35,30 @@ export default { Terminal };
 const FIT_STUB = `export class FitAddon { activate() {} fit() {} dispose() {} }`;
 const WEB_LINKS_STUB = `export class WebLinksAddon { activate() {} dispose() {} }`;
 
-const EMPTY_MODULE_URL = 'data:text/javascript,export default {}';
-
 function dataUrlForSource(source) {
   return `data:text/javascript,${encodeURIComponent(source)}`;
 }
 
+function cssStubSource(isUrlImport) {
+  return isUrlImport ? 'export default "/stub.css";' : 'export default {};';
+}
+
+function cssStubUrl(isUrlImport) {
+  return dataUrlForSource(cssStubSource(isUrlImport));
+}
+
+/** True for .css modules and data-URL stubs that tsx/vite may suffix with ?url. */
+function isCssModuleUrl(url) {
+  const s = String(url);
+  if (isCssSpecifier(s)) return true;
+  return s.startsWith('data:text/javascript,') && s.includes('?url');
+}
+
 /** Intercept xterm/css before tsx hits unknown file extensions. */
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier.endsWith('.css')) {
-    return { format: 'module', shortCircuit: true, url: EMPTY_MODULE_URL };
+  if (isCssSpecifier(specifier)) {
+    const isUrlImport = String(specifier).includes('?url');
+    return { format: 'module', shortCircuit: true, url: cssStubUrl(isUrlImport) };
   }
   if (specifier === '@xterm/xterm') {
     return { format: 'module', shortCircuit: true, url: dataUrlForSource(XTERM_STUB) };
@@ -60,10 +74,11 @@ export async function resolve(specifier, context, nextResolve) {
 
 export async function load(url, context, nextLoad) {
   if (isCssModuleUrl(url)) {
+    const isUrlImport = String(url).includes('?url');
     return {
       format: 'module',
       shortCircuit: true,
-      source: 'export default {};',
+      source: cssStubSource(isUrlImport),
     };
   }
   if (url.includes('@xterm/xterm')) {

@@ -4,6 +4,8 @@
  */
 
 import { createAgentPacksMiddleware } from '../agent-packs/routes.js';
+import { createBenchmarkWorkspaceMiddleware } from '../benchmark-workspace/middleware.js';
+import { createChatsWorkspaceMiddleware } from '../chats-workspace/middleware.js';
 import { createBenchmarksMiddleware } from '../benchmarks/middleware.js';
 import { createBrowserAllowlistMiddleware } from '../browser-allowlist-middleware.js';
 import { createBrowserScreenshotMiddleware } from '../browser-screenshot-middleware.js';
@@ -38,6 +40,8 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createBenchmarksMiddleware());
   connectApp.use(createEvalsMiddleware());
   connectApp.use(createWorkspaceMiddleware());
+  connectApp.use(createChatsWorkspaceMiddleware());
+  connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());
   connectApp.use(
     createPreviewMiddleware({

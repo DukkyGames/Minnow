@@ -100,7 +100,8 @@ describe('settings page HTML', () => {
     assert.match(html, /class="settings-prompt-estimate"/);
   });
 
-  test('settings global search finder exists in header', () => {
+  test('settings global search finder exists in header slot', () => {
+    assert.match(html, /id="settingsSearchFinderSlot"/);
     assert.match(html, /id="settingsSearchFinder"/);
     assert.match(html, /id="settingsSearchInput"/);
     assert.match(html, /id="settingsSearchResults"/);

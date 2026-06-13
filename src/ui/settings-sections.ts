@@ -1706,8 +1706,10 @@ async function renderSkillsSection(): Promise<void> {
 async function renderEvalsSection(): Promise<void> {
   const mount = clearMount('settingsEvalsBody');
   if (!mount) return;
-  const { renderEvalsSettingsSection } = await import('./settings-evals');
-  await renderEvalsSettingsSection(mount);
+  mount.innerHTML =
+    '<p class="settings-field-hint">Eval harness and custom task packs moved to the Benchmark app.</p>' +
+    '<p><a href="#/app/bench/tests" class="settings-link">Open Benchmark → Tests</a></p>';
+  window.location.hash = '#/app/bench/tests';
 }
 
 let memoryListBindingsDone = false;

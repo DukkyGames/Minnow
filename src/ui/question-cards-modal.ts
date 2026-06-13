@@ -17,6 +17,7 @@ import {
   buildAnswerEntries,
   type AskQuestionAnswerDraft,
 } from './question-cards-state';
+import { isChatAppForeground } from './chat-mount';
 import { setComposerStreamingMode } from './composer-send';
 import { setSidebarInputPendingForActiveChat } from './chat-item-dot';
 import { resolveOrchestratePlanScreenQuestionHost } from './orchestrate-plan-screen';
@@ -49,7 +50,20 @@ export function forceCloseAskQuestionModal(): void {
 }
 
 function getQuestionHost(): HTMLElement | null {
+  if (isChatAppForeground()) {
+    return (
+      document.getElementById('chatAppQuestionHost') ??
+      document.getElementById('questionHost')
+    );
+  }
   return document.getElementById('questionHost');
+}
+
+function getQuestionComposerShell(): HTMLElement | null {
+  if (isChatAppForeground()) {
+    return document.querySelector('.chat-app-composer');
+  }
+  return document.getElementById('mainColumn');
 }
 
 function getOrCreateDraft(
@@ -90,15 +104,23 @@ export function showQuestionCardsModal(
       return;
     }
 
-    const mainColumn = document.getElementById('mainColumn');
-    const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-    const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement | null;
+    const composerShell = getQuestionComposerShell();
+    const msgInput = (
+      isChatAppForeground()
+        ? document.getElementById('chatAppInput')
+        : document.getElementById('msgInput')
+    ) as HTMLTextAreaElement | null;
+    const sendBtn = (
+      isChatAppForeground()
+        ? document.getElementById('chatAppSendBtn')
+        : document.getElementById('sendBtn')
+    ) as HTMLButtonElement | null;
     const prevInputDisabled = msgInput?.disabled ?? false;
     const prevSendDisabled = sendBtn?.disabled ?? false;
     const chatIdForAbort = options.chatId?.trim() || getActiveChat().id;
     if (!embedded) {
       acquireUserPromptLock();
-      mainColumn?.classList.add('main-column--question-pending');
+      composerShell?.classList.add('main-column--question-pending');
       setSidebarInputPendingForActiveChat(true);
     }
     if (!embedded) {
@@ -203,7 +225,7 @@ export function showQuestionCardsModal(
         getChatAbort(chatIdForAbort)?.signal.removeEventListener('abort', abortListener);
       }
       if (!embedded) {
-        mainColumn?.classList.remove('main-column--question-pending');
+        composerShell?.classList.remove('main-column--question-pending');
         host.hidden = true;
         setSidebarInputPendingForActiveChat(false);
         releaseUserPromptLock();

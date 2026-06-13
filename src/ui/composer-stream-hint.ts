@@ -4,6 +4,7 @@
 
 import { getStreamingChatId, isActiveChatStreaming } from '../chat/streaming-state';
 import { findChatById } from '../state/sessions';
+import { isChatAppForeground } from './chat-mount';
 
 /** Ensure the background-stream hint element exists under the composer. */
 function ensureBackgroundStreamHintEl(): HTMLElement {
@@ -15,7 +16,9 @@ function ensureBackgroundStreamHintEl(): HTMLElement {
   el.className = 'composer-background-stream-hint hidden';
   el.setAttribute('role', 'status');
 
-  const host = document.querySelector('.input-bar-composer');
+  const host =
+    document.querySelector('.chat-app-composer') ??
+    document.querySelector('.input-bar-composer');
   if (host) {
     host.insertBefore(el, host.firstChild);
   } else {
@@ -49,6 +52,10 @@ export function syncBackgroundStreamHint(): void {
   link.className = 'composer-background-stream-hint__link';
   link.textContent = 'Go to chat';
   link.addEventListener('click', () => {
+    if (isChatAppForeground()) {
+      void import('./chat-app').then((m) => m.activateChatAppThread(streamId));
+      return;
+    }
     void import('./sidebar').then((m) => m.switchChat(streamId));
   });
   hint.appendChild(link);

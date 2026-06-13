@@ -76,6 +76,13 @@ export function applyFileSidebarVisuals(): void {
     btn.setAttribute('aria-label', open ? 'Close file tree' : 'Open file tree');
     btn.setAttribute('title', open ? 'Close file tree' : 'Open file tree');
   }
+
+  const previewBtn = document.getElementById('btnPreviewToggle');
+  if (previewBtn) {
+    const previewOpen = state.rightPaneMode === 'preview';
+    previewBtn.classList.toggle('is-active', previewOpen);
+    previewBtn.setAttribute('aria-pressed', previewOpen ? 'true' : 'false');
+  }
 }
 
 export function toggleFileSidebarLayout(): void {

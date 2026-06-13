@@ -122,8 +122,38 @@ export async function fetchResearchLibrary(
   if (!res.ok) {
     throw new Error(await readErrorMessage(res));
   }
-  const payload = (await res.json()) as ResearchLibraryResponse;
-  return { items: Array.isArray(payload.items) ? payload.items : [] };
+  const payload = (await res.json()) as ResearchLibraryResponse & {
+    research?: Array<Record<string, unknown>>;
+  };
+  const raw = Array.isArray(payload.items)
+    ? payload.items
+    : Array.isArray(payload.research)
+      ? payload.research
+      : [];
+  const items = raw.map((row) => normalizeLibraryItem(row));
+  return { items };
+}
+
+function normalizeLibraryItem(row: Record<string, unknown>): import('./types').ResearchLibraryItem {
+  const started = row.startedAt ?? row.started_at;
+  const completed = row.completedAt ?? row.completed_at;
+  return {
+    id: String(row.id ?? ''),
+    query: String(row.query ?? ''),
+    status: (row.status as import('./types').ResearchStatus) ?? 'done',
+    category: typeof row.category === 'string' ? row.category : undefined,
+    archived: Boolean(row.archived),
+    startedAt: typeof started === 'string' ? started : undefined,
+    completedAt:
+      typeof completed === 'string'
+        ? completed
+        : typeof completed === 'number' && completed > 0
+          ? new Date(completed).toISOString()
+          : undefined,
+    sourceCount: Number(row.sourceCount ?? row.source_count ?? 0) || undefined,
+    rounds: (row.rounds as number | string | undefined) ?? undefined,
+    duration: typeof row.duration === 'string' ? row.duration : undefined,
+  };
 }
 
 /** POST /api/research/cancel/:id */

@@ -11,13 +11,22 @@ import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
+  CHAT_APP_ID,
+  createAssistantChat,
+  getAssistantChats as filterAssistantChats,
+  getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
+  getLastActiveChatIdForApp,
   getUnassignedChats as filterUnassignedChats,
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
+  rememberActiveChatForApp as rememberActiveChatForAppInState,
+  resolveActiveAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
   type RawSessionJson,
 } from './session-workspace-scope';
+import { getForegroundAppId } from '../os/instances';
+import { isChatAppForeground } from '../ui/chat-mount';
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
@@ -808,8 +817,10 @@ export function getExpertChats(expertId: string): Chat[] {
 /** Set the active chat id and schedule a session save. */
 export function activateChatById(id: string): void {
   const state = requireSessionState();
-  if (!state.chats.some((c) => c.id === id)) return;
+  const chat = state.chats.find((c) => c.id === id);
+  if (!chat) return;
   state.activeId = id;
+  maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
 }
 
@@ -858,6 +869,9 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
   ) {
     state.codeChangeTotalsByWorkspace = rawSession.codeChangeTotalsByWorkspace;
   }
+  if (!state.lastActiveChatIdByApp) {
+    state.lastActiveChatIdByApp = {};
+  }
   return state;
 }
 
@@ -872,6 +886,15 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
       planner.groupId = group.id;
     }
   }
+}
+
+/** When the Chat app is foreground, persist its active chat id. */
+function maybeRememberActiveChatForForegroundApp(
+  state: SessionState,
+  chat: Chat,
+): void {
+  if (getForegroundAppId() !== CHAT_APP_ID && !isChatAppForeground()) return;
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, chat.id);
 }
 
 /** Remember the active chat under the current workspace key before switching scope. */
@@ -895,6 +918,51 @@ export function getChatsForWorkspace(
 /** Legacy or unscoped chats (`workspacePath === ''`), newest first. */
 export function getUnassignedChats(state: SessionState = requireSessionState()): Chat[] {
   return filterUnassignedChats(state);
+}
+
+/** Assistant chats for the chats workspace sandbox (sidebar-visible, newest first). */
+export function getAssistantChats(
+  chatsWorkspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterAssistantChats(state, chatsWorkspacePath);
+}
+
+/** All chats bound to the chats workspace (newest first). */
+export function getChatsForChatsWorkspace(
+  chatsWorkspacePath: string,
+  state: SessionState = requireSessionState(),
+): Chat[] {
+  return filterChatsForChatsWorkspace(state, chatsWorkspacePath);
+}
+
+/** Persist last active chat id for a MinnowOS app. */
+export function rememberActiveChatForApp(appId: string, chatId: string): void {
+  const state = requireSessionState();
+  rememberActiveChatForAppInState(state, appId, chatId);
+  scheduleSaveSessions();
+}
+
+/** Read remembered active chat id for a MinnowOS app. */
+export function getLastActiveChatIdForAppFromSession(appId: string): string | undefined {
+  return getLastActiveChatIdForApp(requireSessionState(), appId);
+}
+
+/**
+ * Activate the last assistant chat for the Chat app or create one (general mode).
+ * Requires the absolute chats workspace path from `getChatsWorkspacePath()`.
+ */
+export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
+  const state = requireSessionState();
+  const nextId = resolveActiveAssistantChatId(chatsWorkspacePath, state, (workspaceKey) => {
+    const fresh = createAssistantChat(workspaceKey, newChatId());
+    touchChat(fresh);
+    return fresh;
+  });
+  state.activeId = nextId;
+  rememberActiveChatForAppInState(state, CHAT_APP_ID, nextId);
+  scheduleSaveSessions();
+  return getActiveChat();
 }
 
 /**
@@ -1072,6 +1140,7 @@ export function createAndActivateChat(modelId: string): Chat {
   state.activeId = chat.id;
   touchChat(chat);
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath));
+  maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
   return chat;
 }
@@ -1086,6 +1155,7 @@ export function switchActiveChat(id: string): Chat | null {
   if (!chat) return null;
   state.activeId = id;
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath ?? ''));
+  maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
   return chat;
 }

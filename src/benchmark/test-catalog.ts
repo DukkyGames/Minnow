@@ -2,14 +2,13 @@
  * Static benchmark test descriptions keyed by testId (exact or pattern).
  *
  * Resolution order: exact static entry → suite-specific dynamic resolver
- * (tool-*, skill-*, mode-*, speed-short-*) → null.
+ * (tool-*, skill-*, speed-short-*) → null.
  */
 
 import builtinManifest from '../skills/builtin-manifest.json';
-import { listModes } from '../chat/modes/registry.ts';
-import type { ModeId } from '../chat/modes/types.ts';
 import { BUILT_IN_TOOLS } from '../tools/definitions.ts';
 import { formatSkillPassCriteria, getSkillProbe } from './suites/skill-probes.ts';
+import { FILE_TOOL_PROBE_ORDER } from './suites/file-tool-fixtures.ts';
 import type { SuiteId } from './types.ts';
 
 export interface BenchmarkTestDescription {
@@ -34,11 +33,9 @@ export const SUITE_INTROS: Record<SuiteId, string> = {
   speed:
     'Median time-to-first-token and tokens-per-second from fixed prompts; pass means a non-empty completion, not answer quality.',
   tools:
-    'One serial tool round-trip per built-in tool: model must emit the tool with fixture args; server runs it when required.',
+    'One serial tool round-trip per built-in tool: file probes run first in ~/.minnow/benchmark-workspace (.minnow-bench fixture create → read → mutate → delete); other tools use generic fixtures.',
   skills:
     'Built-in slash skills load into the system prompt; each probe checks observable behavior (tool call or skill-specific regex), not acknowledgment only.',
-  modes:
-    'Composer mode tool policy: forbidden tools must not run on negative probes; expected tools must emit on positive probes.',
   coding:
     'Deterministic coding puzzles plus two LLM-judged explanation/refactor tasks scored by a second model pass.',
 };
@@ -144,20 +141,6 @@ const CODING_DESCRIPTIONS: Record<string, Omit<BenchmarkTestDescription, 'testId
   },
 };
 
-/** Mirrors negative probes in suites/modes.ts (keep in sync). */
-const MODE_NEGATIVE: Partial<Record<ModeId, { forbiddenTool: string }>> = {
-  plan: { forbiddenTool: 'delete_path' },
-};
-
-/** Mirrors positive probes in suites/modes.ts (keep in sync). */
-const MODE_POSITIVE: Partial<Record<ModeId, { expectedTool: string }>> = {
-  general: { expectedTool: 'read_file' },
-  build: { expectedTool: 'list_directory' },
-  plan: { expectedTool: 'read_file' },
-  orchestrate: { expectedTool: 'list_directory' },
-  reef: { expectedTool: 'get_datetime' },
-};
-
 function withIds(
   suite: SuiteId,
   map: Record<string, Omit<BenchmarkTestDescription, 'testId' | 'suite'>>,
@@ -197,14 +180,19 @@ function resolveToolDescription(testId: string, label: string): BenchmarkTestDes
   const emitNote = tool.serverRequired
     ? ' Server executes the tool when a call is emitted.'
     : ' Browser-native or emit-only tools may skip server execution.';
+  const benchNote =
+    tool.category === 'files'
+      ? ` File probes run in ~/.minnow/benchmark-workspace (${FILE_TOOL_PROBE_ORDER[0]} → read → mutate → delete_path).`
+      : '';
+  const verifyNote = toolId === 'read_file' ? ' read_file verifies MINNOW_BENCH_MARKER in output.' : '';
 
   return {
     testId,
     suite: 'tools',
     label,
     purpose: tool.description || `Checks the model can call the ${tool.label} tool.`,
-    method: `Fixture user prompt steers a single tool round-trip for \`${toolId}\`.${emitNote}`,
-    passCriteria: `Model emits \`${toolId}\` with expected arguments; execution succeeds when required.${serverNote}`,
+    method: `Fixture user prompt steers a single tool round-trip for \`${toolId}\`.${emitNote}${benchNote}`,
+    passCriteria: `Model emits \`${toolId}\` with expected arguments; execution succeeds when required.${verifyNote}${serverNote}`,
   };
 }
 
@@ -227,46 +215,6 @@ function resolveSkillDescription(testId: string, label: string): BenchmarkTestDe
     method: `Loads SKILL.md into the system prompt, then sends the skill-specific probe prompt.${toolNote} Skips when the skill body cannot be loaded.`,
     passCriteria: formatSkillPassCriteria(probe),
   };
-}
-
-function resolveModeDescription(testId: string, label: string): BenchmarkTestDescription | null {
-  const negMatch = /^mode-(.+)-negative$/.exec(testId);
-  if (negMatch) {
-    const modeId = negMatch[1] as ModeId;
-    const spec = MODE_NEGATIVE[modeId];
-    if (!spec) return null;
-    const mode = listModes().find((m) => m.id === modeId);
-    return {
-      testId,
-      suite: 'modes',
-      label,
-      purpose: `${mode?.label ?? modeId} mode must block destructive or disallowed tool use.`,
-      method: `User prompt requests \`${spec.forbiddenTool}\`; mode system prompt and tool policy apply.`,
-      passCriteria: `The forbidden tool \`${spec.forbiddenTool}\` must not appear in tool calls.`,
-    };
-  }
-
-  const posMatch = /^mode-(.+)-positive$/.exec(testId);
-  if (posMatch) {
-    const modeId = posMatch[1] as ModeId;
-    const spec = MODE_POSITIVE[modeId];
-    if (!spec) return null;
-    const mode = listModes().find((m) => m.id === modeId);
-    const webSkip =
-      spec.expectedTool === 'web_search'
-        ? ' Skips when the tool server is unavailable (web_search needs npm start).'
-        : '';
-    return {
-      testId,
-      suite: 'modes',
-      label,
-      purpose: `${mode?.label ?? modeId} mode should allow and emit an expected everyday tool.`,
-      method: `User prompt asks for \`${spec.expectedTool}\` with mode system prompt enabled.`,
-      passCriteria: `A tool call named \`${spec.expectedTool}\` is present.${webSkip}`,
-    };
-  }
-
-  return null;
 }
 
 /** Plain-language card copy: purpose, method, pass line (kept under ~320 chars when possible). */
@@ -296,9 +244,6 @@ export function resolveTestDescription(
   }
   if (testId.startsWith('skill-')) {
     return resolveSkillDescription(testId, label);
-  }
-  if (testId.startsWith('mode-')) {
-    return resolveModeDescription(testId, label);
   }
 
   if (suite === 'speed' && testId === 'speed-long-1') {
@@ -366,34 +311,11 @@ function expectedSkillsTests(): ExpectedBenchmarkTest[] {
   }));
 }
 
-function expectedModesTests(): ExpectedBenchmarkTest[] {
-  const tests: ExpectedBenchmarkTest[] = [];
-  for (const mode of listModes()) {
-    const modeId = mode.id as ModeId;
-    if (MODE_NEGATIVE[modeId]) {
-      tests.push({
-        testId: `mode-${modeId}-negative`,
-        suite: 'modes',
-        label: `${mode.label} denies ${MODE_NEGATIVE[modeId]!.forbiddenTool}`,
-      });
-    }
-    if (MODE_POSITIVE[modeId]) {
-      tests.push({
-        testId: `mode-${modeId}-positive`,
-        suite: 'modes',
-        label: `${mode.label} emits ${MODE_POSITIVE[modeId]!.expectedTool}`,
-      });
-    }
-  }
-  return tests;
-}
-
 const SUITE_TEST_LISTERS: Record<SuiteId, () => ExpectedBenchmarkTest[]> = {
   capability: expectedCapabilityTests,
   speed: expectedSpeedTests,
   tools: expectedToolsTests,
   skills: expectedSkillsTests,
-  modes: expectedModesTests,
   coding: expectedCodingTests,
 };
 
@@ -407,14 +329,13 @@ export function listExpectedTestsForSuites(suiteIds: SuiteId[]): ExpectedBenchma
   return out;
 }
 
-/** Full battery test ids (all six suites). */
+/** Full battery test ids (all five suites). */
 export function listAllExpectedBenchmarkTests(): ExpectedBenchmarkTest[] {
   return listExpectedTestsForSuites([
     'capability',
     'speed',
     'tools',
     'skills',
-    'modes',
     'coding',
   ]);
 }

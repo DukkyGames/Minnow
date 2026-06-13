@@ -10,7 +10,6 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const BENCHMARK_IDS = [
   'btnBenchmark',
   'benchmarkView',
-  'btnBenchmarkPageBack',
   'btnBenchmarkQuick',
   'btnBenchmarkFull',
   'btnBenchmarkRun',
@@ -29,7 +28,6 @@ const SUITE_TOGGLE_IDS = [
   'speed',
   'tools',
   'skills',
-  'modes',
   'coding',
 ];
 
@@ -59,7 +57,7 @@ describe('benchmark page HTML', () => {
     assert.doesNotMatch(html, /id="benchmarkCustomSuites"/);
   });
 
-  test('suite toggle group has six aria-pressed buttons', () => {
+  test('suite toggle group has five aria-pressed buttons', () => {
     assert.match(html, /id="benchmarkSuiteToggles"[^>]*role="group"/);
     for (const suiteId of SUITE_TOGGLE_IDS) {
       assert.match(
@@ -70,7 +68,12 @@ describe('benchmark page HTML', () => {
       );
     }
     const toggleMatches = html.match(/class="benchmark-suite-toggle"/g);
-    assert.equal(toggleMatches?.length, 6);
+    assert.equal(toggleMatches?.length, 5);
+  });
+
+  test('page sub-header removed (OS menubar supplies navigation)', () => {
+    assert.doesNotMatch(html, /class="benchmark-page-header"/);
+    assert.doesNotMatch(html, /id="btnBenchmarkPageBack"/);
   });
 
   test('separate Stop button removed', () => {
@@ -85,7 +88,6 @@ describe('benchmark page HTML', () => {
   test('default suite toggles match Quick preset', () => {
     assert.match(html, /data-suite-id="capability"[^>]*aria-pressed="true"/);
     assert.match(html, /data-suite-id="speed"[^>]*aria-pressed="true"/);
-    assert.match(html, /data-suite-id="modes"[^>]*aria-pressed="true"/);
     assert.match(html, /data-suite-id="tools"[^>]*aria-pressed="false"/);
     assert.match(html, /data-suite-id="skills"[^>]*aria-pressed="false"/);
     assert.match(html, /data-suite-id="coding"[^>]*aria-pressed="false"/);

@@ -2,7 +2,7 @@
  * Run model-authored JavaScript during coding benchmarks (via run_javascript tool).
  */
 
-import { executeTool } from '../tools/client.ts';
+import { executeBenchmarkTool } from './execute-tool-sandbox.ts';
 import { raceWithAbort } from './abort.ts';
 import {
   extractJavaScriptFromModelText,
@@ -47,7 +47,7 @@ export async function runCodingJavaScript(
 ): Promise<RunCodingJavaScriptResult> {
   const tool = await raceWithAbort(
     signal,
-    executeTool('run_javascript', { code }),
+    executeBenchmarkTool('run_javascript', { code }),
   );
   const parsed = parseRunJavascriptToolOutput(tool.content);
   return { ...parsed, code };

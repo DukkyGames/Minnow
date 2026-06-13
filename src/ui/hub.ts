@@ -3,7 +3,6 @@
  */
 
 import { EMPTY_STATE_HTML, PLACEHOLDER_CHAT_NAME } from '../constants';
-import { isActiveChatStreaming } from '../chat/streaming-state';
 import { listModes } from '../chat/modes/registry';
 import { normalizeModeId } from '../chat/modes/types';
 import { modelCache } from '../api/models';
@@ -156,12 +155,10 @@ function getSelectedModelLabel(): string {
 }
 
 function buildAmbientStatusLine(): string {
-  const streaming = isActiveChatStreaming();
-  const verb = streaming ? 'generating' : 'listening';
   const model = getSelectedModelLabel();
   const tpsEl = document.getElementById('stripTPS');
   const tpsRaw = tpsEl?.textContent?.trim() ?? '—';
-  const parts = [`minnow is ${verb}`, model];
+  const parts = [model];
   if (tpsRaw && tpsRaw !== '—') {
     parts.push(`${tpsRaw} tok/s`);
   }
@@ -356,9 +353,7 @@ function buildHubDom(activeChat: Chat): HTMLElement {
 
   const status = document.createElement('div');
   status.className = 'hub-status';
-  status.innerHTML =
-    '<span class="hub-status__dot pulse" aria-hidden="true"></span>' +
-    '<span class="hub-status__text mono"></span>';
+  status.innerHTML = '<span class="hub-status__text mono"></span>';
 
   const heading = document.createElement('h1');
   heading.className = 'hub-heading';

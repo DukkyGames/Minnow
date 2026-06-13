@@ -2,6 +2,8 @@
  * Chat viewport scroll: stick-to-bottom while streaming (80px threshold; terminal uses 24px).
  */
 
+import { isChatAppForeground } from './chat-mount';
+
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
 export const CHAT_PIN_THRESHOLD_PX = 80;
 
@@ -17,7 +19,11 @@ export function getChatScrollRoot(): HTMLElement | null {
   const splitPane = document.querySelector(
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
-  return splitPane ?? chatAreaEl;
+  if (splitPane) return splitPane;
+  if (isChatAppForeground()) {
+    return document.getElementById('chatAppArea') ?? chatAreaEl;
+  }
+  return chatAreaEl;
 }
 
 function onChatScrollTargetScroll(): void {
@@ -110,12 +116,17 @@ export function bindBoardInitSplitChatScroll(): void {
   pane.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
 }
 
-/** Wire #chatArea scroll listener and Jump to latest chip (call once from main). */
+/** Wire scroll listeners on Code and Chat transcript roots (call once from main). */
 export function initChatScroll(): void {
   chatAreaEl = document.getElementById('chatArea');
   jumpChipEl = document.getElementById(CHAT_JUMP_CHIP_ID) as HTMLButtonElement | null;
 
   chatAreaEl?.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+  const chatAppArea = document.getElementById('chatAppArea');
+  if (chatAppArea && chatAppArea.dataset.chatScrollBound !== '1') {
+    chatAppArea.dataset.chatScrollBound = '1';
+    chatAppArea.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
+  }
 
   jumpChipEl?.addEventListener('click', () => {
     scrollChatToBottom();

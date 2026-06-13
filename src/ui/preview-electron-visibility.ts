@@ -11,6 +11,7 @@ const FULLSCREEN_OVERLAY_IDS = [
   'benchmarkView',
   'expertsView',
   'researchView',
+  'chatView',
 ] as const;
 
 function usesElectronPreview(): boolean {
