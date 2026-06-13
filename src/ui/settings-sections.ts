@@ -96,12 +96,12 @@ import { renderEditorSection } from './settings-editor';
 import { setStatus } from './status';
 import type { SettingsSectionId } from './settings-page-types';
 import { appendSettingsCrosslinks, appendSettingsGroup, linkToSettingsSection } from './settings-layout';
+import { renderAppearanceSettingsSection } from './settings-appearance';
 import { renderPromptsHubPanel } from './settings-prompts-hub';
 import {
   createSettingsSwitch,
   createSettingsToggleRow,
 } from './settings-switch';
-import { appendThemeControls } from './settings-theme';
 import {
   mountSubAgentTypeEditor,
   mountWorkAgentConfigEditor,
@@ -238,19 +238,17 @@ async function renderGeneralSection(): Promise<void> {
     );
   }
 
-  const appearance = appendSettingsGroup(
-    mount,
-    'Appearance',
-    'Palette family, light/dark mode, and follow-system behavior.',
-  );
-  appendThemeControls(appearance);
-
   const chat = appendSettingsGroup(
     mount,
     'Chat & terminal',
     'How the main thread and background shells behave.',
   );
   await appendTerminalControls(chat);
+
+  const crossAppearance = el('div', 'settings-crosslinks');
+  crossAppearance.appendChild(el('span', 'settings-crosslinks__label', 'Related'));
+  crossAppearance.append(linkToSettingsSection('Appearance', 'appearance'));
+  mount.appendChild(crossAppearance);
 
   const { providers } = await listProviders();
   const enabled = providers.filter((p) => p.enabled !== false);
@@ -2021,6 +2019,12 @@ async function renderFeaturesSection(): Promise<void> {
   }
 }
 
+async function renderAppearanceSection(): Promise<void> {
+  const mount = clearMount('settingsAppearanceBody');
+  if (!mount) return;
+  renderAppearanceSettingsSection(mount);
+}
+
 /** Load or refresh one settings section from live APIs. */
 export async function refreshSettingsSection(
   section: SettingsSectionId,
@@ -2028,6 +2032,9 @@ export async function refreshSettingsSection(
   switch (section) {
     case 'general':
       await renderGeneralSection();
+      break;
+    case 'appearance':
+      await renderAppearanceSection();
       break;
     case 'providers':
       refreshProvidersBanner();

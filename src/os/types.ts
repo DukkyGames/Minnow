@@ -8,7 +8,19 @@ export type OsView = 'desktop' | 'app';
 export interface DesktopPrefs {
   /** `dock` = bottom launcher bar; `grid` = app tile grid below hero. */
   desktopLayout: 'dock' | 'grid';
-  wallpaper: 'flat' | 'gradient' | 'underwater';
+  wallpaper:
+    | 'flat'
+    | 'gradient'
+    | 'underwater'
+    | 'minnow'
+    | 'aurora'
+    | 'starfield'
+    | 'grain'
+    | 'mesh'
+    | 'custom';
+  /** IndexedDB asset id when wallpaper is `custom`. */
+  wallpaperImageId?: string;
+  wallpaperImageFit?: 'cover' | 'contain';
   previewStyle: 'card' | 'tile';
 }
 

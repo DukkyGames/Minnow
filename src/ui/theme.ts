@@ -22,6 +22,15 @@ import {
   type ThemeId,
   type ThemeMode,
 } from '../theme';
+import {
+  applyCustomTheme,
+  isCustomThemeEnabled,
+  subscribeCustomThemeChanges,
+} from '../appearance/custom-theme';
+import {
+  applyAppearanceFonts,
+  subscribeAppearanceFonts,
+} from '../appearance/fonts';
 import { refreshXtermTheme } from './terminal-xterm';
 
 export {
@@ -74,6 +83,10 @@ export function refreshHljsInDocument(): void {
 /** Apply effective theme to DOM and dependent surfaces. */
 export function applyResolvedTheme(id: ThemeId): void {
   applyThemeId(id, { persist: false });
+  if (isCustomThemeEnabled()) {
+    applyCustomTheme();
+  }
+  void applyAppearanceFonts();
   syncHljsDarkStylesheet(getMode(id));
   refreshHljsInDocument();
   refreshXtermTheme();
@@ -84,10 +97,27 @@ export function applyThemeFromPreference(_pref?: LegacyThemePreference): void {
   applyResolvedTheme(getStoredTheme());
 }
 
+let appearanceUnsubs: Array<() => void> = [];
+
+/** Re-apply custom tokens and fonts when appearance prefs change. */
+function wireAppearanceListeners(): void {
+  for (const unsub of appearanceUnsubs) unsub();
+  appearanceUnsubs = [
+    subscribeCustomThemeChanges(() => {
+      if (isCustomThemeEnabled()) applyCustomTheme();
+      else applyResolvedTheme(getStoredTheme());
+    }),
+    subscribeAppearanceFonts(() => {
+      void applyAppearanceFonts();
+    }),
+  ];
+}
+
 /** Call once at startup after DOM exists. */
 export function initTheme(): void {
   initThemeCore();
   syncThemeListeners();
+  wireAppearanceListeners();
   applyResolvedTheme(getStoredTheme());
 }
 
