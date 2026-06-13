@@ -45,6 +45,7 @@ function renderMemoryProposalCard(
   proposal: MemoryProposal,
   onChange: () => void,
   setStatus: StatusFn,
+  onMemoryAccepted?: () => void | Promise<void>,
 ): HTMLElement {
   const card = document.createElement('article');
   card.className = 'settings-proposal-card';
@@ -102,6 +103,7 @@ function renderMemoryProposalCard(
       }
       setStatus('ok', 'Memory saved');
       onChange();
+      await onMemoryAccepted?.();
     })();
   });
 
@@ -215,6 +217,7 @@ async function refreshProposalBadge(): Promise<void> {
 export async function mountMemoryProposalsPanel(
   container: HTMLElement,
   setStatus: StatusFn,
+  hooks?: { onMemoryAccepted?: () => void | Promise<void> },
 ): Promise<void> {
   if (!panelBound) {
     panelBound = true;
@@ -226,7 +229,7 @@ export async function mountMemoryProposalsPanel(
   if (!(listEl instanceof HTMLElement)) return;
 
   const rerender = (): void => {
-    void mountMemoryProposalsPanel(container, setStatus);
+    void mountMemoryProposalsPanel(container, setStatus, hooks);
   };
 
   listEl.replaceChildren();
@@ -271,7 +274,9 @@ export async function mountMemoryProposalsPanel(
   }
 
   for (const row of memoryRows ?? []) {
-    listEl.append(renderMemoryProposalCard(row, rerender, setStatus));
+    listEl.append(
+      renderMemoryProposalCard(row, rerender, setStatus, hooks?.onMemoryAccepted),
+    );
   }
   for (const row of skillRows ?? []) {
     listEl.append(renderSkillProposalCard(row, rerender, setStatus));

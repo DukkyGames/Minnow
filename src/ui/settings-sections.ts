@@ -1894,30 +1894,16 @@ function bindMemoryListActions(listEl: HTMLElement): void {
   });
 }
 
-async function renderMemorySection(): Promise<void> {
+async function refreshMemoryEntriesList(): Promise<void> {
   const countEl = document.getElementById('settingsMemoryEntryCount');
   const hintEl = document.getElementById('settingsMemoryServerHint');
   const listEl = document.getElementById('settingsMemoryList');
   const offlineEl = document.getElementById('settingsMemoryOffline');
   const addPanel = document.getElementById('settingsMemoryAddPanel');
-  const embeddingsPanel = document.getElementById('settingsMemoryEmbeddingsPanel');
-  const synthesisPanel = document.getElementById('settingsMemorySynthesisPanel');
-  const proposalsPanel = document.getElementById('settingsMemoryProposalsPanel');
   if (!countEl || !hintEl || !listEl) return;
-
-  if (embeddingsPanel) {
-    mountMemoryEmbeddingsPanel(embeddingsPanel, setStatus);
-  }
-  if (synthesisPanel) {
-    mountMemorySynthesisSettingsPanel(synthesisPanel, setStatus);
-  }
-  if (proposalsPanel) {
-    await mountMemoryProposalsPanel(proposalsPanel, setStatus);
-  }
 
   listEl.replaceChildren();
   bindMemoryListActions(listEl);
-  bindMemoryAddForm();
 
   const status = await fetchMemoryStatus();
   const online = !!status;
@@ -1959,6 +1945,31 @@ async function renderMemorySection(): Promise<void> {
   for (const entry of sorted) {
     listEl.append(renderMemoryEntryRow(entry));
   }
+}
+
+async function renderMemorySection(): Promise<void> {
+  const countEl = document.getElementById('settingsMemoryEntryCount');
+  const hintEl = document.getElementById('settingsMemoryServerHint');
+  const listEl = document.getElementById('settingsMemoryList');
+  const embeddingsPanel = document.getElementById('settingsMemoryEmbeddingsPanel');
+  const synthesisPanel = document.getElementById('settingsMemorySynthesisPanel');
+  const proposalsPanel = document.getElementById('settingsMemoryProposalsPanel');
+  if (!countEl || !hintEl || !listEl) return;
+
+  if (embeddingsPanel) {
+    mountMemoryEmbeddingsPanel(embeddingsPanel, setStatus);
+  }
+  if (synthesisPanel) {
+    mountMemorySynthesisSettingsPanel(synthesisPanel, setStatus);
+  }
+  if (proposalsPanel) {
+    await mountMemoryProposalsPanel(proposalsPanel, setStatus, {
+      onMemoryAccepted: refreshMemoryEntriesList,
+    });
+  }
+
+  bindMemoryAddForm();
+  await refreshMemoryEntriesList();
 }
 
 let rulesSectionBindingsDone = false;
