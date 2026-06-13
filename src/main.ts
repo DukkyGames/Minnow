@@ -195,6 +195,9 @@ function registerWindowHandlers(): void {
   window.openBenchmarkFromTopbar = () => {
     void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
   };
+  window.openCompareFromTopbar = () => {
+    void import('./ui/compare-page').then((m) => m.openCompareFromTopbar());
+  };
   window.openResearchFromTopbar = () => {
     void import('./research/panel').then((m) => m.openResearchFromTopbar());
   };
@@ -313,6 +316,8 @@ export async function initApp(): Promise<void> {
   settingsPage.initSettingsPage();
   const benchmarkPage = await import('./ui/benchmark-page');
   benchmarkPage.initBenchmarkPage();
+  const comparePage = await import('./ui/compare-page');
+  comparePage.initComparePage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');

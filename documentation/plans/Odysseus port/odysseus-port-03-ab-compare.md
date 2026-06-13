@@ -3,7 +3,7 @@
 Tier: 1  
 Effort: M  
 Priority: High  
-Status: Planned  
+Status: Shipped  
 Linear: [MIN-119](https://linear.app/minnowai/issue/MIN-119/odysseus-port-03-blind-ab-model-compare)
 
 ## Goal

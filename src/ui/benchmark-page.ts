@@ -2120,6 +2120,9 @@ export function openBenchmark(): void {
   void import('../research/panel').then((m) => {
     if (m.isResearchPageOpen()) m.closeResearch({ skipNavigate: true });
   });
+  void import('./compare-page').then((m) => {
+    if (m.isComparePageOpen()) m.closeCompare({ skipNavigate: true });
+  });
 
   root.classList.add('is-open');
   if (!isOsShellEnabled()) {

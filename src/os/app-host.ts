@@ -15,6 +15,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   settings: 'settingsView',
   research: 'researchView',
   bench: 'benchmarkView',
+  compare: 'compareView',
   experts: 'expertsView',
 };
 
@@ -76,7 +77,14 @@ function hideAllLayers(): void {
 }
 
 function closeAllAppPages(): void {
-  for (const id of ['settingsView', 'benchmarkView', 'researchView', 'expertsView', 'chatView']) {
+  for (const id of [
+    'settingsView',
+    'benchmarkView',
+    'compareView',
+    'researchView',
+    'expertsView',
+    'chatView',
+  ]) {
     document.getElementById(id)?.classList.remove('is-open');
   }
 }
@@ -103,6 +111,11 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'bench': {
       const { openBenchmark } = await import('../ui/benchmark-page');
       openBenchmark();
+      break;
+    }
+    case 'compare': {
+      const { openCompare } = await import('../ui/compare-page');
+      openCompare();
       break;
     }
     case 'experts': {

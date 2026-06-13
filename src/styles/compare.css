@@ -1,0 +1,260 @@
+/**
+ * MinnowOS Compare app — blind dual-column model comparison.
+ */
+
+.compare-page {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+}
+
+.compare-page.is-open {
+  display: flex;
+}
+
+.compare-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--mn-fg) 12%, transparent);
+}
+
+.compare-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.compare-header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--mn-fg) 65%, transparent);
+}
+
+.compare-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.compare-prompt-row textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  background: var(--mn-surface);
+  color: var(--mn-fg);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+.compare-pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.compare-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.compare-picker label {
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--mn-fg) 70%, transparent);
+}
+
+.compare-picker select {
+  width: 100%;
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  background: var(--mn-surface);
+  color: var(--mn-fg);
+  padding: 0.4rem 0.5rem;
+}
+
+.compare-run-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.compare-run-actions button {
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  background: var(--mn-surface);
+  color: var(--mn-fg);
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+}
+
+.compare-run-actions button.is-primary {
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg, #fff);
+  border-color: transparent;
+}
+
+.compare-run-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.compare-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  min-height: 12rem;
+}
+
+.compare-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 10rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 14%, transparent);
+  background: var(--mn-surface);
+  overflow: hidden;
+}
+
+.compare-column-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--mn-fg) 10%, transparent);
+  font-size: 0.85rem;
+}
+
+.compare-column-label {
+  font-weight: 700;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mn-accent) 18%, transparent);
+  color: var(--mn-accent);
+}
+
+.compare-column-status {
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--mn-fg) 60%, transparent);
+}
+
+.compare-column-body {
+  flex: 1;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  overflow: auto;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.compare-column-reveal {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  border-top: 1px dashed color-mix(in srgb, var(--mn-fg) 12%, transparent);
+  color: color-mix(in srgb, var(--mn-fg) 72%, transparent);
+  min-height: 1.5rem;
+}
+
+.compare-vote-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.compare-vote-bar button {
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 18%, transparent);
+  background: var(--mn-surface);
+  color: var(--mn-fg);
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+}
+
+.compare-vote-bar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.compare-side-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.compare-panel {
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--mn-fg) 12%, transparent);
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--mn-surface) 90%, var(--mn-bg));
+}
+
+.compare-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.compare-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.compare-history-row {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mn-fg) 8%, transparent);
+  font-size: 0.8rem;
+}
+
+.compare-history-prompt {
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+}
+
+.compare-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  color: color-mix(in srgb, var(--mn-fg) 65%, transparent);
+}
+
+.compare-history-empty,
+.compare-win-rates {
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--mn-fg) 65%, transparent);
+}
+
+.compare-win-rate-row {
+  padding: 0.2rem 0;
+  font-size: 0.8rem;
+}
+
+.compare-status {
+  min-height: 1.25rem;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--mn-danger, #c44) 80%, var(--mn-fg));
+}
+
+@media (max-width: 900px) {
+  .compare-pickers,
+  .compare-columns,
+  .compare-side-panels {
+    grid-template-columns: 1fr;
+  }
+}

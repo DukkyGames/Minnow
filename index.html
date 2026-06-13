@@ -1156,6 +1156,74 @@
   <div id="benchmarkCatalogDrawerBackdrop" class="benchmark-catalog-drawer-backdrop" hidden></div>
 </main>
 
+<main id="compareView" class="compare-page" aria-label="Compare models">
+  <header class="compare-header">
+    <div>
+      <h2>Compare</h2>
+      <p>Blind A/B — model identities stay hidden until you vote.</p>
+    </div>
+  </header>
+  <div class="compare-body">
+    <div class="compare-prompt-row">
+      <label for="comparePrompt">Prompt</label>
+      <textarea id="comparePrompt" rows="3" placeholder="Ask both models the same question…" aria-label="Compare prompt"></textarea>
+    </div>
+    <div class="compare-pickers">
+      <div class="compare-picker">
+        <label for="compareLeftProvider">Model 1 — provider</label>
+        <select id="compareLeftProvider" aria-label="Model 1 provider"></select>
+        <label for="compareLeftModel">Model 1</label>
+        <select id="compareLeftModel" aria-label="Model 1"></select>
+      </div>
+      <div class="compare-picker">
+        <label for="compareRightProvider">Model 2 — provider</label>
+        <select id="compareRightProvider" aria-label="Model 2 provider"></select>
+        <label for="compareRightModel">Model 2</label>
+        <select id="compareRightModel" aria-label="Model 2"></select>
+      </div>
+    </div>
+    <div class="compare-run-actions">
+      <button type="button" class="is-primary" id="btnCompareRun">Run comparison</button>
+      <button type="button" id="btnCompareStop">Stop both</button>
+    </div>
+    <p id="compareStatus" class="compare-status" role="status" aria-live="polite"></p>
+    <div class="compare-columns">
+      <section class="compare-column" id="compareLeftPane" aria-label="Response column left">
+        <div class="compare-column-hdr">
+          <span class="compare-column-label" id="compareLeftLabel">A</span>
+          <span class="compare-column-status" id="compareLeftStatus">Waiting…</span>
+        </div>
+        <div class="compare-column-body" id="compareLeftBody"></div>
+        <div class="compare-column-reveal" id="compareLeftReveal" aria-live="polite"></div>
+      </section>
+      <section class="compare-column" id="compareRightPane" aria-label="Response column right">
+        <div class="compare-column-hdr">
+          <span class="compare-column-label" id="compareRightLabel">B</span>
+          <span class="compare-column-status" id="compareRightStatus">Waiting…</span>
+        </div>
+        <div class="compare-column-body" id="compareRightBody"></div>
+        <div class="compare-column-reveal" id="compareRightReveal" aria-live="polite"></div>
+      </section>
+    </div>
+    <div class="compare-vote-bar" aria-label="Vote for the better response">
+      <button type="button" id="btnCompareVoteLeft" disabled>Left wins</button>
+      <button type="button" id="btnCompareVoteRight" disabled>Right wins</button>
+      <button type="button" id="btnCompareVoteTie" disabled>Tie</button>
+      <button type="button" id="btnCompareVoteBothBad" disabled>Both bad</button>
+    </div>
+    <div class="compare-side-panels">
+      <section class="compare-panel" aria-label="Compare history">
+        <h3>History</h3>
+        <div id="compareHistoryList" class="compare-history-list"></div>
+      </section>
+      <section class="compare-panel" aria-label="Win rates">
+        <h3>Win rates</h3>
+        <div id="compareWinRates" class="compare-win-rates">Win rates appear after your first vote.</div>
+      </section>
+    </div>
+  </div>
+</main>
+
 <main id="expertsView" class="experts-page" data-step="browse" aria-label="Experts' Lab">
   <header class="experts-hdr">
     <span class="experts-hdr-ico" aria-hidden="true">
