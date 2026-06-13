@@ -3,7 +3,7 @@
 Tier: 1  
 Effort: M-L  
 Priority: High  
-Status: Planned  
+Status: Shipped (MIN-122)  
 Depends on: #13 for untrusted memory wrapping  
 Linear: [MIN-122](https://linear.app/minnowai/issue/MIN-122/odysseus-port-01-semantic-memory-and-embeddings)
 
@@ -191,19 +191,19 @@ Retrieval itself stays on existing memory inject path; hybrid logic runs inside 
 
 ## Implementation TODOs
 
-- [ ] Extend `DEFAULT_MEMORY_CONFIG` with an `embeddings` object
-- [ ] Mirror embeddings defaults in `server/config/home.js` and validation/default merge paths
-- [ ] Extend `src/memory/types.ts` for the client config shape
-- [ ] Add provider `embeddingsPath` support or document the OpenAI-compatible `/v1/embeddings` default in provider runtime code
-- [ ] Add Windows model-cache safeguards equivalent to Odysseus's `HF_HUB_DISABLE_SYMLINKS=1` behavior
-- [ ] Add `server/memory/embeddings.js`
-- [ ] Add `server/memory/vector-store.js`
-- [ ] Hook vector upsert/delete into `createEntry`, `updateEntry`, and `deleteEntry`
-- [ ] Add `reindexAllMemoryEntries()` route and settings action
-- [ ] Add async hybrid retrieval and keep the sync keyword function for fallback/tests
-- [ ] Wrap injected memory with #13 `wrapUntrusted`
-- [ ] Add focused memory embedding tests
-- [ ] Update `documentation/context.md`
+- [x] Extend `DEFAULT_MEMORY_CONFIG` with an `embeddings` object
+- [x] Mirror embeddings defaults in `server/config/home.js` and validation/default merge paths
+- [x] Extend `src/memory/types.ts` for the client config shape
+- [x] Add provider `embeddingsPath` support or document the OpenAI-compatible `/v1/embeddings` default in provider runtime code
+- [x] Add Windows model-cache safeguards equivalent to Odysseus's `HF_HUB_DISABLE_SYMLINKS=1` behavior
+- [x] Add `server/memory/embeddings.js`
+- [x] Add `server/memory/vector-store.js`
+- [x] Hook vector upsert/delete into `createEntry`, `updateEntry`, and `deleteEntry`
+- [x] Add `reindexAllMemoryEntries()` route and settings action
+- [x] Add async hybrid retrieval and keep the sync keyword function for fallback/tests
+- [x] Wrap injected memory with #13 `wrapUntrusted`
+- [x] Add focused memory embedding tests
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

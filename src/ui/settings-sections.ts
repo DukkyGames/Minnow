@@ -57,6 +57,7 @@ import {
 } from '../memory/client';
 import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
+import { mountMemoryEmbeddingsPanel } from './settings-memory-embeddings';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
 import {
@@ -1897,7 +1898,12 @@ async function renderMemorySection(): Promise<void> {
   const listEl = document.getElementById('settingsMemoryList');
   const offlineEl = document.getElementById('settingsMemoryOffline');
   const addPanel = document.getElementById('settingsMemoryAddPanel');
+  const embeddingsPanel = document.getElementById('settingsMemoryEmbeddingsPanel');
   if (!countEl || !hintEl || !listEl) return;
+
+  if (embeddingsPanel) {
+    mountMemoryEmbeddingsPanel(embeddingsPanel, setStatus);
+  }
 
   listEl.replaceChildren();
   bindMemoryListActions(listEl);

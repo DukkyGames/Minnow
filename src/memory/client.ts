@@ -7,6 +7,9 @@ import type {
   MemoryEntryMeta,
   MemoryEntryWithBody,
   MemoryRetrieveResult,
+  MemoryEmbeddingsStatus,
+  MemoryEmbeddingsReindexResult,
+  MemoryEmbeddingsConfig,
 } from './types';
 import type { PromptProfile } from '../chat/prompts/types';
 
@@ -139,4 +142,31 @@ export async function backupMemory(): Promise<string | null> {
     body: '{}',
   });
   return data?.backupId ?? null;
+}
+
+/** Fetch semantic embeddings status for memory vectors. */
+export async function fetchMemoryEmbeddingsStatus(): Promise<MemoryEmbeddingsStatus | null> {
+  return memoryFetch<MemoryEmbeddingsStatus>('/api/memory/embeddings/status');
+}
+
+/** Update memory embeddings settings on the server. */
+export async function saveMemoryEmbeddingsConfig(
+  partial: Partial<MemoryEmbeddingsConfig>,
+): Promise<MemoryEmbeddingsConfig | null> {
+  const data = await memoryFetch<{ embeddings: MemoryEmbeddingsConfig }>(
+    '/api/memory/embeddings/config',
+    {
+      method: 'PUT',
+      body: JSON.stringify(partial),
+    },
+  );
+  return data?.embeddings ?? null;
+}
+
+/** Reindex all memory entry vectors. */
+export async function reindexMemoryEmbeddings(): Promise<MemoryEmbeddingsReindexResult | null> {
+  return memoryFetch<MemoryEmbeddingsReindexResult>('/api/memory/embeddings/reindex', {
+    method: 'POST',
+    body: '{}',
+  });
 }
