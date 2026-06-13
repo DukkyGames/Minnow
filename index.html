@@ -636,6 +636,48 @@
         <p class="settings-field-hint">When injection is off, entries are still saved but not added to the prompt.</p>
           </div>
         </section>
+        <section class="settings-group settings-group--flat" id="settingsMemoryEmbeddingsPanel">
+          <h3 class="settings-group__title">
+            Semantic embeddings
+            <span id="settingsMemoryEmbeddingsReindexBadge" class="settings-memory-badge settings-memory-badge--pinned hidden">Reindex needed</span>
+          </h3>
+          <div class="settings-group__body settings-memory-embeddings">
+            <p id="settingsMemoryEmbeddingsStatus" class="settings-field-hint">Checking embeddings status…</p>
+            <p class="settings-field-hint">Hybrid retrieval blends keyword scoring with local vector similarity. The first local model use may download files into <code>~/.minnow/models/embeddings/</code>.</p>
+            <label class="settings-toggle-row">
+              <span>Enable semantic embeddings</span>
+              <input type="checkbox" id="settingsMemoryEmbeddingsEnabled">
+            </label>
+            <div class="field">
+              <label for="settingsMemoryEmbeddingsBackend">Backend</label>
+              <select id="settingsMemoryEmbeddingsBackend" class="settings-select">
+                <option value="local">Local (offline)</option>
+                <option value="provider">Provider /v1/embeddings</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settingsMemoryEmbeddingsModel">Model id</label>
+              <input type="text" id="settingsMemoryEmbeddingsModel" class="settings-input"
+                placeholder="Xenova/all-MiniLM-L6-v2" autocomplete="off">
+            </div>
+            <div class="field hidden" id="settingsMemoryEmbeddingsProviderRow">
+              <label for="settingsMemoryEmbeddingsProvider">Provider id</label>
+              <input type="text" id="settingsMemoryEmbeddingsProvider" class="settings-input"
+                placeholder="provider folder id under ~/.minnow/providers/" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="settingsMemoryEmbeddingsBlend">
+                Blend weight
+                <span id="settingsMemoryEmbeddingsBlendLabel" class="settings-field-hint">50% vector</span>
+              </label>
+              <input type="range" id="settingsMemoryEmbeddingsBlend" min="0" max="1" step="0.05" value="0.5">
+            </div>
+            <div class="settings-actions">
+              <button type="button" id="settingsMemoryEmbeddingsSave" class="settings-action-btn">Save embeddings settings</button>
+              <button type="button" id="settingsMemoryEmbeddingsReindex" class="settings-action-btn">Reindex all</button>
+            </div>
+          </div>
+        </section>
         <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>

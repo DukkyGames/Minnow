@@ -14,6 +14,13 @@ import {
   isValidEntryId,
 } from './paths.js';
 
+import {
+  scheduleEntryVectorSync,
+  syncDeleteEntryVector,
+} from './vector-sync.js';
+import { clearVectorStore } from './vector-store.js';
+import { DEFAULT_EMBEDDINGS_CONFIG } from './embeddings.js';
+
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_ENTRIES = 500;
 
@@ -27,6 +34,7 @@ export const DEFAULT_MEMORY_CONFIG = {
   maxInjectCharsLite: 800,
   retrieveLimit: 20,
   defaultTags: [],
+  embeddings: { ...DEFAULT_EMBEDDINGS_CONFIG },
 };
 
 async function ensureLayout() {
@@ -46,20 +54,55 @@ async function ensureLayout() {
 /** Load merged memory config from config.json. */
 export async function loadMemoryConfig() {
   const config = (await readConfigJson('config.json')) ?? {};
-  const memory =
+  const raw =
+    config.memory && typeof config.memory === 'object'
+      ? config.memory
+      : {};
+  const embeddings =
+    raw.embeddings && typeof raw.embeddings === 'object'
+      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...raw.embeddings }
+      : { ...DEFAULT_EMBEDDINGS_CONFIG };
+  return {
+    ...DEFAULT_MEMORY_CONFIG,
+    ...raw,
+    embeddings,
+  };
+}
+
+/** Persist memory.enabled, limits, and embeddings into config.json. */
+export async function saveMemoryConfig(partial) {
+  const config = (await readConfigJson('config.json')) ?? {};
+  const existing =
     config.memory && typeof config.memory === 'object'
       ? { ...DEFAULT_MEMORY_CONFIG, ...config.memory }
       : { ...DEFAULT_MEMORY_CONFIG };
-  return memory;
-}
+  const existingEmb =
+    existing.embeddings && typeof existing.embeddings === 'object'
+      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...existing.embeddings }
+      : { ...DEFAULT_EMBEDDINGS_CONFIG };
 
-/** Persist memory.enabled and limits into config.json. */
-export async function saveMemoryConfig(partial) {
-  const config = (await readConfigJson('config.json')) ?? {};
+  const partialEmb =
+    partial?.embeddings && typeof partial.embeddings === 'object'
+      ? partial.embeddings
+      : null;
+
+  const nextEmb = partialEmb
+    ? { ...existingEmb, ...partialEmb }
+    : existingEmb;
+
+  if (
+    partialEmb &&
+    ((partialEmb.backend !== undefined && partialEmb.backend !== existingEmb.backend) ||
+      (partialEmb.modelId !== undefined && partialEmb.modelId !== existingEmb.modelId) ||
+      (partialEmb.providerId !== undefined && partialEmb.providerId !== existingEmb.providerId))
+  ) {
+    nextEmb.reindexNeeded = true;
+  }
+
   config.memory = {
-    ...DEFAULT_MEMORY_CONFIG,
-    ...(config.memory && typeof config.memory === 'object' ? config.memory : {}),
+    ...existing,
     ...partial,
+    embeddings: nextEmb,
   };
   await writeConfigJson('config.json', config);
   return config.memory;
@@ -174,6 +217,10 @@ export async function createEntry(input) {
   );
   index.entries.push(meta);
   await saveIndex(index);
+
+  const memoryConfig = await loadMemoryConfig();
+  scheduleEntryVectorSync(meta, body, memoryConfig);
+
   return meta;
 }
 
@@ -210,6 +257,14 @@ export async function updateEntry(id, input) {
   await fs.writeFile(entryFilePath(id), serializeEntry(meta, body), 'utf8');
   index.entries[idx] = meta;
   await saveIndex(index);
+
+  const contentChanged =
+    input.body !== undefined || input.title !== undefined || input.tags !== undefined;
+  if (contentChanged) {
+    const memoryConfig = await loadMemoryConfig();
+    scheduleEntryVectorSync(meta, body, memoryConfig);
+  }
+
   return meta;
 }
 
@@ -226,6 +281,7 @@ export async function deleteEntry(id) {
   } catch {
     /* file may already be gone */
   }
+  void syncDeleteEntryVector(id);
   return true;
 }
 
@@ -250,6 +306,11 @@ export async function clearEntries(archive = false) {
     }
   }
   await saveIndex({ version: 1, entries: [] });
+  try {
+    await clearVectorStore();
+  } catch {
+    /* ignore vector clear errors */
+  }
   return { removed: count, archivePath };
 }
 

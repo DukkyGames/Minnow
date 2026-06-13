@@ -17,6 +17,16 @@ export interface MemoryEntryWithBody extends MemoryEntryMeta {
   body: string;
 }
 
+export interface MemoryEmbeddingsConfig {
+  enabled: boolean;
+  backend: 'local' | 'provider';
+  modelId: string;
+  providerId: string;
+  blendWeight: number;
+  queryTimeoutMs: number;
+  reindexNeeded: boolean;
+}
+
 export interface MemoryConfig {
   enabled: boolean;
   maxEntries: number;
@@ -24,6 +34,27 @@ export interface MemoryConfig {
   maxInjectCharsLite: number;
   retrieveLimit: number;
   defaultTags: string[];
+  embeddings?: MemoryEmbeddingsConfig;
+}
+
+export interface MemoryEmbeddingsStatus {
+  enabled: boolean;
+  backend: string;
+  model: string;
+  providerId: string;
+  blendWeight: number;
+  queryTimeoutMs: number;
+  dim: number;
+  vectorCount: number;
+  reindexNeeded: boolean;
+  healthy: boolean;
+}
+
+export interface MemoryEmbeddingsReindexResult {
+  ok: boolean;
+  indexed: number;
+  failed: number;
+  durationMs: number;
 }
 
 export interface MemoryRetrieveResult {
