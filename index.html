@@ -678,6 +678,42 @@
             </div>
           </div>
         </section>
+        <section class="settings-group settings-group--flat" id="settingsMemorySynthesisPanel">
+          <h3 class="settings-group__title">Auto-learning cadence</h3>
+          <div class="settings-group__body settings-memory-synthesis">
+            <p class="settings-field-hint">Controls how often Minnow proposes new memories and skills after chat turns. Uses the <strong>Chat title jobs</strong> model (Settings → Models) unless synthesis utility overrides are set in config.</p>
+            <p id="settingsMemorySynthesisOffline" class="field-hint settings-memory-offline hidden">
+              Start with <code>npm start</code> to edit synthesis settings.
+            </p>
+            <label class="settings-toggle-row">
+              <span>Enable memory &amp; skill proposals</span>
+              <input type="checkbox" id="settingsMemorySynthesisEnabled" checked>
+            </label>
+            <div class="field">
+              <label for="settingsMemorySynthesisThrottle">Extraction throttle (message pairs)</label>
+              <input type="number" id="settingsMemorySynthesisThrottle" class="settings-input settings-input--narrow"
+                min="1" max="20" step="1" value="4" inputmode="numeric">
+              <p id="settingsMemorySynthesisThrottleHint" class="settings-field-hint">Runs after every 4 completed user+assistant turns.</p>
+            </div>
+            <div class="settings-actions">
+              <button type="button" id="settingsMemorySynthesisSave" class="settings-action-btn">Save synthesis settings</button>
+            </div>
+          </div>
+        </section>
+        <section class="settings-group settings-group--flat" id="settingsMemoryProposalsPanel">
+          <h3 class="settings-group__title">
+            Suggested memories &amp; skills
+            <span id="settingsMemoryProposalsBadge" class="settings-memory-badge settings-memory-badge--pinned hidden" aria-hidden="true"></span>
+          </h3>
+          <div class="settings-group__body settings-memory-proposals">
+            <p class="settings-field-hint">After chat turns, Minnow may propose durable facts or reusable skills. Nothing is saved until you accept.</p>
+            <p id="settingsMemoryProposalsCount" class="settings-memory-stat">Pending: —</p>
+            <p id="settingsMemoryProposalsOffline" class="field-hint settings-memory-offline hidden">
+              Start with <code>npm start</code> to review proposals.
+            </p>
+            <div id="settingsMemoryProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
+          </div>
+        </section>
         <div id="settingsMemoryStats" class="settings-memory-stats" aria-live="polite">
           <span class="settings-memory-stat" id="settingsMemoryEntryCount">Entries: —</span>
           <span class="settings-memory-stat settings-memory-stat--muted" id="settingsMemoryServerHint">Checking server…</span>

@@ -27,6 +27,7 @@ import {
   reindexAllMemoryEntries,
 } from './vector-store.js';
 import { clearReindexNeeded } from './vector-sync.js';
+import { handleSynthesisRequest } from './synthesis-routes.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -73,6 +74,11 @@ export async function handleMemoryRequest(req, res, pathname) {
   }
 
   try {
+    const synthesisHandled = await handleSynthesisRequest(req, res, pathname);
+    if (synthesisHandled) {
+      return true;
+    }
+
     if (pathname === '/api/memory/ping' && req.method === 'GET') {
       sendJson(res, 200, { ok: true });
       return true;
