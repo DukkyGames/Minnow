@@ -2438,3 +2438,96 @@ label.settings-action-btn {
   flex-direction: column;
   gap: 12px;
 }
+
+.settings-routing-fallback {
+  margin-top: 12px;
+  border-top: 1px solid var(--mn-border-subtle, rgba(255, 255, 255, 0.08));
+  padding-top: 12px;
+}
+
+.settings-routing-fallback__summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--mn-text-secondary, #a1a1aa);
+  list-style: none;
+}
+
+.settings-routing-fallback__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-routing-fallback__body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-routing-fallback__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--mn-text-muted, #71717a);
+}
+
+.settings-routing-fallback__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-fallback-candidate {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-fallback-candidate .settings-routing-row__selects {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-fallback-global .settings-fallback-health {
+  margin-top: 8px;
+}
+
+.settings-fallback-global-chain {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-fallback-global-chain__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.settings-fallback-global-chain__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--mn-text-muted, #71717a);
+}
+
+.settings-fallback-health__title {
+  margin: 0 0 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.settings-fallback-health__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--mn-text-muted, #71717a);
+}
+
+.settings-fallback-health__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  color: var(--mn-text-secondary, #a1a1aa);
+}

@@ -16,7 +16,7 @@ export function createTitleProviderPort(providerId?: string): TitleProviderPort 
         provider,
         body,
         abortSignal,
-        { fallbackRole: 'utility' },
+        { fallbackRole: 'chat-titles' },
       );
     },
   };

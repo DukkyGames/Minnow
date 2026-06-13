@@ -103,7 +103,7 @@ export async function handleGenerationsRequest(req, res, pathname) {
         providers.filter((p) => p.enabled !== false).map((p) => p.id),
       );
       const candidates = resolveFallbackChain({
-        role: fallbackRole ?? 'default',
+        role: fallbackRole ?? 'main-chat',
         primaryProviderId: providerId,
         primaryModelId,
         config,

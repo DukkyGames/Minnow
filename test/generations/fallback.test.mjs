@@ -57,6 +57,52 @@ describe('fallback chain resolver', () => {
     assert.equal(chain[2].modelId, 'override');
   });
 
+  test('appends global fallback after role chain when role chain is empty', () => {
+    const chain = resolveFallbackChain({
+      role: 'main-chat',
+      primaryProviderId: 'primary',
+      primaryModelId: 'model-a',
+      config: {
+        fallbackChains: {
+          enabled: true,
+          maxChainLength: 4,
+          roles: {
+            _global: [{ providerId: 'cloud', modelId: 'gpt-4o-mini' }],
+          },
+        },
+      },
+      enabledProviderIds: new Set(['primary', 'cloud']),
+    });
+    assert.deepEqual(chain, [
+      { providerId: 'primary', modelId: 'model-a' },
+      { providerId: 'cloud', modelId: 'gpt-4o-mini' },
+    ]);
+  });
+
+  test('appends global fallback after per-role chain', () => {
+    const chain = resolveFallbackChain({
+      role: 'main-chat',
+      primaryProviderId: 'primary',
+      primaryModelId: 'model-a',
+      config: {
+        fallbackChains: {
+          enabled: true,
+          maxChainLength: 4,
+          roles: {
+            'main-chat': [{ providerId: 'backup', modelId: '' }],
+            _global: [{ providerId: 'cloud', modelId: 'gpt-4o-mini' }],
+          },
+        },
+      },
+      enabledProviderIds: new Set(['primary', 'backup', 'cloud']),
+    });
+    assert.deepEqual(chain, [
+      { providerId: 'primary', modelId: 'model-a' },
+      { providerId: 'backup', modelId: 'model-a' },
+      { providerId: 'cloud', modelId: 'gpt-4o-mini' },
+    ]);
+  });
+
   test('skips disabled providers at resolve time', () => {
     const chain = resolveFallbackChain({
       role: 'utility',

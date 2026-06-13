@@ -151,6 +151,7 @@ async function streamSubAgentTurn(
   providerId: string,
   body: SubAgentCompletionBody,
   signal: AbortSignal,
+  fallbackRole: string,
   onDelta?: (delta: string) => void,
 ): Promise<{
   fullText: string;
@@ -163,7 +164,7 @@ async function streamSubAgentTurn(
   tEnd: number;
 }> {
   const provider = await resolveProvider(providerId);
-  const res = await postChatCompletions(provider, body, signal, { fallbackRole: 'default' });
+  const res = await postChatCompletions(provider, body, signal, { fallbackRole });
 
   if (!res.ok) {
     const err = await res.text();
@@ -383,7 +384,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         attemptBody: SubAgentCompletionBody,
       ): Promise<Awaited<ReturnType<typeof streamSubAgentTurn>>> => {
         try {
-          return await streamSubAgentTurn(input.providerId, attemptBody, input.signal);
+          return await streamSubAgentTurn(input.providerId, attemptBody, input.signal, input.type);
         } catch (streamErr) {
           if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
             usedOutcomeResponseFormat = false;
@@ -391,6 +392,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
               input.providerId,
               stripResponseFormatFromBody(attemptBody),
               input.signal,
+              input.type,
             );
           }
           throw streamErr;
@@ -514,7 +516,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       let streamingAssistant = '';
       const runSubTurn = (turnBody: SubAgentCompletionBody) =>
-        streamSubAgentTurn(input.providerId, turnBody, input.signal, (fullSoFar) => {
+        streamSubAgentTurn(input.providerId, turnBody, input.signal, input.type, (fullSoFar) => {
           streamingAssistant = fullSoFar;
           emitProgress(streamingAssistant);
         });

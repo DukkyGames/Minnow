@@ -8,12 +8,13 @@ import { saveSubAgentConfigToServer, loadSubAgentConfig } from '../agents/sub-ag
 import { saveUiDesignerConfig } from '../agents/ui-designer/config';
 import { saveTitlesConfig } from '../config/titles-meta';
 import {
-  FALLBACK_ROLE_KEYS,
+  getFallbackCandidatesForKey,
+  getGlobalFallbackCandidates,
+  GLOBAL_FALLBACK_CHAIN_KEY,
   loadFallbackChainsConfig,
   saveFallbackChainsConfig,
   type FallbackChainCandidate,
   type FallbackChainsConfig,
-  type FallbackRole,
 } from '../config/fallback-chains-meta';
 import { saveSamplerMeta } from '../config/sampler-meta';
 import { isServerStorageMode } from '../config/storage-mode';
@@ -62,7 +63,21 @@ interface RowControls {
   effectiveEl?: HTMLElement;
   samplerFields?: ReturnType<typeof buildSamplerFieldInputs>;
   thinkingSelect?: HTMLSelectElement;
+  fallbackEditor?: FallbackRowEditor;
 }
+
+interface FallbackRowEditor {
+  rowId: string;
+  list: HTMLElement;
+  candidates: FallbackChainCandidate[];
+}
+
+let mountedRows: RowControls[] = [];
+let lastCatalogChatId: string | null = null;
+let loadedFallbackConfig: FallbackChainsConfig | null = null;
+let globalFallbackEnabledInput: HTMLInputElement | null = null;
+let globalFallbackCooldownInput: HTMLInputElement | null = null;
+let globalFallbackEditor: FallbackRowEditor | null = null;
 
 function supportsAdvancedPanel(row: ModelRoutingRow): boolean {
   return (
@@ -139,9 +154,6 @@ async function saveAdvanced(controls: RowControls): Promise<void> {
   }
 }
 
-let mountedRows: RowControls[] = [];
-let lastCatalogChatId: string | null = null;
-
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -187,10 +199,26 @@ async function wireProviderModelSelects(
   });
 }
 
+async function saveRowFallbackChain(editor: FallbackRowEditor): Promise<void> {
+  const candidates = editor.candidates
+    .map((row) => ({
+      providerId: row.providerId.trim(),
+      modelId: row.modelId.trim(),
+    }))
+    .filter((row) => row.providerId);
+  await saveFallbackChainsConfig({
+    roles: { [editor.rowId]: candidates },
+  });
+}
+
 async function saveRow(controls: RowControls): Promise<void> {
-  const { row, providerSelect, modelSelect, fallbackCb, enabledCb } = controls;
+  const { row, providerSelect, modelSelect, fallbackCb, enabledCb, fallbackEditor } = controls;
   const providerId = providerSelect.value.trim();
   const modelId = modelSelect.value.trim();
+
+  if (fallbackEditor) {
+    await saveRowFallbackChain(fallbackEditor);
+  }
 
   switch (row.persistKind) {
     case 'work-agent': {
@@ -371,6 +399,10 @@ function appendRoutingRow(
     bindingCell.appendChild(advanced);
   }
 
+  if (loadedFallbackConfig) {
+    appendRowFallbackEditor(bindingCell, controls, loadedFallbackConfig);
+  }
+
   tr.appendChild(bindingCell);
 
   const actionsCell = el('td', 'settings-routing-row__actions');
@@ -385,28 +417,61 @@ function appendRoutingRow(
   tableBody.appendChild(tr);
 }
 
-const FALLBACK_ROLE_LABELS: Record<FallbackRole, string> = {
-  default: 'Main chat & sub-agents',
-  utility: 'Background / titles',
-  research: 'Deep research',
-  vision: 'Vision',
-};
+function appendRowFallbackEditor(
+  bindingCell: HTMLElement,
+  controls: RowControls,
+  config: FallbackChainsConfig,
+): void {
+  const details = el('details', 'settings-routing-fallback');
+  const summary = document.createElement('summary');
+  summary.className = 'settings-routing-fallback__summary';
+  summary.textContent = 'Fallback chain';
+  details.appendChild(summary);
 
-interface FallbackRoleEditor {
-  role: FallbackRole;
-  list: HTMLElement;
-  candidates: FallbackChainCandidate[];
+  const panel = el('div', 'settings-routing-fallback__body');
+  panel.appendChild(
+    el(
+      'p',
+      'settings-routing-fallback__hint',
+      'When fallback chains are enabled, Minnow tries the next provider/model only before the first token arrives. Leave model blank to reuse the request model.',
+    ),
+  );
+
+  const list = el('div', 'settings-routing-fallback__list');
+  const editor: FallbackRowEditor = {
+    rowId: controls.row.id,
+    list,
+    candidates: getFallbackCandidatesForKey(config, controls.row.id).map((candidate) => ({
+      ...candidate,
+    })),
+  };
+  controls.fallbackEditor = editor;
+  panel.appendChild(list);
+  renderFallbackCandidateRows(editor);
+
+  const addBtn = el('button', 'settings-action-btn', 'Add fallback');
+  addBtn.type = 'button';
+  addBtn.addEventListener('click', () => {
+    editor.candidates.push({ providerId: '', modelId: '' });
+    renderFallbackCandidateRows(editor);
+  });
+  panel.appendChild(addBtn);
+  details.appendChild(panel);
+  bindingCell.appendChild(details);
 }
 
-async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
+async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   const config = await loadFallbackChainsConfig();
-  const section = el('section', 'settings-routing-group settings-fallback-chains');
-  section.appendChild(el('h3', 'settings-routing-group__title', 'Fallback chains'));
+  loadedFallbackConfig = config;
+  globalFallbackEditor = null;
+
+  const section = el('section', 'settings-routing-group settings-fallback-global');
+  section.appendChild(el('h3', 'settings-routing-group__title', 'Model fallback'));
   section.appendChild(
     el(
       'p',
       'settings-routing-group__lead',
-      'When enabled, Minnow tries the next provider/model only before the first token arrives. Dead hosts are skipped until cooldown expires.',
+      'Global switch, dead-host cooldown, and last-resort fallback chain. Per-role chains below run first; global candidates are tried when a role has no fallbacks or its hosts fail.',
     ),
   );
 
@@ -415,6 +480,7 @@ async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
     { checked: config.enabled },
   );
   enabledRow.classList.add('settings-toggle-row--compact');
+  globalFallbackEnabledInput = enabledInput;
   section.appendChild(enabledRow);
 
   const cooldownRow = el('div', 'settings-field-row');
@@ -425,55 +491,54 @@ async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
   cooldownInput.max = '3600';
   cooldownInput.step = '1';
   cooldownInput.value = String(config.cooldownSeconds);
+  globalFallbackCooldownInput = cooldownInput;
   cooldownRow.appendChild(cooldownInput);
   section.appendChild(cooldownRow);
 
-  const roleEditors: FallbackRoleEditor[] = [];
-
-  for (const role of FALLBACK_ROLE_KEYS) {
-    const roleSection = el('div', 'settings-fallback-role');
-    roleSection.appendChild(
-      el('h4', 'settings-fallback-role__title', FALLBACK_ROLE_LABELS[role]),
-    );
-    roleSection.appendChild(
-      el(
-        'p',
-        'settings-fallback-role__hint',
-        'Ordered fallbacks after the request primary. Leave model blank to reuse the request model.',
-      ),
-    );
-
-    const list = el('div', 'settings-fallback-role__list');
-    const editor: FallbackRoleEditor = {
-      role,
-      list,
-      candidates: config.roles[role].map((c) => ({ ...c })),
-    };
-    roleEditors.push(editor);
-    roleSection.appendChild(list);
+  const globalChainSection = el('div', 'settings-fallback-global-chain');
+  globalChainSection.appendChild(
+    el('h4', 'settings-fallback-global-chain__title', 'Global fallback chain'),
+  );
+  globalChainSection.appendChild(
+    el(
+      'p',
+      'settings-fallback-global-chain__hint',
+      'Last resort for every role after its own chain is exhausted or unset. Leave model blank to reuse the request model.',
+    ),
+  );
+  const globalList = el('div', 'settings-routing-fallback__list');
+  const editor: FallbackRowEditor = {
+    rowId: GLOBAL_FALLBACK_CHAIN_KEY,
+    list: globalList,
+    candidates: getGlobalFallbackCandidates(config).map((candidate) => ({ ...candidate })),
+  };
+  globalFallbackEditor = editor;
+  globalChainSection.appendChild(globalList);
+  renderFallbackCandidateRows(editor);
+  const addGlobalBtn = el('button', 'settings-action-btn', 'Add global fallback');
+  addGlobalBtn.type = 'button';
+  addGlobalBtn.addEventListener('click', () => {
+    editor.candidates.push({ providerId: '', modelId: '' });
     renderFallbackCandidateRows(editor);
-
-    const addBtn = el('button', 'settings-action-btn', 'Add candidate');
-    addBtn.type = 'button';
-    addBtn.addEventListener('click', () => {
-      editor.candidates.push({ providerId: '', modelId: '' });
-      renderFallbackCandidateRows(editor);
-    });
-    roleSection.appendChild(addBtn);
-    section.appendChild(roleSection);
-  }
+  });
+  globalChainSection.appendChild(addGlobalBtn);
+  section.appendChild(globalChainSection);
 
   const healthHost = el('div', 'settings-fallback-health');
   section.appendChild(healthHost);
   void refreshHostHealthPanel(healthHost);
 
-  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save fallback chains');
+  const saveBtn = el(
+    'button',
+    'settings-action-btn settings-action-btn--primary',
+    'Save global fallback settings',
+  );
   saveBtn.type = 'button';
   saveBtn.addEventListener('click', () => {
     void (async () => {
-      const roles = { ...config.roles };
-      for (const editor of roleEditors) {
-        roles[editor.role] = editor.candidates
+      const rolesPatch: Record<string, FallbackChainCandidate[]> = {};
+      if (globalFallbackEditor) {
+        rolesPatch[GLOBAL_FALLBACK_CHAIN_KEY] = globalFallbackEditor.candidates
           .map((row) => ({
             providerId: row.providerId.trim(),
             modelId: row.modelId.trim(),
@@ -481,11 +546,11 @@ async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
           .filter((row) => row.providerId);
       }
       await saveFallbackChainsConfig({
-        enabled: enabledInput.checked,
-        cooldownSeconds: Number(cooldownInput.value),
-        roles,
+        enabled: globalFallbackEnabledInput?.checked === true,
+        cooldownSeconds: Number(globalFallbackCooldownInput?.value ?? config.cooldownSeconds),
+        roles: rolesPatch,
       });
-      setStatus('ok', 'Fallback chains saved');
+      setStatus('ok', 'Global fallback settings saved');
       void refreshHostHealthPanel(healthHost);
     })();
   });
@@ -494,13 +559,13 @@ async function renderFallbackChainsSection(mount: HTMLElement): Promise<void> {
   mount.appendChild(section);
 }
 
-function renderFallbackCandidateRows(editor: FallbackRoleEditor): void {
+function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
   editor.list.replaceChildren();
   editor.candidates.forEach((candidate, index) => {
     const row = el('div', 'settings-fallback-candidate');
     const ids = {
-      provider: `fallback-${editor.role}-${index}-provider`,
-      model: `fallback-${editor.role}-${index}-model`,
+      provider: `fallback-${editor.rowId}-${index}-provider`,
+      model: `fallback-${editor.rowId}-${index}-model`,
     };
     const bindingHost = el('div', 'settings-routing-row__selects');
     const { providerSelect, modelSelect } = appendProviderModelFields(
@@ -693,13 +758,13 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     return;
   }
 
+  await renderGlobalFallbackBar(mount);
+
   for (const group of GROUP_ORDER) {
     const groupRows = catalog.rows.filter((r) => r.group === group);
     if (groupRows.length === 0) continue;
     renderGroup(mount, group, groupRows);
   }
-
-  await renderFallbackChainsSection(mount);
 }
 
 /** Re-render when catalog may be stale (after save). */
