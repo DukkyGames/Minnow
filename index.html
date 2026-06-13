@@ -541,7 +541,7 @@
             <div class="field">
               <label for="settingsProvidersAddApiKey">API key (optional)</label>
               <input type="password" id="settingsProvidersAddApiKey" name="apiKey" autocomplete="off" spellcheck="false" placeholder="Leave empty if the server needs no key">
-              <p class="field-hint">Stored in <code>secrets.json</code> on the server only; never returned to the browser.</p>
+              <p class="field-hint">Stored encrypted in <code>secrets.json</code> on the server only; never returned to the browser. If you delete <code>~/.minnow/.key</code>, saved keys cannot be recovered — re-enter them here.</p>
             </div>
             <label class="settings-toggle-row">
               <input type="checkbox" id="settingsProvidersAddEnabled" name="enabled" checked>
