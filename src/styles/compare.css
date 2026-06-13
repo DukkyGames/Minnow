@@ -156,10 +156,15 @@
 .compare-column-body {
   flex: 1;
   padding: 0.75rem;
-  white-space: pre-wrap;
   overflow: auto;
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+/* Reuse chat markdown typography; compare panes are full column width. */
+.compare-column-body.msg-bubble--md {
+  white-space: normal;
+  max-width: none;
 }
 
 .compare-column-reveal {

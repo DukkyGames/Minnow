@@ -19,6 +19,8 @@ import type {
 } from '../compare/types';
 import { aggregateWinRates } from '../compare/win-rates';
 import { cancelGeneration } from '../api/generations';
+import { ASSISTANT_RENDER_DEBOUNCE_MS } from '../constants';
+import { setAssistantBubbleContent } from '../markdown/renderer';
 import { fillModelSelect, fillProviderSelect } from './settings-model-binding';
 import {
   mountAuxiliaryModelSelectCombobox,
@@ -43,6 +45,68 @@ let rightColumn: ColumnState | null = null;
 let runAbort: AbortController | null = null;
 let initialized = false;
 let modelComboboxesMounted = false;
+
+/** Per-column debounce so dual streams do not share the chat-wide render timer. */
+const columnRenderTimers: Record<ColumnSide, ReturnType<typeof setTimeout> | null> = {
+  left: null,
+  right: null,
+};
+
+/** Streaming carets reused for each compare column body. */
+const columnStreamCursors: Record<ColumnSide, HTMLDivElement | null> = {
+  left: null,
+  right: null,
+};
+
+function ensureColumnStreamCursor(side: ColumnSide): HTMLDivElement {
+  if (!columnStreamCursors[side]) {
+    const cursor = document.createElement('div');
+    cursor.className = 'cursor cursor--prose';
+    cursor.setAttribute('aria-hidden', 'true');
+    columnStreamCursors[side] = cursor;
+  }
+  return columnStreamCursors[side]!;
+}
+
+function cancelColumnRenderDebounce(side: ColumnSide): void {
+  const timer = columnRenderTimers[side];
+  if (timer != null) {
+    clearTimeout(timer);
+    columnRenderTimers[side] = null;
+  }
+}
+
+function cancelAllColumnRenderDebounces(): void {
+  cancelColumnRenderDebounce('left');
+  cancelColumnRenderDebounce('right');
+}
+
+/** Paint compare column prose with the same markdown pipeline as chat bubbles. */
+function renderColumnBodyMarkdown(
+  side: ColumnSide,
+  body: HTMLElement,
+  markdown: string,
+  streaming: boolean,
+): void {
+  body.classList.add('msg-bubble');
+  if (streaming) {
+    const cursor = ensureColumnStreamCursor(side);
+    cancelColumnRenderDebounce(side);
+    columnRenderTimers[side] = setTimeout(() => {
+      columnRenderTimers[side] = null;
+      setAssistantBubbleContent(body, markdown, { streaming: true, streamCursor: cursor });
+    }, ASSISTANT_RENDER_DEBOUNCE_MS);
+    return;
+  }
+  cancelColumnRenderDebounce(side);
+  setAssistantBubbleContent(body, markdown, { streaming: false });
+}
+
+function clearColumnBody(side: ColumnSide, body: HTMLElement): void {
+  cancelColumnRenderDebounce(side);
+  body.innerHTML = '';
+  body.classList.remove('msg-bubble', 'msg-bubble--md');
+}
 
 function ensureCompareModelComboboxes(): void {
   if (modelComboboxesMounted) return;
@@ -107,13 +171,14 @@ function renderColumn(side: ColumnSide, col: ColumnState | null): void {
   if (!label || !body || !status) return;
   if (!col) {
     label.textContent = side === 'left' ? 'A' : 'B';
-    body.textContent = '';
+    clearColumnBody(side, body);
     status.textContent = 'Waiting…';
     if (reveal) reveal.textContent = '';
     return;
   }
   label.textContent = col.label;
-  body.textContent = col.text;
+  const streaming = col.status === 'streaming';
+  renderColumnBodyMarkdown(side, body, col.text, streaming);
   if (col.status === 'streaming') {
     status.textContent = 'Streaming…';
   } else if (col.status === 'complete') {
@@ -163,7 +228,16 @@ function bothColumnsSettled(): boolean {
 }
 
 function updateVoteBar(): void {
-  setVoteEnabled(!revealed && bothColumnsSettled() && Boolean(sessionId));
+  const enabled = !revealed && bothColumnsSettled() && Boolean(sessionId);
+  setVoteEnabled(enabled);
+  const leftBtn = el<HTMLButtonElement>('btnCompareVoteLeft');
+  const rightBtn = el<HTMLButtonElement>('btnCompareVoteRight');
+  if (leftBtn) {
+    leftBtn.textContent = leftColumn ? `${leftColumn.label} wins` : 'A wins';
+  }
+  if (rightBtn) {
+    rightBtn.textContent = rightColumn ? `${rightColumn.label} wins` : 'B wins';
+  }
 }
 
 async function refreshModelPickers(): Promise<void> {
@@ -194,6 +268,7 @@ async function refreshModelPickers(): Promise<void> {
 }
 
 function resetRunUi(): void {
+  cancelAllColumnRenderDebounces();
   if (leftColumn?.unsubscribe) leftColumn.unsubscribe();
   if (rightColumn?.unsubscribe) rightColumn.unsubscribe();
   runAbort?.abort();

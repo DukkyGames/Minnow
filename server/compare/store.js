@@ -164,9 +164,16 @@ async function appendHistoryVote(vote) {
  */
 export function createSession(input) {
   const randomFn = input.randomFn ?? Math.random;
+  // Randomize which user pick (model 1 / model 2) lands on each screen column.
   const swapColumns = coinFlip(randomFn);
   const screenLeft = swapColumns ? input.pickRight : input.pickLeft;
   const screenRight = swapColumns ? input.pickLeft : input.pickRight;
+  const leftGenerationId = swapColumns
+    ? input.rightGenerationId
+    : input.leftGenerationId;
+  const rightGenerationId = swapColumns
+    ? input.leftGenerationId
+    : input.rightGenerationId;
   const leftGetsA = coinFlip(randomFn);
 
   /** @type {CompareSession} */
@@ -174,8 +181,8 @@ export function createSession(input) {
     id: randomUUID(),
     startedAt: new Date().toISOString(),
     prompt: input.prompt,
-    leftGenerationId: input.leftGenerationId,
-    rightGenerationId: input.rightGenerationId,
+    leftGenerationId,
+    rightGenerationId,
     leftAlias: leftGetsA ? 'A' : 'B',
     rightAlias: leftGetsA ? 'B' : 'A',
     left: screenLeft,

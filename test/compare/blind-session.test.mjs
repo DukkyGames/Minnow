@@ -71,6 +71,25 @@ describe('compare blind session store', () => {
     });
     assert.equal(fixed.left.modelId, 'm-right');
     assert.equal(fixed.right.modelId, 'm-left');
+    assert.equal(fixed.leftGenerationId, '22222222-2222-4222-8222-222222222222');
+    assert.equal(fixed.rightGenerationId, '11111111-1111-4111-8111-111111111111');
+  });
+
+  test('generation ids stay aligned with screen columns when not swapped', async () => {
+    await resetCompareHistoryForTests();
+    resetCompareStoreForTests();
+    const session = createSession({
+      prompt: 'Ping',
+      pickLeft: { providerId: 'p1', modelId: 'm-left' },
+      pickRight: { providerId: 'p2', modelId: 'm-right' },
+      leftGenerationId: '11111111-1111-4111-8111-111111111111',
+      rightGenerationId: '22222222-2222-4222-8222-222222222222',
+      randomFn: () => 0.1,
+    });
+    assert.equal(session.left.modelId, 'm-left');
+    assert.equal(session.right.modelId, 'm-right');
+    assert.equal(session.leftGenerationId, '11111111-1111-4111-8111-111111111111');
+    assert.equal(session.rightGenerationId, '22222222-2222-4222-8222-222222222222');
   });
 
   test('double vote is rejected', async () => {
