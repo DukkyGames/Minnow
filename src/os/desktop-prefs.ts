@@ -1,16 +1,20 @@
 import type { DesktopPrefs } from './types';
+import type { WallpaperImageFit, WallpaperMode } from './wallpaper';
 
 const STORAGE_PREFIX = 'minnow.os.';
 
 export const DESKTOP_PREFS_KEYS = {
   desktopLayout: `${STORAGE_PREFIX}desktopLayout`,
   wallpaper: `${STORAGE_PREFIX}wallpaper`,
+  wallpaperImageId: `${STORAGE_PREFIX}wallpaperImageId`,
+  wallpaperImageFit: `${STORAGE_PREFIX}wallpaperImageFit`,
   previewStyle: `${STORAGE_PREFIX}previewStyle`,
 } as const;
 
 export const DEFAULT_DESKTOP_PREFS: DesktopPrefs = {
   desktopLayout: 'dock',
   wallpaper: 'underwater',
+  wallpaperImageFit: 'cover',
   previewStyle: 'card',
 };
 
@@ -18,6 +22,18 @@ type DesktopPrefsListener = (prefs: DesktopPrefs) => void;
 
 const listeners = new Set<DesktopPrefsListener>();
 let cachedPrefs: DesktopPrefs | null = null;
+
+const WALLPAPER_MODES = new Set<WallpaperMode>([
+  'flat',
+  'gradient',
+  'underwater',
+  'minnow',
+  'aurora',
+  'starfield',
+  'grain',
+  'mesh',
+  'custom',
+]);
 
 function readStorage(key: string): string | null {
   try {
@@ -35,15 +51,28 @@ function writeStorage(key: string, value: string): void {
   }
 }
 
+function removeStorage(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode */
+  }
+}
+
 function normalizeLayout(value: string | null): DesktopPrefs['desktopLayout'] {
-  // Grid launcher was replaced by the bottom dock; migrate any stored value.
   if (value === 'grid' || value === 'concierge' || value === 'dock') return 'dock';
   return DEFAULT_DESKTOP_PREFS.desktopLayout;
 }
 
-function normalizeWallpaper(value: string | null): DesktopPrefs['wallpaper'] {
-  if (value === 'flat' || value === 'gradient' || value === 'underwater') return value;
+function normalizeWallpaper(value: string | null): WallpaperMode {
+  if (value && WALLPAPER_MODES.has(value as WallpaperMode)) {
+    return value as WallpaperMode;
+  }
   return DEFAULT_DESKTOP_PREFS.wallpaper;
+}
+
+function normalizeImageFit(value: string | null): WallpaperImageFit {
+  return value === 'contain' ? 'contain' : 'cover';
 }
 
 function normalizePreviewStyle(value: string | null): DesktopPrefs['previewStyle'] {
@@ -56,14 +85,16 @@ export function loadDesktopPrefs(): DesktopPrefs {
 
   const rawLayout = readStorage(DESKTOP_PREFS_KEYS.desktopLayout);
   const desktopLayout = normalizeLayout(rawLayout);
-  // Rewrite legacy `grid` / `concierge` values so the dock layout sticks after refresh.
   if (rawLayout && rawLayout !== desktopLayout) {
     writeStorage(DESKTOP_PREFS_KEYS.desktopLayout, desktopLayout);
   }
 
+  const wallpaperImageId = readStorage(DESKTOP_PREFS_KEYS.wallpaperImageId) ?? undefined;
   const prefs: DesktopPrefs = {
     desktopLayout,
     wallpaper: normalizeWallpaper(readStorage(DESKTOP_PREFS_KEYS.wallpaper)),
+    wallpaperImageId: wallpaperImageId || undefined,
+    wallpaperImageFit: normalizeImageFit(readStorage(DESKTOP_PREFS_KEYS.wallpaperImageFit)),
     previewStyle: normalizePreviewStyle(readStorage(DESKTOP_PREFS_KEYS.previewStyle)),
   };
   cachedPrefs = prefs;
@@ -85,6 +116,12 @@ function emitDesktopPrefs(): void {
 export function saveDesktopPrefs(prefs: DesktopPrefs): void {
   writeStorage(DESKTOP_PREFS_KEYS.desktopLayout, prefs.desktopLayout);
   writeStorage(DESKTOP_PREFS_KEYS.wallpaper, prefs.wallpaper);
+  writeStorage(DESKTOP_PREFS_KEYS.wallpaperImageFit, prefs.wallpaperImageFit ?? 'cover');
+  if (prefs.wallpaperImageId) {
+    writeStorage(DESKTOP_PREFS_KEYS.wallpaperImageId, prefs.wallpaperImageId);
+  } else {
+    removeStorage(DESKTOP_PREFS_KEYS.wallpaperImageId);
+  }
   writeStorage(DESKTOP_PREFS_KEYS.previewStyle, prefs.previewStyle);
   cachedPrefs = { ...prefs };
   emitDesktopPrefs();

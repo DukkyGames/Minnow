@@ -3,9 +3,9 @@ import { closeInstance, getInstanceSnapshot, subscribeInstances } from './instan
 import { launchApp } from './router';
 import { renderConcierge } from './concierge';
 import { renderMiniPreviews } from './mini-previews';
-import { renderWallpaper } from './wallpaper';
-import type { AppId, LaunchOptions } from './types';
-
+import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
+import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
+import type { AppId, DesktopPrefs, LaunchOptions } from './types';
 function greetingFor(d: Date): string {
   const h = d.getHours();
   if (h < 5) return 'Still up';
@@ -38,8 +38,19 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const wallpaperMount = document.createElement('div');
   wallpaperMount.className = 'mn-os-desktop-wall';
-  renderWallpaper(wallpaperMount, prefs.wallpaper);
-  root.appendChild(wallpaperMount);
+
+  async function paintWallpaper(p: DesktopPrefs): Promise<void> {
+    const options: WallpaperRenderOptions = {
+      mode: p.wallpaper,
+      imageFit: p.wallpaperImageFit ?? 'cover',
+    };
+    if (p.wallpaper === 'custom' && p.wallpaperImageId) {
+      options.imageUrl = await getAppearanceAssetObjectUrl(p.wallpaperImageId);
+    }
+    renderWallpaper(wallpaperMount, options);
+  }
+
+  void paintWallpaper(prefs);  root.appendChild(wallpaperMount);
 
   const stage = document.createElement('div');
   stage.className = 'mn-os-desk-stage';
@@ -85,10 +96,9 @@ export function renderDesktop(root: HTMLElement): () => void {
     );
   }
 
-  function applyWallpaper(mode: ReturnType<typeof loadDesktopPrefs>['wallpaper']): void {
-    renderWallpaper(wallpaperMount, mode);
+  function applyWallpaper(p: DesktopPrefs): void {
+    void paintWallpaper(p);
   }
-
   refreshPreviews();
 
   function refreshGreetingClock(): void {
@@ -98,7 +108,7 @@ export function renderDesktop(root: HTMLElement): () => void {
     greet.textContent = `${greetingFor(d)}.`;
   }
 
-  let clockInterval: ReturnType<typeof setInterval> | undefined;
+  let clockInterval: number | undefined;
   const clockAlignTimeout = window.setTimeout(() => {
     refreshGreetingClock();
     clockInterval = window.setInterval(refreshGreetingClock, 60_000);
@@ -106,10 +116,9 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const unsubInstances = subscribeInstances(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
-    applyWallpaper(p.wallpaper);
+    applyWallpaper(p);
     refreshPreviews();
   });
-
   return () => {
     clearTimeout(clockAlignTimeout);
     if (clockInterval !== undefined) clearInterval(clockInterval);

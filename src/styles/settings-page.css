@@ -231,6 +231,10 @@
   max-width: min(56rem, 100%);
 }
 
+#settingsSection-appearance.settings-section--appearance {
+  max-width: min(56rem, 100%);
+}
+
 .settings-section.is-active {
   display: block;
 }
@@ -490,7 +494,24 @@
 }
 
 .settings-theme-block {
-  margin-bottom: 20px;
+  margin-bottom: 4px;
+}
+
+.settings-theme-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.settings-theme-toolbar__follow {
+  margin: 0;
+  border: none;
+  padding: 0;
 }
 
 .settings-theme-follow {
@@ -511,15 +532,19 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+}
+
+.settings-theme-families--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .settings-theme-family {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 6px 12px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--mn-border);
@@ -529,24 +554,27 @@
   text-align: left;
   cursor: pointer;
   position: relative;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 .settings-theme-family:hover {
   border-color: var(--mn-border-strong);
+  background: var(--mn-surface-2);
 }
 
 .settings-theme-family.is-active {
-  outline: 2px solid var(--mn-border-strong);
-  outline-offset: 0;
+  border-color: var(--mn-accent-border);
+  background: color-mix(in srgb, var(--mn-accent-soft) 30%, var(--mn-surface-1));
 }
 
 .settings-theme-family__head {
-  grid-column: 1;
-  grid-row: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  padding-right: 20px;
 }
 
 .settings-theme-family__name {
@@ -561,11 +589,61 @@
 }
 
 .settings-theme-preview {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  width: 100%;
+}
+
+.settings-theme-preview__window {
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--mn-bg);
+}
+
+.settings-theme-preview__titlebar {
   display: flex;
+  align-items: center;
   gap: 4px;
-  align-self: center;
+  padding: 5px 8px;
+  background: var(--mn-surface-1);
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.settings-theme-preview__titlebar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-surface-2);
+  border: 1px solid var(--mn-border);
+}
+
+.settings-theme-preview__titlebar-dot--accent {
+  background: var(--mn-accent);
+  border-color: transparent;
+}
+
+.settings-theme-preview__content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px 10px;
+  background: var(--mn-bg);
+}
+
+.settings-theme-preview__line {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mn-surface-2);
+  width: 72%;
+}
+
+.settings-theme-preview__line--wide {
+  width: 88%;
+}
+
+.settings-theme-preview__line--short {
+  width: 48%;
+  background: var(--mn-accent-soft);
 }
 
 .settings-theme-chip {
@@ -578,8 +656,8 @@
 
 .settings-theme-check {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
   width: 16px;
   height: 16px;
   color: var(--mn-accent);
@@ -592,8 +670,12 @@
 }
 
 .settings-theme-modes {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-surface-0);
 }
 
 .settings-theme-modes.is-system .settings-theme-mode {
@@ -601,20 +683,24 @@
 }
 
 .settings-theme-mode {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-sm);
-  background: var(--mn-surface-1);
-  color: var(--mn-fg);
+  min-width: 72px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--mn-fg-muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .settings-theme-mode.is-active {
-  outline: 2px solid var(--mn-border-strong);
-  outline-offset: 0;
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  font-weight: 600;
 }
 
 .settings-theme-mode:disabled {
@@ -916,15 +1002,46 @@
 }
 
 .settings-select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   max-width: 420px;
   box-sizing: border-box;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 8px 32px 8px 12px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  background: var(--mn-bg);
+  background-color: var(--mn-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%238a929c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
   font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
   color: var(--mn-fg);
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.settings-select:focus-visible {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
+}
+
+.settings-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-select:hover:not(:disabled) {
+    border-color: var(--mn-border-strong);
+  }
 }
 
 .settings-subagent-extra {
@@ -976,6 +1093,12 @@
 
 .settings-action-btn:hover {
   background: var(--mn-accent-soft);
+}
+
+label.settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-action-btn--primary {

@@ -4,6 +4,7 @@
 
 export type SettingsSectionId =
   | 'general'
+  | 'appearance'
   | 'providers'
   | 'usage'
   | 'model-routing'
@@ -31,6 +32,7 @@ export type SettingsSectionId =
 /** Sidebar label (hash id stays stable for bookmarks). */
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   general: 'General',
+  appearance: 'Appearance',
   providers: 'Providers',
   usage: 'Usage & cost',
   'model-routing': 'Models',
@@ -72,7 +74,7 @@ export type SettingsNavGroup = {
 
 /** Sidebar groups and nav order (must match index.html section order). */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
-  { id: 'app', label: 'App', sections: ['general'] },
+  { id: 'app', label: 'App', sections: ['general', 'appearance'] },
   {
     id: 'models',
     label: 'Models & APIs',

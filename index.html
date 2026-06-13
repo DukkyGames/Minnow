@@ -43,7 +43,17 @@
     root.style.colorScheme = mode;
     root.classList.add('theme-no-transition');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', THEME_BG[id] || '#0f1216');
+    var customBg = null;
+    try {
+      if (localStorage.getItem('minnow.appearance.customEnabled') === '1') {
+        var raw = localStorage.getItem('minnow.appearance.customTokens');
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.bg) customBg = parsed.bg;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    if (meta) meta.setAttribute('content', customBg || THEME_BG[id] || '#0f1216');
   } catch (e) { /* private mode */ }
 })();
 </script>
@@ -425,6 +435,7 @@
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavApp">
         <p id="settingsNavApp" class="settings-nav-group__label">App</p>
         <button type="button" data-settings-nav="general" aria-current="page">General</button>
+        <button type="button" data-settings-nav="appearance">Appearance</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavModels">
         <p id="settingsNavModels" class="settings-nav-group__label">Models &amp; APIs</p>
@@ -468,8 +479,12 @@
     <div class="settings-content">
       <section id="settingsSection-general" class="settings-section is-active">
         <h2>General</h2>
-        <p class="settings-lead">Appearance, chat behavior, and where settings are stored. Model backends live under <strong>Providers</strong>.</p>
+        <p class="settings-lead">Chat behavior and where settings are stored. Themes and wallpapers live under <strong>Appearance</strong>.</p>
         <div id="settingsGeneralBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-appearance" class="settings-section settings-section--appearance">
+        <h2>Appearance</h2>
+        <div id="settingsAppearanceBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>

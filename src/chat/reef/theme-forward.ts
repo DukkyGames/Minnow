@@ -50,7 +50,7 @@ export function buildThemeCssBlock(vars: Record<string, string>): string {
 let themeObserver: MutationObserver | null = null;
 
 /**
- * Watch `html[data-theme]` and invoke callback when effective theme changes.
+ * Watch `html[data-theme]` and inline style token/font changes; invoke callback when effective theme changes.
  */
 export function subscribeThemeChanges(callback: (vars: Record<string, string>) => void): () => void {
   if (themeObserver) {
@@ -59,20 +59,26 @@ export function subscribeThemeChanges(callback: (vars: Record<string, string>) =
   }
 
   const root = document.documentElement;
-  let last = root.getAttribute('data-theme') ?? '';
+  let lastTheme = root.getAttribute('data-theme') ?? '';
+  let lastStyle = root.getAttribute('style') ?? '';
 
   const notify = (): void => {
     callback(readThemeVarsFromHost());
   };
 
   themeObserver = new MutationObserver(() => {
-    const next = root.getAttribute('data-theme') ?? '';
-    if (next === last) return;
-    last = next;
+    const nextTheme = root.getAttribute('data-theme') ?? '';
+    const nextStyle = root.getAttribute('style') ?? '';
+    if (nextTheme === lastTheme && nextStyle === lastStyle) return;
+    lastTheme = nextTheme;
+    lastStyle = nextStyle;
     notify();
   });
 
-  themeObserver.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  themeObserver.observe(root, {
+    attributes: true,
+    attributeFilter: ['data-theme', 'style'],
+  });
   notify();
 
   return () => {
