@@ -3,5 +3,10 @@
     "enabled": false,
     "autoStart": true,
     "port": 8899
+  },
+  "llama-cpp": {
+    "enabled": true,
+    "autoStart": false,
+    "port": 8085
   }
 }

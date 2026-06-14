@@ -64,6 +64,7 @@ export interface ModelFitResult {
   run_mode: string;
   quant: string;
   context: number;
+  size_gb: number;
   required_gb: number;
   speed_tps: number;
   score: number;

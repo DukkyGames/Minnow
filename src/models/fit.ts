@@ -2,6 +2,7 @@ import { getModels } from './catalog';
 import {
   activeParamsB,
   estimateMemoryGb,
+  estimateFileSizeGb,
   inferUseCase,
   isPrequantized,
   paramsB,
@@ -447,6 +448,7 @@ export function analyzeModel(
       run_mode: 'no_fit',
       quant: quantToTry,
       context: ctx,
+      size_gb: estimateFileSizeGb(pb, quantToTry),
       required_gb: Math.round(oversizedRequired * 10) / 10,
       speed_tps: 0,
       score: 0,
@@ -499,6 +501,7 @@ export function analyzeModel(
     run_mode: runMode,
     quant,
     context: fitCtx,
+    size_gb: estimateFileSizeGb(pb, quant),
     required_gb: Math.round(requiredGb * 10) / 10,
     speed_tps: Math.round(tps * 10) / 10,
     score: Math.round(composite * 10) / 10,
@@ -539,11 +542,58 @@ type SortKey = number | string | [number, number];
 export const SORT_KEYS: Record<string, (r: ModelFitResult) => SortKey> = {
   score: (r) => [r.score, versionKey(r.name)],
   speed: (r) => r.speed_tps,
+  quality: (r) => r.scores.quality,
+  size: (r) => -r.size_gb,
   vram: (r) => r.required_gb,
   params: (r) => r.params_b,
   context: (r) => r.context,
   newest: (r) => r.release_date ?? '',
 };
+
+/**
+ * Apply the Models "GPU budget" toggle to a hardware snapshot before ranking.
+ * Index 0 = RAM only (no GPU). Index 1+ = a specific homogeneous GPU pool.
+ */
+export function hardwareForGpuBudget(
+  hw: HardwareSnapshot,
+  gpuGroupIndex: number,
+): HardwareSnapshot {
+  if (gpuGroupIndex <= 0) {
+    return {
+      ...hw,
+      hasGpu: false,
+      gpuVramGb: 0,
+      gpuCount: 0,
+      gpu_only: false,
+    };
+  }
+  const group = hw.gpuGroups?.[gpuGroupIndex - 1];
+  if (!group) return hw;
+  return {
+    ...hw,
+    hasGpu: true,
+    gpuVramGb: group.vramTotal,
+    gpuCount: group.count,
+    gpuName: group.name,
+    gpu_only: true,
+  };
+}
+
+/** Default GPU budget index when hardware is first probed (prefer GPU when present). */
+export function defaultGpuGroupIndex(hw: HardwareSnapshot): number {
+  return hw.gpuGroups?.length ? 1 : 0;
+}
+
+/** Keep a prior GPU budget selection when rescanning if the pool still exists. */
+export function resolveGpuGroupIndexAfterRescan(
+  hw: HardwareSnapshot,
+  previousIndex: number,
+): number {
+  if (previousIndex === 0) return 0;
+  const max = hw.gpuGroups?.length ?? 0;
+  if (previousIndex > 0 && previousIndex <= max) return previousIndex;
+  return defaultGpuGroupIndex(hw);
+}
 
 export interface RankModelsOptions {
   useCase?: string | null;
@@ -653,7 +703,21 @@ export function rankModels(
     return 0;
   });
 
-  return filtered.slice(0, limit);
+  if (fitOnly) {
+    return filtered.slice(0, limit);
+  }
+
+  // Score sort pushes too_tight rows to the bottom; without a reserved slice they
+  // never appear in the UI limit and the "Fit only" toggle looks broken.
+  const fitting = filtered.filter((r) => r.fit_level !== 'too_tight');
+  const tight = filtered.filter((r) => r.fit_level === 'too_tight');
+  if (tight.length === 0) {
+    return fitting.slice(0, limit);
+  }
+
+  const tightSlots = Math.min(tight.length, Math.max(1, Math.floor(limit * 0.25)));
+  const fitSlots = Math.max(0, limit - tightSlots);
+  return [...fitting.slice(0, fitSlots), ...tight.slice(0, tightSlots)];
 }
 
 /** Exposed for UI / tests that need native quant resolution. */

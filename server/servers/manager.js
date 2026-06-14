@@ -331,6 +331,12 @@ export async function startServer(serverId) {
   const def = getServerDef(serverId);
   if (!def) throw new Error(`Unknown server: ${serverId}`);
 
+  if (def.kind === 'native-binary') {
+    throw new Error(
+      `"${serverId}" is a native binary runtime — serve a model from Models instead of starting here`,
+    );
+  }
+
   const install = await def.provisioner.getInstallStatus();
   if (!install.installed) {
     throw new Error(`Server "${serverId}" is not installed`);

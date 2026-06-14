@@ -16,6 +16,7 @@ import {
   type RuntimeDetection,
   type ServeRecord,
 } from '../../models/api-client';
+import { openServeDialog } from './serve-dialog';
 import { setStatus } from '../status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -145,21 +146,17 @@ function renderArtifactRow(
         ? 'Download bundled llama-server on first serve (~20 MB)'
         : 'Install llama-server and add it to PATH';
     llamaBtn.addEventListener('click', () => {
-      llamaBtn.disabled = true;
-      if (!llamaReady) {
-        setStatus('ok', 'Downloading bundled llama-server…');
-      }
-      void startModelServe({
+      void openServeDialog({
         modelPath: artifact.path,
-        runtime: 'llama-cpp',
         modelLabel: artifact.filename,
-        profile: 'balanced',
       })
-        .then((serve) => useServedModelInChat(serve))
+        .then((serve) => {
+          if (!serve) return;
+          return useServedModelInChat(serve);
+        })
         .then(() => refreshInstalledSection())
         .catch((err) => {
           setStatus('err', err instanceof Error ? err.message : 'Serve failed');
-          llamaBtn.disabled = false;
         });
     });
 

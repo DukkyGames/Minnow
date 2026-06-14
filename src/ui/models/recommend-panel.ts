@@ -4,16 +4,22 @@
 
 import { selectProviderModel } from '../../api/models';
 import { fetchHardware } from '../../models/hardware-client';
-import { rankModels } from '../../models/fit';
+import {
+  defaultGpuGroupIndex,
+  hardwareForGpuBudget,
+  rankModels,
+  resolveGpuGroupIndexAfterRescan,
+} from '../../models/fit';
 import {
   fetchCachedModels,
   resolveDownloadRepo,
   startModelDownload,
-  startModelServe,
   subscribeDownloadProgress,
   type CachedModelRow,
 } from '../../models/api-client';
+import { openServeDialog } from './serve-dialog';
 import { getModels } from '../../models/catalog';
+import { inferUseCase } from '../../models/quant';
 import type { HardwareSnapshot, ModelFitResult } from '../../models/types';
 import { setStatus } from '../status';
 
@@ -106,24 +112,26 @@ function artifactPathForRow(row: ModelFitResult, cached: CachedModelRow[]): stri
   return `${match.path}/${file.rel_path}`;
 }
 
-function hardwareForRanking(hw: HardwareSnapshot, gpuGroupIndex: number): HardwareSnapshot {
-  if (gpuGroupIndex <= 0 || !hw.gpuGroups?.length) return hw;
-  const group = hw.gpuGroups[gpuGroupIndex - 1];
-  if (!group) return hw;
-  return {
-    ...hw,
-    gpuVramGb: group.vramTotal,
-    gpuCount: group.count,
-    gpuName: group.name,
-  };
-}
+/** Human labels for inferred use-case keys (must match rankModels / inferUseCase). */
+const USE_CASE_LABELS: Record<string, string> = {
+  general: 'General purpose',
+  coding: 'Code generation',
+  reasoning: 'Advanced reasoning',
+  chat: 'Chat & instruction following',
+  multimodal: 'Multimodal / vision',
+  embedding: 'Embeddings & RAG',
+  tts: 'Text-to-speech',
+  stt: 'Speech-to-text',
+};
 
-function uniqueUseCases(): string[] {
+function uniqueUseCases(): Array<{ value: string; label: string }> {
   const cases = new Set<string>();
   for (const m of getModels()) {
-    if (m.use_case) cases.add(m.use_case);
+    cases.add(inferUseCase(m));
   }
-  return [...cases].sort();
+  return [...cases]
+    .sort()
+    .map((value) => ({ value, label: USE_CASE_LABELS[value] ?? value }));
 }
 
 function renderProgressBar(bytes: number, total: number | null): HTMLElement {
@@ -141,6 +149,13 @@ function renderProgressBar(bytes: number, total: number | null): HTMLElement {
     ),
   );
   return wrap;
+}
+
+function syncGpuToggleButtons(mount: HTMLElement): void {
+  if (!panelState) return;
+  mount.querySelectorAll<HTMLButtonElement>('.models-gpu-btn').forEach((btn, i) => {
+    btn.classList.toggle('is-active', panelState!.gpuGroupIndex === i);
+  });
 }
 
 function renderHardwareCard(root: HTMLElement, hw: HardwareSnapshot, onRescan: () => void): void {
@@ -178,6 +193,7 @@ function renderHardwareCard(root: HTMLElement, hw: HardwareSnapshot, onRescan: (
     ramBtn.addEventListener('click', () => {
       if (!panelState) return;
       panelState.gpuGroupIndex = 0;
+      syncGpuToggleButtons(root);
       void rerenderList();
     });
     gpuBar.appendChild(ramBtn);
@@ -188,6 +204,7 @@ function renderHardwareCard(root: HTMLElement, hw: HardwareSnapshot, onRescan: (
       btn.addEventListener('click', () => {
         if (!panelState) return;
         panelState.gpuGroupIndex = i + 1;
+        syncGpuToggleButtons(root);
         void rerenderList();
       });
       gpuBar.appendChild(btn);
@@ -218,11 +235,14 @@ function renderFilters(root: HTMLElement): void {
 
   const useCase = document.createElement('select');
   useCase.className = 'models-filter-select';
-  useCase.appendChild(el('option', '', 'All use cases'));
+  const allUseCases = el('option', '', 'All use cases');
+  allUseCases.value = '';
+  if (!panelState.useCase) allUseCases.selected = true;
+  useCase.appendChild(allUseCases);
   for (const uc of uniqueUseCases()) {
-    const opt = el('option', '', uc);
-    opt.value = uc;
-    if (panelState.useCase === uc) opt.selected = true;
+    const opt = el('option', '', uc.label);
+    opt.value = uc.value;
+    if (panelState.useCase === uc.value) opt.selected = true;
     useCase.appendChild(opt);
   }
   useCase.addEventListener('change', () => {
@@ -264,7 +284,7 @@ function renderFilters(root: HTMLElement): void {
     void rerenderList();
   });
 
-  const ctxLabel = el('label', 'models-filter-ctx', `Context ${panelState.targetContext}`);
+  const ctxValue = el('span', 'models-filter-ctx-value', String(panelState.targetContext));
   const ctx = document.createElement('input');
   ctx.type = 'range';
   ctx.min = '2048';
@@ -272,10 +292,11 @@ function renderFilters(root: HTMLElement): void {
   ctx.step = '2048';
   ctx.value = String(panelState.targetContext);
   ctx.className = 'models-filter-range';
+  ctx.setAttribute('aria-label', 'Target context length');
   ctx.addEventListener('input', () => {
     if (!panelState) return;
     panelState.targetContext = Number(ctx.value);
-    ctxLabel.textContent = `Context ${panelState.targetContext}`;
+    ctxValue.textContent = String(panelState.targetContext);
     void rerenderList();
   });
 
@@ -289,10 +310,26 @@ function renderFilters(root: HTMLElement): void {
     void rerenderList();
   });
   const fitLabel = el('label', 'models-filter-check', 'Fit only');
-  fitLabel.htmlFor = 'modelsFitOnly';
+  // Nested input only — do not also set htmlFor (double-toggles the checkbox on click).
   fitLabel.prepend(fitOnly);
 
-  bar.append(search, useCase, quant, sort, ctxLabel, ctx, fitLabel);
+  const searchGroup = el('div', 'models-filter-group models-filter-group--search');
+  searchGroup.appendChild(search);
+
+  const selectsGroup = el('div', 'models-filter-group models-filter-group--selects');
+  selectsGroup.append(useCase, quant, sort);
+
+  const ctxGroup = el('div', 'models-filter-group models-filter-group--ctx');
+  ctxGroup.append(
+    el('span', 'models-filter-ctx-label', 'Context'),
+    ctxValue,
+    ctx,
+  );
+
+  const fitGroup = el('div', 'models-filter-group models-filter-group--fit');
+  fitGroup.appendChild(fitLabel);
+
+  bar.append(searchGroup, selectsGroup, ctxGroup, fitGroup);
   root.appendChild(bar);
 }
 
@@ -302,13 +339,15 @@ function attachRowActions(
   cachedSet: Set<string>,
   hw: HardwareSnapshot,
 ): void {
+  const trailing = item.querySelector('.models-recommend-row__trailing');
+  if (!trailing) return;
+
   const downloaded = rowIsDownloaded(row, cachedSet);
-  const actions = el('div', 'models-installed-actions');
 
   if (downloaded) {
     const dot = el('span', 'models-cached-dot', 'On disk');
     dot.title = 'Model found in local cache or artifacts';
-    item.querySelector('.models-recommend-row__head')?.appendChild(dot);
+    trailing.appendChild(dot);
   }
 
   const entry = catalogEntryForRow(row);
@@ -350,7 +389,8 @@ function attachRowActions(
           setStatus('err', err instanceof Error ? err.message : 'Download failed');
         });
     });
-    actions.append(btn, progressMount);
+    trailing.appendChild(btn);
+    item.appendChild(progressMount);
   }
 
   if (downloaded) {
@@ -362,18 +402,16 @@ function attachRowActions(
         setStatus('err', 'GGUF path not found — open Installed to serve this file.');
         return;
       }
-      serveBtn.disabled = true;
-      void startModelServe({
+      void openServeDialog({
         modelPath,
-        runtime: 'llama-cpp',
         modelLabel: row.name.split('/').pop() || row.name,
-        profile: 'balanced',
         hardware: hw as unknown as Record<string, unknown>,
         quant: row.quant,
         paramsB: row.params_b,
         isMoe: row.is_moe,
       })
         .then(async (serve) => {
+          if (!serve) return;
           setStatus('ok', 'Model server started.');
           const picked = await selectProviderModel(serve.providerId, serve.modelLabel);
           if (!picked) {
@@ -382,13 +420,10 @@ function attachRowActions(
         })
         .catch((err) => {
           setStatus('err', err instanceof Error ? err.message : 'Serve failed');
-          serveBtn.disabled = false;
         });
     });
-    actions.appendChild(serveBtn);
+    trailing.appendChild(serveBtn);
   }
-
-  if (actions.childElementCount) item.appendChild(actions);
 }
 
 function renderRecommendations(root: HTMLElement, rows: ModelFitResult[], hw: HardwareSnapshot): void {
@@ -406,20 +441,21 @@ function renderRecommendations(root: HTMLElement, rows: ModelFitResult[], hw: Ha
   for (const row of rows) {
     const item = el('article', 'models-recommend-row');
     const head = el('div', 'models-recommend-row__head');
-    head.append(
-      el('span', 'models-recommend-name', row.name),
+    const trailing = el('div', 'models-recommend-row__trailing');
+    trailing.appendChild(
       el(
         'span',
         `models-fit-badge ${FIT_BADGE_CLASS[row.fit_level] ?? ''}`,
         row.fit_level.replace('_', ' '),
       ),
     );
+    head.append(el('span', 'models-recommend-name', row.name), trailing);
     item.appendChild(head);
     item.appendChild(
       el(
         'p',
         'models-recommend-meta',
-        `${row.params_b}B · ${row.quant} · ${row.required_gb} GB · ~${row.speed_tps} tok/s · score ${row.score}`,
+        `${row.params_b}B · ${row.quant} · ${row.size_gb} GB · ${row.required_gb} GB RAM · ~${row.speed_tps} tok/s · score ${row.score}`,
       ),
     );
     attachRowActions(row, item, cachedSet, hw);
@@ -431,7 +467,7 @@ function renderRecommendations(root: HTMLElement, rows: ModelFitResult[], hw: Ha
 async function rerenderList(): Promise<void> {
   const mount = document.getElementById('modelsRecommendBody');
   if (!mount || !panelState) return;
-  const hw = hardwareForRanking(panelState.hardware, panelState.gpuGroupIndex);
+  const hw = hardwareForGpuBudget(panelState.hardware, panelState.gpuGroupIndex);
   const rows = rankModels(hw, {
     limit: 60,
     fitOnly: panelState.fitOnly,
@@ -442,9 +478,7 @@ async function rerenderList(): Promise<void> {
     sort: panelState.sort,
   });
   renderRecommendations(mount, rows, hw);
-  mount.querySelectorAll('.models-gpu-btn').forEach((btn, i) => {
-    btn.classList.toggle('is-active', panelState!.gpuGroupIndex === i);
-  });
+  syncGpuToggleButtons(mount);
 }
 
 async function refreshCachedAndList(): Promise<void> {
@@ -471,6 +505,7 @@ export async function mountRecommendSection(fresh = false): Promise<void> {
   mount.appendChild(el('p', 'models-muted', 'Detecting hardware and scanning local models…'));
 
   const rescan = () => void mountRecommendSection(true);
+  const previousGpuGroupIndex = panelState?.gpuGroupIndex;
 
   try {
     const [hardware, cached] = await Promise.all([
@@ -478,10 +513,15 @@ export async function mountRecommendSection(fresh = false): Promise<void> {
       fetchCachedModels().catch(() => [] as CachedModelRow[]),
     ]);
 
+    const gpuGroupIndex =
+      previousGpuGroupIndex != null
+        ? resolveGpuGroupIndexAfterRescan(hardware, previousGpuGroupIndex)
+        : defaultGpuGroupIndex(hardware);
+
     panelState = {
       hardware,
       cached,
-      gpuGroupIndex: 0,
+      gpuGroupIndex,
       search: '',
       useCase: '',
       quant: '',

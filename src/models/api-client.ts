@@ -38,6 +38,24 @@ export interface ServeRecord {
   error: string | null;
   startedAt: number;
   stoppedAt: number | null;
+  llamaSettings?: Record<string, unknown> | null;
+}
+
+export interface LlamaServeSettings {
+  ctx?: number;
+  n_gpu_layers?: number;
+  cache_type?: string;
+  n_cpu_moe?: number;
+  batch_size?: number;
+  ubatch_size?: number;
+  parallel?: number;
+  split_mode?: string;
+  tensor_split?: string;
+  main_gpu?: number;
+  fit?: boolean;
+  no_warmup?: boolean;
+  extra_args?: string[];
+  env?: Record<string, string>;
 }
 
 export interface CachedModelRow {
@@ -70,6 +88,20 @@ export interface ServeProfile {
   est_vram_gb: number;
   fits: boolean;
   note: string;
+  llama_args?: string[];
+}
+
+export interface LlamaRuntimeStatus {
+  path: string | null;
+  source: string | null;
+  variant: string | null;
+  version: string;
+  assetNames: string[];
+  installedAt: string | null;
+  installable: boolean;
+  gpuCapable: boolean;
+  preferredVariant: string;
+  installableVariants: string[];
 }
 
 export interface ModelsConfigView {
@@ -84,6 +116,8 @@ export interface RuntimeDetection {
     path: string | null;
     bundled: boolean;
     installable: boolean;
+    variant?: string | null;
+    gpuCapable?: boolean;
   };
   ollama: { available: boolean; path: string | null; serving: boolean; baseUrl: string | null };
   lmStudio: { available: boolean; baseUrl: string | null };
@@ -203,6 +237,24 @@ export async function fetchServeProfiles(query: {
   return parseJson(res);
 }
 
+export async function fetchLlamaRuntime(): Promise<LlamaRuntimeStatus> {
+  const res = await fetch('/api/models/llama-runtime');
+  return parseJson(res);
+}
+
+export async function installLlamaRuntime(payload?: {
+  variant?: string;
+  tag?: string;
+  reinstall?: boolean;
+}): Promise<LlamaRuntimeStatus & { ok: boolean; path?: string }> {
+  const res = await fetch('/api/models/llama-runtime/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload ?? {}),
+  });
+  return parseJson(res);
+}
+
 export async function startModelServe(payload: {
   modelPath: string;
   runtime?: 'llama-cpp' | 'ollama' | 'lm-studio';
@@ -213,6 +265,7 @@ export async function startModelServe(payload: {
   paramsB?: number;
   isMoe?: boolean;
   weightsGb?: number;
+  llama?: LlamaServeSettings;
 }): Promise<ServeRecord> {
   const res = await fetch('/api/models/serve', {
     method: 'POST',

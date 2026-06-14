@@ -11,6 +11,8 @@ import { detectRuntimes } from './runtime-detect.js';
 import { listServes, startServe, stopServe } from './serve.js';
 import { validateJobId, validateServeId } from './validate.js';
 import { detectHardware } from '../system/hardware.js';
+import { getLlamaRuntimeStatus, ensureLlamaServer, getInstalledLlamaVariant } from './llama-runtime.js';
+import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -183,7 +185,19 @@ export async function handleModelsRequest(req, res, pathname) {
         serveWeightsGb: weightsGb ? Number(weightsGb) : undefined,
         serveQuant: quant,
       });
-      sendJson(res, 200, { profiles, hardware });
+      const variant = (await getInstalledLlamaVariant()) ?? 'cpu';
+      const profilesWithArgs = profiles.map((p) => ({
+        ...p,
+        llama_args: buildLlamaServerArgs({
+          modelPath: '/model.gguf',
+          port: 8085,
+          profileKey: p.key,
+          hardware,
+          modelMeta: model,
+          variant,
+        }),
+      }));
+      sendJson(res, 200, { profiles: profilesWithArgs, hardware });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }
@@ -193,6 +207,51 @@ export async function handleModelsRequest(req, res, pathname) {
   if (pathname === '/api/models/runtimes' && req.method === 'GET') {
     const runtimes = await detectRuntimes();
     sendJson(res, 200, runtimes);
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-runtime' && req.method === 'GET') {
+    try {
+      const status = await getLlamaRuntimeStatus();
+      sendJson(res, 200, status);
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-runtime/install' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const variant = typeof body.variant === 'string' ? body.variant : undefined;
+      const tag = typeof body.tag === 'string' ? body.tag : undefined;
+      const reinstall = body.reinstall === true;
+      if (variant) {
+        await writeLlamaCppConfig({ variant });
+      }
+      const path = await ensureLlamaServer({ variant, tag, reinstall });
+      const status = await getLlamaRuntimeStatus();
+      sendJson(res, 200, { ok: true, path, ...status });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-cpp-config' && req.method === 'GET') {
+    const config = await readLlamaCppConfig();
+    sendJson(res, 200, config);
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-cpp-config' && req.method === 'PUT') {
+    try {
+      const body = await readJsonBody(req);
+      const config = await writeLlamaCppConfig(body);
+      sendJson(res, 200, { ok: true, ...config });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 

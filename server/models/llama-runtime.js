@@ -12,6 +12,14 @@ import { createGunzip } from 'node:zlib';
 import { getMinnowHome } from '../config/home.js';
 import { runProcess } from '../process-runner.js';
 import { getAppRoot } from '../workspace/root.js';
+import { readLlamaCppConfig } from './llama-args.js';
+import {
+  detectPreferredLlamaVariant,
+  fetchReleaseAssetList,
+  isGpuCapableVariant,
+  listInstallableVariants,
+  resolveLlamaAssets,
+} from './llama-variant.js';
 
 /** Pinned release — update when validating a newer llama.cpp build. */
 export const LLAMA_CPP_RELEASE_TAG = 'b9628';
@@ -116,7 +124,7 @@ export function isLlamaRuntimeInstallable() {
 }
 
 /**
- * Pick the CPU prebuilt asset name for the current platform.
+ * Pick the CPU prebuilt asset name for the current platform (legacy helper).
  * @returns {string}
  */
 export function pickLlamaReleaseAssetName(tag = LLAMA_CPP_RELEASE_TAG) {
@@ -137,6 +145,55 @@ export function pickLlamaReleaseAssetName(tag = LLAMA_CPP_RELEASE_TAG) {
       : `llama-${tag}-bin-ubuntu-x64.tar.gz`;
   }
   throw new Error(`Unsupported platform for bundled llama-server: ${platform} ${arch}`);
+}
+
+/**
+ * Read installed variant from meta.json when present.
+ * @returns {Promise<string | null>}
+ */
+export async function getInstalledLlamaVariant() {
+  try {
+    const raw = await fsp.readFile(getManagedLlamaMetaPath(), 'utf8');
+    const meta = JSON.parse(raw);
+    return typeof meta.variant === 'string' ? meta.variant : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Runtime status for GET /api/models/llama-runtime.
+ */
+export async function getLlamaRuntimeStatus() {
+  const resolved = await resolveLlamaServer();
+  let meta = null;
+  try {
+    meta = JSON.parse(await fsp.readFile(getManagedLlamaMetaPath(), 'utf8'));
+  } catch {
+    /* not installed via managed path */
+  }
+
+  const assets = await fetchReleaseAssetList();
+  const installableVariants = listInstallableVariants(assets);
+  const preferredVariant = await detectPreferredLlamaVariant(undefined, assets);
+  const config = await readLlamaCppConfig();
+  const variant =
+    (typeof config.variant === 'string' ? config.variant : null) ??
+    meta?.variant ??
+    preferredVariant;
+
+  return {
+    path: resolved.path,
+    source: resolved.source,
+    variant: meta?.variant ?? (resolved.path ? variant : preferredVariant),
+    version: meta?.version ?? LLAMA_CPP_RELEASE_TAG,
+    assetNames: meta?.assetNames ?? [],
+    installedAt: meta?.installedAt ?? null,
+    installable: isLlamaRuntimeInstallable(),
+    gpuCapable: isGpuCapableVariant(meta?.variant ?? preferredVariant),
+    preferredVariant,
+    installableVariants,
+  };
 }
 
 async function fetchJson(url) {
@@ -205,6 +262,33 @@ async function extractArchive(archivePath, destDir) {
 }
 
 /**
+ * Copy extracted binaries into the managed install root.
+ * @param {string} extractDir
+ * @param {string} managedRoot
+ */
+async function copyExtractedBinaries(extractDir, managedRoot) {
+  const found = await findExtractedBinary(extractDir);
+  if (!found) {
+    throw new Error('llama-server not found inside archive');
+  }
+
+  const binDir = path.dirname(found);
+  const entries = await fsp.readdir(binDir, { withFileTypes: true });
+  for (const ent of entries) {
+    const src = path.join(binDir, ent.name);
+    const dest = path.join(managedRoot, ent.name);
+    if (ent.isDirectory()) {
+      await fsp.cp(src, dest, { recursive: true });
+    } else {
+      await fsp.copyFile(src, dest);
+      if (process.platform !== 'win32' && ent.name === BINARY_BASE) {
+        await fsp.chmod(dest, 0o755);
+      }
+    }
+  }
+}
+
+/**
  * @param {string} searchDir
  */
 async function findExtractedBinary(searchDir) {
@@ -227,12 +311,20 @@ async function findExtractedBinary(searchDir) {
 
 /**
  * Install llama-server into ~/.minnow/models-runtime/llama-cpp when missing.
- * @param {{ onProgress?: (patch: { percent: number, message: string }) => void }} [opts]
+ * @param {{ variant?: string, tag?: string, reinstall?: boolean, onProgress?: (patch: { percent: number, message: string }) => void }} [opts]
  * @returns {Promise<string>}
  */
 export async function ensureLlamaServer(opts = {}) {
   const resolved = await resolveLlamaServer();
-  if (resolved.path) return resolved.path;
+  const installedVariant = await getInstalledLlamaVariant();
+  const config = await readLlamaCppConfig();
+  const wantsVariant = opts.variant ?? config.variant;
+
+  if (resolved.path && !opts.reinstall) {
+    if (!wantsVariant || wantsVariant === installedVariant) {
+      return resolved.path;
+    }
+  }
 
   if (!isLlamaRuntimeInstallable()) {
     throw new Error(
@@ -249,15 +341,27 @@ export async function ensureLlamaServer(opts = {}) {
 }
 
 /**
- * @param {{ onProgress?: (patch: { percent: number, message: string }) => void }} opts
+ * @param {{ variant?: string, tag?: string, reinstall?: boolean, onProgress?: (patch: { percent: number, message: string }) => void }} opts
  */
 async function installManagedLlamaServer(opts) {
   const onProgress = opts.onProgress;
-  const tag = LLAMA_CPP_RELEASE_TAG;
-  const assetName = pickLlamaReleaseAssetName(tag);
+  const tag = opts.tag ?? LLAMA_CPP_RELEASE_TAG;
+  const config = await readLlamaCppConfig();
+  const assets = await fetchReleaseAssetList(tag);
+  const variant =
+    opts.variant ??
+    config.variant ??
+    (await detectPreferredLlamaVariant(undefined, assets));
+
+  const { mainZip, companionZip, assetNames } = resolveLlamaAssets({
+    variant,
+    tag,
+    assets,
+  });
+
   const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/${tag}`;
 
-  onProgress?.({ percent: 2, message: `Resolving llama.cpp ${tag}` });
+  onProgress?.({ percent: 2, message: `Resolving llama.cpp ${tag} (${variant})` });
 
   let release;
   try {
@@ -268,49 +372,45 @@ async function installManagedLlamaServer(opts) {
     );
   }
 
-  const asset = (release.assets ?? []).find((a) => a.name === assetName);
-  if (!asset?.browser_download_url) {
-    const names = (release.assets ?? []).map((a) => a.name).join(', ');
-    throw new Error(
-      `No llama.cpp release asset ${assetName} (available: ${names || 'none'})`,
-    );
+  const assetByName = new Map((release.assets ?? []).map((a) => [a.name, a]));
+  const mainAsset = assetByName.get(mainZip);
+  if (!mainAsset?.browser_download_url) {
+    throw new Error(`No llama.cpp release asset ${mainZip}`);
   }
 
   const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-llama-'));
   const managedRoot = getManagedLlamaRoot();
 
   try {
-    const archivePath = path.join(tmpRoot, asset.name);
-    onProgress?.({ percent: 5, message: `Downloading ${asset.name}` });
-    await downloadToFile(asset.browser_download_url, archivePath, (pct) => {
-      onProgress?.({ percent: pct, message: `Downloading ${asset.name}` });
+    onProgress?.({ percent: 5, message: `Downloading ${mainZip}` });
+    const mainArchivePath = path.join(tmpRoot, mainZip);
+    await downloadToFile(mainAsset.browser_download_url, mainArchivePath, (pct) => {
+      onProgress?.({ percent: pct, message: `Downloading ${mainZip}` });
     });
 
-    onProgress?.({ percent: 96, message: 'Extracting llama-server' });
-    await fsp.rm(managedRoot, { recursive: true, force: true });
-    await fsp.mkdir(managedRoot, { recursive: true });
-    const extractDir = path.join(tmpRoot, 'extract');
-    await extractArchive(archivePath, extractDir);
-
-    const found = await findExtractedBinary(extractDir);
-    if (!found) {
-      throw new Error(`llama-server not found inside ${asset.name}`);
-    }
-
-    const binDir = path.dirname(found);
-    const entries = await fsp.readdir(binDir, { withFileTypes: true });
-    for (const ent of entries) {
-      const src = path.join(binDir, ent.name);
-      const dest = path.join(managedRoot, ent.name);
-      if (ent.isDirectory()) {
-        await fsp.cp(src, dest, { recursive: true });
-      } else {
-        await fsp.copyFile(src, dest);
-        if (process.platform !== 'win32' && ent.name === BINARY_BASE) {
-          await fsp.chmod(dest, 0o755);
-        }
+    if (companionZip) {
+      const companionAsset = assetByName.get(companionZip);
+      if (companionAsset?.browser_download_url) {
+        onProgress?.({ percent: 50, message: `Downloading ${companionZip}` });
+        const companionPath = path.join(tmpRoot, companionZip);
+        await downloadToFile(companionAsset.browser_download_url, companionPath);
+        onProgress?.({ percent: 70, message: 'Extracting CUDA runtime' });
+        const companionExtract = path.join(tmpRoot, 'companion');
+        await extractArchive(companionPath, companionExtract);
+        await fsp.rm(managedRoot, { recursive: true, force: true });
+        await fsp.mkdir(managedRoot, { recursive: true });
+        await copyExtractedBinaries(companionExtract, managedRoot);
       }
     }
+
+    onProgress?.({ percent: 85, message: 'Extracting llama-server' });
+    if (!companionZip) {
+      await fsp.rm(managedRoot, { recursive: true, force: true });
+      await fsp.mkdir(managedRoot, { recursive: true });
+    }
+    const extractDir = path.join(tmpRoot, 'extract');
+    await extractArchive(mainArchivePath, extractDir);
+    await copyExtractedBinaries(extractDir, managedRoot);
 
     const installed = findBinaryInDir(managedRoot);
     if (!installed) {
@@ -322,7 +422,8 @@ async function installManagedLlamaServer(opts) {
       `${JSON.stringify(
         {
           version: release.tag_name ?? tag,
-          asset: asset.name,
+          variant,
+          assetNames,
           installedAt: new Date().toISOString(),
           path: installed,
         },

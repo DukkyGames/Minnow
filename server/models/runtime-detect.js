@@ -3,7 +3,8 @@
  */
 
 import { runProcess } from '../process-runner.js';
-import { isLlamaRuntimeInstallable, resolveLlamaServer } from './llama-runtime.js';
+import { isLlamaRuntimeInstallable, resolveLlamaServer, getInstalledLlamaVariant } from './llama-runtime.js';
+import { isGpuCapableVariant } from './llama-variant.js';
 
 /**
  * @param {string} cmd
@@ -46,6 +47,7 @@ export async function detectRuntimes() {
     probeHttp('http://127.0.0.1:11434/api/tags'),
   ]);
   const installable = isLlamaRuntimeInstallable();
+  const variant = await getInstalledLlamaVariant();
 
   return {
     llamaCpp: {
@@ -53,6 +55,8 @@ export async function detectRuntimes() {
       path: llamaResolved.path,
       bundled: llamaResolved.source === 'vendor' || llamaResolved.source === 'managed',
       installable,
+      variant,
+      gpuCapable: variant ? isGpuCapableVariant(variant) : false,
     },
     ollama: {
       available: Boolean(ollamaPath),

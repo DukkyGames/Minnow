@@ -229,6 +229,12 @@ export function estimateMemoryGb(model: CatalogModel, quant: string, ctx: number
   return pb * bpp + 0.000008 * kvParams * ctx + 0.5;
 }
 
+/** Approximate on-disk GGUF / weights size from parameter count and quant tier. */
+export function estimateFileSizeGb(paramsBillion: number, quant: string): number {
+  const bpp = QUANT_BYTES_PER_PARAM[quant] ?? 0.5;
+  return Math.round(paramsBillion * bpp * 10) / 10;
+}
+
 export function bestQuantForBudget(
   model: CatalogModel,
   budgetGb: number,
