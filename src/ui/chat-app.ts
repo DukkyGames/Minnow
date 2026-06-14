@@ -23,6 +23,8 @@ import {
 } from '../state/sessions';
 import { refreshChatAppOutputsPanel } from './chat-app-outputs';
 import { refreshChatJumpChipVisibility } from './chat-scroll';
+import { closeContextUsageBreakdown } from './context-usage-breakdown';
+import { refreshContextUsageRing } from './context-usage-ring';
 import { closeBenchmark } from './benchmark-page';
 import { closeCompare } from './compare-page';
 import { syncChatItemDotsInDom } from './chat-item-dot';
@@ -252,6 +254,7 @@ function renderChatAppSurface(): void {
   syncComposerSendState();
   syncComposerFromStreamingState();
   refreshChatJumpChipVisibility();
+  refreshContextUsageRing();
 }
 
 async function ensureChatsWorkspaceReady(): Promise<boolean> {
@@ -309,6 +312,7 @@ export async function openChatApp(seed?: string): Promise<void> {
   if (window.location.hash.startsWith('#/settings')) return;
 
   closeOtherOverlays();
+  closeContextUsageBreakdown();
   root.classList.add('is-open');
 
   if (!isOsShellEnabled()) {
@@ -345,6 +349,7 @@ export function closeChatApp(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
 
   root.classList.remove('is-open');
+  closeContextUsageBreakdown();
 
   if (!isOsShellEnabled()) {
     shell.classList.remove('hidden');

@@ -700,7 +700,7 @@ Full-page Chat app at `#/app/chat` with session rail, message scroll shell, comp
 | Concern | Location |
 |---------|----------|
 | Markup | `index.html` — `#chatView` (`.chat-app-page`): session rail, `.chat-app-viewport` with `#chatAppArea` + `#chatAppJumpLatest`, `#chatAppMessageCol`, composer (`#chatAppInput`, `#chatAppSendBtn`), `#chatAppFiles` |
-| Styles | [`src/styles/chat-app.css`](../src/styles/chat-app.css) — centered 720px transcript column (72ch assistant prose), composer aligned to same width, bench tokens (`--mn-*`, `--radius-*`) |
+| Styles | [`src/styles/chat-app.css`](../src/styles/chat-app.css) — full-width transcript + composer in the main column; bench tokens (`--mn-*`, `--radius-*`) |
 | Page module | [`src/ui/chat-app.ts`](../src/ui/chat-app.ts) — `openChatApp(seed?)`, `closeChatApp()`, `initChatApp()`, session rail via `getAssistantChats` + `appendChatRow` |
 | OS host | [`src/os/app-host.ts`](../src/os/app-host.ts) — reparents `#chatView` into `#osAppsLayer`; `openAppPage('chat')` → `openChatApp` |
 | Registry copy | [`src/os/app-registry.ts`](../src/os/app-registry.ts) — “General assistant — tools, files, and app routing” |
@@ -732,6 +732,7 @@ Code and Chat apps share send + history render paths via parameterized DOM surfa
 | Transcript | `renderChatFromHistory(chat, '#chatAppArea')` on send end, thread switch, and `subscribeChatStreamEnd` |
 | Session rail | `appendChatRow` + `activateAssistantChat`; new chat via `createAssistantChat` (General mode) |
 | Attachments | Shared `#fileInput` + `#chatAppAttachPreview`; [`initAttachments()`](../src/attachments/store.ts) wires `#btnChatAppAttach` |
+| Context ring | `#chatAppContextUsageRing` + `#chatAppContextUsageBreakdown` in composer; shares [`context-usage-ring.ts`](../src/ui/context-usage-ring.ts) / [`context-usage-surface.ts`](../src/ui/context-usage-surface.ts) with Code `#contextUsageRing` |
 | Stream DOM | [`isStreamDomVisible`](../src/chat/streaming-state.ts) returns true when `isChatAppForeground()` |
 
 **Tests:** `test/state/chat-app-sessions.test.mts`.

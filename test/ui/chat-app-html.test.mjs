@@ -23,6 +23,8 @@ const CHAT_APP_IDS = [
   'chatAppInput',
   'btnChatAppStop',
   'chatAppSendBtn',
+  'chatAppContextUsageRing',
+  'chatAppContextUsageBreakdown',
   'chatAppFiles',
   'btnChatAppOutputsToggle',
   'chatAppFilesBody',

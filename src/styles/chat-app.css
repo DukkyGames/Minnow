@@ -277,15 +277,15 @@
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   scroll-behavior: smooth;
   scroll-padding-bottom: 12px;
 }
 
 .chat-app-col {
   width: 100%;
-  max-width: min(720px, 100%);
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -293,21 +293,21 @@
   min-height: 0;
 }
 
-/* Chat app: same readable line length as Code bench (72ch assistant prose). */
+/* Full-width transcript (outputs panel takes the right edge). */
 .chat-app-scroll .msg,
 .chat-app-scroll .tool-call-msg,
 .chat-app-scroll .sub-agent-card {
-  max-width: min(720px, 100%);
+  max-width: 100%;
   width: 100%;
 }
 
 .chat-app-scroll .msg-bubble.msg-bubble--md {
-  max-width: min(720px, 72ch);
+  max-width: 100%;
 }
 
 .chat-app-scroll .thought-stage,
 .chat-app-scroll .thoughts-panel-wrap {
-  max-width: min(720px, 100%);
+  max-width: 100%;
 }
 
 .chat-app-scroll .msg.user .msg-bubble {
@@ -375,8 +375,8 @@
 
 .chat-app-composer-inner {
   width: 100%;
-  max-width: min(720px, 100%);
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -449,6 +449,18 @@
 .chat-app-comp-btn .icon-svg {
   width: 20px;
   height: 20px;
+}
+
+/* Context ring sits beside send (popover opens above the input row). */
+.chat-app-context-usage {
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: 8px;
+}
+
+.chat-app-context-usage .context-usage-breakdown {
+  right: 0;
+  left: auto;
 }
 
 .chat-app-field {

@@ -1050,6 +1050,29 @@
               <button type="button" class="chat-app-comp-btn chat-app-stop hidden" id="btnChatAppStop" aria-label="Stop generation" hidden disabled>
                 <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
               </button>
+              <div class="context-usage-anchor chat-app-context-usage">
+                <button
+                  type="button"
+                  class="context-usage-ring"
+                  id="chatAppContextUsageRing"
+                  aria-label="Context usage"
+                  aria-expanded="false"
+                  aria-haspopup="dialog"
+                  aria-controls="chatAppContextUsageBreakdown"
+                  title="Context window usage"
+                >
+                  <svg class="context-usage-ring__svg" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="context-usage-ring__track" cx="12" cy="12" r="10"></circle>
+                    <circle class="context-usage-ring__fill" cx="12" cy="12" r="10"></circle>
+                  </svg>
+                </button>
+                <div
+                  id="chatAppContextUsageBreakdown"
+                  class="context-usage-breakdown hidden"
+                  role="dialog"
+                  aria-label="Context usage breakdown"
+                ></div>
+              </div>
               <button type="button" class="chat-app-send" id="chatAppSendBtn" aria-label="Send message">
                 <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
               </button>

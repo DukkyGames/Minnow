@@ -4,16 +4,15 @@
 
 import type { ContextBudget, ContextUsageSection } from '../chat/context-usage';
 import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
+import {
+  getActiveContextUsageSurface,
+  getContextUsageBreakdownPanel,
+  getContextUsageRingButton,
+  type ContextUsageSurface,
+} from './context-usage-surface';
 
 let panelOpen = false;
-
-function getPanel(): HTMLElement | null {
-  return document.getElementById('contextUsageBreakdown');
-}
-
-function getRingButton(): HTMLButtonElement | null {
-  return document.getElementById('contextUsageRing') as HTMLButtonElement | null;
-}
+let openSurface: ContextUsageSurface | null = null;
 
 function formatTokens(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '—';
@@ -81,38 +80,47 @@ export function isContextUsageBreakdownOpen(): boolean {
 
 /** Close anchored breakdown panel. */
 export function closeContextUsageBreakdown(): void {
-  const panel = getPanel();
-  const ring = getRingButton();
+  const surface = openSurface ?? getActiveContextUsageSurface();
+  const panel = getContextUsageBreakdownPanel(surface);
+  const ring = getContextUsageRingButton(surface);
   if (!panel || panel.classList.contains('hidden')) {
     panelOpen = false;
+    openSurface = null;
     return;
   }
   panel.classList.add('hidden');
   panelOpen = false;
+  openSurface = null;
   ring?.setAttribute('aria-expanded', 'false');
 }
 
 /** Open or toggle breakdown for the given budget snapshot. */
-export function toggleContextUsageBreakdown(budget: ContextBudget): void {
-  const panel = getPanel();
-  const ring = getRingButton();
+export function toggleContextUsageBreakdown(
+  budget: ContextBudget,
+  surface: ContextUsageSurface = getActiveContextUsageSurface(),
+): void {
+  const panel = getContextUsageBreakdownPanel(surface);
+  const ring = getContextUsageRingButton(surface);
   if (!panel || !ring) return;
 
-  if (panelOpen) {
+  if (panelOpen && openSurface?.breakdownId === surface.breakdownId) {
     closeContextUsageBreakdown();
     return;
   }
 
+  if (panelOpen) closeContextUsageBreakdown();
+
   panel.innerHTML = renderPanelBody(budget);
   panel.classList.remove('hidden');
   panelOpen = true;
+  openSurface = surface;
   ring.setAttribute('aria-expanded', 'true');
 }
 
 /** Repaint open panel after budget refresh. */
 export function syncContextUsageBreakdownIfOpen(budget: ContextBudget): void {
-  if (!panelOpen) return;
-  const panel = getPanel();
+  if (!panelOpen || !openSurface) return;
+  const panel = getContextUsageBreakdownPanel(openSurface);
   if (!panel) return;
   panel.innerHTML = renderPanelBody(budget);
 }
