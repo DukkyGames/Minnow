@@ -21,7 +21,7 @@ import {
 } from './model-routing-effective';
 import { loadTitlesConfig } from '../config/titles-meta';
 import { loadSamplerMeta } from '../config/sampler-meta';
-import { detectConfigServer } from '../config/storage-mode';
+import { detectConfigServer, isConfigServerMode } from '../config/storage-mode';
 import WORK_AGENT_THINKING_DEFAULTS from '../agents/defaults/work-agent-thinking.json';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { getActiveChat } from '../state/sessions';
@@ -132,7 +132,7 @@ export async function loadModelRoutingCatalog(
   };
   const activeChatName = activeChat.name?.trim() || 'Untitled chat';
 
-  if (!serverUp) {
+  if (!isConfigServerMode(serverUp)) {
     return { rows: [], offline: true, activeChat, activeChatName };
   }
 

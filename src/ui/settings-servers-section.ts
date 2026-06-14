@@ -18,6 +18,13 @@ import {
   type ServerInstallJob,
   type ServerRuntimePhase,
 } from '../servers/client';
+import {
+  fetchLlamaRuntime,
+  installLlamaRuntime,
+  listModelServes,
+  stopModelServe,
+  type ServeRecord,
+} from '../models/api-client';
 import { appendSettingsCrosslinks } from './settings-layout';
 import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
@@ -81,6 +88,130 @@ async function pollInstallJob(
     await new Promise((r) => setTimeout(r, 500));
   }
   return 'timeout';
+}
+
+/** llama.cpp row — runtime install + active model serves (no port/auto-start). */
+function createLlamaCppServerRow(
+  server: ManagedServerSummary,
+  onRefresh: () => void,
+): HTMLElement {
+  const row = document.createElement('article');
+  row.className = 'settings-mcp-row';
+  row.setAttribute('role', 'listitem');
+  row.dataset.serverId = server.id;
+
+  const head = el('div', 'settings-mcp-row-head');
+  head.append(el('span', 'settings-mcp-name', server.label));
+  head.append(el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Runtime'));
+  row.append(head);
+
+  const detail = el('div', 'settings-mcp-detail');
+  if (server.description) {
+    detail.append(el('p', 'settings-mcp-desc', server.description));
+  }
+
+  const runtimeInfo = el('p', 'settings-mcp-hint', 'Loading runtime…');
+  runtimeInfo.dataset.llamaRuntimeInfo = server.id;
+  detail.append(runtimeInfo);
+
+  const variantField = el('div', 'settings-field');
+  variantField.append(el('label', 'settings-field-label', 'Variant'));
+  const variantSelect = el('select', 'settings-input') as HTMLSelectElement;
+  variantSelect.dataset.llamaVariant = server.id;
+  variantField.appendChild(variantSelect);
+  detail.append(variantField);
+
+  const actions = el('div', 'settings-server-actions');
+  const installBtn = el('button', 'settings-action-btn', server.installed ? 'Reinstall' : 'Install');
+  installBtn.type = 'button';
+  installBtn.dataset.llamaInstall = server.id;
+  actions.append(installBtn);
+  detail.append(actions);
+
+  const servesPanel = el('details', 'settings-server-logs');
+  servesPanel.open = true;
+  const servesSummary = el('summary', undefined, 'Active model serves');
+  const servesList = el('div', 'settings-llama-serves-list');
+  servesList.dataset.llamaServesList = server.id;
+  servesPanel.append(servesSummary, servesList);
+  detail.append(servesPanel);
+
+  row.append(detail);
+
+  const refreshRuntime = async (): Promise<void> => {
+    try {
+      const runtime = await fetchLlamaRuntime();
+      runtimeInfo.textContent = runtime.path
+        ? `${runtime.variant ?? 'cpu'} · ${runtime.version} · ${runtime.path}`
+        : `Not installed — recommended: ${runtime.preferredVariant}`;
+
+      variantSelect.replaceChildren();
+      for (const v of runtime.installableVariants) {
+        const opt = el('option', undefined, v) as HTMLOptionElement;
+        opt.value = v;
+        if (v === (runtime.variant ?? runtime.preferredVariant)) opt.selected = true;
+        variantSelect.appendChild(opt);
+      }
+    } catch (err) {
+      runtimeInfo.textContent =
+        err instanceof Error ? err.message : 'Could not load llama.cpp runtime';
+    }
+  };
+
+  const refreshServes = async (): Promise<void> => {
+    const serves = await listModelServes();
+    const active = serves.filter(
+      (s: ServeRecord) =>
+        s.runtime === 'llama-cpp' && (s.status === 'running' || s.status === 'starting'),
+    );
+    servesList.replaceChildren();
+    if (!active.length) {
+      servesList.appendChild(
+        el('p', 'settings-field-hint', 'No active serves — use Models → Installed.'),
+      );
+      return;
+    }
+    for (const serve of active) {
+      const item = el('div', 'settings-llama-serve-row');
+      item.append(el('span', undefined, `${serve.modelLabel} · :${serve.port}`));
+      const stopBtn = el('button', 'settings-inline-btn', 'Stop');
+      stopBtn.type = 'button';
+      stopBtn.addEventListener('click', () => {
+        void stopModelServe(serve.id).then(() => {
+          setStatus('ok', 'Serve stopped');
+          void refreshServes();
+          onRefresh();
+        });
+      });
+      item.appendChild(stopBtn);
+      servesList.appendChild(item);
+    }
+  };
+
+  installBtn.addEventListener('click', () => {
+    void (async () => {
+      installBtn.disabled = true;
+      runtimeInfo.textContent = 'Installing…';
+      try {
+        await installLlamaRuntime({
+          variant: variantSelect.value || undefined,
+          reinstall: server.installed,
+        });
+        setStatus('ok', 'llama.cpp runtime installed');
+        await refreshRuntime();
+        onRefresh();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : 'Install failed');
+      } finally {
+        installBtn.disabled = false;
+      }
+    })();
+  });
+
+  void refreshRuntime();
+  void refreshServes();
+
+  return row;
 }
 
 function createServerRow(
@@ -418,7 +549,11 @@ export async function renderServersSettingsSection(mount: HTMLElement): Promise<
       return;
     }
     for (const server of servers) {
-      list.appendChild(createServerRow(server, () => void refresh()));
+      list.appendChild(
+        server.id === 'llama-cpp'
+          ? createLlamaCppServerRow(server, () => void refresh())
+          : createServerRow(server, () => void refresh()),
+      );
     }
   };
 

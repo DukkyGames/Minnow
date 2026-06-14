@@ -1935,10 +1935,11 @@ export function normalizeResearchConfig(raw) {
 }
 
 /** Managed local server ids allowed in servers.json (Phase 0: searxng only). */
-const MANAGED_SERVER_IDS = ['searxng'];
+const MANAGED_SERVER_IDS = ['searxng', 'llama-cpp'];
 
 const DEFAULT_SERVER_PORTS = {
   searxng: 8899,
+  'llama-cpp': 8085,
 };
 
 /**
@@ -1951,6 +1952,11 @@ export function defaultServersConfig() {
       enabled: false,
       autoStart: true,
       port: DEFAULT_SERVER_PORTS.searxng,
+    },
+    'llama-cpp': {
+      enabled: true,
+      autoStart: false,
+      port: DEFAULT_SERVER_PORTS['llama-cpp'],
     },
   };
 }

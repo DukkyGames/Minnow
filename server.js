@@ -13,6 +13,7 @@ import { getAppRoot } from './server/workspace/root.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import { shutdownAllServers } from './server/servers/index.js';
+import { shutdownAllModelServes } from './server/models/index.js';
 import {
   resolveSafePath,
   runWithPathAccess,
@@ -85,6 +86,7 @@ async function main() {
   console.log(`Agent packs API: ${localUrl.replace(/\/$/, '')}/api/agent-packs`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
+  console.log(`Models API: ${localUrl.replace(/\/$/, '')}/api/models/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
   console.log(`Servers API: ${localUrl.replace(/\/$/, '')}/api/servers/ping`);
@@ -94,6 +96,7 @@ async function main() {
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
   const onShutdown = () => {
     shutdownAllServers();
+    shutdownAllModelServes();
     destroyAllPtySessions();
     deleteGenerationsForProviderShutdown();
   };

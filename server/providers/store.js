@@ -22,6 +22,8 @@ import {
 
 const DEFAULT_LM_STUDIO_URL = 'http://localhost:1234';
 const LM_STUDIO_LOCAL_ID = 'lm-studio-local';
+export const LLAMA_CPP_LOCAL_ID = 'llama-cpp-local';
+const DEFAULT_LLAMA_CPP_URL = 'http://127.0.0.1:8085';
 
 /** Best-effort restrictive permissions on secrets files (Unix). */
 async function chmodSecrets(filePath) {
@@ -267,6 +269,71 @@ async function migrateProviderCapabilities() {
   }
 }
 
+/**
+ * Seed a disabled llama.cpp provider row (upserted when a model is served).
+ */
+export async function seedLlamaCppLocal() {
+  const ids = await listProviderIds();
+  if (ids.includes(LLAMA_CPP_LOCAL_ID)) return;
+
+  const baseUrl = validateBaseUrl(DEFAULT_LLAMA_CPP_URL);
+  const now = new Date().toISOString();
+  const paths = getDefaultPaths('openai-v1');
+  const profile = {
+    id: LLAMA_CPP_LOCAL_ID,
+    label: 'llama.cpp (local)',
+    baseUrl,
+    apiKind: 'openai-v1',
+    enabled: false,
+    authStyle: 'bearer',
+    modelsPath: paths.modelsPath,
+    chatCompletionsPath: paths.chatCompletionsPath,
+    supportsModelLoadUnload: false,
+    customHeaders: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+  await writeProfile(LLAMA_CPP_LOCAL_ID, profile);
+  await writeSecrets(LLAMA_CPP_LOCAL_ID, {
+    apiKey: '',
+    bearerToken: '',
+    headerOverrides: {},
+  });
+}
+
+/**
+ * Remove legacy per-serve Models · providers (models-xxxxxxxx ids).
+ */
+export async function migrateLegacyModelServeProviders() {
+  const ids = await listProviderIds();
+  for (const id of ids) {
+    if (id === LLAMA_CPP_LOCAL_ID || id === LM_STUDIO_LOCAL_ID) continue;
+
+    let profile;
+    try {
+      profile = await readProfile(id);
+    } catch {
+      continue;
+    }
+
+    const isLegacyId = /^models-[a-f0-9]{8}$/.test(id);
+    const isLegacyLabel =
+      typeof profile.label === 'string' && /^Models · /.test(profile.label);
+    const isLoopbackOpenAi =
+      profile.apiKind === 'openai-v1' &&
+      typeof profile.baseUrl === 'string' &&
+      /^https?:\/\/127\.0\.0\.1:\d+/.test(profile.baseUrl);
+
+    if ((isLegacyId || isLegacyLabel) && isLoopbackOpenAi) {
+      try {
+        await deleteProvider(id);
+      } catch {
+        await updateProvider(id, { enabled: false });
+      }
+    }
+  }
+}
+
 export async function ensureProviderRegistry() {
   await fs.mkdir(providersRoot(), { recursive: true });
   const ids = await listProviderIds();
@@ -277,10 +344,13 @@ export async function ensureProviderRegistry() {
         ? meta.serverUrl
         : DEFAULT_LM_STUDIO_URL;
     await seedLmStudioLocal(legacyUrl);
+    await seedLlamaCppLocal();
     return;
   }
 
   await migrateProviderCapabilities();
+  await migrateLegacyModelServeProviders();
+  await seedLlamaCppLocal();
 }
 
 /**

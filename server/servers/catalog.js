@@ -3,8 +3,9 @@
  */
 
 import * as searxngProvisioner from './searxng.js';
+import * as llamaCppProvisioner from './llama-cpp.js';
 
-/** @typedef {'python-venv'} ManagedServerKind */
+/** @typedef {'python-venv' | 'native-binary'} ManagedServerKind */
 
 /**
  * @typedef {object} ManagedServerDef
@@ -29,6 +30,16 @@ export const BUILTIN_SERVERS = {
     defaultAutoStart: true,
     healthPath: '/healthz',
     provisioner: searxngProvisioner,
+  },
+  'llama-cpp': {
+    id: 'llama-cpp',
+    label: 'llama.cpp',
+    description: 'Local GGUF inference runtime (llama-server).',
+    kind: 'native-binary',
+    defaultPort: 8085,
+    defaultAutoStart: false,
+    healthPath: '/health',
+    provisioner: llamaCppProvisioner,
   },
 };
 

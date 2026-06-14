@@ -1,5 +1,5 @@
 /** MinnowOS app identifiers — one per launcher tile. */
-export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'settings';
+export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'settings';
 
 /** Shell surface: desktop launcher vs a foreground app. */
 export type OsView = 'desktop' | 'app';
@@ -44,6 +44,8 @@ export interface LaunchOptions {
   seed?: string;
   /** Settings section slug when opening from legacy `#/settings/…` redirects. */
   settingsSection?: string;
+  /** Models app section slug when opening from `#/app/models/…` deep links. */
+  modelsSection?: string;
   /** Code app: composer mode to activate. */
   modeId?: ModeId;
   /** Code app: absolute workspace path from the recent-workspace list. */
@@ -57,4 +59,5 @@ export interface OsRoute {
   view: OsView;
   appId?: AppId;
   settingsSection?: string;
+  modelsSection?: string;
 }

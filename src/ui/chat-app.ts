@@ -22,6 +22,9 @@ import {
   sessionState,
 } from '../state/sessions';
 import { refreshChatAppOutputsPanel } from './chat-app-outputs';
+import { refreshChatJumpChipVisibility } from './chat-scroll';
+import { closeContextUsageBreakdown } from './context-usage-breakdown';
+import { refreshContextUsageRing } from './context-usage-ring';
 import { closeBenchmark } from './benchmark-page';
 import { closeCompare } from './compare-page';
 import { syncChatItemDotsInDom } from './chat-item-dot';
@@ -33,6 +36,7 @@ import {
 import { closeGlobalBugs } from './global-bugs-page';
 import { renderChatFromHistory } from './messages';
 import { closeSettings } from './settings-page';
+import { ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT } from '../constants';
 import { appendChatRow } from './sidebar';
 import { setStatus } from './status';
 
@@ -42,6 +46,8 @@ let chatsWorkspacePath: string | null = null;
 let streamEndUnsubscribe: (() => void) | null = null;
 /** Mobile session rail starts hidden until the menubar toggle opens it. */
 let chatAppRailHidden = true;
+/** Desktop session rail starts collapsed (dots only) until expanded. */
+let chatAppRailExpanded = false;
 
 function getRoot(): HTMLElement | null {
   return document.getElementById('chatView');
@@ -77,8 +83,8 @@ function renderChatAppEmptyState(area: HTMLElement): void {
     <div class="chat-app-empty-ico" aria-hidden="true">
       <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </div>
-    <h2>A quiet place to think.</h2>
-    <p>General assistant with tools, files, and app routing. Ask anything.</p>
+    <h2>Start a conversation</h2>
+    <p>General assistant with tools and file outputs. Ask anything below.</p>
   `;
   area.appendChild(empty);
 }
@@ -160,27 +166,57 @@ function isMobileChatAppLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-/** Sync session rail visibility with mobile collapse state. */
+function isChatAppSessionRailVisible(): boolean {
+  if (isMobileChatAppLayout()) return !chatAppRailHidden;
+  return chatAppRailExpanded;
+}
+
+function syncChatAppRailToggleButton(): void {
+  const btn = document.getElementById('btnChatAppRailToggle');
+  if (!btn) return;
+  const expanded = isChatAppSessionRailVisible();
+  btn.innerHTML = expanded ? ICON_CHEVRON_LEFT : ICON_CHEVRON_RIGHT;
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  btn.setAttribute('aria-label', expanded ? 'Collapse sessions' : 'Expand sessions');
+  btn.setAttribute('title', expanded ? 'Collapse sessions' : 'Expand sessions');
+}
+
+function syncMenubarChatToggle(): void {
+  const btn = document.querySelector<HTMLButtonElement>('.mn-os-mb-chat-toggle');
+  if (!btn || !isChatAppOpen()) return;
+  btn.setAttribute('aria-pressed', isChatAppSessionRailVisible() ? 'true' : 'false');
+}
+
+/** Sync session rail visibility with mobile hide state and desktop expand state. */
 export function applyChatAppRailVisuals(): void {
   const root = getRoot();
   if (!root) return;
   if (!isMobileChatAppLayout()) {
     root.classList.remove('is-rail-hidden');
-    return;
+    root.classList.toggle('is-rail-expanded', chatAppRailExpanded);
+  } else {
+    root.classList.remove('is-rail-expanded');
+    root.classList.toggle('is-rail-hidden', chatAppRailHidden);
+    if (!chatAppRailHidden) chatAppRailExpanded = true;
   }
-  root.classList.toggle('is-rail-hidden', chatAppRailHidden);
+  syncChatAppRailToggleButton();
+  syncMenubarChatToggle();
 }
 
-/** Menubar control: show/hide the Chat app session rail on narrow viewports. */
+/** Menubar / rail control: hide rail on mobile, expand/collapse on desktop. */
 export function toggleChatAppSessionRail(): void {
-  if (!isMobileChatAppLayout()) return;
-  chatAppRailHidden = !chatAppRailHidden;
+  if (isMobileChatAppLayout()) {
+    chatAppRailHidden = !chatAppRailHidden;
+    if (!chatAppRailHidden) chatAppRailExpanded = true;
+  } else {
+    chatAppRailExpanded = !chatAppRailExpanded;
+  }
   applyChatAppRailVisuals();
 }
 
-/** Whether the session rail is collapsed on mobile (menubar aria-pressed). */
+/** Whether the session rail is hidden (mobile) or collapsed (desktop). */
 export function isChatAppSessionRailHidden(): boolean {
-  return chatAppRailHidden;
+  return !isChatAppSessionRailVisible();
 }
 
 /** Concierge / launch_minnow_app seed: auto-send as first message when chat is empty. */
@@ -217,6 +253,8 @@ function renderChatAppSurface(): void {
   void refreshChatAppOutputsPanel();
   syncComposerSendState();
   syncComposerFromStreamingState();
+  refreshChatJumpChipVisibility();
+  refreshContextUsageRing();
 }
 
 async function ensureChatsWorkspaceReady(): Promise<boolean> {
@@ -274,6 +312,7 @@ export async function openChatApp(seed?: string): Promise<void> {
   if (window.location.hash.startsWith('#/settings')) return;
 
   closeOtherOverlays();
+  closeContextUsageBreakdown();
   root.classList.add('is-open');
 
   if (!isOsShellEnabled()) {
@@ -310,6 +349,7 @@ export function closeChatApp(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
 
   root.classList.remove('is-open');
+  closeContextUsageBreakdown();
 
   if (!isOsShellEnabled()) {
     shell.classList.remove('hidden');
@@ -349,6 +389,10 @@ function autoResizeComposer(textarea: HTMLTextAreaElement): void {
 function bindStaticControls(): void {
   document.getElementById('btnChatAppNewChat')?.addEventListener('click', () => {
     void createNewAssistantChat();
+  });
+
+  document.getElementById('btnChatAppRailToggle')?.addEventListener('click', () => {
+    toggleChatAppSessionRail();
   });
 
   const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
