@@ -7,22 +7,116 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { createVenv, runProcess } from '../servers/provisioner.js';
 import { ensureStandalonePython } from '../servers/searxng.js';
+import { detectHardware } from '../system/hardware.js';
 import { getVoiceMetaPath, getVoiceRoot, getVoiceVenvDir } from './paths.js';
 
-/** Pip packages for Phase 2 skeleton (CPU torch is fine until Phase 3/4). */
-const CORE_PACKAGES = [
-  {
-    label: 'torch (CPU)',
-    args: [
-      'torch',
-      '--index-url',
-      'https://download.pytorch.org/whl/cpu',
-    ],
-  },
-  { label: 'transformers', args: ['transformers'] },
-  { label: 'accelerate', args: ['accelerate'] },
-  { label: 'soundfile', args: ['soundfile'] },
-];
+/** PyTorch wheel indexes — CUDA build bundles its own runtime (driver 550+ for cu124). */
+const TORCH_CUDA_INDEX = 'https://download.pytorch.org/whl/cu124';
+const TORCH_CPU_INDEX = 'https://download.pytorch.org/whl/cpu';
+
+/**
+ * Resolve pip torch package for the current machine.
+ * @param {boolean} cudaAvailable
+ * @returns {{ label: string, variant: 'cpu' | 'cuda', args: string[] }}
+ */
+export function buildTorchPackage(cudaAvailable) {
+  const index = cudaAvailable ? TORCH_CUDA_INDEX : TORCH_CPU_INDEX;
+  if (cudaAvailable) {
+    return {
+      label: 'torch + torchaudio (CUDA 12.4)',
+      variant: 'cuda',
+      args: ['torch', 'torchaudio', '--index-url', index],
+    };
+  }
+  return {
+    label: 'torch + torchaudio (CPU)',
+    variant: 'cpu',
+    args: ['torch', 'torchaudio', '--index-url', index],
+  };
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof detectHardware>> | null | undefined} hw
+ * @returns {boolean}
+ */
+export function isCudaHardware(hw) {
+  return hw?.backend === 'cuda';
+}
+
+/**
+ * @returns {Promise<boolean>}
+ */
+async function probeCudaHardware() {
+  try {
+    const hw = await detectHardware();
+    return isCudaHardware(hw);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {Record<string, unknown> | null} meta
+ * @returns {boolean}
+ */
+function metaHasCpuTorch(meta) {
+  if (meta?.torchVariant === 'cpu') return true;
+  const packages = meta?.installedPackages;
+  if (!Array.isArray(packages)) return false;
+  return packages.some((label) => typeof label === 'string' && label.includes('torch (CPU)'));
+}
+
+/**
+ * Drop CPU-only torch before installing the CUDA build (pip cannot swap indexes in-place).
+ * @param {string} venvPython
+ * @param {boolean} cudaAvailable
+ * @param {Record<string, unknown> | null} meta
+ * @param {(message: string) => void} [onProgress]
+ */
+async function maybeUninstallCpuTorch(venvPython, cudaAvailable, meta, onProgress) {
+  if (!cudaAvailable || !metaHasCpuTorch(meta)) return;
+  onProgress?.('Removing CPU-only PyTorch before installing CUDA build');
+  try {
+    await runProcess(venvPython, ['-m', 'pip', 'uninstall', '-y', 'torch', 'torchaudio'], {
+      windowsHide: true,
+    });
+  } catch {
+    /* torch may already be absent */
+  }
+}
+
+/**
+ * qwen-tts can pull a PyPI torchaudio that does not match our torch build — re-pin both.
+ * @param {string} venvPython
+ * @param {boolean} cudaAvailable
+ * @param {(message: string) => void} [onProgress]
+ */
+async function pinTorchStack(venvPython, cudaAvailable, onProgress) {
+  const index = cudaAvailable ? TORCH_CUDA_INDEX : TORCH_CPU_INDEX;
+  const label = cudaAvailable
+    ? 'torch + torchaudio (CUDA 12.4 pin)'
+    : 'torch + torchaudio (CPU pin)';
+  onProgress?.(`Pinning ${label}`);
+  await runProcess(
+    venvPython,
+    ['-m', 'pip', 'install', '--force-reinstall', 'torch', 'torchaudio', '--index-url', index],
+    { windowsHide: true },
+  );
+}
+
+/**
+ * @param {boolean} cudaAvailable
+ * @returns {Array<{ label: string, args: string[] }>}
+ */
+function corePackagesFor(cudaAvailable) {
+  const torchPkg = buildTorchPackage(cudaAvailable);
+  return [
+    { label: torchPkg.label, args: torchPkg.args },
+    { label: 'transformers', args: ['transformers'] },
+    { label: 'accelerate', args: ['accelerate'] },
+    { label: 'soundfile', args: ['soundfile'] },
+  ];
+}
 
 /** Optional package — install continues when unavailable (CI / platform quirks). */
 const OPTIONAL_PACKAGES = [{ label: 'qwen-tts', args: ['qwen-tts'] }];
@@ -101,6 +195,10 @@ export async function provision(onProgress) {
   const progress = (msg) => onProgress?.(msg);
   await fsp.mkdir(getVoiceRoot(), { recursive: true });
 
+  progress('Detecting GPU');
+  const cudaAvailable = await probeCudaHardware();
+  const torchPkg = buildTorchPackage(cudaAvailable);
+
   progress('Ensuring Python runtime');
   const pythonExe = await ensureStandalonePython(progress);
 
@@ -113,10 +211,13 @@ export async function provision(onProgress) {
 
   await ensurePip(venvPython, progress);
 
+  const prevMeta = await readMeta();
+  await maybeUninstallCpuTorch(venvPython, cudaAvailable, prevMeta, progress);
+
   const installedPackages = [];
   const skippedPackages = [];
 
-  for (const pkg of CORE_PACKAGES) {
+  for (const pkg of corePackagesFor(cudaAvailable)) {
     const ok = await pipInstallPackage(venvPython, pkg, progress);
     if (ok) installedPackages.push(pkg.label);
   }
@@ -127,6 +228,19 @@ export async function provision(onProgress) {
     else skippedPackages.push(pkg.label);
   }
 
+  try {
+    await pinTorchStack(venvPython, cudaAvailable, progress);
+    const pinLabel = cudaAvailable
+      ? 'torch + torchaudio (CUDA 12.4 pin)'
+      : 'torch + torchaudio (CPU pin)';
+    if (!installedPackages.includes(pinLabel)) {
+      installedPackages.push(pinLabel);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to pin matching torch/torchaudio: ${message}`);
+  }
+
   const prev = await readMeta();
   const meta = {
     kind: 'python-venv',
@@ -135,6 +249,7 @@ export async function provision(onProgress) {
     venvPython,
     installedPackages,
     skippedPackages,
+    torchVariant: torchPkg.variant,
     port: prev?.port ?? null,
     pid: prev?.pid ?? null,
   };
@@ -142,16 +257,19 @@ export async function provision(onProgress) {
   return meta;
 }
 
-/** @returns {Promise<{ installed: boolean, installedAt: string | null, installedPackages: string[], skippedPackages: string[] }>} */
+/** @returns {Promise<{ installed: boolean, installedAt: string | null, installedPackages: string[], skippedPackages: string[], torchVariant: 'cpu' | 'cuda' | null }>} */
 export async function getInstallStatus() {
   const venvPython = venvPythonPath(getVoiceVenvDir());
   const meta = await readMeta();
   const installed = fs.existsSync(venvPython);
+  const torchVariant =
+    meta?.torchVariant === 'cuda' || meta?.torchVariant === 'cpu' ? meta.torchVariant : null;
   return {
     installed,
     installedAt: meta?.installedAt ?? null,
     installedPackages: Array.isArray(meta?.installedPackages) ? meta.installedPackages : [],
     skippedPackages: Array.isArray(meta?.skippedPackages) ? meta.skippedPackages : [],
+    torchVariant,
   };
 }
 

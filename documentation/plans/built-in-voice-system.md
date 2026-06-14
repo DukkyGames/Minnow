@@ -13,7 +13,7 @@ Implementation plan for local Whisper STT + Qwen3-TTS. Full schema and phased de
 
 ## Phase 2 (shipped)
 
-- **Provisioner** (`server/voice/provision.js`) — reuses shared `python-build-standalone` from `~/.minnow/servers/python`, venv at `~/.minnow/voice/venv`, pip installs `torch` (CPU wheels), `transformers`, `accelerate`, `soundfile`, optional `qwen-tts`; meta at `~/.minnow/voice/meta.json`
+- **Provisioner** (`server/voice/provision.js`) — reuses shared `python-build-standalone` from `~/.minnow/servers/python`, venv at `~/.minnow/voice/venv`, pip installs `torch` (CUDA `cu124` wheels when `detectHardware()` reports `backend === 'cuda'`, else CPU wheels), `transformers`, `accelerate`, `soundfile`, optional `qwen-tts`; meta at `~/.minnow/voice/meta.json` includes `torchVariant`
 - **Worker skeleton** (`server/voice/python/worker.py`) — stdlib HTTP server: `GET /health`, `GET /voice/capabilities`, stub `POST` routes return 501
 - **Runtime manager** (`server/voice/runtime-manager.js`) — `installRuntime`, `repairRuntime`, `startWorker`, `stopWorker`, `getHealth`, `getRuntimeStatus`
 - **APIs** (`server/voice/routes.js`, wired in `server/runtime/middlewares.js`):

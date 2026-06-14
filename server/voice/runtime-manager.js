@@ -14,6 +14,9 @@ import {
 } from './provision.js';
 import { getVoiceLogPath, getVoiceWorkerScriptPath } from './paths.js';
 import { detectHardware } from '../system/hardware.js';
+import { isCudaHardware } from './provision.js';
+import { resetLocalSttForTests as resetSttModelCache } from './local-stt.js';
+import { resetLocalTtsForTests as resetTtsModelCache } from './local-tts.js';
 
 /** @typedef {'pending' | 'installing' | 'completed' | 'failed'} InstallPhase */
 
@@ -79,6 +82,11 @@ function setInstallJob(patch) {
     error: installJob.error,
   });
   return installJob;
+}
+
+function resetWorkerModelCache() {
+  resetSttModelCache();
+  resetTtsModelCache();
 }
 
 /**
@@ -272,6 +280,8 @@ export async function startWorker() {
     await stopWorker();
   }
 
+  resetWorkerModelCache();
+
   const venvPython = await getVenvPython();
   const workerScript = getVoiceWorkerScriptPath();
   const port = await pickFreePort();
@@ -303,6 +313,7 @@ export async function startWorker() {
   child.on('exit', (code) => {
     if (workerState?.child === child) {
       workerState = null;
+      resetWorkerModelCache();
       void appendWorkerLog(`\n[exit] code=${code ?? 'null'}\n`);
       void patchMeta({ pid: null, port: null });
     }
@@ -339,6 +350,7 @@ export async function stopWorker() {
 
   killWorkerChild(workerState.child);
   workerState = null;
+  resetWorkerModelCache();
   await patchMeta({ pid: null, port: null });
   return { ok: true, wasRunning: true };
 }
@@ -368,18 +380,38 @@ export async function getHealth() {
 /**
  * Combined runtime status for the client.
  */
+async function fetchWorkerCuda(port) {
+  const fetchImpl = fetchOverrideForTests ?? fetch;
+  try {
+    const res = await fetchImpl(`http://127.0.0.1:${port}/voice/capabilities`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!res.ok) return false;
+    const json = await res.json();
+    return json?.cuda === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function getRuntimeStatus() {
   const install = await getInstallStatus();
   let cudaAvailable = false;
   try {
     const hw = await detectHardware();
-    cudaAvailable = hw?.gpu?.backend === 'cuda';
+    cudaAvailable = isCudaHardware(hw);
   } catch {
     cudaAvailable = false;
   }
 
   const running = workerState?.healthy === true;
   const workerHealth = running ? await getHealth() : { ok: false, status: 'stopped' };
+
+  if (running && workerState?.port) {
+    cudaAvailable = await fetchWorkerCuda(workerState.port);
+  } else if (install.installed && install.torchVariant) {
+    cudaAvailable = install.torchVariant === 'cuda';
+  }
 
   let health = 'not_installed';
   if (install.installed) {

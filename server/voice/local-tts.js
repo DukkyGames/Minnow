@@ -25,6 +25,19 @@ export async function resolveLocalTtsModelPath(modelId) {
 }
 
 /**
+ * Whether the worker already has the requested TTS model resident.
+ * @param {string} modelId
+ */
+async function isTtsModelReady(modelId) {
+  const caps = await fetchWorkerCapabilities();
+  return (
+    caps.modelLoaded === true &&
+    caps.loadedKind === 'tts' &&
+    caps.loadedModelId === modelId
+  );
+}
+
+/**
  * Ask the worker to load a TTS model.
  * @param {string} modelId
  * @param {Record<string, unknown>} config
@@ -34,9 +47,10 @@ export async function ensureTtsModelLoaded(modelId, config) {
   if (!port) {
     throw new Error('Voice worker is not running. Start it from Models → Voice.');
   }
-  if (loadedModelId === modelId) {
+  if (loadedModelId === modelId && (await isTtsModelReady(modelId))) {
     return;
   }
+  loadedModelId = null;
 
   const modelPath = await resolveLocalTtsModelPath(modelId);
   const tokenizerPath = config.tokenizerModelId

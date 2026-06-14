@@ -56,6 +56,19 @@ export async function fetchWorkerCapabilities() {
 }
 
 /**
+ * Whether the worker already has the requested STT model resident.
+ * @param {string} modelId
+ */
+async function isSttModelReady(modelId) {
+  const caps = await fetchWorkerCapabilities();
+  return (
+    caps.modelLoaded === true &&
+    caps.loadedKind === 'stt' &&
+    caps.loadedModelId === modelId
+  );
+}
+
+/**
  * Ask the worker to load an STT model.
  * @param {string} modelId
  * @param {Record<string, unknown>} config
@@ -65,9 +78,10 @@ export async function ensureSttModelLoaded(modelId, config) {
   if (!port) {
     throw new Error('Voice worker is not running. Start it from Models → Voice.');
   }
-  if (loadedModelId === modelId) {
+  if (loadedModelId === modelId && (await isSttModelReady(modelId))) {
     return;
   }
+  loadedModelId = null;
 
   const modelPath = await resolveLocalModelPath(modelId);
   const fetchImpl = getWorkerFetch();
