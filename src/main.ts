@@ -72,6 +72,7 @@ import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
+import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
@@ -274,6 +275,7 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  startSchedulerNotificationPoll();
   onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();

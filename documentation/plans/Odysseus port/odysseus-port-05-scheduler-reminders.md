@@ -3,7 +3,7 @@
 Tier: 2  
 Effort: M-L  
 Priority: Medium  
-Status: Planned  
+Status: Shipped (MIN-120)  
 Depends on: #12 for stored prompts/channels that may contain secrets  
 Linear: [MIN-120](https://linear.app/minnowai/issue/MIN-120/odysseus-port-05-scheduled-tasks-and-reminders)
 
@@ -208,17 +208,17 @@ interface SchedulerNotification {
 
 ## Implementation TODOs
 
-- [ ] Add scheduler store and validation
-- [ ] Add interval support first
-- [ ] Add run-now route
-- [ ] Start the tick loop from `server/runtime/bootstrap.js`
-- [ ] Add non-overlap locking per job
-- [ ] Add in-app delivery through a client/server notification bridge
-- [ ] Add cron support
+- [x] Add scheduler store and validation
+- [x] Add interval support first
+- [x] Add run-now route
+- [x] Start the tick loop from `server/runtime/bootstrap.js`
+- [x] Add non-overlap locking per job
+- [x] Add in-app delivery through a client/server notification bridge
+- [x] Add cron support
 - [ ] Add optional `ntfy` channel as a later reminder-delivery phase, or document it as out of scope
-- [ ] Add Scheduler settings section or MinnowOS app
+- [x] Add Scheduler settings section or MinnowOS app
 - [ ] Add email/webhook channel hooks after #9/#6
-- [ ] Update `documentation/context.md`
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

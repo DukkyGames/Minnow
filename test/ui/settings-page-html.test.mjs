@@ -33,6 +33,7 @@ const SETTINGS_SECTION_IDS = [
   'skills',
   'features',
   'evals',
+  'scheduler',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
@@ -123,7 +124,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 24);
+    assert.equal(SETTINGS_SECTION_IDS.length, 25);
   });
 
   test('prompts hub mount exists in index.html', () => {

@@ -27,7 +27,8 @@ export type SettingsSectionId =
   | 'editor'
   | 'skills'
   | 'features'
-  | 'evals';
+  | 'evals'
+  | 'scheduler';
 
 /** Sidebar label (hash id stays stable for bookmarks). */
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
@@ -56,6 +57,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   skills: 'Skills',
   features: 'Orchestration',
   evals: 'Evals',
+  scheduler: 'Scheduler',
 };
 
 export type SettingsNavGroupId =
@@ -98,7 +100,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    sections: ['features', 'evals'],
+    sections: ['features', 'evals', 'scheduler'],
   },
 ];
 
