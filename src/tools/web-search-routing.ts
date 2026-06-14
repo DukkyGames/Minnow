@@ -9,6 +9,7 @@ export type WebSearchExecution =
   | { kind: 'brave' }
   | { kind: 'tavily' }
   | { kind: 'ddg' }
+  | { kind: 'searxng' }
   | { kind: 'error'; message: string };
 
 /** Normalize persisted provider; unknown values fall back to DuckDuckGo. */
@@ -66,11 +67,7 @@ export function resolveWebSearchExecution(
           'Error: SearXNG web search requires the local tool server. Run npm start (not npm run dev).',
       };
     }
-    return {
-      kind: 'error',
-      message:
-        'Error: SearXNG search is not wired to web_search yet. Use DuckDuckGo, Tavily, or Brave in Settings → Search, or wait for the Deep Research search phase.',
-    };
+    return { kind: 'searxng' };
   }
 
   const legacy = normalizeWebSearchProvider(provider);

@@ -17,7 +17,11 @@ import {
   type FallbackChainsConfig,
 } from '../config/fallback-chains-meta';
 import { saveSamplerMeta } from '../config/sampler-meta';
-import { isServerStorageMode } from '../config/storage-mode';
+import {
+  detectConfigServer,
+  isConfigServerMode,
+  refreshConfigStorageBanner,
+} from '../config/storage-mode';
 import {
   loadModelRoutingCatalog,
   type ModelRoutingGroup,
@@ -726,7 +730,10 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
   mountedRows = [];
   mount.replaceChildren();
 
-  if (!isServerStorageMode()) {
+  const storageMode = await detectConfigServer();
+  refreshConfigStorageBanner();
+
+  if (!isConfigServerMode(storageMode)) {
     mount.appendChild(
       el(
         'p',
@@ -736,34 +743,45 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
     );
   }
 
-  const { providers } = await listProviders();
-  const activeProvider =
-    providers.find((p) => p.enabled !== false)?.id ?? 'lm-studio-local';
+  try {
+    const { providers } = await listProviders();
+    const activeProvider =
+      providers.find((p) => p.enabled !== false)?.id ?? 'lm-studio-local';
 
-  const catalog = await loadModelRoutingCatalog({
-    providerId: activeProvider,
-    modelId: '',
-  });
+    const catalog = await loadModelRoutingCatalog({
+      providerId: activeProvider,
+      modelId: '',
+    });
 
-  lastCatalogChatId = catalog.activeChat.id;
+    lastCatalogChatId = catalog.activeChat.id;
 
-  if (catalog.offline) {
+    if (catalog.offline) {
+      mount.appendChild(
+        el(
+          'p',
+          'settings-server-banner',
+          'Start with npm start to load bindings from ~/.minnow.',
+        ),
+      );
+      return;
+    }
+
+    await renderGlobalFallbackBar(mount);
+
+    for (const group of GROUP_ORDER) {
+      const groupRows = catalog.rows.filter((r) => r.group === group);
+      if (groupRows.length === 0) continue;
+      renderGroup(mount, group, groupRows);
+    }
+  } catch (err) {
+    console.error('[model-routing] render failed', err);
     mount.appendChild(
       el(
         'p',
         'settings-server-banner',
-        'Start with npm start to load bindings from ~/.minnow.',
+        'Could not load model bindings yet. Switch to another Models tab and back, or refresh the page.',
       ),
     );
-    return;
-  }
-
-  await renderGlobalFallbackBar(mount);
-
-  for (const group of GROUP_ORDER) {
-    const groupRows = catalog.rows.filter((r) => r.group === group);
-    if (groupRows.length === 0) continue;
-    renderGroup(mount, group, groupRows);
   }
 }
 

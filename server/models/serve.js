@@ -8,17 +8,24 @@ import net from 'node:net';
 import path from 'node:path';
 import {
   createBackgroundRun,
-  getRun,
   stopActiveRun,
 } from '../terminal-runner.js';
 import {
   createProvider,
   listProviders,
   setActiveProviderId,
+  updateProvider,
 } from '../providers/store.js';
 import { detectRuntimes } from './runtime-detect.js';
+import { profileToLlamaArgs } from './profiles.js';
 import { getServesIndexPath, modelsLogDir } from './paths.js';
 import { validatePort, validateRuntime, validateServeId } from './validate.js';
+import {
+  buildLlamaServerEnv,
+  ensureLlamaServer,
+  llamaServerSpawnCwd,
+  resolveLlamaServer,
+} from './llama-runtime.js';
 
 /** @typedef {'starting' | 'running' | 'stopped' | 'error'} ServeStatus */
 
@@ -153,8 +160,12 @@ export async function startServe(body) {
   }
 
   const runtimes = await detectRuntimes();
-  if (runtime === 'llama-cpp' && !runtimes.llamaCpp.available) {
-    throw new Error('llama-server not found on PATH — install llama.cpp server binaries');
+  let llamaServerPath = null;
+  if (runtime === 'llama-cpp') {
+    llamaServerPath = (await resolveLlamaServer()).path ?? (await ensureLlamaServer());
+    if (!llamaServerPath) {
+      throw new Error('llama-server not found — install llama.cpp server binaries');
+    }
   }
   if (runtime === 'ollama' && !runtimes.ollama.serving) {
     throw new Error('Ollama is not running on http://127.0.0.1:11434');
@@ -214,11 +225,32 @@ export async function startServe(body) {
 
   await fsp.mkdir(modelsLogDir(), { recursive: true });
 
-  const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port)];
+  const profileKey =
+    typeof body.profile === 'string' && body.profile.trim() ? body.profile.trim() : 'balanced';
+  let args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port)];
+
+  if (body.hardware && typeof body.hardware === 'object') {
+    const { computeServeProfiles } = await import('./profiles.js');
+    const profiles = computeServeProfiles(body.hardware, {
+      name: modelLabel,
+      quantization: body.quant,
+      parameters_raw: body.paramsB,
+      is_moe: body.isMoe,
+    }, {
+      serveWeightsGb: body.weightsGb,
+      serveQuant: body.quant,
+    });
+    const profile = profiles.find((p) => p.key === profileKey) || profiles[1] || profiles[0];
+    if (profile) {
+      args = profileToLlamaArgs(profile, modelPath, port);
+    }
+  }
+
   const run = await createBackgroundRun({
-    command: 'llama-server',
+    command: llamaServerPath,
     args,
-    cwd: path.dirname(modelPath),
+    cwd: llamaServerSpawnCwd(llamaServerPath),
+    env: buildLlamaServerEnv(llamaServerPath),
     source: 'agent',
     logSubdir: 'models',
   });
@@ -283,9 +315,14 @@ export async function stopServe(serveId) {
 
   if (row.runId) {
     stopActiveRun(row.runId);
-    const run = getRun(row.runId);
-    if (run?.pid) {
-      /* logged */
+  }
+
+  // Disable auto-created provider so stale rows do not linger in the picker.
+  if (row.providerId) {
+    try {
+      await updateProvider(row.providerId, { enabled: false });
+    } catch {
+      /* provider may have been removed manually */
     }
   }
 

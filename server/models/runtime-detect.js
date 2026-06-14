@@ -3,6 +3,7 @@
  */
 
 import { runProcess } from '../process-runner.js';
+import { isLlamaRuntimeInstallable, resolveLlamaServer } from './llama-runtime.js';
 
 /**
  * @param {string} cmd
@@ -35,18 +36,24 @@ async function probeHttp(url) {
 }
 
 /**
- * @returns {Promise<{ llamaCpp: { available: boolean, path: string | null }, ollama: { available: boolean, path: string | null, serving: boolean }, lmStudio: { available: boolean, baseUrl: string | null } }>}
+ * @returns {Promise<{ llamaCpp: { available: boolean, path: string | null, bundled: boolean, installable: boolean }, ollama: { available: boolean, path: string | null, serving: boolean }, lmStudio: { available: boolean, baseUrl: string | null } }>}
  */
 export async function detectRuntimes() {
-  const [llamaPath, ollamaPath, lmOk, ollamaOk] = await Promise.all([
-    which('llama-server'),
+  const [llamaResolved, ollamaPath, lmOk, ollamaOk] = await Promise.all([
+    resolveLlamaServer(),
     which('ollama'),
     probeHttp('http://127.0.0.1:1234/v1/models'),
     probeHttp('http://127.0.0.1:11434/api/tags'),
   ]);
+  const installable = isLlamaRuntimeInstallable();
 
   return {
-    llamaCpp: { available: Boolean(llamaPath), path: llamaPath },
+    llamaCpp: {
+      available: Boolean(llamaResolved.path) || installable,
+      path: llamaResolved.path,
+      bundled: llamaResolved.source === 'vendor' || llamaResolved.source === 'managed',
+      installable,
+    },
     ollama: {
       available: Boolean(ollamaPath),
       path: ollamaPath,

@@ -396,7 +396,7 @@ Language servers run in Node on `npm start`. Defaults in `src/lsp/defaults.json`
 
 ### Managed local servers (SearXNG)
 
-Optional **managed SearXNG** runs on loopback for Deep Research and `web_search_searxng` without Docker. Config: `servers.json` (`enabled`, `autoStart`, `port`; default port **8899**). Install layout under `~/.minnow/servers/` (`server/servers/paths.js`): per-server venv + `settings.yml`, shared **python-build-standalone** 3.12 (`20250205`). Provisioner installs upstream SearXNG from a pinned GitHub zip (`server/servers/searxng.js`, ref `e964708c0` — not PyPI/git+pip, which breaks on Windows). On **Windows**, `patchValkeydbForWindows()` patches `searx/valkeydb.py` (upstream imports Unix-only `pwd` at module load; limiter stays off in generated `settings.yml`). Patches apply at install, on `getSpawnSpec`, and repair existing installs on start. Standalone Python must resolve `runtime/python.exe` (not `Lib/venv` template stubs). **`npm start`** calls `initServersApi()` → `autoStartEnabledServers()` (starts only when installed + enabled + autoStart; never auto-installs). **`getManagedSearxngUrl()`** returns `http://127.0.0.1:<port>` when SearXNG is enabled and healthy.
+Optional **managed SearXNG** runs on loopback for Deep Research, `web_search` (when SearXNG is the Search provider), and the `web_search_searxng` server tool without Docker. Config: `servers.json` (`enabled`, `autoStart`, `port`; default port **8899**). Install layout under `~/.minnow/servers/` (`server/servers/paths.js`): per-server venv + `settings.yml`, shared **python-build-standalone** 3.12 (`20250205`). Provisioner installs upstream SearXNG from a pinned GitHub zip (`server/servers/searxng.js`, ref `e964708c0` — not PyPI/git+pip, which breaks on Windows). On **Windows**, `patchValkeydbForWindows()` patches `searx/valkeydb.py` (upstream imports Unix-only `pwd` at module load; limiter stays off in generated `settings.yml`). Patches apply at install, on `getSpawnSpec`, and repair existing installs on start. Standalone Python must resolve `runtime/python.exe` (not `Lib/venv` template stubs). **`npm start`** calls `initServersApi()` → `autoStartEnabledServers()` (starts only when installed + enabled + autoStart; never auto-installs). **`getManagedSearxngUrl()`** returns `http://127.0.0.1:<port>` when SearXNG is enabled and healthy.
 
 | API | Purpose |
 |-----|---------|
@@ -460,7 +460,7 @@ Orchestrate mode is **parse-only** for the LLM: read the plan, call **`board_ini
 
 ### Settings page (Step 20)
 
-Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-page-types.ts`, `src/ui/settings-layout.ts`, `src/ui/settings-switch.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Boolean settings use **toggle switches** (`.settings-switch`, `role="switch"`) via `createSettingsSwitch` / `upgradeSettingsCheckboxes`; skills and agent packs share the same control. Sidebar `.settings-nav` uses **grouped labels** (App · Models & APIs · Prompting & memory · Agents · Tools & integrations · Advanced) via `SETTINGS_NAV_GROUPS` in `settings-page-types.ts`; each section has a `settings-lead` intro in `index.html`. **Editor** (`#/settings/editor`) holds file-viewer AI inline completion; **Language servers** (`#/settings/lsp`, `src/ui/lsp-settings.ts`) is LSP-only with status toolbar, server list, and bundle install rows. **General** groups Appearance (theme), Chat & terminal, Connection summary (active provider + cross-links), and Quick drawer note. **Search** / **Deep Research** / **Servers** (`settings-search-section.ts`, `settings-research-section.ts`, `settings-servers-section.ts`) — `search.json`, `research.json`, managed SearXNG (`servers.json` + `/api/servers/*`). **Tools** groups structured tool arguments (global constrained decoding), turn limits, permissions/cache, filesystem, browser allowlist, and catalog. **Memory** (`#/settings/memory`) combines store toggle and **inject on send** (`features.memoryInjection`). **Orchestration** (`#/settings/features`, nav label) reserved for future orchestrate settings (supervisor UI removed). Topbar gear opens settings; each section loads live data from Step 02–18 APIs. **Rules** (`#/settings/rules`): enable toggle + textarea; **Save rules** → `rules.json` when `npm start` is up. **Plan granularity** under **Modes → Plan**. Nav clicks update hash after `setActiveSection`; `openSettings()` skips re-entry when already on that section. Async sections use render-generation guards. **Skills**: enable toggle, **Edit SKILL.md**, **Add custom skill** via `POST /api/skills`. Custom prompt configs: toolbar New/Save/Duplicate/Delete. Plan: [`documentation/plans/settings-pages-redesign.md`](plans/settings-pages-redesign.md).
+Full-page settings at `#/settings/<section>` (`src/ui/settings-page.ts`, `src/ui/settings-page-types.ts`, `src/ui/settings-layout.ts`, `src/ui/settings-switch.ts`, `src/ui/settings-sections.ts`, `src/styles/settings-page.css`). Boolean settings use **toggle switches** (`.settings-switch`, `role="switch"`) via `createSettingsSwitch` / `upgradeSettingsCheckboxes`; skills and agent packs share the same control. Sidebar `.settings-nav` uses **grouped labels** (App · Prompting & memory · Agents · Tools & integrations · Advanced) via `SETTINGS_NAV_GROUPS` in `settings-page-types.ts`; provider/model settings live in the **Models** app (`#/app/models`); each section has a `settings-lead` intro in `index.html`. **Editor** (`#/settings/editor`) holds file-viewer AI inline completion; **Language servers** (`#/settings/lsp`, `src/ui/lsp-settings.ts`) is LSP-only with status toolbar, server list, and bundle install rows. **General** groups Appearance (theme), Chat & terminal, Connection summary (active provider + cross-links), and Quick drawer note. **Search** / **Deep Research** / **Servers** (`settings-search-section.ts`, `settings-research-section.ts`, `settings-servers-section.ts`) — `search.json`, `research.json`, managed SearXNG (`servers.json` + `/api/servers/*`). **Tools** groups structured tool arguments (global constrained decoding), turn limits, permissions/cache, filesystem, browser allowlist, and catalog. **Memory** (`#/settings/memory`) combines store toggle and **inject on send** (`features.memoryInjection`). **Orchestration** (`#/settings/features`, nav label) reserved for future orchestrate settings (supervisor UI removed). Topbar gear opens settings; each section loads live data from Step 02–18 APIs. **Rules** (`#/settings/rules`): enable toggle + textarea; **Save rules** → `rules.json` when `npm start` is up. **Plan granularity** under **Modes → Plan**. Nav clicks update hash after `setActiveSection`; `openSettings()` skips re-entry when already on that section. Async sections use render-generation guards. **Skills**: enable toggle, **Edit SKILL.md**, **Add custom skill** via `POST /api/skills`. Custom prompt configs: toolbar New/Save/Duplicate/Delete. Plan: [`documentation/plans/settings-pages-redesign.md`](plans/settings-pages-redesign.md).
 
 **Cost / token observability (Feature #14 / MIN-50):** Per-chat `chat.tokenLedger` persists in the session blob (`entries[]` capped at 200; `totals` and `bySource` always accumulate). Ingestion: main tool loop and legacy `sendMessage` (`recordMainChatTurnUsage`), each sub-agent SSE turn on the parent chat (`recordSubAgentTurnUsage`), title job (`source: title`), Reef `callLLM` (`source: reef-widget`). Provider optional `pricing` on `~/.minnow/providers/<id>/profile.json` (validated server-side; exposed on `ProviderPublic`). USD via `src/usage/pricing.ts` (`inputPer1M` / `outputPer1M`, model → `*` → default). UI: Settings → **Usage** (`#/settings/usage`, `src/ui/settings-usage.ts`); pricing editor on provider edit forms (`src/ui/settings-providers.ts`). Stats strip `#stripCost` shows last entry cost when priced. Distinct from Feature 25 prompt **estimate** and MIN-13 **next-send** context ring. Plan: [`documentation/plans/Build out/feature-14-cost-token-observability.md`](plans/Build%20out/feature-14-cost-token-observability.md). Verification: [`documentation/plans/verification/feature-14.md`](plans/verification/feature-14.md).
 
@@ -699,8 +699,8 @@ Full-page Chat app at `#/app/chat` with session rail, message scroll shell, comp
 
 | Concern | Location |
 |---------|----------|
-| Markup | `index.html` — `#chatView` (`.chat-app-page`): `#chatAppSessionList`, `#chatAppArea`, `#chatAppInput`, `#chatAppSendBtn`, `#chatAppFiles` |
-| Styles | [`src/styles/chat-app.css`](../src/styles/chat-app.css) — layout ported from prototype `apps.css` |
+| Markup | `index.html` — `#chatView` (`.chat-app-page`): session rail, `.chat-app-viewport` with `#chatAppArea` + `#chatAppJumpLatest`, `#chatAppMessageCol`, composer (`#chatAppInput`, `#chatAppSendBtn`), `#chatAppFiles` |
+| Styles | [`src/styles/chat-app.css`](../src/styles/chat-app.css) — centered 720px transcript column (72ch assistant prose), composer aligned to same width, bench tokens (`--mn-*`, `--radius-*`) |
 | Page module | [`src/ui/chat-app.ts`](../src/ui/chat-app.ts) — `openChatApp(seed?)`, `closeChatApp()`, `initChatApp()`, session rail via `getAssistantChats` + `appendChatRow` |
 | OS host | [`src/os/app-host.ts`](../src/os/app-host.ts) — reparents `#chatView` into `#osAppsLayer`; `openAppPage('chat')` → `openChatApp` |
 | Registry copy | [`src/os/app-registry.ts`](../src/os/app-registry.ts) — “General assistant — tools, files, and app routing” |
@@ -714,7 +714,8 @@ Code and Chat apps share send + history render paths via parameterized DOM surfa
 | Concern | Location |
 |---------|----------|
 | Composer surface | [`src/ui/composer-surface.ts`](../src/ui/composer-surface.ts) — `getActiveComposerSurface()`, `resolveComposerSurface()`, `registerComposerSurface()`; Chat → `#chatAppInput` / `#chatAppSendBtn`, Code → `#msgInput` / `#sendBtn` |
-| Chat mount | [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts) — `resolveChatMount()`, `getActiveChatMountElement()`, `runWithChatMount()`; Chat foreground → `#chatAppArea` |
+| Scroll / jump chip | [`src/ui/chat-scroll.ts`](../src/ui/chat-scroll.ts) — `#chatAppArea` scroll pin; `#chatAppJumpLatest` when Chat app is foreground (mirrors Code `#chatJumpLatest`) |
+| Chat mount | [`src/ui/chat-mount.ts`](../src/ui/chat-mount.ts) — `resolveChatMount()`, `getActiveChatMountElement()`, `runWithChatMount()`; Chat foreground → `#chatAppMessageCol` |
 | History render | [`src/ui/messages.ts`](../src/ui/messages.ts) — `renderChatFromHistory(chat, mount?)` (default `#chatArea`); non-Code mounts skip hub/board/plan Code-only branches |
 | Send loop | [`src/tools/loop.ts`](../src/tools/loop.ts) — `sendMessageWithTools(composer?)`, `RunChatTurnOptions.composerSurface`; tool-call paint uses `getActiveChatMountElement()` |
 | Messaging API | [`src/chat/messaging.ts`](../src/chat/messaging.ts) — `sendMessage(composer?)` delegates to `sendMessageWithTools` |
@@ -764,7 +765,7 @@ Code and Chat apps share send + history render paths via parameterized DOM surfa
 | Concern | Location |
 |---------|----------|
 | Session rail toggle | [`src/os/menubar.ts`](../src/os/menubar.ts) — `.mn-os-mb-chat-toggle` visible when Code or Chat is foreground ([`menubar-visibility.ts`](../src/os/menubar-visibility.ts)); Chat calls [`toggleChatAppSessionRail()`](../src/ui/chat-app.ts) |
-| Rail collapse | [`src/ui/chat-app.ts`](../src/ui/chat-app.ts) — `applyChatAppRailVisuals()`, mobile-only `.is-rail-hidden` on `#chatView` |
+| Rail expand/collapse | [`src/ui/chat-app.ts`](../src/ui/chat-app.ts) — `#btnChatAppRailToggle` + `.is-rail-expanded` on `#chatView` (desktop: 52px dots → full session list); mobile uses `.is-rail-hidden` overlay |
 | Concierge seed | [`openChatApp(seed?)`](../src/ui/chat-app.ts) — `applyConciergeSeed()` auto-sends first user message when history is empty (concierge + `launch_minnow_app`); [`clearForegroundSeed()`](../src/os/instances.ts) drops instance seed after a successful send |
 | App copy | [`src/os/app-registry.ts`](../src/os/app-registry.ts) — Chat `description`: “General assistant — tools, files, and app routing”; grid tiles show `description` via [`desktop.ts`](../src/os/desktop.ts) |
 | Workspace menubar | [`workspace-menubar.ts`](../src/os/workspace-menubar.ts) — repo picker only when Code is foreground (lives in `.mn-os-mb-right` beside the model chip) |
@@ -951,6 +952,27 @@ Registered in [`server/providers/routes.js`](../server/providers/routes.js) befo
 
 Client: [`src/providers/`](../src/providers/) (`store.ts`, `resolve.ts`, `fetch-models.ts`, `model-capabilities.ts`, `fetch-chat.ts`). Models/load/unload always use `/api/providers/:id/...`; chat uses [`postChatCompletions`](../src/providers/fetch-chat.ts) → `/api/generations` (shim) or [`src/api/generations.ts`](../src/api/generations.ts) (main tool loop).
 
+### Models app API (`npm start` only)
+
+Full-page **Models** hub at `#/app/models/<section>` (`src/ui/models-page.ts`, `src/styles/models-page.css`). Sections: **What fits** (hardware-ranked catalog + local cache badges), **Installed** (downloads + serve), **Settings** (HF token + extra model dirs), plus reparented provider/routing/sampler/thinking/usage settings. Server: [`server/models/`](../server/models/) via [`createModelsMiddleware()`](../server/models/routes.js).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/models/ping` | Health check |
+| `GET` | `/api/models/cached` | Scan HF hub cache, `~/.minnow/models/artifacts`, Ollama tags, `config.json` → `models.modelDirs[]` |
+| `GET` | `/api/models/config` | Masked HF token status + model dirs |
+| `PUT` | `/api/models/config` | Save `hfToken` / `modelDirs` (plaintext v1) |
+| `GET` | `/api/models/profiles?model=…` | llama.cpp Quality/Balanced/Speed presets from hardware |
+| `GET` | `/api/models/downloads` | Download job list |
+| `POST` | `/api/models/download` | Start HF GGUF download (SSE progress on `…/stream`) |
+| `POST` | `/api/models/download/:id/cancel` | Cancel download |
+| `GET` | `/api/models/installed` | GGUF artifacts + download history |
+| `GET` | `/api/models/runtimes` | Detect llama-server (PATH, `vendor/llama-cpp`, or `~/.minnow/models-runtime/llama-cpp`), Ollama, LM Studio |
+| `GET/POST` | `/api/models/serve` | List / start serve (llama.cpp spawn via bundled runtime installer or register Ollama/LM Studio) |
+| `POST` | `/api/models/serve/:id/stop` | Stop serve; disables auto-created provider row |
+
+Hardware probe: `GET /api/system/hardware` (`?fresh=1` bypasses 24h cache) — [`server/system/hardware.js`](../server/system/hardware.js). Client fit ranking: [`src/models/fit.ts`](../src/models/fit.ts) + bundled [`catalog.json`](../src/models/catalog.json). **llama.cpp runtime:** [`server/models/llama-runtime.js`](../server/models/llama-runtime.js) resolves `llama-server` from PATH → optional app `vendor/llama-cpp/` → managed `~/.minnow/models-runtime/llama-cpp/` (auto-download from pinned [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) CPU prebuild on first serve; spawn cwd/env set so Windows DLLs load). **Use in chat** after serve: [`selectProviderModel()`](../src/api/models.ts) sets `#modelSelect` composite key. Tests: `test/models/*.test.mjs`, `test/models/fit.test.mts`, `test/os/models-app.test.mts`.
+
 **Vite-only (`npm run dev`):** No `/api/providers`; client synthesizes a fallback provider id. Settings → **Providers** shows an offline hint and hides the add form until `npm start` is running.
 
 **Settings → Providers** (`#/settings/providers`): lists registered backends from `GET /api/providers`, **Set active**, **Remove** (when more than one), **Add provider**, and per-row **Edit provider** (label, base URL, API style, **models path**, **chat completions path**, auth, enabled, **constrained tool calls** override, **Probe models** / **Probe structured output**, optional new API key → `POST`/`PUT /api/providers` + `PUT .../secrets`). Row badge: `Structured output: yes/no/unknown` from `capabilities.json`. Global **Constrained tool calls** lives under **Settings → Tools** (`config.json` → `toolCalls.useConstrainedDecoding`, default **off**); per-provider override on edit forms. Paths default per `apiKind` (`/v1/...` or `/api/v0/...`); changing API style resets paths when they still match the previous defaults (custom paths e.g. OpenCode Go `/zen/go/v1/...` are preserved). Client: [`src/ui/settings-providers.ts`](../src/ui/settings-providers.ts), [`src/providers/paths.ts`](../src/providers/paths.ts), [`src/providers/store.ts`](../src/providers/store.ts), [`src/config/tool-calls-meta.ts`](../src/config/tool-calls-meta.ts).
@@ -973,7 +995,7 @@ Re-run is **idempotent** (`skipped: true` when `config.json` has `migratedFromLo
 
 ### Vite-only fallback (`npm run dev`)
 
-No `/api/config/*` → client uses **`storageMode: 'localStorage'`** (same keys as before). Settings drawer shows **`#configStorageBanner`**: file-backed config requires `npm start`. **No dual-write.**
+No `/api/config/*` → client uses **`storageMode: 'localStorage'`** (same keys as before). Settings drawer shows **`#configStorageBanner`**: file-backed config requires `npm start`. **No dual-write.** `detectConfigServer()` re-probes until server mode succeeds (2.5s timeout × 3 attempts); successful server mode is cached. Models → **Routing** re-renders on every tab activation and refreshes when already open after `initApp` (fixes OS-router deep link racing session init).
 
 Server URL remains in the settings drawer DOM (not in the session blob). **Temperature** and **max tokens** are edited in the drawer for quick tweaks and persisted under `config.json` → `sampler` (Settings → **Sampler** global defaults); drawer values override saved temperature / max tokens on send when set.
 
@@ -1241,7 +1263,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 |------|---------|
 | `web_search_ddg` | DuckDuckGo HTML search ([`web-search-ddg.js`](../server/tools/web-search-ddg.js); `searchDdgStructured` + text formatter; bot challenges return an actionable error) |
 | `web_search_tavily` | Tavily Search API ([`web-search-tavily.js`](../server/tools/web-search-tavily.js); `searchTavilyStructured`; API key from `search.json` or `tools.json`) |
-| `web_search_searxng` | SearXNG JSON search ([`web-search-searxng.js`](../server/tools/web-search-searxng.js); `GET {searxngUrl}/search?format=json`; used by Deep Research chain and available as a server tool) |
+| `web_search_searxng` | SearXNG JSON search ([`web-search-searxng.js`](../server/tools/web-search-searxng.js); `GET {searxngUrl}/search?format=json`; used by `web_search` when provider is SearXNG, Deep Research chain, and direct server POST) |
 | `send_notification` | OS notification / dialog |
 | `read_document` | PDF + office attachment text extraction (base64 in `args.content`, max **10MB** decoded) |
 
@@ -1278,7 +1300,7 @@ Requires the **Minnow desktop shell** (Electron `WebContentsView` preview panel)
 
 | id | Runs on |
 |----|---------|
-| `web_search` | User-selected provider ([`web-search-routing.ts`](../src/tools/web-search-routing.ts)): **Brave** in browser (`braveApiKey` / `api_key`), **Tavily** via `web_search_tavily`, **DuckDuckGo** via `web_search_ddg`; no silent fallback |
+| `web_search` | User-selected provider ([`web-search-routing.ts`](../src/tools/web-search-routing.ts)): **Brave** in browser (`braveApiKey` / `api_key`), **Tavily** via `web_search_tavily`, **SearXNG** via `web_search_searxng` (managed instance or `search.json` URL), **DuckDuckGo** via `web_search_ddg`; no silent fallback |
 | `wikipedia_search` | Browser |
 | `fetch_web_content` | Server when `npm start` (Node HTTP fetch + strip, ~8KB); browser fallback (CORS limits) |
 | `rag_web_content` | Server when `npm start` (same fetch + sentence scoring); browser fallback |

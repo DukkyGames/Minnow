@@ -5,6 +5,7 @@
 import type { ModelsSectionId } from './models-page';
 import { mountRecommendSection } from './models/recommend-panel';
 import { mountInstalledSection } from './models/installed-panel';
+import { mountModelsSettingsSection } from './models/models-settings-panel';
 import { reparentSettingsSectionIntoModels } from './models/settings-reparent';
 
 /** Map Models routing section ids to legacy settings section ids. */
@@ -26,6 +27,9 @@ export async function renderModelsSection(section: ModelsSectionId): Promise<voi
       break;
     case 'installed':
       mountInstalledSection();
+      break;
+    case 'settings':
+      await mountModelsSettingsSection();
       break;
     default: {
       const settingsId = SETTINGS_SECTION_BY_MODELS[section];

@@ -437,10 +437,6 @@
         <button type="button" data-settings-nav="general" aria-current="page">General</button>
         <button type="button" data-settings-nav="appearance">Appearance</button>
       </div>
-      <div class="settings-nav-group" role="group" aria-labelledby="settingsNavModels">
-        <p id="settingsNavModels" class="settings-nav-group__label">Models &amp; APIs</p>
-        <p class="settings-nav-moved-hint">Providers, routing, sampler, thinking, and usage moved to the <strong>Models</strong> app.</p>
-      </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
         <button type="button" data-settings-nav="prompting">Prompts</button>
@@ -1012,9 +1008,17 @@
 <main id="chatView" class="chat-app-page" aria-label="Chat">
   <div class="chat-app-page-body">
     <aside class="chat-app-rail" aria-label="Chat sessions">
-      <button type="button" class="chat-app-rail-new" id="btnChatAppNewChat" aria-label="New chat" title="New chat">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
+      <div class="chat-app-rail-head">
+        <span class="chat-app-rail-title">Chats</span>
+        <div class="chat-app-rail-head-actions">
+          <button type="button" class="chat-app-rail-new" id="btnChatAppNewChat" aria-label="New chat" title="New chat">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button type="button" class="icon-btn chat-app-rail-toggle" id="btnChatAppRailToggle" aria-label="Expand sessions" aria-expanded="false" title="Expand sessions">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
       <div id="chatAppSessionList" class="chat-app-rail-list chat-list" role="list"></div>
     </aside>
     <div class="chat-app-main chat-app">
@@ -1026,10 +1030,14 @@
       </header>
       <div class="chat-app-workspace">
         <div class="chat-app-conversation">
-          <div id="chatAppArea" class="chat-app-scroll" role="log" aria-live="polite" aria-label="Messages">
-            <div class="chat-app-col" id="chatAppMessageCol"></div>
+          <div class="chat-app-viewport">
+            <div id="chatAppArea" class="chat-app-scroll" role="log" aria-live="polite" aria-label="Messages">
+              <div class="chat-app-col" id="chatAppMessageCol"></div>
+            </div>
+            <button type="button" id="chatAppJumpLatest" class="chat-jump-latest hidden" aria-label="Jump to latest messages">Jump to latest</button>
           </div>
           <footer class="chat-app-composer">
+            <div class="chat-app-composer-inner">
             <div id="chatAppToolApprovalHost" class="tool-approval-host" aria-live="polite" hidden></div>
             <div id="chatAppQuestionHost" class="question-host" aria-live="polite" hidden></div>
             <div id="chatAppAttachPreview" class="attach-preview hidden" aria-live="polite" aria-label="Attached files"></div>
@@ -1045,6 +1053,7 @@
               <button type="button" class="chat-app-send" id="chatAppSendBtn" aria-label="Send message">
                 <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
               </button>
+            </div>
             </div>
           </footer>
         </div>
@@ -1075,6 +1084,7 @@
     <nav class="models-nav" aria-label="Models sections">
       <button type="button" data-models-nav="recommend" aria-current="page">What fits</button>
       <button type="button" data-models-nav="installed">Installed</button>
+      <button type="button" data-models-nav="settings">Settings</button>
       <button type="button" data-models-nav="providers">Providers</button>
       <button type="button" data-models-nav="routing">Routing</button>
       <button type="button" data-models-nav="sampler">Sampler</button>
@@ -1091,6 +1101,11 @@
         <h2>Installed</h2>
         <p class="models-lead">Downloaded GGUF artifacts, active transfers, and local serve controls.</p>
         <div id="modelsInstalledBody"></div>
+      </section>
+      <section id="modelsSection-settings" class="models-section">
+        <h2>Settings</h2>
+        <p class="models-lead">Hugging Face token and extra directories for local model scans.</p>
+        <div id="modelsSettingsBody"></div>
       </section>
       <section id="modelsSection-providers" class="models-section"></section>
       <section id="modelsSection-routing" class="models-section"></section>

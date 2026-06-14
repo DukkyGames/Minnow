@@ -50,5 +50,7 @@ describe('models markup contract', () => {
     assert.match(html, /id="modelsSection-recommend"/);
     assert.match(html, /id="modelsRecommendBody"/);
     assert.match(html, /data-models-nav="providers"/);
+    assert.match(html, /id="modelsSection-settings"/);
+    assert.match(html, /data-models-nav="settings"/);
   });
 });

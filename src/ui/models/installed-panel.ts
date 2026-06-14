@@ -2,6 +2,7 @@
  * Models → Installed — download queue, artifacts, and serve controls.
  */
 
+import { selectProviderModel } from '../../api/models';
 import {
   cancelModelDownload,
   fetchInstalledModels,
@@ -15,7 +16,6 @@ import {
   type RuntimeDetection,
   type ServeRecord,
 } from '../../models/api-client';
-import { fetchModels } from '../../api/models';
 import { setStatus } from '../status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -93,6 +93,15 @@ function renderDownloadRow(job: DownloadJob): HTMLElement {
   return row;
 }
 
+async function useServedModelInChat(serve: ServeRecord): Promise<void> {
+  const picked = await selectProviderModel(serve.providerId, serve.modelLabel);
+  if (picked) {
+    setStatus('ok', 'Model selected in the top bar.');
+  } else {
+    setStatus('ok', 'Provider active — pick the model in the top bar if needed.');
+  }
+}
+
 function renderArtifactRow(
   artifact: InstalledArtifact,
   serves: ServeRecord[],
@@ -121,30 +130,82 @@ function renderArtifactRow(
     const useBtn = el('button', 'models-inline-btn is-primary', 'Use in chat');
     useBtn.type = 'button';
     useBtn.addEventListener('click', () => {
-      void fetchModels().then(() => setStatus('ok', 'Active provider updated — pick the model in the top bar.'));
+      void useServedModelInChat(active);
     });
     actions.append(stopBtn, useBtn);
   } else {
-    const serveBtn = el('button', 'models-inline-btn is-primary', 'Serve (llama.cpp)');
-    serveBtn.type = 'button';
-    serveBtn.disabled = !runtimes?.llamaCpp.available;
-    serveBtn.title = runtimes?.llamaCpp.available
+    const llamaBtn = el('button', 'models-inline-btn is-primary', 'Serve (llama.cpp)');
+    llamaBtn.type = 'button';
+    const llamaReady = Boolean(runtimes?.llamaCpp.path);
+    const llamaInstallable = runtimes?.llamaCpp.installable ?? false;
+    llamaBtn.disabled = !runtimes?.llamaCpp.available;
+    llamaBtn.title = llamaReady
       ? 'Start llama-server for this GGUF'
-      : 'Install llama-server and add it to PATH';
-    serveBtn.addEventListener('click', () => {
-      serveBtn.disabled = true;
-      void startModelServe({ modelPath: artifact.path, runtime: 'llama-cpp', modelLabel: artifact.filename })
-        .then(() => {
-          setStatus('ok', 'Model server started and registered as provider.');
-          return fetchModels();
-        })
+      : llamaInstallable
+        ? 'Download bundled llama-server on first serve (~20 MB)'
+        : 'Install llama-server and add it to PATH';
+    llamaBtn.addEventListener('click', () => {
+      llamaBtn.disabled = true;
+      if (!llamaReady) {
+        setStatus('ok', 'Downloading bundled llama-server…');
+      }
+      void startModelServe({
+        modelPath: artifact.path,
+        runtime: 'llama-cpp',
+        modelLabel: artifact.filename,
+        profile: 'balanced',
+      })
+        .then((serve) => useServedModelInChat(serve))
         .then(() => refreshInstalledSection())
         .catch((err) => {
           setStatus('err', err instanceof Error ? err.message : 'Serve failed');
-          serveBtn.disabled = false;
+          llamaBtn.disabled = false;
         });
     });
-    actions.appendChild(serveBtn);
+
+    const ollamaBtn = el('button', 'models-inline-btn', 'Use Ollama');
+    ollamaBtn.type = 'button';
+    ollamaBtn.disabled = !runtimes?.ollama.serving;
+    ollamaBtn.title = runtimes?.ollama.serving
+      ? 'Register Ollama as the active provider'
+      : 'Start Ollama on http://127.0.0.1:11434';
+    ollamaBtn.addEventListener('click', () => {
+      ollamaBtn.disabled = true;
+      void startModelServe({
+        modelPath: artifact.path,
+        runtime: 'ollama',
+        modelLabel: artifact.repoId || artifact.filename,
+      })
+        .then((serve) => useServedModelInChat(serve))
+        .then(() => refreshInstalledSection())
+        .catch((err) => {
+          setStatus('err', err instanceof Error ? err.message : 'Ollama register failed');
+          ollamaBtn.disabled = false;
+        });
+    });
+
+    const lmBtn = el('button', 'models-inline-btn', 'Use LM Studio');
+    lmBtn.type = 'button';
+    lmBtn.disabled = !runtimes?.lmStudio.available;
+    lmBtn.title = runtimes?.lmStudio.available
+      ? 'Register LM Studio as the active provider'
+      : 'Start LM Studio server on http://127.0.0.1:1234';
+    lmBtn.addEventListener('click', () => {
+      lmBtn.disabled = true;
+      void startModelServe({
+        modelPath: artifact.path,
+        runtime: 'lm-studio',
+        modelLabel: artifact.filename,
+      })
+        .then((serve) => useServedModelInChat(serve))
+        .then(() => refreshInstalledSection())
+        .catch((err) => {
+          setStatus('err', err instanceof Error ? err.message : 'LM Studio register failed');
+          lmBtn.disabled = false;
+        });
+    });
+
+    actions.append(llamaBtn, ollamaBtn, lmBtn);
   }
   row.appendChild(actions);
   return row;
@@ -154,7 +215,13 @@ function renderRuntimesCard(runtimes: RuntimeDetection): HTMLElement {
   const card = el('div', 'models-hardware-card');
   card.appendChild(el('h3', 'models-hardware-card__title', 'Runtimes'));
   const lines = [
-    `llama-server: ${runtimes.llamaCpp.available ? runtimes.llamaCpp.path : 'not found'}`,
+    `llama-server: ${
+      runtimes.llamaCpp.path
+        ? runtimes.llamaCpp.path
+        : runtimes.llamaCpp.installable
+          ? 'bundled (downloads on first serve)'
+          : 'not found'
+    }`,
     `Ollama: ${runtimes.ollama.serving ? 'serving' : runtimes.ollama.available ? 'installed' : 'not found'}`,
     `LM Studio: ${runtimes.lmStudio.available ? runtimes.lmStudio.baseUrl : 'not reachable'}`,
   ];

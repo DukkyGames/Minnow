@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { readConfigJson } from '../config/store.js';
+import { getModelsConfig } from './models-config.js';
 import {
   downloadHfFile,
   fetchRemoteSize,
@@ -292,12 +292,4 @@ export async function resetDownloadsForTests() {
   listenersByJob.clear();
 }
 
-/** Optional HF token persisted in config.json → models.hfToken (plaintext v1). */
-export async function getModelsConfig() {
-  const config = (await readConfigJson('config.json')) ?? {};
-  const models =
-    config.models && typeof config.models === 'object'
-      ? /** @type {Record<string, unknown>} */ (config.models)
-      : {};
-  return models;
-}
+export { getModelsConfig } from './models-config.js';

@@ -108,6 +108,8 @@ describe('models API', () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/models/runtimes');
     assert.equal(res.status, 200);
     assert.equal(typeof res.json.llamaCpp.available, 'boolean');
+    assert.equal(typeof res.json.llamaCpp.bundled, 'boolean');
+    assert.equal(typeof res.json.llamaCpp.installable, 'boolean');
     assert.equal(typeof res.json.ollama.serving, 'boolean');
     assert.equal(typeof res.json.lmStudio.available, 'boolean');
   });
@@ -140,5 +142,18 @@ describe('models API', () => {
     const res = await httpRequest(baseUrl, 'POST', '/api/models/download/not-a-uuid/cancel');
     assert.equal(res.status, 400);
     assert.match(res.json.error, /Invalid job id/);
+  });
+
+  test('cached returns models array', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/models/cached');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.json.models));
+  });
+
+  test('config GET returns masked token fields', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/models/config');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.hfTokenConfigured, false);
+    assert.ok(Array.isArray(res.json.modelDirs));
   });
 });

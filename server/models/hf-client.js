@@ -5,15 +5,40 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { getModelsConfig } from './models-config.js';
 import { validateGgufFilename, validateRepoId } from './validate.js';
 
+/** Cached config token to avoid disk read on every HEAD. */
+let configTokenCache = { value: '', at: 0 };
+
 /**
- * Resolve HF token from env (optional gated models).
+ * Resolve HF token from env vars (sync path for tests).
  */
 export function resolveHfToken() {
-  return (
-    (process.env.HF_TOKEN || process.env.HUGGING_FACE_HUB_TOKEN || '').trim() || ''
-  );
+  const env = (process.env.HF_TOKEN || process.env.HUGGING_FACE_HUB_TOKEN || '').trim();
+  if (env) return env;
+  return configTokenCache.value;
+}
+
+/**
+ * Resolve HF token: env first, then config.json → models.hfToken.
+ */
+export async function resolveHfTokenAsync() {
+  const env = (process.env.HF_TOKEN || process.env.HUGGING_FACE_HUB_TOKEN || '').trim();
+  if (env) return env;
+  const now = Date.now();
+  if (now - configTokenCache.at < 5_000 && configTokenCache.value) {
+    return configTokenCache.value;
+  }
+  const models = await getModelsConfig();
+  const token = typeof models.hfToken === 'string' ? models.hfToken.trim() : '';
+  configTokenCache = { value: token, at: now };
+  return token;
+}
+
+/** Clear token cache after config updates (tests + settings save). */
+export function resetHfTokenCache() {
+  configTokenCache = { value: '', at: 0 };
 }
 
 /**
@@ -33,7 +58,7 @@ function hfHeaders(token) {
  */
 export async function listRepoFiles(repoId) {
   validateRepoId(repoId);
-  const token = resolveHfToken();
+  const token = await resolveHfTokenAsync();
   const url = `https://huggingface.co/api/models/${repoId}/tree/main`;
   const res = await fetch(url, { headers: hfHeaders(token) });
   if (!res.ok) {
@@ -78,7 +103,7 @@ export async function resolveGgufFilename(repoId, quant = 'Q4_K_M') {
 export async function fetchRemoteSize(repoId, filename) {
   validateRepoId(repoId);
   validateGgufFilename(filename);
-  const token = resolveHfToken();
+  const token = await resolveHfTokenAsync();
   const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
   const res = await fetch(url, { method: 'HEAD', headers: hfHeaders(token), redirect: 'follow' });
   if (!res.ok) {
@@ -95,7 +120,7 @@ export async function fetchRemoteSize(repoId, filename) {
 export async function downloadHfFile({ repoId, filename, destPath, signal, onProgress }) {
   validateRepoId(repoId);
   validateGgufFilename(filename);
-  const token = resolveHfToken();
+  const token = await resolveHfTokenAsync();
   const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
   const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
   if (!res.ok || !res.body) {

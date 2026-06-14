@@ -10,10 +10,12 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const CHAT_APP_IDS = [
   'chatView',
   'btnChatAppNewChat',
+  'btnChatAppRailToggle',
   'chatAppSessionList',
   'chatAppTitle',
   'chatAppArea',
   'chatAppMessageCol',
+  'chatAppJumpLatest',
   'chatAppToolApprovalHost',
   'chatAppQuestionHost',
   'chatAppAttachPreview',

@@ -8,10 +8,12 @@ import { isChatAppForeground } from './chat-mount';
 export const CHAT_PIN_THRESHOLD_PX = 80;
 
 export const CHAT_JUMP_CHIP_ID = 'chatJumpLatest';
+export const CHAT_APP_JUMP_CHIP_ID = 'chatAppJumpLatest';
 
 let stickToBottom = true;
 let chatAreaEl: HTMLElement | null = null;
 let jumpChipEl: HTMLButtonElement | null = null;
+let chatAppJumpChipEl: HTMLButtonElement | null = null;
 const BOARD_INIT_SPLIT_CHAT_TESTID = 'boardInitSplitChat';
 
 /** Scroll container for messages: split bottom pane during board_init, else #chatArea. */
@@ -49,15 +51,25 @@ function isBoardViewChromeActive(): boolean {
   );
 }
 
+/** Jump chip for the active transcript surface (Code vs Chat app). */
+function getActiveJumpChip(): HTMLButtonElement | null {
+  if (isChatAppForeground()) return chatAppJumpChipEl;
+  return jumpChipEl;
+}
+
 function updateJumpChipVisibility(): void {
-  if (!jumpChipEl || !chatAreaEl) return;
+  const scrollRoot = getChatScrollRoot();
+  const chip = getActiveJumpChip();
+  if (!chip || !scrollRoot) return;
   if (isBoardViewChromeActive()) {
-    jumpChipEl.classList.add('hidden');
+    jumpChipEl?.classList.add('hidden');
+    chatAppJumpChipEl?.classList.add('hidden');
     return;
   }
-  const hasOverflow = chatAreaEl.scrollHeight > chatAreaEl.clientHeight;
+  const hasOverflow = scrollRoot.scrollHeight > scrollRoot.clientHeight;
   const show = hasOverflow && !stickToBottom;
-  jumpChipEl.classList.toggle('hidden', !show);
+  jumpChipEl?.classList.toggle('hidden', isChatAppForeground() || !show);
+  chatAppJumpChipEl?.classList.toggle('hidden', !isChatAppForeground() || !show);
 }
 
 /** Programmatic scroll without CSS smooth lag during rapid stream updates. */
@@ -117,9 +129,16 @@ export function bindBoardInitSplitChatScroll(): void {
 }
 
 /** Wire scroll listeners on Code and Chat transcript roots (call once from main). */
+function bindJumpChip(chip: HTMLButtonElement | null): void {
+  chip?.addEventListener('click', () => {
+    scrollChatToBottom();
+  });
+}
+
 export function initChatScroll(): void {
   chatAreaEl = document.getElementById('chatArea');
   jumpChipEl = document.getElementById(CHAT_JUMP_CHIP_ID) as HTMLButtonElement | null;
+  chatAppJumpChipEl = document.getElementById(CHAT_APP_JUMP_CHIP_ID) as HTMLButtonElement | null;
 
   chatAreaEl?.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
   const chatAppArea = document.getElementById('chatAppArea');
@@ -128,9 +147,8 @@ export function initChatScroll(): void {
     chatAppArea.addEventListener('scroll', onChatScrollTargetScroll, { passive: true });
   }
 
-  jumpChipEl?.addEventListener('click', () => {
-    scrollChatToBottom();
-  });
+  bindJumpChip(jumpChipEl);
+  bindJumpChip(chatAppJumpChipEl);
 
   bindBoardInitSplitChatScroll();
   updateJumpChipVisibility();

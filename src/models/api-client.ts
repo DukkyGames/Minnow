@@ -40,8 +40,51 @@ export interface ServeRecord {
   stoppedAt: number | null;
 }
 
+export interface CachedModelRow {
+  repo_id: string;
+  size_bytes: number;
+  nb_files: number;
+  has_incomplete: boolean;
+  path: string;
+  is_gguf?: boolean;
+  is_ollama?: boolean;
+  is_local_dir?: boolean;
+  status?: string;
+  gguf_files?: Array<{
+    name: string;
+    rel_path: string;
+    size_bytes: number;
+    role: string;
+    quant: string;
+  }>;
+}
+
+export interface ServeProfile {
+  key: string;
+  label: string;
+  quant: string;
+  n_gpu_layers: number;
+  n_cpu_moe: number;
+  cache_type: string;
+  ctx: number;
+  est_vram_gb: number;
+  fits: boolean;
+  note: string;
+}
+
+export interface ModelsConfigView {
+  hfTokenConfigured: boolean;
+  hfTokenMasked: string;
+  modelDirs: string[];
+}
+
 export interface RuntimeDetection {
-  llamaCpp: { available: boolean; path: string | null };
+  llamaCpp: {
+    available: boolean;
+    path: string | null;
+    bundled: boolean;
+    installable: boolean;
+  };
   ollama: { available: boolean; path: string | null; serving: boolean; baseUrl: string | null };
   lmStudio: { available: boolean; baseUrl: string | null };
 }
@@ -119,10 +162,57 @@ export async function fetchRuntimes(): Promise<RuntimeDetection> {
   return parseJson(res);
 }
 
+export async function fetchCachedModels(): Promise<CachedModelRow[]> {
+  const res = await fetch('/api/models/cached');
+  const data = await parseJson<{ models: CachedModelRow[] }>(res);
+  return data.models;
+}
+
+export async function fetchModelsConfig(): Promise<ModelsConfigView> {
+  const res = await fetch('/api/models/config');
+  return parseJson(res);
+}
+
+export async function saveModelsConfig(patch: {
+  hfToken?: string;
+  clearHfToken?: boolean;
+  modelDirs?: string[];
+}): Promise<ModelsConfigView> {
+  const res = await fetch('/api/models/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return parseJson(res);
+}
+
+export async function fetchServeProfiles(query: {
+  model: string;
+  quant?: string;
+  params_b?: number;
+  weights_gb?: number;
+  is_moe?: boolean;
+}): Promise<{ profiles: ServeProfile[] }> {
+  const qp = new URLSearchParams();
+  qp.set('model', query.model);
+  if (query.quant) qp.set('quant', query.quant);
+  if (query.params_b != null) qp.set('params_b', String(query.params_b));
+  if (query.weights_gb != null) qp.set('weights_gb', String(query.weights_gb));
+  if (query.is_moe) qp.set('is_moe', '1');
+  const res = await fetch(`/api/models/profiles?${qp}`);
+  return parseJson(res);
+}
+
 export async function startModelServe(payload: {
   modelPath: string;
   runtime?: 'llama-cpp' | 'ollama' | 'lm-studio';
   modelLabel?: string;
+  profile?: string;
+  hardware?: Record<string, unknown>;
+  quant?: string;
+  paramsB?: number;
+  isMoe?: boolean;
+  weightsGb?: number;
 }): Promise<ServeRecord> {
   const res = await fetch('/api/models/serve', {
     method: 'POST',

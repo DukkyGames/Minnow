@@ -11,6 +11,7 @@ import { renderModelsSection } from './models-sections';
 export type ModelsSectionId =
   | 'recommend'
   | 'installed'
+  | 'settings'
   | 'providers'
   | 'routing'
   | 'sampler'
@@ -20,6 +21,7 @@ export type ModelsSectionId =
 const SECTIONS: ModelsSectionId[] = [
   'recommend',
   'installed',
+  'settings',
   'providers',
   'routing',
   'sampler',
@@ -30,6 +32,7 @@ const SECTIONS: ModelsSectionId[] = [
 const SECTION_LABELS: Record<ModelsSectionId, string> = {
   recommend: 'What fits',
   installed: 'Installed',
+  settings: 'Settings',
   providers: 'Providers',
   routing: 'Routing',
   sampler: 'Sampler',
@@ -39,7 +42,6 @@ const SECTION_LABELS: Record<ModelsSectionId, string> = {
 
 let activeSection: ModelsSectionId = 'recommend';
 let staticBindingsDone = false;
-const renderedSections = new Set<ModelsSectionId>();
 
 function getModelsRoot(): HTMLElement | null {
   return document.getElementById('modelsView');
@@ -75,10 +77,7 @@ function setActiveSection(section: ModelsSectionId): void {
     }
   }
 
-  if (!renderedSections.has(section)) {
-    renderedSections.add(section);
-    void renderModelsSection(section);
-  }
+  void renderModelsSection(section);
 }
 
 function bindStaticSections(): void {
@@ -145,7 +144,11 @@ export function openModels(section?: ModelsSectionId): void {
   bindStaticSections();
 
   const target = section ?? parseHashSection();
-  if (wasAlreadyOpen && target === activeSection) return;
+  // OS router may open a deep link before initApp finishes; refresh when already active.
+  if (wasAlreadyOpen && target === activeSection) {
+    void renderModelsSection(target);
+    return;
+  }
   setActiveSection(target);
 }
 
