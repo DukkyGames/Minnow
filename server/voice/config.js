@@ -4,6 +4,8 @@
 
 import { readConfigJson } from '../config/store.js';
 import { normalizeVoiceConfig } from '../config/validators.js';
+import { detectHardware } from '../system/hardware.js';
+import { listInstalledVoiceModels } from './download.js';
 
 /** @typedef {import('../config/validators.js').VoiceConfig} VoiceConfig */
 
@@ -17,7 +19,18 @@ export async function loadVoiceConfig() {
     meta.voice && typeof meta.voice === 'object'
       ? /** @type {Record<string, unknown>} */ (meta.voice)
       : {};
-  return normalizeVoiceConfig(existing, existing);
+  let cudaAvailable = false;
+  try {
+    const hw = await detectHardware();
+    cudaAvailable = hw?.gpu?.backend === 'cuda';
+  } catch {
+    cudaAvailable = false;
+  }
+  const installedManifest = await listInstalledVoiceModels();
+  return normalizeVoiceConfig(existing, existing, {
+    cudaAvailable,
+    installedManifest,
+  });
 }
 
 /**

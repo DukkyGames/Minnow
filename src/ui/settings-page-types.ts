@@ -5,6 +5,7 @@
 export type SettingsSectionId =
   | 'general'
   | 'appearance'
+  | 'audio'
   | 'providers'
   | 'usage'
   | 'model-routing'
@@ -26,7 +27,6 @@ export type SettingsSectionId =
   | 'lsp'
   | 'editor'
   | 'skills'
-  | 'voice'
   | 'features'
   | 'evals';
 
@@ -34,6 +34,7 @@ export type SettingsSectionId =
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   general: 'General',
   appearance: 'Appearance',
+  audio: 'Audio',
   providers: 'Providers',
   usage: 'Usage & cost',
   'model-routing': 'Models',
@@ -55,7 +56,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   lsp: 'Language servers',
   editor: 'Editor',
   skills: 'Skills',
-  voice: 'Voice',
   features: 'Orchestration',
   evals: 'Evals',
 };
@@ -75,7 +75,7 @@ export type SettingsNavGroup = {
 
 /** Sidebar groups and nav order (must match index.html section order). */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
-  { id: 'app', label: 'App', sections: ['general', 'appearance'] },
+  { id: 'app', label: 'App', sections: ['general', 'appearance', 'audio'] },
   {
     id: 'prompting',
     label: 'Prompting & memory',
@@ -95,7 +95,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills', 'voice'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills'],
   },
   {
     id: 'advanced',

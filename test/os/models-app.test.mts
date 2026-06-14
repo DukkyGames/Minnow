@@ -35,11 +35,17 @@ describe('models router', () => {
     assert.equal(legacy.modelsSection, 'routing');
   });
 
-  test('parseOsHash resolves models section deep link', () => {
-    const route = parseOsHash('#/app/models/recommend');
+  test('legacy #/settings/voice redirects to models voice', () => {
+    const legacy = resolveLegacyHash('#/settings/voice');
+    assert.equal(legacy.hash, '#/app/models/voice');
+    assert.equal(legacy.modelsSection, 'voice');
+  });
+
+  test('parseOsHash resolves models voice deep link', () => {
+    const route = parseOsHash('#/app/models/voice');
     assert.equal(route.view, 'app');
     assert.equal(route.appId, 'models');
-    assert.equal(route.modelsSection, 'recommend');
+    assert.equal(route.modelsSection, 'voice');
   });
 });
 
@@ -52,5 +58,8 @@ describe('models markup contract', () => {
     assert.match(html, /data-models-nav="providers"/);
     assert.match(html, /id="modelsSection-settings"/);
     assert.match(html, /data-models-nav="settings"/);
+    assert.match(html, /data-models-nav="voice"/);
+    assert.match(html, /id="modelsSection-voice"/);
+    assert.match(html, /id="modelsVoiceBody"/);
   });
 });

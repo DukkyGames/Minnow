@@ -1,9 +1,10 @@
 /**
- * STT API — provider-backed speech-to-text proxy.
+ * STT API — local Whisper worker or provider-backed speech-to-text proxy.
  */
 
 import { getProviderRuntime } from '../providers/store.js';
 import { loadVoiceConfig, resolveVoicePaths } from '../voice/config.js';
+import { buildLocalSttStatus, transcribeLocal } from '../voice/local-stt.js';
 import { formatByteLimit, isAllowedAudioMime, resolveSttLimits } from './limits.js';
 import { parseMultipartFile } from './multipart.js';
 
@@ -27,9 +28,41 @@ function sendJson(res, status, payload) {
 async function buildSttStatus(voice) {
   const stt = voice.stt;
   const enabled = stt.enabled === true;
+  const backend = stt.backend === 'local' ? 'local' : 'provider';
   const providerId = String(stt.providerId || '').trim();
   let healthy = false;
-  if (enabled && providerId) {
+
+  if (!enabled) {
+    return {
+      enabled,
+      backend,
+      providerId,
+      model: stt.model,
+      language: stt.language,
+      healthy: false,
+      modelId: stt.local?.modelId ?? stt.model,
+      runtimeReady: false,
+      modelLoaded: false,
+      cudaAvailable: false,
+      warning: null,
+    };
+  }
+
+  if (backend === 'local') {
+    const local = await buildLocalSttStatus(voice);
+    healthy = local.runtimeReady;
+    return {
+      enabled,
+      backend,
+      providerId: '',
+      model: stt.local.modelId,
+      language: stt.local.language,
+      healthy,
+      ...local,
+    };
+  }
+
+  if (providerId) {
     try {
       await getProviderRuntime(providerId);
       healthy = true;
@@ -37,12 +70,19 @@ async function buildSttStatus(voice) {
       healthy = false;
     }
   }
+
   return {
     enabled,
+    backend,
     providerId,
     model: stt.model,
     language: stt.language,
     healthy,
+    modelId: stt.provider.model,
+    runtimeReady: healthy,
+    modelLoaded: healthy,
+    cudaAvailable: false,
+    warning: providerId ? null : 'No STT provider configured',
   };
 }
 
@@ -108,13 +148,6 @@ export async function handleSttRequest(req, res, pathname) {
       sendJson(res, 503, { error: 'Speech-to-text is disabled in settings' });
       return true;
     }
-    const providerId = String(stt.providerId || '').trim();
-    if (!providerId) {
-      sendJson(res, 503, {
-        error: 'No STT provider configured. Open Settings → Voice.',
-      });
-      return true;
-    }
 
     const { maxAudioBytes } = resolveSttLimits(voice);
     try {
@@ -130,14 +163,32 @@ export async function handleSttRequest(req, res, pathname) {
         return true;
       }
 
-      const text = await transcribeWithProvider({
-        providerId,
-        model: stt.model,
-        language: stt.language,
-        audioBuffer: upload.buffer,
-        mime: upload.mime,
-        filename: upload.filename,
-      });
+      let text = '';
+      if (stt.backend === 'local') {
+        text = await transcribeLocal({
+          localConfig: stt.local,
+          audioBuffer: upload.buffer,
+          mime: upload.mime,
+          filename: upload.filename,
+        });
+      } else {
+        const providerId = String(stt.providerId || '').trim();
+        if (!providerId) {
+          sendJson(res, 503, {
+            error: 'No STT provider configured. Open Models → Voice.',
+          });
+          return true;
+        }
+        text = await transcribeWithProvider({
+          providerId,
+          model: stt.model,
+          language: stt.language,
+          audioBuffer: upload.buffer,
+          mime: upload.mime,
+          filename: upload.filename,
+        });
+      }
+
       sendJson(res, 200, { text });
       return true;
     } catch (err) {

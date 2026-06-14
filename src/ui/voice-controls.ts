@@ -2,19 +2,27 @@
  * Voice playback helpers for assistant messages and shared TTS/STT API calls.
  */
 
+import { loadVoiceMeta } from '../config/voice-meta';
 import { setStatus } from './status';
-import { openSettings } from './settings-page';
+import { openModels } from './models-page';
 
 export interface SttStatus {
   enabled: boolean;
+  backend?: 'local' | 'provider';
   providerId: string;
   model: string;
   language: string;
   healthy: boolean;
+  modelId?: string;
+  runtimeReady?: boolean;
+  modelLoaded?: boolean;
+  cudaAvailable?: boolean;
+  warning?: string | null;
 }
 
 export interface TtsStatus {
   enabled: boolean;
+  backend?: 'local' | 'provider' | 'browser';
   providerId: string;
   model: string;
   voice: string;
@@ -22,10 +30,16 @@ export interface TtsStatus {
   format: string;
   browser: boolean;
   healthy: boolean;
+  modelId?: string;
+  mode?: string;
+  runtimeReady?: boolean;
+  modelLoaded?: boolean;
+  warning?: string | null;
 }
 
 let cachedSttStatus: SttStatus | null = null;
 let cachedTtsStatus: TtsStatus | null = null;
+let cachedOutputDeviceId = '';
 let currentAudio: HTMLAudioElement | null = null;
 let currentPlayButton: HTMLButtonElement | null = null;
 
@@ -89,7 +103,13 @@ function stopCurrentPlayback(): void {
 }
 
 /** Play text with browser speechSynthesis fallback. */
-export function speakWithBrowser(text: string, voiceName = '', rate = 1): void {
+export function speakWithBrowser(
+  text: string,
+  voiceUri = '',
+  rate = 1,
+  pitch = 1,
+  volume = 1,
+): void {
   if (!('speechSynthesis' in window)) {
     setStatus('err', 'Browser speech is not supported here');
     return;
@@ -97,9 +117,11 @@ export function speakWithBrowser(text: string, voiceName = '', rate = 1): void {
   stopCurrentPlayback();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = Math.min(4, Math.max(0.25, rate));
-  if (voiceName) {
+  utterance.pitch = Math.min(2, Math.max(0, pitch));
+  utterance.volume = Math.min(1, Math.max(0, volume));
+  if (voiceUri) {
     const voices = window.speechSynthesis.getVoices();
-    const match = voices.find((v) => v.name === voiceName || v.voiceURI === voiceName);
+    const match = voices.find((v) => v.voiceURI === voiceUri || v.name === voiceUri);
     if (match) utterance.voice = match;
   }
   utterance.onend = () => setStatus('ok', 'Finished reading');
@@ -134,6 +156,20 @@ export async function synthesizeSpeech(
   return res.blob();
 }
 
+/** Apply configured output device when the browser supports setSinkId. */
+async function applyOutputDevice(audio: HTMLAudioElement): Promise<void> {
+  if (!cachedOutputDeviceId) return;
+  const sinkable = audio as HTMLAudioElement & {
+    setSinkId?: (id: string) => Promise<void>;
+  };
+  if (typeof sinkable.setSinkId !== 'function') return;
+  try {
+    await sinkable.setSinkId(cachedOutputDeviceId);
+  } catch {
+    /* ignore sink routing errors */
+  }
+}
+
 /** Play assistant message text via configured TTS (never autoplay). */
 export async function playAssistantText(
   text: string,
@@ -147,7 +183,8 @@ export async function playAssistantText(
 
   const status = cachedTtsStatus ?? (await fetchTtsStatus());
   if (!status?.enabled) {
-    setStatus('err', 'Text-to-speech is disabled. Open Settings → Voice.');
+    setStatus('err', 'Text-to-speech is disabled. Open Models → Voice.');
+    openModels('voice');
     return;
   }
 
@@ -159,13 +196,51 @@ export async function playAssistantText(
   }
 
   try {
-    if (status.browser || status.providerId === 'browser') {
-      speakWithBrowser(plain, status.voice, status.speed);
+    const backend = status.backend ?? (status.browser ? 'browser' : 'provider');
+
+    if (backend === 'browser' || status.browser || status.providerId === 'browser') {
+      const voiceMeta = await loadVoiceMeta();
+      speakWithBrowser(
+        plain,
+        voiceMeta.tts.browser.voiceUri || status.voice,
+        voiceMeta.tts.browser.rate ?? status.speed,
+        voiceMeta.tts.browser.pitch,
+        voiceMeta.tts.browser.volume,
+      );
       return;
     }
+
+    if (backend === 'local') {
+      if (!status.healthy) {
+        setStatus('err', status.warning ?? 'Local TTS worker is not ready. Open Models → Voice.');
+        openModels('voice');
+        return;
+      }
+      const blob = await synthesizeSpeech(plain);
+      stopCurrentPlayback();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudio = audio;
+      if (button) currentPlayButton = button;
+      await applyOutputDevice(audio);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        stopCurrentPlayback();
+        setStatus('ok', 'Finished reading');
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        stopCurrentPlayback();
+        setStatus('err', 'Could not play audio');
+      };
+      await audio.play();
+      setStatus('ok', 'Reading aloud…');
+      return;
+    }
+
     if (!status.healthy) {
-      setStatus('err', 'TTS provider is not configured. Open Settings → Voice.');
-      openSettings('voice');
+      setStatus('err', 'TTS provider is not configured. Open Models → Voice.');
+      openModels('voice');
       return;
     }
 
@@ -179,6 +254,7 @@ export async function playAssistantText(
     const audio = new Audio(url);
     currentAudio = audio;
     if (button) currentPlayButton = button;
+    await applyOutputDevice(audio);
     audio.onended = () => {
       URL.revokeObjectURL(url);
       stopCurrentPlayback();
@@ -195,8 +271,8 @@ export async function playAssistantText(
     stopCurrentPlayback();
     const message = err instanceof Error ? err.message : 'Speech failed';
     setStatus('err', message);
-    if (message.includes('Settings')) {
-      openSettings('voice');
+    if (message.includes('Settings') || message.includes('Models')) {
+      openModels('voice');
     }
   }
 }
@@ -227,5 +303,11 @@ export function attachVoicePlayButton(wrap: HTMLElement, text: string): void {
 
 /** Prime voice status caches on boot. */
 export async function initVoiceStatus(): Promise<void> {
+  try {
+    const voiceMeta = await loadVoiceMeta();
+    cachedOutputDeviceId = voiceMeta.audio.outputDeviceId ?? '';
+  } catch {
+    cachedOutputDeviceId = '';
+  }
   await Promise.all([fetchSttStatus(), fetchTtsStatus()]);
 }

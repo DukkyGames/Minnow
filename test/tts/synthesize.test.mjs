@@ -14,9 +14,17 @@ import {
 } from '../../server/tts/cache.js';
 import {
   MAX_TTS_TEXT_CHARS,
+  buildTtsStatus,
   normalizeTtsSpeed,
 } from '../../server/tts/middleware.js';
 import { normalizeVoiceConfig } from '../../server/config/validators.js';
+import {
+  resetVoiceFetchOverrideForTests,
+  resetVoiceRuntimeForTests,
+  setVoiceFetchOverrideForTests,
+  setWorkerStateForTests,
+} from '../../server/voice/runtime-manager.js';
+import { resetLocalTtsForTests } from '../../server/voice/local-tts.js';
 
 describe('tts speed validation', () => {
   test('normalizeTtsSpeed clamps malformed values', () => {
@@ -25,10 +33,11 @@ describe('tts speed validation', () => {
     assert.equal(normalizeTtsSpeed('bad', 1.5), 1.5);
   });
 
-  test('voice config clamps tts speed on save', () => {
+  test('voice config clamps tts provider speed on save', () => {
     const voice = normalizeVoiceConfig({
-      tts: { speed: 9 },
+      tts: { backend: 'provider', speed: 9 },
     });
+    assert.equal(voice.tts.provider.speed, 4);
     assert.equal(voice.tts.speed, 4);
   });
 });
@@ -80,5 +89,44 @@ describe('tts cache', () => {
 describe('tts text limits', () => {
   test('MAX_TTS_TEXT_CHARS matches OpenAI guidance', () => {
     assert.equal(MAX_TTS_TEXT_CHARS, 4096);
+  });
+});
+
+describe('tts local status', () => {
+  after(() => {
+    resetVoiceRuntimeForTests();
+    resetVoiceFetchOverrideForTests();
+    resetLocalTtsForTests();
+  });
+
+  test('buildTtsStatus reports local backend fields', async () => {
+    setWorkerStateForTests({
+      child: null,
+      port: 9878,
+      healthy: true,
+      phase: 'running',
+    });
+    setVoiceFetchOverrideForTests(async (url) => {
+      if (String(url).endsWith('/voice/capabilities')) {
+        return new Response(
+          JSON.stringify({
+            cuda: false,
+            modelLoaded: false,
+            loadedKind: null,
+            speakers: [],
+            languages: [],
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+
+    const voice = normalizeVoiceConfig({ tts: { backend: 'local', enabled: true } });
+    const status = await buildTtsStatus(voice);
+    assert.equal(status.backend, 'local');
+    assert.equal(status.enabled, true);
+    assert.equal(status.runtimeReady, true);
+    assert.match(status.warning ?? '', /first synthesis/i);
   });
 });

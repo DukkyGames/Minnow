@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   isEmptyToolArgumentsJson,
   mergeContentJsonToolCalls,
+  toolArgumentsRichnessScore,
   tryParseToolCallsFromAssistantContent,
 } from '../../src/providers/constrained-tool-content.ts';
 
@@ -71,5 +72,49 @@ describe('constrained-tool-content', () => {
     const merged = mergeContentJsonToolCalls(text, []);
     assert.equal(merged.length, 1);
     assert.equal(merged[0].function.name, 'get_datetime');
+  });
+
+  test('toolArgumentsRichnessScore ranks full board_init above plan_path-only', () => {
+    const partial = '{"plan_path":"documentation/plans/minnow-marketing-website.md"}';
+    const full = JSON.stringify({
+      plan_path: 'documentation/plans/minnow-marketing-website.md',
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    assert.ok(toolArgumentsRichnessScore(full) > toolArgumentsRichnessScore(partial));
+  });
+
+  test('mergeContentJsonToolCalls prefers content when streamed board_init is partial', () => {
+    const streamed = [
+      {
+        id: 'call_1',
+        type: 'function' as const,
+        function: {
+          name: 'board_init',
+          arguments: '{"plan_path":"documentation/plans/minnow-marketing-website.md"}',
+        },
+      },
+    ];
+    const text = JSON.stringify({
+      tool_calls: [
+        {
+          name: 'board_init',
+          arguments: {
+            plan_path: 'documentation/plans/minnow-marketing-website.md',
+            tasks: [{ id: 'W1-A', title: 'Scaffold', wave: 'W1', category: 'build' }],
+            waves: [{ id: 'W1' }],
+          },
+        },
+      ],
+    });
+    const merged = mergeContentJsonToolCalls(text, streamed);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].id, 'call_1');
+    const args = JSON.parse(merged[0].function.arguments) as {
+      tasks?: unknown[];
+      waves?: unknown[];
+    };
+    assert.equal(args.tasks?.length, 1);
+    assert.equal(args.waves?.length, 1);
   });
 });

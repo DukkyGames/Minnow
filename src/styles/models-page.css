@@ -652,3 +652,123 @@
   gap: 8px;
   font-size: 13px;
 }
+
+/* Models → Voice (Phase 1 shell) */
+.models-voice-runtime-card {
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--mn-bg) 92%, var(--mn-accent) 8%);
+}
+
+.models-voice-runtime-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.models-voice-runtime-card__title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.models-voice-runtime-card__lead {
+  margin: 0 0 12px;
+  color: var(--mn-fg-muted);
+}
+
+.models-voice-runtime-card__progress {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.models-voice-runtime-card__progress.is-hidden {
+  display: none;
+}
+
+.models-voice-runtime-card__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.models-voice-runtime-card__actions .is-hidden {
+  display: none;
+}
+  display: flex;
+  gap: 8px;
+}
+
+.models-voice-subnav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.models-voice-subnav button {
+  padding: 6px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.models-voice-subnav button[aria-current='page'] {
+  border-color: color-mix(in srgb, var(--mn-accent) 40%, var(--mn-border));
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.models-voice-panel {
+  display: none;
+}
+
+.models-voice-panel.is-active {
+  display: block;
+}
+
+.models-voice-backend-summary {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.models-voice-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.models-voice-catalog-row {
+  padding: 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.models-voice-catalog-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.models-voice-catalog-row__label {
+  font-weight: 600;
+}
+
+.models-voice-catalog-row__meta {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.models-voice-settings-shell {
+  padding-top: 8px;
+  border-top: 1px dashed var(--mn-border);
+}

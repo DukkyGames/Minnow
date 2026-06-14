@@ -5,7 +5,8 @@
 import { getActiveComposerSurface } from './composer-surface';
 import { autoResize } from './input';
 import { setStatus } from './status';
-import { openSettings } from './settings-page';
+import { openModels } from './models-page';
+import { loadVoiceMeta } from '../config/voice-meta';
 import { fetchSttStatus } from './voice-controls';
 
 type MicState = 'idle' | 'recording' | 'transcribing';
@@ -17,6 +18,7 @@ let micState: MicState = 'idle';
 let recordingTimer: ReturnType<typeof setInterval> | null = null;
 let recordingStartedAt = 0;
 let maxDurationSeconds = 300;
+let inputDeviceId = '';
 
 const MIC_BUTTON_IDS = ['btnComposerMic', 'btnChatAppMic'] as const;
 
@@ -118,8 +120,8 @@ async function handleRecordingStop(): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Transcription failed';
     setStatus('err', message);
-    if (message.includes('Settings') || message.includes('provider')) {
-      openSettings('voice');
+    if (message.includes('Settings') || message.includes('provider') || message.includes('Models')) {
+      openModels('voice');
     }
   } finally {
     setMicButtonsState('idle');
@@ -140,18 +142,26 @@ async function startRecording(): Promise<void> {
 
   const status = await fetchSttStatus();
   if (!status?.enabled) {
-    setStatus('err', 'Speech-to-text is disabled. Open Settings → Voice.');
-    openSettings('voice');
+    setStatus('err', 'Speech-to-text is disabled. Open Models → Voice.');
+    openModels('voice');
     return;
   }
   if (!status.healthy) {
-    setStatus('err', 'STT provider is not configured. Open Settings → Voice.');
-    openSettings('voice');
+    setStatus('err', 'STT provider is not configured. Open Models → Voice.');
+    openModels('voice');
     return;
   }
 
   try {
-    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+    if (inputDeviceId) {
+      audioConstraints.deviceId = { exact: inputDeviceId };
+    }
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : 'audio/webm';
@@ -240,6 +250,16 @@ export function initComposerVoice(): void {
   ensureMicButton('btnChatAppMic', 'btnChatAppAttach');
 
   void (async () => {
+    try {
+      const voiceMeta = await loadVoiceMeta();
+      inputDeviceId = voiceMeta.audio.inputDeviceId ?? '';
+      const seconds = voiceMeta.limits?.maxDurationSeconds;
+      if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+        maxDurationSeconds = Math.max(1, Math.round(seconds));
+      }
+    } catch {
+      /* keep defaults */
+    }
     try {
       const res = await fetch('/api/config/meta', { cache: 'no-store' });
       if (!res.ok) return;

@@ -24,6 +24,7 @@ import { createPromptConfigsMiddleware } from '../prompt-configs/middleware.js';
 import { createProviderMiddleware } from '../providers/routes.js';
 import { createSttMiddleware } from '../stt/middleware.js';
 import { createTtsMiddleware } from '../tts/middleware.js';
+import { createVoiceRuntimeMiddleware } from '../voice/routes.js';
 import { createReefMiddleware } from '../reef/middleware.js';
 import { createSkillsMiddleware } from '../skills/middleware.js';
 import { createPluginsMiddleware } from '../tools/middleware.js';
@@ -66,6 +67,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createProviderMiddleware());
   connectApp.use(createSttMiddleware());
   connectApp.use(createTtsMiddleware());
+  connectApp.use(createVoiceRuntimeMiddleware());
   connectApp.use(createGenerationsMiddleware());
   connectApp.use(createResearchMiddleware());
   connectApp.use(createWorkAgentsMiddleware());

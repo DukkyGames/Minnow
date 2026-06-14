@@ -4,6 +4,7 @@
 
 import { getProviderRuntime } from '../providers/store.js';
 import { loadVoiceConfig, resolveVoicePaths } from '../voice/config.js';
+import { buildLocalTtsStatus, synthesizeLocal } from '../voice/local-tts.js';
 import {
   getCachedSynthesis,
   putCachedSynthesis,
@@ -78,13 +79,71 @@ function mimeForFormat(format) {
  * Build TTS status for the client.
  * @param {Awaited<ReturnType<typeof loadVoiceConfig>>} voice
  */
-async function buildTtsStatus(voice) {
+export async function buildTtsStatus(voice) {
   const tts = voice.tts;
   const enabled = tts.enabled === true;
+  const backend =
+    tts.backend === 'local' || tts.backend === 'browser' || tts.backend === 'provider'
+      ? tts.backend
+      : 'provider';
   const providerId = String(tts.providerId || '').trim();
-  const browser = providerId === 'browser';
-  let healthy = browser;
-  if (enabled && providerId && !browser) {
+  const browser = backend === 'browser' || providerId === 'browser';
+
+  if (!enabled) {
+    return {
+      enabled,
+      backend,
+      providerId: browser ? 'browser' : providerId,
+      model: tts.model,
+      voice: tts.voice,
+      speed: tts.speed,
+      format: tts.format,
+      browser,
+      healthy: false,
+      modelId: tts.local?.modelId ?? tts.model,
+      mode: tts.local?.mode ?? 'custom_voice',
+      runtimeReady: false,
+      modelLoaded: false,
+      warning: null,
+    };
+  }
+
+  if (backend === 'local') {
+    const local = await buildLocalTtsStatus(voice);
+    return {
+      enabled,
+      providerId: '',
+      model: tts.local.modelId,
+      voice: tts.local.customVoice?.speaker ?? tts.voice,
+      speed: 1,
+      format: 'wav',
+      browser: false,
+      healthy: local.runtimeReady,
+      ...local,
+    };
+  }
+
+  if (browser) {
+    return {
+      enabled,
+      backend: 'browser',
+      providerId: 'browser',
+      model: '',
+      voice: tts.browser?.voiceUri ?? tts.voice,
+      speed: tts.browser?.rate ?? tts.speed,
+      format: 'wav',
+      browser: true,
+      healthy: true,
+      modelId: '',
+      mode: tts.local?.mode ?? 'custom_voice',
+      runtimeReady: false,
+      modelLoaded: false,
+      warning: null,
+    };
+  }
+
+  let healthy = false;
+  if (providerId) {
     try {
       await getProviderRuntime(providerId);
       healthy = true;
@@ -94,13 +153,19 @@ async function buildTtsStatus(voice) {
   }
   return {
     enabled,
+    backend: 'provider',
     providerId,
     model: tts.model,
     voice: tts.voice,
     speed: tts.speed,
     format: tts.format,
-    browser,
+    browser: false,
     healthy,
+    modelId: tts.model,
+    mode: tts.local?.mode ?? 'custom_voice',
+    runtimeReady: false,
+    modelLoaded: false,
+    warning: healthy ? null : 'TTS provider is not configured',
   };
 }
 
@@ -165,10 +230,15 @@ export async function handleTtsRequest(req, res, pathname) {
       sendJson(res, 503, { error: 'Text-to-speech is disabled in settings' });
       return true;
     }
-    const providerId = String(tts.providerId || '').trim();
-    if (!providerId || providerId === 'browser') {
+
+    const backend =
+      tts.backend === 'local' || tts.backend === 'browser' || tts.backend === 'provider'
+        ? tts.backend
+        : 'provider';
+
+    if (backend === 'browser') {
       sendJson(res, 503, {
-        error: 'Browser TTS runs client-side. Configure a provider in Settings → Voice.',
+        error: 'Browser TTS runs client-side. Configure local or provider TTS in Models → Voice.',
       });
       return true;
     }
@@ -187,44 +257,75 @@ export async function handleTtsRequest(req, res, pathname) {
         return true;
       }
 
-      const selectedVoice =
-        typeof body.voice === 'string' && body.voice.trim()
-          ? body.voice.trim()
-          : tts.voice;
-      const speed = normalizeTtsSpeed(
-        body.speed ?? tts.speed,
-        normalizeTtsSpeed(tts.speed, 1),
-      );
-      const format =
-        typeof body.format === 'string' && body.format.trim()
-          ? body.format.trim()
-          : tts.format;
+      const returnBytes = body.returnBytes === true;
+      let audio;
+      let mime;
 
-      const cached = await getCachedSynthesis(text, selectedVoice, speed, format);
-      if (cached) {
-        sendJson(res, 200, { url: `/api/tts/audio/${cached.id}` });
+      if (backend === 'local') {
+        const result = await synthesizeLocal({
+          localConfig: tts.local,
+          text,
+        });
+        audio = result.buffer;
+        mime = result.mime;
+      } else {
+        const providerId = String(tts.providerId || '').trim();
+        if (!providerId) {
+          sendJson(res, 503, {
+            error: 'TTS provider is not configured. Open Models → Voice.',
+          });
+          return true;
+        }
+
+        const selectedVoice =
+          typeof body.voice === 'string' && body.voice.trim()
+            ? body.voice.trim()
+            : tts.voice;
+        const speed = normalizeTtsSpeed(
+          body.speed ?? tts.speed,
+          normalizeTtsSpeed(tts.speed, 1),
+        );
+        const format =
+          typeof body.format === 'string' && body.format.trim()
+            ? body.format.trim()
+            : tts.format;
+
+        const cached = await getCachedSynthesis(text, selectedVoice, speed, format);
+        if (cached) {
+          sendJson(res, 200, { url: `/api/tts/audio/${cached.id}` });
+          return true;
+        }
+
+        audio = await synthesizeWithProvider({
+          providerId,
+          model: tts.model,
+          voice: selectedVoice,
+          speed,
+          format,
+          text,
+        });
+        mime = mimeForFormat(format);
+        const id = await putCachedSynthesis(
+          text,
+          selectedVoice,
+          speed,
+          format,
+          audio,
+          mime,
+        );
+
+        if (returnBytes) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', mime);
+          res.setHeader('Content-Length', String(audio.length));
+          res.end(audio);
+          return true;
+        }
+
+        sendJson(res, 200, { url: `/api/tts/audio/${id}` });
         return true;
       }
 
-      const audio = await synthesizeWithProvider({
-        providerId,
-        model: tts.model,
-        voice: selectedVoice,
-        speed,
-        format,
-        text,
-      });
-      const mime = mimeForFormat(format);
-      const id = await putCachedSynthesis(
-        text,
-        selectedVoice,
-        speed,
-        format,
-        audio,
-        mime,
-      );
-
-      const returnBytes = body.returnBytes === true;
       if (returnBytes) {
         res.statusCode = 200;
         res.setHeader('Content-Type', mime);
@@ -233,6 +334,7 @@ export async function handleTtsRequest(req, res, pathname) {
         return true;
       }
 
+      const id = await putCachedSynthesis(text, tts.local.modelId, 1, 'wav', audio, mime);
       sendJson(res, 200, { url: `/api/tts/audio/${id}` });
       return true;
     } catch (err) {
@@ -291,4 +393,4 @@ export function createTtsMiddleware() {
 }
 
 /** @internal Test helpers */
-export { buildTtsStatus, synthesizeWithProvider, MAX_TTS_TEXT_CHARS };
+export { synthesizeWithProvider, MAX_TTS_TEXT_CHARS };

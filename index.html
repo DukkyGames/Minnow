@@ -436,6 +436,7 @@
         <p id="settingsNavApp" class="settings-nav-group__label">App</p>
         <button type="button" data-settings-nav="general" aria-current="page">General</button>
         <button type="button" data-settings-nav="appearance">Appearance</button>
+        <button type="button" data-settings-nav="audio">Audio</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
@@ -461,7 +462,6 @@
         <button type="button" data-settings-nav="lsp">Language servers</button>
         <button type="button" data-settings-nav="editor">Editor</button>
         <button type="button" data-settings-nav="skills">Skills</button>
-        <button type="button" data-settings-nav="voice">Voice</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
         <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
@@ -478,6 +478,42 @@
       <section id="settingsSection-appearance" class="settings-section settings-section--appearance">
         <h2>Appearance</h2>
         <div id="settingsAppearanceBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-audio" class="settings-section">
+        <h2>Audio</h2>
+        <p class="settings-lead">Microphone and speaker devices for dictation and read-aloud. Configure STT/TTS models under <strong>Models → Voice</strong>.</p>
+        <section class="settings-group settings-group--flat" id="settingsAudioPanel" data-settings-search-key="audio.devices">
+          <p id="settingsAudioOffline" class="field-hint settings-memory-offline hidden">
+            Start with <code>npm start</code> to persist audio device settings.
+          </p>
+          <div class="settings-group__body">
+            <div class="field">
+              <label for="settingsAudioInputDevice">Input device</label>
+              <select id="settingsAudioInputDevice" class="settings-select"></select>
+            </div>
+            <div class="field">
+              <label for="settingsAudioOutputDevice">Output device</label>
+              <select id="settingsAudioOutputDevice" class="settings-select"></select>
+              <p class="field-hint">Output routing uses <code>setSinkId</code> when supported (Chrome / Electron).</p>
+            </div>
+            <label class="settings-toggle-row" data-settings-search-key="audio.echoCancellation">
+              <input type="checkbox" id="settingsAudioEchoCancellation" checked>
+              Echo cancellation
+            </label>
+            <label class="settings-toggle-row" data-settings-search-key="audio.noiseSuppression">
+              <input type="checkbox" id="settingsAudioNoiseSuppression" checked>
+              Noise suppression
+            </label>
+            <label class="settings-toggle-row" data-settings-search-key="audio.autoGainControl">
+              <input type="checkbox" id="settingsAudioAutoGainControl" checked>
+              Auto gain control
+            </label>
+            <div class="settings-form-actions">
+              <button type="button" class="settings-action-btn" id="settingsAudioSave">Save audio settings</button>
+              <button type="button" class="settings-inline-btn" id="settingsAudioRefreshDevices">Refresh devices</button>
+            </div>
+          </div>
+        </section>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -859,74 +895,9 @@
         <p class="settings-lead">Slash commands and SKILL packs (built-in and user). Toggle which skills the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
       </section>
-      <section id="settingsSection-voice" class="settings-section">
+      <section id="settingsSection-voice" class="settings-section hidden" hidden aria-hidden="true">
         <h2>Voice</h2>
-        <p class="settings-lead">Speech-to-text dictation in the composer and text-to-speech playback on assistant messages. Provider-backed STT/TTS uses OpenAI-compatible <code>/v1/audio/transcriptions</code> and <code>/v1/audio/speech</code> endpoints.</p>
-        <section class="settings-group settings-group--flat" id="settingsVoicePanel">
-          <p id="settingsVoiceOffline" class="field-hint settings-memory-offline hidden">
-            Start with <code>npm start</code> to configure voice providers.
-          </p>
-          <p id="settingsVoiceError" class="settings-memory-form-error hidden" role="alert"></p>
-          <div class="settings-group__body">
-            <h3 class="settings-group__title">Speech input (STT)</h3>
-            <label class="settings-toggle-row">
-              <input type="checkbox" id="settingsVoiceSttEnabled" checked>
-              Enable microphone dictation
-            </label>
-            <div class="field">
-              <label for="settingsVoiceSttProvider">STT provider</label>
-              <select id="settingsVoiceSttProvider" class="settings-select"></select>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="settingsVoiceSttModel">Model</label>
-                <input type="text" id="settingsVoiceSttModel" class="settings-input" value="whisper-1" spellcheck="false">
-              </div>
-              <div class="field">
-                <label for="settingsVoiceSttLanguage">Language</label>
-                <input type="text" id="settingsVoiceSttLanguage" class="settings-input" value="en" spellcheck="false">
-              </div>
-            </div>
-            <h3 class="settings-group__title">Speech output (TTS)</h3>
-            <label class="settings-toggle-row">
-              <input type="checkbox" id="settingsVoiceTtsEnabled" checked>
-              Enable read-aloud on assistant messages
-            </label>
-            <div class="field">
-              <label for="settingsVoiceTtsProvider">TTS provider</label>
-              <select id="settingsVoiceTtsProvider" class="settings-select"></select>
-              <p class="settings-field-hint">Choose <strong>Browser (offline)</strong> for OS speech without a provider key.</p>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="settingsVoiceTtsModel">Model</label>
-                <input type="text" id="settingsVoiceTtsModel" class="settings-input" value="tts-1" spellcheck="false">
-              </div>
-              <div class="field">
-                <label for="settingsVoiceTtsVoice">Voice</label>
-                <select id="settingsVoiceTtsVoice" class="settings-select"></select>
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="settingsVoiceTtsSpeed">Speed</label>
-                <input type="number" id="settingsVoiceTtsSpeed" class="settings-input settings-input--narrow" min="0.25" max="4" step="0.05" value="1">
-              </div>
-              <div class="field">
-                <label for="settingsVoiceTtsFormat">Format</label>
-                <select id="settingsVoiceTtsFormat" class="settings-select">
-                  <option value="mp3">mp3</option>
-                  <option value="wav">wav</option>
-                  <option value="opus">opus</option>
-                </select>
-              </div>
-            </div>
-            <div class="settings-actions">
-              <button type="button" id="settingsVoiceTestTts" class="settings-inline-btn">Test voice</button>
-              <button type="button" id="settingsVoiceSave" class="settings-action-btn">Save voice settings</button>
-            </div>
-          </div>
-        </section>
+        <p class="settings-lead">Voice model settings moved to <strong>Models → Voice</strong> (<code>#/app/models/voice</code>). Device routing remains under <strong>Settings → Audio</strong>.</p>
       </section>
       <section id="settingsSection-features" class="settings-section">
         <h2>Orchestration</h2>
@@ -1178,6 +1149,7 @@
       <button type="button" data-models-nav="recommend" aria-current="page">What fits</button>
       <button type="button" data-models-nav="installed">Installed</button>
       <button type="button" data-models-nav="settings">Settings</button>
+      <button type="button" data-models-nav="voice">Voice</button>
       <button type="button" data-models-nav="providers">Providers</button>
       <button type="button" data-models-nav="routing">Routing</button>
       <button type="button" data-models-nav="sampler">Sampler</button>
@@ -1199,6 +1171,11 @@
         <h2>Settings</h2>
         <p class="models-lead">Hugging Face token and extra directories for local model scans.</p>
         <div id="modelsSettingsBody"></div>
+      </section>
+      <section id="modelsSection-voice" class="models-section">
+        <h2>Voice</h2>
+        <p class="models-lead">Local Whisper STT and Qwen3-TTS models, runtime health, and voice I/O settings.</p>
+        <div id="modelsVoiceBody"></div>
       </section>
       <section id="modelsSection-providers" class="models-section"></section>
       <section id="modelsSection-routing" class="models-section"></section>

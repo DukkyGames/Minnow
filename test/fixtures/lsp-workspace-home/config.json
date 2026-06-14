@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-06-14T03:15:16.676Z",
+  "createdAt": "2026-06-14T20:04:22.669Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -165,10 +165,30 @@
     "wordWrap": false,
     "renderWhitespace": false
   },
+  "voice": {
+    "stt": {
+      "enabled": true,
+      "providerId": "",
+      "model": "whisper-1",
+      "language": "en"
+    },
+    "tts": {
+      "enabled": true,
+      "providerId": "",
+      "model": "tts-1",
+      "voice": "alloy",
+      "speed": 1,
+      "format": "mp3"
+    },
+    "limits": {
+      "maxAudioBytes": 26214400,
+      "maxDurationSeconds": 300
+    }
+  },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-fB99S2",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-PHZAZI",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-fB99S2"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-PHZAZI"
     ]
   }
 }

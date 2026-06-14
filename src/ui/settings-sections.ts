@@ -59,7 +59,7 @@ import { parseMemoryTagsInput } from '../memory/parse-tags';
 import type { MemoryEntryWithBody } from '../memory/types';
 import { mountMemoryEmbeddingsPanel } from './settings-memory-embeddings';
 import { mountMemorySynthesisSettingsPanel } from './settings-memory-synthesis';
-import { renderVoiceSettingsSection } from './settings-voice';
+import { renderAudioSettingsSection } from './settings-audio';
 import { mountMemoryProposalsPanel } from './memory-proposals-panel';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
@@ -2064,6 +2064,9 @@ export async function refreshSettingsSection(
     case 'appearance':
       await renderAppearanceSection();
       break;
+    case 'audio':
+      await renderAudioSettingsSection(setStatus);
+      break;
     case 'providers':
       refreshProvidersBanner();
       await listProviders();
@@ -2131,9 +2134,6 @@ export async function refreshSettingsSection(
       break;
     case 'skills':
       await renderSkillsSection();
-      break;
-    case 'voice':
-      await renderVoiceSettingsSection(setStatus);
       break;
     case 'evals':
       await renderEvalsSection();
