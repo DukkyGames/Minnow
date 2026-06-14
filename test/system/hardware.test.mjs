@@ -57,4 +57,19 @@ describe('detectHardware', () => {
     assert.ok(hw.detectedAt > 0);
     assert.ok(['cuda', 'rocm', 'metal', 'cpu_x86', 'cpu_arm'].includes(hw.backend));
   });
+
+  test('reports platform matching the host OS', async () => {
+    clearHardwareCacheForTests();
+    const hw = await detectHardware({ fresh: true });
+    if (process.platform === 'win32') {
+      assert.equal(hw.os, 'windows');
+      assert.equal(hw.platform, 'windows');
+    } else if (process.platform === 'darwin') {
+      assert.equal(hw.os, 'darwin');
+      assert.equal(hw.platform, 'darwin');
+    } else {
+      assert.equal(hw.os, 'linux');
+      assert.equal(hw.platform, 'linux');
+    }
+  });
 });

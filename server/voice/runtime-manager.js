@@ -409,8 +409,10 @@ export async function getRuntimeStatus() {
 
   if (running && workerState?.port) {
     cudaAvailable = await fetchWorkerCuda(workerState.port);
-  } else if (install.installed && install.torchVariant) {
-    cudaAvailable = install.torchVariant === 'cuda';
+  } else if (install.torchVariant === 'cuda') {
+    cudaAvailable = true;
+  } else if (install.torchVariant === 'cpu') {
+    cudaAvailable = false;
   }
 
   let health = 'not_installed';
@@ -432,6 +434,7 @@ export async function getRuntimeStatus() {
     running,
     health,
     cudaAvailable,
+    torchVariant: install.torchVariant,
     port: workerState?.port ?? null,
     installedAt: install.installedAt,
     installedPackages: install.installedPackages,

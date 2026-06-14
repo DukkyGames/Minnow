@@ -22,6 +22,7 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     { applyMinnowMiddlewares },
     { resolveSafePath, runWithPathAccess },
     { attachPtyWebSocketServer },
+    { attachSttWebSocketServer },
     { getAppRoot },
   ] = await Promise.all([
     importServerModule<{
@@ -40,6 +41,9 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     importServerModule<{
       attachPtyWebSocketServer: (httpServer: http.Server) => void;
     }>('terminal/pty-ws.js'),
+    importServerModule<{
+      attachSttWebSocketServer: (httpServer: http.Server) => void;
+    }>('stt/stt-ws.js'),
     importServerModule<{ getAppRoot: () => string }>('workspace/root.js'),
   ]);
 
@@ -58,6 +62,7 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
 
   const server = http.createServer(connectApp);
   attachPtyWebSocketServer(server);
+  attachSttWebSocketServer(server);
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

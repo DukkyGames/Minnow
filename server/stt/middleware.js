@@ -44,6 +44,8 @@ async function buildSttStatus(voice) {
       runtimeReady: false,
       modelLoaded: false,
       cudaAvailable: false,
+      streaming: false,
+      streamingSupported: false,
       warning: null,
     };
   }
@@ -51,6 +53,8 @@ async function buildSttStatus(voice) {
   if (backend === 'local') {
     const local = await buildLocalSttStatus(voice);
     healthy = local.runtimeReady;
+    const streamingEnabled = stt.local?.streamingEnabled !== false;
+    const streamingSupported = healthy && streamingEnabled;
     return {
       enabled,
       backend,
@@ -58,6 +62,8 @@ async function buildSttStatus(voice) {
       model: stt.local.modelId,
       language: stt.local.language,
       healthy,
+      streaming: streamingSupported,
+      streamingSupported,
       ...local,
     };
   }
@@ -82,6 +88,8 @@ async function buildSttStatus(voice) {
     runtimeReady: healthy,
     modelLoaded: healthy,
     cudaAvailable: false,
+    streaming: false,
+    streamingSupported: false,
     warning: providerId ? null : 'No STT provider configured',
   };
 }

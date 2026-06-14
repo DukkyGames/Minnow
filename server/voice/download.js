@@ -13,6 +13,7 @@ import {
   getVoiceModelsRoot,
   voiceModelDir,
 } from './paths.js';
+import { isSttCatalogModel } from './stt-catalog.js';
 import { QWEN_TOKENIZER_MODEL_ID, resolveTtsCatalogMeta } from './tts-catalog.js';
 
 /** Minimum free bytes before starting a voice download (500 MB). */
@@ -129,9 +130,104 @@ async function assertDiskSpace(requiredBytes) {
  */
 
 /**
+ * Map a voice models directory name back to a HuggingFace repo id.
+ * @param {string} dirName
+ */
+function dirNameToModelId(dirName) {
+  return dirName.replace(/--/g, '/');
+}
+
+/**
+ * Classify an on-disk voice model as STT or TTS using catalog metadata.
+ * @param {string} modelId
+ * @returns {'stt' | 'tts' | null}
+ */
+function classifyVoiceModelKind(modelId) {
+  if (isSttCatalogModel(modelId)) return 'stt';
+  const lower = modelId.toLowerCase();
+  if (lower.includes('tts') || lower.includes('tokenizer') || lower.includes('qwen3-tts')) {
+    return 'tts';
+  }
+  return null;
+}
+
+/**
+ * @param {string} destDir
+ */
+async function computeDirSizeBytes(destDir) {
+  let sizeBytes = 0;
+  try {
+    const walk = async (current) => {
+      const entries = await fsp.readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile()) {
+          const stat = await fsp.stat(full);
+          sizeBytes += stat.size;
+        }
+      }
+    };
+    await walk(destDir);
+  } catch {
+    sizeBytes = 0;
+  }
+  return sizeBytes;
+}
+
+/**
+ * Scan ~/.minnow/models/voice for HF snapshot folders and rebuild the manifest.
  * @returns {Promise<{ version: number, stt: InstalledVoiceModel[], tts: InstalledVoiceModel[] }>}
  */
-async function readInstalledManifest() {
+async function rebuildInstalledManifestFromDisk() {
+  const manifest = { version: 1, stt: [], tts: [] };
+  const modelsRoot = getVoiceModelsRoot();
+  let entries = [];
+  try {
+    entries = await fsp.readdir(modelsRoot, { withFileTypes: true });
+  } catch {
+    return manifest;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const modelId = dirNameToModelId(entry.name);
+    const kind = classifyVoiceModelKind(modelId);
+    if (!kind) continue;
+
+    const destDir = path.join(modelsRoot, entry.name);
+    let installedAt = Date.now();
+    try {
+      const stat = await fsp.stat(destDir);
+      installedAt = Math.trunc(stat.mtimeMs);
+    } catch {
+      /* keep default installedAt */
+    }
+
+    const row = /** @type {InstalledVoiceModel} */ ({
+      modelId,
+      path: destDir,
+      installedAt,
+      sizeBytes: await computeDirSizeBytes(destDir),
+      kind,
+      ...(kind === 'tts' ? { mode: resolveTtsCatalogMeta(modelId).mode } : {}),
+    });
+
+    if (kind === 'stt') manifest.stt.push(row);
+    else manifest.tts.push(row);
+  }
+
+  manifest.stt.sort((a, b) => b.installedAt - a.installedAt);
+  manifest.tts.sort((a, b) => b.installedAt - a.installedAt);
+  await writeInstalledManifest(manifest);
+  return manifest;
+}
+
+/**
+ * @returns {Promise<{ version: number, stt: InstalledVoiceModel[], tts: InstalledVoiceModel[] }>}
+ */
+async function readInstalledManifestFile() {
   try {
     const raw = await fsp.readFile(getVoiceInstalledPath(), 'utf8');
     const parsed = JSON.parse(raw);
@@ -143,6 +239,38 @@ async function readInstalledManifest() {
   } catch {
     return { version: 1, stt: [], tts: [] };
   }
+}
+
+/**
+ * Whether any HF snapshot folders exist under the voice models root.
+ */
+async function hasVoiceModelsOnDisk() {
+  try {
+    const entries = await fsp.readdir(getVoiceModelsRoot(), { withFileTypes: true });
+    return entries.some((entry) => entry.isDirectory());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {{ version: number, stt: InstalledVoiceModel[], tts: InstalledVoiceModel[] }} manifest
+ */
+async function shouldRebuildManifest(manifest) {
+  if (manifest.stt.length > 0 || manifest.tts.length > 0) return false;
+  return hasVoiceModelsOnDisk();
+}
+
+/**
+ * @param {{ rebuildFromDisk?: boolean }} [options]
+ * @returns {Promise<{ version: number, stt: InstalledVoiceModel[], tts: InstalledVoiceModel[] }>}
+ */
+async function readInstalledManifest({ rebuildFromDisk = false } = {}) {
+  const manifest = await readInstalledManifestFile();
+  if (rebuildFromDisk && (await shouldRebuildManifest(manifest))) {
+    return rebuildInstalledManifestFromDisk();
+  }
+  return manifest;
 }
 
 /**
@@ -164,24 +292,7 @@ async function registerInstalledModel(kind, modelId, destDir, options = {}) {
   const manifest = await readInstalledManifest();
   const list = kind === 'stt' ? manifest.stt : manifest.tts;
   const filtered = list.filter((row) => row.modelId !== modelId);
-  let sizeBytes = 0;
-  try {
-    const walk = async (current) => {
-      const entries = await fsp.readdir(current, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = path.join(current, entry.name);
-        if (entry.isDirectory()) {
-          await walk(full);
-        } else if (entry.isFile()) {
-          const stat = await fsp.stat(full);
-          sizeBytes += stat.size;
-        }
-      }
-    };
-    await walk(destDir);
-  } catch {
-    sizeBytes = 0;
-  }
+  const sizeBytes = await computeDirSizeBytes(destDir);
   filtered.unshift({
     modelId,
     path: destDir,
@@ -331,7 +442,7 @@ export async function startVoiceDownload(body) {
   const modelId = validateRepoId(String(body.modelId || '').trim());
 
   const destDir = voiceModelDir(modelId);
-  const existing = await readInstalledManifest();
+  const existing = await readInstalledManifest({ rebuildFromDisk: true });
   const list = kind === 'stt' ? existing.stt : existing.tts;
   const already = list.some((row) => row.modelId === modelId);
   if (already) {
@@ -423,7 +534,7 @@ export function subscribeVoiceDownload(jobId, listener) {
 }
 
 export async function listInstalledVoiceModels() {
-  return readInstalledManifest();
+  return readInstalledManifest({ rebuildFromDisk: true });
 }
 
 /**
@@ -433,7 +544,7 @@ export async function listInstalledVoiceModels() {
 export async function deleteVoiceModel(kind, modelId) {
   const normalizedKind = validateKind(kind);
   const normalizedId = validateRepoId(String(modelId || '').trim());
-  const manifest = await readInstalledManifest();
+  const manifest = await readInstalledManifest({ rebuildFromDisk: true });
   const list = normalizedKind === 'stt' ? manifest.stt : manifest.tts;
   const entry = list.find((row) => row.modelId === normalizedId);
   if (!entry) {

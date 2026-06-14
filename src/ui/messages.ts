@@ -9,6 +9,7 @@ import {
   teardownOrchestratePlanScreen,
   teardownOrchestratePlanScreenDom,
 } from './orchestrate-plan-screen';
+import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import { normalizeModeId } from '../chat/modes/types';
 import { resolveModelInfo, showCachedModelInfo } from '../api/models';
 import { isActiveChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
@@ -271,10 +272,21 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     }
 
     const text = msg.content ?? '';
-    const trimmed = text.trim();
+    let trimmed = text.trim();
     const withThinking = msg as AssistantMessage;
-    const hasThinking =
-      withThinking.thinking != null && withThinking.thinking.length > 0;
+    let thinkingSegments =
+      withThinking.thinking != null && withThinking.thinking.length > 0
+        ? withThinking.thinking
+        : undefined;
+    // Repair already-saved sessions where thinking leaked into `content` without `thinking`.
+    if (!thinkingSegments?.length && trimmed) {
+      const split = extractInlineThinkingFromContent(text);
+      if (split.thinking.length > 0 && split.reply.trim()) {
+        trimmed = split.reply.trim();
+        thinkingSegments = split.thinking;
+      }
+    }
+    const hasThinking = thinkingSegments != null && thinkingSegments.length > 0;
     if (!trimmed && !hasThinking) {
       continue;
     }
@@ -284,9 +296,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       chatId: chat.id,
       modeId: chat.modeId,
     });
-    if (withThinking.thinking && withThinking.thinking.length > 0) {
+    if (hasThinking) {
       const durationMs = withThinking.thinkingDurationMs;
-      renderThoughtsToggle(wrap, withThinking.thinking, {
+      renderThoughtsToggle(wrap, thinkingSegments!, {
         durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
       });
     }

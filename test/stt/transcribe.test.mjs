@@ -12,6 +12,7 @@ import {
 } from '../../server/stt/limits.js';
 import { extractFileFromMultipart } from '../../server/stt/multipart.js';
 import { normalizeVoiceConfig } from '../../server/config/validators.js';
+import { buildSttStatus } from '../../server/stt/middleware.js';
 
 describe('stt limits', () => {
   test('formatByteLimit renders megabytes', () => {
@@ -32,6 +33,33 @@ describe('stt limits', () => {
     const limits = resolveSttLimits(voice);
     assert.equal(limits.maxAudioBytes, 1024);
     assert.equal(limits.maxDurationSeconds, 30);
+  });
+
+  test('buildSttStatus exposes streamingSupported for healthy local backend', async () => {
+    const voice = normalizeVoiceConfig({
+      stt: {
+        enabled: true,
+        backend: 'local',
+        local: { modelId: 'openai/whisper-base', streamingEnabled: true },
+      },
+    });
+    const status = await buildSttStatus(voice);
+    assert.equal(status.streamingSupported, false);
+    assert.equal(status.streaming, false);
+    assert.equal(status.backend, 'local');
+  });
+
+  test('buildSttStatus disables streaming for provider backend', async () => {
+    const voice = normalizeVoiceConfig({
+      stt: {
+        enabled: true,
+        backend: 'provider',
+        provider: { providerId: 'openai', model: 'whisper-1', language: 'en' },
+      },
+    });
+    const status = await buildSttStatus(voice);
+    assert.equal(status.streamingSupported, false);
+    assert.equal(status.streaming, false);
   });
 });
 

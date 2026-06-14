@@ -8,6 +8,8 @@ import type { HardwareSnapshot } from '../../models/types';
 import { fillProviderSelect } from '../settings-model-binding';
 import { setStatus } from '../status';
 import { STT_CATALOG, findSttCatalogEntry } from '../../voice/catalog-stt';
+import { recordedBlobToWav } from '../../voice/recorded-audio';
+import { connectMicAnalyser, watchSilence } from '../../voice/silence-detector';
 import { TTS_CATALOG, findTtsCatalogEntry } from '../../voice/catalog-tts';
 import {
   cancelVoiceDownload,
@@ -45,7 +47,7 @@ import {
   setTtsBackendUi,
 } from '../../voice/settings-form';
 import { analyzeSttFit, analyzeTtsFit, VOICE_FIT_BADGE_CLASS } from '../../voice/voice-fit';
-import { synthesizeSpeech } from '../voice-controls';
+import { fetchSttStatus, synthesizeSpeech } from '../voice-controls';
 
 type VoiceSubSection = 'stt' | 'tts';
 
@@ -125,6 +127,17 @@ function runtimeHealthDotClass(health: VoiceRuntimeHealth): string {
   }
 }
 
+function runtimeUsesCuda(): boolean {
+  if (runtimeStatus?.cudaAvailable) return true;
+  if (runtimeStatus?.torchVariant === 'cuda') return true;
+  const packages = runtimeStatus?.installedPackages ?? [];
+  if (packages.some((label) => /cuda/i.test(label))) return true;
+  if (hardware?.backend === 'cuda' && runtimeStatus?.installed) {
+    return !packages.some((label) => label.includes('torch (CPU)'));
+  }
+  return false;
+}
+
 function updateRuntimeCardUi(): void {
   const card = document.querySelector('.models-voice-runtime');
   if (!card || !runtimeStatus) return;
@@ -148,7 +161,7 @@ function updateRuntimeCardUi(): void {
 
   if (detailEl) {
     const parts: string[] = [];
-    parts.push(runtimeStatus.cudaAvailable ? 'CUDA' : 'CPU');
+    parts.push(runtimeUsesCuda() ? 'CUDA' : 'CPU');
     if (runtimeStatus.running && runtimeStatus.port) {
       parts.push(`127.0.0.1:${runtimeStatus.port}`);
     }
@@ -200,7 +213,8 @@ async function refreshRuntimeStatus(): Promise<void> {
       installed: false,
       running: false,
       health: 'error',
-      cudaAvailable: false,
+      cudaAvailable: hardware?.backend === 'cuda',
+      torchVariant: hardware?.backend === 'cuda' ? 'cuda' : null,
       port: null,
       installedAt: null,
       installedPackages: [],
@@ -507,6 +521,29 @@ function renderSttSettingsSection(): void {
     document.getElementById('voiceSttProviderId') as HTMLSelectElement,
     voiceConfig.stt.provider.providerId,
   ).then(() => fillSttProviderPanel(voiceConfig!));
+
+  void (async () => {
+    const hintId = 'modelsVoiceSttStreamingHint';
+    document.getElementById(hintId)?.remove();
+    if (voiceConfig!.stt.backend !== 'local') return;
+    const status = await fetchSttStatus();
+    const shellEl = document.getElementById('modelsVoiceSttSettings');
+    if (!shellEl) return;
+    const hint = document.createElement('p');
+    hint.id = hintId;
+    hint.className = 'field-hint models-voice-streaming-hint';
+    if (!status?.healthy) {
+      hint.textContent =
+        'Start the voice worker above for live dictation. Without it, the composer mic falls back to batch transcription.';
+    } else if (status.streamingSupported) {
+      hint.textContent = 'Live dictation is available — words appear in the composer while the mic is open.';
+    } else if (voiceConfig!.stt.local.streamingEnabled === false) {
+      hint.textContent = 'Live dictation is off — enable the checkbox above and save settings.';
+    } else {
+      hint.textContent = 'Live dictation requires local Whisper with the voice worker running.';
+    }
+    shellEl.appendChild(hint);
+  })();
 }
 
 async function saveSttSettings(): Promise<void> {
@@ -533,6 +570,22 @@ async function saveSttSettings(): Promise<void> {
 let micRecorder: MediaRecorder | null = null;
 let micChunks: BlobPart[] = [];
 let micStream: MediaStream | null = null;
+let micTestSilenceStop: (() => void) | null = null;
+let micTestAnalyserDisconnect: (() => void) | null = null;
+let micTestMaxTimer: ReturnType<typeof setTimeout> | null = null;
+
+const MIC_TEST_MAX_SECONDS = 30;
+
+function clearMicTestMonitors(): void {
+  micTestSilenceStop?.();
+  micTestSilenceStop = null;
+  micTestAnalyserDisconnect?.();
+  micTestAnalyserDisconnect = null;
+  if (micTestMaxTimer) {
+    clearTimeout(micTestMaxTimer);
+    micTestMaxTimer = null;
+  }
+}
 
 async function runMicTest(): Promise<void> {
   const testBtn = document.getElementById('modelsVoiceSttTestMic') as HTMLButtonElement | null;
@@ -543,6 +596,10 @@ async function runMicTest(): Promise<void> {
   }
 
   try {
+    const silenceTimeout =
+      voiceConfig?.limits?.silenceTimeoutSeconds ??
+      (await loadVoiceMeta()).limits.silenceTimeoutSeconds;
+
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     micChunks = [];
     micRecorder = new MediaRecorder(micStream);
@@ -550,11 +607,12 @@ async function runMicTest(): Promise<void> {
       if (ev.data.size) micChunks.push(ev.data);
     };
     micRecorder.onstop = () => {
+      clearMicTestMonitors();
       for (const track of micStream?.getTracks() ?? []) track.stop();
       micStream = null;
       micRecorder = null;
       if (testBtn) {
-        testBtn.textContent = 'Test mic (5s)';
+        testBtn.textContent = 'Test mic';
         testBtn.disabled = false;
       }
       void (async () => {
@@ -566,8 +624,9 @@ async function runMicTest(): Promise<void> {
         }
         if (resultEl) resultEl.textContent = 'Transcribing…';
         try {
+          const wavBlob = await recordedBlobToWav(blob);
           const form = new FormData();
-          form.append('file', blob, 'test.webm');
+          form.append('file', wavBlob, 'test.wav');
           const res = await fetch('/api/stt/transcribe', { method: 'POST', body: form });
           const data = (await res.json()) as { text?: string; error?: string };
           if (!res.ok) throw new Error(data.error || 'Transcription failed');
@@ -582,11 +641,35 @@ async function runMicTest(): Promise<void> {
       testBtn.textContent = 'Stop recording';
       testBtn.disabled = false;
     }
+    if (resultEl) {
+      resultEl.textContent =
+        silenceTimeout > 0
+          ? `Listening… pause for ${silenceTimeout}s to transcribe (or click Stop).`
+          : 'Listening… click Stop when finished.';
+    }
     micRecorder.start();
-    setTimeout(() => {
-      if (micRecorder?.state === 'recording') micRecorder.stop();
-    }, 5000);
+
+    if (silenceTimeout > 0 && micStream) {
+      const { analyser, disconnect } = connectMicAnalyser(micStream);
+      micTestAnalyserDisconnect = disconnect;
+      micTestSilenceStop = watchSilence(analyser, {
+        silenceTimeoutMs: Math.round(silenceTimeout * 1000),
+        onSilenceTimeout: () => {
+          if (micRecorder?.state === 'recording') {
+            micRecorder.stop();
+          }
+        },
+      });
+    }
+
+    micTestMaxTimer = setTimeout(() => {
+      if (micRecorder?.state === 'recording') {
+        micRecorder.stop();
+        if (resultEl) resultEl.textContent = `Stopped after ${MIC_TEST_MAX_SECONDS}s limit.`;
+      }
+    }, MIC_TEST_MAX_SECONDS * 1000);
   } catch (err) {
+    clearMicTestMonitors();
     const message = err instanceof Error ? err.message : 'Microphone access denied';
     if (resultEl) resultEl.textContent = message;
     if (testBtn) testBtn.disabled = false;
@@ -629,7 +712,7 @@ function mountSttPanel(panel: HTMLElement): void {
   });
   actions.appendChild(saveBtn);
 
-  const testBtn = el('button', 'models-inline-btn', 'Test mic (5s)');
+  const testBtn = el('button', 'models-inline-btn', 'Test mic');
   testBtn.type = 'button';
   testBtn.id = 'modelsVoiceSttTestMic';
   testBtn.addEventListener('click', () => {
@@ -955,10 +1038,14 @@ async function refreshActiveBackendSummary(): Promise<void> {
   const sttSummary = document.getElementById('modelsVoiceSttBackendSummary');
   const ttsSummary = document.getElementById('modelsVoiceTtsBackendSummary');
   if (sttSummary) {
-    sttSummary.textContent =
-      config.stt.backend === 'local'
-        ? `Local · ${config.stt.local.modelId}`
-        : `Provider · ${config.stt.provider.providerId || 'not configured'}`;
+    if (config.stt.backend === 'local') {
+      const streamingOn = config.stt.local.streamingEnabled !== false;
+      sttSummary.textContent = streamingOn
+        ? `Local · ${config.stt.local.modelId} · live dictation`
+        : `Local · ${config.stt.local.modelId} · batch`;
+    } else {
+      sttSummary.textContent = `Provider · ${config.stt.provider.providerId || 'not configured'}`;
+    }
   }
   if (ttsSummary) {
     ttsSummary.textContent =
@@ -1042,6 +1129,11 @@ export async function refreshVoicePanel(): Promise<void> {
   ttsBackend = voiceConfig.tts.backend;
   renderSttSettingsSection();
   await renderTtsSettingsSection();
+  try {
+    hardware = await fetchHardware();
+  } catch {
+    hardware = null;
+  }
   await Promise.all([
     refreshActiveBackendSummary(),
     refreshRuntimeStatus(),

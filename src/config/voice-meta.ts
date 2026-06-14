@@ -17,6 +17,8 @@ export interface VoiceAudioConfig {
 export interface VoiceLimitsConfig {
   maxAudioBytes: number;
   maxDurationSeconds: number;
+  /** Seconds of silence after speech before auto-submitting mic dictation (0 = manual stop only). */
+  silenceTimeoutSeconds: number;
 }
 
 /** Local Whisper runtime + decoding (HF Transformers pipeline). */
@@ -43,6 +45,8 @@ export interface VoiceSttLocalConfig {
   useSafetensors: boolean;
   lowCpuMemUsage: boolean;
   torchCompile: boolean;
+  /** Live PCM streaming dictation (local backend only). */
+  streamingEnabled: boolean;
 }
 
 /** External OpenAI-compatible STT API. */
@@ -186,6 +190,7 @@ function defaultSttLocal(cudaAvailable = false): VoiceSttLocalConfig {
     useSafetensors: true,
     lowCpuMemUsage: true,
     torchCompile: false,
+    streamingEnabled: true,
   };
 }
 
@@ -297,6 +302,7 @@ export function createDefaultVoiceConfig(cudaAvailable = false): VoiceConfig {
     limits: {
       maxAudioBytes: 25 * 1024 * 1024,
       maxDurationSeconds: 300,
+      silenceTimeoutSeconds: 2.5,
     },
   };
 }
@@ -365,6 +371,7 @@ function parseSttLocal(raw: Record<string, unknown>, base: VoiceSttLocalConfig):
   if (typeof raw.useSafetensors === 'boolean') out.useSafetensors = raw.useSafetensors;
   if (typeof raw.lowCpuMemUsage === 'boolean') out.lowCpuMemUsage = raw.lowCpuMemUsage;
   if (typeof raw.torchCompile === 'boolean') out.torchCompile = raw.torchCompile;
+  if (typeof raw.streamingEnabled === 'boolean') out.streamingEnabled = raw.streamingEnabled;
   return out;
 }
 
@@ -668,6 +675,11 @@ function parseVoiceBlock(raw: unknown): VoiceConfig {
       Number.isFinite(limitsRaw.maxDurationSeconds)
         ? Math.max(1, Math.round(limitsRaw.maxDurationSeconds))
         : defaults.limits.maxDurationSeconds,
+    silenceTimeoutSeconds:
+      typeof limitsRaw.silenceTimeoutSeconds === 'number' &&
+      Number.isFinite(limitsRaw.silenceTimeoutSeconds)
+        ? Math.max(0, Math.min(30, limitsRaw.silenceTimeoutSeconds))
+        : defaults.limits.silenceTimeoutSeconds,
   };
 
   syncLegacySttFields(stt);

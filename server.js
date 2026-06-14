@@ -7,6 +7,7 @@ import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { attachPtyWebSocketServer } from './server/terminal/pty-ws.js';
+import { attachSttWebSocketServer } from './server/stt/stt-ws.js';
 import { destroyAllPtySessions } from './server/terminal/pty-host.js';
 import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { getAppRoot } from './server/workspace/root.js';
@@ -57,6 +58,7 @@ async function main() {
         configureServer(server) {
           if (server.httpServer) {
             attachPtyWebSocketServer(server.httpServer);
+            attachSttWebSocketServer(server.httpServer);
           }
           applyMinnowMiddlewares(server.middlewares, {
             resolveSafePath,

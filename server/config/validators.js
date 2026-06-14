@@ -1491,6 +1491,7 @@ function defaultSttLocal(cudaAvailable = false) {
     useSafetensors: true,
     lowCpuMemUsage: true,
     torchCompile: false,
+    streamingEnabled: true,
   };
 }
 
@@ -1609,6 +1610,7 @@ export function defaultVoiceConfig(cudaAvailable = false) {
     limits: {
       maxAudioBytes: 25 * 1024 * 1024,
       maxDurationSeconds: 300,
+      silenceTimeoutSeconds: 2.5,
     },
   };
 }
@@ -1665,6 +1667,7 @@ function normalizeSttLocal(raw, base) {
   if (typeof raw.useSafetensors === 'boolean') out.useSafetensors = raw.useSafetensors;
   if (typeof raw.lowCpuMemUsage === 'boolean') out.lowCpuMemUsage = raw.lowCpuMemUsage;
   if (typeof raw.torchCompile === 'boolean') out.torchCompile = raw.torchCompile;
+  if (typeof raw.streamingEnabled === 'boolean') out.streamingEnabled = raw.streamingEnabled;
   return out;
 }
 
@@ -2041,6 +2044,15 @@ export function normalizeVoiceConfig(raw, existing = {}, options = {}) {
       Number.isFinite(limits.maxDurationSeconds)
     ) {
       base.limits.maxDurationSeconds = Math.max(1, Math.round(limits.maxDurationSeconds));
+    }
+    if (
+      typeof limits.silenceTimeoutSeconds === 'number' &&
+      Number.isFinite(limits.silenceTimeoutSeconds)
+    ) {
+      base.limits.silenceTimeoutSeconds = Math.max(
+        0,
+        Math.min(30, limits.silenceTimeoutSeconds),
+      );
     }
   }
 

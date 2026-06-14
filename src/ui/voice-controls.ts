@@ -17,6 +17,8 @@ export interface SttStatus {
   runtimeReady?: boolean;
   modelLoaded?: boolean;
   cudaAvailable?: boolean;
+  streaming?: boolean;
+  streamingSupported?: boolean;
   warning?: string | null;
 }
 

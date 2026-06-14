@@ -2,6 +2,7 @@
  * Build recent chat messages for synthesis extraction.
  */
 
+import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 import type { AssistantMessage, Chat, Message } from '../types';
 
 /** Max user/assistant pairs to include in synthesis context. */
@@ -14,7 +15,13 @@ function messageText(content: Message['content']): string {
 
 /** Remove reasoning/thinking blocks from assistant prose for excerpts and extraction. */
 export function stripThinkingForExcerpt(text: string): string {
-  let value = String(text ?? '');
+  const raw = String(text ?? '');
+  const split = extractInlineThinkingFromContent(raw);
+  if (split.thinking.length > 0 && split.reply.trim()) {
+    return split.reply.trim();
+  }
+  // Fallback for unclosed tags or shapes extractInlineThinkingFromContent does not split.
+  let value = raw;
   const patterns = [
     /<think>[\s\S]*?<\/redacted_thinking>\s*/gi,
     /<think(?:ing)?(?:\s+[^>]*)?>[\s\S]*?<\/think(?:ing)?>\s*/gi,
@@ -28,7 +35,8 @@ export function stripThinkingForExcerpt(text: string): string {
       value = value.replace(re, '');
     }
   }
-  return value.trim();
+  const stripped = value.trim();
+  return stripped || split.reply.trim();
 }
 
 /** User-visible assistant prose — never fall back to thinking-only content. */

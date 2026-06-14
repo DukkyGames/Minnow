@@ -276,6 +276,7 @@ const DEFAULT_META = {
     limits: {
       maxAudioBytes: 25 * 1024 * 1024,
       maxDurationSeconds: 300,
+      silenceTimeoutSeconds: 2.5,
     },
   },
 };

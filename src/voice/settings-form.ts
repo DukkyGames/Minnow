@@ -25,6 +25,17 @@ interface FieldSpec {
   showWhen?: (config: VoiceSttLocalConfig, catalog?: SttCatalogEntry) => boolean;
 }
 
+const COMPOSER_MIC_FIELDS: FieldSpec[] = [
+  {
+    key: 'streamingEnabled',
+    label: 'Live dictation (streaming)',
+    group: 'basic',
+    type: 'checkbox',
+    hint:
+      'Show words in the composer while the mic is open. Local Whisper only — requires the voice worker to be running. Disable to transcribe after recording stops (batch).',
+  },
+];
+
 const BASIC_FIELDS: FieldSpec[] = [
   {
     key: 'modelId',
@@ -296,7 +307,7 @@ function renderField(
 /** Read STT local config from rendered form controls. */
 export function readSttLocalFromForm(base: VoiceSttLocalConfig): VoiceSttLocalConfig {
   const out = { ...base };
-  const fields = [...BASIC_FIELDS, ...ADVANCED_FIELDS];
+  const fields = [...COMPOSER_MIC_FIELDS, ...BASIC_FIELDS, ...ADVANCED_FIELDS];
   for (const spec of fields) {
     const el = document.getElementById(fieldId(spec.key)) as
       | HTMLInputElement
@@ -374,6 +385,16 @@ export function renderSttSettingsForm(options: RenderSttSettingsFormOptions): vo
   localPanel.className = 'models-voice-local-panel';
   localPanel.id = 'modelsVoiceSttLocalPanel';
   localPanel.hidden = config.stt.backend !== 'local';
+
+  const composerMic = document.createElement('fieldset');
+  composerMic.className = 'models-voice-fieldset';
+  const composerLegend = document.createElement('legend');
+  composerLegend.textContent = 'Composer mic';
+  composerMic.appendChild(composerLegend);
+  for (const spec of COMPOSER_MIC_FIELDS) {
+    renderField(spec, config.stt.local, catalogEntry, composerMic);
+  }
+  localPanel.appendChild(composerMic);
 
   const basic = document.createElement('fieldset');
   basic.className = 'models-voice-fieldset';

@@ -113,13 +113,17 @@ function corePackagesFor(cudaAvailable) {
   return [
     { label: torchPkg.label, args: torchPkg.args },
     { label: 'transformers', args: ['transformers'] },
+    { label: 'faster-whisper', args: ['faster-whisper'] },
     { label: 'accelerate', args: ['accelerate'] },
     { label: 'soundfile', args: ['soundfile'] },
   ];
 }
 
 /** Optional package — install continues when unavailable (CI / platform quirks). */
-const OPTIONAL_PACKAGES = [{ label: 'qwen-tts', args: ['qwen-tts'] }];
+const OPTIONAL_PACKAGES = [
+  { label: 'qwen-tts', args: ['qwen-tts'] },
+  { label: 'imageio-ffmpeg', args: ['imageio-ffmpeg'] },
+];
 
 /**
  * @param {string} venvDir

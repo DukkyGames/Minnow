@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 # Lazy-loaded ML stack — import only when inference routes are called.
+_fw_model: Any = None
 _stt_pipeline: Any = None
 _tts_model: Any = None
 _loaded_model_id: str | None = None
@@ -101,8 +102,9 @@ def _resolve_tts_dtype(config: dict[str, Any]):
 
 
 def _unload_model() -> None:
-    global _stt_pipeline, _tts_model, _loaded_model_id, _loaded_kind, _loaded_mode
+    global _fw_model, _stt_pipeline, _tts_model, _loaded_model_id, _loaded_kind, _loaded_mode
     global _tts_speakers, _tts_languages
+    _fw_model = None
     _stt_pipeline = None
     _tts_model = None
     _loaded_model_id = None
@@ -119,8 +121,52 @@ def _unload_model() -> None:
         pass
 
 
+def _resolve_fw_compute_type(config: dict[str, Any], device: str) -> str:
+    compute = str(config.get("computeType", "auto") or "auto")
+    if compute == "float16":
+        return "float16"
+    if compute == "float32":
+        return "float32"
+    if compute == "bfloat16":
+        return "float16"
+    return "float16" if device == "cuda" else "int8"
+
+
+def _resolve_fw_model_source(model_id: str, model_path: str) -> str:
+    if model_path and os.path.isdir(model_path):
+        return model_path
+    lowered = model_id.lower()
+    for size in ("large-v3", "large-v2", "large", "medium", "small", "base", "tiny"):
+        if size in lowered:
+            return size
+    return model_id
+
+
 def _load_stt_model(model_id: str, model_path: str, config: dict[str, Any]) -> None:
-    global _stt_pipeline, _loaded_model_id, _loaded_kind
+    global _fw_model, _stt_pipeline, _loaded_model_id, _loaded_kind
+
+    device_pref = _resolve_device(config)
+    device = "cuda" if device_pref.startswith("cuda") else "cpu"
+    compute_type = _resolve_fw_compute_type(config, device)
+    source = _resolve_fw_model_source(model_id, model_path)
+
+    try:
+        from faster_whisper import WhisperModel
+
+        _fw_model = WhisperModel(source, device=device, compute_type=compute_type)
+        _stt_pipeline = None
+        _loaded_model_id = model_id
+        _loaded_kind = "stt"
+        return
+    except ImportError as err:
+        raise RuntimeError(
+            "faster-whisper is not installed in the voice runtime. Repair from Models → Voice."
+        ) from err
+
+
+def _load_stt_model_transformers_fallback(model_id: str, model_path: str, config: dict[str, Any]) -> None:
+    """Optional HF transformers fallback when faster-whisper is unavailable."""
+    global _stt_pipeline, _fw_model, _loaded_model_id, _loaded_kind
 
     from transformers import pipeline
 
@@ -142,6 +188,7 @@ def _load_stt_model(model_id: str, model_path: str, config: dict[str, Any]) -> N
         device=0 if device.startswith("cuda") else -1,
         model_kwargs=model_kwargs,
     )
+    _fw_model = None
     _loaded_model_id = model_id
     _loaded_kind = "stt"
 
@@ -247,19 +294,137 @@ def _parse_multipart(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     return {"audio": audio_bytes, "mime": mime, "config": config}
 
 
-def _transcribe_audio(audio_bytes: bytes, config: dict[str, Any]) -> str:
+def _suffix_for_mime(mime: str) -> str:
+    base = str(mime or "").split(";", 1)[0].strip().lower()
+    mapping = {
+        "audio/webm": ".webm",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/wave": ".wav",
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/mp4": ".m4a",
+        "audio/ogg": ".ogg",
+        "audio/flac": ".flac",
+    }
+    return mapping.get(base, ".bin")
+
+
+def _decode_with_ffmpeg(input_path: str) -> tuple[Any, int]:
+    import subprocess
+
+    import imageio_ffmpeg
+    import numpy as np
+    import soundfile as sf
+
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out:
+        output_path = out.name
+
+    try:
+        completed = subprocess.run(
+            [
+                ffmpeg_exe,
+                "-y",
+                "-i",
+                input_path,
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-f",
+                "wav",
+                output_path,
+            ],
+            check=False,
+            capture_output=True,
+        )
+        if completed.returncode != 0:
+            detail = completed.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(detail or f"ffmpeg exited {completed.returncode}")
+        data, sample_rate = sf.read(output_path)
+        return np.asarray(data, dtype=np.float32), int(sample_rate)
+    finally:
+        if os.path.isfile(output_path):
+            os.unlink(output_path)
+
+
+def _decode_audio(audio_bytes: bytes, mime: str = "audio/webm") -> tuple[Any, int]:
+    import numpy as np
+
+    suffix = _suffix_for_mime(mime)
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(audio_bytes)
+        input_path = tmp.name
+
+    decode_error: Exception | None = None
+    try:
+        if suffix in (".wav", ".flac", ".ogg"):
+            import soundfile as sf
+
+            data, sample_rate = sf.read(input_path)
+            return np.asarray(data, dtype=np.float32), int(sample_rate)
+
+        try:
+            import torchaudio
+
+            waveform, sample_rate = torchaudio.load(input_path)
+            if waveform.shape[0] > 1:
+                waveform = waveform.mean(dim=0, keepdim=True)
+            data = waveform.squeeze(0).detach().cpu().numpy().astype(np.float32)
+            return data, int(sample_rate)
+        except Exception as err:
+            decode_error = err
+
+        return _decode_with_ffmpeg(input_path)
+    except Exception as err:
+        if decode_error is not None:
+            raise RuntimeError(
+                f"Could not decode audio ({mime or 'unknown'}). "
+                "Run Repair in Models → Voice to install ffmpeg support, or send WAV audio."
+            ) from decode_error
+        raise
+    finally:
+        if os.path.isfile(input_path):
+            os.unlink(input_path)
+
+
+def _transcribe_pcm_faster_whisper(pcm_int16: Any, sample_rate: int, config: dict[str, Any]) -> str:
+    if _fw_model is None:
+        raise RuntimeError("STT model is not loaded")
+
+    import numpy as np
+
+    audio = np.frombuffer(pcm_int16, dtype=np.int16).astype(np.float32) / 32768.0
+    if sample_rate != 16000:
+        # Resample is out of scope for v1 — client sends 16 kHz PCM.
+        pass
+
+    generate_kwargs: dict[str, Any] = {"vad_filter": True}
+    language = str(config.get("language", "") or "").strip()
+    if language:
+        generate_kwargs["language"] = language
+    task = config.get("task")
+    if task in ("transcribe", "translate"):
+        generate_kwargs["task"] = task
+
+    segments, _info = _fw_model.transcribe(audio, **generate_kwargs)
+    parts = [seg.text.strip() for seg in segments if seg.text.strip()]
+    return " ".join(parts).strip()
+
+
+def _transcribe_audio(audio_bytes: bytes, config: dict[str, Any], mime: str = "audio/webm") -> str:
+    if _fw_model is not None:
+        data, sample_rate = _decode_audio(audio_bytes, mime)
+        import numpy as np
+
+        pcm = (np.clip(data, -1.0, 1.0) * 32767.0).astype(np.int16)
+        return _transcribe_pcm_faster_whisper(pcm.tobytes(), sample_rate, config)
+
     if _stt_pipeline is None:
         raise RuntimeError("STT model is not loaded")
 
-    import soundfile as sf
-
-    with tempfile.NamedTemporaryFile(suffix=".audio", delete=True) as tmp:
-        tmp.write(audio_bytes)
-        tmp.flush()
-        try:
-            data, sample_rate = sf.read(tmp.name)
-        except Exception:
-            data, sample_rate = sf.read(io.BytesIO(audio_bytes))
+    data, sample_rate = _decode_audio(audio_bytes, mime)
 
     generate_kwargs: dict[str, Any] = {}
     language = str(config.get("language", "") or "").strip()
@@ -394,6 +559,104 @@ def _synthesize_tts(text: str, config: dict[str, Any]) -> tuple[bytes, str]:
     return _wav_bytes_from_numpy(wavs, sr), "audio/wav"
 
 
+class SttStreamSession:
+    """Incremental PCM → faster-whisper segment streaming at 16 kHz mono."""
+
+    SAMPLE_RATE = 16000
+    MIN_SPEECH_SAMPLES = int(0.4 * SAMPLE_RATE)
+    SILENCE_SAMPLES = int(0.55 * SAMPLE_RATE)
+    ENERGY_THRESHOLD = 0.012
+
+    def __init__(self, config: dict[str, Any], wfile: Any) -> None:
+        self.config = config
+        self.wfile = wfile
+        self.buffer = bytearray()
+        self.speech_active = False
+        self.silence_samples = 0
+        self.speech_samples = 0
+        self.committed: list[str] = []
+
+    def _sse(self, event: str, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.wfile.write(f"event: {event}\n".encode("utf-8"))
+        self.wfile.write(b"data: ")
+        self.wfile.write(body)
+        self.wfile.write(b"\n\n")
+        self.wfile.flush()
+
+    def ingest(self, chunk: bytes) -> None:
+        if not chunk:
+            return
+        self.buffer.extend(chunk)
+        import numpy as np
+
+        samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
+        if samples.size == 0:
+            return
+        energy = float(np.sqrt(np.mean(samples * samples)))
+        if energy >= self.ENERGY_THRESHOLD:
+            self.speech_active = True
+            self.silence_samples = 0
+            self.speech_samples += samples.size
+            return
+
+        if not self.speech_active:
+            return
+
+        self.silence_samples += samples.size
+        if self.silence_samples >= self.SILENCE_SAMPLES and self.speech_samples >= self.MIN_SPEECH_SAMPLES:
+            self._flush_segment()
+            self.speech_active = False
+            self.silence_samples = 0
+            self.speech_samples = 0
+
+    def _flush_segment(self) -> None:
+        if not self.buffer:
+            return
+        try:
+            text = _transcribe_pcm_faster_whisper(bytes(self.buffer), self.SAMPLE_RATE, self.config)
+        except Exception as err:
+            self._sse("error", {"message": str(err)})
+            self.buffer.clear()
+            return
+        self.buffer.clear()
+        if text:
+            self.committed.append(text)
+            self._sse("segment", {"text": text})
+
+    def finalize(self) -> None:
+        if self.buffer and (self.speech_samples >= self.MIN_SPEECH_SAMPLES or self.committed):
+            self._flush_segment()
+        final_text = " ".join(self.committed).strip()
+        self._sse("final", {"text": final_text})
+
+
+def _read_body_stream(handler: BaseHTTPRequestHandler, callback: Any) -> None:
+    transfer_encoding = str(handler.headers.get("Transfer-Encoding", "") or "").lower()
+    if transfer_encoding == "chunked":
+        while True:
+            size_line = handler.rfile.readline().strip()
+            if not size_line:
+                break
+            chunk_size = int(size_line, 16)
+            if chunk_size == 0:
+                handler.rfile.readline()
+                break
+            chunk = handler.rfile.read(chunk_size)
+            handler.rfile.readline()
+            callback(chunk)
+        return
+
+    length = int(handler.headers.get("Content-Length", "0") or "0")
+    remaining = length
+    while remaining > 0:
+        chunk = handler.rfile.read(min(8192, remaining))
+        if not chunk:
+            break
+        remaining -= len(chunk)
+        callback(chunk)
+
+
 class VoiceWorkerHandler(BaseHTTPRequestHandler):
     """JSON API for voice runtime health, STT/TTS inference, and model lifecycle."""
 
@@ -407,7 +670,7 @@ class VoiceWorkerHandler(BaseHTTPRequestHandler):
             _json_response(self, 200, {"ok": True, "status": "ready"})
             return
         if self.path == "/voice/capabilities":
-            model_loaded = _stt_pipeline is not None or _tts_model is not None
+            model_loaded = _fw_model is not None or _stt_pipeline is not None or _tts_model is not None
             _json_response(
                 self,
                 200,
@@ -435,6 +698,9 @@ class VoiceWorkerHandler(BaseHTTPRequestHandler):
         if self.path == "/stt/transcribe":
             self._handle_stt_transcribe()
             return
+        if self.path == "/stt/stream":
+            self._handle_stt_stream()
+            return
         if self.path == "/tts/synthesize":
             self._handle_tts_synthesize()
             return
@@ -461,7 +727,7 @@ class VoiceWorkerHandler(BaseHTTPRequestHandler):
                 return
 
             if kind == "stt":
-                if _loaded_model_id == model_id and _stt_pipeline is not None:
+                if _loaded_model_id == model_id and (_fw_model is not None or _stt_pipeline is not None):
                     _json_response(self, 200, {"ok": True, "modelId": model_id, "alreadyLoaded": True})
                     return
                 _unload_model()
@@ -504,7 +770,7 @@ class VoiceWorkerHandler(BaseHTTPRequestHandler):
         if kind and kind != _loaded_kind:
             _json_response(self, 200, {"ok": True, "wasLoaded": False})
             return
-        was_loaded = _stt_pipeline is not None or _tts_model is not None
+        was_loaded = _fw_model is not None or _stt_pipeline is not None or _tts_model is not None
         _unload_model()
         _json_response(self, 200, {"ok": True, "wasLoaded": was_loaded})
 
@@ -518,10 +784,39 @@ class VoiceWorkerHandler(BaseHTTPRequestHandler):
             config = parsed.get("config", {})
             if not isinstance(config, dict):
                 config = {}
-            text = _transcribe_audio(audio, config)
+            mime = str(parsed.get("mime", "audio/webm") or "audio/webm")
+            text = _transcribe_audio(audio, config, mime)
             _json_response(self, 200, {"text": text})
         except Exception as err:
             _json_response(self, 500, {"error": str(err)})
+
+    def _handle_stt_stream(self) -> None:
+        if _fw_model is None:
+            _json_response(self, 503, {"error": "STT model is not loaded"})
+            return
+        try:
+            config_raw = self.headers.get("X-Stt-Config", "{}")
+            config = json.loads(config_raw or "{}")
+            if not isinstance(config, dict):
+                config = {}
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+            session = SttStreamSession(config, self.wfile)
+
+            def on_chunk(chunk: bytes) -> None:
+                session.ingest(chunk)
+
+            _read_body_stream(self, on_chunk)
+            session.finalize()
+        except Exception as err:
+            try:
+                _json_response(self, 500, {"error": str(err)})
+            except Exception:
+                pass
 
     def _handle_tts_synthesize(self) -> None:
         try:

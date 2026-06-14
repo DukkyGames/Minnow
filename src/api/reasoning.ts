@@ -1,6 +1,7 @@
 /**
  * LM Studio reasoning streams: separate from assistant prose (`content`).
- * Supports `delta.reasoning` / `delta.reasoning_content` and non-streaming message fields.
+ * Supports `delta.reasoning` / `delta.reasoning_content` / `delta.thinking`
+ * and non-streaming message fields.
  */
 
 import type { ChatCompletionChunk } from '../types';
@@ -13,19 +14,26 @@ export function extractReasoningDelta(chunk: ChatCompletionChunk): string {
   if (!delta) return '';
   if (delta.reasoning) return delta.reasoning;
   if (delta.reasoning_content) return delta.reasoning_content;
+  if (delta.thinking) return delta.thinking;
   const msg = choice.message;
   if (msg?.reasoning) return msg.reasoning;
   if (msg?.reasoning_content) return msg.reasoning_content;
+  const msgThinking = (msg as { thinking?: string } | undefined)?.thinking;
+  if (msgThinking) return msgThinking;
   return '';
 }
 
 /** Reasoning string from a non-streaming completion message object. */
 export function extractReasoningMessage(
-  message: { reasoning?: string; reasoning_content?: string } | null | undefined,
+  message:
+    | { reasoning?: string; reasoning_content?: string; thinking?: string }
+    | null
+    | undefined,
 ): string {
   if (!message) return '';
   if (message.reasoning) return message.reasoning;
   if (message.reasoning_content) return message.reasoning_content;
+  if (message.thinking) return message.thinking;
   return '';
 }
 

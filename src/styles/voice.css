@@ -1,14 +1,165 @@
 /* Voice I/O — composer mic + assistant read-aloud controls */
 
+.composer-mic-btn {
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.composer-mic-btn__icon {
+  position: relative;
+  z-index: 1;
+  transform: scale(calc(1 + var(--mic-level, 0) * 0.1));
+  transition: transform 0.1s var(--ease-out), opacity 0.2s var(--ease-out);
+}
+
+.composer-mic-btn__ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 50%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.2s var(--ease-out);
+}
+
 .composer-mic-btn--recording {
-  color: var(--mn-danger, #e55);
-  border-color: color-mix(in srgb, var(--mn-danger, #e55) 45%, var(--mn-border));
-  background: color-mix(in srgb, var(--mn-danger, #e55) 12%, var(--mn-bg));
+  color: var(--mn-danger, oklch(0.62 0.18 15));
+  border-color: color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 45%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 12%, var(--mn-bg));
+}
+
+.composer-mic-btn--recording .composer-mic-btn__ring {
+  opacity: 1;
+  animation: composer-mic-ring-pulse 1.5s var(--ease-out) infinite;
+}
+
+.composer-mic-btn--detecting .composer-mic-btn__ring {
+  border-color: color-mix(in srgb, var(--mn-danger, oklch(0.62 0.18 15)) 75%, transparent);
+  animation-duration: 0.85s;
+}
+
+.composer-mic-btn__bars {
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 9px;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease-out);
+}
+
+.composer-mic-btn--detecting .composer-mic-btn__bars {
+  opacity: 1;
+}
+
+.composer-mic-btn__bars span {
+  display: block;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--mn-danger, oklch(0.62 0.18 15));
+  height: 3px;
+  transform-origin: bottom center;
+  animation: composer-mic-bar-dance 0.55s var(--ease-out) infinite alternate;
+}
+
+.composer-mic-btn__bars span:nth-child(1) {
+  animation-delay: 0s;
+  height: calc(3px + var(--mic-level, 0) * 6px);
+}
+
+.composer-mic-btn__bars span:nth-child(2) {
+  animation-delay: 0.12s;
+  height: calc(4px + var(--mic-level, 0) * 7px);
+}
+
+.composer-mic-btn__bars span:nth-child(3) {
+  animation-delay: 0.24s;
+  height: calc(3px + var(--mic-level, 0) * 5px);
+}
+
+.composer-mic-btn__spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--mn-border);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .composer-mic-btn--busy {
-  opacity: 0.6;
   pointer-events: none;
+}
+
+.composer-mic-btn--busy .composer-mic-btn__icon {
+  opacity: 0.3;
+}
+
+.composer-mic-btn--busy .composer-mic-btn__spinner {
+  opacity: 1;
+  animation: composer-mic-spin 0.75s linear infinite;
+}
+
+@keyframes composer-mic-ring-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+
+  50% {
+    transform: scale(1.07);
+    opacity: 0.35;
+  }
+}
+
+@keyframes composer-mic-bar-dance {
+  0% {
+    transform: scaleY(0.55);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes composer-mic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-mic-btn__icon {
+    transition: opacity 0.2s var(--ease-out);
+  }
+
+  .composer-mic-btn--recording .composer-mic-btn__ring {
+    animation: none;
+    opacity: 0.75;
+    transform: none;
+  }
+
+  .composer-mic-btn__bars span {
+    animation: none;
+  }
+
+  .composer-mic-btn--busy .composer-mic-btn__spinner {
+    animation: none;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
+  }
 }
 
 .voice-play-btn {
@@ -38,16 +189,15 @@
   border: 2px solid var(--mn-border);
   border-top-color: var(--mn-accent);
   border-radius: 50%;
-  animation: voice-play-spin 0.8s linear infinite;
-}
-
-@keyframes voice-play-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: composer-mic-spin 0.8s linear infinite;
 }
 
 .settings-voice--offline .settings-group__body {
   opacity: 0.55;
   pointer-events: none;
+}
+
+/* Live local STT dictation — interim text uses muted foreground */
+.composer-dictating {
+  color: color-mix(in srgb, var(--mn-fg) 88%, var(--mn-muted));
 }

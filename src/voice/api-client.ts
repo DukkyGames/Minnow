@@ -24,6 +24,7 @@ export interface VoiceRuntimeStatus {
   running: boolean;
   health: VoiceRuntimeHealth;
   cudaAvailable: boolean;
+  torchVariant: 'cpu' | 'cuda' | null;
   port: number | null;
   installedAt: string | null;
   installedPackages: string[];
@@ -48,7 +49,7 @@ async function parseJson<T>(res: Response): Promise<T> {
 
 /** Fetch combined voice runtime status. */
 export async function fetchRuntimeStatus(): Promise<VoiceRuntimeStatus> {
-  const res = await fetch('/api/voice/runtime/status');
+  const res = await fetch('/api/voice/runtime/status', { cache: 'no-store' });
   return parseJson(res);
 }
 
