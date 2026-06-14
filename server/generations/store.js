@@ -3,6 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { fireAndForget } from '../webhooks/emit.js';
 
 /** @typedef {'pending' | 'streaming' | 'complete' | 'error' | 'cancelled'} GenerationStatus */
 
@@ -36,6 +37,7 @@ import { randomUUID } from 'node:crypto';
  * @property {string} chosenProviderId
  * @property {string} chosenModelId
  * @property {string | null} fallbackRole
+ * @property {string | null} chatId
  */
 
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -256,6 +258,7 @@ function scheduleEviction(state) {
  *   persist?: boolean,
  *   candidates?: FallbackCandidate[],
  *   fallbackRole?: string | null,
+ *   chatId?: string | null,
  * }} params
  * @returns {GenerationState}
  */
@@ -265,6 +268,7 @@ export function createGenerationState({
   persist = false,
   candidates,
   fallbackRole = null,
+  chatId = null,
 }) {
   const id = randomUUID();
   const requestBody = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
@@ -297,6 +301,7 @@ export function createGenerationState({
     chosenProviderId: first.providerId,
     chosenModelId: first.modelId,
     fallbackRole: typeof fallbackRole === 'string' ? fallbackRole : null,
+    chatId: typeof chatId === 'string' && chatId.trim() ? chatId.trim() : null,
   };
   generations.set(id, state);
   return state;
@@ -403,6 +408,16 @@ export function markComplete(state) {
   state.status = 'complete';
   state.finishedAt = new Date().toISOString();
   broadcastTerminalEvent(state);
+  fireAndForget('chat.completed', {
+    generationId: state.id,
+    providerId: state.chosenProviderId || state.providerId,
+    modelId: state.chosenModelId,
+    status: 'completed',
+    chatId: state.chatId,
+    startedAt: state.startedAt,
+    finishedAt: state.finishedAt,
+    fallbackUsed: state.fallbackUsed === true,
+  });
   scheduleEviction(state);
 }
 

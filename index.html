@@ -461,6 +461,7 @@
         <button type="button" data-settings-nav="lsp">Language servers</button>
         <button type="button" data-settings-nav="editor">Editor</button>
         <button type="button" data-settings-nav="skills">Skills</button>
+        <button type="button" data-settings-nav="webhooks">Webhooks</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
         <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
@@ -857,6 +858,11 @@
         <h2>Skills</h2>
         <p class="settings-lead">Slash commands and SKILL packs (built-in and user). Toggle which skills the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-webhooks" class="settings-section">
+        <h2>Webhooks</h2>
+        <p class="settings-lead">Outgoing HMAC-signed webhooks for chat completion, session creation, and scheduler events.</p>
+        <div id="settingsWebhooksBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-features" class="settings-section">
         <h2>Orchestration</h2>
