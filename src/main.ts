@@ -52,6 +52,7 @@ import './styles/minnowos-desktop.css';
 import './styles/minnowos-wallpaper.css';
 import './styles/minnowos-apps.css';
 import './styles/chat-app.css';
+import './styles/models-page.css';
 
 import 'highlight.js/styles/github.min.css';
 
@@ -195,6 +196,9 @@ function registerWindowHandlers(): void {
   window.openBenchmarkFromTopbar = () => {
     void import('./ui/benchmark-page').then((m) => m.openBenchmarkFromTopbar());
   };
+  window.openModelsFromTopbar = () => {
+    void import('./ui/models-page').then((m) => m.openModelsFromTopbar());
+  };
   window.openCompareFromTopbar = () => {
     void import('./ui/compare-page').then((m) => m.openCompareFromTopbar());
   };
@@ -316,6 +320,8 @@ export async function initApp(): Promise<void> {
   settingsPage.initSettingsPage();
   const benchmarkPage = await import('./ui/benchmark-page');
   benchmarkPage.initBenchmarkPage();
+  const modelsPage = await import('./ui/models-page');
+  modelsPage.initModelsPage();
   const comparePage = await import('./ui/compare-page');
   comparePage.initComparePage();
   const researchPage = await import('./research/panel');

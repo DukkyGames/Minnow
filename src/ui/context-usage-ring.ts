@@ -11,12 +11,20 @@ import {
 import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
 import { getPendingAttachments } from '../attachments/store';
 import { getActiveChat } from '../state/sessions';
+import { getActiveComposerSurface } from './composer-surface';
 import {
   closeContextUsageBreakdown,
   isContextUsageBreakdownOpen,
   syncContextUsageBreakdownIfOpen,
   toggleContextUsageBreakdown,
 } from './context-usage-breakdown';
+import {
+  getActiveContextUsageSurface,
+  getContextUsageRingButton,
+  getContextUsageRingSvg,
+  listContextUsageSurfaces,
+  type ContextUsageSurface,
+} from './context-usage-surface';
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
@@ -25,16 +33,7 @@ let lastBudget: ContextBudget | null = null;
 const WARN_PERCENT = 85;
 
 function readPendingComposerText(): string {
-  const el = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  return el?.value ?? '';
-}
-
-function getRingButton(): HTMLButtonElement | null {
-  return document.getElementById('contextUsageRing') as HTMLButtonElement | null;
-}
-
-function getRingSvg(): SVGSVGElement | null {
-  return document.querySelector('#contextUsageRing .context-usage-ring__svg');
+  return getActiveComposerSurface().inputEl?.value ?? '';
 }
 
 function formatTooltip(budget: ContextBudget): string {
@@ -55,9 +54,9 @@ function formatTooltip(budget: ContextBudget): string {
   return lines.join('\n');
 }
 
-function paintRing(budget: ContextBudget): void {
-  const button = getRingButton();
-  const svg = getRingSvg();
+function paintRingSurface(surface: ContextUsageSurface, budget: ContextBudget): void {
+  const button = getContextUsageRingButton(surface);
+  const svg = getContextUsageRingSvg(surface);
   if (!button || !svg) return;
 
   const percent = budget.percent ?? 0;
@@ -83,6 +82,14 @@ function paintRing(budget: ContextBudget): void {
   button.title = formatTooltip(budget);
 }
 
+function paintUnavailable(surface: ContextUsageSurface): void {
+  const button = getContextUsageRingButton(surface);
+  if (!button) return;
+  button.classList.remove('context-usage-ring--warn');
+  button.setAttribute('aria-label', 'Context usage unavailable');
+  button.title = 'Could not estimate context usage.';
+}
+
 async function runRefresh(): Promise<void> {
   try {
     const chat = getActiveChat();
@@ -96,17 +103,13 @@ async function runRefresh(): Promise<void> {
       inFlight: getContextInFlightOverlay(chat.id),
     });
     lastBudget = budget;
-    paintRing(budget);
+    for (const surface of listContextUsageSurfaces()) {
+      paintRingSurface(surface, budget);
+    }
     syncContextUsageBreakdownIfOpen(budget);
   } catch {
-    const button = getRingButton();
-    if (button) {
-      button.classList.remove('context-usage-ring--warn');
-      button.setAttribute(
-        'aria-label',
-        'Context usage unavailable',
-      );
-      button.title = 'Could not estimate context usage.';
+    for (const surface of listContextUsageSurfaces()) {
+      paintUnavailable(surface);
     }
   }
 }
@@ -131,6 +134,25 @@ export function scheduleContextUsageRefresh(): void {
   }, 200);
 }
 
+function bindRingButton(surface: ContextUsageSurface): void {
+  const button = getContextUsageRingButton(surface);
+  if (!button || button.dataset.contextRingBound === '1') return;
+  button.dataset.contextRingBound = '1';
+
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const active = getActiveContextUsageSurface();
+    if (surface.ringId !== active.ringId) return;
+    if (lastBudget) {
+      toggleContextUsageBreakdown(lastBudget, surface);
+    } else {
+      void runRefresh().then(() => {
+        if (lastBudget) toggleContextUsageBreakdown(lastBudget, surface);
+      });
+    }
+  });
+}
+
 let initialized = false;
 
 /** Mount ring handlers and listeners (call once from initApp). */
@@ -138,32 +160,28 @@ export function initContextUsageRing(): void {
   if (initialized) return;
   initialized = true;
 
-  const button = getRingButton();
-  const panel = document.getElementById('contextUsageBreakdown');
-  if (!button) return;
-
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (lastBudget) {
-      toggleContextUsageBreakdown(lastBudget);
-    } else {
-      void runRefresh().then(() => {
-        if (lastBudget) toggleContextUsageBreakdown(lastBudget);
-      });
-    }
-  });
+  for (const surface of listContextUsageSurfaces()) {
+    bindRingButton(surface);
+  }
 
   document.addEventListener('click', (event) => {
     if (!isContextUsageBreakdownOpen()) return;
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (button.contains(target)) return;
-    if (panel?.contains(target)) return;
+    for (const surface of listContextUsageSurfaces()) {
+      const button = getContextUsageRingButton(surface);
+      const panel = document.getElementById(surface.breakdownId);
+      if (button?.contains(target) || panel?.contains(target)) return;
+    }
     closeContextUsageBreakdown();
   });
 
-  const msgInput = document.getElementById('msgInput');
-  msgInput?.addEventListener('input', () => scheduleContextUsageRefresh());
+  for (const { inputId } of [
+    { inputId: 'msgInput' },
+    { inputId: 'chatAppInput' },
+  ]) {
+    document.getElementById(inputId)?.addEventListener('input', () => scheduleContextUsageRefresh());
+  }
 
   const modelSelect = document.getElementById('modelSelect');
   modelSelect?.addEventListener('change', () => refreshContextUsageRing());

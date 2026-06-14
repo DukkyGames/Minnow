@@ -425,3 +425,37 @@ export async function fetchModels(): Promise<void> {
     syncModelSelectPicker();
   }
 }
+
+/**
+ * After serve, pick the new provider's model in the top bar.
+ * @returns true when a matching option was found and selected.
+ */
+export async function selectProviderModel(
+  providerId: string,
+  modelIdHint: string,
+): Promise<boolean> {
+  await fetchModels();
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement;
+  const hint = modelIdHint.trim().toLowerCase();
+  if (!hint) return false;
+
+  for (const opt of [...sel.options]) {
+    const decoded = decodeModelSelectKey(opt.value);
+    if (!decoded || decoded.providerId !== providerId) continue;
+    const mid = decoded.modelId.toLowerCase();
+    if (mid.includes(hint) || hint.includes(mid) || mid.endsWith(hint) || hint.endsWith(mid)) {
+      sel.value = opt.value;
+      const chat = getActiveChat();
+      chat.providerId = decoded.providerId;
+      chat.modelId = decoded.modelId;
+      touchChat(chat);
+      scheduleSaveSessions();
+      syncModelSelectPicker();
+      updateModelLoadUnloadButtons();
+      showCachedModelInfo();
+      renderSidebar();
+      return true;
+    }
+  }
+  return false;
+}

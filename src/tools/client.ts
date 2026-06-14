@@ -357,6 +357,11 @@ async function executeToolInner(
           query: enrichedArgs.query,
         });
       }
+      if (route.kind === 'searxng') {
+        return executeServerTool('web_search_searxng', {
+          query: enrichedArgs.query,
+        });
+      }
       return executeServerTool('web_search_ddg', {
         query: enrichedArgs.query,
       });
@@ -393,7 +398,11 @@ async function executeToolInner(
   }
 
   const permissionId =
-    name === 'web_search_ddg' || name === 'web_search_tavily' ? 'web_search' : tool.id;
+    name === 'web_search_ddg' ||
+    name === 'web_search_tavily' ||
+    name === 'web_search_searxng'
+      ? 'web_search'
+      : tool.id;
   const blocked = await maybeBlockToolForUserApproval(
     permissionId,
     enrichedArgs,

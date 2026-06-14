@@ -60,7 +60,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
 
 export type SettingsNavGroupId =
   | 'app'
-  | 'models'
   | 'prompting'
   | 'agents'
   | 'integrations'
@@ -75,11 +74,6 @@ export type SettingsNavGroup = {
 /** Sidebar groups and nav order (must match index.html section order). */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   { id: 'app', label: 'App', sections: ['general', 'appearance'] },
-  {
-    id: 'models',
-    label: 'Models & APIs',
-    sections: ['model-routing', 'providers', 'usage', 'sampler', 'thinking'],
-  },
   {
     id: 'prompting',
     label: 'Prompting & memory',

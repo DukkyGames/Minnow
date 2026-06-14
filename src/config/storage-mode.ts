@@ -2,12 +2,13 @@
  * Detect whether file-backed config (/api/config) is available.
  */
 
-const CONFIG_PING_TIMEOUT_MS = 800;
+const CONFIG_PING_TIMEOUT_MS = 2500;
+const CONFIG_PING_ATTEMPTS = 3;
+const CONFIG_PING_RETRY_DELAY_MS = 200;
 
 export type StorageMode = 'server' | 'localStorage';
 
 let storageMode: StorageMode = 'localStorage';
-let detectPromise: Promise<StorageMode> | null = null;
 
 /** Current persistence mode (set after detectConfigServer). */
 export function getStorageMode(): StorageMode {
@@ -19,40 +20,60 @@ export function isServerStorageMode(): boolean {
   return storageMode === 'server';
 }
 
+/** Type-safe check for StorageMode probe results (strings are truthy — never use `!mode`). */
+export function isConfigServerMode(mode: StorageMode): boolean {
+  return mode === 'server';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Single GET /api/config/ping attempt with abort timeout. */
+async function pingConfigServerOnce(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONFIG_PING_TIMEOUT_MS);
+
+  try {
+    const res = await fetch('/api/config/ping', {
+      method: 'GET',
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { ok?: boolean };
+    return data.ok === true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Probe the config API with short retries (startup can be slow on Windows). */
+async function probeConfigServer(): Promise<StorageMode> {
+  for (let attempt = 0; attempt < CONFIG_PING_ATTEMPTS; attempt++) {
+    if (await pingConfigServerOnce()) {
+      return 'server';
+    }
+    if (attempt < CONFIG_PING_ATTEMPTS - 1) {
+      await sleep(CONFIG_PING_RETRY_DELAY_MS);
+    }
+  }
+  return 'localStorage';
+}
+
 /**
  * Ping /api/config/ping; authoritative for Step 02 persistence.
+ * Successful server mode is cached; localStorage is re-probed on later calls.
  */
 export async function detectConfigServer(): Promise<StorageMode> {
-  if (detectPromise) return detectPromise;
-
-  detectPromise = (async () => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), CONFIG_PING_TIMEOUT_MS);
-
-    try {
-      const res = await fetch('/api/config/ping', {
-        method: 'GET',
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { ok?: boolean };
-        if (data.ok) {
-          storageMode = 'server';
-          return storageMode;
-        }
-      }
-    } catch {
-      /* Vite-only or server down */
-    } finally {
-      clearTimeout(timer);
-    }
-
-    storageMode = 'localStorage';
+  if (storageMode === 'server') {
     return storageMode;
-  })();
+  }
 
-  return detectPromise;
+  storageMode = await probeConfigServer();
+  return storageMode;
 }
 
 /** Show or hide the settings banner for Vite-only mode. */

@@ -27,6 +27,7 @@ import { createSkillsMiddleware } from '../skills/middleware.js';
 import { createPluginsMiddleware } from '../tools/middleware.js';
 import { createTerminalMiddleware } from '../terminal/middleware.js';
 import { createSystemMiddleware } from '../system/middleware.js';
+import { createModelsMiddleware } from '../models/index.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -45,6 +46,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createChatsWorkspaceMiddleware());
   connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());
+  connectApp.use(createModelsMiddleware());
   connectApp.use(
     createPreviewMiddleware({
       resolveSafePath,

@@ -160,6 +160,30 @@ describe('resolveWebSearchExecution', () => {
       assert.match(route.message, /disabled/i);
     }
   });
+
+  it('routes searxng when server is available', () => {
+    const route = resolveWebSearchExecution(
+      config({ webSearchProvider: 'duckduckgo' }),
+      {},
+      true,
+      { ...DEFAULT_SEARCH_CONFIG, provider: 'searxng' },
+    );
+    assert.equal(route.kind, 'searxng');
+  });
+
+  it('errors for searxng without server', () => {
+    const route = resolveWebSearchExecution(
+      config({ webSearchProvider: 'duckduckgo' }),
+      {},
+      false,
+      { ...DEFAULT_SEARCH_CONFIG, provider: 'searxng' },
+    );
+    assert.equal(route.kind, 'error');
+    if (route.kind === 'error') {
+      assert.match(route.message, /SearXNG/i);
+      assert.match(route.message, /npm start/i);
+    }
+  });
 });
 
 describe('hasBraveApiKey / hasTavilyApiKey', () => {

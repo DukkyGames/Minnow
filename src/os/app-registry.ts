@@ -54,11 +54,18 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Side-by-side votes, reveal, win rates',
   },
   {
+    id: 'models',
+    name: 'Models',
+    icon: 'chip',
+    tag: 'Download, run & tune models',
+    description: 'Local runtimes, providers, recommendations',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',
-    tag: 'Models, providers, appearance',
-    description: 'Everything under one roof',
+    tag: 'Appearance, prompts, agents',
+    description: 'App, prompting, and integration settings',
   },
 ] as const;
 

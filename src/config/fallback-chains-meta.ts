@@ -2,7 +2,7 @@
  * Fallback chain settings from config.json meta (Odysseus port #04).
  */
 
-import { detectConfigServer } from './storage-mode';
+import { detectConfigServer, isConfigServerMode } from './storage-mode';
 
 /** Legacy coarse roles still accepted at API boundaries for backward compatibility. */
 export type FallbackRole = 'default' | 'utility' | 'vision' | 'research';
@@ -163,7 +163,7 @@ async function fetchFromServer(): Promise<FallbackChainsConfig> {
 export async function loadFallbackChainsConfig(): Promise<FallbackChainsConfig> {
   if (cached) return cached;
   const serverUp = await detectConfigServer();
-  cached = serverUp ? await fetchFromServer() : readLocalConfig();
+  cached = isConfigServerMode(serverUp) ? await fetchFromServer() : readLocalConfig();
   writeLocalConfig(cached);
   return cached;
 }

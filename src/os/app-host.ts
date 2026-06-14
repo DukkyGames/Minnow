@@ -16,6 +16,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   research: 'researchView',
   bench: 'benchmarkView',
   compare: 'compareView',
+  models: 'modelsView',
   experts: 'expertsView',
 };
 
@@ -81,6 +82,7 @@ function closeAllAppPages(): void {
     'settingsView',
     'benchmarkView',
     'compareView',
+    'modelsView',
     'researchView',
     'expertsView',
     'chatView',
@@ -116,6 +118,11 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'compare': {
       const { openCompare } = await import('../ui/compare-page');
       openCompare();
+      break;
+    }
+    case 'models': {
+      const { openModels } = await import('../ui/models-page');
+      openModels((route.modelsSection ?? options?.modelsSection ?? 'recommend') as import('../ui/models-page').ModelsSectionId);
       break;
     }
     case 'experts': {
