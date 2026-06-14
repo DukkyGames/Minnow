@@ -1,0 +1,53 @@
+/* Voice I/O — composer mic + assistant read-aloud controls */
+
+.composer-mic-btn--recording {
+  color: var(--mn-danger, #e55);
+  border-color: color-mix(in srgb, var(--mn-danger, #e55) 45%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-danger, #e55) 12%, var(--mn-bg));
+}
+
+.composer-mic-btn--busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.voice-play-btn {
+  right: 36px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-play-btn .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.voice-play-btn--loading .icon-svg {
+  opacity: 0.35;
+}
+
+.voice-play-btn--loading::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mn-border);
+  border-top-color: var(--mn-accent);
+  border-radius: 50%;
+  animation: voice-play-spin 0.8s linear infinite;
+}
+
+@keyframes voice-play-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.settings-voice--offline .settings-group__body {
+  opacity: 0.55;
+  pointer-events: none;
+}

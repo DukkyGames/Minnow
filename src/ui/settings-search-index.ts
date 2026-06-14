@@ -47,6 +47,7 @@ const SECTION_SEARCH_ALIASES: Partial<
   'work-agents': ['work agent', 'worker'],
   mcp: ['model context protocol'],
   lsp: ['language server', 'typescript server'],
+  voice: ['speech', 'stt', 'tts', 'microphone', 'dictation', 'read aloud'],
 };
 
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {

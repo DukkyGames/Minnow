@@ -31,6 +31,7 @@ const SETTINGS_SECTION_IDS = [
   'lsp',
   'editor',
   'skills',
+  'voice',
   'features',
   'evals',
 ];
@@ -123,7 +124,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 24);
+    assert.equal(SETTINGS_SECTION_IDS.length, 25);
   });
 
   test('prompts hub mount exists in index.html', () => {
@@ -137,6 +138,14 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesText"/);
     assert.match(html, /id="settingsRulesSave"/);
     assert.match(html, /data-settings-nav="rules"/);
+  });
+
+  test('voice settings panel exists in index.html', () => {
+    assert.match(html, /id="settingsSection-voice"/);
+    assert.match(html, /id="settingsVoicePanel"/);
+    assert.match(html, /id="settingsVoiceSttProvider"/);
+    assert.match(html, /id="settingsVoiceTtsProvider"/);
+    assert.match(html, /data-settings-nav="voice"/);
   });
 
   test('composer tools button and popover exist in index.html', () => {

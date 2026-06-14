@@ -1673,6 +1673,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
             });
           }
+          const histIdx = chat.history.length - 1;
+          const { attachMessageActions } = await import('../ui/message-actions');
+          const { attachVoicePlayButton } = await import('../ui/voice-controls');
+          attachMessageActions(lastWrap, {
+            chatId: chat.id,
+            historyIndex: histIdx,
+            turnKind: 'assistant',
+          });
+          attachVoicePlayButton(lastWrap, finalContent);
           updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
           setStatus('ok', 'Ready');
         }

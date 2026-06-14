@@ -69,6 +69,7 @@ import {
   attachMessageActions,
   type MessageTurnKind,
 } from './message-actions';
+import { attachVoicePlayButton } from './voice-controls';
 import { attachBranchPicker } from './branch-picker';
 import {
   renderUserMessageBubble,
@@ -300,6 +301,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       historyIndex: i,
       turnKind: 'assistant',
     });
+    attachVoicePlayButton(wrap, trimmed);
   }
   renderPersistedSubAgentCardsForChat(chat);
   scrollChatToBottom();

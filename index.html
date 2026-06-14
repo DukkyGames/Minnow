@@ -461,6 +461,7 @@
         <button type="button" data-settings-nav="lsp">Language servers</button>
         <button type="button" data-settings-nav="editor">Editor</button>
         <button type="button" data-settings-nav="skills">Skills</button>
+        <button type="button" data-settings-nav="voice">Voice</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
         <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
@@ -857,6 +858,75 @@
         <h2>Skills</h2>
         <p class="settings-lead">Slash commands and SKILL packs (built-in and user). Toggle which skills the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-voice" class="settings-section">
+        <h2>Voice</h2>
+        <p class="settings-lead">Speech-to-text dictation in the composer and text-to-speech playback on assistant messages. Provider-backed STT/TTS uses OpenAI-compatible <code>/v1/audio/transcriptions</code> and <code>/v1/audio/speech</code> endpoints.</p>
+        <section class="settings-group settings-group--flat" id="settingsVoicePanel">
+          <p id="settingsVoiceOffline" class="field-hint settings-memory-offline hidden">
+            Start with <code>npm start</code> to configure voice providers.
+          </p>
+          <p id="settingsVoiceError" class="settings-memory-form-error hidden" role="alert"></p>
+          <div class="settings-group__body">
+            <h3 class="settings-group__title">Speech input (STT)</h3>
+            <label class="settings-toggle-row">
+              <input type="checkbox" id="settingsVoiceSttEnabled" checked>
+              Enable microphone dictation
+            </label>
+            <div class="field">
+              <label for="settingsVoiceSttProvider">STT provider</label>
+              <select id="settingsVoiceSttProvider" class="settings-select"></select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsVoiceSttModel">Model</label>
+                <input type="text" id="settingsVoiceSttModel" class="settings-input" value="whisper-1" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="settingsVoiceSttLanguage">Language</label>
+                <input type="text" id="settingsVoiceSttLanguage" class="settings-input" value="en" spellcheck="false">
+              </div>
+            </div>
+            <h3 class="settings-group__title">Speech output (TTS)</h3>
+            <label class="settings-toggle-row">
+              <input type="checkbox" id="settingsVoiceTtsEnabled" checked>
+              Enable read-aloud on assistant messages
+            </label>
+            <div class="field">
+              <label for="settingsVoiceTtsProvider">TTS provider</label>
+              <select id="settingsVoiceTtsProvider" class="settings-select"></select>
+              <p class="settings-field-hint">Choose <strong>Browser (offline)</strong> for OS speech without a provider key.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsVoiceTtsModel">Model</label>
+                <input type="text" id="settingsVoiceTtsModel" class="settings-input" value="tts-1" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="settingsVoiceTtsVoice">Voice</label>
+                <select id="settingsVoiceTtsVoice" class="settings-select"></select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="settingsVoiceTtsSpeed">Speed</label>
+                <input type="number" id="settingsVoiceTtsSpeed" class="settings-input settings-input--narrow" min="0.25" max="4" step="0.05" value="1">
+              </div>
+              <div class="field">
+                <label for="settingsVoiceTtsFormat">Format</label>
+                <select id="settingsVoiceTtsFormat" class="settings-select">
+                  <option value="mp3">mp3</option>
+                  <option value="wav">wav</option>
+                  <option value="opus">opus</option>
+                </select>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button type="button" id="settingsVoiceTestTts" class="settings-inline-btn">Test voice</button>
+              <button type="button" id="settingsVoiceSave" class="settings-action-btn">Save voice settings</button>
+            </div>
+          </div>
+        </section>
       </section>
       <section id="settingsSection-features" class="settings-section">
         <h2>Orchestration</h2>

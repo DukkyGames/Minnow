@@ -1339,6 +1339,15 @@ export function mergeConfigMeta(existing, patch) {
     );
   }
 
+  if (p.voice && typeof p.voice === 'object') {
+    base.voice = normalizeVoiceConfig(
+      p.voice,
+      base.voice && typeof base.voice === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.voice)
+        : {},
+    );
+  }
+
   return base;
 }
 
@@ -1419,6 +1428,138 @@ export function normalizeFallbackChainsConfig(raw, existing = {}) {
       roles[role] = normalized;
     }
     base.roles = roles;
+  }
+
+  return base;
+}
+
+/**
+ * Default voice I/O config for new homes and merge fallbacks.
+ * @returns {object}
+ */
+export function defaultVoiceConfig() {
+  return {
+    stt: {
+      enabled: true,
+      providerId: '',
+      model: 'whisper-1',
+      language: 'en',
+    },
+    tts: {
+      enabled: true,
+      providerId: '',
+      model: 'tts-1',
+      voice: 'alloy',
+      speed: 1.0,
+      format: 'mp3',
+    },
+    limits: {
+      maxAudioBytes: 25 * 1024 * 1024,
+      maxDurationSeconds: 300,
+    },
+  };
+}
+
+const TTS_VOICES = new Set([
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer',
+  'verse',
+]);
+
+const TTS_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
+
+/**
+ * Normalize voice STT/TTS settings persisted in config.json.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ */
+export function normalizeVoiceConfig(raw, existing = {}) {
+  const base = {
+    ...defaultVoiceConfig(),
+    ...existing,
+    stt: {
+      ...defaultVoiceConfig().stt,
+      ...(existing.stt && typeof existing.stt === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.stt)
+        : {}),
+    },
+    tts: {
+      ...defaultVoiceConfig().tts,
+      ...(existing.tts && typeof existing.tts === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.tts)
+        : {}),
+    },
+    limits: {
+      ...defaultVoiceConfig().limits,
+      ...(existing.limits && typeof existing.limits === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.limits)
+        : {}),
+    },
+  };
+
+  if (!raw || typeof raw !== 'object') return base;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+
+  if (row.stt && typeof row.stt === 'object') {
+    const stt = /** @type {Record<string, unknown>} */ (row.stt);
+    if (typeof stt.enabled === 'boolean') base.stt.enabled = stt.enabled;
+    if (typeof stt.providerId === 'string') base.stt.providerId = stt.providerId.trim();
+    if (typeof stt.model === 'string' && stt.model.trim()) {
+      base.stt.model = stt.model.trim();
+    }
+    if (typeof stt.language === 'string') {
+      base.stt.language = stt.language.trim();
+    }
+  }
+
+  if (row.tts && typeof row.tts === 'object') {
+    const tts = /** @type {Record<string, unknown>} */ (row.tts);
+    if (typeof tts.enabled === 'boolean') base.tts.enabled = tts.enabled;
+    if (typeof tts.providerId === 'string') base.tts.providerId = tts.providerId.trim();
+    if (typeof tts.model === 'string' && tts.model.trim()) {
+      base.tts.model = tts.model.trim();
+    }
+    if (typeof tts.voice === 'string' && tts.voice.trim()) {
+      const voice = tts.voice.trim().toLowerCase();
+      base.tts.voice = TTS_VOICES.has(voice) ? voice : base.tts.voice;
+    }
+    if (typeof tts.speed === 'number' && Number.isFinite(tts.speed)) {
+      base.tts.speed = Math.min(4, Math.max(0.25, tts.speed));
+    }
+    if (typeof tts.format === 'string' && tts.format.trim()) {
+      const format = tts.format.trim().toLowerCase();
+      base.tts.format = TTS_FORMATS.has(format) ? format : base.tts.format;
+    }
+  }
+
+  if (row.limits && typeof row.limits === 'object') {
+    const limits = /** @type {Record<string, unknown>} */ (row.limits);
+    if (
+      typeof limits.maxAudioBytes === 'number' &&
+      Number.isFinite(limits.maxAudioBytes)
+    ) {
+      base.limits.maxAudioBytes = Math.max(
+        1024,
+        Math.round(limits.maxAudioBytes),
+      );
+    }
+    if (
+      typeof limits.maxDurationSeconds === 'number' &&
+      Number.isFinite(limits.maxDurationSeconds)
+    ) {
+      base.limits.maxDurationSeconds = Math.max(
+        1,
+        Math.round(limits.maxDurationSeconds),
+      );
+    }
   }
 
   return base;

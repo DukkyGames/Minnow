@@ -26,6 +26,7 @@ export type SettingsSectionId =
   | 'lsp'
   | 'editor'
   | 'skills'
+  | 'voice'
   | 'features'
   | 'evals';
 
@@ -54,6 +55,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   lsp: 'Language servers',
   editor: 'Editor',
   skills: 'Skills',
+  voice: 'Voice',
   features: 'Orchestration',
   evals: 'Evals',
 };
@@ -93,7 +95,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills', 'voice'],
   },
   {
     id: 'advanced',
