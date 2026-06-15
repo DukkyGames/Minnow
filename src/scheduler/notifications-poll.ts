@@ -25,7 +25,7 @@ async function deliverNotification(
   deliveredIds.add(row.id);
 
   const { noteAgentMessage } = await import('../os/instances');
-  noteAgentMessage('settings', `${row.label}: ${row.message}`);
+  noteAgentMessage('scheduler', `${row.label}: ${row.message}`);
 
   try {
     await ackSchedulerNotification(row.id);

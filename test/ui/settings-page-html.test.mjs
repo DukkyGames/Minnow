@@ -33,7 +33,6 @@ const SETTINGS_SECTION_IDS = [
   'skills',
   'features',
   'evals',
-  'scheduler',
 ];
 
 /** Sections populated by refreshSettingsSection via clearMount(). */
@@ -124,13 +123,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 25);
-  });
-
-  test('scheduler section and nav exist in index.html', () => {
-    assert.match(html, /id="settingsSection-scheduler"/);
-    assert.match(html, /id="settingsSchedulerBody"/);
-    assert.match(html, /data-settings-nav="scheduler"/);
+    assert.equal(SETTINGS_SECTION_IDS.length, 24);
   });
 
   test('prompts hub mount exists in index.html', () => {

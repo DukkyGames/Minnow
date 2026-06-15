@@ -1,8 +1,8 @@
 /**
- * Settings → Scheduler — local recurring agent jobs and reminders.
+ * Scheduler job list + editor panel (shared by the Scheduler app).
  */
 
-import { listModes } from '../chat/modes/registry';
+import { listModes } from '../../chat/modes/registry';
 import {
   createSchedulerJob,
   deleteSchedulerJob,
@@ -12,11 +12,13 @@ import {
   updateSchedulerJob,
   type ScheduledJob,
   type SchedulerRun,
-} from '../scheduler/client';
-import { appendSettingsCrosslinks } from './settings-layout';
-import { createSettingsToggleRow } from './settings-switch';
-import { setStatus } from './status';
-import { isLocalServerAvailable } from '../tools/config';
+} from '../../scheduler/client';
+import { createSettingsToggleRow } from '../settings-switch';
+import { isLocalServerAvailable } from '../../tools/config';
+
+export interface SchedulerPanelOptions {
+  onStatus?: (state: 'ok' | 'err', message: string) => void;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -45,8 +47,15 @@ const EMPTY_FORM: Omit<ScheduledJob, 'id' | 'createdAt' | 'updatedAt' | 'running
   channels: ['in_app'],
 };
 
-/** Render scheduler settings into the section mount. */
-export async function renderSchedulerSettingsSection(mount: HTMLElement): Promise<void> {
+/** Render scheduler CRUD UI into the supplied mount element. */
+export async function renderSchedulerPanel(
+  mount: HTMLElement,
+  options: SchedulerPanelOptions = {},
+): Promise<void> {
+  const notify = (state: 'ok' | 'err', message: string) => {
+    options.onStatus?.(state, message);
+  };
+
   mount.replaceChildren();
 
   const banner = el(
@@ -57,16 +66,9 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
   mount.appendChild(banner);
 
   if (!isLocalServerAvailable()) {
-    const offline = el(
-      'p',
-      'settings-muted',
-      'Start npm start to manage scheduled jobs.',
+    mount.appendChild(
+      el('p', 'settings-muted', 'Start npm start to manage scheduled jobs.'),
     );
-    mount.appendChild(offline);
-    appendSettingsCrosslinks(mount, [
-      { label: 'Servers', sectionId: 'servers' },
-      { label: 'General', sectionId: 'general' },
-    ]);
     return;
   }
 
@@ -76,29 +78,27 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
   toolbar.appendChild(addBtn);
   mount.appendChild(toolbar);
 
-  const list = el('div', 'settings-scheduler-list');
+  const list = el('div', 'scheduler-list settings-scheduler-list');
   list.setAttribute('role', 'list');
   mount.appendChild(list);
 
-  const formPanel = el('section', 'settings-scheduler-form hidden');
+  const formPanel = el('section', 'scheduler-form settings-scheduler-form hidden');
   formPanel.setAttribute('aria-label', 'Job editor');
   mount.appendChild(formPanel);
 
-  const historyPanel = el('section', 'settings-scheduler-history hidden');
+  const historyPanel = el('section', 'scheduler-history settings-scheduler-history hidden');
   historyPanel.setAttribute('aria-label', 'Run history');
   mount.appendChild(historyPanel);
 
   let editingId: string | null = null;
   let selectedHistoryJobId: string | null = null;
-
   const formState = { ...EMPTY_FORM };
 
   function renderForm(): void {
     formPanel.replaceChildren();
     formPanel.classList.toggle('hidden', editingId === null && !formPanel.dataset.create);
 
-    const title = el('h3', 'settings-subheading', editingId ? 'Edit job' : 'New job');
-    formPanel.appendChild(title);
+    formPanel.appendChild(el('h3', 'settings-subheading', editingId ? 'Edit job' : 'New job'));
 
     const labelField = el('label', 'settings-field');
     labelField.textContent = 'Label';
@@ -164,13 +164,14 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
     modeField.appendChild(modeSelect);
     formPanel.appendChild(modeField);
 
-    const enabledRow = createSettingsToggleRow('Enabled', {
-      checked: formState.enabled,
-      onChange: (on) => {
-        formState.enabled = on;
-      },
-    });
-    formPanel.appendChild(enabledRow.row);
+    formPanel.appendChild(
+      createSettingsToggleRow('Enabled', {
+        checked: formState.enabled,
+        onChange: (on) => {
+          formState.enabled = on;
+        },
+      }).row,
+    );
 
     const actions = el('div', 'settings-toolbar');
     const saveBtn = el('button', 'btn btn--primary', 'Save');
@@ -185,17 +186,17 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
         try {
           if (editingId) {
             await updateSchedulerJob(editingId, formState);
-            setStatus('ok', 'Scheduler job updated');
+            notify('ok', 'Job updated');
           } else {
             await createSchedulerJob(formState);
-            setStatus('ok', 'Scheduler job created');
+            notify('ok', 'Job created');
           }
           editingId = null;
           delete formPanel.dataset.create;
           await refreshList();
           formPanel.classList.add('hidden');
         } catch (err) {
-          setStatus('err', err instanceof Error ? err.message : String(err));
+          notify('err', err instanceof Error ? err.message : String(err));
         }
       })();
     });
@@ -241,8 +242,7 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
       row.appendChild(el('td', undefined, formatWhen(run.startedAt)));
       row.appendChild(el('td', undefined, run.status));
       row.appendChild(el('td', undefined, run.exitCode != null ? String(run.exitCode) : '—'));
-      const summary = run.error ?? run.output?.slice(0, 120) ?? '—';
-      row.appendChild(el('td', undefined, summary));
+      row.appendChild(el('td', undefined, run.error ?? run.output?.slice(0, 120) ?? '—'));
       body.appendChild(row);
     }
     table.appendChild(body);
@@ -272,12 +272,13 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
 
       const head = el('div', 'settings-mcp-row__head');
       head.appendChild(el('strong', undefined, job.label));
-      const meta = el(
-        'span',
-        'settings-muted',
-        `${job.schedule.kind} ${job.schedule.value} · next ${formatWhen(job.nextRunAt)}${job.running ? ' · running' : ''}`,
+      head.appendChild(
+        el(
+          'span',
+          'settings-muted',
+          `${job.schedule.kind} ${job.schedule.value} · next ${formatWhen(job.nextRunAt)}${job.running ? ' · running' : ''}`,
+        ),
       );
-      head.appendChild(meta);
       row.appendChild(head);
 
       const actions = el('div', 'settings-toolbar');
@@ -288,13 +289,11 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
         void (async () => {
           try {
             await runSchedulerJobNow(job.id);
-            setStatus('ok', `Started "${job.label}"`);
+            notify('ok', `Started "${job.label}"`);
             await refreshList();
-            if (selectedHistoryJobId === job.id) {
-              await renderHistory(job.id);
-            }
+            if (selectedHistoryJobId === job.id) await renderHistory(job.id);
           } catch (err) {
-            setStatus('err', err instanceof Error ? err.message : String(err));
+            notify('err', err instanceof Error ? err.message : String(err));
           }
         })();
       });
@@ -328,33 +327,37 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
         void (async () => {
           try {
             await deleteSchedulerJob(job.id);
-            setStatus('ok', 'Scheduler job deleted');
+            notify('ok', 'Job deleted');
             if (selectedHistoryJobId === job.id) {
               historyPanel.classList.add('hidden');
               selectedHistoryJobId = null;
             }
             await refreshList();
           } catch (err) {
-            setStatus('err', err instanceof Error ? err.message : String(err));
+            notify('err', err instanceof Error ? err.message : String(err));
           }
         })();
       });
 
-      const toggleRow = createSettingsToggleRow('Enabled', {
-        checked: job.enabled,
-        onChange: (on) => {
-          void (async () => {
-            try {
-              await updateSchedulerJob(job.id, { enabled: on });
-              await refreshList();
-            } catch (err) {
-              setStatus('err', err instanceof Error ? err.message : String(err));
-            }
-          })();
-        },
-      });
-
-      actions.append(toggleRow.row, runBtn, editBtn, historyBtn, deleteBtn);
+      actions.append(
+        createSettingsToggleRow('Enabled', {
+          checked: job.enabled,
+          onChange: (on) => {
+            void (async () => {
+              try {
+                await updateSchedulerJob(job.id, { enabled: on });
+                await refreshList();
+              } catch (err) {
+                notify('err', err instanceof Error ? err.message : String(err));
+              }
+            })();
+          },
+        }).row,
+        runBtn,
+        editBtn,
+        historyBtn,
+        deleteBtn,
+      );
       row.appendChild(actions);
       list.appendChild(row);
     }
@@ -370,8 +373,4 @@ export async function renderSchedulerSettingsSection(mount: HTMLElement): Promis
 
   renderForm();
   await refreshList();
-  appendSettingsCrosslinks(mount, [
-    { label: 'General', sectionId: 'general' },
-    { label: 'Tools', sectionId: 'tools' },
-  ]);
 }

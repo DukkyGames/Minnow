@@ -115,7 +115,6 @@ import { renderModelRoutingSection } from './settings-model-routing';
 import { renderSearchSettingsSection } from './settings-search-section';
 import { renderServersSettingsSection } from './settings-servers-section';
 import { renderDeepResearchSettingsSection } from './settings-research-section';
-import { renderSchedulerSettingsSection } from './settings-scheduler';
 import { renderSamplerSettingsSection } from './settings-sampler';
 import { renderThinkingSettingsSection } from './settings-thinking';
 import {
@@ -805,12 +804,6 @@ async function renderDeepResearchSettingsSectionWrapper(): Promise<void> {
   const generation = beginAsyncSectionRender('deep-research');
   await renderDeepResearchSettingsSection(mount);
   if (isAsyncSectionRenderStale('deep-research', generation)) return;
-}
-
-async function renderSchedulerSettingsSectionWrapper(): Promise<void> {
-  const mount = document.getElementById('settingsSchedulerBody');
-  if (!mount) return;
-  await renderSchedulerSettingsSection(mount);
 }
 
 async function renderServersSettingsSectionWrapper(): Promise<void> {
@@ -2140,9 +2133,6 @@ export async function refreshSettingsSection(
       break;
     case 'evals':
       await renderEvalsSection();
-      break;
-    case 'scheduler':
-      await renderSchedulerSettingsSectionWrapper();
       break;
     default:
       break;

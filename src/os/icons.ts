@@ -3,6 +3,9 @@
 /** Public path for the Compare app raster glyph. */
 export const COMPARE_ICON_SRC = '/icons/compare.png';
 
+/** Public path for the Scheduler app raster glyph. */
+export const SCHEDULER_ICON_SRC = '/icons/scheduler.png';
+
 export type OsIconName =
   | 'code'
   | 'chat'
@@ -10,6 +13,7 @@ export type OsIconName =
   | 'flask'
   | 'bench'
   | 'compare'
+  | 'scheduler'
   | 'chip'
   | 'gear'
   | 'arrowUp'
@@ -20,7 +24,7 @@ export type OsIconName =
   | 'fish';
 
 /** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
-export type RasterIconName = 'compare';
+export type RasterIconName = 'compare' | 'scheduler';
 
 /** Inline SVG icon ids (excludes raster-backed launcher icons). */
 export type SvgIconName = Exclude<OsIconName, RasterIconName>;
@@ -48,6 +52,7 @@ const PATHS: Record<SvgIconName, string> = {
 /** App launcher icons backed by a PNG mask instead of inline SVG paths. */
 const RASTER_ICON_SRC: Record<RasterIconName, string> = {
   compare: COMPARE_ICON_SRC,
+  scheduler: SCHEDULER_ICON_SRC,
 };
 
 export interface OsIconOptions {

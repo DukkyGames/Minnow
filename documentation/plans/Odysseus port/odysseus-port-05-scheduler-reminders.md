@@ -54,7 +54,7 @@ V1 scope: user-defined interval/cron jobs + run-now. Odysseus built-in action ta
 | `server/scheduler/delivery.js` | Notification queue persistence |
 | `server/scheduler/middleware.js` | API routes |
 | `server/scheduler/tick.js` | Interval tick loop + due-job dispatch |
-| `src/ui/settings-scheduler.ts` OR `src/ui/scheduler-page.ts` | Job management UI |
+| `src/ui/scheduler-page.ts` OR `src/ui/scheduler/scheduler-panel.ts` | Job management UI |
 | `test/scheduler/store.test.mjs` | Job validation, cap |
 | `test/scheduler/schedule.test.mjs` | Next-run calculation |
 | `test/scheduler/runner.test.mjs` | Fake subprocess tests |

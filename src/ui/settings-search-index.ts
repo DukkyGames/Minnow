@@ -42,7 +42,6 @@ const SECTION_SEARCH_ALIASES: Partial<
   search: ['web search', 'brave', 'tavily', 'searxng', 'duckduckgo', 'ddg'],
   'deep-research': ['research', 'iterresearch', 'deep research', 'engine'],
   servers: ['searxng', 'managed server', 'local search', 'metasearch', 'install searxng'],
-  scheduler: ['cron', 'interval', 'scheduled', 'reminder', 'recurring', 'task'],
   tools: ['permissions', 'tool cache'],
   'sub-agents': ['subagent', 'sub agent', 'spawn'],
   'work-agents': ['work agent', 'worker'],

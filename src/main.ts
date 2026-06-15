@@ -326,6 +326,8 @@ export async function initApp(): Promise<void> {
   modelsPage.initModelsPage();
   const comparePage = await import('./ui/compare-page');
   comparePage.initComparePage();
+  const schedulerPage = await import('./ui/scheduler-page');
+  schedulerPage.initSchedulerPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');

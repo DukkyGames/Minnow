@@ -466,7 +466,6 @@
         <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
         <button type="button" data-settings-nav="features">Orchestration</button>
         <button type="button" data-settings-nav="evals">Evals</button>
-        <button type="button" data-settings-nav="scheduler">Scheduler</button>
       </div>
     </nav>
     <div class="settings-content">
@@ -868,11 +867,6 @@
         <h2>Evals</h2>
         <p class="settings-lead">Local eval harness — task packs, suite runs, and rubric grading under <code>~/.minnow/evals/</code>.</p>
         <div id="settingsEvalsBody" class="settings-section-body"></div>
-      </section>
-      <section id="settingsSection-scheduler" class="settings-section">
-        <h2>Scheduler</h2>
-        <p class="settings-lead">Recurring local agent jobs with interval or cron schedules. Jobs run only while Minnow is open.</p>
-        <div id="settingsSchedulerBody" class="settings-section-body"></div>
       </section>
     </div>
   </div>
@@ -1299,6 +1293,20 @@
         <div id="compareWinRates" class="compare-win-rates">Win rates appear after your first vote.</div>
       </section>
     </div>
+  </div>
+</main>
+
+<main id="schedulerView" class="scheduler-page" aria-label="Scheduler">
+  <header class="scheduler-hdr">
+    <span class="scheduler-hdr-ico" id="schedulerPageIcon" aria-hidden="true"></span>
+    <div class="scheduler-hdr-txt">
+      <h2>Scheduler</h2>
+      <span>Recurring local agent jobs and in-app reminders</span>
+    </div>
+  </header>
+  <div id="schedulerAppBody" class="scheduler-body">
+    <p id="schedulerStatus" class="scheduler-status" role="status" aria-live="polite"></p>
+    <div id="schedulerPanelMount" class="scheduler-panel-mount"></div>
   </div>
 </main>
 
