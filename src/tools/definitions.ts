@@ -1371,6 +1371,44 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'list_mail',
+    label: 'List mail',
+    description: 'List recent cached email summaries from a configured IMAP account.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'list_mail',
+      'Return bounded recent email summaries from the local cache (max 20). Sync inbox in the Email app first. Does not expose full mailbox dumps.',
+      {
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        folder: { type: 'string', description: 'IMAP folder (optional — all cached folders)' },
+        query: { type: 'string', description: 'Case-insensitive filter on subject/from/preview' },
+        limit: { type: 'number', description: 'Max rows (default 20, max 20)' },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'draft_reply',
+    label: 'Draft email reply',
+    description: 'Compose a reply draft for a thread — does not send.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'draft_reply',
+      'Create a reply draft for a cached email thread. Returns To/Subject/body for user review. Never sends automatically.',
+      {
+        threadId: { type: 'string', description: 'Thread id from list_mail or the Email app' },
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        instructions: {
+          type: 'string',
+          description: 'Optional guidance for the opening paragraph',
+        },
+      },
+      ['threadId'],
+    ),
+  },
+  {
     id: 'get_lsp_diagnostics',
     label: 'LSP diagnostics',
     description: 'Formatted language-server diagnostics for a project file.',

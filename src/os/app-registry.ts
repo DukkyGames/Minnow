@@ -75,6 +75,13 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Month and week views with agent-assisted scheduling',
   },
   {
+    id: 'email',
+    name: 'Email',
+    icon: 'email',
+    tag: 'IMAP triage and draft replies',
+    description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',

@@ -61,6 +61,9 @@ export function resolveLegacyHash(hash: string): {
   if (trimmed === '#/calendar' || trimmed.startsWith('#/calendar/')) {
     return { hash: '#/app/calendar' };
   }
+  if (trimmed === '#/email' || trimmed.startsWith('#/email/')) {
+    return { hash: '#/app/email' };
+  }
   if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
     const section = match?.[1] ?? 'recommend';

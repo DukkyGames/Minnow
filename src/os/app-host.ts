@@ -19,6 +19,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   models: 'modelsView',
   scheduler: 'schedulerView',
   calendar: 'calendarView',
+  email: 'emailView',
   experts: 'expertsView',
 };
 
@@ -87,6 +88,7 @@ function closeAllAppPages(): void {
     'modelsView',
     'schedulerView',
     'calendarView',
+    'emailView',
     'researchView',
     'expertsView',
     'chatView',
@@ -137,6 +139,11 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'calendar': {
       const { openCalendar } = await import('../ui/calendar-page');
       await openCalendar();
+      break;
+    }
+    case 'email': {
+      const { openEmail } = await import('../ui/email-page');
+      await openEmail();
       break;
     }
     case 'experts': {
