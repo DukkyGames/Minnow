@@ -314,7 +314,7 @@ function defaultToolsJson() {
   }
   return {
     enabled,
-    permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
+    permissions: { default: permissionsDefault },
     keys: { braveApiKey: '', tavilyApiKey: '' },
     webSearchProvider: 'duckduckgo',
     plugins: {},

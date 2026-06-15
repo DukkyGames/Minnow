@@ -81,7 +81,7 @@ describe('config API CRUD', () => {
   test('GET search seeds from tools.json when missing', async () => {
     const tools = {
       enabled: { web_search: true },
-      permissions: { default: { web_search: 'ask' }, perAgent: {}, patterns: [] },
+      permissions: { default: { web_search: 'ask' } },
       keys: { braveApiKey: 'brave-seed', tavilyApiKey: 'tvly-seed' },
       webSearchProvider: 'tavily',
     };

@@ -68,7 +68,6 @@ import {
   refreshProvidersBanner,
   registerToolHandlers,
 } from './settings';
-import { mountToolApprovalRulesSection } from './tool-approval-settings';
 import {
   createMcpServer,
   deleteMcpServer,
@@ -1353,15 +1352,13 @@ async function renderToolsSection(): Promise<void> {
   toolsPanel.appendChild(list);
   catalog.appendChild(toolsPanel);
 
-  mountToolApprovalRulesSection(catalog);
-
   fillToolsSection('settingsToolsList');
   const { appendPluginToolsToList } = await import('./settings-plugins');
   await appendPluginToolsToList('settingsToolsList');
 
   allFullBtn.addEventListener('click', () => {
     const ok = window.confirm(
-      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt for all agents (main, work agents, and sub-agents). General mode still shows an approval strip before each tool. Paths outside the workspace still prompt when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
+      'Grant full permission to all tools?\n\nEvery built-in tool will run without the approval prompt. Paths outside the workspace still prompt when filesystem access is workspace-only.\n\nThis does not change “Filesystem access” below (workspace vs full disk). Only use this if you accept that risk.',
     );
     if (!ok) return;
     void (async () => {

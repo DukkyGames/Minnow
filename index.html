@@ -1092,6 +1092,21 @@
               <button type="button" class="chat-app-comp-btn" id="btnChatAppAttach" aria-label="Attach files" title="Attach files">
                 <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </button>
+              <div class="composer-tools-anchor chat-app-tools-anchor">
+                <button type="button" class="chat-app-comp-btn composer-tools-btn" id="btnChatAppTools"
+                  aria-label="Tools" aria-expanded="false" aria-haspopup="dialog"
+                  aria-controls="chatAppToolsPopover" title="Tool permissions">
+                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M4 14h4M12 6h4M20 10h4"/></svg>
+                </button>
+                <div id="chatAppToolsPopover" class="composer-tools-popover hidden" role="dialog" aria-label="Tool permissions">
+                  <p id="chatAppToolsServerBanner" class="tools-server-banner hidden" role="status">Server tools need npm start (not npm run dev).</p>
+                  <p id="chatAppToolsPreviewBanner" class="tools-server-banner hidden" role="status">Browser tools need the Minnow desktop app window.</p>
+                  <div id="chatAppToolsList" class="tools-list tools-list--composer"></div>
+                  <footer class="composer-tools-popover__footer">
+                    <button type="button" class="composer-tools-popover__link" id="chatAppToolsOpenSettings">Settings → Tools</button>
+                  </footer>
+                </div>
+              </div>
               <label for="chatAppInput" class="visually-hidden">Message</label>
               <textarea id="chatAppInput" class="chat-app-field" rows="1" placeholder="Message Minnow…"></textarea>
               <button type="button" class="chat-app-comp-btn chat-app-stop hidden" id="btnChatAppStop" aria-label="Stop generation" hidden disabled>

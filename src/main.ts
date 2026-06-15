@@ -156,6 +156,8 @@ import { initSubAgentUi } from './ui/sub-agent-cards';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
+  closeAllToolsPopovers,
+  initChatAppToolsPopover,
   initComposerToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
@@ -265,8 +267,10 @@ export async function initApp(): Promise<void> {
   await loadSystemPromptSettings();
   fillToolsSection();
   fillToolsSection('composerToolsList', { variant: 'composer' });
+  fillToolsSection('chatAppToolsList', { variant: 'composer' });
   registerToolHandlers();
   initComposerToolsPopover();
+  initChatAppToolsPopover();
   initComposerVoice();
   void initVoiceStatus();
   initAttachments();
@@ -373,7 +377,7 @@ export async function initApp(): Promise<void> {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      closeComposerToolsPopover();
+      closeAllToolsPopovers();
       closeContextUsageBreakdown();
       dismissOpenLayers();
     }

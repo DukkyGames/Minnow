@@ -39,7 +39,7 @@ describe('searchStructured', () => {
       path.join(tempHome, 'tools.json'),
       `${JSON.stringify({
         enabled: {},
-        permissions: { default: {}, perAgent: {}, patterns: [] },
+        permissions: { default: {} },
         keys: { braveApiKey: '', tavilyApiKey: 'tv-test-key' },
         webSearchProvider: 'duckduckgo',
       })}\n`,

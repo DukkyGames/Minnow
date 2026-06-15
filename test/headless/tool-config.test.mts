@@ -40,8 +40,6 @@ describe('headless tool config', () => {
             enabled: { read_file: true },
             permissions: {
               default: { read_file: 'full' },
-              perAgent: {},
-              patterns: [],
             },
             keys: { braveApiKey: '', tavilyApiKey: '' },
             webSearchProvider: 'duckduckgo',
@@ -95,8 +93,6 @@ describe('headless tool config', () => {
       enabled: { read_file: true },
       permissions: {
         default: { read_file: 'full' },
-        perAgent: {},
-        patterns: [],
       },
       keys: { braveApiKey: '', tavilyApiKey: '' },
       webSearchProvider: 'duckduckgo',

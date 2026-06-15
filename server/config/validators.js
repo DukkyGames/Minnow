@@ -479,8 +479,6 @@ export function validateSessionState(raw) {
  * @param {unknown} raw
  * @returns {object}
  */
-const MAX_APPROVAL_PATTERNS = 64;
-
 /** @param {unknown} value */
 function isToolPermissionMode(value) {
   return value === 'full' || value === 'ask' || value === 'off';
@@ -499,66 +497,13 @@ function isLegacyFlatPermissions(permissions) {
   return false;
 }
 
-/** @param {unknown} raw @returns {object | null} */
-function normalizeApprovalPattern(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const row = /** @type {Record<string, unknown>} */ (raw);
-  const id = typeof row.id === 'string' ? row.id.trim() : '';
-  const toolId = typeof row.toolId === 'string' ? row.toolId.trim() : '';
-  const agentScope =
-    row.agentScope === '*' ?
-      '*'
-    : typeof row.agentScope === 'string' ?
-      row.agentScope.trim()
-    : '';
-  const argPath = typeof row.argPath === 'string' ? row.argPath.trim() : '';
-  const match = row.match;
-  const value = typeof row.value === 'string' ? row.value : '';
-  if (!id || !toolId || !agentScope || !argPath || !value) return null;
-  if (match !== 'startsWith' && match !== 'equals') return null;
-  return { id, toolId, agentScope, argPath, match, value };
-}
-
-/** @param {unknown} raw */
-function normalizeApprovalPatterns(raw) {
-  if (!Array.isArray(raw)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of raw) {
-    if (out.length >= MAX_APPROVAL_PATTERNS) break;
-    const pattern = normalizeApprovalPattern(item);
-    if (!pattern || seen.has(pattern.id)) continue;
-    seen.add(pattern.id);
-    out.push(pattern);
-  }
-  return out;
-}
-
-/** @param {unknown} raw */
-function normalizePerAgentMap(raw) {
-  const out = {};
-  if (!raw || typeof raw !== 'object') return out;
-  for (const [agentKey, toolsRaw] of Object.entries(/** @type {Record<string, unknown>} */ (raw))) {
-    if (!agentKey.trim() || !toolsRaw || typeof toolsRaw !== 'object') continue;
-    const tools = {};
-    for (const [toolId, mode] of Object.entries(/** @type {Record<string, unknown>} */ (toolsRaw))) {
-      if (!toolId || !isToolPermissionMode(mode)) continue;
-      tools[toolId] = mode;
-    }
-    if (Object.keys(tools).length > 0) {
-      out[agentKey.trim()] = tools;
-    }
-  }
-  return out;
-}
-
 /**
  * @param {unknown} stored
  * @param {Record<string, string>} seedDefault
  */
 function normalizePermissionsFromStored(stored, seedDefault) {
   if (!stored || typeof stored !== 'object') {
-    return { default: { ...seedDefault }, perAgent: {}, patterns: [] };
+    return { default: { ...seedDefault } };
   }
 
   if (isLegacyFlatPermissions(stored)) {
@@ -567,7 +512,7 @@ function normalizePermissionsFromStored(stored, seedDefault) {
       if (!id || !isToolPermissionMode(value)) continue;
       merged[id] = value;
     }
-    return { default: merged, perAgent: {}, patterns: [] };
+    return { default: merged };
   }
 
   const obj = /** @type {Record<string, unknown>} */ (stored);
@@ -579,11 +524,7 @@ function normalizePermissionsFromStored(stored, seedDefault) {
     }
   }
 
-  return {
-    default: merged,
-    perAgent: normalizePerAgentMap(obj.perAgent),
-    patterns: normalizeApprovalPatterns(obj.patterns),
-  };
+  return { default: merged };
 }
 
 export function normalizeToolConfig(raw) {
@@ -605,7 +546,7 @@ export function normalizeToolConfig(raw) {
 
   const config = {
     enabled,
-    permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
+    permissions: { default: permissionsDefault },
     keys: { braveApiKey: '', tavilyApiKey: '' },
     webSearchProvider: 'duckduckgo',
     toolCache: { enabled: true },

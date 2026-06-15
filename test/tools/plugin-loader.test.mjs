@@ -34,7 +34,7 @@ describe('plugin loader', () => {
 
     await writeConfigJson('tools.json', {
       enabled: {},
-      permissions: { default: {}, perAgent: {}, patterns: [] },
+      permissions: { default: {} },
       keys: { braveApiKey: '' },
       plugins: { echo: { enabled: true } },
     });
@@ -65,7 +65,7 @@ describe('plugin loader', () => {
   test('disabled plugin is not loaded', async () => {
     await writeConfigJson('tools.json', {
       enabled: {},
-      permissions: { default: {}, perAgent: {}, patterns: [] },
+      permissions: { default: {} },
       keys: { braveApiKey: '' },
       plugins: { echo: { enabled: false } },
     });
@@ -75,7 +75,7 @@ describe('plugin loader', () => {
 
     await writeConfigJson('tools.json', {
       enabled: {},
-      permissions: { default: {}, perAgent: {}, patterns: [] },
+      permissions: { default: {} },
       keys: { braveApiKey: '' },
       plugins: { echo: { enabled: true } },
     });
