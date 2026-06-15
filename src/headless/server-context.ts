@@ -2,7 +2,7 @@
  * Injectable base URL for headless CLI — rewrites relative /api/* fetch calls.
  */
 
-let headlessBaseUrl = 'http://127.0.0.1:5173';
+let headlessBaseUrl = 'http://localhost:5173';
 let restoreFetch: (() => void) | null = null;
 
 /** Normalize base URL (no trailing slash). */

@@ -20,6 +20,7 @@ import {
 } from './delivery.js';
 import { schedulerRunHistoryPath } from './paths.js';
 import { resolveJobWorkspacePath } from './workspace.js';
+import { getSchedulerServerBaseUrl } from './server-base-url.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -106,7 +107,7 @@ export async function runStoredJob(storedJob, options = {}) {
   const startedAt = new Date().toISOString();
   const runId = randomUUID();
   const timeoutMs = options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
-  const baseUrl = options.baseUrl ?? `http://127.0.0.1:${process.env.PORT || 5173}`;
+  const baseUrl = options.baseUrl ?? getSchedulerServerBaseUrl();
 
   await mutateStoredJob(jobId, (job) => ({
     ...job,

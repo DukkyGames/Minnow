@@ -16,6 +16,7 @@ import {
   startSchedulerTickLoop,
   stopSchedulerTickLoop,
 } from './server/scheduler/tick.js';
+import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
 import { shutdownAllModelServes } from './server/models/index.js';
@@ -100,7 +101,9 @@ async function main() {
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
   console.log(`Scheduler API: ${localUrl.replace(/\/$/, '')}/api/scheduler/ping`);
-  await startSchedulerTickLoop({ baseUrl: localUrl.replace(/\/$/, '') });
+  const schedulerBaseUrl = localUrl.replace(/\/$/, '');
+  setSchedulerServerBaseUrl(schedulerBaseUrl);
+  await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   const onShutdown = () => {
     stopSchedulerTickLoop();
     shutdownSchedulerRuns();
