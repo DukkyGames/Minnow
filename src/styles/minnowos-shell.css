@@ -677,6 +677,11 @@ html.minnow-os-enabled #osAppsLayer .chat-app-page.is-open {
   width: 100%;
 }
 
+/* In-app dock reveal tab (22px) sits over the stage bottom — lift the composer clear of it. */
+html.minnow-os-enabled:has(.mn-os-dock-shell[data-shell-view='app']) .chat-app-composer {
+  padding-bottom: calc(max(18px, env(safe-area-inset-bottom, 0px)) + 26px);
+}
+
 html.minnow-os-enabled header.topbar.hidden {
   display: none !important;
 }

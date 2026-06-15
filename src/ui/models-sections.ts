@@ -7,6 +7,7 @@ import { mountRecommendSection } from './models/recommend-panel';
 import { mountInstalledSection } from './models/installed-panel';
 import { mountModelsSettingsSection } from './models/models-settings-panel';
 import { reparentSettingsSectionIntoModels } from './models/settings-reparent';
+import { mountVoicePanel } from './models/voice-panel';
 
 /** Map Models routing section ids to legacy settings section ids. */
 const SETTINGS_SECTION_BY_MODELS: Partial<
@@ -30,6 +31,9 @@ export async function renderModelsSection(section: ModelsSectionId): Promise<voi
       break;
     case 'settings':
       await mountModelsSettingsSection();
+      break;
+    case 'voice':
+      mountVoicePanel();
       break;
     default: {
       const settingsId = SETTINGS_SECTION_BY_MODELS[section];

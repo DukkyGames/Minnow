@@ -12,7 +12,8 @@ export type SettingsSearchEntryKind =
   | 'mode'
   | 'expert'
   | 'work-agent'
-  | 'sub-agent';
+  | 'sub-agent'
+  | 'models-section';
 
 /** One searchable destination in the settings page. */
 export type SettingsSearchEntry = {
@@ -21,6 +22,8 @@ export type SettingsSearchEntry = {
   label: string;
   sectionId: SettingsSectionId;
   kind: SettingsSearchEntryKind;
+  /** When set, open Models app instead of settings (e.g. voice I/O). */
+  modelsSection?: string;
   /** DOM anchor via data-settings-search-key after navigation. */
   searchKey?: string;
   keywords?: string[];

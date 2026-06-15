@@ -1339,6 +1339,15 @@ export function mergeConfigMeta(existing, patch) {
     );
   }
 
+  if (p.voice && typeof p.voice === 'object') {
+    base.voice = normalizeVoiceConfig(
+      p.voice,
+      base.voice && typeof base.voice === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.voice)
+        : {},
+    );
+  }
+
   return base;
 }
 
@@ -1419,6 +1428,710 @@ export function normalizeFallbackChainsConfig(raw, existing = {}) {
       roles[role] = normalized;
     }
     base.roles = roles;
+  }
+
+  return base;
+}
+
+const QWEN_CUSTOM_VOICE_06B = 'Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice';
+
+const TTS_VOICES = new Set([
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer',
+  'verse',
+]);
+
+const TTS_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
+
+const STT_RESPONSE_FORMATS = new Set(['json', 'text', 'verbose_json', 'srt', 'vtt']);
+
+/** Clamp a numeric config field to [min, max] with fallback. */
+function clampVoiceNum(value, min, max, fallback) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function isQwen06bCustomVoice(modelId) {
+  return typeof modelId === 'string' && modelId.includes('0.6B-CustomVoice');
+}
+
+/**
+ * Default local Whisper settings (GPU-first when CUDA is available).
+ * @param {boolean} [cudaAvailable]
+ */
+function defaultSttLocal(cudaAvailable = false) {
+  return {
+    modelId: cudaAvailable ? 'openai/whisper-small' : 'openai/whisper-base',
+    language: '',
+    task: 'transcribe',
+    longFormAlgorithm: 'chunked',
+    chunkLengthSeconds: 30,
+    batchSize: 1,
+    returnTimestamps: false,
+    timestampGranularity: 'segment',
+    maxNewTokens: 448,
+    numBeams: 1,
+    conditionOnPrevTokens: false,
+    compressionRatioThreshold: 1.35,
+    temperatureFallback: true,
+    temperature: 0,
+    logprobThreshold: -1,
+    noSpeechThreshold: 0.6,
+    device: 'auto',
+    computeType: 'auto',
+    attnImplementation: 'auto',
+    useSafetensors: true,
+    lowCpuMemUsage: true,
+    torchCompile: false,
+    streamingEnabled: true,
+  };
+}
+
+function defaultSttProvider() {
+  return {
+    providerId: '',
+    model: 'whisper-1',
+    language: 'en',
+    prompt: '',
+    responseFormat: 'json',
+    temperature: 0,
+  };
+}
+
+/**
+ * Default local Qwen3-TTS settings (GPU-first when CUDA is available).
+ * @param {boolean} [cudaAvailable]
+ */
+function defaultTtsLocal(cudaAvailable = false) {
+  return {
+    modelId: QWEN_CUSTOM_VOICE_06B,
+    deviceMap: 'auto',
+    dtype: cudaAvailable ? 'bfloat16' : 'float32',
+    attnImplementation: 'auto',
+    tokenizerModelId: 'Qwen/Qwen3-TTS-Tokenizer-12Hz',
+    mode: 'custom_voice',
+    customVoice: {
+      speaker: 'Ryan',
+      language: 'Auto',
+      instruct: '',
+    },
+    voiceDesign: {
+      language: 'Auto',
+      instruct: '',
+    },
+    voiceClone: {
+      refAudioPath: '',
+      refText: '',
+      xVectorOnlyMode: false,
+      language: 'Auto',
+      savedPromptId: '',
+    },
+    generation: {
+      maxNewTokens: 2048,
+      topP: 1,
+      topK: 50,
+      temperature: 0.9,
+      repetitionPenalty: 1,
+    },
+    streaming: defaultTtsLocalStreaming(),
+  };
+}
+
+/** Default PCM streaming tuning for local Qwen3-TTS (distinct from `tts.streaming` enable flag). */
+function defaultTtsLocalStreaming() {
+  return {
+    emitEveryFrames: 8,
+    decodeWindowFrames: 80,
+    firstChunkEmitEvery: 5,
+    firstChunkDecodeWindow: 48,
+    overlapSamples: 512,
+    repetitionPenalty: 1.05,
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeTtsLocalStreaming(raw, base) {
+  const out = { ...base };
+  out.emitEveryFrames = clampVoiceNum(raw.emitEveryFrames, 1, 32, out.emitEveryFrames);
+  out.decodeWindowFrames = clampVoiceNum(raw.decodeWindowFrames, 16, 256, out.decodeWindowFrames);
+  out.firstChunkEmitEvery = clampVoiceNum(raw.firstChunkEmitEvery, 1, 32, out.firstChunkEmitEvery);
+  out.firstChunkDecodeWindow = clampVoiceNum(
+    raw.firstChunkDecodeWindow,
+    16,
+    256,
+    out.firstChunkDecodeWindow,
+  );
+  out.overlapSamples = clampVoiceNum(raw.overlapSamples, 0, 4096, out.overlapSamples);
+  out.repetitionPenalty = clampVoiceNum(raw.repetitionPenalty, 0.5, 2, out.repetitionPenalty);
+  return out;
+}
+
+function defaultTtsProvider() {
+  return {
+    providerId: '',
+    model: 'tts-1',
+    voice: 'alloy',
+    speed: 1,
+    format: 'mp3',
+  };
+}
+
+function defaultTtsBrowser() {
+  return {
+    voiceUri: '',
+    rate: 1,
+    pitch: 1,
+    volume: 1,
+  };
+}
+
+function defaultVoiceAudio() {
+  return {
+    inputDeviceId: '',
+    outputDeviceId: '',
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+}
+
+/**
+ * Default voice I/O config for new homes and merge fallbacks.
+ * @param {boolean} [cudaAvailable] When true, prefer whisper-small and bfloat16 TTS.
+ * @returns {object}
+ */
+export function defaultVoiceConfig(cudaAvailable = false) {
+  const sttLocal = defaultSttLocal(cudaAvailable);
+  const ttsLocal = defaultTtsLocal(cudaAvailable);
+  const sttProvider = defaultSttProvider();
+  const ttsProvider = defaultTtsProvider();
+  return {
+    audio: defaultVoiceAudio(),
+    stt: {
+      enabled: true,
+      backend: 'local',
+      local: sttLocal,
+      provider: sttProvider,
+      providerId: '',
+      model: sttLocal.modelId,
+      language: sttLocal.language,
+    },
+    tts: {
+      enabled: true,
+      backend: 'local',
+      streaming: true,
+      local: ttsLocal,
+      provider: ttsProvider,
+      browser: defaultTtsBrowser(),
+      providerId: '',
+      model: ttsLocal.modelId,
+      voice: ttsLocal.customVoice.speaker,
+      speed: 1,
+      format: 'wav',
+    },
+    limits: {
+      maxAudioBytes: 25 * 1024 * 1024,
+      maxDurationSeconds: 300,
+      silenceTimeoutSeconds: 2.5,
+    },
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeSttLocal(raw, base) {
+  const out = { ...base };
+  if (typeof raw.modelId === 'string' && raw.modelId.trim()) out.modelId = raw.modelId.trim();
+  if (typeof raw.language === 'string') out.language = raw.language.trim();
+  if (raw.task === 'transcribe' || raw.task === 'translate') out.task = raw.task;
+  if (raw.longFormAlgorithm === 'sequential' || raw.longFormAlgorithm === 'chunked') {
+    out.longFormAlgorithm = raw.longFormAlgorithm;
+  }
+  out.chunkLengthSeconds = clampVoiceNum(raw.chunkLengthSeconds, 10, 30, out.chunkLengthSeconds);
+  out.batchSize = clampVoiceNum(raw.batchSize, 1, 16, out.batchSize);
+  if (typeof raw.returnTimestamps === 'boolean') out.returnTimestamps = raw.returnTimestamps;
+  if (raw.timestampGranularity === 'segment' || raw.timestampGranularity === 'word') {
+    out.timestampGranularity = raw.timestampGranularity;
+  }
+  out.maxNewTokens = clampVoiceNum(raw.maxNewTokens, 1, 448, out.maxNewTokens);
+  out.numBeams = clampVoiceNum(raw.numBeams, 1, 5, out.numBeams);
+  if (typeof raw.conditionOnPrevTokens === 'boolean') {
+    out.conditionOnPrevTokens = raw.conditionOnPrevTokens;
+  }
+  out.compressionRatioThreshold = clampVoiceNum(
+    raw.compressionRatioThreshold,
+    0.5,
+    2,
+    out.compressionRatioThreshold,
+  );
+  if (typeof raw.temperatureFallback === 'boolean') out.temperatureFallback = raw.temperatureFallback;
+  out.temperature = clampVoiceNum(raw.temperature, 0, 1, out.temperature);
+  out.logprobThreshold = clampVoiceNum(raw.logprobThreshold, -2, 0, out.logprobThreshold);
+  out.noSpeechThreshold = clampVoiceNum(raw.noSpeechThreshold, 0, 1, out.noSpeechThreshold);
+  if (raw.device === 'auto' || raw.device === 'cpu' || raw.device === 'cuda') out.device = raw.device;
+  if (
+    raw.computeType === 'auto' ||
+    raw.computeType === 'float16' ||
+    raw.computeType === 'bfloat16' ||
+    raw.computeType === 'float32'
+  ) {
+    out.computeType = raw.computeType;
+  }
+  if (
+    raw.attnImplementation === 'auto' ||
+    raw.attnImplementation === 'sdpa' ||
+    raw.attnImplementation === 'flash_attention_2'
+  ) {
+    out.attnImplementation = raw.attnImplementation;
+  }
+  if (typeof raw.useSafetensors === 'boolean') out.useSafetensors = raw.useSafetensors;
+  if (typeof raw.lowCpuMemUsage === 'boolean') out.lowCpuMemUsage = raw.lowCpuMemUsage;
+  if (typeof raw.torchCompile === 'boolean') out.torchCompile = raw.torchCompile;
+  if (typeof raw.streamingEnabled === 'boolean') out.streamingEnabled = raw.streamingEnabled;
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeSttProvider(raw, base) {
+  const out = { ...base };
+  if (typeof raw.providerId === 'string') out.providerId = raw.providerId.trim();
+  if (typeof raw.model === 'string' && raw.model.trim()) out.model = raw.model.trim();
+  if (typeof raw.language === 'string') out.language = raw.language.trim();
+  if (typeof raw.prompt === 'string') out.prompt = raw.prompt;
+  if (typeof raw.responseFormat === 'string' && STT_RESPONSE_FORMATS.has(raw.responseFormat)) {
+    out.responseFormat = raw.responseFormat;
+  }
+  out.temperature = clampVoiceNum(raw.temperature, 0, 1, out.temperature);
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeTtsLocal(raw, base) {
+  const out = { ...base };
+  if (typeof raw.modelId === 'string' && raw.modelId.trim()) out.modelId = raw.modelId.trim();
+  if (raw.deviceMap === 'auto' || raw.deviceMap === 'cpu' || raw.deviceMap === 'cuda:0') {
+    out.deviceMap = raw.deviceMap;
+  }
+  if (
+    raw.dtype === 'auto' ||
+    raw.dtype === 'bfloat16' ||
+    raw.dtype === 'float16' ||
+    raw.dtype === 'float32'
+  ) {
+    out.dtype = raw.dtype;
+  }
+  if (
+    raw.attnImplementation === 'auto' ||
+    raw.attnImplementation === 'flash_attention_2' ||
+    raw.attnImplementation === 'sdpa' ||
+    raw.attnImplementation === 'eager'
+  ) {
+    out.attnImplementation = raw.attnImplementation;
+  }
+  if (typeof raw.tokenizerModelId === 'string' && raw.tokenizerModelId.trim()) {
+    out.tokenizerModelId = raw.tokenizerModelId.trim();
+  }
+  if (raw.mode === 'custom_voice' || raw.mode === 'voice_design' || raw.mode === 'voice_clone') {
+    out.mode = raw.mode;
+  }
+  if (raw.customVoice && typeof raw.customVoice === 'object') {
+    const cv = /** @type {Record<string, unknown>} */ (raw.customVoice);
+    if (typeof cv.speaker === 'string' && cv.speaker.trim()) {
+      out.customVoice.speaker = cv.speaker.trim();
+    }
+    if (typeof cv.language === 'string') out.customVoice.language = cv.language.trim();
+    if (typeof cv.instruct === 'string') out.customVoice.instruct = cv.instruct;
+  }
+  if (raw.voiceDesign && typeof raw.voiceDesign === 'object') {
+    const vd = /** @type {Record<string, unknown>} */ (raw.voiceDesign);
+    if (typeof vd.language === 'string') out.voiceDesign.language = vd.language.trim();
+    if (typeof vd.instruct === 'string') out.voiceDesign.instruct = vd.instruct;
+  }
+  if (raw.voiceClone && typeof raw.voiceClone === 'object') {
+    const vc = /** @type {Record<string, unknown>} */ (raw.voiceClone);
+    if (typeof vc.refAudioPath === 'string') out.voiceClone.refAudioPath = vc.refAudioPath.trim();
+    if (typeof vc.refText === 'string') out.voiceClone.refText = vc.refText;
+    if (typeof vc.xVectorOnlyMode === 'boolean') out.voiceClone.xVectorOnlyMode = vc.xVectorOnlyMode;
+    if (typeof vc.language === 'string') out.voiceClone.language = vc.language.trim();
+    if (typeof vc.savedPromptId === 'string') {
+      out.voiceClone.savedPromptId = vc.savedPromptId.trim();
+    }
+  }
+  if (raw.generation && typeof raw.generation === 'object') {
+    const gen = /** @type {Record<string, unknown>} */ (raw.generation);
+    out.generation.maxNewTokens = clampVoiceNum(
+      gen.maxNewTokens,
+      256,
+      4096,
+      out.generation.maxNewTokens,
+    );
+    out.generation.topP = clampVoiceNum(gen.topP, 0, 1, out.generation.topP);
+    out.generation.topK = clampVoiceNum(gen.topK, 0, 100, out.generation.topK);
+    out.generation.temperature = clampVoiceNum(gen.temperature, 0, 2, out.generation.temperature);
+    out.generation.repetitionPenalty = clampVoiceNum(
+      gen.repetitionPenalty,
+      0,
+      2,
+      out.generation.repetitionPenalty,
+    );
+  }
+  if (raw.streaming && typeof raw.streaming === 'object') {
+    out.streaming = normalizeTtsLocalStreaming(
+      /** @type {Record<string, unknown>} */ (raw.streaming),
+      out.streaming ?? defaultTtsLocalStreaming(),
+    );
+  } else if (!out.streaming) {
+    out.streaming = defaultTtsLocalStreaming();
+  }
+  if (isQwen06bCustomVoice(out.modelId)) {
+    out.customVoice.instruct = '';
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeTtsProvider(raw, base) {
+  const out = { ...base };
+  if (typeof raw.providerId === 'string') out.providerId = raw.providerId.trim();
+  if (typeof raw.model === 'string' && raw.model.trim()) out.model = raw.model.trim();
+  if (typeof raw.voice === 'string' && raw.voice.trim()) {
+    const voice = raw.voice.trim().toLowerCase();
+    out.voice = TTS_VOICES.has(voice) ? voice : out.voice;
+  }
+  out.speed = clampVoiceNum(raw.speed, 0.25, 4, out.speed);
+  if (typeof raw.format === 'string' && TTS_FORMATS.has(raw.format.trim().toLowerCase())) {
+    out.format = raw.format.trim().toLowerCase();
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeTtsBrowser(raw, base) {
+  const out = { ...base };
+  if (typeof raw.voiceUri === 'string') out.voiceUri = raw.voiceUri.trim();
+  out.rate = clampVoiceNum(raw.rate, 0.25, 4, out.rate);
+  out.pitch = clampVoiceNum(raw.pitch, 0, 2, out.pitch);
+  out.volume = clampVoiceNum(raw.volume, 0, 1, out.volume);
+  return out;
+}
+
+/** Sync legacy flat STT/TTS fields for provider middleware compatibility. */
+function syncLegacyVoiceFields(stt, tts) {
+  if (stt.backend === 'provider') {
+    stt.providerId = stt.provider.providerId;
+    stt.model = stt.provider.model;
+    stt.language = stt.provider.language;
+  } else {
+    stt.providerId = '';
+    stt.model = stt.local.modelId;
+    stt.language = stt.local.language;
+  }
+
+  if (tts.backend === 'provider') {
+    tts.providerId = tts.provider.providerId;
+    tts.model = tts.provider.model;
+    tts.voice = tts.provider.voice;
+    tts.speed = tts.provider.speed;
+    tts.format = tts.provider.format;
+  } else if (tts.backend === 'browser') {
+    tts.providerId = 'browser';
+    tts.model = '';
+    tts.voice = tts.browser.voiceUri;
+    tts.speed = tts.browser.rate;
+    tts.format = 'wav';
+  } else {
+    tts.providerId = '';
+    tts.model = tts.local.modelId;
+    tts.voice = tts.local.customVoice.speaker;
+    tts.speed = 1;
+    tts.format = 'wav';
+  }
+}
+
+/**
+ * Normalize voice STT/TTS settings persisted in config.json.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ * @param {{ cudaAvailable?: boolean, installedManifest?: { stt?: unknown[], tts?: unknown[] } }} [options]
+ */
+export function normalizeVoiceConfig(raw, existing = {}, options = {}) {
+  const cudaAvailable = options.cudaAvailable === true;
+  const defaults = defaultVoiceConfig(cudaAvailable);
+  const base = {
+    audio: {
+      ...defaults.audio,
+      ...(existing.audio && typeof existing.audio === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.audio)
+        : {}),
+    },
+    stt: {
+      ...defaults.stt,
+      local: normalizeSttLocal(
+        existing.stt &&
+          typeof existing.stt === 'object' &&
+          existing.stt.local &&
+          typeof existing.stt.local === 'object'
+          ? /** @type {Record<string, unknown>} */ (existing.stt.local)
+          : {},
+        defaults.stt.local,
+      ),
+      provider: normalizeSttProvider(
+        existing.stt &&
+          typeof existing.stt === 'object' &&
+          existing.stt.provider &&
+          typeof existing.stt.provider === 'object'
+          ? /** @type {Record<string, unknown>} */ (existing.stt.provider)
+          : {},
+        defaults.stt.provider,
+      ),
+    },
+    tts: {
+      ...defaults.tts,
+      local: normalizeTtsLocal(
+        existing.tts &&
+          typeof existing.tts === 'object' &&
+          existing.tts.local &&
+          typeof existing.tts.local === 'object'
+          ? /** @type {Record<string, unknown>} */ (existing.tts.local)
+          : {},
+        defaults.tts.local,
+      ),
+      provider: normalizeTtsProvider(
+        existing.tts &&
+          typeof existing.tts === 'object' &&
+          existing.tts.provider &&
+          typeof existing.tts.provider === 'object'
+          ? /** @type {Record<string, unknown>} */ (existing.tts.provider)
+          : {},
+        defaults.tts.provider,
+      ),
+      browser: normalizeTtsBrowser(
+        existing.tts &&
+          typeof existing.tts === 'object' &&
+          existing.tts.browser &&
+          typeof existing.tts.browser === 'object'
+          ? /** @type {Record<string, unknown>} */ (existing.tts.browser)
+          : {},
+        defaults.tts.browser,
+      ),
+    },
+    limits: {
+      ...defaults.limits,
+      ...(existing.limits && typeof existing.limits === 'object'
+        ? /** @type {Record<string, unknown>} */ (existing.limits)
+        : {}),
+    },
+  };
+
+  if (existing.stt && typeof existing.stt === 'object') {
+    const estt = /** @type {Record<string, unknown>} */ (existing.stt);
+    if (typeof estt.enabled === 'boolean') base.stt.enabled = estt.enabled;
+    if (estt.backend === 'local' || estt.backend === 'provider') base.stt.backend = estt.backend;
+  }
+  if (existing.tts && typeof existing.tts === 'object') {
+    const etts = /** @type {Record<string, unknown>} */ (existing.tts);
+    if (typeof etts.enabled === 'boolean') base.tts.enabled = etts.enabled;
+    if (typeof etts.streaming === 'boolean') base.tts.streaming = etts.streaming;
+    if (etts.backend === 'local' || etts.backend === 'provider' || etts.backend === 'browser') {
+      base.tts.backend = etts.backend;
+    }
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    syncLegacyVoiceFields(base.stt, base.tts);
+    return base;
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw);
+
+  if (row.audio && typeof row.audio === 'object') {
+    const audio = /** @type {Record<string, unknown>} */ (row.audio);
+    if (typeof audio.inputDeviceId === 'string') {
+      base.audio.inputDeviceId = audio.inputDeviceId.trim();
+    }
+    if (typeof audio.outputDeviceId === 'string') {
+      base.audio.outputDeviceId = audio.outputDeviceId.trim();
+    }
+    if (typeof audio.echoCancellation === 'boolean') {
+      base.audio.echoCancellation = audio.echoCancellation;
+    }
+    if (typeof audio.noiseSuppression === 'boolean') {
+      base.audio.noiseSuppression = audio.noiseSuppression;
+    }
+    if (typeof audio.autoGainControl === 'boolean') {
+      base.audio.autoGainControl = audio.autoGainControl;
+    }
+  }
+
+  if (row.stt && typeof row.stt === 'object') {
+    const stt = /** @type {Record<string, unknown>} */ (row.stt);
+    if (typeof stt.enabled === 'boolean') base.stt.enabled = stt.enabled;
+    if (stt.local && typeof stt.local === 'object') {
+      base.stt.local = normalizeSttLocal(
+        /** @type {Record<string, unknown>} */ (stt.local),
+        base.stt.local,
+      );
+    }
+    if (stt.provider && typeof stt.provider === 'object') {
+      base.stt.provider = normalizeSttProvider(
+        /** @type {Record<string, unknown>} */ (stt.provider),
+        base.stt.provider,
+      );
+    }
+    if (typeof stt.providerId === 'string' && stt.providerId.trim()) {
+      base.stt.provider.providerId = stt.providerId.trim();
+    }
+    if (typeof stt.model === 'string' && stt.model.trim() && !stt.local) {
+      base.stt.provider.model = stt.model.trim();
+    }
+    if (typeof stt.language === 'string' && stt.language.trim() && !stt.local) {
+      base.stt.provider.language = stt.language.trim();
+    }
+    if (stt.backend === 'local' || stt.backend === 'provider') {
+      base.stt.backend = stt.backend;
+    } else if (base.stt.provider.providerId) {
+      base.stt.backend = 'provider';
+    } else {
+      base.stt.backend = 'local';
+    }
+  }
+
+  if (row.tts && typeof row.tts === 'object') {
+    const tts = /** @type {Record<string, unknown>} */ (row.tts);
+    if (typeof tts.enabled === 'boolean') base.tts.enabled = tts.enabled;
+    if (typeof tts.streaming === 'boolean') base.tts.streaming = tts.streaming;
+    if (tts.local && typeof tts.local === 'object') {
+      base.tts.local = normalizeTtsLocal(
+        /** @type {Record<string, unknown>} */ (tts.local),
+        base.tts.local,
+      );
+    }
+    if (tts.provider && typeof tts.provider === 'object') {
+      base.tts.provider = normalizeTtsProvider(
+        /** @type {Record<string, unknown>} */ (tts.provider),
+        base.tts.provider,
+      );
+    }
+    if (tts.browser && typeof tts.browser === 'object') {
+      base.tts.browser = normalizeTtsBrowser(
+        /** @type {Record<string, unknown>} */ (tts.browser),
+        base.tts.browser,
+      );
+    }
+    if (typeof tts.providerId === 'string' && tts.providerId.trim()) {
+      const pid = tts.providerId.trim();
+      if (pid === 'browser') {
+        base.tts.backend = 'browser';
+      } else {
+        base.tts.provider.providerId = pid;
+      }
+    }
+    if (typeof tts.model === 'string' && tts.model.trim() && !tts.local) {
+      base.tts.provider.model = tts.model.trim();
+    }
+    if (typeof tts.voice === 'string' && tts.voice.trim() && !tts.local) {
+      const voice = tts.voice.trim().toLowerCase();
+      base.tts.provider.voice = TTS_VOICES.has(voice) ? voice : base.tts.provider.voice;
+    }
+    if (typeof tts.speed === 'number' && Number.isFinite(tts.speed) && !tts.provider) {
+      base.tts.provider.speed = clampVoiceNum(tts.speed, 0.25, 4, base.tts.provider.speed);
+    }
+    if (typeof tts.format === 'string' && tts.format.trim() && !tts.provider) {
+      const format = tts.format.trim().toLowerCase();
+      if (TTS_FORMATS.has(format)) base.tts.provider.format = format;
+    }
+    if (tts.backend === 'local' || tts.backend === 'provider' || tts.backend === 'browser') {
+      base.tts.backend = tts.backend;
+    } else if (base.tts.provider.providerId) {
+      base.tts.backend = 'provider';
+    } else if (tts.providerId === 'browser') {
+      base.tts.backend = 'browser';
+    } else {
+      base.tts.backend = 'local';
+    }
+  }
+
+  if (row.limits && typeof row.limits === 'object') {
+    const limits = /** @type {Record<string, unknown>} */ (row.limits);
+    if (typeof limits.maxAudioBytes === 'number' && Number.isFinite(limits.maxAudioBytes)) {
+      base.limits.maxAudioBytes = Math.max(1024, Math.round(limits.maxAudioBytes));
+    }
+    if (
+      typeof limits.maxDurationSeconds === 'number' &&
+      Number.isFinite(limits.maxDurationSeconds)
+    ) {
+      base.limits.maxDurationSeconds = Math.max(1, Math.round(limits.maxDurationSeconds));
+    }
+    if (
+      typeof limits.silenceTimeoutSeconds === 'number' &&
+      Number.isFinite(limits.silenceTimeoutSeconds)
+    ) {
+      base.limits.silenceTimeoutSeconds = Math.max(
+        0,
+        Math.min(30, limits.silenceTimeoutSeconds),
+      );
+    }
+  }
+
+  syncLegacyVoiceFields(base.stt, base.tts);
+
+  const manifest = options.installedManifest;
+  if (manifest && typeof manifest === 'object') {
+    const sttRows = Array.isArray(manifest.stt) ? manifest.stt : [];
+    const ttsRows = Array.isArray(manifest.tts) ? manifest.tts : [];
+    const hasLocalStt = sttRows.some(
+      (row) =>
+        row &&
+        typeof row === 'object' &&
+        /** @type {{ mode?: string }} */ (row).mode !== 'tokenizer',
+    );
+    const hasLocalTts = ttsRows.some(
+      (row) =>
+        row &&
+        typeof row === 'object' &&
+        /** @type {{ mode?: string }} */ (row).mode !== 'tokenizer',
+    );
+    if (
+      base.stt.backend === 'local' &&
+      !hasLocalStt &&
+      typeof base.stt.provider?.providerId === 'string' &&
+      base.stt.provider.providerId.trim()
+    ) {
+      base.stt.backend = 'provider';
+    }
+    if (
+      base.tts.backend === 'local' &&
+      !hasLocalTts &&
+      typeof base.tts.provider?.providerId === 'string' &&
+      base.tts.provider.providerId.trim()
+    ) {
+      base.tts.backend = 'provider';
+    }
+    syncLegacyVoiceFields(base.stt, base.tts);
   }
 
   return base;

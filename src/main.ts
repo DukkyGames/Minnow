@@ -13,6 +13,7 @@ import './styles/model-select.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
+import './styles/voice.css';
 import './styles/branch-picker.css';
 import './styles/thoughts.css';
 import './styles/code-change-strip.css';
@@ -156,6 +157,8 @@ import {
   closeComposerToolsPopover,
   initComposerToolsPopover,
 } from './ui/composer-tools-popover';
+import { initComposerVoice } from './ui/composer-voice';
+import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
 import {
   closeMobileFileSidebar,
@@ -263,6 +266,8 @@ export async function initApp(): Promise<void> {
   fillToolsSection('composerToolsList', { variant: 'composer' });
   registerToolHandlers();
   initComposerToolsPopover();
+  initComposerVoice();
+  void initVoiceStatus();
   initAttachments();
   initContextUsageRing();
   initModeSelector();

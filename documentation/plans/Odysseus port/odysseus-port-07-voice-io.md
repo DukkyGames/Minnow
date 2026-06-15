@@ -3,7 +3,7 @@
 Tier: 2  
 Effort: M-L  
 Priority: Medium  
-Status: Planned  
+Status: Shipped (MIN-123)  
 Depends on: #12 for provider credentials  
 Linear: [MIN-123](https://linear.app/minnowai/issue/MIN-123/odysseus-port-07-voice-io)
 
@@ -180,17 +180,17 @@ Recommendation: ship **provider-backed v1**; add browser TTS as optional fallbac
 
 ## Implementation TODOs
 
-- [ ] Add `voice` config block to `config.json` metadata
-- [ ] Add browser Web Speech API fallback as Phase 0 or explicitly document why it is deferred
-- [ ] Add `server/tts/` proxy route
-- [ ] Add assistant message play button and audio playback
-- [ ] Add TTS settings UI
-- [ ] Add `server/stt/` transcription route
-- [ ] Port audio upload byte/duration limits from Odysseus
-- [ ] Add mic permission/capture UX using `MediaRecorder`
-- [ ] Insert transcript into `getActiveComposerSurface().inputEl`
-- [ ] Add optional local Whisper backend design notes after provider path works
-- [ ] Update `documentation/context.md`
+- [x] Add `voice` config block to `config.json` metadata
+- [x] Add browser Web Speech API fallback as Phase 0 or explicitly document why it is deferred
+- [x] Add `server/tts/` proxy route
+- [x] Add assistant message play button and audio playback
+- [x] Add TTS settings UI
+- [x] Add `server/stt/` transcription route
+- [x] Port audio upload byte/duration limits from Odysseus
+- [x] Add mic permission/capture UX using `MediaRecorder`
+- [x] Insert transcript into `getActiveComposerSurface().inputEl`
+- [x] Add optional local Whisper backend design notes after provider path works
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

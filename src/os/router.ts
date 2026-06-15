@@ -24,6 +24,7 @@ const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
   usage: 'usage',
   sampler: 'sampler',
   thinking: 'thinking',
+  voice: 'voice',
 };
 
 /** Map legacy hashes to MinnowOS routes before parsing. */

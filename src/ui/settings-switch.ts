@@ -67,6 +67,22 @@ export function createSettingsToggleRow(
   return { row, input };
 }
 
+/** Label text from a legacy `<label class="settings-toggle-row">` (span child or bare text). */
+function readLegacyToggleRowLabel(parent: HTMLElement, input: HTMLInputElement): string {
+  const spanLabel = parent.querySelector(':scope > span');
+  if (spanLabel?.textContent?.trim()) {
+    return spanLabel.textContent.trim();
+  }
+  const textParts: string[] = [];
+  for (const node of parent.childNodes) {
+    if (node.nodeType !== Node.TEXT_NODE) continue;
+    const trimmed = node.textContent?.trim();
+    if (trimmed) textParts.push(trimmed);
+  }
+  if (textParts.length > 0) return textParts.join(' ');
+  return input.getAttribute('aria-label')?.trim() ?? '';
+}
+
 function copyInputState(from: HTMLInputElement, to: HTMLInputElement): void {
   for (const attr of ['id', 'name', 'checked', 'disabled'] as const) {
     if (attr === 'checked' || attr === 'disabled') {
@@ -95,11 +111,10 @@ export function wrapCheckboxAsSwitch(input: HTMLInputElement): HTMLInputElement 
   switchInput.setAttribute('role', 'switch');
 
   if (parent.tagName === 'LABEL' && parent.classList.contains('settings-toggle-row')) {
-    const text =
-      parent.querySelector(':scope > span')?.textContent?.trim() ||
-      switchInput.getAttribute('aria-label') ||
-      '';
-    const row = createSettingsToggleRow(text, {});
+    const text = readLegacyToggleRowLabel(parent, switchInput);
+    const row = createSettingsToggleRow(text, {
+      searchKey: parent.dataset.settingsSearchKey,
+    });
     copyInputState(input, row.input);
     if (switchInput.getAttribute('aria-label')) {
       row.input.setAttribute('aria-label', switchInput.getAttribute('aria-label')!);

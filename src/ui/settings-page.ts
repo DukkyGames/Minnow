@@ -51,8 +51,10 @@ function getChatShell(): HTMLElement | null {
 function parseHashSection(): SettingsSectionId {
   const hash = window.location.hash.replace(/^#\/?/, '');
   const match = hash.match(/^settings(?:\/([\w-]+))?/);
-  const id = match?.[1] as SettingsSectionId | undefined;
-  if (id && SECTIONS.includes(id)) return id;
+  const id = match?.[1];
+  if (id === 'voice') return 'general';
+  const sectionId = id as SettingsSectionId | undefined;
+  if (sectionId && SECTIONS.includes(sectionId)) return sectionId;
   return 'general';
 }
 
@@ -271,6 +273,10 @@ function onHashChange(): void {
     return;
   }
   if (hash.startsWith('#/settings')) {
+    if (hash === '#/settings/voice' || hash.startsWith('#/settings/voice/')) {
+      void import('./models-page').then((m) => m.openModels('voice'));
+      return;
+    }
     void import('./global-bugs-page').then((m) => {
       if (m.isGlobalBugsPageOpen()) m.closeGlobalBugs();
     });

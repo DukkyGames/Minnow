@@ -111,12 +111,41 @@ export type ValidateBoardInitResult =
   | { ok: true; args: BoardInitArgs }
   | { ok: false; error: string };
 
+/** Coerce JSON array fields some models stringify in tool arguments. */
+function coerceToolArrayField(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Normalize board_init payload shape before validation. */
+export function normalizeBoardInitArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const tasks = coerceToolArrayField(args.tasks);
+  const waves = coerceToolArrayField(args.waves);
+  return {
+    ...args,
+    ...(tasks ? { tasks } : {}),
+    ...(waves ? { waves } : {}),
+  };
+}
+
 /** Validate board_init arguments (exported for tests). */
 export function validateBoardInitArgs(
   args: Record<string, unknown>,
   chat: Chat | null,
 ): ValidateBoardInitResult {
-  const plan_path = typeof args.plan_path === 'string' ? args.plan_path.trim() : '';
+  const normalized = normalizeBoardInitArgs(args);
+  const plan_path =
+    typeof normalized.plan_path === 'string' ? normalized.plan_path.trim() : '';
   if (!plan_path) return { ok: false, error: 'Error: board_init requires "plan_path"' };
 
   if (chat?.orchestratePlanPath && chat.orchestratePlanPath !== plan_path) {
@@ -126,16 +155,16 @@ export function validateBoardInitArgs(
     };
   }
 
-  if (!Array.isArray(args.tasks) || !args.tasks.length) {
+  if (!Array.isArray(normalized.tasks) || !normalized.tasks.length) {
     return { ok: false, error: 'Error: board_init requires non-empty "tasks"' };
   }
-  if (!Array.isArray(args.waves) || !args.waves.length) {
+  if (!Array.isArray(normalized.waves) || !normalized.waves.length) {
     return { ok: false, error: 'Error: board_init requires non-empty "waves"' };
   }
 
   const waveIds = new Set<number | string>();
   const parsedWaves: Array<{ id: number | string }> = [];
-  for (const w of args.waves) {
+  for (const w of normalized.waves) {
     if (!w || typeof w !== 'object') {
       return { ok: false, error: 'Error: each wave must have an "id"' };
     }
@@ -148,7 +177,7 @@ export function validateBoardInitArgs(
 
   const taskIds = new Set<string>();
   const parsedTasks: BoardInitArgs['tasks'] = [];
-  for (const item of args.tasks) {
+  for (const item of normalized.tasks) {
     if (!item || typeof item !== 'object') {
       return { ok: false, error: 'Error: each task must have id, title, wave, category' };
     }
