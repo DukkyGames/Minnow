@@ -89,6 +89,7 @@ const SCAFFOLD_DIRS = [
   'scheduler-runs',
   'research',
   'research/cache',
+  'tts-cache',
 ];
 
 const DEFAULT_META = {
@@ -257,6 +258,27 @@ const DEFAULT_META = {
     tabSize: 2,
     wordWrap: false,
     renderWhitespace: false,
+  },
+  voice: {
+    stt: {
+      enabled: true,
+      providerId: '',
+      model: 'whisper-1',
+      language: 'en',
+    },
+    tts: {
+      enabled: true,
+      providerId: '',
+      model: 'tts-1',
+      voice: 'alloy',
+      speed: 1.0,
+      format: 'mp3',
+    },
+    limits: {
+      maxAudioBytes: 25 * 1024 * 1024,
+      maxDurationSeconds: 300,
+      silenceTimeoutSeconds: 2.5,
+    },
   },
 };
 

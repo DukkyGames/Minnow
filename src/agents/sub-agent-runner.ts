@@ -4,13 +4,20 @@
 
 import {
   extractMessageText,
+  extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
   mergeToolCallDelta,
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
-import { StreamingContentAccumulator } from '../api/message-content';
+import {
+  extractInlineThinkingFromContent,
+  HarmonyChannelRouter,
+  InlineContentThinkingRouter,
+  modelLikelyUsesInlineThinking,
+  type RoutedContentPart,
+} from '../api/inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import {
   createSseEventBuffer,
@@ -171,12 +178,62 @@ async function streamSubAgentTurn(
     throw new Error(`HTTP ${res.status}: ${err}`);
   }
 
-  const contentAcc = new StreamingContentAccumulator();
+  const modelId = body.model ?? '';
+  const inlineRouter = new InlineContentThinkingRouter({
+    thinkingModel: modelLikelyUsesInlineThinking(modelId),
+  });
+  const harmonyRouter = new HarmonyChannelRouter();
+  let proseText = '';
   let reasoningText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+
+  function processRoutedParts(parts: RoutedContentPart[]): void {
+    for (const [text, isThinking] of parts) {
+      if (isThinking) {
+        if (text) {
+          reasoningText += text;
+        }
+        continue;
+      }
+      if (!text) {
+        continue;
+      }
+      if (tFirst == null) tFirst = performance.now();
+      proseText += text;
+      onDelta?.(proseText);
+    }
+  }
+
+  function routeContentDelta(delta: string): void {
+    if (!delta) {
+      return;
+    }
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          reasoningText += harmonyText;
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+  }
+
+  function flushContentRouters(): void {
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          reasoningText += harmonyText;
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+    processRoutedParts(inlineRouter.flush());
+  }
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -185,16 +242,14 @@ async function streamSubAgentTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
-    contentAcc.ingestChoice(chunk.choices?.[0]);
     const reasoningDelta = extractReasoningDelta(chunk);
     if (reasoningDelta) {
       reasoningText += reasoningDelta;
     }
-    const delta = contentAcc.getText();
-    if (delta && tFirst == null) {
-      tFirst = performance.now();
+    const contentDelta = extractStreamDelta(chunk);
+    if (contentDelta) {
+      routeContentDelta(contentDelta);
     }
-    onDelta?.(delta);
   }
 
   while (true) {
@@ -205,7 +260,14 @@ async function streamSubAgentTurn(
 
   flushSseEventBuffer(sseBuffer, handleChunk);
 
-  const fullText = contentAcc.getText();
+  flushContentRouters();
+
+  let fullText = proseText;
+  const split = extractInlineThinkingFromContent(fullText);
+  if (split.thinking.length && split.reply.trim()) {
+    reasoningText += split.thinking.join('\n\n');
+    fullText = split.reply;
+  }
   const streamedToolCalls = finalizeToolCalls(toolAcc);
   const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls);
   const finishReason =

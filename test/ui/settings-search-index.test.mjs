@@ -30,6 +30,16 @@ describe('settings-search-index', () => {
     assert.ok(features.keywords?.includes('orchestration'));
   });
 
+  test('voice keywords route to Models app entry', () => {
+    const index = buildSettingsSearchIndex();
+    const voice = index.find((e) => e.id === 'models:voice');
+    assert.ok(voice);
+    assert.equal(voice.kind, 'models-section');
+    assert.equal(voice.modelsSection, 'voice');
+    assert.ok(voice.keywords?.includes('stt'));
+    assert.ok(voice.keywords?.includes('tts'));
+  });
+
   test('servers section includes searxng and managed server keywords', () => {
     const index = buildSettingsSearchIndex();
     const servers = index.find((e) => e.id === 'section:servers');

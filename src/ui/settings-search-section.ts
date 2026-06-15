@@ -80,7 +80,9 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   providerField.append(providerLabel, providerSelect);
   providerGroup.appendChild(providerField);
 
-  const searxngField = el('div', 'settings-field');
+  const searxngField = el('div', 'settings-field settings-search-url-field');
+
+  const searxngEditable = el('div', 'settings-search-url-editable');
   const searxngLabel = el('label', 'settings-field-label', 'SearXNG base URL');
   searxngLabel.htmlFor = 'settingsSearxngUrl';
   const searxngInput = document.createElement('input');
@@ -89,17 +91,34 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   searxngInput.className = 'settings-input';
   searxngInput.placeholder = 'http://localhost:8080';
   searxngInput.autocomplete = 'off';
-  searxngField.append(searxngLabel, searxngInput);
+  searxngEditable.append(searxngLabel, searxngInput);
 
-  const managedNote = el('p', 'settings-section-note settings-search-managed-note hidden');
-  managedNote.append(
+  const searxngManaged = el('div', 'settings-search-url-managed hidden');
+  const managedHead = el('div', 'settings-search-url-managed__head');
+  managedHead.append(
+    el('span', 'settings-field-label', 'SearXNG base URL'),
+    el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Managed'),
+  );
+  const managedUrlPanel = el('div', 'settings-search-managed-url');
+  managedUrlPanel.setAttribute('role', 'status');
+  const managedStatus = el('span', 'settings-mcp-status settings-mcp-status--ok');
+  managedStatus.append(
+    el('span', 'settings-mcp-status-dot'),
+    el('span', 'settings-mcp-status-text', 'Running'),
+  );
+  const managedEndpoint = el('code', 'settings-search-managed-url__endpoint');
+  managedUrlPanel.append(managedStatus, managedEndpoint);
+  const managedHint = el('p', 'settings-field-hint');
+  managedHint.append(
     document.createTextNode(
-      'Managed SearXNG is active — Search and Deep Research use the loopback instance from ',
+      'Search and Deep Research use the loopback instance from ',
     ),
     linkToSettingsSection('Settings → Servers', 'servers'),
-    document.createTextNode('. The URL below is ignored while managed SearXNG is running.'),
+    document.createTextNode('. Saved URL in search.json applies when managed SearXNG stops.'),
   );
-  searxngField.append(managedNote);
+  searxngManaged.append(managedHead, managedUrlPanel, managedHint);
+
+  searxngField.append(searxngEditable, searxngManaged);
   providerGroup.appendChild(searxngField);
 
   const keysGroup = appendSettingsGroup(
@@ -194,15 +213,19 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   };
   applyToForm(current);
 
+  const setSearxngManagedMode = (managedUrl: string | null): void => {
+    const managed = Boolean(managedUrl);
+    searxngEditable.classList.toggle('hidden', managed);
+    searxngManaged.classList.toggle('hidden', !managed);
+    if (managedUrl) {
+      managedEndpoint.textContent = managedUrl;
+    }
+  };
+
   if (isLocalServerAvailable()) {
     const servers = await fetchManagedServers();
     const managedUrl = servers ? getManagedSearxngActiveUrl(servers) : null;
-    if (managedUrl) {
-      managedNote.classList.remove('hidden');
-      searxngInput.readOnly = true;
-      searxngInput.value = managedUrl;
-      searxngInput.title = 'Controlled by Settings → Servers while managed SearXNG is running';
-    }
+    setSearxngManagedMode(managedUrl);
   }
 
   const readForm = (): SearchConfig => {
@@ -219,9 +242,9 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
       fallbackChain:
         fallbackChain.length > 0 ? fallbackChain : [...DEFAULT_SEARCH_CONFIG.fallbackChain],
       searxngUrl:
-        searxngInput.readOnly
-          ? configuredSearxngUrl
-          : searxngInput.value.trim() || DEFAULT_SEARCH_CONFIG.searxngUrl,
+        searxngManaged.classList.contains('hidden')
+          ? searxngInput.value.trim() || DEFAULT_SEARCH_CONFIG.searxngUrl
+          : configuredSearxngUrl,
       keys: {
         braveApiKey: braveInput.value.trim(),
         tavilyApiKey: tavilyInput.value.trim(),

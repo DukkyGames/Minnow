@@ -513,7 +513,12 @@ export async function detectHardware({ fresh } = {}) {
     availableRamGb,
     cpuCores,
     cpuName,
-    platform: process.platform === 'darwin' ? 'darwin' : 'linux',
+    platform:
+      process.platform === 'win32'
+        ? 'windows'
+        : process.platform === 'darwin'
+          ? 'darwin'
+          : 'linux',
   };
 
   if (nvidia && 'gpuError' in nvidia) {

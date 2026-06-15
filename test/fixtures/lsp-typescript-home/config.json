@@ -165,6 +165,26 @@
     "wordWrap": false,
     "renderWhitespace": false
   },
+  "voice": {
+    "stt": {
+      "enabled": true,
+      "providerId": "",
+      "model": "whisper-1",
+      "language": "en"
+    },
+    "tts": {
+      "enabled": true,
+      "providerId": "",
+      "model": "tts-1",
+      "voice": "alloy",
+      "speed": 1,
+      "format": "mp3"
+    },
+    "limits": {
+      "maxAudioBytes": 26214400,
+      "maxDurationSeconds": 300
+    }
+  },
   "workspace": {
     "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-ts-lsp-N7Oks6",
     "recentPaths": [
