@@ -6,7 +6,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -34,7 +34,8 @@ if (!fs.existsSync(tsxCli)) {
   process.exit(2);
 }
 
-const testLoader = path.join(root, 'test', 'test-loader.mjs');
+// Node's --import hook requires file:// URLs on Windows (bare C:\ paths fail with ERR_UNSUPPORTED_ESM_URL_SCHEME).
+const testLoader = pathToFileURL(path.join(root, 'test', 'test-loader.mjs')).href;
 const tsxArgs = [tsxCli, '--import', testLoader, runner, ...argv];
 
 const result = spawnSync(process.execPath, tsxArgs, {

@@ -99,14 +99,19 @@ describe('benchmark workspace allowlist', () => {
     await rmTestHome(homeDir);
   });
 
-  it('isAllowedWorkspaceRoot accepts code, chats, and benchmark workspaces', async () => {
+  it('isAllowedWorkspaceRoot accepts code, chats, benchmark, and scheduler workspaces', async () => {
     const { getChatsWorkspacePath, ensureChatsWorkspace } = await import(
       '../../server/chats-workspace/paths.js'
     );
+    const { ensureSchedulerWorkspace, getSchedulerWorkspacePath } = await import(
+      '../../server/scheduler-workspace/paths.js'
+    );
     await ensureChatsWorkspace();
+    await ensureSchedulerWorkspace();
     assert.equal(isAllowedWorkspaceRoot(codeWorkspace), true);
     assert.equal(isAllowedWorkspaceRoot(getChatsWorkspacePath()), true);
     assert.equal(isAllowedWorkspaceRoot(getBenchmarkWorkspacePath()), true);
+    assert.equal(isAllowedWorkspaceRoot(getSchedulerWorkspacePath()), true);
     assert.equal(isAllowedWorkspaceRoot(path.join(homeDir, 'other')), false);
   });
 

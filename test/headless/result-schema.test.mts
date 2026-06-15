@@ -34,6 +34,7 @@ const FIXTURE: HeadlessRunResult = {
   ],
   stats: { toolRounds: 1, durationMs: 5000 },
   error: null,
+  chatId: null,
 };
 
 describe('HeadlessRunResult schema', () => {
@@ -57,6 +58,7 @@ describe('HeadlessRunResult schema', () => {
       'turns',
       'stats',
       'error',
+      'chatId',
     ]);
   });
 

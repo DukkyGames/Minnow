@@ -41,6 +41,9 @@ export function resolveLegacyHash(hash: string): {
     if (modelsSection) {
       return { hash: `#/app/models/${modelsSection}`, modelsSection };
     }
+    if (slug === 'scheduler') {
+      return { hash: '#/app/scheduler' };
+    }
     return {
       hash: '#/app/settings',
       settingsSection: slug,
@@ -51,6 +54,9 @@ export function resolveLegacyHash(hash: string): {
   }
   if (trimmed === '#/compare' || trimmed.startsWith('#/compare/')) {
     return { hash: '#/app/compare' };
+  }
+  if (trimmed === '#/scheduler' || trimmed.startsWith('#/scheduler/')) {
+    return { hash: '#/app/scheduler' };
   }
   if (trimmed === '#/models' || trimmed.startsWith('#/models/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^models(?:\/([\w-]+))?/);
