@@ -3,7 +3,9 @@
  */
 
 import {
+  createCalDavAccount,
   createCalendarEvent,
+  deleteCalDavAccount,
   deleteCalendarEvent,
   exportIcsUrl,
   fetchCalDavAccounts,
@@ -12,6 +14,7 @@ import {
   importIcsFile,
   syncCalDav,
   updateCalendarEvent,
+  type CalDavAccount,
   type CalendarEvent,
   type CalendarRow,
 } from '../../calendar/client';
@@ -86,9 +89,11 @@ export async function renderCalendarPanel(
     mode: 'month' as ViewMode,
     calendars: [] as CalendarRow[],
     events: [] as CalendarEvent[],
+    caldavAccounts: [] as CalDavAccount[],
     visibleCalendarIds: new Set<string>(),
     selectedEventId: null as string | null,
     loading: false,
+    caldavFormOpen: false,
   };
 
   mount.innerHTML = '';
@@ -167,6 +172,38 @@ export async function renderCalendarPanel(
   calendarList.className = 'calendar-list';
   sidebar.appendChild(calendarList);
 
+  const caldavSection = document.createElement('div');
+  caldavSection.className = 'calendar-caldav';
+  sidebar.appendChild(caldavSection);
+
+  const caldavHeader = document.createElement('div');
+  caldavHeader.className = 'calendar-caldav-header';
+  caldavSection.appendChild(caldavHeader);
+
+  const caldavHeading = document.createElement('h4');
+  caldavHeading.textContent = 'CalDAV';
+  caldavHeader.appendChild(caldavHeading);
+
+  const addCalDavBtn = document.createElement('button');
+  addCalDavBtn.type = 'button';
+  addCalDavBtn.className = 'calendar-btn calendar-btn--ghost calendar-btn--sm';
+  addCalDavBtn.textContent = 'Add account';
+  caldavHeader.appendChild(addCalDavBtn);
+
+  const caldavAccountsList = document.createElement('div');
+  caldavAccountsList.className = 'calendar-caldav-accounts';
+  caldavSection.appendChild(caldavAccountsList);
+
+  const caldavForm = document.createElement('form');
+  caldavForm.className = 'calendar-caldav-form hidden';
+  caldavSection.appendChild(caldavForm);
+
+  const caldavHint = document.createElement('p');
+  caldavHint.className = 'calendar-caldav-hint';
+  caldavHint.textContent =
+    'Connect Google Calendar, Fastmail, Nextcloud, or any CalDAV server. Passwords are encrypted locally.';
+  caldavSection.appendChild(caldavHint);
+
   const main = document.createElement('div');
   main.className = 'calendar-main';
   layout.appendChild(main);
@@ -234,6 +271,148 @@ export async function renderCalendarPanel(
       row.append(checkbox, swatch, name);
       calendarList.appendChild(row);
     }
+  }
+
+  /** Render configured CalDAV accounts in the sidebar. */
+  function renderCalDavAccounts(): void {
+    caldavAccountsList.innerHTML = '';
+    if (state.caldavAccounts.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'calendar-caldav-empty';
+      empty.textContent = 'No accounts yet';
+      caldavAccountsList.appendChild(empty);
+      return;
+    }
+
+    for (const account of state.caldavAccounts) {
+      const row = document.createElement('div');
+      row.className = 'calendar-caldav-row';
+
+      const meta = document.createElement('div');
+      meta.className = 'calendar-caldav-meta';
+      const label = document.createElement('span');
+      label.className = 'calendar-caldav-label';
+      label.textContent = account.label;
+      meta.appendChild(label);
+      if (account.lastSyncAt) {
+        const synced = document.createElement('span');
+        synced.className = 'calendar-caldav-synced';
+        synced.textContent = `Last sync ${formatRelativeTime(account.lastSyncAt)}`;
+        meta.appendChild(synced);
+      }
+      row.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'calendar-caldav-actions';
+
+      const syncOneBtn = document.createElement('button');
+      syncOneBtn.type = 'button';
+      syncOneBtn.className = 'calendar-btn calendar-btn--ghost calendar-btn--sm';
+      syncOneBtn.textContent = 'Sync';
+      syncOneBtn.addEventListener('click', async () => {
+        try {
+          await syncCalDav(account.id);
+          setStatus('ok', `Synced ${account.label}`);
+          await reloadCalDavAccounts();
+          await reloadAll();
+        } catch (err) {
+          setStatus('err', err instanceof Error ? err.message : String(err));
+        }
+      });
+      actions.appendChild(syncOneBtn);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'calendar-btn calendar-btn--danger calendar-btn--sm';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', async () => {
+        if (!window.confirm(`Remove CalDAV account "${account.label}"?`)) {
+          return;
+        }
+        try {
+          await deleteCalDavAccount(account.id);
+          setStatus('ok', 'CalDAV account removed');
+          await reloadCalDavAccounts();
+          await reloadAll();
+        } catch (err) {
+          setStatus('err', err instanceof Error ? err.message : String(err));
+        }
+      });
+      actions.appendChild(removeBtn);
+
+      row.appendChild(actions);
+      caldavAccountsList.appendChild(row);
+    }
+  }
+
+  /** Show or hide the add-account form in the sidebar. */
+  function setCalDavFormOpen(open: boolean): void {
+    state.caldavFormOpen = open;
+    caldavForm.classList.toggle('hidden', !open);
+    addCalDavBtn.textContent = open ? 'Cancel' : 'Add account';
+    caldavHint.classList.toggle('hidden', open);
+  }
+
+  /** Build the CalDAV account form once and wire submit handling. */
+  function mountCalDavForm(): void {
+    caldavForm.innerHTML = '';
+
+    const labelInput = document.createElement('input');
+    labelInput.required = true;
+    labelInput.placeholder = 'Label (e.g. Work)';
+    caldavForm.appendChild(labelInput);
+
+    const urlInput = document.createElement('input');
+    urlInput.required = true;
+    urlInput.type = 'url';
+    urlInput.placeholder = 'https://www.google.com/calendar/dav/you@gmail.com/user/';
+    caldavForm.appendChild(urlInput);
+
+    const userInput = document.createElement('input');
+    userInput.required = true;
+    userInput.placeholder = 'Username / email';
+    userInput.autocomplete = 'username';
+    caldavForm.appendChild(userInput);
+
+    const passInput = document.createElement('input');
+    passInput.required = true;
+    passInput.type = 'password';
+    passInput.placeholder = 'App password';
+    passInput.autocomplete = 'current-password';
+    caldavForm.appendChild(passInput);
+
+    const formActions = document.createElement('div');
+    formActions.className = 'calendar-form-actions';
+    caldavForm.appendChild(formActions);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.className = 'calendar-btn calendar-btn--primary calendar-btn--sm';
+    saveBtn.textContent = 'Save account';
+    formActions.appendChild(saveBtn);
+
+    caldavForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await createCalDavAccount({
+          label: labelInput.value.trim(),
+          url: urlInput.value.trim(),
+          username: userInput.value.trim(),
+          password: passInput.value,
+        });
+        setStatus('ok', 'CalDAV account saved');
+        setCalDavFormOpen(false);
+        caldavForm.reset();
+        await reloadCalDavAccounts();
+      } catch (err) {
+        setStatus('err', err instanceof Error ? err.message : String(err));
+      }
+    });
+  }
+
+  async function reloadCalDavAccounts(): Promise<void> {
+    state.caldavAccounts = await fetchCalDavAccounts();
+    renderCalDavAccounts();
   }
 
   function renderEventChip(event: CalendarEvent, container: HTMLElement): void {
@@ -434,6 +613,7 @@ export async function renderCalendarPanel(
       }
     }
     renderCalendarList();
+    await reloadCalDavAccounts();
     updateTitle();
     await reloadEvents();
   }
@@ -491,18 +671,30 @@ export async function renderCalendarPanel(
 
   syncBtn.addEventListener('click', async () => {
     try {
-      const accounts = await fetchCalDavAccounts();
+      const accounts = state.caldavAccounts.length
+        ? state.caldavAccounts
+        : await fetchCalDavAccounts();
       if (accounts.length === 0) {
-        setStatus('err', 'No CalDAV accounts configured');
+        setStatus('err', 'Add a CalDAV account in the sidebar first');
+        setCalDavFormOpen(true);
         return;
       }
-      await syncCalDav(accounts[0].id);
-      setStatus('ok', 'CalDAV sync complete');
+      for (const account of accounts) {
+        await syncCalDav(account.id);
+      }
+      setStatus('ok', `CalDAV sync complete (${accounts.length} account${accounts.length === 1 ? '' : 's'})`);
+      await reloadCalDavAccounts();
       await reloadAll();
     } catch (err) {
       setStatus('err', err instanceof Error ? err.message : String(err));
     }
   });
+
+  addCalDavBtn.addEventListener('click', () => {
+    setCalDavFormOpen(!state.caldavFormOpen);
+  });
+
+  mountCalDavForm();
 
   document.addEventListener('keydown', (ev) => {
     if (!mount.isConnected) {
@@ -526,4 +718,26 @@ function toLocalInput(iso: string): string {
 
 function fromLocalInput(value: string): string {
   return new Date(value).toISOString();
+}
+
+/** Short relative time label for last-sync timestamps. */
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const deltaMs = Date.now() - then;
+  if (!Number.isFinite(then) || deltaMs < 0) {
+    return 'just now';
+  }
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 1) {
+    return 'just now';
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }

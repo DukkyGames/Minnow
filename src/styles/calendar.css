@@ -144,6 +144,107 @@
   color: var(--mn-fg-muted);
 }
 
+.calendar-caldav {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.calendar-caldav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.calendar-caldav-header h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.calendar-btn--sm {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.calendar-caldav-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calendar-caldav-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.calendar-caldav-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: var(--mn-bg);
+}
+
+.calendar-caldav-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.calendar-caldav-label {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-caldav-synced {
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.calendar-caldav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calendar-caldav-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.calendar-caldav-form input {
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 12.5px;
+}
+
+.calendar-caldav-form.hidden,
+.calendar-caldav-hint.hidden {
+  display: none;
+}
+
+.calendar-caldav-hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+}
+
 .calendar-list-row {
   display: flex;
   align-items: center;
