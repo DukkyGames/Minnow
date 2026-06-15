@@ -151,3 +151,45 @@ export async function deleteCalDavAccount(id: string): Promise<void> {
   });
   await parseJson(res);
 }
+
+export async function createCalendar(input: {
+  name: string;
+  color?: string;
+}): Promise<CalendarRow> {
+  const res = await fetch('/api/calendar/calendars', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ calendar: input }),
+  });
+  const data = await parseJson<{ calendar: CalendarRow }>(res);
+  return data.calendar;
+}
+
+export async function updateCalendar(
+  id: string,
+  input: { name?: string; color?: string },
+): Promise<CalendarRow> {
+  const res = await fetch(`/api/calendar/calendars/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ calendar: input }),
+  });
+  const data = await parseJson<{ calendar: CalendarRow }>(res);
+  return data.calendar;
+}
+
+export async function deleteCalendar(id: string): Promise<void> {
+  const res = await fetch(`/api/calendar/calendars/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  await parseJson(res);
+}
+
+export async function resetCalendar(): Promise<void> {
+  const res = await fetch('/api/calendar/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed: true }),
+  });
+  await parseJson(res);
+}

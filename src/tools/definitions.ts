@@ -1340,7 +1340,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'manage_calendar',
-      'Manage local calendar events under ~/.minnow/calendar. Use list with a date range (max 50 events), create/update with ISO startsAt/endsAt, delete only after user confirmation (confirmed: true), or find_free_time for open slots on a day.',
+      'Manage local calendar events under ~/.minnow/calendar. Use list with a date range (default limit 50, max 200; optional offset for pagination), create/update with ISO startsAt/endsAt, delete only after user confirmation (confirmed: true), or find_free_time for open slots on a day.',
       {
         action: {
           type: 'string',
@@ -1354,6 +1354,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         endsAt: { type: 'string', description: 'ISO 8601 end time' },
         from: { type: 'string', description: 'ISO range start for list' },
         to: { type: 'string', description: 'ISO range end for list' },
+        limit: { type: 'number', description: 'Max events to return for list (default 50, max 200)' },
+        offset: { type: 'number', description: 'Skip N events for list pagination (default 0)' },
         date: { type: 'string', description: 'YYYY-MM-DD for find_free_time' },
         minMinutes: { type: 'number', description: 'Minimum free slot length in minutes' },
         description: { type: 'string', description: 'Event description' },

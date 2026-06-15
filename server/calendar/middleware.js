@@ -15,10 +15,12 @@ import { listUpcomingEvents } from './store.js';
 import {
   createCalendar,
   createEvent,
+  deleteCalendar,
   deleteEvent,
   getEventById,
   listCalendars,
   listEvents,
+  resetCalendarData,
   updateCalendar,
   updateEvent,
 } from './store.js';
@@ -117,6 +119,33 @@ export function createCalendarMiddleware() {
         const body = await readJsonBody(req);
         const calendar = createCalendar(body?.calendar ?? body);
         sendJson(res, 201, { calendar });
+        return;
+      }
+
+      const calendarMatch = url.match(/^\/api\/calendar\/calendars\/([^/]+)$/);
+      if (calendarMatch) {
+        const calendarId = decodeURIComponent(calendarMatch[1]);
+        if (req.method === 'PUT') {
+          const body = await readJsonBody(req);
+          const calendar = updateCalendar(calendarId, body?.calendar ?? body);
+          sendJson(res, 200, { calendar });
+          return;
+        }
+        if (req.method === 'DELETE') {
+          deleteCalendar(calendarId);
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+      }
+
+      if (url === '/api/calendar/reset' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        if (body?.confirmed !== true) {
+          sendJson(res, 400, { error: 'confirmed: true is required to reset calendar data' });
+          return;
+        }
+        resetCalendarData();
+        sendJson(res, 200, { ok: true });
         return;
       }
 

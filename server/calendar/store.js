@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { getMinnowHome } from '../config/home.js';
-import { calendarDbPath } from './paths.js';
+import { calendarDbPath, deleteAllCalendarSecrets, deleteRemindersSentFile } from './paths.js';
 import { expandEventsInRange } from './recurrence.js';
 
 /** Default accent-like color for the built-in Personal calendar. */
@@ -238,6 +238,47 @@ export function updateCalendar(id, input) {
     color,
     updated_at: updatedAt,
   });
+}
+
+/**
+ * Delete a local calendar. Refuses the last remaining calendar or synced calendars.
+ * @param {string} id
+ */
+export function deleteCalendar(id) {
+  const database = getCalendarDb();
+  const count = database.prepare('SELECT COUNT(*) AS c FROM calendars').get().c;
+  if (count <= 1) {
+    throw new Error('Cannot delete the last calendar');
+  }
+
+  const existing = database.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
+  if (!existing) {
+    throw new Error('Calendar not found');
+  }
+  if (existing.source !== 'local') {
+    throw new Error('Cannot delete synced calendars');
+  }
+
+  database.prepare('DELETE FROM calendars WHERE id = ?').run(id);
+  return { ok: true };
+}
+
+/**
+ * Wipe all calendar data and restore a fresh Personal calendar.
+ */
+export function resetCalendarData() {
+  const database = getCalendarDb();
+  const wipe = database.transaction(() => {
+    database.prepare('DELETE FROM events').run();
+    database.prepare('DELETE FROM sync_state').run();
+    database.prepare('DELETE FROM calendars').run();
+    database.prepare('DELETE FROM caldav_accounts').run();
+    ensureDefaultCalendar(database);
+  });
+  wipe();
+  deleteAllCalendarSecrets();
+  deleteRemindersSentFile();
+  return { ok: true };
 }
 
 /**

@@ -18,6 +18,8 @@ import {
   type CalendarEvent,
   type CalendarRow,
 } from '../../calendar/client';
+import { getMaxInlineEvents, loadCalendarPrefs, type CalendarPrefs } from '../../calendar/prefs';
+import { openCalendarSettings } from './calendar-settings';
 
 export interface CalendarPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -84,9 +86,11 @@ export async function renderCalendarPanel(
   mount: HTMLElement,
   options: CalendarPanelOptions = {},
 ): Promise<void> {
+  const initialPrefs = loadCalendarPrefs();
   const state = {
     anchor: new Date(),
-    mode: 'month' as ViewMode,
+    mode: initialPrefs.defaultMode as ViewMode,
+    prefs: initialPrefs,
     calendars: [] as CalendarRow[],
     events: [] as CalendarEvent[],
     caldavAccounts: [] as CalDavAccount[],
@@ -94,6 +98,7 @@ export async function renderCalendarPanel(
     selectedEventId: null as string | null,
     loading: false,
     caldavFormOpen: false,
+    dayPopover: null as { day: Date; anchorEl: HTMLElement } | null,
   };
 
   mount.innerHTML = '';
@@ -134,6 +139,7 @@ export async function renderCalendarPanel(
   const modeSelect = document.createElement('select');
   modeSelect.className = 'calendar-select';
   modeSelect.innerHTML = '<option value="month">Month</option><option value="week">Week</option>';
+  modeSelect.value = state.mode;
   toolbar.appendChild(modeSelect);
 
   const newBtn = document.createElement('button');
@@ -159,6 +165,19 @@ export async function renderCalendarPanel(
   syncBtn.className = 'calendar-btn calendar-btn--ghost';
   syncBtn.textContent = 'Sync CalDAV';
   toolbar.appendChild(syncBtn);
+
+  const settingsBtn = document.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.className = 'calendar-btn calendar-btn--ghost';
+  settingsBtn.textContent = 'Settings';
+  settingsBtn.setAttribute('aria-label', 'Calendar settings');
+  toolbar.appendChild(settingsBtn);
+
+  const dayPopoverEl = document.createElement('div');
+  dayPopoverEl.className = 'calendar-day-popover hidden';
+  dayPopoverEl.hidden = true;
+  dayPopoverEl.setAttribute('role', 'listbox');
+  document.body.appendChild(dayPopoverEl);
 
   const layout = document.createElement('div');
   layout.className = 'calendar-layout';
@@ -233,7 +252,7 @@ export async function renderCalendarPanel(
 
   function eventsForDay(day: Date): CalendarEvent[] {
     const key = dateKey(day);
-    return state.events.filter((event) => {
+    const matched = state.events.filter((event) => {
       if (!state.visibleCalendarIds.has(event.calendarId)) {
         return false;
       }
@@ -241,6 +260,96 @@ export async function renderCalendarPanel(
       const endKey = event.endsAt.slice(0, 10);
       return key >= startKey && key <= endKey;
     });
+    return matched.sort((a, b) => {
+      if (a.allDay !== b.allDay) {
+        return a.allDay ? -1 : 1;
+      }
+      return a.startsAt.localeCompare(b.startsAt);
+    });
+  }
+
+  /** Close the anchored day popover if open. */
+  function closeDayPopover(): void {
+    state.dayPopover = null;
+    dayPopoverEl.hidden = true;
+    dayPopoverEl.classList.add('hidden');
+    dayPopoverEl.innerHTML = '';
+    for (const trigger of grid.querySelectorAll<HTMLElement>('[aria-expanded="true"]')) {
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  /** Position the popover below (or above) the anchor cell. */
+  function positionDayPopover(anchorEl: HTMLElement): void {
+    const rect = anchorEl.getBoundingClientRect();
+    const margin = 6;
+    dayPopoverEl.style.left = `${Math.max(margin, rect.left)}px`;
+    dayPopoverEl.style.width = `${Math.max(180, rect.width)}px`;
+    dayPopoverEl.hidden = false;
+    dayPopoverEl.classList.remove('hidden');
+
+    const popoverHeight = dayPopoverEl.offsetHeight || 200;
+    const belowTop = rect.bottom + margin;
+    const aboveTop = rect.top - popoverHeight - margin;
+    const fitsBelow = belowTop + popoverHeight <= window.innerHeight - margin;
+    dayPopoverEl.style.top = `${fitsBelow ? belowTop : Math.max(margin, aboveTop)}px`;
+  }
+
+  /** Open a popover listing all events for the given day. */
+  function openDayPopover(anchorEl: HTMLElement, day: Date): void {
+    const sameAnchor =
+      state.dayPopover?.anchorEl === anchorEl && dateKey(state.dayPopover.day) === dateKey(day);
+    if (sameAnchor) {
+      closeDayPopover();
+      return;
+    }
+
+    closeDayPopover();
+    state.dayPopover = { day, anchorEl };
+    anchorEl.setAttribute('aria-expanded', 'true');
+
+    const heading = document.createElement('div');
+    heading.className = 'calendar-day-popover-heading';
+    heading.textContent = day.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+    dayPopoverEl.appendChild(heading);
+
+    const events = eventsForDay(day);
+    if (events.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'calendar-day-popover-empty';
+      empty.textContent = 'No events';
+      dayPopoverEl.appendChild(empty);
+    } else {
+      for (const event of events) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'calendar-day-popover-item';
+        item.setAttribute('role', 'option');
+        const cal = state.calendars.find((c) => c.id === event.calendarId);
+        if (cal) {
+          item.style.setProperty('--event-color', cal.color);
+        }
+        const time = document.createElement('span');
+        time.className = 'calendar-day-popover-time';
+        time.textContent = formatTime(event.startsAt, event.allDay);
+        const title = document.createElement('span');
+        title.className = 'calendar-day-popover-title';
+        title.textContent = event.title;
+        item.append(time, title);
+        item.addEventListener('click', () => {
+          closeDayPopover();
+          openDrawer(event);
+        });
+        dayPopoverEl.appendChild(item);
+      }
+    }
+
+    positionDayPopover(anchorEl);
   }
 
   function renderCalendarList(): void {
@@ -433,9 +542,11 @@ export async function renderCalendarPanel(
   }
 
   function renderGrid(): void {
+    closeDayPopover();
     grid.innerHTML = '';
     grid.classList.toggle('calendar-grid--week', state.mode === 'week');
     const days = state.mode === 'month' ? buildMonthGrid(state.anchor) : buildWeekDays(state.anchor);
+    const maxInline = getMaxInlineEvents(state.mode, state.prefs);
 
     for (const day of days) {
       const cell = document.createElement('div');
@@ -448,21 +559,30 @@ export async function renderCalendarPanel(
         cell.classList.add('is-today');
       }
 
-      const label = document.createElement('div');
+      const label = document.createElement('button');
+      label.type = 'button';
       label.className = 'calendar-cell-date';
       label.textContent = String(day.getUTCDate());
+      label.setAttribute('aria-haspopup', 'listbox');
+      label.setAttribute('aria-expanded', 'false');
+      label.addEventListener('click', () => openDayPopover(label, day));
       cell.appendChild(label);
 
+      const dayEvents = eventsForDay(day);
       const eventsWrap = document.createElement('div');
       eventsWrap.className = 'calendar-cell-events';
-      for (const event of eventsForDay(day).slice(0, 3)) {
+      for (const event of dayEvents.slice(0, maxInline)) {
         renderEventChip(event, eventsWrap);
       }
-      const overflow = eventsForDay(day).length - 3;
+      const overflow = dayEvents.length - maxInline;
       if (overflow > 0) {
-        const more = document.createElement('div');
+        const more = document.createElement('button');
+        more.type = 'button';
         more.className = 'calendar-cell-more';
         more.textContent = `+${overflow} more`;
+        more.setAttribute('aria-haspopup', 'listbox');
+        more.setAttribute('aria-expanded', 'false');
+        more.addEventListener('click', () => openDayPopover(more, day));
         eventsWrap.appendChild(more);
       }
       cell.appendChild(eventsWrap);
@@ -619,24 +739,28 @@ export async function renderCalendarPanel(
   }
 
   prevBtn.addEventListener('click', async () => {
+    closeDayPopover();
     state.anchor = addDays(state.anchor, state.mode === 'month' ? -30 : -7);
     updateTitle();
     await reloadEvents();
   });
 
   nextBtn.addEventListener('click', async () => {
+    closeDayPopover();
     state.anchor = addDays(state.anchor, state.mode === 'month' ? 30 : 7);
     updateTitle();
     await reloadEvents();
   });
 
   todayBtn.addEventListener('click', async () => {
+    closeDayPopover();
     state.anchor = new Date();
     updateTitle();
     await reloadEvents();
   });
 
   modeSelect.addEventListener('change', async () => {
+    closeDayPopover();
     state.mode = modeSelect.value as ViewMode;
     updateTitle();
     await reloadEvents();
@@ -694,10 +818,38 @@ export async function renderCalendarPanel(
     setCalDavFormOpen(!state.caldavFormOpen);
   });
 
-  mountCalDavForm();
+  settingsBtn.addEventListener('click', () => {
+    void openCalendarSettings({
+      calendars: state.calendars,
+      onStatus: setStatus,
+      onPrefsChanged: (prefs: CalendarPrefs) => {
+        state.prefs = prefs;
+        state.mode = prefs.defaultMode;
+        modeSelect.value = prefs.defaultMode;
+        updateTitle();
+        renderGrid();
+      },
+      onCalendarsChanged: reloadAll,
+    });
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (!state.dayPopover || dayPopoverEl.hidden) {
+      return;
+    }
+    const target = event.target as Node;
+    if (dayPopoverEl.contains(target) || state.dayPopover.anchorEl.contains(target)) {
+      return;
+    }
+    closeDayPopover();
+  });
 
   document.addEventListener('keydown', (ev) => {
     if (!mount.isConnected) {
+      return;
+    }
+    if (ev.key === 'Escape' && state.dayPopover) {
+      closeDayPopover();
       return;
     }
     if (ev.key === 'ArrowLeft') {
@@ -706,6 +858,8 @@ export async function renderCalendarPanel(
       nextBtn.click();
     }
   });
+
+  mountCalDavForm();
 
   await reloadAll();
 }

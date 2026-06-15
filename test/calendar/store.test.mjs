@@ -10,11 +10,13 @@ import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   closeCalendarDbForTests,
+  createCalendar,
   createEvent,
   deleteEvent,
   getEventById,
   listCalendars,
   listEvents,
+  resetCalendarData,
   updateEvent,
 } from '../../server/calendar/store.js';
 
@@ -103,5 +105,24 @@ describe('calendar store', () => {
     });
     assert.ok(rows.some((row) => row.title === 'In range'));
     assert.ok(!rows.some((row) => row.title === 'Out of range'));
+  });
+
+  test('resetCalendarData leaves one Personal calendar and zero events', () => {
+    const calendarId = listCalendars()[0].id;
+    createEvent({
+      calendarId,
+      title: 'Before reset',
+      startsAt: '2026-06-15T10:00:00.000Z',
+      endsAt: '2026-06-15T11:00:00.000Z',
+    });
+    createCalendar({ name: 'Work' });
+
+    resetCalendarData();
+
+    const calendars = listCalendars();
+    assert.equal(calendars.length, 1);
+    assert.equal(calendars[0].name, 'Personal');
+    const events = listEvents({ expandRecurrence: false });
+    assert.equal(events.length, 0);
   });
 });

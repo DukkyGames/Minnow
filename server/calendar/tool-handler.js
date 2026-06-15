@@ -12,7 +12,8 @@ import {
 } from '../calendar/store.js';
 import { findFreeTimeSlots } from '../calendar/recurrence.js';
 
-const MAX_LIST_EVENTS = 50;
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 200;
 
 /**
  * @param {Record<string, unknown>} args
@@ -25,22 +26,42 @@ export async function toolManageCalendar(args) {
     const to =
       args.to ??
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const events = listEvents({
+    const all = listEvents({
       calendarId: args.calendarId ? String(args.calendarId) : undefined,
       from,
       to,
       expandRecurrence: true,
-    }).slice(0, MAX_LIST_EVENTS);
+    });
 
-    if (events.length === 0) {
+    if (all.length === 0) {
       return 'No events found in the requested range.';
     }
 
-    const lines = events.map(
+    const limitRaw = args.limit !== undefined ? Number(args.limit) : DEFAULT_LIST_LIMIT;
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(MAX_LIST_LIMIT, Math.max(1, Math.floor(limitRaw)))
+      : DEFAULT_LIST_LIMIT;
+    const offsetRaw = args.offset !== undefined ? Number(args.offset) : 0;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+    const total = all.length;
+    const page = all.slice(offset, offset + limit);
+    const truncated = offset + page.length < total;
+
+    const lines = page.map(
       (event) =>
         `- ${event.startsAt} → ${event.endsAt}: ${event.title} (id=${event.id}, calendar=${event.calendarId})`,
     );
-    return `Events (${events.length}):\n${lines.join('\n')}`;
+
+    const header =
+      truncated || offset > 0
+        ? `Events (${page.length} of ${total}, offset ${offset}):`
+        : `Events (${page.length}):`;
+
+    let body = `${header}\n${lines.join('\n')}`;
+    if (truncated) {
+      body += `\n(${total} total — use offset=${offset + limit} to fetch the next page.)`;
+    }
+    return body;
   }
 
   if (action === 'create') {
