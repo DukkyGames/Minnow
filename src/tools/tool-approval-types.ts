@@ -5,8 +5,6 @@
  * (the queue calls `showToolApprovalModal`, which needs these request fields).
  */
 
-import type { ToolAgentKey } from './tool-settings-types';
-
 /** Workspace context shown in the approval dialog. */
 export type ToolApprovalWorkspace =
   | { label: string; path: string }
@@ -24,10 +22,4 @@ export interface ToolApprovalRequest {
   pathWarning?: string;
   subAgentType?: string;
   workAgentId?: string | null;
-  /** Resolved agent key for sticky always-allow scope. */
-  agentKey?: ToolAgentKey;
-  /** Whether "Always allow" writes global default or per-agent override. */
-  alwaysAllowScope?: 'global' | 'agent';
-  /** When a pattern would have auto-approved but path guard still prompts. */
-  matchedPatternLabel?: string;
 }

@@ -4,10 +4,7 @@
 
 import { loadToolConfig } from '../tools/config';
 import type { ToolApprovalContext } from '../tools/permission-gate';
-import {
-  resolveEffectivePermission,
-  formatApprovalPatternLabel,
-} from '../tools/permission-resolve';
+import { resolveEffectivePermission } from '../tools/permission-resolve';
 import type { ToolExecutionResult } from '../types';
 import type { ToolPermissionMode } from '../tools/tool-settings-types';
 
@@ -50,12 +47,9 @@ export function maybeBlockHeadlessToolApproval(
   }
 
   if (!options.noApproval) {
-    const patternHint = resolved.matchedPattern
-      ? ` (matched pattern: ${formatApprovalPatternLabel(resolved.matchedPattern)})`
-      : '';
     return {
       content:
-        `Error: tool "${execName}" requires user approval in non-interactive mode${patternHint}. ` +
+        `Error: tool "${execName}" requires user approval in non-interactive mode. ` +
         'Pass --no-approval only with explicit risk acceptance, or set the tool to Full in Settings.',
     };
   }

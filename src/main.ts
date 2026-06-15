@@ -74,6 +74,7 @@ import { detectConfigServer, refreshConfigStorageBanner } from './config/storage
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
 import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
+import { initNotificationProducers } from './notifications/producers';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
@@ -156,6 +157,8 @@ import { initSubAgentUi } from './ui/sub-agent-cards';
 import { initAgentActivityPanel } from './ui/agent-activity-panel';
 import {
   closeComposerToolsPopover,
+  closeAllToolsPopovers,
+  initChatAppToolsPopover,
   initComposerToolsPopover,
 } from './ui/composer-tools-popover';
 import { initComposerVoice } from './ui/composer-voice';
@@ -265,8 +268,10 @@ export async function initApp(): Promise<void> {
   await loadSystemPromptSettings();
   fillToolsSection();
   fillToolsSection('composerToolsList', { variant: 'composer' });
+  fillToolsSection('chatAppToolsList', { variant: 'composer' });
   registerToolHandlers();
   initComposerToolsPopover();
+  initChatAppToolsPopover();
   initComposerVoice();
   void initVoiceStatus();
   initAttachments();
@@ -281,6 +286,7 @@ export async function initApp(): Promise<void> {
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   startSchedulerNotificationPoll();
+  initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
@@ -333,6 +339,8 @@ export async function initApp(): Promise<void> {
   comparePage.initComparePage();
   const schedulerPage = await import('./ui/scheduler-page');
   schedulerPage.initSchedulerPage();
+  const calendarPage = await import('./ui/calendar-page');
+  calendarPage.initCalendarPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');
@@ -371,7 +379,7 @@ export async function initApp(): Promise<void> {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      closeComposerToolsPopover();
+      closeAllToolsPopovers();
       closeContextUsageBreakdown();
       dismissOpenLayers();
     }

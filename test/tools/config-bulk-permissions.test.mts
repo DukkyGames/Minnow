@@ -18,10 +18,10 @@ function cloneConfig(base: ToolConfig): ToolConfig {
     enabled: { ...base.enabled },
     permissions: {
       default: { ...base.permissions.default },
-      perAgent: JSON.parse(JSON.stringify(base.permissions.perAgent)),
-      patterns: [...base.permissions.patterns],
     },
     keys: { ...base.keys },
+    webSearchProvider: base.webSearchProvider,
+    toolCache: base.toolCache ? { ...base.toolCache } : undefined,
   };
 }
 

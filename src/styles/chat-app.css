@@ -411,6 +411,21 @@
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
+.chat-app-tools-anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.chat-app-tools-anchor .composer-tools-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.chat-app-tools-anchor .composer-tools-popover {
+  bottom: calc(100% + 8px);
+  left: 0;
+}
+
 .chat-app-input:focus-within {
   border-color: var(--mn-accent);
   box-shadow: 0 0 0 3px var(--mn-accent-soft);

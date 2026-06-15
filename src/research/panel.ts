@@ -8,7 +8,7 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import { wrapUntrusted } from '../lib/untrusted.mjs';
 import { getActiveModelIdFromDom } from '../benchmark/resolve-binding';
 import { loadResearchConfig } from '../config/research-config';
-import { noteAgentMessage } from '../os/instances';
+import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
   fetchResearchResult,
@@ -352,10 +352,13 @@ async function startResearchRun(extra: { continueFrom?: string } = {}): Promise<
           void fetchResearchResult(researchId).then((data) => {
             const sources = data.sources?.length ?? scanned;
             const title = query.slice(0, 60);
-            noteAgentMessage(
-              'research',
-              `Your research brief on ${title}${query.length > 60 ? '…' : ''} is ready — ${sources} sources.`,
-            );
+            pushNotification({
+              kind: 'research',
+              title: 'Research',
+              preview: `Your research brief on ${title}${query.length > 60 ? '…' : ''} is ready — ${sources} sources.`,
+              appId: 'research',
+              dedupeKey: `research:${researchId}`,
+            });
           });
           setStatus('ok', 'Research complete');
         } else if (status === 'cancelled') {

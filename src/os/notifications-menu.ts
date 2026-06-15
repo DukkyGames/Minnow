@@ -1,17 +1,19 @@
 /**
- * OS menubar notifications popover — lists background app alerts with unread counts.
+ * OS menubar notifications popover — per-event inbox rows with chat deep-links.
  */
 
-import { getAppById } from './app-registry';
-import { createAppIcon, createOsIcon } from './icons';
+import { formatRelativeTime, kindLabel } from '../notifications/preview';
+import { openNotificationTarget } from '../notifications/navigate';
 import {
-  clearAllUnread,
-  getInstanceSnapshot,
-  subscribeInstances,
-} from './instances';
+  getNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsRead,
+  subscribeNotifications,
+} from '../notifications/store';
+import type { NotificationRecord } from '../notifications/types';
+import { getAppById } from './app-registry';
+import { createAppIcon, createOsIcon, type OsIconName } from './icons';
 import { closeOsModelChipMenu } from './model-chip-menu';
-import { launchApp } from './router';
-import type { AppInstance } from './types';
 
 let panelEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
@@ -21,47 +23,40 @@ let anchorBell: HTMLButtonElement | null = null;
 let menuOpen = false;
 let outsideHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
-let unsubInstances: (() => void) | null = null;
+let unsubNotifications: (() => void) | null = null;
 
-/** Instances with unread background messages, newest activity last in array order. */
-function getUnreadInstances(): AppInstance[] {
-  return getInstanceSnapshot().instances.filter((i) => i.unread > 0);
-}
-
-function truncateMessage(msg: string, max = 120): string {
-  const trimmed = msg.trim();
-  if (!trimmed) return '';
-  if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max - 1)}…`;
+function unreadNotifications(): NotificationRecord[] {
+  return getNotifications().filter((n) => !n.read);
 }
 
 function rebuildList(): void {
   if (!listEl || !emptyEl || !clearBtn) return;
 
-  const unread = getUnreadInstances();
+  const unread = unreadNotifications();
   listEl.replaceChildren();
   listEl.hidden = unread.length === 0;
   emptyEl.hidden = unread.length > 0;
   clearBtn.hidden = unread.length === 0;
 
-  for (const inst of unread) {
-    const app = getAppById(inst.appId);
+  for (const record of unread) {
+    const app = getAppById(record.appId);
     if (!app) continue;
 
     const li = document.createElement('li');
     li.className = 'mn-os-notif-item';
+    if (!record.read) li.classList.add('is-unread');
 
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mn-os-notif-item__btn';
     btn.addEventListener('click', () => {
-      launchApp(inst.appId);
+      void openNotificationTarget(record);
       closeOsNotificationsMenu();
     });
 
     const icon = document.createElement('span');
     icon.className = 'mn-os-notif-item__icon';
-    icon.appendChild(createAppIcon(app.icon as 'code', { size: 16 }));
+    icon.appendChild(createAppIcon(app.icon as OsIconName, { size: 16 }));
     btn.appendChild(icon);
 
     const body = document.createElement('span');
@@ -72,21 +67,24 @@ function rebuildList(): void {
 
     const title = document.createElement('span');
     title.className = 'mn-os-notif-item__title';
-    title.textContent = app.name;
+    title.textContent = record.title;
     head.appendChild(title);
 
-    const badge = document.createElement('span');
-    badge.className = 'mn-os-notif-item__badge';
-    badge.textContent = String(inst.unread);
-    badge.setAttribute('aria-label', `${inst.unread} unread`);
-    head.appendChild(badge);
+    const time = document.createElement('span');
+    time.className = 'mn-os-notif-item__time';
+    time.textContent = formatRelativeTime(record.createdAt);
+    head.appendChild(time);
 
     body.appendChild(head);
 
+    const meta = document.createElement('span');
+    meta.className = 'mn-os-notif-item__kind';
+    meta.textContent = kindLabel(record.kind);
+    body.appendChild(meta);
+
     const preview = document.createElement('span');
     preview.className = 'mn-os-notif-item__preview';
-    const snippet = truncateMessage(inst.msg) || app.tag;
-    preview.textContent = snippet;
+    preview.textContent = record.preview || app.tag;
     body.appendChild(preview);
 
     btn.appendChild(body);
@@ -168,7 +166,7 @@ function ensurePanel(): HTMLDivElement {
   clearBtn.textContent = 'Mark all read';
   clearBtn.hidden = true;
   clearBtn.addEventListener('click', () => {
-    clearAllUnread();
+    markAllNotificationsRead();
     rebuildList();
   });
   header.appendChild(clearBtn);
@@ -193,7 +191,8 @@ function ensurePanel(): HTMLDivElement {
 
   const emptyHint = document.createElement('p');
   emptyHint.className = 'mn-os-notif-menu__empty-hint';
-  emptyHint.textContent = 'Background agents will appear here when they finish work.';
+  emptyHint.textContent =
+    'Background chats, tasks, and jobs appear here when they finish.';
   emptyEl.appendChild(emptyHint);
 
   panelEl.append(header, listEl, emptyEl);
@@ -228,17 +227,20 @@ export function initOsNotificationsMenu(bell: HTMLButtonElement): () => void {
   bell.setAttribute('aria-expanded', 'false');
   bell.setAttribute('aria-controls', 'osNotificationsMenu');
 
-  const onBellClick = () => toggleMenu();
+  const onBellClick = () => {
+    void import('../notifications/sound').then((m) => m.unlockNotificationAudio());
+    toggleMenu();
+  };
   bell.addEventListener('click', onBellClick);
 
-  unsubInstances = subscribeInstances(() => {
+  unsubNotifications = subscribeNotifications(() => {
     if (menuOpen) rebuildList();
   });
 
   return () => {
     bell.removeEventListener('click', onBellClick);
-    unsubInstances?.();
-    unsubInstances = null;
+    unsubNotifications?.();
+    unsubNotifications = null;
     closeOsNotificationsMenu();
     panelEl?.remove();
     panelEl = null;
@@ -248,3 +250,6 @@ export function initOsNotificationsMenu(bell: HTMLButtonElement): () => void {
     anchorBell = null;
   };
 }
+
+/** Unread count for menubar badge (exported for menubar sync). */
+export { getUnreadNotificationCount };

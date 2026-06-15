@@ -1,5 +1,5 @@
 /** MinnowOS app identifiers — one per launcher tile. */
-export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'settings';
+export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'calendar' | 'settings';
 
 /** Shell surface: desktop launcher vs a foreground app. */
 export type OsView = 'desktop' | 'app';
@@ -52,6 +52,8 @@ export interface LaunchOptions {
   workspacePath?: string;
   /** Research: start a run immediately when a seed is present. */
   autoRun?: boolean;
+  /** Code app: switch to this chat after launch (notification deep-link). */
+  chatId?: string;
 }
 
 /** Parsed hash route consumed by the OS shell and page bridge. */

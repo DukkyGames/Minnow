@@ -304,8 +304,16 @@ export function isChatAppOpen(): boolean {
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
+/** Options when opening the Chat app from the shell or a notification deep-link. */
+export interface ChatAppOpenOptions {
+  seed?: string;
+  chatId?: string;
+}
+
 /** Open the Chat app (`#/app/chat`). */
-export async function openChatApp(seed?: string): Promise<void> {
+export async function openChatApp(options?: string | ChatAppOpenOptions): Promise<void> {
+  const opts: ChatAppOpenOptions =
+    typeof options === 'string' ? { seed: options } : (options ?? {});
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
@@ -327,7 +335,16 @@ export async function openChatApp(seed?: string): Promise<void> {
   const ready = await ensureChatsWorkspaceReady();
   if (ready) {
     try {
-      await ensureActiveAssistantChat();
+      if (opts.chatId?.trim()) {
+        const chat = sessionState?.chats.find((c) => c.id === opts.chatId?.trim());
+        if (chat) {
+          activateAssistantChat(chat.id);
+        } else {
+          await ensureActiveAssistantChat();
+        }
+      } else {
+        await ensureActiveAssistantChat();
+      }
     } catch {
       /* server offline — still show shell */
     }
@@ -335,7 +352,7 @@ export async function openChatApp(seed?: string): Promise<void> {
 
   applyChatAppRailVisuals();
   renderChatAppSurface();
-  await applyConciergeSeed(seed);
+  await applyConciergeSeed(opts.seed);
   syncComposerFromStreamingState();
 
   const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;

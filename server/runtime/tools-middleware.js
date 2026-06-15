@@ -20,6 +20,7 @@ import {
   blockPlanModeWrite,
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
+import { toolManageCalendar } from '../calendar/tool-handler.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
 import {
@@ -896,6 +897,7 @@ const SERVER_TOOL_HANDLERS = {
     return JSON.stringify(await listLspServers(), null, 2);
   },
   save_memory: toolSaveMemory,
+  manage_calendar: toolManageCalendar,
 };
 
 /**

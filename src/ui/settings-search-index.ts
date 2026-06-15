@@ -33,6 +33,7 @@ const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
 const SECTION_SEARCH_ALIASES: Partial<
   Record<SettingsSectionId, string[]>
 > = {
+  general: ['notifications', 'bell', 'sound', 'alert', 'background chat'],
   features: ['orchestration', 'orchestrate', 'orchestrator', 'hub', 'board'],
   prompting: ['prompts', 'prompt', 'profile', 'system prompt'],
   rules: ['user rules', 'cursor rules', 'rule'],

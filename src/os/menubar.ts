@@ -2,9 +2,11 @@ import { getAppById } from './app-registry';
 import {
   getForegroundAppId,
   getOsView,
-  getTotalUnread,
   subscribeInstances,
 } from './instances';
+import { getUnreadNotificationCount } from './notifications-menu';
+import { onNewNotification } from '../notifications/push';
+import { subscribeNotifications } from '../notifications/store';
 import { launchApp, navigateToDesktop } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
@@ -214,24 +216,39 @@ export function renderMenubar(root: HTMLElement): () => void {
 
     void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
-    const unread = getTotalUnread();
+    const unread = getUnreadNotificationCount();
     bell.classList.toggle('is-on', unread > 0);
     if (unread > 0) {
       bellBadge.hidden = false;
-      bellBadge.textContent = String(unread);
+      bellBadge.textContent = unread > 99 ? '99+' : String(unread);
     } else {
       bellBadge.hidden = true;
       bellBadge.textContent = '';
     }
   }
 
+  function ringBell(): void {
+    bell.classList.remove('is-ringing');
+    // Force reflow so repeated notifications retrigger animation.
+    void bell.offsetWidth;
+    bell.classList.add('is-ringing');
+    window.setTimeout(() => bell.classList.remove('is-ringing'), 1200);
+  }
+
   syncMenubar();
   const unsub = subscribeInstances(syncMenubar);
+  const unsubInbox = subscribeNotifications(syncMenubar);
+  const unsubNotif = onNewNotification((record) => {
+    syncMenubar();
+    if (!record.read) ringBell();
+  });
 
   const stopClock = startMenubarClock(timeEl);
 
   return () => {
     unsub();
+    unsubInbox();
+    unsubNotif();
     stopClock();
     cleanupModelChip();
     cleanupNotifications();

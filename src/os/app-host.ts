@@ -18,6 +18,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   compare: 'compareView',
   models: 'modelsView',
   scheduler: 'schedulerView',
+  calendar: 'calendarView',
   experts: 'expertsView',
 };
 
@@ -85,6 +86,7 @@ function closeAllAppPages(): void {
     'compareView',
     'modelsView',
     'schedulerView',
+    'calendarView',
     'researchView',
     'expertsView',
     'chatView',
@@ -132,6 +134,11 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       await openScheduler();
       break;
     }
+    case 'calendar': {
+      const { openCalendar } = await import('../ui/calendar-page');
+      await openCalendar();
+      break;
+    }
     case 'experts': {
       const { openExperts } = await import('../ui/experts/experts-hub');
       openExperts();
@@ -149,7 +156,10 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       ) {
         welcome.openWelcome({ skipHash: true });
       }
-      if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
+      if (options?.chatId?.trim()) {
+        const { switchToCodeChat } = await import('./chat-launch');
+        await switchToCodeChat(options.chatId);
+      } else if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
         const { applyCodeLaunchOptions } = await import('./code-launch');
         await applyCodeLaunchOptions(options);
       }
@@ -157,7 +167,7 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     }
     case 'chat': {
       const { openChatApp } = await import('../ui/chat-app');
-      await openChatApp(options?.seed);
+      await openChatApp({ seed: options?.seed, chatId: options?.chatId });
       break;
     }
     default:

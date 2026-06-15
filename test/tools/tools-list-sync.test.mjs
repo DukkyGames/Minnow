@@ -26,7 +26,7 @@ const {
 } = await import('../../src/tools/config.ts');
 const { fillToolsSection } = await import('../../src/ui/tools-list.ts');
 
-const LIST_IDS = ['toolsList', 'settingsToolsList', 'composerToolsList'];
+const LIST_IDS = ['toolsList', 'settingsToolsList', 'composerToolsList', 'chatAppToolsList'];
 const SYNC_TOOL_ID = 'calculate';
 
 /** Mount drawer, settings, and composer tool lists in happy-dom. */
@@ -43,11 +43,13 @@ function setupThreeToolLists() {
     <div id="toolsList"></div>
     <div id="settingsToolsList"></div>
     <div id="composerToolsList"></div>
+    <div id="chatAppToolsList"></div>
   `;
 
   fillToolsSection('toolsList');
   fillToolsSection('settingsToolsList');
   fillToolsSection('composerToolsList', { variant: 'composer' });
+  fillToolsSection('chatAppToolsList', { variant: 'composer' });
 }
 
 /** Permission select for one tool row inside a list container. */
@@ -68,8 +70,9 @@ function seedCalculateOff() {
 }
 
 describe('tools list sync contract', () => {
-  test('refreshAllToolListUis refreshes drawer, settings, and composer lists', () => {
+  test('refreshAllToolListUis refreshes drawer, settings, composer, and chat app lists', () => {
     const src = readFileSync(join(root, 'src/tools/config.ts'), 'utf8');
+    assert.match(src, /chatAppToolsList/);
     assert.match(src, /composerToolsList/);
     assert.match(src, /settingsToolsList/);
     assert.match(src, /toolsList/);
@@ -95,7 +98,7 @@ describe('tools list sync runtime', { concurrency: false }, () => {
     localStorage.clear();
   });
 
-  test('setToolPermission updates drawer, settings, and composer selects', () => {
+  test('setToolPermission updates drawer, settings, composer, and chat app selects', () => {
     setupThreeToolLists();
     setLocalServerAvailable(true);
     seedCalculateOff();

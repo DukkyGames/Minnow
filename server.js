@@ -18,6 +18,10 @@ import {
   startSchedulerTickLoop,
   stopSchedulerTickLoop,
 } from './server/scheduler/tick.js';
+import {
+  startCalendarReminderLoop,
+  stopCalendarReminderLoop,
+} from './server/calendar/reminders.js';
 import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
 import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
@@ -105,11 +109,14 @@ async function main() {
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
   console.log(`Scheduler API: ${localUrl.replace(/\/$/, '')}/api/scheduler/ping`);
+  console.log(`Calendar API: ${localUrl.replace(/\/$/, '')}/api/calendar/ping`);
   const schedulerBaseUrl = localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
+  startCalendarReminderLoop();
   const onShutdown = () => {
     stopSchedulerTickLoop();
+    stopCalendarReminderLoop();
     shutdownSchedulerRuns();
     shutdownAllServers();
     shutdownAllModelServes();
