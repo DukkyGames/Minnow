@@ -27,6 +27,8 @@ export interface HeadlessRunCliOptions {
   persistChat: boolean;
   chatId: string | null;
   chatName: string | null;
+  /** Scheduled job subprocess — adds guidance to avoid save_memory noise. */
+  schedulerRun: boolean;
 }
 
 const RUN_HELP = `minnow run — execute one agent turn without the SPA
@@ -66,6 +68,7 @@ Session:
   --persist-chat          Save transcript to ~/.minnow sessions (requires --chat-id)
   --chat-id <id>          Chat id to create or update when persisting
   --chat-name <label>     Sidebar title for the persisted chat (default: Headless run)
+  --scheduler-run         Scheduled-job context (suppress routine save_memory)
 
 Env:
   MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1  Required with --no-approval
@@ -124,6 +127,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       'persist-chat': { type: 'boolean', default: false },
       'chat-id': { type: 'string' },
       'chat-name': { type: 'string' },
+      'scheduler-run': { type: 'boolean', default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -210,6 +214,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       persistChat,
       chatId,
       chatName,
+      schedulerRun: Boolean(values['scheduler-run']),
     },
   };
 }

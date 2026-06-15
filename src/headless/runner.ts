@@ -32,10 +32,14 @@ import {
   setPromptMetaCacheForTests,
   type PromptProfileName,
 } from '../config/prompt-meta';
-import { detectConfigServer } from '../config/storage-mode';
+import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { getActiveProvider } from '../providers/store';
 import { parseToolArguments } from '../tools/parse-tool-arguments';
 import { detectLocalServer } from '../tools/client';
+import {
+  ensureToolConfigReady,
+  isToolConfigReadyForSettingsUi,
+} from '../tools/config';
 import type { ApiMessage, Chat, ChatCompletionChunk, ToolCallAccumulator } from '../types';
 import type { HeadlessRunCliOptions } from './argv';
 import {
@@ -168,6 +172,12 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   await initHeadlessWorkAgents();
   await loadChatMeta();
   await loadPromptMetaWithProfile(options.cli.profile);
+  await ensureToolConfigReady();
+  if (isServerStorageMode() && !isToolConfigReadyForSettingsUi()) {
+    throw new Error(
+      'Could not load tool settings from ~/.minnow. Ensure npm start is running and /api/config/tools is reachable.',
+    );
+  }
 
   if (options.cli.maxToolTurns != null) {
     setChatMetaForTests({ maxToolTurns: options.cli.maxToolTurns });
@@ -237,6 +247,14 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     chat.modelId = sendModelId;
 
     const outbound = await resolveHeadlessOutboundSystemMessages(chat, options.cli.profile);
+    const schedulerSystemNote = options.cli.schedulerRun
+      ? [
+          'You are executing a Minnow scheduled job in headless mode.',
+          'Server tools (read/write files, shell, git, search, etc.) are available via the local tool API.',
+          'Do not call save_memory to record routine run output — the scheduler stores run history automatically.',
+          'Only use save_memory when the job prompt explicitly asks you to remember something for future chats.',
+        ].join(' ')
+      : '';
 
     const modeId = normalizeModeId(chat.modeId);
     const resolvedSampler = resolveSamplerPreset({
@@ -263,9 +281,13 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
         throw new DOMException('Aborted', 'AbortError');
       }
 
+      const composedSystem = [outbound.composed, schedulerSystemNote]
+        .filter((part) => part.trim())
+        .join('\n\n');
+
       const messages: ApiMessage[] = buildHeadlessApiMessages(
         chat,
-        outbound.composed,
+        composedSystem,
         outbound.userRules ?? undefined,
       );
 

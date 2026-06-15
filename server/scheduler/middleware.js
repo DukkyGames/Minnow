@@ -11,6 +11,7 @@ import {
 } from './store.js';
 import { runJobNow } from './runner.js';
 import { listRunsForJob } from './runner.js';
+import { getSchedulerServerBaseUrl } from './server-base-url.js';
 import {
   ackNotification,
   listUnackedNotifications,
@@ -131,7 +132,7 @@ export function createSchedulerMiddleware() {
       const runMatch = url.match(/^\/api\/scheduler\/jobs\/([^/]+)\/run$/);
       if (runMatch && req.method === 'POST') {
         const jobId = decodeURIComponent(runMatch[1]);
-        const result = await runJobNow(jobId);
+        const result = await runJobNow(jobId, { baseUrl: getSchedulerServerBaseUrl() });
         sendJson(res, 200, result);
         return;
       }

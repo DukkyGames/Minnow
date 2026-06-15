@@ -153,6 +153,7 @@ export async function runStoredJob(storedJob, options = {}) {
   const workspacePath = await resolveJobWorkspacePath(storedJob);
   args.push('--workspace', workspacePath);
   args.push('--persist-chat', '--chat-id', runId, '--chat-name', storedJob.label || 'Scheduled job');
+  args.push('--scheduler-run');
 
   const env = {
     ...process.env,
@@ -281,7 +282,11 @@ export async function runJobNow(jobId, options = {}) {
   if (!stored) {
     throw new Error('Job not found');
   }
-  return runStoredJob(stored, { ...options, trigger: 'manual' });
+  return runStoredJob(stored, {
+    ...options,
+    baseUrl: options.baseUrl ?? getSchedulerServerBaseUrl(),
+    trigger: 'manual',
+  });
 }
 
 /** Current number of in-flight scheduled runs. */

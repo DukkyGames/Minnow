@@ -94,8 +94,10 @@ describe('scheduler runner', () => {
 
     const persistIndex = capturedArgs?.indexOf('--persist-chat') ?? -1;
     const chatIdIndex = capturedArgs?.indexOf('--chat-id') ?? -1;
+    const schedulerRunIndex = capturedArgs?.indexOf('--scheduler-run') ?? -1;
     assert.ok(persistIndex >= 0);
     assert.ok(chatIdIndex >= 0);
+    assert.ok(schedulerRunIndex >= 0);
     assert.equal(capturedArgs?.[chatIdIndex + 1], runs[0].id);
 
     const after = await getStoredJobById(created.id);
