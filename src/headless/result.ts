@@ -37,6 +37,8 @@ export interface HeadlessRunResult {
     durationMs: number;
   };
   error: string | null;
+  /** Present when --persist-chat wrote this run into ~/.minnow sessions. */
+  chatId: string | null;
 }
 
 /** Stable key order for CI diff-friendly JSON. */
@@ -58,6 +60,7 @@ export function serializeHeadlessRunResult(result: HeadlessRunResult): string {
     turns: result.turns,
     stats: result.stats,
     error: result.error,
+    chatId: result.chatId,
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
