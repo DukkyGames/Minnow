@@ -254,11 +254,14 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
       const created =
         (data.memoryProposals?.length ?? 0) + (data.skillProposal ? 1 : 0);
       if (created > 0) {
-        const { noteAgentMessage } = await import('../os/instances');
-        noteAgentMessage(
-          'settings',
-          `${created} new memory/skill proposal${created === 1 ? '' : 's'} ready for review`,
-        );
+        const { pushNotification } = await import('../notifications/push');
+        pushNotification({
+          kind: 'synthesis',
+          title: 'Auto-learning',
+          preview: `${created} new memory/skill proposal${created === 1 ? '' : 's'} ready for review`,
+          appId: 'settings',
+          dedupeKey: `synthesis:${input.chatId}:${created}`,
+        });
       }
     } catch {
       /* synthesis is best-effort */

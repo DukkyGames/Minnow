@@ -60,6 +60,7 @@ import type { MemoryEntryWithBody } from '../memory/types';
 import { mountMemoryEmbeddingsPanel } from './settings-memory-embeddings';
 import { mountMemorySynthesisSettingsPanel } from './settings-memory-synthesis';
 import { renderAudioSettingsSection } from './settings-audio';
+import { renderNotificationsSettingsSection } from './settings-notifications';
 import { mountMemoryProposalsPanel } from './memory-proposals-panel';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
@@ -248,6 +249,13 @@ async function renderGeneralSection(): Promise<void> {
     'How the main thread and background shells behave.',
   );
   await appendTerminalControls(chat);
+
+  const notifications = appendSettingsGroup(
+    mount,
+    'Notifications',
+    'Menubar bell alerts for background chats, tasks, and scheduled jobs.',
+  );
+  renderNotificationsSettingsSection(notifications);
 
   const crossAppearance = el('div', 'settings-crosslinks');
   crossAppearance.appendChild(el('span', 'settings-crosslinks__label', 'Related'));

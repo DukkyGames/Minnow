@@ -1939,6 +1939,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         outputMessages,
       });
       scheduleSaveSessions();
+      if (ownsGlobalStreaming) {
+        void import('../notifications/chat-turn.js').then((mod) => {
+          mod.notifyChatTurnEnded(chat.id, turnRunId);
+        });
+      }
     }
   }
   } finally {

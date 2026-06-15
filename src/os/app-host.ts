@@ -156,7 +156,10 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       ) {
         welcome.openWelcome({ skipHash: true });
       }
-      if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
+      if (options?.chatId?.trim()) {
+        const { switchToCodeChat } = await import('./chat-launch');
+        await switchToCodeChat(options.chatId);
+      } else if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
         const { applyCodeLaunchOptions } = await import('./code-launch');
         await applyCodeLaunchOptions(options);
       }
@@ -164,7 +167,7 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     }
     case 'chat': {
       const { openChatApp } = await import('../ui/chat-app');
-      await openChatApp(options?.seed);
+      await openChatApp({ seed: options?.seed, chatId: options?.chatId });
       break;
     }
     default:

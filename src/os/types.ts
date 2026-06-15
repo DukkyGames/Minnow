@@ -52,6 +52,8 @@ export interface LaunchOptions {
   workspacePath?: string;
   /** Research: start a run immediately when a seed is present. */
   autoRun?: boolean;
+  /** Code app: switch to this chat after launch (notification deep-link). */
+  chatId?: string;
 }
 
 /** Parsed hash route consumed by the OS shell and page bridge. */

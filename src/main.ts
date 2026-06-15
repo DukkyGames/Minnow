@@ -74,6 +74,7 @@ import { detectConfigServer, refreshConfigStorageBanner } from './config/storage
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
 import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
+import { initNotificationProducers } from './notifications/producers';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
@@ -285,6 +286,7 @@ export async function initApp(): Promise<void> {
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
   startSchedulerNotificationPoll();
+  initNotificationProducers();
   onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
