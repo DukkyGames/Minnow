@@ -15,6 +15,14 @@ import {
   type SchedulerRun,
 } from '../../scheduler/client';
 import { describeSchedule, uiToSchedule, validateScheduleUi } from '../../scheduler/schedule-display';
+import { populateMultiProviderModelSelect } from '../../api/models';
+import { formatModelLabel } from '../../lib/format-model-label';
+import { decodeModelSelectKey } from '../../lib/model-select-key';
+import { listProviders } from '../../providers/store';
+import {
+  mountAuxiliaryModelSelectCombobox,
+  syncAuxiliaryModelSelectCombobox,
+} from '../model-select-picker';
 import { createSettingsToggleRow } from '../settings-switch';
 import { isLocalServerAvailable } from '../../tools/config';
 import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
@@ -73,6 +81,21 @@ function formatJobWorkspaceLabel(
     return `${defaultLabel} (default)`;
   }
   return workspaceBasename(custom);
+}
+
+/** Human-readable model label for job list rows. */
+function formatJobModelLabel(
+  job: Pick<ScheduledJob, 'providerId' | 'modelId'>,
+  providerLabelById: Map<string, string>,
+): string {
+  const modelId = job.modelId?.trim();
+  if (!modelId) {
+    return 'Menubar default';
+  }
+  const { optionText } = formatModelLabel({ id: modelId });
+  const providerId = job.providerId?.trim();
+  const providerLabel = providerId ? providerLabelById.get(providerId) ?? providerId : '';
+  return providerLabel ? `${optionText} — ${providerLabel}` : optionText;
 }
 
 const EMPTY_FORM: Omit<ScheduledJob, 'id' | 'createdAt' | 'updatedAt' | 'running'> = {
@@ -192,6 +215,7 @@ export async function renderSchedulerPanel(
   const formState = { ...EMPTY_FORM };
   let defaultWorkspacePath = '';
   let defaultWorkspaceLabel = 'Scheduler';
+  const providerLabelById = new Map<string, string>();
 
   try {
     const defaultWorkspace = await fetchSchedulerDefaultWorkspace();
@@ -199,6 +223,15 @@ export async function renderSchedulerPanel(
     defaultWorkspaceLabel = defaultWorkspace.label || 'Scheduler';
   } catch {
     /* offline guard above should prevent this; keep form usable */
+  }
+
+  try {
+    const { providers } = await listProviders();
+    for (const provider of providers) {
+      providerLabelById.set(provider.id, provider.label || provider.id);
+    }
+  } catch {
+    /* model list labels degrade to ids when providers are unreachable */
   }
 
   function setEditorOpen(open: boolean): void {
@@ -275,6 +308,46 @@ export async function renderSchedulerPanel(
     });
     modeField.appendChild(modeSelect);
     fields.appendChild(modeField);
+
+    const modelField = el('div', 'scheduler-field scheduler-model-field');
+    modelField.appendChild(el('span', 'scheduler-field__label', 'Model'));
+    const modelSelect = el('select', 'settings-select scheduler-model-select') as HTMLSelectElement;
+    modelSelect.id = 'schedulerJobModel';
+    modelSelect.innerHTML = '<option value="">Loading models…</option>';
+    modelField.appendChild(modelSelect);
+
+    const modelHint = el(
+      'span',
+      'scheduler-field__hint',
+      formState.modelId?.trim()
+        ? formatJobModelLabel(formState, providerLabelById)
+        : 'Uses the model selected in the menubar when this job runs.',
+    );
+    modelField.appendChild(modelHint);
+    fields.appendChild(modelField);
+
+    mountAuxiliaryModelSelectCombobox(modelSelect);
+    modelSelect.addEventListener('change', () => {
+      const decoded = decodeModelSelectKey(modelSelect.value);
+      if (decoded) {
+        formState.providerId = decoded.providerId;
+        formState.modelId = decoded.modelId;
+        modelHint.textContent = formatJobModelLabel(formState, providerLabelById);
+      } else {
+        formState.providerId = undefined;
+        formState.modelId = undefined;
+        modelHint.textContent = 'Uses the model selected in the menubar when this job runs.';
+      }
+    });
+    void (async () => {
+      await populateMultiProviderModelSelect(modelSelect, {
+        selectedProviderId: formState.providerId,
+        selectedModelId: formState.modelId,
+        includeEmptyOption: true,
+        emptyLabel: '(use menubar default)',
+      });
+      syncAuxiliaryModelSelectCombobox(modelSelect);
+    })();
 
     const workspaceField = el('div', 'scheduler-field');
     workspaceField.appendChild(el('span', 'scheduler-field__label', 'Workspace'));
@@ -371,9 +444,13 @@ export async function renderSchedulerPanel(
             return;
           }
           formState.schedule = uiToSchedule(scheduleUi);
+          const hasPinnedModel =
+            Boolean(formState.providerId?.trim()) && Boolean(formState.modelId?.trim());
           const jobPayload = {
             ...formState,
             workspacePath: formState.workspacePath?.trim() || '',
+            providerId: hasPinnedModel ? formState.providerId?.trim() : '',
+            modelId: hasPinnedModel ? formState.modelId?.trim() : '',
           };
           if (editingId) {
             await updateSchedulerJob(editingId, jobPayload);
@@ -496,6 +573,14 @@ export async function renderSchedulerPanel(
       ),
     );
 
+    mainCol.appendChild(
+      el(
+        'p',
+        'scheduler-job__model',
+        `Model · ${formatJobModelLabel(job, providerLabelById)}`,
+      ),
+    );
+
     if (job.running) {
       const running = el('span', 'scheduler-job__running');
       const dot = el('span', 'scheduler-job__running-dot');
@@ -553,6 +638,8 @@ export async function renderSchedulerPanel(
         schedule: { ...job.schedule },
         prompt: job.prompt,
         modeId: job.modeId,
+        providerId: job.providerId,
+        modelId: job.modelId,
         workspacePath: job.workspacePath,
         channels: [...job.channels],
       });

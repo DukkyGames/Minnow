@@ -421,6 +421,21 @@
   color: var(--mn-fg-muted);
 }
 
+.scheduler-model-field .model-select-inner {
+  position: relative;
+  width: 100%;
+}
+
+.scheduler-model-field .settings-select {
+  max-width: none;
+}
+
+.scheduler-job__model {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
 .scheduler-input,
 .scheduler-textarea {
   width: 100%;

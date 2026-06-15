@@ -21,6 +21,7 @@ import {
 import { schedulerRunHistoryPath } from './paths.js';
 import { resolveJobWorkspacePath } from './workspace.js';
 import { getSchedulerServerBaseUrl } from './server-base-url.js';
+import { resolveJobRunModel } from './resolve-job-model.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -140,11 +141,13 @@ export async function runStoredJob(storedJob, options = {}) {
   if (storedJob.workAgentId) {
     args.push('--agent', storedJob.workAgentId);
   }
-  if (storedJob.providerId) {
-    args.push('--provider', storedJob.providerId);
+
+  const { providerId, modelId } = await resolveJobRunModel(storedJob);
+  if (providerId) {
+    args.push('--provider', providerId);
   }
-  if (storedJob.modelId) {
-    args.push('--model', storedJob.modelId);
+  if (modelId) {
+    args.push('--model', modelId);
   }
 
   const workspacePath = await resolveJobWorkspacePath(storedJob);

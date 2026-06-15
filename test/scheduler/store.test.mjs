@@ -101,6 +101,32 @@ describe('scheduler store', () => {
     assert.ok(!jobs.some((row) => row.id === job.id));
   });
 
+  test('round-trips providerId and modelId on create and update', async () => {
+    const created = await createJob({
+      label: 'Pinned model job',
+      schedule: { kind: 'interval', value: '60s' },
+      prompt: 'run with model',
+      modeId: 'build',
+      providerId: 'lmstudio',
+      modelId: 'qwen/qwen3-8b',
+      channels: ['in_app'],
+    });
+    assert.equal(created.providerId, 'lmstudio');
+    assert.equal(created.modelId, 'qwen/qwen3-8b');
+
+    const cleared = await updateJob(created.id, {
+      label: 'Pinned model job',
+      prompt: 'run with model',
+      schedule: { kind: 'interval', value: '60s' },
+      modeId: 'build',
+      providerId: '',
+      modelId: '',
+      channels: ['in_app'],
+    });
+    assert.equal(cleared.providerId, undefined);
+    assert.equal(cleared.modelId, undefined);
+  });
+
   test('enforces max job count', async () => {
     const existing = await listJobs();
     for (let i = existing.length; i < MAX_SCHEDULER_JOBS; i += 1) {

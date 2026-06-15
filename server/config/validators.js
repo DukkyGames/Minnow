@@ -365,6 +365,9 @@ function ensureChatShape(raw) {
         : PLACEHOLDER_CHAT_NAME,
     workspacePath,
     modelId: typeof row.modelId === 'string' ? row.modelId : '',
+    ...(typeof row.providerId === 'string' && row.providerId.trim()
+      ? { providerId: row.providerId.trim() }
+      : {}),
     modeId: normalizeModeId(
       typeof row.modeId === 'string' ? row.modeId : undefined,
     ),
