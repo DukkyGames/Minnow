@@ -127,6 +127,12 @@ describe('settings page HTML', () => {
     assert.equal(SETTINGS_SECTION_IDS.length, 25);
   });
 
+  test('scheduler section and nav exist in index.html', () => {
+    assert.match(html, /id="settingsSection-scheduler"/);
+    assert.match(html, /id="settingsSchedulerBody"/);
+    assert.match(html, /data-settings-nav="scheduler"/);
+  });
+
   test('prompts hub mount exists in index.html', () => {
     assert.match(html, /id="settingsPromptsHubMount"/);
     assert.match(html, /class="settings-prompts-hub-mount"/);
