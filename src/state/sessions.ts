@@ -9,6 +9,7 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   CHAT_APP_ID,
@@ -1142,6 +1143,7 @@ export function createAndActivateChat(modelId: string): Chat {
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(chat.workspacePath));
   maybeRememberActiveChatForForegroundApp(state, chat);
   scheduleSaveSessions();
+  notifySessionCreated(chat.id, chat.workspacePath);
   return chat;
 }
 

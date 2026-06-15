@@ -569,6 +569,7 @@ async function streamCompletionTurn(
     const created = await createGeneration(provider.id, body, {
       persist: true,
       fallbackRole: 'main-chat',
+      chatId: chat.id,
     });
     generationId = created.generationId;
     chat.currentGenerationId = generationId;

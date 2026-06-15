@@ -3,7 +3,7 @@
 Tier: 2  
 Effort: S-M  
 Priority: Medium  
-Status: Planned  
+Status: Shipped  
 Depends on: #12  
 Linear: [MIN-118](https://linear.app/minnowai/issue/MIN-118/odysseus-port-06-outgoing-webhooks)
 
@@ -203,16 +203,16 @@ Do not include prompt text in webhook payloads by default.
 
 ## Implementation TODOs
 
-- [ ] Add webhook store and CRUD routes
-- [ ] Add secret storage integration for signing secrets
-- [ ] Add SSRF guard that checks URL scheme, hostname, and resolved IPs
-- [ ] Add HMAC signing headers
-- [ ] Add bounded delivery queue and recent delivery log
-- [ ] Add `chat.completed` event emission
-- [ ] Add `session.created` event emission if a reliable hook exists
-- [ ] Add Settings UI for subscriptions, events, test-fire, and delivery log
-- [ ] Add a `webhooks` `SettingsSectionId`, nav group entry, `index.html` section markup, and `refreshSettingsSection()` case
-- [ ] Update `documentation/context.md`
+- [x] Add webhook store and CRUD routes
+- [x] Add secret storage integration for signing secrets
+- [x] Add SSRF guard that checks URL scheme, hostname, and resolved IPs
+- [x] Add HMAC signing headers
+- [x] Add bounded delivery queue and recent delivery log
+- [x] Add `chat.completed` event emission
+- [x] Add `session.created` event emission if a reliable hook exists
+- [x] Add Settings UI for subscriptions, events, test-fire, and delivery log
+- [x] Add a `webhooks` `SettingsSectionId`, nav group entry, `index.html` section markup, and `refreshSettingsSection()` case
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 
