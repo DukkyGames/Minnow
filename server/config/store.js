@@ -208,6 +208,9 @@ export async function readResource(resource) {
     if (!data?.editorSettings) {
       patch.editorSettings = DEFAULT_META.editorSettings;
     }
+    if (!data?.voice) {
+      patch.voice = DEFAULT_META.voice;
+    }
     if (Object.keys(patch).length > 0) {
       return mergeConfigMeta(data ?? {}, patch);
     }

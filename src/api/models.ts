@@ -280,6 +280,99 @@ function buildMultiProviderModelSelectInnerHtml(results: ProviderModelsResult[])
   return chunks.join('');
 }
 
+/** Options for {@link populateMultiProviderModelSelect}. */
+export interface PopulateMultiProviderModelSelectOptions {
+  selectedProviderId?: string;
+  selectedModelId?: string;
+  includeEmptyOption?: boolean;
+  emptyLabel?: string;
+  signal?: AbortSignal;
+}
+
+/**
+ * Load models from every enabled provider into a multi-provider &lt;select&gt;.
+ * Populates {@link modelCache} for auxiliary combobox tooltips and load dots.
+ * @returns Provider fetch results when models were loaded; `null` when the select was set to an error/empty state.
+ */
+export async function populateMultiProviderModelSelect(
+  select: HTMLSelectElement,
+  options?: PopulateMultiProviderModelSelectOptions,
+): Promise<ProviderModelsResult[] | null> {
+  const signal = options?.signal;
+  const emptyLabel = options?.emptyLabel ?? '(use menubar default)';
+
+  select.innerHTML = '<option value="">Loading models…</option>';
+  syncModelSelectPicker();
+
+  try {
+    const { providers } = await listProviders();
+    const enabled = providers.filter((p) => p.enabled !== false);
+
+    if (enabled.length === 0) {
+      select.innerHTML = '<option value="">No providers configured</option>';
+      syncModelSelectPicker();
+      return null;
+    }
+
+    const results = await fetchModelsForAllProviders(enabled, signal ?? new AbortController().signal);
+    const withModels = results.filter((r) => r.models.length > 0);
+    const totalModels = withModels.reduce((n, r) => n + r.models.length, 0);
+
+    if (totalModels === 0) {
+      select.innerHTML = '<option value="">No models found</option>';
+      syncModelSelectPicker();
+      return results;
+    }
+
+    let innerHtml = buildMultiProviderModelSelectInnerHtml(results);
+    if (options?.includeEmptyOption) {
+      innerHtml = `<option value="">${escapeHtml(emptyLabel)}</option>${innerHtml}`;
+    }
+    select.innerHTML = innerHtml;
+    syncModelSelectPicker();
+
+    modelCache.clear();
+    for (const { provider, models } of results) {
+      for (const m of models) {
+        const key = encodeModelSelectKey(provider.id, m.id);
+        modelCache.set(key, { ...m, capabilities: catalogCapabilitiesFromRow(m) });
+      }
+    }
+
+    for (const { provider, error } of results) {
+      if (error || provider.enabled === false) continue;
+      try {
+        const capsFile = await fetchProviderCapabilities(provider.id, signal);
+        mergeCapabilitiesIntoModelCache(capsFile);
+      } catch {
+        /* stale or missing capabilities file is ok */
+      }
+    }
+
+    const pid = options?.selectedProviderId?.trim();
+    const mid = options?.selectedModelId?.trim();
+    if (pid && mid) {
+      const want = encodeModelSelectKey(pid, mid);
+      if ([...select.options].some((opt) => opt.value === want)) {
+        select.value = want;
+      } else if (options?.includeEmptyOption) {
+        select.value = '';
+      }
+    } else if (options?.includeEmptyOption) {
+      select.value = '';
+    }
+
+    syncModelSelectPicker();
+    return results;
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e && e.name === 'AbortError') return null;
+    select.innerHTML = '<option value="">Cannot reach providers</option>';
+    syncModelSelectPicker();
+    return null;
+  }
+}
+
 /** Pick initial <select> value: chat binding, else first loaded model, else first option. */
 function pickInitialSelectValue(
   results: ProviderModelsResult[],
@@ -316,7 +409,6 @@ function pickInitialSelectValue(
 /** Load models from every enabled provider and populate the model select. */
 export async function fetchModels(): Promise<void> {
   const sel = document.getElementById('modelSelect') as HTMLSelectElement;
-  const chat = getActiveChat();
 
   if (modelsFetchAbort) modelsFetchAbort.abort();
   const controller = new AbortController();
@@ -340,14 +432,24 @@ export async function fetchModels(): Promise<void> {
       return;
     }
 
-    const results = await fetchModelsForAllProviders(enabled, signal);
+    const results = await populateMultiProviderModelSelect(sel, { signal });
+    if (!results) {
+      const { providers: listed } = await listProviders();
+      const enabledCount = listed.filter((p) => p.enabled !== false).length;
+      if (enabledCount === 0) {
+        setStatus('err', 'No providers configured. Use Settings → Providers.');
+      } else {
+        setStatus('err', 'Cannot reach one or more providers. Check Settings → Providers.');
+      }
+      updateModelLoadUnloadButtons();
+      return;
+    }
+
     const failures = results.filter((r) => r.error);
     const withModels = results.filter((r) => r.models.length > 0);
     const totalModels = withModels.reduce((n, r) => n + r.models.length, 0);
 
     if (totalModels === 0) {
-      sel.innerHTML = '<option value="">No models found</option>';
-      syncModelSelectPicker();
       const names = failures.map((f) => f.provider.label).join(', ');
       setStatus(
         'err',
@@ -357,27 +459,6 @@ export async function fetchModels(): Promise<void> {
       );
       updateModelLoadUnloadButtons();
       return;
-    }
-
-    sel.innerHTML = buildMultiProviderModelSelectInnerHtml(results);
-    syncModelSelectPicker();
-
-    modelCache.clear();
-    for (const { provider, models } of results) {
-      for (const m of models) {
-        const key = encodeModelSelectKey(provider.id, m.id);
-        modelCache.set(key, { ...m, capabilities: catalogCapabilitiesFromRow(m) });
-      }
-    }
-
-    for (const { provider, error } of results) {
-      if (error || provider.enabled === false) continue;
-      try {
-        const capsFile = await fetchProviderCapabilities(provider.id, signal);
-        mergeCapabilitiesIntoModelCache(capsFile);
-      } catch {
-        /* stale or missing capabilities file is ok */
-      }
     }
 
     const ac = getActiveChat();

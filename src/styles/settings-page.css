@@ -1044,6 +1044,58 @@
   }
 }
 
+.settings-input {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--mn-fg);
+  outline: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.settings-input::placeholder {
+  color: var(--mn-fg-muted);
+  font-weight: 400;
+}
+
+.settings-input:focus-visible {
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 3px var(--mn-accent-soft);
+}
+
+.settings-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-input:hover:not(:disabled) {
+    border-color: var(--mn-border-strong);
+  }
+}
+
+.settings-input[type='number']::-webkit-outer-spin-button,
+.settings-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.settings-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .settings-subagent-extra {
   margin-bottom: 16px;
   padding-bottom: 16px;
@@ -1343,7 +1395,40 @@ label.settings-action-btn {
   border-radius: var(--radius-sm);
 }
 
-.settings-search-managed-note .settings-inline-link {
+.settings-search-url-managed__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 4px;
+}
+
+.settings-search-url-managed__head .settings-field-label {
+  margin-bottom: 0;
+}
+
+.settings-search-managed-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  max-width: 420px;
+  padding: 10px 12px;
+  background: var(--mn-surface-0);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-search-managed-url__endpoint {
+  font-family: var(--font-mono, var(--mn-font-mono));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--mn-fg);
+  word-break: break-all;
+}
+
+.settings-search-url-managed .settings-field-hint .settings-inline-link {
   display: inline;
   margin: 0 0.15em;
 }

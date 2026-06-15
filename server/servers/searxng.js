@@ -176,7 +176,7 @@ async function writePythonRuntimeMeta(pythonRoot, pythonExe, extra = {}) {
  * @param {(message: string) => void} [onProgress]
  * @returns {Promise<string>} path to standalone python executable
  */
-async function ensureStandalonePython(onProgress) {
+export async function ensureStandalonePython(onProgress) {
   const pythonRoot = getServersPythonDir();
   const runtimeDir = path.join(pythonRoot, 'runtime');
   const metaPath = path.join(pythonRoot, 'meta.json');

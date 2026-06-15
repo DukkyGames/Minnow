@@ -13,6 +13,7 @@ import './styles/model-select.css';
 import './styles/sidebar.css';
 import './styles/messages.css';
 import './styles/message-actions.css';
+import './styles/voice.css';
 import './styles/branch-picker.css';
 import './styles/thoughts.css';
 import './styles/code-change-strip.css';
@@ -72,6 +73,7 @@ import { sendMessage } from './chat/messaging';
 import { detectConfigServer, refreshConfigStorageBanner } from './config/storage-mode';
 import { runMigrationIfNeeded } from './config/migrate';
 import { detectLocalServer } from './tools/client';
+import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
 import { mountSlashPicker } from './ui/skill-picker';
@@ -156,6 +158,8 @@ import {
   closeComposerToolsPopover,
   initComposerToolsPopover,
 } from './ui/composer-tools-popover';
+import { initComposerVoice } from './ui/composer-voice';
+import { initVoiceStatus } from './ui/voice-controls';
 import { dismissOpenLayers } from './ui/status';
 import {
   closeMobileFileSidebar,
@@ -263,6 +267,8 @@ export async function initApp(): Promise<void> {
   fillToolsSection('composerToolsList', { variant: 'composer' });
   registerToolHandlers();
   initComposerToolsPopover();
+  initComposerVoice();
+  void initVoiceStatus();
   initAttachments();
   initContextUsageRing();
   initModeSelector();
@@ -274,6 +280,7 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  startSchedulerNotificationPoll();
   onWelcomeServerAvailabilityChanged();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
@@ -324,6 +331,8 @@ export async function initApp(): Promise<void> {
   modelsPage.initModelsPage();
   const comparePage = await import('./ui/compare-page');
   comparePage.initComparePage();
+  const schedulerPage = await import('./ui/scheduler-page');
+  schedulerPage.initSchedulerPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');

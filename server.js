@@ -7,11 +7,19 @@ import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { attachPtyWebSocketServer } from './server/terminal/pty-ws.js';
+import { attachSttWebSocketServer } from './server/stt/stt-ws.js';
+import { attachTtsWebSocketServer } from './server/tts/tts-ws.js';
 import { destroyAllPtySessions } from './server/terminal/pty-host.js';
 import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { getAppRoot } from './server/workspace/root.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
+import {
+  startSchedulerTickLoop,
+  stopSchedulerTickLoop,
+} from './server/scheduler/tick.js';
+import { setSchedulerServerBaseUrl } from './server/scheduler/server-base-url.js';
+import { shutdownSchedulerRuns } from './server/scheduler/runner.js';
 import { shutdownAllServers } from './server/servers/index.js';
 import { shutdownAllModelServes } from './server/models/index.js';
 import {
@@ -57,6 +65,8 @@ async function main() {
         configureServer(server) {
           if (server.httpServer) {
             attachPtyWebSocketServer(server.httpServer);
+            attachSttWebSocketServer(server.httpServer);
+            attachTtsWebSocketServer(server.httpServer);
           }
           applyMinnowMiddlewares(server.middlewares, {
             resolveSafePath,
@@ -94,7 +104,13 @@ async function main() {
   console.log(`Preview API: ${localUrl.replace(/\/$/, '')}/api/preview/ping`);
   console.log(`Terminal API: ${localUrl.replace(/\/$/, '')}/api/terminal/run`);
   console.log(`Terminal PTY: ${localUrl.replace(/\/$/, '')}/api/terminal/ws?sessionId=…`);
+  console.log(`Scheduler API: ${localUrl.replace(/\/$/, '')}/api/scheduler/ping`);
+  const schedulerBaseUrl = localUrl.replace(/\/$/, '');
+  setSchedulerServerBaseUrl(schedulerBaseUrl);
+  await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });
   const onShutdown = () => {
+    stopSchedulerTickLoop();
+    shutdownSchedulerRuns();
     shutdownAllServers();
     shutdownAllModelServes();
     destroyAllPtySessions();

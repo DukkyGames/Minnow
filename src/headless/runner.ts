@@ -32,10 +32,14 @@ import {
   setPromptMetaCacheForTests,
   type PromptProfileName,
 } from '../config/prompt-meta';
-import { detectConfigServer } from '../config/storage-mode';
+import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { getActiveProvider } from '../providers/store';
 import { parseToolArguments } from '../tools/parse-tool-arguments';
 import { detectLocalServer } from '../tools/client';
+import {
+  ensureToolConfigReady,
+  isToolConfigReadyForSettingsUi,
+} from '../tools/config';
 import type { ApiMessage, Chat, ChatCompletionChunk, ToolCallAccumulator } from '../types';
 import type { HeadlessRunCliOptions } from './argv';
 import {
@@ -50,6 +54,7 @@ import {
   type HeadlessTurnRecord,
 } from './result';
 import { installHeadlessFetch, installHeadlessLocalStorage } from './server-context';
+import { persistHeadlessChat } from './persist-chat';
 
 /** Apply --profile in memory only (does not write ~/.minnow). */
 async function loadPromptMetaWithProfile(profile: string): Promise<void> {
@@ -129,9 +134,10 @@ async function streamHeadlessTurn(
 
 function buildHeadlessChat(options: HeadlessRunCliOptions, workspacePath: string): Chat {
   const now = Date.now();
+  const chatId = options.chatId?.trim() || `headless-${now}`;
   return {
-    id: `headless-${now}`,
-    name: 'Headless run',
+    id: chatId,
+    name: options.chatName?.trim() || 'Headless run',
     workspacePath,
     modelId: options.modelId ?? '',
     providerId: options.providerId ?? undefined,
@@ -166,6 +172,12 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   await initHeadlessWorkAgents();
   await loadChatMeta();
   await loadPromptMetaWithProfile(options.cli.profile);
+  await ensureToolConfigReady();
+  if (isServerStorageMode() && !isToolConfigReadyForSettingsUi()) {
+    throw new Error(
+      'Could not load tool settings from ~/.minnow. Ensure npm start is running and /api/config/tools is reachable.',
+    );
+  }
 
   if (options.cli.maxToolTurns != null) {
     setChatMetaForTests({ maxToolTurns: options.cli.maxToolTurns });
@@ -187,6 +199,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   let providerId = '';
   let modelId = '';
   let workAgentId: string | null = null;
+  let persistedChatId: string | null = null;
 
   try {
     if (options.signal.aborted) {
@@ -234,6 +247,14 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     chat.modelId = sendModelId;
 
     const outbound = await resolveHeadlessOutboundSystemMessages(chat, options.cli.profile);
+    const schedulerSystemNote = options.cli.schedulerRun
+      ? [
+          'You are executing a Minnow scheduled job in headless mode.',
+          'Server tools (read/write files, shell, git, search, etc.) are available via the local tool API.',
+          'Do not call save_memory to record routine run output — the scheduler stores run history automatically.',
+          'Only use save_memory when the job prompt explicitly asks you to remember something for future chats.',
+        ].join(' ')
+      : '';
 
     const modeId = normalizeModeId(chat.modeId);
     const resolvedSampler = resolveSamplerPreset({
@@ -260,9 +281,13 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
         throw new DOMException('Aborted', 'AbortError');
       }
 
+      const composedSystem = [outbound.composed, schedulerSystemNote]
+        .filter((part) => part.trim())
+        .join('\n\n');
+
       const messages: ApiMessage[] = buildHeadlessApiMessages(
         chat,
-        outbound.composed,
+        composedSystem,
         outbound.userRules ?? undefined,
       );
 
@@ -355,6 +380,25 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     log(error);
   }
 
+  if (options.cli.persistChat && options.cli.chatId) {
+    try {
+      await persistHeadlessChat({
+        chatId: chat.id,
+        chatName: chat.name,
+        workspacePath: chat.workspacePath,
+        modeId: normalizeModeId(chat.modeId),
+        providerId,
+        modelId,
+        workAgentId,
+        history: chat.history,
+      });
+      persistedChatId = chat.id;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`Failed to persist chat: ${message}`);
+    }
+  }
+
   const finishedAt = new Date().toISOString();
   const result: HeadlessRunResult = {
     version: HEADLESS_RESULT_VERSION,
@@ -376,6 +420,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
       durationMs: Date.now() - t0,
     },
     error,
+    chatId: persistedChatId,
   };
 
   return result;

@@ -436,6 +436,7 @@
         <p id="settingsNavApp" class="settings-nav-group__label">App</p>
         <button type="button" data-settings-nav="general" aria-current="page">General</button>
         <button type="button" data-settings-nav="appearance">Appearance</button>
+        <button type="button" data-settings-nav="audio">Audio</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavPrompting">
         <p id="settingsNavPrompting" class="settings-nav-group__label">Prompting &amp; memory</p>
@@ -478,6 +479,42 @@
       <section id="settingsSection-appearance" class="settings-section settings-section--appearance">
         <h2>Appearance</h2>
         <div id="settingsAppearanceBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-audio" class="settings-section">
+        <h2>Audio</h2>
+        <p class="settings-lead">Microphone and speaker devices for dictation and read-aloud. Configure STT/TTS models under <strong>Models → Voice</strong>.</p>
+        <section class="settings-group settings-group--flat" id="settingsAudioPanel" data-settings-search-key="audio.devices">
+          <p id="settingsAudioOffline" class="field-hint settings-memory-offline hidden">
+            Start with <code>npm start</code> to persist audio device settings.
+          </p>
+          <div class="settings-group__body">
+            <div class="field">
+              <label for="settingsAudioInputDevice">Input device</label>
+              <select id="settingsAudioInputDevice" class="settings-select"></select>
+            </div>
+            <div class="field">
+              <label for="settingsAudioOutputDevice">Output device</label>
+              <select id="settingsAudioOutputDevice" class="settings-select"></select>
+              <p class="field-hint">Output routing uses <code>setSinkId</code> when supported (Chrome / Electron).</p>
+            </div>
+            <label class="settings-toggle-row" data-settings-search-key="audio.echoCancellation">
+              <span>Echo cancellation</span>
+              <input type="checkbox" id="settingsAudioEchoCancellation" checked>
+            </label>
+            <label class="settings-toggle-row" data-settings-search-key="audio.noiseSuppression">
+              <span>Noise suppression</span>
+              <input type="checkbox" id="settingsAudioNoiseSuppression" checked>
+            </label>
+            <label class="settings-toggle-row" data-settings-search-key="audio.autoGainControl">
+              <span>Auto gain control</span>
+              <input type="checkbox" id="settingsAudioAutoGainControl" checked>
+            </label>
+            <div class="settings-form-actions">
+              <button type="button" class="settings-action-btn" id="settingsAudioSave">Save audio settings</button>
+              <button type="button" class="settings-inline-btn" id="settingsAudioRefreshDevices">Refresh devices</button>
+            </div>
+          </div>
+        </section>
       </section>
       <section id="settingsSection-providers" class="settings-section">
         <h2>Providers</h2>
@@ -864,6 +901,10 @@
         <p class="settings-lead">Outgoing HMAC-signed webhooks for chat completion, session creation, and scheduler events.</p>
         <div id="settingsWebhooksBody" class="settings-section-body"></div>
       </section>
+      <section id="settingsSection-voice" class="settings-section hidden" hidden aria-hidden="true">
+        <h2>Voice</h2>
+        <p class="settings-lead">Voice model settings moved to <strong>Models → Voice</strong> (<code>#/app/models/voice</code>). Device routing remains under <strong>Settings → Audio</strong>.</p>
+      </section>
       <section id="settingsSection-features" class="settings-section">
         <h2>Orchestration</h2>
         <p class="settings-lead">Orchestrate supervisor: heartbeat, stall resumes, repetition detection, and optional LLM escalation. Replaces legacy <code>selfHealing.*</code> toggles.</p>
@@ -1114,6 +1155,7 @@
       <button type="button" data-models-nav="recommend" aria-current="page">What fits</button>
       <button type="button" data-models-nav="installed">Installed</button>
       <button type="button" data-models-nav="settings">Settings</button>
+      <button type="button" data-models-nav="voice">Voice</button>
       <button type="button" data-models-nav="providers">Providers</button>
       <button type="button" data-models-nav="routing">Routing</button>
       <button type="button" data-models-nav="sampler">Sampler</button>
@@ -1135,6 +1177,11 @@
         <h2>Settings</h2>
         <p class="models-lead">Hugging Face token and extra directories for local model scans.</p>
         <div id="modelsSettingsBody"></div>
+      </section>
+      <section id="modelsSection-voice" class="models-section">
+        <h2>Voice</h2>
+        <p class="models-lead">Local Whisper STT and Qwen3-TTS models, runtime health, and voice I/O settings.</p>
+        <div id="modelsVoiceBody"></div>
       </section>
       <section id="modelsSection-providers" class="models-section"></section>
       <section id="modelsSection-routing" class="models-section"></section>
@@ -1299,6 +1346,20 @@
         <div id="compareWinRates" class="compare-win-rates">Win rates appear after your first vote.</div>
       </section>
     </div>
+  </div>
+</main>
+
+<main id="schedulerView" class="scheduler-page" aria-label="Scheduler">
+  <header class="scheduler-hdr">
+    <span class="scheduler-hdr-ico" id="schedulerPageIcon" aria-hidden="true"></span>
+    <div class="scheduler-hdr-txt">
+      <h2>Scheduler</h2>
+      <span>Recurring local agent jobs and in-app reminders</span>
+    </div>
+  </header>
+  <div id="schedulerAppBody" class="scheduler-body">
+    <p id="schedulerStatus" class="scheduler-status" role="status" aria-live="polite"></p>
+    <div id="schedulerPanelMount" class="scheduler-panel-mount"></div>
   </div>
 </main>
 

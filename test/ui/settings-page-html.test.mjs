@@ -10,6 +10,8 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 /** Nav section ids must match panels in index.html (settings-page-types SETTINGS_SECTIONS). */
 const SETTINGS_SECTION_IDS = [
   'general',
+  'appearance',
+  'audio',
   'providers',
   'usage',
   'model-routing',
@@ -125,7 +127,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 25);
+    assert.equal(SETTINGS_SECTION_IDS.length, 27);
   });
 
   test('prompts hub mount exists in index.html', () => {
@@ -139,6 +141,21 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesText"/);
     assert.match(html, /id="settingsRulesSave"/);
     assert.match(html, /data-settings-nav="rules"/);
+  });
+
+  test('audio settings panel exists in index.html', () => {
+    assert.match(html, /id="settingsSection-audio"/);
+    assert.match(html, /id="settingsAudioPanel"/);
+    assert.match(html, /id="settingsAudioInputDevice"/);
+    assert.match(html, /id="settingsAudioOutputDevice"/);
+    assert.match(html, /data-settings-nav="audio"/);
+  });
+
+  test('voice settings redirect notice in index.html', () => {
+    assert.match(html, /id="settingsSection-voice"/);
+    assert.match(html, /Models → Voice/);
+    assert.match(html, /id="modelsSection-voice"/);
+    assert.match(html, /id="modelsVoiceBody"/);
   });
 
   test('composer tools button and popover exist in index.html', () => {

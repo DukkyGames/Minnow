@@ -22,12 +22,16 @@ import { createPreviewMiddleware } from '../preview/middleware.js';
 import { createProfilesMiddleware } from '../profiles/middleware.js';
 import { createPromptConfigsMiddleware } from '../prompt-configs/middleware.js';
 import { createProviderMiddleware } from '../providers/routes.js';
+import { createSttMiddleware } from '../stt/middleware.js';
+import { createTtsMiddleware } from '../tts/middleware.js';
+import { createVoiceRuntimeMiddleware } from '../voice/routes.js';
 import { createReefMiddleware } from '../reef/middleware.js';
 import { createSkillsMiddleware } from '../skills/middleware.js';
 import { createPluginsMiddleware } from '../tools/middleware.js';
 import { createTerminalMiddleware } from '../terminal/middleware.js';
 import { createSystemMiddleware } from '../system/middleware.js';
 import { createModelsMiddleware } from '../models/index.js';
+import { createSchedulerMiddleware } from '../scheduler/middleware.js';
 import { createWebhooksMiddleware } from '../webhooks/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
@@ -48,6 +52,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());
   connectApp.use(createModelsMiddleware());
+  connectApp.use(createSchedulerMiddleware());
   connectApp.use(
     createPreviewMiddleware({
       resolveSafePath,
@@ -64,6 +69,9 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createPromptConfigsMiddleware());
   connectApp.use(createProfilesMiddleware());
   connectApp.use(createProviderMiddleware());
+  connectApp.use(createSttMiddleware());
+  connectApp.use(createTtsMiddleware());
+  connectApp.use(createVoiceRuntimeMiddleware());
   connectApp.use(createGenerationsMiddleware());
   connectApp.use(createResearchMiddleware());
   connectApp.use(createWorkAgentsMiddleware());

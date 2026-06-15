@@ -48,6 +48,30 @@ const SECTION_SEARCH_ALIASES: Partial<
   mcp: ['model context protocol'],
   webhooks: ['outgoing webhook', 'hmac', 'automation', 'signed events'],
   lsp: ['language server', 'typescript server'],
+  audio: ['microphone', 'speaker', 'devices', 'dictation', 'echo', 'gain'],
+};
+
+/** Voice I/O keywords route to Models → Voice (not a settings section). */
+const MODELS_VOICE_SEARCH: SettingsSearchEntry = {
+  id: 'models:voice',
+  label: 'Voice',
+  sectionId: 'audio',
+  kind: 'models-section',
+  modelsSection: 'voice',
+  keywords: [
+    'voice',
+    'speech',
+    'stt',
+    'tts',
+    'read aloud',
+    'dictation',
+    'whisper',
+    'qwen',
+    'text to speech',
+    'speech to text',
+    'models voice',
+  ],
+  hint: 'Models app',
 };
 
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {
@@ -172,6 +196,7 @@ export function buildSettingsSearchIndex(): SettingsSearchEntry[] {
   const sections = SETTINGS_SECTIONS.map(sectionEntry);
   return [
     ...sections,
+    MODELS_VOICE_SEARCH,
     ...navGroupEntries(),
     ...toolCategoryEntries(),
     ...toolEntries(),

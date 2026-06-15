@@ -42,6 +42,13 @@ import {
 } from '../api/chat';
 import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
+import {
+  extractInlineThinkingFromContent,
+  HarmonyChannelRouter,
+  InlineContentThinkingRouter,
+  modelLikelyUsesInlineThinking,
+  type RoutedContentPart,
+} from '../api/inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage } from '../api/reasoning';
 import { resolveModelInfo } from '../api/models';
 import {
@@ -577,6 +584,66 @@ async function streamCompletionTurn(
   let toolAcc: ToolCallAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+  const modelId = body.model ?? '';
+  const inlineRouter = new InlineContentThinkingRouter({
+    thinkingModel: modelLikelyUsesInlineThinking(modelId),
+  });
+  const harmonyRouter = new HarmonyChannelRouter();
+
+  function processRoutedParts(parts: RoutedContentPart[]): void {
+    for (const [text, isThinking] of parts) {
+      if (isThinking) {
+        if (text) {
+          thoughtController?.appendReasoningDelta(text);
+          onStreamContextActivity?.();
+        }
+        continue;
+      }
+      if (!text) {
+        continue;
+      }
+      thoughtController?.endReasoningPhase();
+      onFirstProseDelta?.();
+      if (tFirst == null) tFirst = performance.now();
+      fullText += text;
+      onPartialText?.(fullText);
+      onStreamContextActivity?.();
+      if (domVisible) {
+        scheduleAssistantBubbleRender(bubble, fullText, cursor);
+      }
+    }
+  }
+
+  function routeContentDelta(delta: string): void {
+    if (!delta) {
+      return;
+    }
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          thoughtController?.appendReasoningDelta(harmonyText);
+          onStreamContextActivity?.();
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+  }
+
+  function flushContentRouters(): void {
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          thoughtController?.appendReasoningDelta(harmonyText);
+          onStreamContextActivity?.();
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+    processRoutedParts(inlineRouter.flush());
+  }
+
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
@@ -585,17 +652,9 @@ async function streamCompletionTurn(
       thoughtController?.appendReasoningDelta(reasoning);
       onStreamContextActivity?.();
     }
-    const delta = extractStreamDelta(chunk);
-    if (delta) {
-      thoughtController?.endReasoningPhase();
-      onFirstProseDelta?.();
-      if (tFirst == null) tFirst = performance.now();
-      fullText += delta;
-      onPartialText?.(fullText);
-      onStreamContextActivity?.();
-      if (domVisible) {
-        scheduleAssistantBubbleRender(bubble, fullText, cursor);
-      }
+    const contentDelta = extractStreamDelta(chunk);
+    if (contentDelta) {
+      routeContentDelta(contentDelta);
     }
     if (domVisible) {
       scrollChatIfPinned();
@@ -662,9 +721,17 @@ async function streamCompletionTurn(
     throw err;
   }
 
+  flushContentRouters();
   onPartialText?.(fullText);
 
   thoughtController?.endReasoningPhase();
+
+  const split = extractInlineThinkingFromContent(fullText);
+  if (split.thinking.length && split.reply.trim()) {
+    thoughtController?.ingestCompletedReasoning(split.thinking.join('\n\n'));
+    fullText = split.reply;
+    onPartialText?.(fullText);
+  }
 
   const tEnd = performance.now();
   const toolCalls = mergeContentJsonToolCalls(fullText, finalizeToolCalls(toolAcc));
@@ -1674,6 +1741,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               durationMs: thinkingDurationMs > 0 ? thinkingDurationMs : undefined,
             });
           }
+          const histIdx = chat.history.length - 1;
+          const { attachMessageActions } = await import('../ui/message-actions');
+          const { attachVoicePlayButton } = await import('../ui/voice-controls');
+          attachMessageActions(lastWrap, {
+            chatId: chat.id,
+            historyIndex: histIdx,
+            turnKind: 'assistant',
+          });
+          attachVoicePlayButton(lastWrap, finalContent);
           updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
           setStatus('ok', 'Ready');
         }

@@ -49,6 +49,13 @@ import {
   setAssistantErrorBubble,
 } from '../ui/messages';
 import { streamDeltaContentToText } from './message-content.ts';
+import {
+  extractInlineThinkingFromContent,
+  HarmonyChannelRouter,
+  InlineContentThinkingRouter,
+  modelLikelyUsesInlineThinking,
+  type RoutedContentPart,
+} from './inline-thinking';
 import { extractReasoningDelta, extractReasoningMessage } from './reasoning';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
@@ -488,6 +495,59 @@ export async function sendMessage(): Promise<void> {
   let streamMeta: StreamMetaAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+  const inlineRouter = new InlineContentThinkingRouter({
+    thinkingModel: modelLikelyUsesInlineThinking(modelId),
+  });
+  const harmonyRouter = new HarmonyChannelRouter();
+
+  function processRoutedParts(parts: RoutedContentPart[]): void {
+    for (const [text, isThinking] of parts) {
+      if (isThinking) {
+        if (text) {
+          thoughtController.appendReasoningDelta(text);
+        }
+        continue;
+      }
+      if (!text) {
+        continue;
+      }
+      thoughtController.endReasoningPhase();
+      revealProse();
+      if (tFirst == null) tFirst = performance.now();
+      fullText += text;
+      if (isStreamDomVisible(chat.id)) {
+        scheduleAssistantBubbleRender(bubble, fullText, cursor);
+      }
+    }
+  }
+
+  function routeContentDelta(delta: string): void {
+    if (!delta) {
+      return;
+    }
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          thoughtController.appendReasoningDelta(harmonyText);
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+  }
+
+  function flushContentRouters(): void {
+    for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
+      if (isHarmonyThinking) {
+        if (harmonyText) {
+          thoughtController.appendReasoningDelta(harmonyText);
+        }
+        continue;
+      }
+      processRoutedParts(inlineRouter.feed(harmonyText));
+    }
+    processRoutedParts(inlineRouter.flush());
+  }
 
   try {
     const provider = await getActiveProvider(chat.providerId);
@@ -515,15 +575,9 @@ export async function sendMessage(): Promise<void> {
       if (reasoning) {
         thoughtController.appendReasoningDelta(reasoning);
       }
-      const delta = extractStreamDelta(chunk);
-      if (delta) {
-        thoughtController.endReasoningPhase();
-        revealProse();
-        if (tFirst == null) tFirst = performance.now();
-        fullText += delta;
-        if (isStreamDomVisible(chat.id)) {
-          scheduleAssistantBubbleRender(bubble, fullText, cursor);
-        }
+      const contentDelta = extractStreamDelta(chunk);
+      if (contentDelta) {
+        routeContentDelta(contentDelta);
       }
       if (isStreamDomVisible(chat.id)) {
         scrollChatIfPinned();
@@ -539,7 +593,15 @@ export async function sendMessage(): Promise<void> {
 
     flushSseEventBuffer(sseBuffer, handleChunk);
 
+    flushContentRouters();
+
     thoughtController.endReasoningPhase();
+
+    const split = extractInlineThinkingFromContent(fullText);
+    if (split.thinking.length && split.reply.trim()) {
+      thoughtController.ingestCompletedReasoning(split.thinking.join('\n\n'));
+      fullText = split.reply;
+    }
 
     cancelAssistantBubbleRenderDebounce();
     cursor.remove();

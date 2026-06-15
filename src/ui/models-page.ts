@@ -12,6 +12,7 @@ export type ModelsSectionId =
   | 'recommend'
   | 'installed'
   | 'settings'
+  | 'voice'
   | 'providers'
   | 'routing'
   | 'sampler'
@@ -22,6 +23,7 @@ const SECTIONS: ModelsSectionId[] = [
   'recommend',
   'installed',
   'settings',
+  'voice',
   'providers',
   'routing',
   'sampler',
@@ -33,6 +35,7 @@ const SECTION_LABELS: Record<ModelsSectionId, string> = {
   recommend: 'What fits',
   installed: 'Installed',
   settings: 'Settings',
+  voice: 'Voice',
   providers: 'Providers',
   routing: 'Routing',
   sampler: 'Sampler',
