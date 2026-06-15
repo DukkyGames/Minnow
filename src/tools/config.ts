@@ -11,19 +11,12 @@ import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
 import { isMinnowElectronShell } from './minnow-shell';
 import {
   createEmptyToolPermissionsConfig,
-  type ApprovalPattern,
-  type ToolAgentKey,
   type ToolConfig,
   type ToolPermissionMode,
   type ToolPermissionsConfig,
 } from './tool-settings-types';
-import { MAX_APPROVAL_PATTERNS } from './permission-resolve';
-import { DEFAULT_REGISTRY_IDS } from '../agents/work-agent-registry';
-import DEFAULT_SUB_AGENTS from '../agents/defaults/sub-agents.json';
 
 export type {
-  ApprovalPattern,
-  ToolAgentKey,
   ToolConfig,
   ToolPermissionMode,
   ToolPermissionsConfig,
@@ -35,8 +28,6 @@ export { defaultToolConfig } from '../config/defaults';
 export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 
 const PERMISSION_SET = new Set<ToolPermissionMode>(['full', 'ask', 'off']);
-
-const PATTERN_MATCH_SET = new Set<ApprovalPattern['match']>(['startsWith', 'equals']);
 
 /** True when `value` is a valid stored permission string. */
 export function isToolPermissionMode(value: unknown): value is ToolPermissionMode {
@@ -58,71 +49,13 @@ export function isLegacyFlatPermissions(permissions: unknown): boolean {
   return false;
 }
 
-function normalizeApprovalPattern(raw: unknown): ApprovalPattern | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const row = raw as Record<string, unknown>;
-  const id = typeof row.id === 'string' ? row.id.trim() : '';
-  const toolId = typeof row.toolId === 'string' ? row.toolId.trim() : '';
-  const agentScope =
-    row.agentScope === '*' ?
-      '*'
-    : typeof row.agentScope === 'string' ?
-      row.agentScope.trim()
-    : '';
-  const argPath = typeof row.argPath === 'string' ? row.argPath.trim() : '';
-  const match = row.match;
-  const value = typeof row.value === 'string' ? row.value : '';
-  if (!id || !toolId || !agentScope || !argPath || !value) return null;
-  if (!PATTERN_MATCH_SET.has(match as ApprovalPattern['match'])) return null;
-  return {
-    id,
-    toolId,
-    agentScope,
-    argPath,
-    match: match as ApprovalPattern['match'],
-    value,
-  };
-}
-
-/** Validates and caps pattern rows from storage. */
-export function normalizeApprovalPatterns(raw: unknown): ApprovalPattern[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ApprovalPattern[] = [];
-  const seen = new Set<string>();
-  for (const item of raw) {
-    if (out.length >= MAX_APPROVAL_PATTERNS) break;
-    const pattern = normalizeApprovalPattern(item);
-    if (!pattern || seen.has(pattern.id)) continue;
-    seen.add(pattern.id);
-    out.push(pattern);
-  }
-  return out;
-}
-
-function normalizePerAgentMap(raw: unknown): ToolPermissionsConfig['perAgent'] {
-  const out: ToolPermissionsConfig['perAgent'] = {};
-  if (!raw || typeof raw !== 'object') return out;
-  for (const [agentKey, toolsRaw] of Object.entries(raw as Record<string, unknown>)) {
-    if (!agentKey.trim() || !toolsRaw || typeof toolsRaw !== 'object') continue;
-    const tools: Record<string, ToolPermissionMode> = {};
-    for (const [toolId, mode] of Object.entries(toolsRaw as Record<string, unknown>)) {
-      if (!toolId || !isToolPermissionMode(mode)) continue;
-      tools[toolId] = mode;
-    }
-    if (Object.keys(tools).length > 0) {
-      out[agentKey.trim()] = tools;
-    }
-  }
-  return out;
-}
-
 /** Merges legacy flat or v2 stored permissions into {@link ToolPermissionsConfig}. */
 export function normalizePermissionsFromStored(
   stored: unknown,
   seedDefault: Record<string, ToolPermissionMode>,
 ): ToolPermissionsConfig {
   if (!stored || typeof stored !== 'object') {
-    return { default: { ...seedDefault }, perAgent: {}, patterns: [] };
+    return { default: { ...seedDefault } };
   }
 
   if (isLegacyFlatPermissions(stored)) {
@@ -132,7 +65,7 @@ export function normalizePermissionsFromStored(
       if (!id || !isToolPermissionMode(value)) continue;
       merged[id] = value;
     }
-    return { default: merged, perAgent: {}, patterns: [] };
+    return { default: merged };
   }
 
   const obj = stored as Record<string, unknown>;
@@ -145,58 +78,7 @@ export function normalizePermissionsFromStored(
     }
   }
 
-  return {
-    default: merged,
-    perAgent: normalizePerAgentMap(obj.perAgent),
-    patterns: normalizeApprovalPatterns(obj.patterns),
-  };
-}
-
-/** Agent keys for settings matrix (main, work agents, sub-agent types). */
-export function listKnownAgentKeys(): ToolAgentKey[] {
-  const keys = new Set<ToolAgentKey>(['main', '*']);
-  for (const id of DEFAULT_REGISTRY_IDS) {
-    keys.add(`work-agent:${id}`);
-  }
-  const subTypes = DEFAULT_SUB_AGENTS as { types?: Record<string, unknown> };
-  if (subTypes.types) {
-    for (const typeId of Object.keys(subTypes.types)) {
-      keys.add(`sub-agent:${typeId}`);
-    }
-  }
-  return [...keys].sort((a, b) => {
-    if (a === 'main') return -1;
-    if (b === 'main') return 1;
-    return a.localeCompare(b);
-  });
-}
-
-/** Sets a per-agent override (sparse); does not enable globally `off` tools. */
-export function setAgentToolPermission(
-  config: ToolConfig,
-  agentKey: ToolAgentKey,
-  toolId: string,
-  mode: ToolPermissionMode,
-): void {
-  if (!config.permissions.perAgent[agentKey]) {
-    config.permissions.perAgent[agentKey] = {};
-  }
-  config.permissions.perAgent[agentKey][toolId] = mode;
-}
-
-/** Appends a pattern row when under the cap. */
-export function addApprovalPattern(config: ToolConfig, pattern: ApprovalPattern): boolean {
-  if (config.permissions.patterns.length >= MAX_APPROVAL_PATTERNS) return false;
-  if (config.permissions.patterns.some((p) => p.id === pattern.id)) return false;
-  config.permissions.patterns.push(pattern);
-  return true;
-}
-
-/** Removes a pattern by id. */
-export function removeApprovalPattern(config: ToolConfig, patternId: string): boolean {
-  const before = config.permissions.patterns.length;
-  config.permissions.patterns = config.permissions.patterns.filter((p) => p.id !== patternId);
-  return config.permissions.patterns.length < before;
+  return { default: merged };
 }
 
 /**
@@ -607,13 +489,6 @@ export function applyAllBuiltInToolPermissions(
   for (const tool of BUILT_IN_TOOLS) {
     config.permissions.default[tool.id] = mode;
   }
-  if (mode === 'full') {
-    const wildcard = { ...(config.permissions.perAgent['*'] ?? {}) };
-    for (const tool of BUILT_IN_TOOLS) {
-      wildcard[tool.id] = 'full';
-    }
-    config.permissions.perAgent['*'] = wildcard;
-  }
   syncEnabledFromPermissions(config);
   return config;
 }
@@ -635,7 +510,7 @@ export function refreshAllToolListUis(_root: ParentNode = document): void {
 
   loadToolConfigIntoDrawer(document);
 
-  for (const listId of ['toolsList', 'settingsToolsList', 'composerToolsList'] as const) {
+  for (const listId of ['toolsList', 'settingsToolsList', 'composerToolsList', 'chatAppToolsList'] as const) {
     const list = document.getElementById(listId);
     if (list) {
       syncToolSelectAllControls(list);
@@ -769,6 +644,16 @@ export function refreshServerToolDisabledState(): void {
   const composerPreviewBanner = document.getElementById('composerToolsPreviewBanner');
   if (composerPreviewBanner) {
     composerPreviewBanner.classList.toggle('hidden', !previewUnavailable);
+  }
+
+  const chatAppBanner = document.getElementById('chatAppToolsServerBanner');
+  if (chatAppBanner) {
+    chatAppBanner.classList.toggle('hidden', !serverUnavailable);
+  }
+
+  const chatAppPreviewBanner = document.getElementById('chatAppToolsPreviewBanner');
+  if (chatAppPreviewBanner) {
+    chatAppPreviewBanner.classList.toggle('hidden', !previewUnavailable);
   }
 
   const previewBanner = document.getElementById('toolsPreviewBanner');

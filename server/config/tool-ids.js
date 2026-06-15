@@ -62,4 +62,5 @@ export const ALL_TOOL_IDS = [
   'get_lsp_diagnostics',
   'list_lsp_servers',
   'save_memory',
+  'manage_calendar',
 ];

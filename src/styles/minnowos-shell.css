@@ -361,6 +361,22 @@
   box-shadow: 0 0 0 2px var(--os-accent-glow);
 }
 
+.mn-os-mb-bell.is-ringing {
+  animation: mn-os-bell-ring 1.2s ease-out;
+  transform-origin: top center;
+}
+
+@keyframes mn-os-bell-ring {
+  0% { transform: rotate(0deg); }
+  12% { transform: rotate(12deg); }
+  24% { transform: rotate(-10deg); }
+  36% { transform: rotate(8deg); }
+  48% { transform: rotate(-6deg); }
+  60% { transform: rotate(4deg); }
+  72% { transform: rotate(-2deg); }
+  100% { transform: rotate(0deg); }
+}
+
 /* OS menubar notifications popover */
 .mn-os-notif-menu {
   position: fixed;
@@ -466,6 +482,28 @@
 .mn-os-notif-item__title {
   font-size: 12.5px;
   font-weight: 600;
+  color: var(--mn-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mn-os-notif-item__time {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+}
+
+.mn-os-notif-item__kind {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--mn-accent);
+}
+
+.mn-os-notif-item.is-unread .mn-os-notif-item__title {
   color: var(--mn-fg);
 }
 

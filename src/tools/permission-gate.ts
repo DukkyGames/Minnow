@@ -7,7 +7,6 @@ import { getToolSecurityMetaCached, loadToolSecurityMeta } from '../config/tool-
 import {
   loadToolConfig,
   saveToolConfigAsync,
-  setAgentToolPermission,
   type ToolPermissionMode,
 } from './config';
 import { describeToolInvocation } from './describe-invocation';
@@ -16,11 +15,7 @@ import { isPathUnderWorkspace } from './workspace-path-guard';
 import type { ToolExecutionResult } from '../types';
 import { enqueueToolApproval, type ToolApprovalContext } from './approval-queue';
 import type { ToolApprovalRequest } from './tool-approval-types';
-import {
-  formatApprovalPatternLabel,
-  resolveEffectivePermission,
-  resolveToolAgentKey,
-} from './permission-resolve';
+import { resolveEffectivePermission } from './permission-resolve';
 
 export type { ToolApprovalContext };
 
@@ -82,10 +77,6 @@ export async function maybeBlockToolForUserApproval(
         }${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nThe server will reject these unless you enable full filesystem access in Settings.`
       : '';
 
-  const agentKey = resolveToolAgentKey(context);
-  const alwaysAllowScope: ToolApprovalRequest['alwaysAllowScope'] =
-    agentKey === 'main' ? 'global' : 'agent';
-
   const decision = await enqueueToolApproval({
     toolName: execName,
     title: summary.title,
@@ -95,12 +86,6 @@ export async function maybeBlockToolForUserApproval(
     pathWarning: pathWarning || undefined,
     subAgentType: context.subAgentType,
     workAgentId: context.workAgentId,
-    agentKey,
-    alwaysAllowScope,
-    matchedPatternLabel:
-      resolved.matchedPattern ?
-        formatApprovalPatternLabel(resolved.matchedPattern)
-      : undefined,
   });
 
   if (decision === 'cancel') {
@@ -108,11 +93,7 @@ export async function maybeBlockToolForUserApproval(
   }
 
   if (decision === 'always-allow') {
-    if (alwaysAllowScope === 'agent') {
-      setAgentToolPermission(config, agentKey, permissionToolId, 'full');
-    } else {
-      config.permissions.default[permissionToolId] = 'full';
-    }
+    config.permissions.default[permissionToolId] = 'full';
     await saveToolConfigAsync(config);
   }
 

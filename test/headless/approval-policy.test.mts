@@ -23,9 +23,9 @@ describe('headless approval policy', () => {
       enabled: { read_file: true },
       permissions: {
         default: { read_file: 'ask' },
-        perAgent: {},
-        patterns: [],
       },
+      keys: { braveApiKey: '', tavilyApiKey: '' },
+      webSearchProvider: 'duckduckgo',
     });
     const blocked = maybeBlockHeadlessToolApproval(
       'read_file',
@@ -45,9 +45,9 @@ describe('headless approval policy', () => {
       enabled: { read_file: true },
       permissions: {
         default: { read_file: 'ask' },
-        perAgent: {},
-        patterns: [],
       },
+      keys: { braveApiKey: '', tavilyApiKey: '' },
+      webSearchProvider: 'duckduckgo',
     });
     const blocked = maybeBlockHeadlessToolApproval(
       'read_file',
@@ -68,9 +68,9 @@ describe('headless approval policy', () => {
       enabled: { read_file: true },
       permissions: {
         default: { read_file: 'ask' },
-        perAgent: {},
-        patterns: [],
       },
+      keys: { braveApiKey: '', tavilyApiKey: '' },
+      webSearchProvider: 'duckduckgo',
     });
     const blocked = maybeBlockHeadlessToolApproval(
       'read_file',

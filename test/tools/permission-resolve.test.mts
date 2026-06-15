@@ -1,5 +1,5 @@
 /**
- * Tests for layered tool permission resolution (patterns, per-agent, default).
+ * Tests for catalog-only tool permission resolution.
  */
 
 import assert from 'node:assert/strict';
@@ -11,12 +11,7 @@ import {
   normalizePermissionsFromStored,
   normalizeToolConfig,
 } from '../../src/tools/config.ts';
-import {
-  findMatchingApprovalPattern,
-  getArgValueAtPath,
-  resolveEffectivePermission,
-  resolveToolAgentKey,
-} from '../../src/tools/permission-resolve.ts';
+import { resolveEffectivePermission } from '../../src/tools/permission-resolve.ts';
 import type { ToolConfig } from '../../src/tools/tool-settings-types.ts';
 
 function cloneConfig(base: ToolConfig): ToolConfig {
@@ -24,10 +19,10 @@ function cloneConfig(base: ToolConfig): ToolConfig {
     enabled: { ...base.enabled },
     permissions: {
       default: { ...base.permissions.default },
-      perAgent: JSON.parse(JSON.stringify(base.permissions.perAgent)),
-      patterns: base.permissions.patterns.map((p) => ({ ...p })),
     },
     keys: { ...base.keys },
+    webSearchProvider: base.webSearchProvider,
+    toolCache: base.toolCache ? { ...base.toolCache } : undefined,
   };
 }
 
@@ -38,7 +33,7 @@ describe('isLegacyFlatPermissions', () => {
 
   test('rejects v2 shape', () => {
     assert.equal(
-      isLegacyFlatPermissions({ default: { execute_command: 'ask' }, perAgent: {}, patterns: [] }),
+      isLegacyFlatPermissions({ default: { execute_command: 'ask' } }),
       false,
     );
   });
@@ -50,8 +45,20 @@ describe('normalizePermissionsFromStored', () => {
     const out = normalizePermissionsFromStored({ read_file: 'full', execute_command: 'ask' }, seed);
     assert.equal(out.default.read_file, 'full');
     assert.equal(out.default.execute_command, 'ask');
-    assert.deepEqual(out.perAgent, {});
-    assert.deepEqual(out.patterns, []);
+  });
+
+  test('reads default map from v2 shape and ignores legacy perAgent/patterns', () => {
+    const seed = defaultToolConfig().permissions.default;
+    const out = normalizePermissionsFromStored(
+      {
+        default: { read_file: 'full' },
+        perAgent: { main: { execute_command: 'full' } },
+        patterns: [{ id: 'x', toolId: 'execute_command', agentScope: '*', argPath: 'command', match: 'equals', value: 'ls' }],
+      },
+      seed,
+    );
+    assert.equal(out.default.read_file, 'full');
+    assert.equal(out.default.execute_command, seed.execute_command);
   });
 });
 
@@ -63,112 +70,11 @@ describe('normalizeToolConfig', () => {
       keys: { braveApiKey: '' },
     });
     assert.equal(config.permissions.default.execute_command, 'ask');
-    assert.deepEqual(config.permissions.perAgent, {});
-    assert.deepEqual(config.permissions.patterns, []);
-  });
-});
-
-describe('resolveToolAgentKey', () => {
-  test('sub-agent wins over work agent', () => {
-    assert.equal(
-      resolveToolAgentKey({ subAgentType: 'shell', workAgentId: 'builder' }),
-      'sub-agent:shell',
-    );
-  });
-
-  test('work agent when set on main loop', () => {
-    assert.equal(resolveToolAgentKey({ workAgentId: 'builder' }), 'work-agent:builder');
-  });
-
-  test('main when neither set', () => {
-    assert.equal(resolveToolAgentKey({}), 'main');
-  });
-});
-
-describe('findMatchingApprovalPattern', () => {
-  test('startsWith on command', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'ask';
-    config.permissions.patterns.push({
-      id: 'pattern-11111111-1111-1111-1111-111111111111',
-      toolId: 'execute_command',
-      agentScope: '*',
-      argPath: 'command',
-      match: 'startsWith',
-      value: 'git status',
-    });
-
-    const match = findMatchingApprovalPattern(
-      config,
-      'execute_command',
-      { command: 'git status -sb' },
-      'main',
-    );
-    assert.ok(match);
-    assert.equal(match.value, 'git status');
-  });
-
-  test('no match for dangerous command', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'ask';
-    config.permissions.patterns.push({
-      id: 'pattern-11111111-1111-1111-1111-111111111111',
-      toolId: 'execute_command',
-      agentScope: '*',
-      argPath: 'command',
-      match: 'startsWith',
-      value: 'git status',
-    });
-
-    const match = findMatchingApprovalPattern(
-      config,
-      'execute_command',
-      { command: 'rm -rf /' },
-      'main',
-    );
-    assert.equal(match, null);
   });
 });
 
 describe('resolveEffectivePermission', () => {
-  test('pattern auto-approves when global is ask', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'ask';
-    config.permissions.patterns.push({
-      id: 'pattern-11111111-1111-1111-1111-111111111111',
-      toolId: 'execute_command',
-      agentScope: '*',
-      argPath: 'command',
-      match: 'startsWith',
-      value: 'git status',
-    });
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'git status' },
-      {},
-    );
-    assert.equal(resolved.mode, 'full');
-    assert.ok(resolved.matchedPattern);
-  });
-
-  test('per-agent full overrides global ask', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'ask';
-    config.permissions.perAgent['sub-agent:shell'] = { execute_command: 'full' };
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'rm -rf /' },
-      { subAgentType: 'shell' },
-    );
-    assert.equal(resolved.mode, 'full');
-    assert.equal(resolved.agentKey, 'sub-agent:shell');
-  });
-
-  test('build mode honors global full', () => {
+  test('returns catalog default for build mode', () => {
     const config = cloneConfig(defaultToolConfig());
     config.permissions.default.read_file = 'full';
 
@@ -181,7 +87,46 @@ describe('resolveEffectivePermission', () => {
     assert.equal(resolved.mode, 'full');
   });
 
-  test('per-agent wildcard full from bulk all-full', () => {
+  test('general mode honors global full', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'full';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'full');
+  });
+
+  test('general mode honors global ask', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'ask';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'ask');
+  });
+
+  test('global off is hard off', () => {
+    const config = cloneConfig(defaultToolConfig());
+    config.permissions.default.execute_command = 'off';
+
+    const resolved = resolveEffectivePermission(
+      config,
+      'execute_command',
+      { command: 'echo hi' },
+      { modeId: 'general' },
+    );
+    assert.equal(resolved.mode, 'off');
+  });
+
+  test('bulk all-full sets full for every built-in', () => {
     const config = cloneConfig(defaultToolConfig());
     applyAllBuiltInToolPermissions(config, 'full');
 
@@ -192,83 +137,5 @@ describe('resolveEffectivePermission', () => {
       { subAgentType: 'shell' },
     );
     assert.equal(resolved.mode, 'full');
-    assert.equal(config.permissions.perAgent['*']?.execute_command, 'full');
-  });
-
-  test('general mode forces ask even when global is full', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'full';
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'echo hi' },
-      { modeId: 'general' },
-    );
-    assert.equal(resolved.mode, 'ask');
-    assert.equal(resolved.matchedPattern, null);
-  });
-
-  test('general mode forces ask even when a pattern would auto-approve', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'ask';
-    config.permissions.patterns.push({
-      id: 'pattern-11111111-1111-1111-1111-111111111111',
-      toolId: 'execute_command',
-      agentScope: '*',
-      argPath: 'command',
-      match: 'startsWith',
-      value: 'git status',
-    });
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'git status' },
-      { modeId: 'general' },
-    );
-    assert.equal(resolved.mode, 'ask');
-    assert.equal(resolved.matchedPattern, null);
-  });
-
-  test('general mode keeps global off', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'off';
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'echo hi' },
-      { modeId: 'general' },
-    );
-    assert.equal(resolved.mode, 'off');
-  });
-
-  test('global off is hard off', () => {
-    const config = cloneConfig(defaultToolConfig());
-    config.permissions.default.execute_command = 'off';
-    config.permissions.perAgent['sub-agent:shell'] = { execute_command: 'full' };
-    config.permissions.patterns.push({
-      id: 'pattern-11111111-1111-1111-1111-111111111111',
-      toolId: 'execute_command',
-      agentScope: '*',
-      argPath: 'command',
-      match: 'startsWith',
-      value: 'git status',
-    });
-
-    const resolved = resolveEffectivePermission(
-      config,
-      'execute_command',
-      { command: 'git status' },
-      { subAgentType: 'shell' },
-    );
-    assert.equal(resolved.mode, 'off');
-  });
-});
-
-describe('getArgValueAtPath', () => {
-  test('reads nested path', () => {
-    assert.equal(getArgValueAtPath({ options: { cwd: '/tmp' } }, 'options.cwd'), '/tmp');
   });
 });

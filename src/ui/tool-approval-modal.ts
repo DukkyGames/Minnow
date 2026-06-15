@@ -141,13 +141,6 @@ export function showToolApprovalModal(
       header.appendChild(badge);
     }
 
-    if (request.matchedPatternLabel) {
-      const patternHint = document.createElement('p');
-      patternHint.className = 'tool-approval-description';
-      patternHint.textContent = `Matched auto-approve rule: ${request.matchedPatternLabel}`;
-      header.appendChild(patternHint);
-    }
-
     const toolIdRow = document.createElement('p');
     toolIdRow.className = 'tool-approval-tool-id';
     toolIdRow.textContent = request.toolName;
@@ -219,11 +212,8 @@ export function showToolApprovalModal(
     btnAlways.type = 'button';
     btnAlways.className =
       'tool-approval-action tool-approval-action--accent';
-    const alwaysLabel =
-      request.alwaysAllowScope === 'agent' ?
-        'Always allow for this agent'
-      : 'Always allow';
-    btnAlways.innerHTML = `<span class="tool-approval-action__kbd" aria-hidden="true">2</span><span class="tool-approval-action__label">${alwaysLabel}</span>`;
+    btnAlways.innerHTML =
+      '<span class="tool-approval-action__kbd" aria-hidden="true">2</span><span class="tool-approval-action__label">Always allow</span>';
 
     const btnCancel = document.createElement('button');
     btnCancel.type = 'button';

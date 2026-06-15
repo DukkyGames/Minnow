@@ -3,7 +3,7 @@
 Tier: 3  
 Effort: L-XL  
 Priority: Later  
-Status: Planned  
+Status: Shipped  
 Depends on: #12  
 Pairs with: #5 Scheduler  
 Linear: [MIN-129](https://linear.app/minnowai/issue/MIN-129/odysseus-port-10-calendar-caldav-and-ics)
@@ -185,17 +185,17 @@ interface CalendarEvent {
 
 ## Implementation TODOs
 
-- [ ] Add local calendar/event store
-- [ ] Decide SQLite vs JSON store before implementation; prefer SQLite for Odysseus parity
-- [ ] Add CRUD routes
-- [ ] Add Calendar app shell and local CRUD UI
-- [ ] Add `.ics` import/export
-- [ ] Add recurrence expansion with timezone tests
-- [ ] Add encrypted CalDAV account config
-- [ ] Add bidirectional CalDAV sync
-- [ ] Add `manage_calendar` tool
-- [ ] Integrate upcoming events with #5 reminder dispatch rather than direct scheduler storage polling
-- [ ] Update `documentation/context.md`
+- [x] Add local calendar/event store
+- [x] Decide SQLite vs JSON store before implementation; prefer SQLite for Odysseus parity
+- [x] Add CRUD routes
+- [x] Add Calendar app shell and local CRUD UI
+- [x] Add `.ics` import/export
+- [x] Add recurrence expansion with timezone tests
+- [x] Add encrypted CalDAV account config
+- [x] Add bidirectional CalDAV sync
+- [x] Add `manage_calendar` tool
+- [x] Integrate upcoming events with #5 reminder dispatch rather than direct scheduler storage polling
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

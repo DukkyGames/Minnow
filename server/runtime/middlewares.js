@@ -32,6 +32,7 @@ import { createTerminalMiddleware } from '../terminal/middleware.js';
 import { createSystemMiddleware } from '../system/middleware.js';
 import { createModelsMiddleware } from '../models/index.js';
 import { createSchedulerMiddleware } from '../scheduler/middleware.js';
+import { createCalendarMiddleware } from '../calendar/middleware.js';
 import { createWebhooksMiddleware } from '../webhooks/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
@@ -53,6 +54,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createSystemMiddleware());
   connectApp.use(createModelsMiddleware());
   connectApp.use(createSchedulerMiddleware());
+  connectApp.use(createCalendarMiddleware());
   connectApp.use(
     createPreviewMiddleware({
       resolveSafePath,

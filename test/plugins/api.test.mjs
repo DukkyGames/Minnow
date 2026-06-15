@@ -66,7 +66,7 @@ describe('plugins API', () => {
 
     await writeConfigJson('tools.json', {
       enabled: {},
-      permissions: { default: {}, perAgent: {}, patterns: [] },
+      permissions: { default: {} },
       keys: { braveApiKey: '' },
       plugins: { echo: { enabled: true } },
     });

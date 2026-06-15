@@ -87,6 +87,7 @@ const SCAFFOLD_DIRS = [
   'evals/packs',
   'evals/runs',
   'scheduler-runs',
+  'calendar',
   'research',
   'research/cache',
   'tts-cache',
@@ -313,7 +314,7 @@ function defaultToolsJson() {
   }
   return {
     enabled,
-    permissions: { default: permissionsDefault, perAgent: {}, patterns: [] },
+    permissions: { default: permissionsDefault },
     keys: { braveApiKey: '', tavilyApiKey: '' },
     webSearchProvider: 'duckduckgo',
     plugins: {},
