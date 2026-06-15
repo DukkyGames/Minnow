@@ -23,6 +23,7 @@ export function getDefaultPaths(apiKind, overrides = {}) {
           modelsPath: '/v1/models',
           chatCompletionsPath: '/v1/chat/completions',
           embeddingsPath: '/v1/embeddings',
+          imagesPath: '/v1/images/generations',
         }
       : {
           modelsPath: '/api/v0/models',
@@ -35,6 +36,7 @@ export function getDefaultPaths(apiKind, overrides = {}) {
     modelsPath: overrides.modelsPath || defaults.modelsPath,
     chatCompletionsPath: overrides.chatCompletionsPath || defaults.chatCompletionsPath,
     embeddingsPath: overrides.embeddingsPath || defaults.embeddingsPath || '/v1/embeddings',
+    imagesPath: overrides.imagesPath || defaults.imagesPath || '/v1/images/generations',
   };
 
   if (defaults.modelsLoadPath) {

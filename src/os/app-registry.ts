@@ -68,6 +68,13 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Interval and cron schedules while Minnow is running',
   },
   {
+    id: 'gallery',
+    name: 'Gallery',
+    icon: 'gallery',
+    tag: 'Generate & browse images',
+    description: 'Local image generation and persistent gallery',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',

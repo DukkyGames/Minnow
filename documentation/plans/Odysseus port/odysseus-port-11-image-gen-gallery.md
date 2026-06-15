@@ -3,7 +3,7 @@
 Tier: 3  
 Effort: M-L  
 Priority: Later  
-Status: Planned  
+Status: Shipped  
 Depends on: #12 for provider credentials when needed  
 Linear: [MIN-121](https://linear.app/minnowai/issue/MIN-121/odysseus-port-11-image-generation-and-gallery)
 
@@ -200,18 +200,18 @@ Files: `~/.minnow/gallery/images/<id>.png`, index at `~/.minnow/gallery/index.js
 
 ## Implementation TODOs
 
-- [ ] Add image config block for provider/model/default params
-- [ ] Decide SQLite vs JSON metadata store before implementation
-- [ ] Add server image generation proxy
-- [ ] Add gallery file and metadata store
-- [ ] Add Gallery app shell and grid UI
-- [ ] Add album support
-- [ ] Add image detail view and download/open actions
-- [ ] Add optional `generate_image` tool
+- [x] Add image config block for provider/model/default params
+- [x] Decide SQLite vs JSON metadata store before implementation
+- [x] Add server image generation proxy
+- [x] Add gallery file and metadata store
+- [x] Add Gallery app shell and grid UI
+- [x] Add album support
+- [x] Add image detail view and download/open actions
+- [x] Add optional `generate_image` tool
 - [ ] Add optional local Stable Diffusion/Cookbook integration phase
-- [ ] Decide whether video assets are in v1 scope; Odysseus gallery supports more than still images
-- [ ] Add cleanup/cap settings
-- [ ] Update `documentation/context.md`
+- [x] Decide whether video assets are in v1 scope; Odysseus gallery supports more than still images
+- [x] Add cleanup/cap settings
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

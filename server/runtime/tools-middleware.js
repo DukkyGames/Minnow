@@ -21,6 +21,7 @@ import {
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
+import { toolGenerateImage } from '../images/tool-generate.js';
 import { toolReadDocument } from '../tools/read-document.js';
 import {
   toolFetchWebContent,
@@ -896,6 +897,7 @@ const SERVER_TOOL_HANDLERS = {
     return JSON.stringify(await listLspServers(), null, 2);
   },
   save_memory: toolSaveMemory,
+  generate_image: toolGenerateImage,
 };
 
 /**

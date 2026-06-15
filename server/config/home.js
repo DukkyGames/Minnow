@@ -90,6 +90,8 @@ const SCAFFOLD_DIRS = [
   'research',
   'research/cache',
   'tts-cache',
+  'gallery',
+  'gallery/images',
 ];
 
 const DEFAULT_META = {
@@ -279,6 +281,15 @@ const DEFAULT_META = {
       maxDurationSeconds: 300,
       silenceTimeoutSeconds: 2.5,
     },
+  },
+  images: {
+    defaultProviderId: '',
+    defaultModel: 'dall-e-3',
+    defaultSize: '1024x1024',
+    defaultCount: 1,
+    maxFileBytes: 10 * 1024 * 1024,
+    maxGalleryBytes: 1024 * 1024 * 1024,
+    maxImages: 500,
   },
 };
 

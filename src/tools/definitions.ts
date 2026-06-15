@@ -1332,6 +1332,41 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'generate_image',
+    label: 'Generate image',
+    description:
+      'Generate an image from a text prompt via a configured provider and save it to the local gallery. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'generate_image',
+      'Generate an image from a prompt using an OpenAI-compatible image API. Saves the result to ~/.minnow/gallery and returns gallery image ids. Use when the user asks you to create, draw, or generate an image.',
+      {
+        prompt: {
+          type: 'string',
+          description: 'Text description of the image to generate',
+        },
+        album: {
+          type: 'string',
+          description: 'Optional gallery album id to save into (default: Generated)',
+        },
+        size: {
+          type: 'string',
+          description: 'Image size (e.g. 1024x1024)',
+        },
+        providerId: {
+          type: 'string',
+          description: 'Optional provider id override',
+        },
+        model: {
+          type: 'string',
+          description: 'Optional model override (e.g. dall-e-3)',
+        },
+      },
+      ['prompt'],
+    ),
+  },
+  {
     id: 'get_lsp_diagnostics',
     label: 'LSP diagnostics',
     description: 'Formatted language-server diagnostics for a project file.',

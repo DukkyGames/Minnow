@@ -211,6 +211,9 @@ export async function readResource(resource) {
     if (!data?.voice) {
       patch.voice = DEFAULT_META.voice;
     }
+    if (!data?.images) {
+      patch.images = DEFAULT_META.images;
+    }
     if (Object.keys(patch).length > 0) {
       return mergeConfigMeta(data ?? {}, patch);
     }
