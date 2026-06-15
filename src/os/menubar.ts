@@ -15,6 +15,7 @@ import {
   isMenubarCenterVisible,
 } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
+import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 
 function formatClock(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -141,6 +142,14 @@ export function renderMenubar(root: HTMLElement): () => void {
   modelChip.append(chipDot, chipText);
   const cleanupModelChip = initOsModelChipMenu(modelChip, chipDot, chipText);
 
+  const schedulerBtn = document.createElement('button');
+  schedulerBtn.type = 'button';
+  schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
+  schedulerBtn.setAttribute('aria-label', 'Scheduler');
+  schedulerBtn.title = 'Scheduler';
+  schedulerBtn.appendChild(createAppIcon('scheduler', { size: 16 }));
+  schedulerBtn.addEventListener('click', () => openSchedulerFromMenubar());
+
   const bell = document.createElement('button');
   bell.type = 'button';
   bell.className = 'mn-os-mb-bell';
@@ -163,7 +172,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChip, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, center, right);
 
   function syncMenubar(): void {

@@ -24,6 +24,11 @@ export interface HeadlessRunCliOptions {
   quiet: boolean;
   maxToolTurns: number | null;
   autoRejectQuestions: boolean;
+  persistChat: boolean;
+  chatId: string | null;
+  chatName: string | null;
+  /** Scheduled job subprocess — adds guidance to avoid save_memory noise. */
+  schedulerRun: boolean;
 }
 
 const RUN_HELP = `minnow run — execute one agent turn without the SPA
@@ -32,7 +37,7 @@ Required:
   --prompt <text>       User task (or --stdin to read from stdin)
 
 Server:
-  --base-url <url>      Dev server origin (default http://127.0.0.1:5173)
+  --base-url <url>      Dev server origin (default http://localhost:5173)
   --start-server        Spawn "node server.js" with BROWSER=none if ping fails
   --server-timeout <s>  Preflight wait in seconds (default 30)
 
@@ -59,6 +64,12 @@ Output:
 Limits:
   --max-tool-turns <n>  Cap tool rounds for this run (1–${MAX_CHAT_MAX_TOOL_TURNS})
 
+Session:
+  --persist-chat          Save transcript to ~/.minnow sessions (requires --chat-id)
+  --chat-id <id>          Chat id to create or update when persisting
+  --chat-name <label>     Sidebar title for the persisted chat (default: Headless run)
+  --scheduler-run         Scheduled-job context (suppress routine save_memory)
+
 Env:
   MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1  Required with --no-approval
   BROWSER=none                             Use with npm start in CI
@@ -81,7 +92,7 @@ Usage:
 Examples:
   minnow run --prompt "Summarize README.md" --workspace .
   BROWSER=none npm start &
-  minnow run --base-url http://127.0.0.1:5173 --prompt "Reply OK" --json
+  minnow run --base-url http://localhost:5173 --prompt "Reply OK" --json
 `);
 }
 
@@ -97,7 +108,7 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
     options: {
       prompt: { type: 'string' },
       stdin: { type: 'boolean', default: false },
-      'base-url': { type: 'string', default: 'http://127.0.0.1:5173' },
+      'base-url': { type: 'string', default: 'http://localhost:5173' },
       'start-server': { type: 'boolean', default: false },
       'server-timeout': { type: 'string', default: '30' },
       agent: { type: 'string' },
@@ -113,6 +124,10 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       'json-out': { type: 'string' },
       quiet: { type: 'boolean', default: false },
       'max-tool-turns': { type: 'string' },
+      'persist-chat': { type: 'boolean', default: false },
+      'chat-id': { type: 'string' },
+      'chat-name': { type: 'string' },
+      'scheduler-run': { type: 'boolean', default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -168,12 +183,19 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
     };
   }
 
+  const persistChat = Boolean(values['persist-chat']);
+  const chatId = values['chat-id'] ? String(values['chat-id']).trim() : null;
+  const chatName = values['chat-name'] ? String(values['chat-name']).trim() : null;
+  if (persistChat && !chatId) {
+    return { ok: false, message: '--persist-chat requires --chat-id' };
+  }
+
   return {
     ok: true,
     options: {
       prompt,
       stdin: Boolean(values.stdin),
-      baseUrl: String(values['base-url'] ?? 'http://127.0.0.1:5173').trim(),
+      baseUrl: String(values['base-url'] ?? 'http://localhost:5173').trim(),
       startServer: Boolean(values['start-server']),
       serverTimeoutSec,
       agentId: values.agent ? String(values.agent).trim() : null,
@@ -189,6 +211,10 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       quiet: Boolean(values.quiet),
       maxToolTurns,
       autoRejectQuestions: values['auto-reject-questions'] !== false,
+      persistChat,
+      chatId,
+      chatName,
+      schedulerRun: Boolean(values['scheduler-run']),
     },
   };
 }

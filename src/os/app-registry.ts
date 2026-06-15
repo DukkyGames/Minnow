@@ -61,6 +61,13 @@ export const APPS: readonly AppDefinition[] = [
     description: 'Local runtimes, providers, recommendations',
   },
   {
+    id: 'scheduler',
+    name: 'Scheduler',
+    icon: 'scheduler',
+    tag: 'Recurring agent jobs & reminders',
+    description: 'Interval and cron schedules while Minnow is running',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',
