@@ -6,7 +6,8 @@ import '../styles/compare.css';
 import '../styles/settings-page.css';
 
 import { humanizeModelSlug, slugFromModelId } from '../lib/format-model-label';
-import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
+import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { BenchmarkStreamTextAccumulator } from '../benchmark/stream-text';
 import { listCompareHistory, submitCompareVote } from '../compare/persistence';
@@ -748,6 +749,7 @@ function wireControls(): void {
 export function initComparePage(): void {
   if (initialized) return;
   initialized = true;
+  registerWindowTeardown('compare', () => closeCompare({ skipNavigate: true }));
   wireControls();
   renderPickerGrid();
   renderColumnGrid(pickerSlots.length);
@@ -780,7 +782,7 @@ export function openCompare(): void {
   });
 
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     window.location.hash = '#/compare';
   }
@@ -794,13 +796,15 @@ export function closeCompare(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
   resetRunUi();
   root.classList.remove('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     if (!options?.skipNavigate && window.location.hash.startsWith('#/compare')) {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('compare')) {
+      navigateToDesktop();
+    }
   }
 }
 
@@ -814,14 +818,14 @@ function onHashChange(): void {
     openCompare();
     return;
   }
-  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isOsEmbedded() && isOsAppHash(hash)) return;
   if (isComparePageOpen()) {
     closeCompare();
   }
 }
 
 export function openCompareFromTopbar(): void {
-  if (isOsShellEnabled()) {
+  if (isOsEmbedded()) {
     void import('../os/router').then((m) => m.launchApp('compare'));
     return;
   }

@@ -681,3 +681,351 @@
     animation: none !important;
   }
 }
+
+/* ---------- desktop chat (Phase 2) ---------- */
+
+#osDesktopLayer.is-chat-active .mn-os-desk-hero {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer .mn-os-desk-hero {
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desktop-chat {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mn-os-desktop-chat {
+  flex: 1;
+  width: 100%;
+  max-width: 920px;
+  display: flex;
+  gap: 0;
+  min-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms var(--os-ease-out) 80ms;
+}
+
+.mn-os-chat-rail {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  transition: width 280ms var(--os-ease-out);
+}
+
+.mn-os-chat-rail.is-collapsed {
+  width: 44px;
+}
+
+.mn-os-chat-rail.is-expanded {
+  width: 240px;
+}
+
+.mn-os-chat-rail-tab {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  min-height: 96px;
+  padding: 10px 6px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  border: 1px solid var(--os-border-strong);
+  border-left: none;
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--os-surface-2) 90%, transparent);
+  color: var(--os-text-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.mn-os-chat-rail.is-expanded .mn-os-chat-rail-tab {
+  display: none;
+}
+
+.mn-os-chat-rail-panel {
+  width: 100%;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--os-ease-out);
+}
+
+.mn-os-chat-rail.is-expanded .mn-os-chat-rail-panel {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mn-os-chat-rail-list {
+  height: 100%;
+  overflow: auto;
+  padding: 8px 6px;
+}
+
+.mn-os-chat-transcript {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 0 8px 120px;
+  background: transparent;
+}
+
+.mn-os-chat-col {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.mn-os-chat-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--os-text-dim);
+}
+
+.mn-os-composer-dock {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16vh + 12px);
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 48px));
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 280ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-composer-docked .mn-os-composer-dock {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mn-os-desktop-composer {
+  width: 100%;
+}
+
+.mn-os-desktop-composer.is-busy {
+  opacity: 0.85;
+}
+
+.mn-os-desktop-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--os-border-strong);
+  border-radius: 16px;
+  box-shadow:
+    0 18px 50px -18px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mn-os-desktop-input-row:focus-within {
+  border-color: var(--os-accent-glow);
+  box-shadow:
+    0 0 0 4px var(--os-accent-soft),
+    0 18px 50px -18px rgba(0, 0, 0, 0.7);
+}
+
+.mn-os-desktop-comp-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--os-text-dim);
+}
+
+.mn-os-desktop-comp-btn:hover {
+  background: var(--os-surface-3);
+  color: var(--os-text);
+}
+
+.mn-os-desktop-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mn-os-desktop-field {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--os-text);
+  font-size: 16px;
+  padding: 8px 4px;
+  resize: none;
+  max-height: 160px;
+}
+
+.mn-os-desktop-field::placeholder {
+  color: var(--os-text-faint);
+}
+
+.mn-os-desktop-send {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 11px;
+  border: none;
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  display: grid;
+  place-items: center;
+}
+
+.mn-os-desktop-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#osDesktopLayer.is-chat-active .mn-os-cc-chips {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .context-usage-ring {
+  animation: mn-os-context-fade-in 320ms var(--os-ease-out) 120ms both;
+}
+
+@keyframes mn-os-context-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+#osDesktopLayer:not(.is-chat-active) .mn-os-desk-stage {
+  justify-content: center;
+  align-items: center;
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desk-stage {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: 8vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #osDesktopLayer .mn-os-desk-hero,
+  .mn-os-desktop-chat,
+  .mn-os-chat-rail,
+  .mn-os-chat-rail-panel,
+  .mn-os-composer-dock,
+  .mn-os-desktop-research,
+  #osDesktopLayer.is-chat-active .mn-os-cc-chips,
+  #osDesktopLayer.is-research-mode .mn-os-cc-chips,
+  #osDesktopLayer.is-chat-active .context-usage-ring {
+    transition-duration: 0.001ms !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- desktop research (Phase 4) ---------- */
+
+#osDesktopLayer.is-research-active .mn-os-desk-hero {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+}
+
+#osDesktopLayer.is-research-mode .mn-os-cc-chips {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--os-ease-out);
+}
+
+.mn-os-desktop-research {
+  position: absolute;
+  inset: 8vh 24px 18vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  overflow: auto;
+  padding: 0 8px 24px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 8;
+  transition: opacity 380ms var(--os-ease-out) 80ms;
+}
+
+#osDesktopLayer.is-research-active .mn-os-desktop-research {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mn-os-research-toolbar {
+  display: flex;
+  gap: 8px;
+  align-self: flex-end;
+  pointer-events: auto;
+}
+
+.mn-os-research-toolbar-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
+  color: var(--os-text-dim);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mn-os-research-toolbar-btn:hover {
+  color: var(--os-text);
+  background: var(--os-surface-3);
+}
+
+.mn-os-research-card {
+  width: min(760px, 100%);
+  background: color-mix(in srgb, var(--os-surface-2) 90%, transparent);
+  border: 1px solid var(--os-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px -18px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+}
+
+.mn-os-research-card:empty {
+  display: none;
+}
+
+.mn-os-research-card.hidden {
+  display: none !important;
+}
+
+.mn-os-research-progress .dr-prog,
+.mn-os-research-result .dr-report,
+.mn-os-research-library .dr-lib {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+#osDesktopLayer.is-research-active .mn-os-desk-stage {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: 4vh;
+}

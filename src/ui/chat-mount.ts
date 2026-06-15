@@ -1,12 +1,14 @@
 /**
- * Chat transcript mount resolution for Code (#chatArea) vs Chat app (#chatAppArea).
+ * Chat transcript mount resolution for Code (#chatArea) vs Chat app vs desktop chat.
  */
 
+import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
 
-/** True when the Chat app page is the active UI (OS shell or `#/app/chat` hash). */
+/** True when desktop chat or the legacy Chat app is the active UI. */
 export function isChatAppForeground(): boolean {
+  if (isDesktopChatActive()) return true;
   if (getForegroundAppId() === 'chat') return true;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
@@ -35,9 +37,13 @@ function getChatAppMessageCol(): HTMLElement | null {
   return document.getElementById('chatAppMessageCol');
 }
 
-/** Active transcript root: override, Chat app column, or Code orchestrate mount. */
+/** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
+  if (isDesktopChatActive()) {
+    const desktopCol = document.getElementById('desktopChatCol');
+    if (desktopCol) return desktopCol;
+  }
   if (isChatAppForeground()) {
     const col = getChatAppMessageCol();
     if (col) return col;

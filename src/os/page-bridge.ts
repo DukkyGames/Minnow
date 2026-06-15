@@ -1,4 +1,8 @@
 import { getForegroundAppId, getOsView, subscribeInstances } from './instances';
+import {
+  isDesktopChatActive,
+  isDesktopResearchActive,
+} from './desktop-state';
 import type { AppId } from './types';
 
 /** Feature flag — always on until a gradual rollout toggle exists. */
@@ -20,6 +24,8 @@ export function isOsEmbedded(): boolean {
 /** True when the legacy chat workspace (`#appBody`) should be hidden. */
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
+  if (isDesktopChatActive()) return true;
+  if (isDesktopResearchActive()) return true;
   if (getOsView() === 'desktop') return true;
   return getForegroundAppId() !== 'code';
 }
@@ -38,9 +44,15 @@ export function syncLegacyChromeVisibility(): void {
   const view = getOsView();
   document.documentElement.classList.toggle('os-desktop', view === 'desktop');
   document.documentElement.classList.toggle('os-in-app', view === 'app');
+  document.documentElement.classList.toggle('os-desktop-chat', isDesktopChatActive());
+  document.documentElement.classList.toggle('os-desktop-research', isDesktopResearchActive());
 
   const fg = getForegroundAppId();
-  if (fg) {
+  if (isDesktopChatActive()) {
+    document.documentElement.dataset.osApp = 'chat';
+  } else if (isDesktopResearchActive()) {
+    document.documentElement.dataset.osApp = 'research';
+  } else if (fg) {
     document.documentElement.dataset.osApp = fg;
   } else {
     delete document.documentElement.dataset.osApp;
@@ -77,6 +89,9 @@ export function initOsPageBridge(): void {
   visibilityBound = true;
   subscribeInstances(() => {
     syncLegacyChromeVisibility();
+  });
+  void import('./desktop-state').then(({ subscribeDesktopState }) => {
+    subscribeDesktopState(() => syncLegacyChromeVisibility());
   });
   syncLegacyChromeVisibility();
 }

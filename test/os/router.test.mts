@@ -39,8 +39,8 @@ function setupChatAppDom(win: import('happy-dom').Window): void {
 describe('resolveLegacyHash', () => {
   test('redirects settings paths to the settings app', () => {
     assert.deepEqual(resolveLegacyHash('#/settings/providers'), {
-      hash: '#/app/settings',
-      settingsSection: 'providers',
+      hash: '#/app/models/providers',
+      modelsSection: 'providers',
     });
     assert.deepEqual(resolveLegacyHash('#/settings'), {
       hash: '#/app/settings',
@@ -48,9 +48,19 @@ describe('resolveLegacyHash', () => {
     });
   });
 
+  test('resolveLegacyHash redirects #/app/chat to desktop', () => {
+    assert.deepEqual(resolveLegacyHash('#/app/chat'), {
+      hash: '#/desktop',
+      desktopChat: true,
+    });
+  });
+
   test('redirects legacy full-page routes to OS apps', () => {
     assert.deepEqual(resolveLegacyHash('#/benchmark'), { hash: '#/app/bench' });
-    assert.deepEqual(resolveLegacyHash('#/research/run'), { hash: '#/app/research' });
+    assert.deepEqual(resolveLegacyHash('#/research/run'), {
+      hash: '#/desktop',
+      desktopResearch: true,
+    });
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), { hash: '#/app/experts' });
   });
 });
@@ -112,27 +122,32 @@ describe('os router navigation', () => {
     assert.equal(route.appId, 'code');
   });
 
-  test('launchApp(chat) stores seed on the foreground instance', () => {
-    window.location.hash = '#/app/chat';
-    syncOsRouteFromHashForTests();
+  test('launchApp(chat) redirects to desktop chat', async () => {
+    const { isDesktopChatActive, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    resetDesktopStateForTests();
     launchApp('chat', { seed: 'summarize my notes' });
+    assert.equal(window.location.hash, '#/desktop');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'app');
-    const inst = snap.instances.find((i) => i.appId === 'chat');
-    assert.ok(inst);
-    assert.equal(inst?.seed, 'summarize my notes');
-    assert.deepEqual(inst?.launchOptions, { seed: 'summarize my notes' });
-    assert.equal(window.location.hash, '#/app/chat');
-    assert.equal(getCurrentRoute().appId, 'chat');
+    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.instances.find((i) => i.appId === 'chat'), undefined);
+    assert.equal(isDesktopChatActive(), true);
   });
 
-  test('launchApp(research) stores autoRun in launch options', () => {
+  test('launchApp(research) redirects to desktop research', async () => {
+    const { isDesktopResearchActive, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    resetDesktopStateForTests();
     launchApp('research', { seed: 'Apple stock', autoRun: true });
-    syncOsRouteFromHashForTests();
-    const inst = getInstanceSnapshot().instances.find((i) => i.appId === 'research');
-    assert.ok(inst);
-    assert.equal(inst?.launchOptions?.autoRun, true);
-    assert.equal(inst?.launchOptions?.seed, 'Apple stock');
+    assert.equal(window.location.hash, '#/desktop');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
+    assert.equal(isDesktopResearchActive(), true);
   });
 
   test('navigateToDesktop returns to desktop view', () => {
@@ -242,16 +257,17 @@ describe('chat app OS integration', () => {
     setSessionStateForTests(null);
   });
 
-  test('launchApp(chat) from desktop stores seed on the foreground instance', async () => {
+  test('launchApp(chat) from desktop activates desktop chat', async () => {
+    const { isDesktopChatActive, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    resetDesktopStateForTests();
     launchApp('chat', { seed: 'summarize my notes' });
-    syncOsRouteFromHashForTests();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const snap = getInstanceSnapshot();
-    assert.equal(snap.view, 'app');
-    const inst = snap.instances.find((i) => i.appId === 'chat');
-    assert.ok(inst);
-    assert.equal(inst?.seed, 'summarize my notes');
-    assert.equal(window.location.hash, '#/app/chat');
+    assert.equal(snap.view, 'desktop');
+    assert.equal(window.location.hash, '#/desktop');
+    assert.equal(isDesktopChatActive(), true);
   });
 
   test('openChatApp applies seed to composer when empty', async () => {

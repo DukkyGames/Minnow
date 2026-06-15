@@ -1,3 +1,8 @@
+import { getPresentationMode } from './app-registry';
+import {
+  CALENDAR_WINDOW_MIN_HEIGHT,
+  CALENDAR_WINDOW_MIN_WIDTH,
+} from './calendar-constants';
 import { isOsShellEnabled } from './page-bridge';
 import {
   getForegroundAppId,
@@ -8,6 +13,9 @@ import {
 import { getCurrentRoute } from './router';
 import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
+import { windowManager } from './window-manager';
+import { syncSchedulerSidePanel } from './scheduler-side-panel';
+import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
 
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
@@ -24,6 +32,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
 
 let initialized = false;
 let lastForegroundApp: AppId | null = null;
+const mountedWindowInstances = new Set<string>();
 
 function getAppsLayer(): HTMLElement | null {
   return document.getElementById('osAppsLayer');
@@ -107,11 +116,19 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'research': {
-      const { openResearch } = await import('../research/panel');
-      openResearch({
-        seed: options?.seed,
-        autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
-      });
+      if (isOsShellEnabled()) {
+        const { activateDesktopResearch } = await import('./desktop-state');
+        await activateDesktopResearch({
+          seed: options?.seed,
+          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+        });
+      } else {
+        const { openResearch } = await import('../research/panel');
+        openResearch({
+          seed: options?.seed,
+          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+        });
+      }
       break;
     }
     case 'bench': {
@@ -130,8 +147,10 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'scheduler': {
-      const { openScheduler } = await import('../ui/scheduler-page');
-      await openScheduler();
+      if (!isOsShellEnabled()) {
+        const { openScheduler } = await import('../ui/scheduler-page');
+        await openScheduler();
+      }
       break;
     }
     case 'calendar': {
@@ -166,8 +185,8 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'chat': {
-      const { openChatApp } = await import('../ui/chat-app');
-      await openChatApp({ seed: options?.seed, chatId: options?.chatId });
+      const { activateDesktopChat } = await import('./desktop-state');
+      await activateDesktopChat({ seed: options?.seed, chatId: options?.chatId });
       break;
     }
     default:
@@ -187,23 +206,148 @@ function launchOptionsFromSnapshot(snapshot: InstanceSnapshot): LaunchOptions | 
   return inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
 }
 
+function usesFullscreenLayer(mode: ReturnType<typeof getPresentationMode>): boolean {
+  return mode === 'fullscreen' || mode === 'desktop';
+}
+
+function shouldBlurDesktop(snapshot: InstanceSnapshot): boolean {
+  if (snapshot.view !== 'app') return false;
+  const appId = getForegroundAppId();
+  if (!appId) return false;
+  return usesFullscreenLayer(getPresentationMode(appId));
+}
+
+function stashWindowContent(appId: AppId): void {
+  const el = layerForApp(appId);
+  if (!el) return;
+  const appsLayer = getAppsLayer();
+  if (appsLayer && el.parentElement !== appsLayer) {
+    appsLayer.appendChild(el);
+  }
+  el.classList.remove('is-open');
+}
+
+async function ensureWindowSurface(
+  instanceId: string,
+  appId: AppId,
+  options?: LaunchOptions,
+): Promise<void> {
+  if (!WINDOW_MOUNTED_APPS.has(appId)) return;
+
+  const wasMounted = mountedWindowInstances.has(instanceId);
+  windowManager.ensureLayer();
+  const openOptions: Parameters<typeof windowManager.open>[1] = { instanceId };
+  if (appId === 'calendar') {
+    openOptions.minWidth = CALENDAR_WINDOW_MIN_WIDTH;
+    openOptions.minHeight = CALENDAR_WINDOW_MIN_HEIGHT;
+  }
+  const windowId = windowManager.open(appId, openOptions);
+  const body = windowManager.getFrame(windowId)?.body;
+  const content = layerForApp(appId);
+  if (body && content && content.parentElement !== body) {
+    body.appendChild(content);
+  }
+  mountedWindowInstances.add(instanceId);
+
+  if (!wasMounted) {
+    const layer = layerForApp(appId);
+    if (!layer?.classList.contains('is-open')) {
+      await openAppPage(appId, options);
+    }
+  }
+}
+
+function teardownWindowSurface(instanceId: string, appId: AppId): void {
+  if (!mountedWindowInstances.has(instanceId)) return;
+  mountedWindowInstances.delete(instanceId);
+
+  layerForApp(appId)?.classList.remove('is-open');
+  runWindowTeardown(appId);
+
+  stashWindowContent(appId);
+  const win = windowManager.findWindowByInstance(instanceId);
+  if (win) windowManager.close(win.id);
+}
+
+function syncWindowSurfaces(snapshot: InstanceSnapshot): void {
+  const openIds = new Set(snapshot.instances.map((i) => i.id));
+
+  for (const inst of snapshot.instances) {
+    if (getPresentationMode(inst.appId) !== 'window') continue;
+    if (!WINDOW_MOUNTED_APPS.has(inst.appId)) continue;
+    const options =
+      inst.launchOptions ?? (inst.seed ? { seed: inst.seed } : undefined);
+    void ensureWindowSurface(inst.id, inst.appId, options);
+    if (inst.id === snapshot.foregroundId) {
+      const win = windowManager.findWindowByInstance(inst.id);
+      if (win) windowManager.focus(win.id);
+    }
+  }
+
+  for (const mountedId of [...mountedWindowInstances]) {
+    if (!openIds.has(mountedId)) {
+      const win = windowManager.findWindowByInstance(mountedId);
+      teardownWindowSurface(mountedId, win?.appId ?? 'settings');
+    }
+  }
+}
+
 function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   const stage = getStage();
   if (!stage) return;
 
+  syncWindowSurfaces(snapshot);
+
+  syncSchedulerSidePanel();
+
+  const blur = shouldBlurDesktop(snapshot);
+  stage.classList.toggle('is-in-app', blur);
+  stage.classList.toggle('is-in-app-fullscreen', blur);
+
   if (snapshot.view === 'desktop') {
-    stage.classList.remove('is-in-app');
     hideAllLayers();
-    if (lastForegroundApp !== null) closeAllAppPages();
+    const hadFullscreenForeground =
+      lastForegroundApp !== null &&
+      usesFullscreenLayer(getPresentationMode(lastForegroundApp));
+    if (hadFullscreenForeground) closeAllAppPages();
     lastForegroundApp = null;
     return;
   }
 
-  stage.classList.add('is-in-app');
   const appId = getForegroundAppId();
   if (!appId) return;
 
+  const mode = getPresentationMode(appId);
   const options = launchOptionsFromSnapshot(snapshot);
+
+  if (mode === 'window' && WINDOW_MOUNTED_APPS.has(appId)) {
+    hideAllLayers();
+    lastForegroundApp = appId;
+    return;
+  }
+
+  if (mode === 'desktop') {
+    hideAllLayers();
+    if (appId === 'chat') {
+      void import('./desktop-state').then((m) =>
+        m.activateDesktopChat({
+          seed: options?.seed,
+          chatId: options?.chatId,
+        }),
+      );
+    } else if (appId === 'research') {
+      void import('./desktop-state').then((m) =>
+        m.activateDesktopResearch({
+          seed: options?.seed,
+          autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+        }),
+      );
+    }
+    lastForegroundApp = null;
+    return;
+  }
+
+  if (!usesFullscreenLayer(mode)) return;
 
   if (appId !== lastForegroundApp) {
     showAppLayer(appId);
@@ -219,6 +363,7 @@ export function initAppHost(): void {
   if (!isOsShellEnabled() || initialized) return;
   initialized = true;
   mountAppLayers();
+  windowManager.ensureLayer();
   subscribeInstances((snap) => syncFromSnapshot(snap));
   syncFromSnapshot(getInstanceSnapshot());
 }
@@ -227,6 +372,12 @@ export function initAppHost(): void {
 export function resetAppHostForTests(): void {
   initialized = false;
   lastForegroundApp = null;
+  mountedWindowInstances.clear();
   const appsLayer = getAppsLayer();
   if (appsLayer) delete appsLayer.dataset.mounted;
+}
+
+/** Re-run app-host sync from current instance snapshot (tests). */
+export function syncAppHostForTests(): void {
+  syncFromSnapshot(getInstanceSnapshot());
 }

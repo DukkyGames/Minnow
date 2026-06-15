@@ -1,5 +1,6 @@
-import { APPS, getAppById } from './app-registry';
+import { APPS, getAppById, getPresentationMode } from './app-registry';
 import { createAppIcon, createOsIcon } from './icons';
+import { isWindowMountedApp } from './window-mounted-apps';
 import type { AppInstance } from './types';
 import type { DesktopPrefs } from './types';
 
@@ -20,9 +21,13 @@ export function renderMiniPreviews(
   // Mini-stack cards belong on the desktop launcher only — not over foreground apps.
   if (snapshot.view === 'app') return;
 
-  const minimized = snapshot.instances.filter(
-    (i) => i.id !== snapshot.foregroundId || snapshot.view === 'desktop',
-  );
+  const minimized = snapshot.instances.filter((i) => {
+    // Window-mounted apps use WindowFrame minimize — skip duplicate desktop cards.
+    if (isWindowMountedApp(i.appId) && getPresentationMode(i.appId) === 'window') {
+      return false;
+    }
+    return i.id !== snapshot.foregroundId || snapshot.view === 'desktop';
+  });
 
   if (minimized.length === 0) return;
 

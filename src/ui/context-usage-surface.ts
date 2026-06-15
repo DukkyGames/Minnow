@@ -1,7 +1,8 @@
 /**
- * Context usage ring + breakdown DOM targets for Code vs Chat composers.
+ * Context usage ring + breakdown DOM targets for Code vs Chat vs desktop composers.
  */
 
+import { isDesktopChatActive } from '../os/desktop-state';
 import { isChatAppForeground } from './chat-mount';
 
 export interface ContextUsageSurface {
@@ -9,7 +10,7 @@ export interface ContextUsageSurface {
   breakdownId: string;
 }
 
-const SURFACES: Record<'code' | 'chat', ContextUsageSurface> = {
+const SURFACES: Record<'code' | 'chat' | 'desktop', ContextUsageSurface> = {
   code: {
     ringId: 'contextUsageRing',
     breakdownId: 'contextUsageBreakdown',
@@ -18,16 +19,26 @@ const SURFACES: Record<'code' | 'chat', ContextUsageSurface> = {
     ringId: 'chatAppContextUsageRing',
     breakdownId: 'chatAppContextUsageBreakdown',
   },
+  desktop: {
+    ringId: 'desktopContextRing',
+    breakdownId: 'desktopContextBreakdown',
+  },
 };
+
+function resolveSurfaceKey(): keyof typeof SURFACES {
+  if (isDesktopChatActive()) return 'desktop';
+  if (isChatAppForeground()) return 'chat';
+  return 'code';
+}
 
 /** Ring + breakdown ids for the foreground chat surface. */
 export function getActiveContextUsageSurface(): ContextUsageSurface {
-  return isChatAppForeground() ? SURFACES.chat : SURFACES.code;
+  return SURFACES[resolveSurfaceKey()];
 }
 
-/** All mounted context usage surfaces (Code + Chat). */
+/** All mounted context usage surfaces (Code + Chat + desktop). */
 export function listContextUsageSurfaces(): ContextUsageSurface[] {
-  return [SURFACES.code, SURFACES.chat];
+  return [SURFACES.code, SURFACES.chat, SURFACES.desktop];
 }
 
 export function getContextUsageRingButton(

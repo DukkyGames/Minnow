@@ -159,8 +159,8 @@ function createAttachChip(attachment: Attachment): HTMLElement {
   return chip;
 }
 
-/** Composer preview strip ids (Code + Chat app share one pending list). */
-const ATTACH_PREVIEW_IDS = ['attachPreview', 'chatAppAttachPreview'] as const;
+/** Composer preview strip ids (Code + Chat app + desktop share one pending list). */
+const ATTACH_PREVIEW_IDS = ['attachPreview', 'chatAppAttachPreview', 'desktopAttachPreview'] as const;
 
 /** Renders chips into composer preview strips when markup exists (SA-15). */
 export function renderAttachPreview(): void {
@@ -215,6 +215,11 @@ export function initAttachments(): void {
   const chatAttachBtn = document.getElementById('btnChatAppAttach');
   if (chatAttachBtn && fileInput) {
     chatAttachBtn.addEventListener('click', () => fileInput.click());
+  }
+
+  const desktopAttachBtn = document.getElementById('btnDesktopAttach');
+  if (desktopAttachBtn && fileInput) {
+    desktopAttachBtn.addEventListener('click', () => fileInput.click());
   }
 
   renderAttachPreview();

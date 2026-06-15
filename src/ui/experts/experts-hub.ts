@@ -40,7 +40,8 @@ import {
   teardownExpertScopeShell,
 } from './experts-scope';
 import { appendChatRow } from '../sidebar';
-import { isOsAppHash, isOsShellEnabled } from '../../os/page-bridge';
+import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
+import { requestCloseWindowApp, registerWindowTeardown } from '../../os/window-mounted-apps';
 import { launchApp, navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -438,7 +439,7 @@ export async function startExpertChat(expertId: string): Promise<void> {
 export function returnToExpertsHub(): void {
   const expertId = selectedExpertId;
   teardownExpertScopeShell();
-  if (isOsShellEnabled()) {
+  if (isOsEmbedded()) {
     launchApp('experts');
   }
   if (expertId) {
@@ -638,14 +639,16 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
 
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     document.querySelector('header.topbar')?.classList.remove('hidden');
     if (!options?.skipNavigate && window.location.hash.startsWith('#/experts')) {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('experts')) {
+      navigateToDesktop();
+    }
   }
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -705,7 +708,7 @@ export function openExperts(options?: OpenExpertsOptions): void {
 
   setExpertsPageOpen(true);
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
     document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
@@ -825,13 +828,14 @@ function onHashChange(): void {
     openExperts();
     return;
   }
-  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isOsEmbedded() && isOsAppHash(hash)) return;
   if (isExpertsPageOpen()) {
     closeExpertsHub();
   }
 }
 
 export function initExpertsHub(): void {
+  registerWindowTeardown('experts', () => closeExpertsHub({ skipNavigate: true }));
   bindStaticControls();
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.startsWith('#/experts')) {

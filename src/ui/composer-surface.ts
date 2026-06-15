@@ -1,7 +1,8 @@
 /**
- * Resolves the active composer input + send button for Code vs Chat (and other apps).
+ * Resolves the active composer input + send button for Code vs Chat vs desktop.
  */
 
+import { isDesktopChatActive } from '../os/desktop-state';
 import { getForegroundAppId } from '../os/instances';
 import type { AppId } from '../os/types';
 import { isChatAppForeground } from './chat-mount';
@@ -15,12 +16,16 @@ export interface ComposerSurface {
 const DEFAULT_IDS: Record<string, { inputId: string; sendBtnId: string }> = {
   code: { inputId: 'msgInput', sendBtnId: 'sendBtn' },
   chat: { inputId: 'chatAppInput', sendBtnId: 'chatAppSendBtn' },
+  desktop: { inputId: 'desktopInput', sendBtnId: 'desktopSendBtn' },
 };
 
-const registry = new Map<AppId, ComposerSurface>();
+const registry = new Map<AppId | 'desktop', ComposerSurface>();
 
 /** Override composer elements for an app (e.g. tests or embedded hosts). */
-export function registerComposerSurface(appId: AppId, surface: ComposerSurface): void {
+export function registerComposerSurface(
+  appId: AppId | 'desktop',
+  surface: ComposerSurface,
+): void {
   registry.set(appId, surface);
 }
 
@@ -31,12 +36,18 @@ function resolveByIds(inputId: string, sendBtnId: string): ComposerSurface {
   };
 }
 
-/** Composer for the foreground MinnowOS app; Code app when shell is on desktop. */
+function resolveComposerKey(): AppId | 'desktop' {
+  if (isDesktopChatActive()) return 'desktop';
+  if (isChatAppForeground()) return 'chat';
+  return getForegroundAppId() ?? 'code';
+}
+
+/** Composer for the foreground MinnowOS app; Code app when shell is on desktop idle. */
 export function getActiveComposerSurface(): ComposerSurface {
-  const appId = isChatAppForeground() ? 'chat' : (getForegroundAppId() ?? 'code');
-  const registered = registry.get(appId);
+  const key = resolveComposerKey();
+  const registered = registry.get(key);
   if (registered) return registered;
-  const ids = DEFAULT_IDS[appId] ?? DEFAULT_IDS.code!;
+  const ids = DEFAULT_IDS[key] ?? DEFAULT_IDS.code!;
   return resolveByIds(ids.inputId, ids.sendBtnId);
 }
 

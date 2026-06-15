@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-06-15T06:14:55.855Z",
+  "createdAt": "2026-06-15T16:30:11.757Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -182,13 +182,14 @@
     },
     "limits": {
       "maxAudioBytes": 26214400,
-      "maxDurationSeconds": 300
+      "maxDurationSeconds": 300,
+      "silenceTimeoutSeconds": 2.5
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-HKb55s",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-QGvlRI",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-HKb55s"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-QGvlRI"
     ]
   }
 }

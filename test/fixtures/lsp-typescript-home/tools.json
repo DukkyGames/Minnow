@@ -61,7 +61,8 @@
     "load_impeccable_context": false,
     "get_lsp_diagnostics": false,
     "list_lsp_servers": false,
-    "save_memory": true
+    "save_memory": true,
+    "manage_calendar": false
   },
   "permissions": {
     "default": {
@@ -126,10 +127,9 @@
       "load_impeccable_context": "off",
       "get_lsp_diagnostics": "off",
       "list_lsp_servers": "off",
-      "save_memory": "ask"
-    },
-    "perAgent": {},
-    "patterns": []
+      "save_memory": "ask",
+      "manage_calendar": "off"
+    }
   },
   "keys": {
     "braveApiKey": "",
