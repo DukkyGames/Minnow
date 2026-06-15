@@ -13,7 +13,7 @@ import {
   getVoiceModelsRoot,
   voiceModelDir,
 } from './paths.js';
-import { isSttCatalogModel } from './stt-catalog.js';
+import { isSttCatalogModel, resolveSttDownloadRepoId } from './stt-catalog.js';
 import { QWEN_TOKENIZER_MODEL_ID, resolveTtsCatalogMeta } from './tts-catalog.js';
 
 /** Minimum free bytes before starting a voice download (500 MB). */
@@ -351,8 +351,10 @@ async function runDownloadJob(job) {
   });
 
   try {
+    const repoId =
+      job.kind === 'stt' ? resolveSttDownloadRepoId(job.modelId) : job.modelId;
     const result = await downloadHfSnapshot({
-      repoId: job.modelId,
+      repoId,
       destDir: job.destDir,
       signal: controller.signal,
       onProgress: (bytes, total) => {
@@ -453,9 +455,11 @@ export async function startVoiceDownload(body) {
     throw new Error('Download a TTS model — the tokenizer is installed automatically when required');
   }
 
+  const downloadRepoId = kind === 'stt' ? resolveSttDownloadRepoId(modelId) : modelId;
+
   let totalBytes = null;
   try {
-    const files = await listRepoFilesRecursive(modelId);
+    const files = await listRepoFilesRecursive(downloadRepoId);
     const sum = files.reduce((acc, f) => acc + (f.size ?? 0), 0);
     totalBytes = sum > 0 ? sum : null;
   } catch {

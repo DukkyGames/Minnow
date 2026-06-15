@@ -6,19 +6,37 @@ import { loadVoiceConfig } from './config.js';
 import { getWorkerPort, getWorkerFetch } from './runtime-manager.js';
 import { voiceModelDir } from './paths.js';
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 
 /** @type {string | null} */
 let loadedModelId = null;
 
 /**
+ * Whether a voice model directory contains a faster-whisper CTranslate2 snapshot.
+ * @param {string} destDir
+ */
+async function isCtranslate2ModelDir(destDir) {
+  try {
+    await fsp.access(path.join(destDir, 'model.bin'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve the on-disk path for a voice STT model.
+ * HF transformers snapshots are ignored — faster-whisper loads by size alias instead.
  * @param {string} modelId
  */
 export async function resolveLocalModelPath(modelId) {
   const dest = voiceModelDir(modelId);
   try {
     await fsp.access(dest);
-    return dest;
+    if (await isCtranslate2ModelDir(dest)) {
+      return dest;
+    }
+    return modelId;
   } catch {
     return modelId;
   }

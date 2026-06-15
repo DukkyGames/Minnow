@@ -132,8 +132,14 @@ def _resolve_fw_compute_type(config: dict[str, Any], device: str) -> str:
     return "float16" if device == "cuda" else "int8"
 
 
+def _is_faster_whisper_model_dir(model_path: str) -> bool:
+    """True when the directory is a CTranslate2 snapshot (model.bin), not HF transformers."""
+    return bool(model_path) and os.path.isfile(os.path.join(model_path, "model.bin"))
+
+
 def _resolve_fw_model_source(model_id: str, model_path: str) -> str:
-    if model_path and os.path.isdir(model_path):
+    # Local HF snapshots (model.safetensors / pytorch_model.bin) cannot be loaded by faster-whisper.
+    if model_path and os.path.isdir(model_path) and _is_faster_whisper_model_dir(model_path):
         return model_path
     lowered = model_id.lower()
     for size in ("large-v3", "large-v2", "large", "medium", "small", "base", "tiny"):
