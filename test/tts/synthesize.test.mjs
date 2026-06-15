@@ -9,6 +9,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import {
   hashTtsParams,
+  getCachedSynthesis,
   putCachedSynthesis,
   readTtsCache,
 } from '../../server/tts/cache.js';
@@ -84,6 +85,16 @@ describe('tts cache', () => {
     const files = await fs.readdir(dir);
     assert.ok(files.some((name) => name.endsWith('.audio')));
   });
+
+  test('getCachedSynthesis hits local TTS cache keyed by modelId', async () => {
+    const modelId = 'Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice';
+    const fakeWav = Buffer.from([0x52, 0x49, 0x46, 0x46]);
+    const id = await putCachedSynthesis('local cache phrase', modelId, 1, 'wav', fakeWav, 'audio/wav');
+    const cached = await getCachedSynthesis('local cache phrase', modelId, 1, 'wav');
+    assert.ok(cached);
+    assert.equal(cached.id, id);
+    assert.equal(hashTtsParams('local cache phrase', modelId, 1, 'wav'), id);
+  });
 });
 
 describe('tts text limits', () => {
@@ -127,6 +138,31 @@ describe('tts local status', () => {
     assert.equal(status.backend, 'local');
     assert.equal(status.enabled, true);
     assert.equal(status.runtimeReady, true);
+    assert.equal(status.streamingSupported, true);
     assert.match(status.warning ?? '', /first synthesis/i);
+  });
+
+  test('buildTtsStatus disables streamingSupported when streaming is off', async () => {
+    setWorkerStateForTests({
+      child: null,
+      port: 9878,
+      healthy: true,
+      phase: 'running',
+    });
+    setVoiceFetchOverrideForTests(async (url) => {
+      if (String(url).endsWith('/voice/capabilities')) {
+        return new Response(JSON.stringify({ ttsLoaded: true, loadedKind: 'tts' }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+
+    const voice = normalizeVoiceConfig({
+      tts: { backend: 'local', enabled: true, streaming: false },
+    });
+    const status = await buildTtsStatus(voice);
+    assert.equal(status.streamingSupported, false);
+    assert.equal(status.streaming, false);
   });
 });

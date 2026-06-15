@@ -17,6 +17,7 @@ import { detectHardware } from '../system/hardware.js';
 import { isCudaHardware } from './provision.js';
 import { resetLocalSttForTests as resetSttModelCache } from './local-stt.js';
 import { resetLocalTtsForTests as resetTtsModelCache } from './local-tts.js';
+import { preloadVoiceModels } from './preload.js';
 
 /** @typedef {'pending' | 'installing' | 'completed' | 'failed'} InstallPhase */
 
@@ -337,6 +338,12 @@ export async function startWorker() {
   workerState.healthy = true;
   workerState.phase = 'running';
   await patchMeta({ port, pid: child.pid ?? null });
+
+  // Warm STT/TTS models from settings without blocking startup on failure.
+  void preloadVoiceModels().catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[voice] preload failed: ${message}`);
+  });
 
   return { ok: true, port, pid: child.pid ?? null };
 }

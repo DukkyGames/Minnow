@@ -71,6 +71,14 @@ describe('local TTS bridge', () => {
           temperature: 0.9,
           repetitionPenalty: 1,
         },
+        streaming: {
+          emitEveryFrames: 8,
+          decodeWindowFrames: 80,
+          firstChunkEmitEvery: 5,
+          firstChunkDecodeWindow: 48,
+          overlapSamples: 512,
+          repetitionPenalty: 1.05,
+        },
       },
       text: 'hello local tts',
     });
@@ -94,6 +102,7 @@ describe('local TTS bridge', () => {
         return new Response(
           JSON.stringify({
             cuda: true,
+            ttsLoaded: true,
             modelLoaded: true,
             loadedKind: 'tts',
             speakers: ['Ryan'],

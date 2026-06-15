@@ -47,7 +47,7 @@ import {
   setTtsBackendUi,
 } from '../../voice/settings-form';
 import { analyzeSttFit, analyzeTtsFit, VOICE_FIT_BADGE_CLASS } from '../../voice/voice-fit';
-import { fetchSttStatus, synthesizeSpeech } from '../voice-controls';
+import { fetchSttStatus, fetchTtsStatus, synthesizeSpeech } from '../voice-controls';
 
 type VoiceSubSection = 'stt' | 'tts';
 
@@ -208,6 +208,9 @@ async function refreshRuntimeStatus(): Promise<void> {
   try {
     runtimeStatus = await fetchRuntimeStatus();
     updateRuntimeCardUi();
+    if (runtimeStatus.running) {
+      await Promise.all([fetchSttStatus(), fetchTtsStatus()]);
+    }
   } catch {
     runtimeStatus = {
       installed: false,
@@ -844,6 +847,29 @@ async function renderTtsSettingsSection(): Promise<void> {
     voiceConfig.tts.provider.providerId,
   );
   fillTtsProviderPanel(voiceConfig);
+  void (async () => {
+    const hintId = 'modelsVoiceTtsStreamingHint';
+    document.getElementById(hintId)?.remove();
+    if (voiceConfig!.tts.backend !== 'local') return;
+    const status = await fetchTtsStatus();
+    const shellEl = document.getElementById('modelsVoiceTtsSettings');
+    if (!shellEl) return;
+    const hint = document.createElement('p');
+    hint.id = hintId;
+    hint.className = 'field-hint models-voice-streaming-hint';
+    if (!status?.healthy) {
+      hint.textContent =
+        'Start the voice worker above for read-aloud. Without it, message playback falls back to batch synthesis.';
+    } else if (status.streamingSupported) {
+      hint.textContent =
+        'Streaming read-aloud is available — assistant messages play as PCM chunks arrive over WebSocket.';
+    } else if (voiceConfig!.tts.streaming === false) {
+      hint.textContent = 'Streaming read-aloud is off — enable the checkbox above and save settings.';
+    } else {
+      hint.textContent = 'Streaming read-aloud requires local Qwen TTS with the voice worker running.';
+    }
+    shellEl.appendChild(hint);
+  })();
 }
 
 async function saveTtsSettings(): Promise<void> {

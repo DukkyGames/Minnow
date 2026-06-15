@@ -119,9 +119,22 @@ function corePackagesFor(cudaAvailable) {
   ];
 }
 
-/** Optional package — install continues when unavailable (CI / platform quirks). */
+/**
+ * Streaming-capable qwen-tts fork — PyPI qwen-tts lacks true PCM streaming APIs
+ * (`stream_generate_*`, `enable_streaming_optimizations`).
+ */
+const QWEN_TTS_STREAMING_SPEC =
+  'git+https://github.com/xxddccaa/Qwen3-TTS-streaming.git';
+
+/**
+ * Worker env `MINNOW_TTS_USE_COMPILE` (default true): set to `false` when the voice
+ * worker serves concurrent TTS streams — disables torch.compile to avoid CUDA graph
+ * conflicts across threads. Applied in `server/voice/python/worker.py` on TTS load.
+ */
+
+/** Optional packages — install continues when unavailable (CI / platform quirks). */
 const OPTIONAL_PACKAGES = [
-  { label: 'qwen-tts', args: ['qwen-tts'] },
+  { label: 'qwen-tts (streaming fork)', args: [QWEN_TTS_STREAMING_SPEC] },
   { label: 'imageio-ffmpeg', args: ['imageio-ffmpeg'] },
 ];
 
@@ -179,7 +192,7 @@ async function pipInstallPackage(venvPython, pkg, onProgress) {
     await runProcess(
       venvPython,
       ['-m', 'pip', 'install', ...pkg.args],
-      { windowsHide: true },
+      { windowsHide: true, ...pkg.spawnOptions },
     );
   } catch (err) {
     if (pkg.optional) {
@@ -190,6 +203,35 @@ async function pipInstallPackage(venvPython, pkg, onProgress) {
     throw err;
   }
   return true;
+}
+
+/**
+ * Optional flash-attn on CUDA hosts — speeds attention when the wheel builds cleanly.
+ * @param {string} venvPython
+ * @param {boolean} cudaAvailable
+ * @param {(message: string) => void} [onProgress]
+ * @returns {Promise<boolean>}
+ */
+async function maybeInstallFlashAttn(venvPython, cudaAvailable, onProgress) {
+  if (!cudaAvailable) return false;
+  onProgress?.('Installing flash-attn (optional, CUDA only)');
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env };
+  if (process.platform === 'win32') {
+    env.MAX_JOBS = '4';
+  }
+  try {
+    await runProcess(
+      venvPython,
+      ['-m', 'pip', 'install', 'flash-attn', '--no-build-isolation'],
+      { windowsHide: true, env },
+    );
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    onProgress?.(`Skipped optional flash-attn: ${message}`);
+    return false;
+  }
 }
 
 /**
@@ -230,6 +272,12 @@ export async function provision(onProgress) {
     const ok = await pipInstallPackage(venvPython, { ...pkg, optional: true }, progress);
     if (ok) installedPackages.push(pkg.label);
     else skippedPackages.push(pkg.label);
+  }
+
+  if (await maybeInstallFlashAttn(venvPython, cudaAvailable, progress)) {
+    installedPackages.push('flash-attn');
+  } else if (cudaAvailable) {
+    skippedPackages.push('flash-attn');
   }
 
   try {

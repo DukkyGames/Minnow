@@ -30,6 +30,37 @@ describe('voice config schema', () => {
     assert.equal(voice.tts.speed, 1.2);
   });
 
+  test('defaultVoiceConfig includes TTS streaming tuning defaults', () => {
+    const voice = defaultVoiceConfig(true);
+    assert.deepEqual(voice.tts.local.streaming, {
+      emitEveryFrames: 8,
+      decodeWindowFrames: 80,
+      firstChunkEmitEvery: 5,
+      firstChunkDecodeWindow: 48,
+      overlapSamples: 512,
+      repetitionPenalty: 1.05,
+    });
+  });
+
+  test('clamps TTS local streaming numeric fields', () => {
+    const voice = normalizeVoiceConfig({
+      tts: {
+        local: {
+          streaming: {
+            emitEveryFrames: 99,
+            decodeWindowFrames: 4,
+            overlapSamples: 99999,
+            repetitionPenalty: 5,
+          },
+        },
+      },
+    });
+    assert.equal(voice.tts.local.streaming.emitEveryFrames, 32);
+    assert.equal(voice.tts.local.streaming.decodeWindowFrames, 16);
+    assert.equal(voice.tts.local.streaming.overlapSamples, 4096);
+    assert.equal(voice.tts.local.streaming.repetitionPenalty, 2);
+  });
+
   test('rejects instruct on 0.6B CustomVoice', () => {
     const voice = normalizeVoiceConfig({
       tts: {

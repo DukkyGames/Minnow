@@ -469,7 +469,7 @@ interface TtsFieldSpec {
   max?: number;
   step?: number;
   hint?: string;
-  panel?: 'customVoice' | 'voiceDesign' | 'voiceClone' | 'generation' | 'runtime';
+  panel?: 'customVoice' | 'voiceDesign' | 'voiceClone' | 'generation' | 'runtime' | 'streaming';
   readOnly?: boolean;
 }
 
@@ -897,6 +897,94 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
   );
   localPanel.appendChild(generation);
 
+  const streaming = document.createElement('fieldset');
+  streaming.className = 'models-voice-fieldset models-voice-fieldset--advanced';
+  streaming.appendChild(
+    Object.assign(document.createElement('legend'), { textContent: 'Advanced streaming' }),
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.emitEveryFrames',
+      label: 'Emit every frames',
+      type: 'number',
+      min: 1,
+      max: 32,
+      step: 1,
+      panel: 'streaming',
+      hint: 'PCM chunk cadence during stable-phase decode',
+    },
+    config.tts.local.streaming.emitEveryFrames,
+    streaming,
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.decodeWindowFrames',
+      label: 'Decode window frames',
+      type: 'number',
+      min: 16,
+      max: 256,
+      step: 1,
+      panel: 'streaming',
+    },
+    config.tts.local.streaming.decodeWindowFrames,
+    streaming,
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.firstChunkEmitEvery',
+      label: 'First chunk emit every',
+      type: 'number',
+      min: 1,
+      max: 32,
+      step: 1,
+      panel: 'streaming',
+      hint: 'Faster first audible chunk (two-phase streaming)',
+    },
+    config.tts.local.streaming.firstChunkEmitEvery,
+    streaming,
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.firstChunkDecodeWindow',
+      label: 'First chunk decode window',
+      type: 'number',
+      min: 16,
+      max: 256,
+      step: 1,
+      panel: 'streaming',
+    },
+    config.tts.local.streaming.firstChunkDecodeWindow,
+    streaming,
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.overlapSamples',
+      label: 'Overlap samples',
+      type: 'number',
+      min: 0,
+      max: 4096,
+      step: 64,
+      panel: 'streaming',
+      hint: 'Crossfade overlap between PCM chunks',
+    },
+    config.tts.local.streaming.overlapSamples,
+    streaming,
+  );
+  renderTtsControl(
+    {
+      id: 'streaming.repetitionPenalty',
+      label: 'Streaming repetition penalty',
+      type: 'number',
+      min: 0.5,
+      max: 2,
+      step: 0.05,
+      panel: 'streaming',
+    },
+    config.tts.local.streaming.repetitionPenalty,
+    streaming,
+  );
+  localPanel.appendChild(streaming);
+
   mount.appendChild(localPanel);
   setTtsModePanels(config.tts.local.mode);
 }
@@ -930,7 +1018,7 @@ function setTtsNestedValue(local: VoiceTtsLocalConfig, key: string, value: unkno
     const parts = key.split('.');
     if (parts.length === 2) {
       const [group, field] = parts;
-      if (group === 'customVoice' || group === 'voiceDesign' || group === 'voiceClone' || group === 'generation') {
+      if (group === 'customVoice' || group === 'voiceDesign' || group === 'voiceClone' || group === 'generation' || group === 'streaming') {
         (local[group] as unknown as Record<string, unknown>)[field] = value;
       }
     }

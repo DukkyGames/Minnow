@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { extractSpeechText } from '../../src/ui/voice-controls.ts';
+import { extractSpeechText } from '../../src/ui/voice-speech-text.ts';
 
 describe('voice-controls', () => {
   test('extractSpeechText strips code fences and markdown', () => {
@@ -17,5 +17,9 @@ describe('voice-controls', () => {
       '<thinking>secret</thinking>Visible answer.',
     );
     assert.equal(plain, 'Visible answer.');
+  });
+
+  test('extractSpeechText returns empty for code-only input (speakStreamingText guard)', () => {
+    assert.equal(extractSpeechText('```\nonly code\n```'), '');
   });
 });

@@ -46,9 +46,23 @@ export async function resolveLocalModelPath(modelId) {
  * Fetch worker /voice/capabilities when the worker is running.
  */
 export async function fetchWorkerCapabilities() {
+  const empty = {
+    cuda: false,
+    flashAttnAvailable: false,
+    modelLoaded: false,
+    sttLoaded: false,
+    ttsLoaded: false,
+    loadedSttModelId: null,
+    loadedTtsModelId: null,
+    loadedTtsMode: null,
+    loadedModelId: null,
+    loadedKind: null,
+    speakers: [],
+    languages: [],
+  };
   const port = getWorkerPort();
   if (!port) {
-    return { cuda: false, flashAttnAvailable: false, modelLoaded: false };
+    return empty;
   }
   const fetchImpl = getWorkerFetch();
   try {
@@ -56,20 +70,33 @@ export async function fetchWorkerCapabilities() {
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) {
-      return { cuda: false, flashAttnAvailable: false, modelLoaded: false };
+      return empty;
     }
     const json = await res.json();
+    const sttLoaded =
+      json?.sttLoaded === true ||
+      (json?.modelLoaded === true && json?.loadedKind === 'stt');
+    const ttsLoaded =
+      json?.ttsLoaded === true ||
+      (json?.modelLoaded === true && json?.loadedKind === 'tts');
     return {
       cuda: json?.cuda === true,
       flashAttnAvailable: json?.flashAttnAvailable === true,
       modelLoaded: json?.modelLoaded === true,
+      sttLoaded,
+      ttsLoaded,
+      loadedSttModelId:
+        typeof json?.loadedSttModelId === 'string' ? json.loadedSttModelId : null,
+      loadedTtsModelId:
+        typeof json?.loadedTtsModelId === 'string' ? json.loadedTtsModelId : null,
+      loadedTtsMode: typeof json?.loadedTtsMode === 'string' ? json.loadedTtsMode : null,
       loadedModelId: typeof json?.loadedModelId === 'string' ? json.loadedModelId : null,
       loadedKind: typeof json?.loadedKind === 'string' ? json.loadedKind : null,
       speakers: Array.isArray(json?.speakers) ? json.speakers : [],
       languages: Array.isArray(json?.languages) ? json.languages : [],
     };
   } catch {
-    return { cuda: false, flashAttnAvailable: false, modelLoaded: false };
+    return empty;
   }
 }
 
@@ -79,11 +106,9 @@ export async function fetchWorkerCapabilities() {
  */
 async function isSttModelReady(modelId) {
   const caps = await fetchWorkerCapabilities();
-  return (
-    caps.modelLoaded === true &&
-    caps.loadedKind === 'stt' &&
-    caps.loadedModelId === modelId
-  );
+  const sttReady = caps.sttLoaded === true || caps.loadedKind === 'stt';
+  const loadedId = caps.loadedSttModelId ?? caps.loadedModelId;
+  return sttReady && loadedId === modelId;
 }
 
 /**
@@ -330,15 +355,22 @@ export async function buildLocalSttStatus(voice) {
   let warning = null;
   if (stt.backend === 'local' && !runtimeReady) {
     warning = 'Voice worker is not running';
-  } else if (stt.backend === 'local' && caps && !caps.modelLoaded) {
+  } else if (
+    stt.backend === 'local' &&
+    caps &&
+    !caps.sttLoaded &&
+    caps.loadedKind !== 'stt'
+  ) {
     warning = 'Model will load on first transcription';
   }
+
+  const sttLoaded = caps?.sttLoaded === true || caps?.loadedKind === 'stt';
 
   return {
     backend: stt.backend,
     modelId,
     runtimeReady,
-    modelLoaded: caps?.modelLoaded === true,
+    modelLoaded: sttLoaded,
     cudaAvailable: caps?.cuda === true,
     warning,
   };

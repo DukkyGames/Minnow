@@ -110,6 +110,7 @@ export async function buildTtsStatus(voice) {
 
   if (backend === 'local') {
     const local = await buildLocalTtsStatus(voice);
+    const streamingSupported = local.runtimeReady && tts.streaming !== false;
     return {
       enabled,
       providerId: '',
@@ -119,6 +120,8 @@ export async function buildTtsStatus(voice) {
       format: 'wav',
       browser: false,
       healthy: local.runtimeReady,
+      streamingSupported,
+      streaming: tts.streaming,
       ...local,
     };
   }
@@ -262,6 +265,20 @@ export async function handleTtsRequest(req, res, pathname) {
       let mime;
 
       if (backend === 'local') {
+        const cacheVoice = tts.local.modelId;
+        const cached = await getCachedSynthesis(text, cacheVoice, 1, 'wav');
+        if (cached) {
+          if (returnBytes) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', cached.mime);
+            res.setHeader('Content-Length', String(cached.data.length));
+            res.end(cached.data);
+            return true;
+          }
+          sendJson(res, 200, { url: `/api/tts/audio/${cached.id}` });
+          return true;
+        }
+
         const result = await synthesizeLocal({
           localConfig: tts.local,
           text,

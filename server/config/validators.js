@@ -1541,7 +1541,40 @@ function defaultTtsLocal(cudaAvailable = false) {
       temperature: 0.9,
       repetitionPenalty: 1,
     },
+    streaming: defaultTtsLocalStreaming(),
   };
+}
+
+/** Default PCM streaming tuning for local Qwen3-TTS (distinct from `tts.streaming` enable flag). */
+function defaultTtsLocalStreaming() {
+  return {
+    emitEveryFrames: 8,
+    decodeWindowFrames: 80,
+    firstChunkEmitEvery: 5,
+    firstChunkDecodeWindow: 48,
+    overlapSamples: 512,
+    repetitionPenalty: 1.05,
+  };
+}
+
+/**
+ * @param {Record<string, unknown>} raw
+ * @param {Record<string, unknown>} base
+ */
+function normalizeTtsLocalStreaming(raw, base) {
+  const out = { ...base };
+  out.emitEveryFrames = clampVoiceNum(raw.emitEveryFrames, 1, 32, out.emitEveryFrames);
+  out.decodeWindowFrames = clampVoiceNum(raw.decodeWindowFrames, 16, 256, out.decodeWindowFrames);
+  out.firstChunkEmitEvery = clampVoiceNum(raw.firstChunkEmitEvery, 1, 32, out.firstChunkEmitEvery);
+  out.firstChunkDecodeWindow = clampVoiceNum(
+    raw.firstChunkDecodeWindow,
+    16,
+    256,
+    out.firstChunkDecodeWindow,
+  );
+  out.overlapSamples = clampVoiceNum(raw.overlapSamples, 0, 4096, out.overlapSamples);
+  out.repetitionPenalty = clampVoiceNum(raw.repetitionPenalty, 0.5, 2, out.repetitionPenalty);
+  return out;
 }
 
 function defaultTtsProvider() {
@@ -1760,6 +1793,14 @@ function normalizeTtsLocal(raw, base) {
       2,
       out.generation.repetitionPenalty,
     );
+  }
+  if (raw.streaming && typeof raw.streaming === 'object') {
+    out.streaming = normalizeTtsLocalStreaming(
+      /** @type {Record<string, unknown>} */ (raw.streaming),
+      out.streaming ?? defaultTtsLocalStreaming(),
+    );
+  } else if (!out.streaming) {
+    out.streaming = defaultTtsLocalStreaming();
   }
   if (isQwen06bCustomVoice(out.modelId)) {
     out.customVoice.instruct = '';

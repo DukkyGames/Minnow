@@ -92,7 +92,9 @@ describe('local STT bridge', () => {
           JSON.stringify({
             cuda: true,
             flashAttnAvailable: false,
+            sttLoaded: true,
             modelLoaded: true,
+            loadedKind: 'stt',
           }),
           { status: 200 },
         );

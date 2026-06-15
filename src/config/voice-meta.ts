@@ -108,6 +108,16 @@ export interface VoiceTtsGenerationConfig {
   repetitionPenalty: number;
 }
 
+/** PCM streaming tuning for local Qwen3-TTS worker (`tts.local.streaming`). */
+export interface VoiceTtsLocalStreamingConfig {
+  emitEveryFrames: number;
+  decodeWindowFrames: number;
+  firstChunkEmitEvery: number;
+  firstChunkDecodeWindow: number;
+  overlapSamples: number;
+  repetitionPenalty: number;
+}
+
 /** External OpenAI-compatible TTS API. */
 export interface VoiceTtsProviderConfig {
   providerId: string;
@@ -131,6 +141,7 @@ export interface VoiceTtsLocalConfig extends VoiceTtsLocalRuntimeConfig {
   voiceDesign: VoiceTtsVoiceDesignConfig;
   voiceClone: VoiceTtsVoiceCloneConfig;
   generation: VoiceTtsGenerationConfig;
+  streaming: VoiceTtsLocalStreamingConfig;
 }
 
 export interface VoiceTtsConfig {
@@ -205,6 +216,17 @@ function defaultSttProvider(): VoiceSttProviderConfig {
   };
 }
 
+function defaultTtsLocalStreaming(): VoiceTtsLocalStreamingConfig {
+  return {
+    emitEveryFrames: 8,
+    decodeWindowFrames: 80,
+    firstChunkEmitEvery: 5,
+    firstChunkDecodeWindow: 48,
+    overlapSamples: 512,
+    repetitionPenalty: 1.05,
+  };
+}
+
 function defaultTtsLocal(cudaAvailable = false): VoiceTtsLocalConfig {
   return {
     modelId: QWEN_CUSTOM_VOICE_06B,
@@ -236,6 +258,7 @@ function defaultTtsLocal(cudaAvailable = false): VoiceTtsLocalConfig {
       temperature: 0.9,
       repetitionPenalty: 1,
     },
+    streaming: defaultTtsLocalStreaming(),
   };
 }
 
@@ -454,6 +477,34 @@ function parseTtsLocal(raw: Record<string, unknown>, base: VoiceTtsLocalConfig):
       2,
       out.generation.repetitionPenalty,
     );
+  }
+  if (raw.streaming && typeof raw.streaming === 'object') {
+    const st = raw.streaming as Record<string, unknown>;
+    out.streaming = {
+      emitEveryFrames: clampNum(st.emitEveryFrames, 1, 32, out.streaming?.emitEveryFrames ?? 8),
+      decodeWindowFrames: clampNum(st.decodeWindowFrames, 16, 256, out.streaming?.decodeWindowFrames ?? 80),
+      firstChunkEmitEvery: clampNum(
+        st.firstChunkEmitEvery,
+        1,
+        32,
+        out.streaming?.firstChunkEmitEvery ?? 5,
+      ),
+      firstChunkDecodeWindow: clampNum(
+        st.firstChunkDecodeWindow,
+        16,
+        256,
+        out.streaming?.firstChunkDecodeWindow ?? 48,
+      ),
+      overlapSamples: clampNum(st.overlapSamples, 0, 4096, out.streaming?.overlapSamples ?? 512),
+      repetitionPenalty: clampNum(
+        st.repetitionPenalty,
+        0.5,
+        2,
+        out.streaming?.repetitionPenalty ?? 1.05,
+      ),
+    };
+  } else if (!out.streaming) {
+    out.streaming = defaultTtsLocalStreaming();
   }
   if (isQwen06bCustomVoice(out.modelId)) {
     out.customVoice.instruct = '';

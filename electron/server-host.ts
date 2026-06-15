@@ -23,6 +23,7 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     { resolveSafePath, runWithPathAccess },
     { attachPtyWebSocketServer },
     { attachSttWebSocketServer },
+    { attachTtsWebSocketServer },
     { getAppRoot },
   ] = await Promise.all([
     importServerModule<{
@@ -44,6 +45,9 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
     importServerModule<{
       attachSttWebSocketServer: (httpServer: http.Server) => void;
     }>('stt/stt-ws.js'),
+    importServerModule<{
+      attachTtsWebSocketServer: (httpServer: http.Server) => void;
+    }>('tts/tts-ws.js'),
     importServerModule<{ getAppRoot: () => string }>('workspace/root.js'),
   ]);
 
@@ -63,6 +67,7 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
   const server = http.createServer(connectApp);
   attachPtyWebSocketServer(server);
   attachSttWebSocketServer(server);
+  attachTtsWebSocketServer(server);
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

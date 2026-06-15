@@ -163,7 +163,10 @@
 }
 
 .voice-play-btn {
+  position: absolute;
+  top: 4px;
   right: 36px;
+  z-index: 2;
   width: 28px;
   height: 28px;
   padding: 0;
