@@ -33,6 +33,7 @@ const SETTINGS_SECTION_IDS = [
   'lsp',
   'editor',
   'skills',
+  'webhooks',
   'features',
   'evals',
 ];
@@ -52,6 +53,7 @@ const DYNAMIC_SECTION_BODY_IDS = [
   'settingsServersBody',
   'settingsToolsBody',
   'settingsSkillsBody',
+  'settingsWebhooksBody',
   'settingsUsageBody',
   'settingsEditorBody',
 ];
@@ -125,7 +127,7 @@ describe('settings page HTML', () => {
   });
 
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 26);
+    assert.equal(SETTINGS_SECTION_IDS.length, 27);
   });
 
   test('prompts hub mount exists in index.html', () => {

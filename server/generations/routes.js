@@ -116,6 +116,7 @@ export async function handleGenerationsRequest(req, res, pathname) {
         persist: payload.persist === true,
         candidates,
         fallbackRole,
+        chatId: typeof payload.chatId === 'string' ? payload.chatId : null,
       });
 
       pumpUpstream({ state });

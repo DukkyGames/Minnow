@@ -32,6 +32,7 @@ import { createTerminalMiddleware } from '../terminal/middleware.js';
 import { createSystemMiddleware } from '../system/middleware.js';
 import { createModelsMiddleware } from '../models/index.js';
 import { createSchedulerMiddleware } from '../scheduler/middleware.js';
+import { createWebhooksMiddleware } from '../webhooks/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -59,6 +60,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
     }),
   );
   connectApp.use(createMemoryMiddleware());
+  connectApp.use(createWebhooksMiddleware());
   connectApp.use(createReefMiddleware());
   connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));
   connectApp.use(createMcpMiddleware());

@@ -52,6 +52,8 @@ export interface CreateGenerationOptions {
   persist?: boolean;
   /** Optional role for server-side fallback chain resolution. */
   fallbackRole?: FallbackRole;
+  /** Active chat id for webhook chat.completed payloads. */
+  chatId?: string;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function createGeneration(
       body,
       persist: options.persist === true,
       ...(options.fallbackRole ? { fallbackRole: options.fallbackRole } : {}),
+      ...(options.chatId ? { chatId: options.chatId } : {}),
     }),
   });
 
