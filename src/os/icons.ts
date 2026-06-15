@@ -3,9 +3,6 @@
 /** Public path for the Compare app raster glyph. */
 export const COMPARE_ICON_SRC = '/icons/compare.png';
 
-/** Public path for the Scheduler app raster glyph. */
-export const SCHEDULER_ICON_SRC = '/icons/scheduler.png';
-
 export type OsIconName =
   | 'code'
   | 'chat'
@@ -24,7 +21,7 @@ export type OsIconName =
   | 'fish';
 
 /** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
-export type RasterIconName = 'compare' | 'scheduler';
+export type RasterIconName = 'compare';
 
 /** Inline SVG icon ids (excludes raster-backed launcher icons). */
 export type SvgIconName = Exclude<OsIconName, RasterIconName>;
@@ -37,6 +34,8 @@ const PATHS: Record<SvgIconName, string> = {
     '<path d="M9 3h6"/><path d="M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3"/><path d="M7.5 14h9"/>',
   bench:
     '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>',
+  scheduler:
+    '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="0.75" fill="currentColor" stroke="none"/><path d="M12 12V5.5"/><path d="M12 12L10.1 10.1"/><path d="M12 2.75A9.5 9.5 0 0 1 20.2 7.4"/>',
   chip:
     '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
   gear:
@@ -52,7 +51,6 @@ const PATHS: Record<SvgIconName, string> = {
 /** App launcher icons backed by a PNG mask instead of inline SVG paths. */
 const RASTER_ICON_SRC: Record<RasterIconName, string> = {
   compare: COMPARE_ICON_SRC,
-  scheduler: SCHEDULER_ICON_SRC,
 };
 
 export interface OsIconOptions {
