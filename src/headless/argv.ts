@@ -24,6 +24,9 @@ export interface HeadlessRunCliOptions {
   quiet: boolean;
   maxToolTurns: number | null;
   autoRejectQuestions: boolean;
+  persistChat: boolean;
+  chatId: string | null;
+  chatName: string | null;
 }
 
 const RUN_HELP = `minnow run — execute one agent turn without the SPA
@@ -58,6 +61,11 @@ Output:
 
 Limits:
   --max-tool-turns <n>  Cap tool rounds for this run (1–${MAX_CHAT_MAX_TOOL_TURNS})
+
+Session:
+  --persist-chat          Save transcript to ~/.minnow sessions (requires --chat-id)
+  --chat-id <id>          Chat id to create or update when persisting
+  --chat-name <label>     Sidebar title for the persisted chat (default: Headless run)
 
 Env:
   MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION=1  Required with --no-approval
@@ -113,6 +121,9 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       'json-out': { type: 'string' },
       quiet: { type: 'boolean', default: false },
       'max-tool-turns': { type: 'string' },
+      'persist-chat': { type: 'boolean', default: false },
+      'chat-id': { type: 'string' },
+      'chat-name': { type: 'string' },
     },
     allowPositionals: true,
     strict: true,
@@ -168,6 +179,13 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
     };
   }
 
+  const persistChat = Boolean(values['persist-chat']);
+  const chatId = values['chat-id'] ? String(values['chat-id']).trim() : null;
+  const chatName = values['chat-name'] ? String(values['chat-name']).trim() : null;
+  if (persistChat && !chatId) {
+    return { ok: false, message: '--persist-chat requires --chat-id' };
+  }
+
   return {
     ok: true,
     options: {
@@ -189,6 +207,9 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
       quiet: Boolean(values.quiet),
       maxToolTurns,
       autoRejectQuestions: values['auto-reject-questions'] !== false,
+      persistChat,
+      chatId,
+      chatName,
     },
   };
 }

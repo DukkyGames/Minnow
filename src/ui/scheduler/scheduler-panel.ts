@@ -27,6 +27,15 @@ import { createSettingsToggleRow } from '../settings-switch';
 import { isLocalServerAvailable } from '../../tools/config';
 import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
 import { mountScheduleField } from './schedule-field';
+import {
+  formatSchedulerRunSummary,
+  resolveSchedulerRunChatId,
+} from '../../scheduler/run-summary';
+import { findChatById, loadSessionsFromStorage, sessionState } from '../../state/sessions';
+import { setWorkspacePath } from '../../config/workspace-api';
+import { getWorkspacePath, setWorkspaceFromServer } from '../../state/workspace';
+import { launchApp } from '../../os/router';
+import { switchChat, applyWorkspaceScopedSession } from '../sidebar';
 
 export interface SchedulerPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -476,6 +485,38 @@ export async function renderSchedulerPanel(
     });
   }
 
+  async function openSchedulerRunChat(chatId: string): Promise<void> {
+    try {
+      await loadSessionsFromStorage();
+    } catch {
+      notify('err', 'Could not reload chats from the server.');
+      return;
+    }
+
+    const chat = findChatById(chatId);
+    if (!chat) {
+      notify('err', 'Chat for this run is not available yet.');
+      return;
+    }
+
+    const chatWorkspace = chat.workspacePath?.trim();
+    if (chatWorkspace && chatWorkspace !== getWorkspacePath()) {
+      try {
+        const info = await setWorkspacePath(chatWorkspace);
+        setWorkspaceFromServer(info);
+        applyWorkspaceScopedSession(chatWorkspace);
+      } catch (err) {
+        notify('err', err instanceof Error ? err.message : String(err));
+        return;
+      }
+    }
+
+    launchApp('code');
+    if (sessionState?.activeId !== chatId) {
+      switchChat(chatId);
+    }
+  }
+
   async function renderHistory(jobId: string): Promise<void> {
     selectedHistoryJobId = jobId;
     historyPanel.classList.remove('hidden');
@@ -517,6 +558,24 @@ export async function renderSchedulerPanel(
     const body = el('tbody');
     for (const run of runs) {
       const row = el('tr');
+      const chatId = resolveSchedulerRunChatId(run);
+      if (chatId) {
+        row.classList.add('scheduler-runs-table__row--clickable');
+        row.setAttribute('role', 'button');
+        row.tabIndex = 0;
+        row.title = 'Open chat for this run';
+        row.setAttribute('aria-label', `Open chat for run started ${formatWhen(run.startedAt)}`);
+        const openRunChat = (): void => {
+          void openSchedulerRunChat(chatId);
+        };
+        row.addEventListener('click', openRunChat);
+        row.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openRunChat();
+          }
+        });
+      }
       row.appendChild(el('td', 'scheduler-runs-table__time', formatWhen(run.startedAt)));
       const statusCell = el('td');
       const status = el('span', `scheduler-run-status scheduler-run-status--${run.status}`);
@@ -527,7 +586,7 @@ export async function renderSchedulerPanel(
         el('td', 'scheduler-runs-table__mono', run.exitCode != null ? String(run.exitCode) : '—'),
       );
       row.appendChild(
-        el('td', undefined, run.error ?? truncateText(run.output ?? '—', 120)),
+        el('td', undefined, formatSchedulerRunSummary(run, 120)),
       );
       body.appendChild(row);
     }

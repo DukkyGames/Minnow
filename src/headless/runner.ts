@@ -50,6 +50,7 @@ import {
   type HeadlessTurnRecord,
 } from './result';
 import { installHeadlessFetch, installHeadlessLocalStorage } from './server-context';
+import { persistHeadlessChat } from './persist-chat';
 
 /** Apply --profile in memory only (does not write ~/.minnow). */
 async function loadPromptMetaWithProfile(profile: string): Promise<void> {
@@ -129,9 +130,10 @@ async function streamHeadlessTurn(
 
 function buildHeadlessChat(options: HeadlessRunCliOptions, workspacePath: string): Chat {
   const now = Date.now();
+  const chatId = options.chatId?.trim() || `headless-${now}`;
   return {
-    id: `headless-${now}`,
-    name: 'Headless run',
+    id: chatId,
+    name: options.chatName?.trim() || 'Headless run',
     workspacePath,
     modelId: options.modelId ?? '',
     providerId: options.providerId ?? undefined,
@@ -187,6 +189,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   let providerId = '';
   let modelId = '';
   let workAgentId: string | null = null;
+  let persistedChatId: string | null = null;
 
   try {
     if (options.signal.aborted) {
@@ -355,6 +358,25 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
     log(error);
   }
 
+  if (options.cli.persistChat && options.cli.chatId) {
+    try {
+      await persistHeadlessChat({
+        chatId: chat.id,
+        chatName: chat.name,
+        workspacePath: chat.workspacePath,
+        modeId: normalizeModeId(chat.modeId),
+        providerId,
+        modelId,
+        workAgentId,
+        history: chat.history,
+      });
+      persistedChatId = chat.id;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`Failed to persist chat: ${message}`);
+    }
+  }
+
   const finishedAt = new Date().toISOString();
   const result: HeadlessRunResult = {
     version: HEADLESS_RESULT_VERSION,
@@ -376,6 +398,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
       durationMs: Date.now() - t0,
     },
     error,
+    chatId: persistedChatId,
   };
 
   return result;

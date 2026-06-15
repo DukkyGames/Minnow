@@ -152,6 +152,7 @@ export async function runStoredJob(storedJob, options = {}) {
 
   const workspacePath = await resolveJobWorkspacePath(storedJob);
   args.push('--workspace', workspacePath);
+  args.push('--persist-chat', '--chat-id', runId, '--chat-name', storedJob.label || 'Scheduled job');
 
   const env = {
     ...process.env,
@@ -228,6 +229,10 @@ export async function runStoredJob(storedJob, options = {}) {
 
   const output = stdout.trim().slice(0, MAX_OUTPUT_CHARS);
   const errorText = stderr.trim().slice(0, MAX_OUTPUT_CHARS) || parsedResult?.error || undefined;
+  const chatId =
+    typeof parsedResult?.chatId === 'string' && parsedResult.chatId.trim()
+      ? parsedResult.chatId.trim()
+      : undefined;
 
   await upsertRun(jobId, {
     id: runId,
@@ -238,6 +243,7 @@ export async function runStoredJob(storedJob, options = {}) {
     exitCode,
     output: output || undefined,
     error: errorText,
+    chatId,
   });
 
   await mutateStoredJob(jobId, (job) => ({

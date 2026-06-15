@@ -36,6 +36,7 @@ describe('scheduler runner', () => {
       exitCode: 0,
       assistantFinal: 'All good',
       error: null,
+      chatId: '11111111-1111-1111-1111-111111111111',
     };
 
     /** @type {string[] | undefined} */
@@ -89,6 +90,13 @@ describe('scheduler runner', () => {
     assert.equal(runs.length, 1);
     assert.equal(runs[0].status, 'completed');
     assert.match(runs[0].output ?? '', /All good/);
+    assert.equal(runs[0].chatId, payload.chatId);
+
+    const persistIndex = capturedArgs?.indexOf('--persist-chat') ?? -1;
+    const chatIdIndex = capturedArgs?.indexOf('--chat-id') ?? -1;
+    assert.ok(persistIndex >= 0);
+    assert.ok(chatIdIndex >= 0);
+    assert.equal(capturedArgs?.[chatIdIndex + 1], runs[0].id);
 
     const after = await getStoredJobById(created.id);
     assert.equal(after?.running, false);

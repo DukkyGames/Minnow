@@ -46,6 +46,8 @@ export interface SchedulerRun {
   exitCode?: number;
   output?: string;
   error?: string;
+  /** Session chat id when the run was persisted via --persist-chat. */
+  chatId?: string;
 }
 
 export interface SchedulerNotification {
