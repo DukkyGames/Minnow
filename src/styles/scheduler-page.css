@@ -161,16 +161,20 @@
 }
 
 .scheduler-panel-main {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
+  min-width: 0;
 }
 
-@media (min-width: 900px) {
-  .scheduler-panel-main.has-editor {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-  }
+.scheduler-panel-footer {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.scheduler-panel-add-btn {
+  min-width: 8rem;
 }
 
 /* ---------- job list ---------- */
@@ -371,36 +375,7 @@
   color: var(--mn-fg-muted);
 }
 
-/* ---------- editor ---------- */
-
-.scheduler-editor.hidden,
-.scheduler-history.hidden {
-  display: none;
-}
-
-.scheduler-editor {
-  padding: 16px;
-  border: 1px solid var(--mn-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--mn-fg) 2.5%, var(--mn-bg));
-}
-
-.scheduler-editor__head {
-  margin-bottom: 14px;
-}
-
-.scheduler-editor__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.scheduler-editor__fields {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+/* ---------- editor (shared field tokens; window body in scheduler-editor-window.css) ---------- */
 
 .scheduler-field {
   display: flex;
@@ -574,6 +549,35 @@
 
 .scheduler-schedule-preview.is-err {
   color: var(--mn-danger);
+}
+
+.scheduler-editor.hidden,
+.scheduler-history.hidden {
+  display: none;
+}
+
+.scheduler-editor {
+  padding: 16px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--mn-fg) 2.5%, var(--mn-bg));
+}
+
+.scheduler-editor__head {
+  margin-bottom: 14px;
+}
+
+.scheduler-editor__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.scheduler-editor__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .scheduler-editor__actions {

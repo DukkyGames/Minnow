@@ -89,7 +89,8 @@ import {
 } from './benchmark-transcript-drawer.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import { setStatus } from './status';
-import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
+import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 
 /** How a benchmark run was started from the run bar. */
@@ -2125,7 +2126,7 @@ export function openBenchmark(): void {
   });
 
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     window.location.hash = '#/benchmark';
   }
@@ -2143,13 +2144,15 @@ export function closeBenchmark(options?: { skipNavigate?: boolean }): void {
   if (!root || !shell) return;
   closeBenchmarkTranscriptDrawer();
   root.classList.remove('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     if (!options?.skipNavigate && window.location.hash.startsWith('#/benchmark')) {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('bench')) {
+      navigateToDesktop();
+    }
   }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -2169,7 +2172,7 @@ function onHashChange(): void {
     openBenchmark();
     return;
   }
-  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isOsEmbedded() && isOsAppHash(hash)) return;
   const root = getBenchmarkRoot();
   if (root?.classList.contains('is-open')) {
     closeBenchmark();
@@ -2183,6 +2186,7 @@ function onSuiteToggleClick(this: HTMLButtonElement): void {
 }
 
 export function initBenchmarkPage(): void {
+  registerWindowTeardown('bench', () => closeBenchmark({ skipNavigate: true }));
   document.getElementById('btnBenchmarkQuick')?.addEventListener('click', () => {
     void startRun('quick');
   });

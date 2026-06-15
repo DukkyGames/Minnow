@@ -29,7 +29,7 @@
 }
 
 /* ----- shell ----- */
-#researchView .dr-tabs {
+:is(#researchView, .mn-os-desktop-research) .dr-tabs {
   display: flex;
   gap: 4px;
   padding: 16px 24px 0;
@@ -37,7 +37,7 @@
   flex-shrink: 0;
 }
 
-#researchView .dr-tab {
+:is(#researchView, .mn-os-desktop-research) .dr-tab {
   position: relative;
   background: none;
   border: none;
@@ -49,15 +49,15 @@
   cursor: pointer;
 }
 
-#researchView .dr-tab:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-tab:hover {
   color: var(--mn-fg);
 }
 
-#researchView .dr-tab.on {
+:is(#researchView, .mn-os-desktop-research) .dr-tab.on {
   color: var(--mn-fg);
 }
 
-#researchView .dr-tab.on::after {
+:is(#researchView, .mn-os-desktop-research) .dr-tab.on::after {
   content: '';
   position: absolute;
   left: 8px;
@@ -68,14 +68,14 @@
   background: var(--mn-accent);
 }
 
-#researchView .dr-scroll {
+:is(#researchView, .mn-os-desktop-research) .dr-scroll {
   flex: 1;
   overflow: auto;
   padding: 26px 24px 30px;
   min-height: 0;
 }
 
-#researchView .dr-col {
+:is(#researchView, .mn-os-desktop-research) .dr-col {
   max-width: 760px;
   margin: 0 auto;
   display: flex;
@@ -83,14 +83,14 @@
   gap: 22px;
 }
 
-#researchView .dr-foot {
+:is(#researchView, .mn-os-desktop-research) .dr-foot {
   padding: 10px 24px;
   border-top: 1px solid var(--mn-border);
   text-align: right;
   flex-shrink: 0;
 }
 
-#researchView .dr-eng {
+:is(#researchView, .mn-os-desktop-research) .dr-eng {
   font-size: 12px;
   color: var(--mn-fg-muted);
   text-decoration: underline;
@@ -101,24 +101,24 @@
   font: inherit;
 }
 
-#researchView .dr-eng:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-eng:hover {
   color: var(--mn-accent);
 }
 
 /* ----- run form ----- */
-#researchView .dr-form {
+:is(#researchView, .mn-os-desktop-research) .dr-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-#researchView .dr-flabel {
+:is(#researchView, .mn-os-desktop-research) .dr-flabel {
   font-size: 10.5px;
   letter-spacing: 0.08em;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-q {
+:is(#researchView, .mn-os-desktop-research) .dr-q {
   width: 100%;
   resize: vertical;
   min-height: 96px;
@@ -134,16 +134,16 @@
   box-sizing: border-box;
 }
 
-#researchView .dr-q:focus {
+:is(#researchView, .mn-os-desktop-research) .dr-q:focus {
   border-color: var(--mn-accent-border, var(--mn-accent));
   box-shadow: 0 0 0 3px var(--mn-accent-soft);
 }
 
-#researchView .dr-q::placeholder {
+:is(#researchView, .mn-os-desktop-research) .dr-q::placeholder {
   color: var(--mn-fg-subtle);
 }
 
-#researchView .dr-controls {
+:is(#researchView, .mn-os-desktop-research) .dr-controls {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 12px;
@@ -151,25 +151,25 @@
 }
 
 @media (max-width: 900px) {
-  #researchView .dr-controls {
+  :is(#researchView, .mn-os-desktop-research) .dr-controls {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-#researchView .dr-field {
+:is(#researchView, .mn-os-desktop-research) .dr-field {
   display: flex;
   flex-direction: column;
   gap: 7px;
   min-width: 0;
 }
 
-#researchView .dr-select {
+:is(#researchView, .mn-os-desktop-research) .dr-select {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-#researchView .dr-select select {
+:is(#researchView, .mn-os-desktop-research) .dr-select select {
   appearance: none;
   width: 100%;
   background: var(--mn-surface-0, var(--mn-bg-elevated, var(--mn-bg)));
@@ -182,11 +182,11 @@
   cursor: pointer;
 }
 
-#researchView .dr-select select:focus {
+:is(#researchView, .mn-os-desktop-research) .dr-select select:focus {
   border-color: var(--mn-accent-border, var(--mn-accent));
 }
 
-#researchView .dr-select::after {
+:is(#researchView, .mn-os-desktop-research) .dr-select::after {
   content: '';
   position: absolute;
   right: 12px;
@@ -198,7 +198,7 @@
   pointer-events: none;
 }
 
-#researchView .dr-input {
+:is(#researchView, .mn-os-desktop-research) .dr-input {
   background: var(--mn-surface-0, var(--mn-bg-elevated, var(--mn-bg)));
   border: 1px solid var(--mn-border-strong, var(--mn-border));
   border-radius: 9px;
@@ -210,21 +210,21 @@
   box-sizing: border-box;
 }
 
-#researchView .dr-input:focus {
+:is(#researchView, .mn-os-desktop-research) .dr-input:focus {
   border-color: var(--mn-accent-border, var(--mn-accent));
 }
 
-#researchView .dr-input::placeholder {
+:is(#researchView, .mn-os-desktop-research) .dr-input::placeholder {
   color: var(--mn-fg-subtle);
 }
 
-#researchView .dr-actions {
+:is(#researchView, .mn-os-desktop-research) .dr-actions {
   display: flex;
   gap: 10px;
   margin-top: 6px;
 }
 
-#researchView .dr-run {
+:is(#researchView, .mn-os-desktop-research) .dr-run {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -239,28 +239,28 @@
   cursor: pointer;
 }
 
-#researchView .dr-run:hover:not(:disabled) {
+:is(#researchView, .mn-os-desktop-research) .dr-run:hover:not(:disabled) {
   filter: brightness(1.07);
   transform: translateY(-1px);
 }
 
-#researchView .dr-run:disabled {
+:is(#researchView, .mn-os-desktop-research) .dr-run:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-#researchView .dr-run.busy {
+:is(#researchView, .mn-os-desktop-research) .dr-run.busy {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
   color: var(--mn-fg-muted);
   border: 1px solid var(--mn-border-strong, var(--mn-border));
 }
 
-#researchView .dr-run.sm {
+:is(#researchView, .mn-os-desktop-research) .dr-run.sm {
   padding: 8px 14px;
   font-size: 13px;
 }
 
-#researchView .dr-cancel {
+:is(#researchView, .mn-os-desktop-research) .dr-cancel {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
   border: 1px solid var(--mn-border-strong, var(--mn-border));
   color: var(--mn-fg);
@@ -270,11 +270,11 @@
   cursor: pointer;
 }
 
-#researchView .dr-cancel:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-cancel:hover {
   background: var(--mn-surface-2, var(--mn-bg-elevated));
 }
 
-#researchView .dr-spinner {
+:is(#researchView, .mn-os-desktop-research) .dr-spinner {
   width: 14px;
   height: 14px;
   border: 2px solid var(--mn-border);
@@ -283,7 +283,7 @@
   animation: dr-spin 0.7s linear infinite;
 }
 
-#researchView .dr-spinner.sm {
+:is(#researchView, .mn-os-desktop-research) .dr-spinner.sm {
   width: 12px;
   height: 12px;
   border-width: 2px;
@@ -296,7 +296,7 @@
 }
 
 /* ----- progress panel ----- */
-#researchView .dr-prog {
+:is(#researchView, .mn-os-desktop-research) .dr-prog {
   background: var(--mn-surface-0, var(--mn-bg-elevated));
   border: 1px solid var(--mn-border);
   border-radius: 14px;
@@ -305,13 +305,13 @@
   margin-bottom: 25px;
 }
 
-#researchView .dr-prog-head {
+:is(#researchView, .mn-os-desktop-research) .dr-prog-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-#researchView .dr-prog-title {
+:is(#researchView, .mn-os-desktop-research) .dr-prog-title {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -319,7 +319,7 @@
   font-weight: 600;
 }
 
-#researchView .dr-dot {
+:is(#researchView, .mn-os-desktop-research) .dr-dot {
   width: 8px;
   height: 8px;
   border-radius: 99px;
@@ -339,18 +339,18 @@
   }
 }
 
-#researchView .dr-timer {
+:is(#researchView, .mn-os-desktop-research) .dr-timer {
   font-size: 13px;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-stepper {
+:is(#researchView, .mn-os-desktop-research) .dr-stepper {
   display: flex;
   align-items: center;
   margin: 22px 6px 10px;
 }
 
-#researchView .dr-node {
+:is(#researchView, .mn-os-desktop-research) .dr-node {
   width: 22px;
   height: 22px;
   flex: none;
@@ -363,7 +363,7 @@
   transition: 0.3s var(--ease-out, ease);
 }
 
-#researchView .dr-node-i {
+:is(#researchView, .mn-os-desktop-research) .dr-node-i {
   width: 7px;
   height: 7px;
   border-radius: 99px;
@@ -371,39 +371,39 @@
   transition: 0.3s var(--ease-out, ease);
 }
 
-#researchView .dr-node.done {
+:is(#researchView, .mn-os-desktop-research) .dr-node.done {
   background: #7fc99a;
   border-color: #7fc99a;
 }
 
-#researchView .dr-node.active {
+:is(#researchView, .mn-os-desktop-research) .dr-node.active {
   border-color: var(--mn-accent);
   box-shadow: 0 0 0 4px var(--mn-accent-soft);
 }
 
-#researchView .dr-node.active .dr-node-i {
+:is(#researchView, .mn-os-desktop-research) .dr-node.active .dr-node-i {
   background: var(--mn-accent);
   animation: dr-pulse 1.4s var(--ease-out, ease) infinite;
 }
 
-#researchView .dr-track {
+:is(#researchView, .mn-os-desktop-research) .dr-track {
   flex: 1;
   height: 2px;
   background: var(--mn-border-strong, var(--mn-border));
   transition: background 0.4s var(--ease-out, ease);
 }
 
-#researchView .dr-track.fill {
+:is(#researchView, .mn-os-desktop-research) .dr-track.fill {
   background: #7fc99a;
 }
 
-#researchView .dr-stepper-labels {
+:is(#researchView, .mn-os-desktop-research) .dr-stepper-labels {
   display: flex;
   justify-content: space-between;
   margin: 0 -4px 14px;
 }
 
-#researchView .dr-slabel {
+:is(#researchView, .mn-os-desktop-research) .dr-slabel {
   font-size: 10px;
   letter-spacing: 0.03em;
   color: var(--mn-fg-subtle);
@@ -411,48 +411,48 @@
   text-align: center;
 }
 
-#researchView .dr-slabel.on {
+:is(#researchView, .mn-os-desktop-research) .dr-slabel.on {
   color: var(--mn-accent);
 }
 
-#researchView .dr-slabel.did {
+:is(#researchView, .mn-os-desktop-research) .dr-slabel.did {
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-current {
+:is(#researchView, .mn-os-desktop-research) .dr-current {
   padding: 14px 0 4px;
   border-top: 1px solid var(--mn-border);
 }
 
-#researchView .dr-cur-link {
+:is(#researchView, .mn-os-desktop-research) .dr-cur-link {
   font-size: 14px;
   color: var(--mn-accent);
   cursor: pointer;
 }
 
-#researchView .dr-cur-link:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-cur-link:hover {
   text-decoration: underline;
 }
 
-#researchView .dr-cur-meta {
+:is(#researchView, .mn-os-desktop-research) .dr-cur-meta {
   font-size: 11.5px;
   color: var(--mn-fg-muted);
   margin-top: 6px;
 }
 
-#researchView .dr-cur-dim,
-#researchView .dr-rep-dim {
+:is(#researchView, .mn-os-desktop-research) .dr-cur-dim,
+:is(#researchView, .mn-os-desktop-research) .dr-rep-dim {
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-feed {
+:is(#researchView, .mn-os-desktop-research) .dr-feed {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-#researchView .dr-feed-row {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-row {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -461,11 +461,11 @@
   animation: dr-feed-in 0.32s var(--ease-out, ease);
 }
 
-#researchView .dr-feed-row.reading {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-row.reading {
   background: var(--mn-accent-soft);
 }
 
-#researchView .dr-feed-row.read {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-row.read {
   opacity: 0.72;
 }
 
@@ -476,7 +476,7 @@
   }
 }
 
-#researchView .dr-stype {
+:is(#researchView, .mn-os-desktop-research) .dr-stype {
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -490,20 +490,20 @@
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-stype.t-paper {
+:is(#researchView, .mn-os-desktop-research) .dr-stype.t-paper {
   color: var(--mn-accent);
   border-color: var(--mn-accent-border, var(--mn-accent));
 }
 
-#researchView .dr-stype.t-docs {
+:is(#researchView, .mn-os-desktop-research) .dr-stype.t-docs {
   color: #8fd0e0;
 }
 
-#researchView .dr-stype.t-news {
+:is(#researchView, .mn-os-desktop-research) .dr-stype.t-news {
   color: #e0b87f;
 }
 
-#researchView .dr-feed-title {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-title {
   flex: 1;
   min-width: 0;
   font-size: 13px;
@@ -515,18 +515,18 @@
   cursor: pointer;
 }
 
-#researchView .dr-feed-title:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-title:hover {
   color: var(--mn-accent);
   text-decoration: underline;
 }
 
-#researchView .dr-feed-host {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-host {
   font-size: 11px;
   flex: none;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-feed-state {
+:is(#researchView, .mn-os-desktop-research) .dr-feed-state {
   width: 18px;
   display: grid;
   place-items: center;
@@ -534,12 +534,12 @@
   flex: none;
 }
 
-#researchView .dr-check {
+:is(#researchView, .mn-os-desktop-research) .dr-check {
   color: #7fc99a;
 }
 
 /* ----- report ----- */
-#researchView .dr-rep-top {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -548,7 +548,7 @@
   gap: 8px;
 }
 
-#researchView .dr-rep-badge {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -561,19 +561,19 @@
   padding: 5px 11px;
 }
 
-#researchView .dr-rep-stats {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-stats {
   font-size: 12px;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-rep-title {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-title {
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0 18px;
 }
 
-#researchView .dr-tldr {
+:is(#researchView, .mn-os-desktop-research) .dr-tldr {
   background: var(--mn-surface-0, var(--mn-bg-elevated));
   border: 1px solid var(--mn-accent-border, var(--mn-accent));
   border-radius: 13px;
@@ -581,21 +581,21 @@
   margin-bottom: 26px;
 }
 
-#researchView .dr-tldr-h {
+:is(#researchView, .mn-os-desktop-research) .dr-tldr-h {
   font-size: 10.5px;
   letter-spacing: 0.1em;
   color: var(--mn-accent);
   margin-bottom: 9px;
 }
 
-#researchView .dr-tldr p {
+:is(#researchView, .mn-os-desktop-research) .dr-tldr p {
   margin: 0;
   font-size: 14.5px;
   line-height: 1.62;
   color: var(--mn-fg);
 }
 
-#researchView .dr-rep-sec {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-sec {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -603,31 +603,31 @@
   margin: 28px 0 14px;
 }
 
-#researchView .dr-findings {
+:is(#researchView, .mn-os-desktop-research) .dr-findings {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-#researchView .dr-finding {
+:is(#researchView, .mn-os-desktop-research) .dr-finding {
   border-left: 2px solid var(--mn-border-strong, var(--mn-border));
   padding-left: 16px;
 }
 
-#researchView .dr-finding-h {
+:is(#researchView, .mn-os-desktop-research) .dr-finding-h {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 6px;
 }
 
-#researchView .dr-finding p {
+:is(#researchView, .mn-os-desktop-research) .dr-finding p {
   margin: 0;
   font-size: 14px;
   line-height: 1.6;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-cite {
+:is(#researchView, .mn-os-desktop-research) .dr-cite {
   font-size: 10px;
   color: var(--mn-accent);
   background: var(--mn-accent-soft);
@@ -639,13 +639,13 @@
   vertical-align: super;
 }
 
-#researchView .dr-srclist {
+:is(#researchView, .mn-os-desktop-research) .dr-srclist {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-#researchView .dr-src {
+:is(#researchView, .mn-os-desktop-research) .dr-src {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -657,18 +657,18 @@
   color: inherit;
 }
 
-#researchView .dr-src:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-src:hover {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
 }
 
-#researchView .dr-src-n {
+:is(#researchView, .mn-os-desktop-research) .dr-src-n {
   font-size: 11px;
   color: var(--mn-fg-subtle);
   width: 18px;
   flex: none;
 }
 
-#researchView .dr-src-title {
+:is(#researchView, .mn-os-desktop-research) .dr-src-title {
   flex: 1;
   font-size: 13.5px;
   white-space: nowrap;
@@ -676,36 +676,36 @@
   text-overflow: ellipsis;
 }
 
-#researchView .dr-src-host {
+:is(#researchView, .mn-os-desktop-research) .dr-src-host {
   font-size: 11.5px;
   flex: none;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-conf {
+:is(#researchView, .mn-os-desktop-research) .dr-conf {
   font-size: 10.5px;
   padding: 3px 9px;
   border-radius: 7px;
   flex: none;
 }
 
-#researchView .dr-conf.high {
+:is(#researchView, .mn-os-desktop-research) .dr-conf.high {
   background: var(--mn-accent-soft);
   color: var(--mn-accent);
 }
 
-#researchView .dr-conf.med {
+:is(#researchView, .mn-os-desktop-research) .dr-conf.med {
   background: var(--mn-surface-2, var(--mn-bg-elevated));
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-follow {
+:is(#researchView, .mn-os-desktop-research) .dr-follow {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-#researchView .dr-followchip {
+:is(#researchView, .mn-os-desktop-research) .dr-followchip {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -721,12 +721,12 @@
   cursor: pointer;
 }
 
-#researchView .dr-followchip:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-followchip:hover {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
   border-color: var(--mn-accent-border, var(--mn-accent));
 }
 
-#researchView .dr-rep-actions {
+:is(#researchView, .mn-os-desktop-research) .dr-rep-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -735,7 +735,7 @@
   border-top: 1px solid var(--mn-border);
 }
 
-#researchView .dr-save {
+:is(#researchView, .mn-os-desktop-research) .dr-save {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -749,12 +749,12 @@
   cursor: pointer;
 }
 
-#researchView .dr-save.done {
+:is(#researchView, .mn-os-desktop-research) .dr-save.done {
   background: color-mix(in srgb, #7fc99a 16%, transparent);
   color: #7fc99a;
 }
 
-#researchView .dr-ghost {
+:is(#researchView, .mn-os-desktop-research) .dr-ghost {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -767,12 +767,12 @@
   cursor: pointer;
 }
 
-#researchView .dr-ghost:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-ghost:hover {
   background: var(--mn-surface-2, var(--mn-bg-elevated));
 }
 
 /* ----- library ----- */
-#researchView .dr-lib-head {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -781,7 +781,7 @@
   gap: 10px;
 }
 
-#researchView .dr-lib-toolbar {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(108px, 132px) auto;
   gap: 12px;
@@ -790,34 +790,34 @@
 }
 
 @media (max-width: 640px) {
-  #researchView .dr-lib-toolbar {
+  :is(#researchView, .mn-os-desktop-research) .dr-lib-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 
-  #researchView .dr-lib-field-search {
+  :is(#researchView, .mn-os-desktop-research) .dr-lib-field-search {
     grid-column: 1 / -1;
   }
 }
 
-#researchView .dr-lib-field {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-field {
   display: flex;
   flex-direction: column;
   gap: 7px;
   min-width: 0;
 }
 
-#researchView .dr-lib-field-archived {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-field-archived {
   align-items: flex-start;
 }
 
-#researchView .dr-lib-field-archived .dr-switch {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-field-archived .dr-switch {
   min-height: 35px;
   display: inline-flex;
   align-items: center;
 }
 
 /* Library toolbar toggle — matches settings switch, scoped to research view */
-#researchView .dr-switch {
+:is(#researchView, .mn-os-desktop-research) .dr-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -827,7 +827,7 @@
   min-height: 24px;
 }
 
-#researchView .dr-switch__input {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -839,7 +839,7 @@
   border: 0;
 }
 
-#researchView .dr-switch__track {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__track {
   position: relative;
   display: block;
   width: 40px;
@@ -849,7 +849,7 @@
   transition: background 0.2s var(--ease-out, ease);
 }
 
-#researchView .dr-switch__thumb {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__thumb {
   position: absolute;
   top: 3px;
   left: 3px;
@@ -861,37 +861,37 @@
   transition: transform 0.2s var(--ease-out, ease);
 }
 
-#researchView .dr-switch__input:checked + .dr-switch__track {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__input:checked + .dr-switch__track {
   background: var(--mn-accent);
 }
 
-#researchView .dr-switch__input:checked + .dr-switch__track .dr-switch__thumb {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__input:checked + .dr-switch__track .dr-switch__thumb {
   transform: translateX(18px);
 }
 
-#researchView .dr-switch__input:focus-visible + .dr-switch__track {
+:is(#researchView, .mn-os-desktop-research) .dr-switch__input:focus-visible + .dr-switch__track {
   outline: 2px solid var(--mn-accent);
   outline-offset: 2px;
 }
 
-#researchView .dr-lib-count {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-count {
   font-size: 12px;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-lib-grid {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
 @media (max-width: 640px) {
-  #researchView .dr-lib-grid {
+  :is(#researchView, .mn-os-desktop-research) .dr-lib-grid {
     grid-template-columns: 1fr;
   }
 }
 
-#researchView .dr-lib-card {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-card {
   position: relative;
   background: var(--mn-surface-0, var(--mn-bg-elevated));
   border: 1px solid var(--mn-border);
@@ -900,13 +900,13 @@
   width: 100%;
 }
 
-#researchView .dr-lib-card:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-card:hover {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
   border-color: var(--mn-border-strong, var(--mn-border));
   transform: translateY(-2px);
 }
 
-#researchView .dr-lib-card-body {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-card-body {
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -921,7 +921,7 @@
   color: inherit;
 }
 
-#researchView .dr-lib-tag {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-tag {
   font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -931,19 +931,19 @@
   padding: 3px 8px;
 }
 
-#researchView .dr-lib-title {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-title {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.3;
 }
 
-#researchView .dr-lib-meta {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-meta {
   font-size: 11.5px;
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-lib-when {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-when {
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -951,7 +951,7 @@
   color: var(--mn-fg-muted);
 }
 
-#researchView .dr-lib-menu-btn {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu-btn {
   position: absolute;
   top: 12px;
   right: 12px;
@@ -965,12 +965,12 @@
   line-height: 1;
 }
 
-#researchView .dr-lib-menu-btn:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu-btn:hover {
   background: var(--mn-surface-2, var(--mn-bg-elevated));
   color: var(--mn-fg);
 }
 
-#researchView .dr-lib-menu {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu {
   position: absolute;
   top: 36px;
   right: 12px;
@@ -983,7 +983,7 @@
   padding: 4px;
 }
 
-#researchView .dr-lib-menu button {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu button {
   display: block;
   width: 100%;
   text-align: left;
@@ -997,15 +997,15 @@
   border-radius: 6px;
 }
 
-#researchView .dr-lib-menu button:hover {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu button:hover {
   background: var(--mn-surface-1, var(--mn-bg-elevated));
 }
 
-#researchView .dr-lib-menu button.danger {
+:is(#researchView, .mn-os-desktop-research) .dr-lib-menu button.danger {
   color: var(--mn-danger, #c44);
 }
 
-#researchView .research-library-empty {
+:is(#researchView, .mn-os-desktop-research) .research-library-empty {
   color: var(--mn-fg-muted);
   font-size: 13px;
   text-align: center;

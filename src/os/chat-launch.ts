@@ -16,7 +16,7 @@ export async function launchCodeWithChat(chatId: string): Promise<void> {
   await switchToCodeChat(trimmed);
 }
 
-/** Foreground Chat app and activate the given assistant thread. */
+/** Foreground desktop chat and activate the given assistant thread. */
 export async function launchChatWithThread(chatId: string): Promise<void> {
   const trimmed = chatId.trim();
   if (!trimmed) {
@@ -25,7 +25,7 @@ export async function launchChatWithThread(chatId: string): Promise<void> {
   }
 
   launchApp('chat', { chatId: trimmed });
-  await switchToChatAppThread(trimmed);
+  await switchToDesktopChatThread(trimmed);
 }
 
 /** Switch sidebar to a chat after Code app is foreground (app-host / deep-link). */
@@ -45,19 +45,24 @@ export async function switchToCodeChat(chatId: string): Promise<void> {
   trySwitch();
 }
 
-/** Activate an assistant thread after the Chat app is foreground (notification deep-link). */
-export async function switchToChatAppThread(chatId: string): Promise<void> {
+/** Activate an assistant thread after desktop chat is active (notification deep-link). */
+export async function switchToDesktopChatThread(chatId: string): Promise<void> {
   const trimmed = chatId.trim();
   if (!trimmed) return;
 
-  const { activateChatAppThread } = await import('../ui/chat-app');
+  const { activateDesktopChatSession } = await import('./desktop-chat');
   const trySwitch = (attempt = 0): void => {
-    const root = document.getElementById('chatView');
-    if (root?.classList.contains('is-open') || attempt >= 20) {
-      activateChatAppThread(trimmed);
+    const col = document.getElementById('desktopChatCol');
+    if (col || attempt >= 20) {
+      activateDesktopChatSession(trimmed);
       return;
     }
     window.setTimeout(() => trySwitch(attempt + 1), 50);
   };
   trySwitch();
+}
+
+/** @deprecated Legacy Chat app thread switch — routes to desktop chat. */
+export async function switchToChatAppThread(chatId: string): Promise<void> {
+  await switchToDesktopChatThread(chatId);
 }

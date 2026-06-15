@@ -72,6 +72,7 @@ export function initDockLauncher(root: HTMLElement): () => void {
   };
 
   for (const app of APPS) {
+    if (app.id === 'chat') continue;
     dock.appendChild(buildDockTile(app, onLaunch));
   }
 

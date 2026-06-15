@@ -3,12 +3,15 @@
  */
 
 import '../styles/scheduler-page.css';
+import '../styles/scheduler-editor-window.css';
 import '../styles/settings-page.css';
 
 import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import { renderSchedulerPanel } from './scheduler/scheduler-panel';
+import { openJobEditorWindow } from './scheduler/job-editor-window';
+import type { ScheduledJob } from '../scheduler/client';
 
 let initialized = false;
 let statusTimer: number | undefined;
@@ -37,10 +40,44 @@ function setPanelStatus(state: 'ok' | 'err', message: string): void {
   }, 4000);
 }
 
+function panelEditorCallbacks() {
+  return {
+    onStatus: setPanelStatus,
+    onAddTask: () => {
+      openJobEditorWindow({
+        onSaved: () => {
+          void refreshPanel();
+        },
+        onStatus: setPanelStatus,
+      });
+    },
+    onEditJob: (job: ScheduledJob) => {
+      openJobEditorWindow({
+        jobId: job.id,
+        initialJob: {
+          label: job.label,
+          enabled: job.enabled,
+          schedule: { ...job.schedule },
+          prompt: job.prompt,
+          modeId: job.modeId,
+          providerId: job.providerId,
+          modelId: job.modelId,
+          workspacePath: job.workspacePath,
+          channels: [...job.channels],
+        },
+        onSaved: () => {
+          void refreshPanel();
+        },
+        onStatus: setPanelStatus,
+      });
+    },
+  };
+}
+
 async function refreshPanel(): Promise<void> {
   const body = getBody();
   if (!body) return;
-  await renderSchedulerPanel(body, { onStatus: setPanelStatus });
+  await renderSchedulerPanel(body, panelEditorCallbacks());
 }
 
 function mountHeaderIcon(): void {
@@ -53,23 +90,29 @@ export function initSchedulerPage(): void {
   if (initialized) return;
   initialized = true;
   mountHeaderIcon();
-  window.addEventListener('hashchange', onHashChange);
-  if (
-    window.location.hash === '#/scheduler' ||
-    window.location.hash.startsWith('#/app/scheduler')
-  ) {
-    void openScheduler();
+  if (!isOsShellEnabled()) {
+    window.addEventListener('hashchange', onHashChange);
+    if (
+      window.location.hash === '#/scheduler' ||
+      window.location.hash.startsWith('#/app/scheduler')
+    ) {
+      void openScheduler();
+    }
   }
 }
 
 export async function openScheduler(): Promise<void> {
+  if (isOsShellEnabled()) {
+    const { launchApp } = await import('../os/router');
+    launchApp('scheduler');
+    return;
+  }
+
   const root = getRoot();
   if (!root) return;
 
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
-    window.location.hash = '#/scheduler';
-  }
+  window.location.hash = '#/scheduler';
   mountHeaderIcon();
   await refreshPanel();
 }

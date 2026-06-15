@@ -1,6 +1,9 @@
 /** MinnowOS app identifiers — one per launcher tile. */
 export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'calendar' | 'settings';
 
+/** How an app is presented in the MinnowOS shell. */
+export type PresentationMode = 'fullscreen' | 'window' | 'desktop' | 'sidePanel';
+
 /** Shell surface: desktop launcher vs a foreground app. */
 export type OsView = 'desktop' | 'app';
 

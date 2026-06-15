@@ -153,6 +153,13 @@ function bindRingButton(surface: ContextUsageSurface): void {
   });
 }
 
+/** Bind any context rings added after initial boot (e.g. desktop composer). */
+export function bindContextUsageRings(): void {
+  for (const surface of listContextUsageSurfaces()) {
+    bindRingButton(surface);
+  }
+}
+
 let initialized = false;
 
 /** Mount ring handlers and listeners (call once from initApp). */
@@ -179,6 +186,7 @@ export function initContextUsageRing(): void {
   for (const { inputId } of [
     { inputId: 'msgInput' },
     { inputId: 'chatAppInput' },
+    { inputId: 'desktopInput' },
   ]) {
     document.getElementById(inputId)?.addEventListener('input', () => scheduleContextUsageRefresh());
   }
