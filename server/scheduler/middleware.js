@@ -16,6 +16,10 @@ import {
   listUnackedNotifications,
 } from './delivery.js';
 import { ensureMinnowLayout } from '../config/home.js';
+import {
+  ensureSchedulerWorkspace,
+  getSchedulerWorkspacePath,
+} from '../scheduler-workspace/paths.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -74,6 +78,16 @@ export function createSchedulerMiddleware() {
 
       if (url === '/api/scheduler/ping' && req.method === 'GET') {
         sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (url === '/api/scheduler/workspace' && req.method === 'GET') {
+        await ensureSchedulerWorkspace();
+        sendJson(res, 200, {
+          ok: true,
+          path: getSchedulerWorkspacePath(),
+          label: 'Scheduler',
+        });
         return;
       }
 

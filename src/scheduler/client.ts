@@ -57,6 +57,12 @@ export interface SchedulerNotification {
   acked: boolean;
 }
 
+export interface SchedulerDefaultWorkspace {
+  ok?: boolean;
+  path: string;
+  label: string;
+}
+
 /** Whether the scheduler API is reachable. */
 export async function pingSchedulerApi(): Promise<boolean> {
   try {
@@ -67,6 +73,15 @@ export async function pingSchedulerApi(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Default workspace for jobs without an explicit path (~/.minnow/scheduler-workspace). */
+export async function fetchSchedulerDefaultWorkspace(): Promise<SchedulerDefaultWorkspace> {
+  const res = await fetch('/api/scheduler/workspace', { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Failed to load scheduler workspace (${res.status})`);
+  }
+  return (await res.json()) as SchedulerDefaultWorkspace;
 }
 
 /** Load all scheduled jobs. */

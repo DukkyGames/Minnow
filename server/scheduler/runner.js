@@ -19,6 +19,7 @@ import {
   summarizeRunForNotification,
 } from './delivery.js';
 import { schedulerRunHistoryPath } from './paths.js';
+import { resolveJobWorkspacePath } from './workspace.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -144,9 +145,9 @@ export async function runStoredJob(storedJob, options = {}) {
   if (storedJob.modelId) {
     args.push('--model', storedJob.modelId);
   }
-  if (storedJob.workspacePath) {
-    args.push('--workspace', storedJob.workspacePath);
-  }
+
+  const workspacePath = await resolveJobWorkspacePath(storedJob);
+  args.push('--workspace', workspacePath);
 
   const env = {
     ...process.env,

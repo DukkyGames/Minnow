@@ -35,7 +35,7 @@ const PATHS: Record<SvgIconName, string> = {
   bench:
     '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>',
   scheduler:
-    '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="0.75" fill="currentColor" stroke="none"/><path d="M12 12V5.5"/><path d="M12 12L10.1 10.1"/><path d="M12 2.75A9.5 9.5 0 0 1 20.2 7.4"/>',
+    '<path d="M16 14v2.2l1.6 1"/><path d="M16 2v4"/><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M3 10h5"/><path d="M8 2v4"/><circle cx="16" cy="16" r="6"/>',
   chip:
     '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
   gear:

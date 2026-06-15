@@ -10,6 +10,7 @@ import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { createJob, getStoredJobById } from '../../server/scheduler/store.js';
 import { listRunsForJob, runStoredJob } from '../../server/scheduler/runner.js';
+import { getSchedulerWorkspacePath } from '../../server/scheduler-workspace/paths.js';
 
 describe('scheduler runner', () => {
   /** @type {string} */
@@ -36,7 +37,11 @@ describe('scheduler runner', () => {
       error: null,
     };
 
-    const fakeSpawn = () => {
+    /** @type {string[] | undefined} */
+    let capturedArgs;
+
+    const fakeSpawn = (_execPath, args) => {
+      capturedArgs = args;
       const handlers = {};
       return {
         stdout: {
@@ -74,6 +79,10 @@ describe('scheduler runner', () => {
     });
     assert.equal(result.started, true);
     assert.equal(result.status, 'completed');
+
+    const workspaceIndex = capturedArgs?.indexOf('--workspace') ?? -1;
+    assert.ok(workspaceIndex >= 0);
+    assert.equal(capturedArgs?.[workspaceIndex + 1], getSchedulerWorkspacePath());
 
     const runs = await listRunsForJob(created.id);
     assert.equal(runs.length, 1);
