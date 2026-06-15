@@ -658,6 +658,8 @@ export interface ChatCompletionChoiceDelta {
   reasoning?: string;
   /** LM Studio experimental DeepSeek-style separate reasoning field. */
   reasoning_content?: string;
+  /** Some Ollama-compatible gateways (e.g. MiniMax) emit thinking in this field. */
+  thinking?: string;
   tool_calls?: ChatCompletionToolCallDelta[];
 }
 

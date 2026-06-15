@@ -44,10 +44,16 @@ export function flashSettingsSearchTarget(node: HTMLElement): void {
   }, FLASH_MS);
 }
 
-/** Open settings, refresh the section, then scroll to the resolved target. */
+/** Open settings or Models app, refresh the section, then scroll to the resolved target. */
 export async function navigateToSettingsSearchEntry(
   entry: SettingsSearchEntry,
 ): Promise<void> {
+  if (entry.modelsSection) {
+    const { openModels } = await import('./models-page');
+    openModels(entry.modelsSection as import('./models-page').ModelsSectionId);
+    return;
+  }
+
   openSettings(entry.sectionId);
   await refreshSettingsSection(entry.sectionId);
   await new Promise<void>((resolve) => {

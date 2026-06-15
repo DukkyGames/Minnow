@@ -97,12 +97,46 @@ export function isEmptyToolArgumentsJson(argumentsRaw: string): boolean {
   }
 }
 
+/** Score parsed tool arguments so partial SSE payloads lose to fuller content JSON. */
+export function toolArgumentsRichnessScore(argumentsRaw: string): number {
+  const trimmed = argumentsRaw.trim();
+  if (!trimmed || trimmed === '{}') return 0;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return trimmed.length;
+    }
+    const record = parsed as Record<string, unknown>;
+    let score = Object.keys(record).length * 100;
+    for (const value of Object.values(record)) {
+      if (Array.isArray(value)) {
+        score += value.length * 10;
+      } else if (typeof value === 'string') {
+        if (value.startsWith('[') || value.startsWith('{')) {
+          score += Math.min(value.length, 500);
+        } else {
+          score += Math.min(value.length, 50);
+        }
+      }
+    }
+    return score + Math.min(trimmed.length, 1000);
+  } catch {
+    return trimmed.length;
+  }
+}
+
 function pickRicherToolArguments(streamedRaw: string, contentRaw: string): string {
   const streamEmpty = isEmptyToolArgumentsJson(streamedRaw);
   const contentEmpty = isEmptyToolArgumentsJson(contentRaw);
   if (streamEmpty && !contentEmpty) return contentRaw;
-  if (!streamEmpty) return streamedRaw;
-  return contentRaw;
+  if (contentEmpty && !streamEmpty) return streamedRaw;
+  if (streamEmpty && contentEmpty) return streamedRaw;
+
+  const streamScore = toolArgumentsRichnessScore(streamedRaw);
+  const contentScore = toolArgumentsRichnessScore(contentRaw);
+  if (contentScore > streamScore) return contentRaw;
+  if (streamScore > contentScore) return streamedRaw;
+  return streamedRaw;
 }
 
 function mergeStreamedWithContentToolCalls(

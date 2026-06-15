@@ -152,6 +152,24 @@ describe('validateBoardInitArgs', () => {
     }
   });
 
+  test('accepts stringified tasks and waves arrays', () => {
+    const r = validateBoardInitArgs(
+      {
+        plan_path: PLAN_PATH,
+        tasks: JSON.stringify([
+          { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        ]),
+        waves: JSON.stringify([{ id: 'W1' }]),
+      },
+      null,
+    );
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.args.tasks.length, 1);
+      assert.equal(r.args.waves.length, 1);
+    }
+  });
+
   test('rejects plan_path mismatch with selected plan', () => {
     const r = validateBoardInitArgs(
       { plan_path: 'other/plan.md', tasks: [], waves: [{ id: 'W1' }] },

@@ -52,14 +52,16 @@ function hfHeaders(token) {
 }
 
 /**
- * List sibling files in a HF repo (main branch).
+ * List files in a HF repo (main branch).
  * @param {string} repoId
+ * @param {{ recursive?: boolean }} [options]
  * @returns {Promise<Array<{ path: string, size?: number }>>}
  */
-export async function listRepoFiles(repoId) {
+export async function listRepoFiles(repoId, options = {}) {
   validateRepoId(repoId);
   const token = await resolveHfTokenAsync();
-  const url = `https://huggingface.co/api/models/${repoId}/tree/main`;
+  const recursive = options.recursive === true ? '?recursive=true' : '';
+  const url = `https://huggingface.co/api/models/${repoId}/tree/main${recursive}`;
   const res = await fetch(url, { headers: hfHeaders(token) });
   if (!res.ok) {
     throw new Error(`Hugging Face list failed (${res.status})`);
@@ -68,7 +70,13 @@ export async function listRepoFiles(repoId) {
   if (!Array.isArray(data)) return [];
   return data
     .filter((row) => row && typeof row.path === 'string')
+    .filter((row) => row.type === 'file' || row.type === undefined)
     .map((row) => ({ path: row.path, size: typeof row.size === 'number' ? row.size : undefined }));
+}
+
+/** Recursively list all files in a HF repo. */
+export async function listRepoFilesRecursive(repoId) {
+  return listRepoFiles(repoId, { recursive: true });
 }
 
 /**
@@ -162,4 +170,106 @@ export async function downloadHfFile({ repoId, filename, destPath, signal, onPro
 
   await fsp.rename(tmpPath, destPath);
   return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };
+}
+
+/**
+ * Validate a HF repo-relative file path (no traversal).
+ * @param {string} filename
+ */
+export function validateRepoFilePath(filename) {
+  if (!filename || typeof filename !== 'string') {
+    throw new Error('Invalid file path');
+  }
+  if (filename.includes('..') || filename.startsWith('/') || filename.includes('\\')) {
+    throw new Error('Invalid file path');
+  }
+  return filename;
+}
+
+/**
+ * Stream any HF repo file to disk (voice snapshots, not only GGUF).
+ * @param {{ repoId: string, filename: string, destPath: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
+ */
+export async function downloadHfRepoFile({ repoId, filename, destPath, signal, onProgress }) {
+  validateRepoId(repoId);
+  validateRepoFilePath(filename);
+  const token = await resolveHfTokenAsync();
+  const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
+  const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
+  if (!res.ok || !res.body) {
+    throw new Error(`Hugging Face download failed (${res.status}) for ${filename}`);
+  }
+
+  const totalHeader = res.headers.get('content-length');
+  const totalBytes = totalHeader ? Number(totalHeader) : null;
+  await fsp.mkdir(path.dirname(destPath), { recursive: true });
+
+  const tmpPath = `${destPath}.partial`;
+  const file = fs.createWriteStream(tmpPath);
+  const reader = res.body.getReader();
+  let bytesReceived = 0;
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        throw new Error('Download cancelled');
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesReceived += value.byteLength;
+      if (!file.write(value)) {
+        await new Promise((resolve) => file.once('drain', resolve));
+      }
+      onProgress?.(bytesReceived, totalBytes);
+    }
+  } catch (err) {
+    file.destroy();
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    throw err;
+  }
+
+  await new Promise((resolve, reject) => {
+    file.end(() => resolve());
+    file.on('error', reject);
+  });
+
+  await fsp.rename(tmpPath, destPath);
+  return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };
+}
+
+/**
+ * Download all files in a HF repo snapshot to a directory.
+ * @param {{ repoId: string, destDir: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
+ */
+export async function downloadHfSnapshot({ repoId, destDir, signal, onProgress }) {
+  validateRepoId(repoId);
+  const files = await listRepoFilesRecursive(repoId);
+  if (!files.length) {
+    throw new Error(`No files found in ${repoId}`);
+  }
+
+  const totalBytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0) || null;
+  let completedBytes = 0;
+
+  for (const file of files) {
+    if (signal?.aborted) {
+      throw new Error('Download cancelled');
+    }
+    const destPath = path.join(destDir, file.path);
+    let fileBytes = 0;
+    const result = await downloadHfRepoFile({
+      repoId,
+      filename: file.path,
+      destPath,
+      signal,
+      onProgress: (received) => {
+        fileBytes = received;
+        onProgress?.(completedBytes + fileBytes, totalBytes);
+      },
+    });
+    completedBytes += result.bytesReceived;
+    onProgress?.(completedBytes, totalBytes);
+  }
+
+  return { bytesReceived: completedBytes, totalBytes };
 }
