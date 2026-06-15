@@ -534,15 +534,36 @@
   color: var(--mn-danger, #e05252);
 }
 
-.calendar-drawer {
-  border: 1px solid var(--mn-border);
-  border-radius: 12px;
-  padding: 16px;
-  background: var(--mn-bg-elevated, var(--mn-bg));
+.calendar-event-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--mn-bg) 35%, transparent);
+  backdrop-filter: blur(2px);
+  padding: 20px;
 }
 
-.calendar-drawer.hidden {
+.calendar-event-overlay.hidden {
   display: none;
+}
+
+.calendar-drawer {
+  width: min(440px, 100%);
+  max-height: min(85vh, 640px);
+  overflow: auto;
+  border: 1px solid var(--mn-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--mn-bg-elevated, var(--mn-bg));
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--mn-fg) 20%, transparent);
+}
+
+.calendar-drawer h4 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .calendar-form {

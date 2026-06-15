@@ -231,9 +231,16 @@ export async function renderCalendarPanel(
   grid.className = 'calendar-grid';
   main.appendChild(grid);
 
+  const eventOverlay = document.createElement('div');
+  eventOverlay.className = 'calendar-event-overlay hidden';
+  eventOverlay.hidden = true;
+
   const drawer = document.createElement('aside');
-  drawer.className = 'calendar-drawer hidden';
-  panel.appendChild(drawer);
+  drawer.className = 'calendar-drawer';
+  drawer.setAttribute('role', 'dialog');
+  drawer.setAttribute('aria-modal', 'true');
+  eventOverlay.appendChild(drawer);
+  document.body.appendChild(eventOverlay);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -590,9 +597,17 @@ export async function renderCalendarPanel(
     }
   }
 
-  function openDrawer(event: CalendarEvent | null): void {
+  /** Close the event create/edit popup. */
+  function closeDrawer(): void {
     drawer.innerHTML = '';
-    drawer.classList.remove('hidden');
+    eventOverlay.hidden = true;
+    eventOverlay.classList.add('hidden');
+    state.selectedEventId = null;
+  }
+
+  function openDrawer(event: CalendarEvent | null): void {
+    closeDayPopover();
+    drawer.innerHTML = '';
     state.selectedEventId = event?.id ?? null;
 
     const heading = document.createElement('h4');
@@ -664,7 +679,7 @@ export async function renderCalendarPanel(
         }
         try {
           await deleteCalendarEvent(baseId);
-          drawer.classList.add('hidden');
+          closeDrawer();
           setStatus('ok', 'Event deleted');
           await reloadEvents();
         } catch (err) {
@@ -678,8 +693,12 @@ export async function renderCalendarPanel(
     closeBtn.type = 'button';
     closeBtn.className = 'calendar-btn calendar-btn--ghost';
     closeBtn.textContent = 'Close';
-    closeBtn.addEventListener('click', () => drawer.classList.add('hidden'));
+    closeBtn.addEventListener('click', () => closeDrawer());
     actions.appendChild(closeBtn);
+
+    eventOverlay.hidden = false;
+    eventOverlay.classList.remove('hidden');
+    titleInput.focus();
 
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -706,7 +725,7 @@ export async function renderCalendarPanel(
           await createCalendarEvent(payload);
           setStatus('ok', 'Event created');
         }
-        drawer.classList.add('hidden');
+        closeDrawer();
         await reloadEvents();
       } catch (err) {
         setStatus('err', err instanceof Error ? err.message : String(err));
@@ -833,6 +852,12 @@ export async function renderCalendarPanel(
     });
   });
 
+  eventOverlay.addEventListener('click', (event) => {
+    if (event.target === eventOverlay) {
+      closeDrawer();
+    }
+  });
+
   document.addEventListener('pointerdown', (event) => {
     if (!state.dayPopover || dayPopoverEl.hidden) {
       return;
@@ -848,9 +873,15 @@ export async function renderCalendarPanel(
     if (!mount.isConnected) {
       return;
     }
-    if (ev.key === 'Escape' && state.dayPopover) {
-      closeDayPopover();
-      return;
+    if (ev.key === 'Escape') {
+      if (state.dayPopover) {
+        closeDayPopover();
+        return;
+      }
+      if (!eventOverlay.hidden) {
+        closeDrawer();
+        return;
+      }
     }
     if (ev.key === 'ArrowLeft') {
       prevBtn.click();
