@@ -1332,6 +1332,43 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'manage_calendar',
+    label: 'Manage calendar',
+    description:
+      'List, create, update, or delete local calendar events. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'manage_calendar',
+      'Manage local calendar events under ~/.minnow/calendar. Use list with a date range (max 50 events), create/update with ISO startsAt/endsAt, delete only after user confirmation (confirmed: true), or find_free_time for open slots on a day.',
+      {
+        action: {
+          type: 'string',
+          enum: ['list', 'create', 'update', 'delete', 'find_free_time'],
+          description: 'Calendar operation to perform',
+        },
+        calendarId: { type: 'string', description: 'Target calendar id (optional for list/create)' },
+        eventId: { type: 'string', description: 'Event id for update/delete' },
+        title: { type: 'string', description: 'Event title' },
+        startsAt: { type: 'string', description: 'ISO 8601 start time' },
+        endsAt: { type: 'string', description: 'ISO 8601 end time' },
+        from: { type: 'string', description: 'ISO range start for list' },
+        to: { type: 'string', description: 'ISO range end for list' },
+        date: { type: 'string', description: 'YYYY-MM-DD for find_free_time' },
+        minMinutes: { type: 'number', description: 'Minimum free slot length in minutes' },
+        description: { type: 'string', description: 'Event description' },
+        location: { type: 'string', description: 'Event location' },
+        allDay: { type: 'boolean', description: 'All-day event flag' },
+        rrule: { type: 'string', description: 'RFC 5545 RRULE string' },
+        confirmed: {
+          type: 'boolean',
+          description: 'Must be true to delete an event after user approval',
+        },
+      },
+      ['action'],
+    ),
+  },
+  {
     id: 'get_lsp_diagnostics',
     label: 'LSP diagnostics',
     description: 'Formatted language-server diagnostics for a project file.',

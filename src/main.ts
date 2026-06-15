@@ -333,6 +333,8 @@ export async function initApp(): Promise<void> {
   comparePage.initComparePage();
   const schedulerPage = await import('./ui/scheduler-page');
   schedulerPage.initSchedulerPage();
+  const calendarPage = await import('./ui/calendar-page');
+  calendarPage.initCalendarPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');
