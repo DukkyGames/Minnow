@@ -57,6 +57,12 @@ export interface LaunchOptions {
   autoRun?: boolean;
   /** Code app: switch to this chat after launch (notification deep-link). */
   chatId?: string;
+  /** Experts hub: initial step when opening on the desktop surface. */
+  step?: 'browse' | 'create' | 'edit';
+  /** Experts hub: pre-select an expert in the roster. */
+  expertId?: string;
+  /** Desktop experts: open the full lab panel on entry. */
+  openLab?: boolean;
 }
 
 /** Parsed hash route consumed by the OS shell and page bridge. */

@@ -136,8 +136,10 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
 export function focusInstance(id: string): boolean {
   const inst = instances.find((i) => i.id === id);
   if (!inst) return false;
+  const nextView = viewForPresentationMode(getPresentationMode(inst.appId));
+  if (foregroundId === id && view === nextView) return true;
   foregroundId = id;
-  view = viewForPresentationMode(getPresentationMode(inst.appId));
+  view = nextView;
   emit();
   return true;
 }

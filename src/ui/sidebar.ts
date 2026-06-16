@@ -158,6 +158,8 @@ interface AppendChatRowOptions {
   inGroup?: boolean;
   /** Override default switchChat activation (e.g. Experts hub before shell opens). */
   onActivate?: (chat: Chat) => void;
+  /** Override default deleteChat (e.g. Experts hub detail list refresh). */
+  onDelete?: (chat: Chat) => void;
 }
 
 /** Sidebar row highlight id; suppressed while a board folder owns the main column. */
@@ -292,7 +294,14 @@ export function appendChatRow(
   deleteBtn.className = 'chat-delete-btn';
   deleteBtn.textContent = '\u{1F5D1}';
   deleteBtn.setAttribute('aria-label', `Delete chat: ${chat.name}`);
-  deleteBtn.addEventListener('click', (e) => deleteChat(chat.id, e));
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (options?.onDelete) {
+      options.onDelete(chat);
+      return;
+    }
+    deleteChat(chat.id, e);
+  });
 
   actions.appendChild(renameBtn);
   actions.appendChild(deleteBtn);

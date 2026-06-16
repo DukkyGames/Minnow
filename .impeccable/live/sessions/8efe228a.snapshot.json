@@ -1,0 +1,23 @@
+{
+  "id": "8efe228a",
+  "phase": "variants_ready",
+  "pageUrl": "/",
+  "sourceFile": "src/os/desktop.ts",
+  "expectedVariants": 3,
+  "arrivedVariants": 3,
+  "visibleVariant": 1,
+  "paramValues": {
+    "bottom-clearance": 140,
+    "density": "snug"
+  },
+  "pendingEventSeq": null,
+  "pendingEvent": null,
+  "deliveryLease": null,
+  "checkpointRevision": 1,
+  "activeOwner": "890315ca",
+  "sourceMarkers": {},
+  "fallbackMode": null,
+  "annotationArtifacts": [],
+  "diagnostics": [],
+  "updatedAt": "2026-06-15T17:16:11.385Z"
+}

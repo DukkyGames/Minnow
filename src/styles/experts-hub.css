@@ -461,6 +461,10 @@
   display: none;
 }
 
+#expertsActionError {
+  margin: 0 0 12px;
+}
+
 .experts-edit-form {
   display: flex;
   flex-direction: column;

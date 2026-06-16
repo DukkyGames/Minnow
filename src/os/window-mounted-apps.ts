@@ -8,7 +8,6 @@ export const WINDOW_MOUNTED_APPS = new Set<AppId>([
   'models',
   'bench',
   'compare',
-  'experts',
   'calendar',
 ]);
 

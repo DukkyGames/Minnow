@@ -34,7 +34,7 @@ let micAnalyserDisconnect: (() => void) | null = null;
 let stopSilenceWatch: (() => void) | null = null;
 let micDetecting = false;
 
-const MIC_BUTTON_IDS = ['btnComposerMic', 'btnChatAppMic'] as const;
+const MIC_BUTTON_IDS = ['btnComposerMic', 'btnChatAppMic', 'btnDesktopMic'] as const;
 
 const MIC_BUTTON_MARKUP =
   '<span class="composer-mic-btn__ring" aria-hidden="true"></span>' +
@@ -455,6 +455,10 @@ function onMicClick(): void {
 }
 
 function upgradeMicButton(btn: HTMLButtonElement): void {
+  if (btn.id === 'btnDesktopMic') {
+    btn.classList.remove('attach-btn');
+    btn.classList.add('mn-os-desktop-comp-btn');
+  }
   if (!btn.querySelector('.composer-mic-btn__icon')) {
     btn.innerHTML = MIC_BUTTON_MARKUP;
   }
@@ -476,7 +480,10 @@ function ensureMicButton(id: string, anchorId: string): void {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.id = id;
-  btn.className = 'attach-btn composer-mic-btn';
+  btn.className =
+    id === 'btnDesktopMic'
+      ? 'mn-os-desktop-comp-btn composer-mic-btn'
+      : 'attach-btn composer-mic-btn';
   btn.setAttribute('aria-label', 'Dictate with microphone');
   btn.setAttribute('aria-busy', 'false');
   btn.title = 'Dictate';
@@ -550,4 +557,4 @@ export function initComposerVoice(): void {
 export function getMicState(): MicState {
   return micState;
 }
-
+

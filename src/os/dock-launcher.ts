@@ -1,8 +1,50 @@
 import { APPS } from './app-registry';
+import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { createAppIcon, createOsIcon } from './icons';
-import { getOsView, subscribeInstances } from './instances';
+import {
+  getForegroundAppId,
+  getInstanceSnapshot,
+  getOsView,
+  subscribeInstances,
+} from './instances';
 import { launchApp } from './router';
+import { RESEARCH_LIBRARY_INSTANCE_ID } from './research-constants';
+import { windowManager } from './window-manager';
 import type { AppId } from './types';
+
+/** Whether the research library window is open (avoids importing library-window CSS in tests). */
+function isResearchLibraryOpen(): boolean {
+  return Boolean(windowManager.findWindowByInstance(RESEARCH_LIBRARY_INSTANCE_ID));
+}
+
+/** Whether an app surface is running (instance, desktop research, or library window). */
+function isDockAppOpen(appId: AppId): boolean {
+  const snap = getInstanceSnapshot();
+  if (snap.instances.some((inst) => inst.appId === appId)) {
+    return true;
+  }
+  if (appId === 'research') {
+    return isDesktopResearchActive() || isResearchLibraryOpen();
+  }
+  if (appId === 'experts') {
+    return isDesktopExpertsActive();
+  }
+  return false;
+}
+
+/** Whether an app is the focused surface in the shell. */
+function isDockAppActive(appId: AppId): boolean {
+  if (getForegroundAppId() === appId) {
+    return true;
+  }
+  if (appId === 'research' && getOsView() === 'desktop' && isDesktopResearchActive()) {
+    return true;
+  }
+  if (appId === 'experts' && getOsView() === 'desktop' && isDesktopExpertsActive()) {
+    return true;
+  }
+  return false;
+}
 
 /** Build one dock launcher tile for an app. */
 function buildDockTile(
@@ -12,6 +54,7 @@ function buildDockTile(
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'mn-os-tile-dock';
+  btn.dataset.appId = app.id;
   btn.title = app.tag;
 
   const ico = document.createElement('span');
@@ -63,6 +106,8 @@ export function initDockLauncher(root: HTMLElement): () => void {
   dock.setAttribute('role', 'toolbar');
   dock.setAttribute('aria-label', 'App launcher');
 
+  const tileByAppId = new Map<AppId, HTMLButtonElement>();
+
   const onLaunch = (appId: AppId) => {
     launchApp(appId);
     if (getOsView() === 'app') {
@@ -73,11 +118,24 @@ export function initDockLauncher(root: HTMLElement): () => void {
 
   for (const app of APPS) {
     if (app.id === 'chat') continue;
-    dock.appendChild(buildDockTile(app, onLaunch));
+    const tile = buildDockTile(app, onLaunch);
+    tileByAppId.set(app.id, tile);
+    dock.appendChild(tile);
   }
 
   panel.append(hideBtn, dock);
   root.append(revealBtn, panel);
+
+  /** Reflect open / foreground state on dock tiles. */
+  function syncDockTiles(): void {
+    for (const [appId, tile] of tileByAppId) {
+      const open = isDockAppOpen(appId);
+      const active = open && isDockAppActive(appId);
+      tile.classList.toggle('is-open', open);
+      tile.classList.toggle('is-active', active);
+      tile.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
 
   function syncShellState(): void {
     const inApp = getOsView() === 'app';
@@ -112,17 +170,23 @@ export function initDockLauncher(root: HTMLElement): () => void {
 
   document.addEventListener('keydown', onKeyDown);
 
-  const unsub = subscribeInstances(() => {
+  const unsubInstances = subscribeInstances(() => {
     if (getOsView() === 'desktop') {
       dockOpenInApp = false;
     }
     syncShellState();
+    syncDockTiles();
   });
+  const unsubDesktop = subscribeDesktopState(syncDockTiles);
+  const unsubWindows = windowManager.subscribe(syncDockTiles);
 
   syncShellState();
+  syncDockTiles();
 
   return () => {
-    unsub();
+    unsubInstances();
+    unsubDesktop();
+    unsubWindows();
     document.removeEventListener('keydown', onKeyDown);
   };
 }

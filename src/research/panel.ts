@@ -35,7 +35,6 @@ import {
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import {
-  activateDesktopResearch,
   deactivateDesktopResearch,
   isDesktopResearchActive,
 } from '../os/desktop-state';
@@ -463,9 +462,11 @@ export interface OpenResearchOptions {
 /** Open Deep Research (`#/research` or OS `#/app/research`). */
 export function openResearch(options?: OpenResearchOptions): void {
   if (isOsShellEnabled()) {
-    void activateDesktopResearch({
-      seed: options?.seed,
-      autoRun: options?.autoRun || pendingAutoRun,
+    void import('../os/router').then(({ launchApp }) => {
+      launchApp('research', {
+        seed: options?.seed,
+        autoRun: options?.autoRun || pendingAutoRun,
+      });
     });
     pendingAutoRun = false;
     return;

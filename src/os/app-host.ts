@@ -3,6 +3,7 @@ import {
   CALENDAR_WINDOW_MIN_HEIGHT,
   CALENDAR_WINDOW_MIN_WIDTH,
 } from './calendar-constants';
+import { isDesktopExpertsActive } from './desktop-state';
 import { isOsShellEnabled } from './page-bridge';
 import {
   getForegroundAppId,
@@ -89,6 +90,7 @@ function hideAllLayers(): void {
 }
 
 function closeAllAppPages(): void {
+  const keepExpertsOpen = isDesktopExpertsActive();
   for (const id of [
     'settingsView',
     'benchmarkView',
@@ -100,6 +102,7 @@ function closeAllAppPages(): void {
     'expertsView',
     'chatView',
   ]) {
+    if (keepExpertsOpen && id === 'expertsView') continue;
     document.getElementById(id)?.classList.remove('is-open');
   }
 }
@@ -159,8 +162,16 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       break;
     }
     case 'experts': {
-      const { openExperts } = await import('../ui/experts/experts-hub');
-      openExperts();
+      if (isOsShellEnabled()) {
+        const { activateDesktopExperts } = await import('./desktop-state');
+        await activateDesktopExperts({
+          step: options?.step,
+          expertId: options?.expertId,
+        });
+      } else {
+        const { openExperts } = await import('../ui/experts/experts-hub');
+        openExperts();
+      }
       break;
     }
     case 'code': {
@@ -236,7 +247,11 @@ async function ensureWindowSurface(
 
   const wasMounted = mountedWindowInstances.has(instanceId);
   windowManager.ensureLayer();
-  const openOptions: Parameters<typeof windowManager.open>[1] = { instanceId };
+  const openOptions: Parameters<typeof windowManager.open>[1] = {
+    instanceId,
+    // Sync walks every open instance — never steal focus until the foreground pass below.
+    activate: false,
+  };
   if (appId === 'calendar') {
     openOptions.minWidth = CALENDAR_WINDOW_MIN_WIDTH;
     openOptions.minHeight = CALENDAR_WINDOW_MIN_HEIGHT;
@@ -306,6 +321,9 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
 
   if (snapshot.view === 'desktop') {
     hideAllLayers();
+    if (isDesktopExpertsActive()) {
+      setLayerActive(layerForApp('experts'), true);
+    }
     const hadFullscreenForeground =
       lastForegroundApp !== null &&
       usesFullscreenLayer(getPresentationMode(lastForegroundApp));
@@ -340,6 +358,13 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
         m.activateDesktopResearch({
           seed: options?.seed,
           autoRun: options?.autoRun ?? Boolean(options?.seed?.trim()),
+        }),
+      );
+    } else if (appId === 'experts') {
+      void import('./desktop-state').then((m) =>
+        m.activateDesktopExperts({
+          step: options?.step,
+          expertId: options?.expertId,
         }),
       );
     }

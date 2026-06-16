@@ -7,6 +7,7 @@ import {
   clearComposerInput,
   getActiveComposerSurface,
 } from './composer-surface';
+import { isDesktopChatActive } from '../os/desktop-state';
 import { isChatAppForeground } from './chat-mount';
 import { setStatus } from './status';
 import { refreshActiveBoardIfMounted } from './orchestrate-board';
@@ -76,6 +77,7 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
     sendBtn.removeAttribute('data-steer-ready');
     sendBtn.setAttribute('aria-label', 'Send message');
     if (input) input.disabled = recoveryBlocked;
+    syncDesktopComposerFishSwim();
     return;
   }
 
@@ -104,6 +106,8 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   if (sendBtn && !isStreaming) {
     sendBtn.disabled = recoveryBlocked;
   }
+
+  syncDesktopComposerFishSwim();
 }
 
 /** Hint when a steering correction is queued on the active streaming chat. */
@@ -129,9 +133,21 @@ export function syncSteerQueuedHint(): void {
   el.textContent = show ? 'Correction queued — applies after current step' : '';
 }
 
+/** Swim the desktop send fish while the active chat is streaming. */
+export function syncDesktopComposerFishSwim(): void {
+  const composer = document.getElementById('desktopComposerRoot');
+  const sendBtn = document.getElementById('desktopSendBtn');
+  if (!composer) return;
+
+  const swimming = isDesktopChatActive() && isActiveChatStreaming();
+  composer.classList.toggle('is-streaming', swimming);
+  sendBtn?.setAttribute('aria-busy', swimming ? 'true' : 'false');
+}
+
 /** Align send/stop button and background-stream hint with active vs streaming chat. */
 export function syncComposerFromStreamingState(): void {
   setComposerStreamingMode(isActiveChatStreaming() ? 'streaming' : 'idle');
+  syncDesktopComposerFishSwim();
   syncBackgroundStreamHint();
   syncSteerQueuedHint();
   refreshActiveBoardIfMounted();

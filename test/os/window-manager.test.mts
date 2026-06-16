@@ -91,6 +91,16 @@ describe('windowManager', () => {
     assert.equal(windowManager.getWindows().length, 1);
   });
 
+  test('re-open with activate:false does not steal focus from another window', () => {
+    const settings = windowManager.open('settings', { instanceId: 'inst-settings' });
+    const models = windowManager.open('models', { instanceId: 'inst-models' });
+    windowManager.focus(settings);
+    assert.equal(windowManager.getFocusedWindowId(), settings);
+
+    windowManager.open('models', { instanceId: 'inst-models', activate: false });
+    assert.equal(windowManager.getFocusedWindowId(), settings);
+  });
+
   test('persists bounds to localStorage on close', () => {
     const id = windowManager.open('settings', { instanceId: 'inst-1' });
     const frame = windowManager.getFrame(id);

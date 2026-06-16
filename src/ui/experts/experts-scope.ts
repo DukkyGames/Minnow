@@ -15,7 +15,6 @@ import { syncComposerFromStreamingState } from '../composer-send';
 import { syncModeSelectorFromActiveChat } from '../mode-selector';
 import { syncModelSelectForActiveChat } from '../sidebar';
 import { isOsShellEnabled } from '../../os/page-bridge';
-import { launchApp } from '../../os/router';
 
 let expertScopeId: string | null = null;
 
@@ -123,23 +122,27 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
 
-  // Expert chats run in the Code workspace (#appBody); foreground that app under MinnowOS.
-  if (isOsShellEnabled()) {
-    launchApp('code');
-  } else {
-    shell.classList.remove('hidden');
-    document.querySelector('header.topbar')?.classList.remove('hidden');
-  }
-
   activateChatById(chat.id);
   recordChatOpened(chat.id);
   syncModelSelectForActiveChat();
-  renderChatFromHistory(chat);
   void bootGenerationResumeForChat(chat);
   renderStatsForChat(chat);
   syncModeSelectorFromActiveChat();
   syncComposerFromStreamingState();
-  renderExpertScopeChatList(expertId, chat.id);
+
+  if (isOsShellEnabled()) {
+    const { activateDesktopChat } = await import('../../os/desktop-state');
+    await activateDesktopChat({ chatId: chat.id });
+    renderChatFromHistory(chat, '#desktopChatCol');
+    const { renderDesktopExpertScopeRail } = await import('../desktop-chat-rail');
+    renderDesktopExpertScopeRail(expertId, chat.id);
+  } else {
+    shell.classList.remove('hidden');
+    document.querySelector('header.topbar')?.classList.remove('hidden');
+    renderChatFromHistory(chat);
+    renderExpertScopeChatList(expertId, chat.id);
+  }
+
   void import('../../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -156,4 +159,5 @@ export function teardownExpertScopeShell(): void {
     delete shell.dataset.scope;
     delete shell.dataset.expertId;
   }
+  void import('../desktop-chat-rail').then((m) => m.clearDesktopExpertScopeRail());
 }

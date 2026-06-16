@@ -67,6 +67,8 @@ class WindowManager {
       minHeight?: number;
       persistBounds?: boolean;
       manageInstance?: boolean;
+      /** When false, do not raise/focus an existing or new window (sync paths). Default true. */
+      activate?: boolean;
     },
   ): string {
     const layer = this.ensureLayer();
@@ -77,7 +79,9 @@ class WindowManager {
       (w) => w.appId === appId && w.instanceId === instanceId,
     );
     if (existing) {
-      this.focus(existing.id);
+      if (options?.activate !== false) {
+        this.focus(existing.id);
+      }
       if (existing.minimized) this.minimize(existing.id, false);
       return existing.id;
     }
@@ -147,7 +151,9 @@ class WindowManager {
     });
     frame.root.style.zIndex = String(record.zIndex);
     this.frames.set(id, frame);
-    this.focus(id);
+    if (options?.activate !== false) {
+      this.focus(id);
+    }
     this.emit();
     return id;
   }
@@ -177,6 +183,7 @@ class WindowManager {
     const record = this.windows.get(windowId);
     const frame = this.frames.get(windowId);
     if (!record || !frame) return;
+    if (this.focusedId === windowId) return;
 
     this.zCounter += 1;
     record.zIndex = this.zCounter;

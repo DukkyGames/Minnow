@@ -61,7 +61,10 @@ describe('resolveLegacyHash', () => {
       hash: '#/desktop',
       desktopResearch: true,
     });
-    assert.deepEqual(resolveLegacyHash('#/experts/gallery'), { hash: '#/app/experts' });
+    assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
+      hash: '#/desktop',
+      desktopExperts: true,
+    });
   });
 });
 
@@ -148,6 +151,20 @@ describe('os router navigation', () => {
     assert.equal(snap.view, 'desktop');
     assert.equal(snap.instances.find((i) => i.appId === 'research'), undefined);
     assert.equal(isDesktopResearchActive(), true);
+  });
+
+  test('launchApp(experts) redirects to desktop experts', async () => {
+    const { isDesktopExpertsActive, resetDesktopStateForTests } = await import(
+      '../../src/os/desktop-state.ts'
+    );
+    resetDesktopStateForTests();
+    launchApp('experts');
+    assert.equal(window.location.hash, '#/desktop');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.instances.find((i) => i.appId === 'experts'), undefined);
+    assert.equal(isDesktopExpertsActive(), true);
   });
 
   test('navigateToDesktop returns to desktop view', () => {

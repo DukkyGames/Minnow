@@ -103,12 +103,27 @@ describe('desktop research state', () => {
     const layer = document.getElementById('osDesktopLayer');
     assert.equal(layer?.classList.contains('is-research-idle'), true);
     assert.equal(layer?.classList.contains('is-research-mode'), true);
+    assert.equal(layer?.classList.contains('is-composer-docked'), true);
     const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
     assert.equal(input?.placeholder, 'What would you like to research?');
+    const greet = document.querySelector('.mn-os-desk-hero .mn-os-greet');
+    const greetSub = document.querySelector('.mn-os-desk-hero .mn-os-greet-sub');
+    assert.equal(greet?.textContent, 'Deep research.');
+    assert.equal(
+      greetSub?.textContent,
+      "What would you like to research? I'll gather sources and synthesize a report.",
+    );
     assert.equal(input?.value, 'quantum computing');
+    const dock = document.querySelector('.mn-os-composer-dock');
+    const composer = document.getElementById('desktopComposerRoot');
+    assert.ok(dock?.contains(composer ?? null));
+    const overlay = document.querySelector('.mn-os-desktop-research');
+    assert.ok(overlay);
     assert.ok(document.getElementById('desktopResearchProgressMount'));
+    assert.ok(document.getElementById('desktopResearchProgressBody'));
     assert.ok(document.getElementById('desktopResearchResultMount'));
-    assert.ok(document.getElementById('desktopResearchLibraryMount'));
+    assert.ok(document.getElementById('desktopResearchResultBody'));
+    assert.ok(document.getElementById('btnDesktopResearchClose'));
   });
 
   test('resolveLegacyHash redirects research routes to desktop', () => {
@@ -120,6 +135,16 @@ describe('desktop research state', () => {
       hash: '#/desktop',
       desktopResearch: true,
     });
+  });
+
+  test('launchApp(research) without options still activates research idle', async () => {
+    launchApp('research');
+    assert.equal(window.location.hash, '#/desktop');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(isDesktopResearchActive(), true);
+    assert.equal(getDesktopState(), 'researchIdle');
+    const layer = document.getElementById('osDesktopLayer');
+    assert.equal(layer?.classList.contains('is-research-mode'), true);
   });
 
   test('launchApp(research) stays on desktop and activates research idle', async () => {
