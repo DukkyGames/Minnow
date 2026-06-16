@@ -120,6 +120,9 @@ function closeOtherFullPages(): void {
     const root = document.getElementById('benchmarkView');
     if (root?.classList.contains('is-open')) m.closeBenchmark({ skipNavigate: true });
   });
+  void import('./brain-page').then((m) => {
+    if (m.isBrainPageOpen()) m.closeBrain({ skipNavigate: true });
+  });
   void import('./settings-page').then((m) => {
     const settingsRoot = document.getElementById('settingsView');
     if (settingsRoot?.classList.contains('is-open')) m.closeSettings({ skipNavigate: true });

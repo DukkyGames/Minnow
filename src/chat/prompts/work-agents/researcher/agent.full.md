@@ -7,7 +7,12 @@ description: Strictly read-only guardrails for the main Research chat turn; orch
 providerId: null
 modelId: null
 maxInputTokens: 12000
-contextEnforcementPolicy: summarize
+contextEnforcementPolicy: archive
+archive:
+  stalenessTurns: 15
+  pressureThreshold: 0.7
+  minRecentTurns: 6
+  retrievalTopK: 8
 defaultForModes:
   - research
 allowedTools:
@@ -23,6 +28,7 @@ allowedTools:
   - wikipedia_search
   - fetch_web_content
   - rag_web_content
+  - recall_chat_context
   - git_status
   - git_diff
   - git_log

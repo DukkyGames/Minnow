@@ -66,10 +66,10 @@ Add the matching client capabilities so servers enable these features:
 
 ## Acceptance criteria
 
-- [ ] The three functions return normalized, well-formed results against a live language server.
-- [ ] Capabilities are advertised in `initialize`.
-- [ ] `/api/lsp/*` endpoints respond.
-- [ ] Typecheck + lint clean; tests green.
+- [x] The three functions return normalized, well-formed results against a live language server.
+- [x] Capabilities are advertised in `initialize`.
+- [x] `/api/lsp/*` endpoints respond.
+- [x] Typecheck + lint clean; tests green.
 
 ## Out of scope
 

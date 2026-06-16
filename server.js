@@ -102,6 +102,7 @@ async function main() {
   console.log(`Agent packs API: ${localUrl.replace(/\/$/, '')}/api/agent-packs`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
+  console.log(`Brain API: ${localUrl.replace(/\/$/, '')}/api/brain/ping`);
   console.log(`Models API: ${localUrl.replace(/\/$/, '')}/api/models/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);

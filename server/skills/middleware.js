@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { getSkillById, listMergedSkills, SKILL_ID_RE } from './scan.js';
 import { createUserSkill, saveUserSkillContent } from './user-skills.js';
 import { handleImpeccableReferenceRequest } from '../impeccable/reference-handler.js';
-import { handleSynthesisRequest } from '../memory/synthesis-routes.js';
+import { handleSynthesisRequest } from '../brain/synthesis-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');

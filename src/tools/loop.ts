@@ -196,6 +196,12 @@ import {
   applyContextBudget,
   resolveContextBudget,
 } from '../chat/context-budget';
+import {
+  applyArchivePolicy,
+  applyMemoizedCollapse,
+  reportArchiveDisabled,
+  type ArchivePreResult,
+} from '../chat/archive';
 import { resolveContextLimit } from '../chat/context-usage';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
@@ -1198,6 +1204,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
       : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
 
+    let archiveMemo: ArchivePreResult | null = null;
+
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
@@ -1221,12 +1229,40 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
       });
+
+      let preMessages = rawMessages;
+      if (workAgentBudget.enforcementPolicy === 'archive') {
+        try {
+          if (turn === 0) {
+            archiveMemo = await applyArchivePolicy(rawMessages, {
+              chat,
+              agentConfig: workAgentBudget,
+            });
+            preMessages = archiveMemo.messages;
+            chat.lastContextTrim = {
+              archived: archiveMemo.archived,
+              recalled: archiveMemo.recalled,
+              recallTokens: archiveMemo.recallTokens,
+            };
+          } else if (archiveMemo) {
+            preMessages = applyMemoizedCollapse(
+              rawMessages,
+              archiveMemo,
+              chat.history.length,
+            );
+          }
+        } catch (err) {
+          reportArchiveDisabled(err);
+          preMessages = rawMessages;
+        }
+      }
+
       const budgetResolved = resolveContextBudget({
         agentConfig: workAgentBudget,
         modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
       });
       const budgetApplied = applyContextBudget(
-        rawMessages,
+        preMessages,
         budgetResolved,
         workAgentBudget,
       );
