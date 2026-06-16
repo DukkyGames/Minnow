@@ -6,8 +6,19 @@ import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
-import { ensureActiveAssistantChat } from '../state/chat-app-sessions';
-import { getActiveChat, sessionState } from '../state/sessions';
+import {
+  CHAT_APP_ID,
+  createAssistantChat,
+  ensureActiveAssistantChat,
+} from '../state/chat-app-sessions';
+import {
+  getActiveChat,
+  isExpertChat,
+  newChatId,
+  rememberActiveChatForApp,
+  scheduleSaveSessions,
+  sessionState,
+} from '../state/sessions';
 import { refreshChatJumpChipVisibility } from '../ui/chat-scroll';
 import { syncChatItemDotsInDom } from '../ui/chat-item-dot';
 import {
@@ -81,7 +92,10 @@ async function ensureChatsWorkspaceReady(): Promise<boolean> {
 
 async function ensureReadyForSend(): Promise<boolean> {
   try {
-    await ensureActiveAssistantChat();
+    const chat = getActiveChat();
+    if (!isExpertChat(chat)) {
+      await ensureActiveAssistantChat();
+    }
     if (!chatsWorkspacePath) {
       chatsWorkspacePath = await getChatsWorkspacePath();
     }
@@ -109,7 +123,8 @@ export async function handleDesktopSend(prefill?: string): Promise<void> {
     return;
   }
 
-  await sendMessage();
+  const sendBtn = document.getElementById('desktopSendBtn') as HTMLButtonElement | null;
+  await sendMessage({ inputEl: input, sendBtnEl: sendBtn });
   renderDesktopChatMessages();
   renderDesktopChatRail(chatsWorkspacePath);
   syncDesktopComposerSendState();
@@ -120,11 +135,19 @@ async function applyDesktopSeed(seed?: string): Promise<void> {
   if (!seed?.trim() || !sessionState) return;
   const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
   if (!input || input.value.trim()) return;
-
-  const chat = getActiveChat();
-  if (chat.history.length > 0) return;
-
   await handleDesktopSend(seed.trim());
+}
+
+/** Start a fresh assistant thread in the chats workspace sandbox. */
+function createFreshAssistantChat(
+  chatsWorkspacePath: string,
+  state: NonNullable<typeof sessionState>,
+): void {
+  const chat = createAssistantChat(chatsWorkspacePath, newChatId());
+  state.chats.unshift(chat);
+  state.activeId = chat.id;
+  rememberActiveChatForApp(CHAT_APP_ID, chat.id);
+  scheduleSaveSessions();
 }
 
 /** Switch the active assistant thread on the desktop surface. */
@@ -163,20 +186,39 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
 
   const ready = await ensureChatsWorkspaceReady();
   if (ready && sessionState) {
-    try {
-      if (options?.chatId?.trim()) {
-        const chat = sessionState.chats.find((c) => c.id === options.chatId?.trim());
+    const state = sessionState;
+    if (options?.chatId?.trim()) {
+      try {
+        const chat = state.chats.find((c) => c.id === options.chatId?.trim());
         if (chat) {
-          sessionState.activeId = chat.id;
+          state.activeId = chat.id;
           chat.unread = false;
+          if (isExpertChat(chat)) {
+            const expertId =
+              chat.expertId?.trim() || chat.expertSelection?.expertId?.trim() || '';
+            if (expertId) {
+              const scope = await import('../ui/experts/experts-scope');
+              scope.setExpertScopeId(expertId);
+              scope.syncExpertScopeChromeDataset();
+              scope.setExpertScopeSidebarVisible(true);
+              scope.renderExpertScopeHeader(expertId);
+            }
+          }
         } else {
           await ensureActiveAssistantChat();
         }
-      } else {
-        await ensureActiveAssistantChat();
+      } catch {
+        /* server offline — still show shell */
       }
-    } catch {
-      /* server offline — still show shell */
+    } else if (options?.seed?.trim() && chatsWorkspacePath) {
+      // Seeded sends from the hero concierge always open a new thread.
+      createFreshAssistantChat(chatsWorkspacePath, state);
+    } else {
+      try {
+        await ensureActiveAssistantChat();
+      } catch {
+        /* server offline — still show shell */
+      }
     }
   }
 
@@ -212,17 +254,6 @@ export function wireDesktopComposerControls(): void {
     autoResizeDesktopComposer(input);
     syncDesktopComposerSendState();
   });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void handleDesktopSend();
-    }
-  });
-
-  document.getElementById('desktopSendBtn')?.addEventListener('click', () => {
-    void handleDesktopSend();
-  });
-
   const fileInput = document.getElementById('fileInput') as HTMLInputElement | null;
   document.getElementById('btnDesktopAttach')?.addEventListener('click', () => {
     fileInput?.click();

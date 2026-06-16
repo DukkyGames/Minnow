@@ -8,11 +8,16 @@ import { loadResearchConfig } from '../config/research-config';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
+  fetchResearchDetail,
   fetchResearchResult,
   startResearch,
   subscribeToResearchStream,
 } from '../research/client';
-import { renderResearchLibrary } from '../research/library';
+import {
+  closeResearchLibraryWindow,
+  isResearchLibraryWindowOpen,
+  openResearchLibraryWindow,
+} from '../research/library-window';
 import { ResearchProgressPanel } from '../research/progress-panel';
 import { renderResearchResultFromMarkdown } from '../research/report-view';
 import type { ResearchStartRequest } from '../research/types';
@@ -31,22 +36,26 @@ let activeResearchId: string | null = null;
 let running = false;
 let lastRunRound = 1;
 let currentQuery = '';
-let showingLibrary = false;
 
 function getProgressMount(): HTMLElement | null {
-  return document.getElementById('desktopResearchProgressMount');
+  return document.getElementById('desktopResearchProgressBody');
 }
 
 function getResultMount(): HTMLElement | null {
-  return document.getElementById('desktopResearchResultMount');
+  return document.getElementById('desktopResearchResultBody');
 }
 
-function getLibraryMount(): HTMLElement | null {
-  return document.getElementById('desktopResearchLibraryMount');
+function syncResearchResultChrome(): void {
+  const closeBtn = document.getElementById('btnDesktopResearchClose');
+  const body = getResultMount();
+  const hasContent = Boolean(body?.childElementCount);
+  closeBtn?.toggleAttribute('hidden', !hasContent);
 }
 
-function getResearchOverlay(): HTMLElement | null {
-  return document.querySelector('.mn-os-desktop-research');
+function dismissDesktopResearchResult(): void {
+  resetRunUi();
+  setDesktopResearchRunActive(false);
+  getComposerInput()?.focus();
 }
 
 function syncResearchToolbar(): void {
@@ -56,22 +65,6 @@ function syncResearchToolbar(): void {
 
 function getComposerInput(): HTMLTextAreaElement | null {
   return document.getElementById('desktopInput') as HTMLTextAreaElement | null;
-}
-
-function setLibraryVisible(visible: boolean): void {
-  showingLibrary = visible;
-  const lib = getLibraryMount();
-  const progress = getProgressMount();
-  const result = getResultMount();
-  lib?.classList.toggle('hidden', !visible);
-  if (visible) {
-    progress?.classList.add('hidden');
-    result?.classList.add('hidden');
-  } else {
-    progress?.classList.remove('hidden');
-    result?.classList.remove('hidden');
-  }
-  getResearchOverlay()?.classList.toggle('is-library', visible);
 }
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
@@ -105,20 +98,25 @@ function teardownStream(): void {
   runAbort = null;
 }
 
-function resetRunUi(): void {
+function clearProgressUi(): void {
+  progressPanel?.destroy();
+  progressPanel = null;
   const progressMount = getProgressMount();
   if (progressMount) {
-    progressPanel?.destroy();
-    progressPanel = null;
     progressMount.innerHTML = '';
   }
+}
+
+function resetRunUi(): void {
+  clearProgressUi();
   const resultMount = getResultMount();
   if (resultMount) {
     resultMount.innerHTML = '';
   }
   activeResearchId = null;
-  setLibraryVisible(false);
+  closeResearchLibraryWindow();
   syncResearchToolbar();
+  syncResearchResultChrome();
 }
 
 async function showResultForId(researchId: string): Promise<void> {
@@ -127,10 +125,21 @@ async function showResultForId(researchId: string): Promise<void> {
     return;
   }
   mount.innerHTML = '<p class="dr-rep-stats research-mono">Loading result…</p>';
-  setLibraryVisible(false);
+  closeResearchLibraryWindow();
+  clearProgressUi();
+  activeResearchId = researchId;
+  syncResearchResultChrome();
+  // Library opens stay in researchIdle unless we promote to researchActive (hides hero, stage layout).
+  setDesktopResearchRunActive(true);
   syncResearchToolbar();
   try {
-    const data = await fetchResearchResult(researchId);
+    const data = await fetchResearchDetail(researchId);
+    if (data.query?.trim()) {
+      currentQuery = data.query.trim();
+    }
+    if (data.stats?.rounds != null) {
+      lastRunRound = data.stats.rounds;
+    }
     renderResearchResultFromMarkdown(
       mount,
       data.result,
@@ -143,9 +152,7 @@ async function showResultForId(researchId: string): Promise<void> {
           void import('../research/panel').then((m) => m.openResearchReport(researchId));
         },
         onRunAgain: () => {
-          resetRunUi();
-          setDesktopResearchRunActive(false);
-          getComposerInput()?.focus();
+          dismissDesktopResearchResult();
         },
         onDiscuss: () => {
           void import('../research/panel').then((m) => m.discussResearchReport(researchId));
@@ -165,30 +172,22 @@ async function showResultForId(researchId: string): Promise<void> {
         },
       },
     );
+    syncResearchResultChrome();
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Could not load result';
     mount.innerHTML = `<p class="dr-rep-stats">${msg}</p>`;
+    syncResearchResultChrome();
   }
 }
 
 async function showDesktopResearchLibrary(): Promise<void> {
-  const mount = getLibraryMount();
-  if (!mount) {
-    return;
-  }
-  setLibraryVisible(true);
-  await renderResearchLibrary({
-    mount,
+  await openResearchLibraryWindow({
     onNewResearch: () => {
-      setLibraryVisible(false);
-  syncResearchToolbar();
       resetRunUi();
       setDesktopResearchRunActive(false);
       getComposerInput()?.focus();
     },
     onOpenDetail: (id) => {
-      setLibraryVisible(false);
-  syncResearchToolbar();
       void showResultForId(id);
     },
     onOpenReport: (id) => {
@@ -202,8 +201,6 @@ async function showDesktopResearchLibrary(): Promise<void> {
       if (input && query.trim()) {
         input.value = query;
       }
-      setLibraryVisible(false);
-  syncResearchToolbar();
       void startDesktopResearchRun({ continueFrom: id });
     },
   });
@@ -227,7 +224,7 @@ export async function startDesktopResearchRun(
   running = true;
   activeResearchId = null;
   setDesktopResearchRunActive(true);
-  setLibraryVisible(false);
+  closeResearchLibraryWindow();
   syncResearchToolbar();
 
   const progressMount = getProgressMount();
@@ -240,6 +237,7 @@ export async function startDesktopResearchRun(
   if (resultMount) {
     resultMount.innerHTML = '';
   }
+  syncResearchResultChrome();
 
   try {
     const binding = await resolveResearchBinding();
@@ -265,6 +263,15 @@ export async function startDesktopResearchRun(
       onEnd: (endEvent) => {
         running = false;
         const status = endEvent?.status ?? 'done';
+        if (status === 'cancelled') {
+          activeResearchId = null;
+          clearProgressUi();
+          syncResearchToolbar();
+          setStatus('ok', 'Research cancelled');
+          setDesktopResearchRunActive(false);
+          teardownStream();
+          return;
+        }
         progressPanel?.complete(status, endEvent?.message);
         syncResearchToolbar();
         if (status === 'done') {
@@ -282,9 +289,6 @@ export async function startDesktopResearchRun(
             });
           });
           setStatus('ok', 'Research complete');
-        } else if (status === 'cancelled') {
-          setStatus('ok', 'Research cancelled');
-          setDesktopResearchRunActive(false);
         } else {
           setStatus('err', endEvent?.message ?? 'Research failed');
         }
@@ -321,9 +325,11 @@ export async function cancelDesktopResearchRun(): Promise<void> {
   }
   teardownStream();
   running = false;
-  progressPanel?.complete('cancelled');
+  activeResearchId = null;
+  clearProgressUi();
   syncResearchToolbar();
   setDesktopResearchRunActive(false);
+  setStatus('ok', 'Research cancelled');
 }
 
 function applyDesktopSeed(seed?: string): void {
@@ -359,7 +365,7 @@ export function teardownDesktopResearch(): void {
   resetRunUi();
   running = false;
   currentQuery = '';
-  showingLibrary = false;
+  closeResearchLibraryWindow();
   syncResearchToolbar();
 }
 
@@ -399,6 +405,9 @@ export function wireDesktopResearchControls(): void {
   document.getElementById('btnDesktopResearchCancel')?.addEventListener('click', () => {
     void cancelDesktopResearchRun();
   });
+  document.getElementById('btnDesktopResearchClose')?.addEventListener('click', () => {
+    dismissDesktopResearchResult();
+  });
   document.getElementById('btnDesktopResearchLibrary')?.addEventListener('click', () => {
     void showDesktopResearchLibrary();
   });
@@ -409,7 +418,7 @@ export function isDesktopResearchRunning(): boolean {
   return running;
 }
 
-/** Test hook: whether library panel is visible. */
+/** Test hook: whether library window is open. */
 export function isDesktopResearchLibraryOpenForTests(): boolean {
-  return showingLibrary;
+  return isResearchLibraryWindowOpen();
 }

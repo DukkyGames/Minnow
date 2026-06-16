@@ -6,8 +6,11 @@ import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
 import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
-import { subscribeDesktopState } from './desktop-state';
+import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
 import { wireDesktopResearchControls } from './research-desktop';
+import { windowManager } from './window-manager';
+import { createOsIcon } from './icons';
+import { ICON_CHEVRON_LEFT } from '../constants';
 import type { AppId, DesktopPrefs, LaunchOptions } from './types';
 
 function greetingFor(d: Date): string {
@@ -78,6 +81,12 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   hero.append(greetTime, greet, greetSub);
 
+  const expertsHeroMount = document.createElement('div');
+  expertsHeroMount.id = 'desktopExpertsHeroMount';
+  expertsHeroMount.className = 'mn-os-experts-hero-mount hidden';
+  expertsHeroMount.setAttribute('aria-hidden', 'true');
+  hero.appendChild(expertsHeroMount);
+
   const conciergeMount = document.createElement('div');
   conciergeMount.className = 'mn-os-concierge-mount';
   const onLaunch = (appId: AppId, options: LaunchOptions) => launchApp(appId, options);
@@ -97,16 +106,43 @@ export function renderDesktop(root: HTMLElement): () => void {
   railTab.className = 'mn-os-chat-rail-tab';
   railTab.setAttribute('aria-label', 'Show chat sessions');
   railTab.setAttribute('aria-expanded', 'false');
-  railTab.textContent = 'Chats';
+  railTab.appendChild(createOsIcon('chat', { size: 18 }));
 
   const railPanel = document.createElement('div');
   railPanel.className = 'mn-os-chat-rail-panel';
 
+  const railMain = document.createElement('div');
+  railMain.className = 'mn-os-chat-rail-main';
+
+  const railHeader = document.createElement('div');
+  railHeader.className = 'chat-sidebar-header';
+
+  const railTitle = document.createElement('span');
+  railTitle.className = 'chat-sidebar-title';
+  railTitle.textContent = 'Chats';
+
+  const railCollapse = document.createElement('button');
+  railCollapse.type = 'button';
+  railCollapse.id = 'btnDesktopChatRailCollapse';
+  railCollapse.className = 'icon-btn';
+  railCollapse.setAttribute('aria-label', 'Collapse chat sessions');
+  railCollapse.innerHTML = ICON_CHEVRON_LEFT;
+
+  railHeader.append(railTitle, railCollapse);
+
+  const railNewChat = document.createElement('button');
+  railNewChat.type = 'button';
+  railNewChat.id = 'btnDesktopChatNew';
+  railNewChat.className = 'chat-new-wide';
+  railNewChat.textContent = '+ New chat';
+
   const railList = document.createElement('div');
   railList.id = 'desktopChatSessionList';
-  railList.className = 'mn-os-chat-rail-list';
+  railList.className = 'chat-list mn-os-chat-rail-list';
   railList.setAttribute('role', 'list');
-  railPanel.appendChild(railList);
+
+  railMain.append(railHeader, railNewChat, railList);
+  railPanel.appendChild(railMain);
   rail.append(railTab, railPanel);
 
   const transcript = document.createElement('div');
@@ -124,15 +160,68 @@ export function renderDesktop(root: HTMLElement): () => void {
   desktopResearch.className = 'mn-os-desktop-research dr';
   desktopResearch.setAttribute('aria-label', 'Research');
 
-  const researchToolbar = document.createElement('div');
-  researchToolbar.className = 'mn-os-research-toolbar';
+  const researchProgress = document.createElement('div');
+  researchProgress.id = 'desktopResearchProgressMount';
+  researchProgress.className = 'mn-os-research-card mn-os-research-progress';
+  researchProgress.setAttribute('aria-live', 'polite');
+
+  const researchProgressChrome = document.createElement('div');
+  researchProgressChrome.className = 'mn-os-research-progress-chrome';
 
   const researchCancel = document.createElement('button');
   researchCancel.type = 'button';
   researchCancel.id = 'btnDesktopResearchCancel';
-  researchCancel.className = 'mn-os-research-toolbar-btn';
+  researchCancel.className = 'dr-cancel mn-os-research-cancel';
   researchCancel.textContent = 'Cancel';
   researchCancel.hidden = true;
+
+  researchProgressChrome.appendChild(researchCancel);
+
+  const researchProgressBody = document.createElement('div');
+  researchProgressBody.id = 'desktopResearchProgressBody';
+  researchProgressBody.className = 'mn-os-research-progress-body';
+
+  researchProgress.append(researchProgressChrome, researchProgressBody);
+
+  const researchResult = document.createElement('div');
+  researchResult.id = 'desktopResearchResultMount';
+  researchResult.className = 'mn-os-research-card mn-os-research-result';
+
+  const researchResultChrome = document.createElement('div');
+  researchResultChrome.className = 'mn-os-research-result-chrome';
+
+  const researchClose = document.createElement('button');
+  researchClose.type = 'button';
+  researchClose.id = 'btnDesktopResearchClose';
+  researchClose.className = 'dr-cancel mn-os-research-close';
+  researchClose.textContent = 'Close';
+  researchClose.hidden = true;
+
+  researchResultChrome.appendChild(researchClose);
+
+  const researchResultBody = document.createElement('div');
+  researchResultBody.id = 'desktopResearchResultBody';
+  researchResultBody.className = 'mn-os-research-result-body';
+
+  researchResult.append(researchResultChrome, researchResultBody);
+
+  desktopResearch.append(researchProgress, researchResult);
+
+  const desktopExperts = document.createElement('div');
+  desktopExperts.id = 'desktopExpertsMount';
+  desktopExperts.className = 'mn-os-desktop-experts';
+  desktopExperts.setAttribute('aria-label', "Experts' Lab");
+
+  desktopChat.append(transcript);
+  stage.append(hero, desktopChat, desktopResearch, desktopExperts);
+  root.append(rail);
+  root.appendChild(stage);
+
+  const composerDock = document.createElement('div');
+  composerDock.className = 'mn-os-composer-dock';
+
+  const researchComposerActions = document.createElement('div');
+  researchComposerActions.className = 'mn-os-composer-research-actions';
 
   const researchLibrary = document.createElement('button');
   researchLibrary.type = 'button';
@@ -140,34 +229,8 @@ export function renderDesktop(root: HTMLElement): () => void {
   researchLibrary.className = 'mn-os-research-toolbar-btn';
   researchLibrary.textContent = 'Library';
 
-  researchToolbar.append(researchCancel, researchLibrary);
-
-  const researchProgress = document.createElement('div');
-  researchProgress.id = 'desktopResearchProgressMount';
-  researchProgress.className = 'mn-os-research-card mn-os-research-progress';
-  researchProgress.setAttribute('aria-live', 'polite');
-
-  const researchResult = document.createElement('div');
-  researchResult.id = 'desktopResearchResultMount';
-  researchResult.className = 'mn-os-research-card mn-os-research-result';
-
-  const researchLibraryMount = document.createElement('div');
-  researchLibraryMount.id = 'desktopResearchLibraryMount';
-  researchLibraryMount.className = 'mn-os-research-card mn-os-research-library hidden';
-
-  desktopResearch.append(
-    researchToolbar,
-    researchProgress,
-    researchResult,
-    researchLibraryMount,
-  );
-
-  desktopChat.append(rail, transcript);
-  stage.append(hero, desktopChat, desktopResearch);
-  root.appendChild(stage);
-
-  const composerDock = document.createElement('div');
-  composerDock.className = 'mn-os-composer-dock';
+  researchComposerActions.appendChild(researchLibrary);
+  composerDock.appendChild(researchComposerActions);
   root.appendChild(composerDock);
 
   wireDesktopChatRail();
@@ -199,7 +262,10 @@ export function renderDesktop(root: HTMLElement): () => void {
     const d = new Date();
     const formatted = formatDateTime(d);
     greetTime.textContent = `${formatted.time} · ${formatted.date}`;
-    greet.textContent = `${greetingFor(d)}.`;
+    // Research/experts mode uses fixed hero copy; only refresh the time-of-day greeting when idle/chat.
+    if (!isDesktopResearchActive() && !isDesktopExpertsActive()) {
+      greet.textContent = `${greetingFor(d)}.`;
+    }
   }
 
   let clockInterval: number | undefined;
@@ -209,6 +275,7 @@ export function renderDesktop(root: HTMLElement): () => void {
   }, msUntilNextMinute(new Date()));
 
   const unsubInstances = subscribeInstances(() => refreshPreviews());
+  const unsubWindows = windowManager.subscribe(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
     applyWallpaper(p);
     refreshPreviews();
@@ -221,6 +288,7 @@ export function renderDesktop(root: HTMLElement): () => void {
     clearTimeout(clockAlignTimeout);
     if (clockInterval !== undefined) clearInterval(clockInterval);
     unsubInstances();
+    unsubWindows();
     unsubPrefs();
     unsubDesktopState();
   };

@@ -43,6 +43,7 @@ describe('desktop chat state', () => {
       document: Document;
       HTMLElement: typeof HTMLElement;
       localStorage: Storage;
+      fetch: typeof fetch;
     };
     g.window = win as unknown as Window & typeof globalThis.window;
     g.document = win.document;
@@ -58,7 +59,7 @@ describe('desktop chat state', () => {
       dispatchEvent: () => false,
       onchange: null,
     })) as typeof window.matchMedia;
-    win.fetch = (async (input: string | URL) => {
+    g.fetch = (async (input: string | URL) => {
       const url = String(input);
       if (url.includes('/api/chats-workspace')) {
         return {
@@ -119,6 +120,27 @@ describe('desktop chat state', () => {
     assert.ok(document.getElementById('desktopContextRing'));
   });
 
+  test('activateDesktopChat with seed creates a new thread instead of reusing history', async () => {
+    const CHATS_WS = '/home/user/.minnow/chats';
+    const { sessionState, getActiveChat } = await import('../../src/state/sessions.ts');
+    const existing = sessionState!.chats[0]!;
+    existing.workspacePath = CHATS_WS;
+    existing.history.push({ role: 'user', content: 'prior turn' });
+    const priorId = existing.id;
+    const priorCount = sessionState!.chats.length;
+
+    try {
+      await activateDesktopChat({ seed: 'brand new question' });
+    } catch {
+      // Provider/model DOM is absent in this harness; chat creation is what we verify.
+    }
+
+    assert.equal(sessionState!.chats.length, priorCount + 1);
+    assert.notEqual(getActiveChat().id, priorId);
+    assert.equal(getActiveChat().workspacePath, CHATS_WS);
+    assert.equal(getActiveChat().history.length, 0);
+  });
+
   test('resolveLegacyHash redirects #/app/chat to desktop', () => {
     assert.deepEqual(resolveLegacyHash('#/app/chat'), {
       hash: '#/desktop',
@@ -127,7 +149,7 @@ describe('desktop chat state', () => {
   });
 
   test('launchApp(chat) stays on desktop and activates chat', async () => {
-    launchApp('chat', { seed: 'hello' });
+    launchApp('chat');
     assert.equal(window.location.hash, '#/desktop');
     await new Promise((r) => setTimeout(r, 0));
     assert.equal(isDesktopChatActive(), true);

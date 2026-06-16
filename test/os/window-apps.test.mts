@@ -6,6 +6,7 @@ import {
   syncAppHostForTests,
 } from '../../src/os/app-host.ts';
 import {
+  focusInstance,
   getInstanceSnapshot,
   launchInstance,
   resetInstancesForTests,
@@ -23,14 +24,13 @@ import {
   windowManager,
 } from '../../src/os/window-manager.ts';
 
-const WINDOW_APPS = ['settings', 'models', 'bench', 'compare', 'experts', 'calendar'] as const;
+const WINDOW_APPS = ['settings', 'models', 'bench', 'compare', 'calendar'] as const;
 
 const CONTENT_BY_APP: Record<(typeof WINDOW_APPS)[number], string> = {
   settings: 'settingsView',
   models: 'modelsView',
   bench: 'benchmarkView',
   compare: 'compareView',
-  experts: 'expertsView',
   calendar: 'calendarView',
 };
 
@@ -46,7 +46,6 @@ function setupWindowAppsDom(win: import('happy-dom').Window): void {
     <main id="modelsView" class="models-page mn-os-app-layer" data-os-app="models"></main>
     <main id="benchmarkView" class="benchmark-page mn-os-app-layer" data-os-app="bench"></main>
     <main id="compareView" class="compare-page mn-os-app-layer" data-os-app="compare"></main>
-    <main id="expertsView" class="experts-page mn-os-app-layer" data-os-app="experts"></main>
     <main id="calendarView" class="calendar-page mn-os-app-layer" data-os-app="calendar"></main>
   `;
 }
@@ -133,31 +132,51 @@ describe('window-mounted apps', () => {
     assert.equal(document.getElementById('modelsView')?.classList.contains('is-open'), false);
   });
 
-  test('mini-previews skip window-mounted apps', () => {
+  test('mini-previews show window-mounted apps only when minimized', () => {
     const mount = document.createElement('div');
-    renderMiniPreviews(
-      mount,
-      {
-        view: 'desktop',
-        foregroundId: 'inst-code',
-        instances: [
-          { id: 'inst-settings', appId: 'settings', unread: 0, msg: '' },
-          { id: 'inst-code', appId: 'code', unread: 0, msg: '' },
-        ],
-      },
-      loadDesktopPrefs(),
-      () => {},
-      () => {},
-    );
+    const prefs = loadDesktopPrefs();
 
+    markWindowAppOpen('settings');
+    const instanceId = launchInstance('settings');
+    syncAppHostForTests();
+
+    renderMiniPreviews(mount, getInstanceSnapshot(), prefs, () => {}, () => {});
+    assert.doesNotMatch(mount.textContent ?? '', /Settings/i);
+
+    const win = windowManager.findWindowByInstance(instanceId);
+    assert.ok(win);
+    windowManager.minimize(win.id, true);
+
+    mount.replaceChildren();
+    renderMiniPreviews(mount, getInstanceSnapshot(), prefs, () => {}, () => {});
     const text = mount.textContent ?? '';
-    assert.match(text, /Code/i);
-    assert.doesNotMatch(text, /Settings/i);
+    assert.match(text, /Settings/i);
+    assert.match(text, /RUNNING · 1/);
   });
 
   test('WINDOW_MOUNTED_APPS includes all window presentation apps', () => {
     for (const appId of WINDOW_APPS) {
       assert.equal(WINDOW_MOUNTED_APPS.has(appId), true);
     }
+  });
+
+  test('sync keeps foreground window when multiple window apps are open', async () => {
+    markWindowAppOpen('settings');
+    const settingsId = launchInstance('settings');
+    markWindowAppOpen('models');
+    launchInstance('models');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const settingsWin = windowManager.findWindowByInstance(settingsId);
+    assert.ok(settingsWin);
+    windowManager.focus(settingsWin.id);
+    focusInstance(settingsId);
+    assert.equal(windowManager.getFocusedWindowId(), settingsWin.id);
+
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(windowManager.getFocusedWindowId(), settingsWin.id);
   });
 });

@@ -1,6 +1,7 @@
 import { getForegroundAppId, getOsView, subscribeInstances } from './instances';
 import {
   isDesktopChatActive,
+  isDesktopExpertsActive,
   isDesktopResearchActive,
 } from './desktop-state';
 import type { AppId } from './types';
@@ -26,6 +27,7 @@ export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
   if (isDesktopChatActive()) return true;
   if (isDesktopResearchActive()) return true;
+  if (isDesktopExpertsActive()) return true;
   if (getOsView() === 'desktop') return true;
   return getForegroundAppId() !== 'code';
 }
@@ -46,12 +48,15 @@ export function syncLegacyChromeVisibility(): void {
   document.documentElement.classList.toggle('os-in-app', view === 'app');
   document.documentElement.classList.toggle('os-desktop-chat', isDesktopChatActive());
   document.documentElement.classList.toggle('os-desktop-research', isDesktopResearchActive());
+  document.documentElement.classList.toggle('os-desktop-experts', isDesktopExpertsActive());
 
   const fg = getForegroundAppId();
   if (isDesktopChatActive()) {
     document.documentElement.dataset.osApp = 'chat';
   } else if (isDesktopResearchActive()) {
     document.documentElement.dataset.osApp = 'research';
+  } else if (isDesktopExpertsActive()) {
+    document.documentElement.dataset.osApp = 'experts';
   } else if (fg) {
     document.documentElement.dataset.osApp = fg;
   } else {

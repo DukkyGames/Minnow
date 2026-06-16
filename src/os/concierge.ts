@@ -2,6 +2,7 @@ import { resolveConciergePlan } from './concierge-agent';
 import {
   activateDesktopChat,
   isDesktopChatActive,
+  isDesktopExpertsActive,
   isDesktopResearchActive,
 } from './desktop-state';
 import { handleDesktopSend, wireDesktopComposerControls } from './desktop-chat';
@@ -9,7 +10,6 @@ import { handleDesktopResearchSubmit } from './research-desktop';
 import { getAppById } from './app-registry';
 import { CONCIERGE_LINES } from './intent-routing';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
-import { createOsIcon } from './icons';
 import type { AppId, LaunchOptions } from './types';
 
 const CONCIERGE_CHIPS = [
@@ -47,11 +47,6 @@ function buildDesktopComposer(): HTMLElement {
 
   const inputWrap = document.createElement('div');
   inputWrap.className = 'mn-os-desktop-input-wrap';
-
-  const fish = document.createElement('div');
-  fish.className = 'mn-os-cc-fish';
-  fish.innerHTML = MINNOW_GLYPH_HEADER_HTML;
-  inputWrap.appendChild(fish);
 
   const field = document.createElement('textarea');
   field.id = 'desktopInput';
@@ -92,7 +87,7 @@ function buildDesktopComposer(): HTMLElement {
   sendBtn.id = 'desktopSendBtn';
   sendBtn.className = 'mn-os-desktop-send';
   sendBtn.setAttribute('aria-label', 'Send message');
-  sendBtn.appendChild(createOsIcon('arrowUp', { size: 18 }));
+  sendBtn.innerHTML = MINNOW_GLYPH_HEADER_HTML;
 
   row.append(attachBtn, inputWrap, contextAnchor, sendBtn);
   root.append(attachPreview, row);
@@ -145,10 +140,12 @@ export function renderConcierge(
 
   function syncUi(): void {
     composer.classList.toggle('is-busy', phase !== 'idle');
-    const inSurfaceMode = isDesktopChatActive() || isDesktopResearchActive();
+    const inSurfaceMode =
+      isDesktopChatActive() || isDesktopResearchActive() || isDesktopExpertsActive();
     field.disabled = phase !== 'idle' && !inSurfaceMode;
     const hasText = Boolean(field.value.trim());
     sendBtn.disabled = (!hasText && phase === 'idle') || phase === 'thinking';
+    sendBtn.setAttribute('aria-busy', phase === 'thinking' ? 'true' : 'false');
     status.classList.toggle('is-visible', phase !== 'idle');
     statusLine.textContent = lineText;
     chipsWrap.hidden = phase !== 'idle' || inSurfaceMode;

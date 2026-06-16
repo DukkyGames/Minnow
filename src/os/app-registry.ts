@@ -42,7 +42,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'flask',
     tag: 'Compose & test expert agents',
     description: 'Personas, tools, eval harness',
-    presentationMode: 'window',
+    presentationMode: 'desktop',
   },
   {
     id: 'bench',

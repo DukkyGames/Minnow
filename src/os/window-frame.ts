@@ -1,3 +1,4 @@
+import { createOsIcon, type SvgIconName } from './icons';
 import {
   detectSnapPreview,
   shouldReleaseSnap,
@@ -175,12 +176,13 @@ export class WindowFrame {
     this.root.remove();
   }
 
-  private makeControlButton(kind: string, label: string, onClick: () => void): HTMLButtonElement {
+  private makeControlButton(kind: SvgIconName, label: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `mn-os-window-btn mn-os-window-btn--${kind}`;
     btn.setAttribute('aria-label', label);
     btn.title = label;
+    btn.appendChild(createOsIcon(kind, { size: 14, stroke: 1.8 }));
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       onClick();
@@ -276,7 +278,10 @@ export class WindowFrame {
 
   private wireInteractions(titlebar: HTMLElement, grips: HTMLElement): void {
     this.root.addEventListener('mousedown', () => this.onFocus?.());
-    this.root.addEventListener('focusin', () => this.onFocus?.());
+    this.root.addEventListener('focusin', () => {
+      if (this.root.classList.contains('is-focused')) return;
+      this.onFocus?.();
+    });
 
     titlebar.addEventListener('mousedown', (ev) => {
       if (ev.button !== 0) return;

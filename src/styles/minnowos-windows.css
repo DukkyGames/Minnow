@@ -107,6 +107,11 @@
   transition: 0.14s var(--os-ease);
 }
 
+.mn-os-window-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 .mn-os-window-btn:hover {
   background: var(--os-surface-2);
   color: var(--os-text);

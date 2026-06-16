@@ -1,11 +1,17 @@
 import {
   activateDesktopChat,
+  activateDesktopExperts,
   activateDesktopResearch,
+  consumePendingDesktopChatActivation,
+  consumePendingDesktopExpertsActivation,
+  consumePendingDesktopResearchActivation,
+  deactivateDesktopExperts,
   deactivateDesktopResearch,
+  isDesktopExpertsActive,
+  isDesktopResearchActive,
   queueDesktopChatActivation,
+  queueDesktopExpertsActivation,
   queueDesktopResearchActivation,
-  takePendingDesktopChatOptions,
-  takePendingDesktopResearchOptions,
 } from './desktop-state';
 import { isAppId } from './app-registry';
 import {
@@ -44,6 +50,7 @@ export function resolveLegacyHash(hash: string): {
   modelsSection?: string;
   desktopChat?: boolean;
   desktopResearch?: boolean;
+  desktopExperts?: boolean;
 } {
   const trimmed = hash || '#/';
   if (trimmed.startsWith('#/settings')) {
@@ -85,7 +92,10 @@ export function resolveLegacyHash(hash: string): {
     return { hash: '#/desktop', desktopResearch: true };
   }
   if (trimmed === '#/experts' || trimmed.startsWith('#/experts/')) {
-    return { hash: '#/app/experts' };
+    return { hash: '#/desktop', desktopExperts: true };
+  }
+  if (trimmed === '#/app/experts' || trimmed.startsWith('#/app/experts/')) {
+    return { hash: '#/desktop', desktopExperts: true };
   }
   if (trimmed === '#/app/chat' || trimmed.startsWith('#/app/chat/')) {
     return { hash: '#/desktop', desktopChat: true };
@@ -144,14 +154,19 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'desktop') {
     syncForegroundLifecycle(null);
     showDesktop();
-    const pendingResearch = takePendingDesktopResearchOptions();
-    if (pendingResearch) {
+    const pendingResearch = consumePendingDesktopResearchActivation();
+    if (pendingResearch !== null) {
       void activateDesktopResearch(pendingResearch);
       return;
     }
-    const pending = takePendingDesktopChatOptions();
-    if (pending) {
-      void activateDesktopChat(pending);
+    const pendingExperts = consumePendingDesktopExpertsActivation();
+    if (pendingExperts !== null) {
+      void activateDesktopExperts(pendingExperts);
+      return;
+    }
+    const pendingChat = consumePendingDesktopChatActivation();
+    if (pendingChat !== null) {
+      void activateDesktopChat(pendingChat);
     }
     return;
   }
@@ -191,6 +206,9 @@ function applyRouteFromHash(): void {
       if (legacy.desktopResearch) {
         queueDesktopResearchActivation(pendingLaunchOptions);
       }
+      if (legacy.desktopExperts) {
+        queueDesktopExpertsActivation(pendingLaunchOptions);
+      }
       window.location.hash = legacy.hash;
       return;
     }
@@ -226,7 +244,20 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
     return;
   }
   if (appId === 'research') {
+    if (getOsView() === 'desktop' && isDesktopResearchActive()) {
+      deactivateDesktopResearch();
+      return;
+    }
     queueDesktopResearchActivation(options);
+    navigateToDesktop();
+    return;
+  }
+  if (appId === 'experts') {
+    if (getOsView() === 'desktop' && isDesktopExpertsActive()) {
+      deactivateDesktopExperts();
+      return;
+    }
+    queueDesktopExpertsActivation(options);
     navigateToDesktop();
     return;
   }

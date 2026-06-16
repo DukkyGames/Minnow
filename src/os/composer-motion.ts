@@ -8,12 +8,6 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
 /**
  * Move the composer root from the hero mount into the dock with a FLIP animation.
  * Falls back to an instant reparent when reduced motion is preferred.
@@ -48,13 +42,17 @@ export async function runComposerDockTransition(
       const onEnd = (): void => {
         composerEl.removeEventListener('transitionend', onEnd);
         composerEl.style.transition = '';
+        composerEl.style.transform = '';
         composerEl.style.transformOrigin = '';
         resolve();
       };
-      composerEl.addEventListener('transitionend', onEnd);
+      composerEl.addEventListener('transitionend', (event) => {
+        if (event.propertyName !== 'transform') {
+          return;
+        }
+        onEnd();
+      });
       window.setTimeout(onEnd, HERO_EXIT_MS + 50);
     });
   });
-
-  void wait(HERO_EXIT_MS);
 }
