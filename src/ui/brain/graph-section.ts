@@ -21,14 +21,30 @@ let searchQuery = '';
 let bindingsDone = false;
 let firstRunHint = true;
 
-/** Open a page from graph, tree, wikilinks, or lint. */
-export function navigateBrainGraphPage(relPath: string): void {
-  selectedPath = relPath.replace(/\\/g, '/');
-  void renderGraphSection();
+/**
+ * Lightweight selection path: reuses the existing simulation instead of rebuilding.
+ * Falls back to a full `renderGraphSection()` when the graph is not yet mounted
+ * or the page is not in the current catalog (e.g. navigating from Edit after a save).
+ */
+function selectGraphPage(relPath: string): void {
+  const inCatalog = catalogPages.some((p) => p.path === relPath);
+  if (!graphApi || !inCatalog) {
+    selectedPath = relPath;
+    void renderGraphSection();
+    return;
+  }
+  selectedPath = relPath;
+  const nodeId = `page:${relPath}`;
+  graphApi.selectNode(nodeId);
+  graphApi.centerOnNode(nodeId);
+  syncTreeSelection();
+  void openInspector(relPath);
 }
 
-/** @deprecated Alias for graph navigation (wikilink compatibility). */
-export const navigateBrainWikiPage = navigateBrainGraphPage;
+/** Open a page from graph, tree, wikilinks, or lint. */
+export function navigateBrainGraphPage(relPath: string): void {
+  selectGraphPage(relPath.replace(/\\/g, '/'));
+}
 
 export function getGraphSelectedPath(): string | null {
   return selectedPath;
@@ -38,16 +54,14 @@ export function setGraphSelectedPath(relPath: string | null): void {
   selectedPath = relPath;
 }
 
-/** @deprecated */
-export const getWikiSelectedPath = getGraphSelectedPath;
-/** @deprecated */
-export const setWikiSelectedPath = setGraphSelectedPath;
-
-/** Highlight orphan pages from lint. */
+/** Highlight orphan pages from lint. Called just before openBrain('graph'), so the
+ * navigation that follows will call renderGraphSection() and apply the updated state. */
 export function setGraphOrphanPaths(paths: string[]): void {
   orphanPaths = new Set(paths);
   highlightOrphans = paths.length > 0;
-  void renderGraphSection();
+  // Sync the toolbar toggle so the user can see and clear the highlight on arrival.
+  const btn = document.getElementById('brainGraphOrphanToggle');
+  if (btn) btn.setAttribute('aria-pressed', highlightOrphans ? 'true' : 'false');
 }
 
 function bindGraphToolbar(): void {
@@ -87,6 +101,20 @@ function bindGraphToolbar(): void {
     void refreshGraphCanvas();
   });
 
+  document.getElementById('brainGraphOrphanToggle')?.addEventListener('click', () => {
+    highlightOrphans = !highlightOrphans;
+    const btn = document.getElementById('brainGraphOrphanToggle');
+    btn?.setAttribute('aria-pressed', highlightOrphans ? 'true' : 'false');
+    void refreshGraphCanvas();
+  });
+
+  // Bind the first-run hint dismiss button once here so it never re-attaches.
+  document.getElementById('brainGraphDismissHint')?.addEventListener('click', () => {
+    const hint = document.getElementById('brainGraphFirstRun');
+    if (hint) hint.classList.add('hidden');
+    firstRunHint = false;
+  });
+
   const searchEl = document.getElementById('brainGraphSearch') as HTMLInputElement | null;
   searchEl?.addEventListener('input', () => {
     searchQuery = searchEl.value;
@@ -124,7 +152,8 @@ async function refreshGraphCanvas(): Promise<void> {
       },
       onDoubleClick: (node) => {
         if (!node?.path) return;
-        graphApi?.selectNode(node.id);
+        // Focus-subtree: zoom to the node's neighborhood and make the highlight sticky.
+        graphApi?.focusNode(node.id);
         selectedPath = node.path;
         syncTreeSelection();
         void openInspector(node.path);
@@ -133,7 +162,7 @@ async function refreshGraphCanvas(): Promise<void> {
         graphApi?.setHoverNode(node?.id ?? null);
       },
     });
-    window.addEventListener('resize', () => graphApi?.resize());
+    // Resize is handled internally by the engine's ResizeObserver — no window listener needed.
   }
 
   let data = buildPageGraph(catalogPages, {
@@ -153,8 +182,7 @@ async function refreshGraphCanvas(): Promise<void> {
     graphApi.selectNode(nodeId);
     syncTreeSelection();
   }
-
-  requestAnimationFrame(() => graphApi?.fitToView());
+  // Auto-fit is driven by the engine's pendingFit / simulation 'end' handler — no RAF needed.
 }
 async function openInspector(relPath: string): Promise<void> {
   const inspector = document.getElementById('brainInspector');
@@ -242,10 +270,7 @@ function showFirstRunHint(): void {
     return;
   }
   hint.classList.remove('hidden');
-  document.getElementById('brainGraphDismissHint')?.addEventListener('click', () => {
-    hint.classList.add('hidden');
-    firstRunHint = false;
-  });
+  // Dismiss button is wired once in bindGraphToolbar().
 }
 
 /** Render graph home section. */
@@ -306,5 +331,3 @@ export async function renderGraphSection(): Promise<void> {
   showFirstRunHint();
 }
 
-/** @deprecated */
-export const renderWikiSection = renderGraphSection;

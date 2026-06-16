@@ -4,7 +4,7 @@
 
 import { fetchBrainLog } from '../../brain/client';
 import { renderBrainMarkdown } from './wikilink-markdown';
-import { navigateBrainWikiPage } from './wiki-section';
+import { navigateBrainGraphPage } from './graph-section';
 
 /** Render the wiki changelog. */
 export async function renderLogSection(): Promise<void> {
@@ -25,5 +25,5 @@ export async function renderLogSection(): Promise<void> {
     return;
   }
 
-  renderBrainMarkdown(mount, log ?? '', navigateBrainWikiPage);
+  renderBrainMarkdown(mount, log ?? '', navigateBrainGraphPage);
 }

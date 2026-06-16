@@ -55,8 +55,8 @@ function bindIngestSection(): void {
         btn.className = 'brain-inline-link';
         btn.textContent = path;
         btn.addEventListener('click', () => {
-          void import('./wiki-section').then((m) => {
-            m.navigateBrainWikiPage(path);
+          void import('./graph-section').then((m) => {
+            m.navigateBrainGraphPage(path);
             void import('../brain-page').then((bp) => bp.openBrain('graph'));
           });
         });

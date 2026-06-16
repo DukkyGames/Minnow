@@ -138,6 +138,8 @@ async function runLint(): Promise<void> {
   }
 
   renderLintReport(mount, report);
+  // Guard in renderLintSection() checks this flag to preserve the report on re-entry.
+  mount.dataset.lintRan = '1';
 }
 
 /** Show lint intro; run button wired once. */
