@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { getCatalogPath } from '../../server/brain/paths.js';
 import {
   createPage,
@@ -28,6 +29,7 @@ before(async () => {
 });
 
 after(async () => {
+  closeCodeDbForTests();
   delete process.env.MINNOW_HOME;
   resetMinnowHomeCache();
   await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });

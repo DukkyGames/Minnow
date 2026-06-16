@@ -5,8 +5,11 @@
 import {
   fetchBrainCodeConfig,
   fetchBrainCodeStatus,
+  fetchBrainGitHookStatus,
   fetchBrainStatus,
+  installBrainGitHook,
   saveBrainCodeConfig,
+  uninstallBrainGitHook,
 } from '../../brain/client';
 import type { BrainCodeStatus } from '../../brain/types';
 import {
@@ -118,6 +121,34 @@ function bindSettingsSection(): void {
         result?.ok ? `Indexed ${result.indexed} pages` : 'Reindex failed',
       );
       await refreshEmbeddingsFields();
+    })();
+  });
+
+  document.getElementById('brainCodeGitHookInstall')?.addEventListener('click', () => {
+    void (async () => {
+      setStatus('spin', 'Installing git hook…');
+      const result = await installBrainGitHook();
+      setStatus(
+        result?.installed ? 'ok' : 'err',
+        result?.installed
+          ? result.alreadyPresent
+            ? 'Git hook already installed'
+            : 'Git post-commit hook installed'
+          : 'Git hook install failed',
+      );
+      await refreshGitHookStatus();
+    })();
+  });
+
+  document.getElementById('brainCodeGitHookUninstall')?.addEventListener('click', () => {
+    void (async () => {
+      setStatus('spin', 'Removing git hook…');
+      const result = await uninstallBrainGitHook();
+      setStatus(
+        result?.removed ? 'ok' : 'err',
+        result?.removed ? 'Git hook removed' : 'Git hook was not installed',
+      );
+      await refreshGitHookStatus();
     })();
   });
 
@@ -245,6 +276,19 @@ function globsToText(globs: string[]): string {
   return globs.join('\n');
 }
 
+async function refreshGitHookStatus(): Promise<void> {
+  const el = document.getElementById('brainCodeGitHookStatus');
+  if (!el) return;
+  const status = await fetchBrainGitHookStatus();
+  if (!status) {
+    el.textContent = 'Hook status unavailable.';
+    return;
+  }
+  el.textContent = status.installed
+    ? `Post-commit hook installed at ${status.hookPath}`
+    : 'Post-commit hook not installed';
+}
+
 async function refreshCodeSettingsFields(): Promise<void> {
   const offlineEl = document.getElementById('brainCodeSettingsOffline');
   const statusEl = document.getElementById('brainCodeSettingsStatus');
@@ -285,6 +329,7 @@ async function refreshCodeSettingsFields(): Promise<void> {
   if (embEl && !embEl.matches(':focus')) {
     embEl.checked = config.codeEmbeddingsEnabled;
   }
+  await refreshGitHookStatus();
 }
 
 async function refreshBrainStatusLine(): Promise<void> {

@@ -149,6 +149,21 @@ export interface BrainCodeReadSymbolResult {
   error?: string;
 }
 
+/** GET /api/brain/code/git-hook/status. */
+export interface BrainCodeGitHookStatus {
+  hookPath: string;
+  installed: boolean;
+  scriptPath: string;
+}
+
+/** POST /api/brain/code/git-hook/install. */
+export interface BrainCodeGitHookInstallResult {
+  ok: boolean;
+  installed: boolean;
+  hookPath: string;
+  alreadyPresent?: boolean;
+}
+
 /** POST /api/brain/code/reindex. */
 export interface BrainCodeReindexResult {
   ok: boolean;

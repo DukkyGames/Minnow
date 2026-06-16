@@ -9,7 +9,9 @@ import path from 'node:path';
 import { createServer, request as httpRequestNode } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { handleBrainRequest, initBrainApi } from '../../server/brain/routes.js';
+import { shutdownAllLsp } from '../../server/lsp/manager.js';
 
 const PAGE_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -77,6 +79,8 @@ describe('brain API', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    shutdownAllLsp();
+    closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
