@@ -9,6 +9,7 @@ import {
 } from './instances';
 import { launchApp } from './router';
 import { RESEARCH_LIBRARY_INSTANCE_ID } from './research-constants';
+import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import type { AppId } from './types';
 
@@ -138,11 +139,14 @@ export function initDockLauncher(root: HTMLElement): () => void {
   }
 
   function syncShellState(): void {
+    const immersive = shouldSuppressDesktopChrome();
     const inApp = getOsView() === 'app';
     root.dataset.shellView = inApp ? 'app' : 'desktop';
     root.dataset.dockOpen = inApp ? (dockOpenInApp ? 'true' : 'false') : 'true';
-    revealBtn.hidden = !inApp || dockOpenInApp;
-    hideBtn.hidden = !inApp || !dockOpenInApp;
+    // Fullscreen apps and maximized windows hide the dock entirely.
+    root.hidden = immersive;
+    revealBtn.hidden = immersive || !inApp || dockOpenInApp;
+    hideBtn.hidden = immersive || !inApp || !dockOpenInApp;
   }
 
   function openDock(): void {
@@ -171,14 +175,22 @@ export function initDockLauncher(root: HTMLElement): () => void {
   document.addEventListener('keydown', onKeyDown);
 
   const unsubInstances = subscribeInstances(() => {
-    if (getOsView() === 'desktop') {
+    if (getOsView() === 'desktop' && !shouldSuppressDesktopChrome()) {
+      dockOpenInApp = false;
+    } else if (shouldSuppressDesktopChrome()) {
       dockOpenInApp = false;
     }
     syncShellState();
     syncDockTiles();
   });
   const unsubDesktop = subscribeDesktopState(syncDockTiles);
-  const unsubWindows = windowManager.subscribe(syncDockTiles);
+  const unsubWindows = windowManager.subscribe(() => {
+    if (shouldSuppressDesktopChrome()) {
+      dockOpenInApp = false;
+    }
+    syncShellState();
+    syncDockTiles();
+  });
 
   syncShellState();
   syncDockTiles();

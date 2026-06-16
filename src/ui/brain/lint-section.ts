@@ -4,7 +4,8 @@
 
 import { lintBrainWiki } from '../../brain/client';
 import type { BrainLintReport } from '../../brain/types';
-import { navigateBrainWikiPage } from './wiki-section';
+import { navigateBrainGraphPage, setGraphOrphanPaths } from './graph-section';
+import { openBrain } from '../brain-page';
 
 let bindingsDone = false;
 
@@ -20,13 +21,30 @@ function renderIssueList(
     title?: string;
   }>,
   emptyText: string,
+  options?: { graphLink?: boolean },
 ): void {
   const section = document.createElement('section');
   section.className = 'brain-lint-group';
+  const headingRow = document.createElement('div');
+  headingRow.className = 'brain-lint-group__head';
   const heading = document.createElement('h4');
   heading.className = 'brain-section-subtitle';
   heading.textContent = title;
-  section.append(heading);
+  headingRow.append(heading);
+
+  if (options?.graphLink && title === 'Orphans' && rows.length > 0) {
+    const graphBtn = document.createElement('button');
+    graphBtn.type = 'button';
+    graphBtn.className = 'brain-action-btn';
+    graphBtn.textContent = 'View in graph';
+    graphBtn.addEventListener('click', () => {
+      const paths = rows.map((r) => r.path).filter(Boolean) as string[];
+      setGraphOrphanPaths(paths);
+      openBrain('graph');
+    });
+    headingRow.append(graphBtn);
+  }
+  section.append(headingRow);
 
   if (!rows.length) {
     const ok = document.createElement('p');
@@ -46,7 +64,7 @@ function renderIssueList(
       btn.type = 'button';
       btn.className = 'brain-inline-link';
       btn.textContent = row.path;
-      btn.addEventListener('click', () => navigateBrainWikiPage(row.path!));
+      btn.addEventListener('click', () => navigateBrainGraphPage(row.path!));
       li.append(btn);
     } else if (row.from && row.target) {
       li.textContent = `${row.from} → [[${row.target}]]: ${row.summary}`;
@@ -69,7 +87,9 @@ function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
   meta.textContent = `${report.pageCount} pages · ${new Date(report.generatedAt).toLocaleString()}`;
   mount.append(meta);
 
-  renderIssueList(mount, 'Orphans', report.orphans.map((o) => ({ ...o, summary: o.title })), 'No orphan pages.');
+  renderIssueList(mount, 'Orphans', report.orphans.map((o) => ({ ...o, summary: o.title })), 'No orphan pages.', {
+    graphLink: true,
+  });
   renderIssueList(mount, 'Stale', report.stale.map((o) => ({ ...o, summary: o.title })), 'No stale pages.');
   renderIssueList(
     mount,

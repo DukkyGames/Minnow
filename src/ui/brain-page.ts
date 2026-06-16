@@ -3,14 +3,16 @@
  */
 
 import '../styles/brain-page.css';
+import '../styles/brain-graph.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
+import { closeBrainInspector } from './brain/inspector';
 import { renderBrainSection } from './brain/sections';
 
 export type BrainSectionId =
-  | 'wiki'
+  | 'graph'
   | 'edit'
   | 'log'
   | 'schema'
@@ -20,8 +22,13 @@ export type BrainSectionId =
   | 'code'
   | 'settings';
 
+/** Legacy hash segment still routed to graph home. */
+const LEGACY_SECTION_ALIASES: Record<string, BrainSectionId> = {
+  wiki: 'graph',
+};
+
 const SECTIONS: BrainSectionId[] = [
-  'wiki',
+  'graph',
   'edit',
   'log',
   'schema',
@@ -33,7 +40,7 @@ const SECTIONS: BrainSectionId[] = [
 ];
 
 const SECTION_LABELS: Record<BrainSectionId, string> = {
-  wiki: 'Wiki',
+  graph: 'Graph',
   edit: 'Edit',
   log: 'Log',
   schema: 'Schema',
@@ -44,7 +51,7 @@ const SECTION_LABELS: Record<BrainSectionId, string> = {
   settings: 'Settings',
 };
 
-let activeSection: BrainSectionId = 'wiki';
+let activeSection: BrainSectionId = 'graph';
 let staticBindingsDone = false;
 
 function getBrainRoot(): HTMLElement | null {
@@ -55,15 +62,20 @@ function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
 }
 
+function resolveSectionId(raw: string | undefined): BrainSectionId {
+  if (!raw) return 'graph';
+  if (SECTIONS.includes(raw as BrainSectionId)) return raw as BrainSectionId;
+  return LEGACY_SECTION_ALIASES[raw] ?? 'graph';
+}
+
 function parseHashSection(): BrainSectionId {
   const hash = window.location.hash.replace(/^#\/?/, '');
   const match = hash.match(/^(?:app\/brain|brain)(?:\/([\w-]+))?/);
-  const id = match?.[1] as BrainSectionId | undefined;
-  if (id && SECTIONS.includes(id)) return id;
-  return 'wiki';
+  return resolveSectionId(match?.[1]);
 }
 
 function setActiveSection(section: BrainSectionId, options?: { editPath?: string }): void {
+  const prevSection = activeSection;
   activeSection = section;
   for (const id of SECTIONS) {
     const panel = document.getElementById(`brainSection-${id}`);
@@ -74,11 +86,14 @@ function setActiveSection(section: BrainSectionId, options?: { editPath?: string
     nav?.setAttribute('aria-current', id === section ? 'page' : 'false');
   }
 
-  if (!isOsEmbedded()) {
-    const nextHash = `#/app/brain/${section}`;
-    if (window.location.hash !== nextHash) {
-      window.location.hash = nextHash;
-    }
+  if (prevSection !== section) {
+    const inspector = document.getElementById('brainInspector');
+    if (inspector) closeBrainInspector(inspector);
+  }
+
+  const nextHash = `#/app/brain/${section}`;
+  if (window.location.hash !== nextHash) {
+    window.location.hash = nextHash;
   }
 
   void renderBrainSection(section, options);
@@ -164,6 +179,13 @@ export function openBrainEditForPath(relPath: string): void {
   openBrain('edit', { editPath: relPath });
 }
 
+/** Open Edit for a new wiki page (manual creation entry point). */
+export function openBrainNewPage(): void {
+  openBrain('edit', { editPath: 'facts/' });
+  const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
+  pathEl?.focus();
+}
+
 /** Close Brain and return to chat or desktop. */
 export function closeBrain(options?: { skipNavigate?: boolean }): void {
   const root = getBrainRoot();
@@ -190,7 +212,7 @@ export function closeBrain(options?: { skipNavigate?: boolean }): void {
 }
 
 export function openBrainFromTopbar(): void {
-  openBrain('wiki');
+  openBrain('graph');
 }
 
 export function isBrainPageOpen(): boolean {

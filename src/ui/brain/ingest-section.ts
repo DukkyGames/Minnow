@@ -57,7 +57,7 @@ function bindIngestSection(): void {
         btn.addEventListener('click', () => {
           void import('./wiki-section').then((m) => {
             m.navigateBrainWikiPage(path);
-            void import('../brain-page').then((bp) => bp.openBrain('wiki'));
+            void import('../brain-page').then((bp) => bp.openBrain('graph'));
           });
         });
         li.append(btn);

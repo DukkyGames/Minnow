@@ -204,7 +204,11 @@ export async function handleCodeIndexRequest(req, res, pathname) {
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    sendJson(res, 500, { error: message });
+    const status =
+      err && typeof err === 'object' && 'statusCode' in err && typeof err.statusCode === 'number'
+        ? err.statusCode
+        : 500;
+    sendJson(res, status, { error: message });
     return true;
   }
 }

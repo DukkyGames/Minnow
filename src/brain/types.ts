@@ -155,15 +155,17 @@ export interface BrainCodeReadSymbolResult {
 export interface BrainCodeGitHookStatus {
   hookPath: string;
   installed: boolean;
+  isGitRepo?: boolean;
   scriptPath: string;
 }
 
 /** POST /api/brain/code/git-hook/install. */
 export interface BrainCodeGitHookInstallResult {
-  ok: boolean;
-  installed: boolean;
-  hookPath: string;
+  ok?: boolean;
+  installed?: boolean;
+  hookPath?: string;
   alreadyPresent?: boolean;
+  error?: string;
 }
 
 /** POST /api/brain/code/reindex. */

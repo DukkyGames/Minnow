@@ -3,7 +3,7 @@
  */
 
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
-import { getWikiSelectedPath, setWikiSelectedPath } from './wiki-section';
+import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
 
 let bindingsDone = false;
 
@@ -20,6 +20,10 @@ function bindEditSection(): void {
 
   document.getElementById('brainEditLoad')?.addEventListener('click', () => {
     void loadEditForm();
+  });
+
+  document.getElementById('brainEditNew')?.addEventListener('click', () => {
+    void prepareNewPage();
   });
 
   document.getElementById('brainEditSave')?.addEventListener('click', () => {
@@ -56,6 +60,22 @@ async function loadEditForm(): Promise<void> {
   setEditStatus('ok', `Loaded ${relPath}`);
 }
 
+/** Reset the form for manual page creation. */
+async function prepareNewPage(): Promise<void> {
+  const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
+  const titleEl = document.getElementById('brainEditTitle') as HTMLInputElement | null;
+  const tagsEl = document.getElementById('brainEditTags') as HTMLInputElement | null;
+  const bodyEl = document.getElementById('brainEditBody') as HTMLTextAreaElement | null;
+  if (!pathEl || !titleEl || !tagsEl || !bodyEl) return;
+
+  pathEl.value = 'facts/';
+  titleEl.value = '';
+  tagsEl.value = '';
+  bodyEl.value = '';
+  setEditStatus('ok', 'New page — enter a path, title, and body, then save.');
+  pathEl.focus();
+}
+
 async function saveEditForm(): Promise<void> {
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
   const titleEl = document.getElementById('brainEditTitle') as HTMLInputElement | null;
@@ -90,7 +110,7 @@ async function saveEditForm(): Promise<void> {
     return;
   }
 
-  setWikiSelectedPath(relPath);
+  setGraphSelectedPath(relPath);
   setEditStatus('ok', `Saved ${relPath}`);
 }
 
@@ -100,11 +120,15 @@ export async function renderEditSection(prefillPath?: string): Promise<void> {
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
   if (pathEl && prefillPath) {
     pathEl.value = prefillPath;
-    await loadEditForm();
+    if (prefillPath.endsWith('/')) {
+      await prepareNewPage();
+    } else {
+      await loadEditForm();
+    }
     return;
   }
   if (pathEl && !pathEl.value.trim()) {
-    const fromWiki = getWikiSelectedPath();
-    if (fromWiki) pathEl.value = fromWiki;
+    const fromGraph = getGraphSelectedPath();
+    if (fromGraph) pathEl.value = fromGraph;
   }
 }
