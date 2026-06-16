@@ -53,10 +53,20 @@ export function readForceGraphTheme(root: HTMLElement = document.documentElement
   return {
     stageBg: pick('--brain-stage-bg', pick('--mn-bg', 'oklch(97% 0 0)')),
     nodePage: pick('--brain-node-page', 'oklch(55% 0.08 250)'),
+    nodePageMuted: pick('--brain-node-page-muted', pick('--brain-node-page', 'oklch(55% 0.08 250)')),
     nodeTag: pick('--brain-node-tag', 'oklch(62% 0.1 155)'),
+    nodeTagMuted: pick('--brain-node-tag-muted', pick('--brain-node-tag', 'oklch(62% 0.1 155)')),
     nodeSymbol: pick('--brain-node-symbol', 'oklch(58% 0.12 285)'),
+    nodeSymbolMuted: pick(
+      '--brain-node-symbol-muted',
+      pick('--brain-node-symbol', 'oklch(58% 0.12 285)'),
+    ),
     nodeActive: pick('--brain-node-active', 'oklch(45% 0.14 250)'),
     nodeOrphan: pick('--brain-node-orphan', 'oklch(62% 0.16 25)'),
+    nodeOrphanMuted: pick(
+      '--brain-node-orphan-muted',
+      pick('--brain-node-orphan', 'oklch(62% 0.16 25)'),
+    ),
     edge: pick('--brain-edge', 'oklch(70% 0.02 250 / 0.45)'),
     edgeHighlight: pick('--brain-edge-hi', 'oklch(50% 0.06 250 / 0.85)'),
     label: pick('--mn-fg', 'oklch(32% 0.02 250)'),
@@ -109,12 +119,12 @@ export function createForceGraph(
     return 8;
   };
 
-  const nodeColor = (node: GraphNode): string => {
-    if (node.orphan) return theme.nodeOrphan;
+  const nodeColor = (node: GraphNode, dimmed = false): string => {
     if (node.id === selectedId) return theme.nodeActive;
-    if (node.kind === 'tag') return theme.nodeTag;
-    if (node.kind === 'symbol') return theme.nodeSymbol;
-    return theme.nodePage;
+    if (node.orphan) return dimmed ? theme.nodeOrphanMuted : theme.nodeOrphan;
+    if (node.kind === 'tag') return dimmed ? theme.nodeTagMuted : theme.nodeTag;
+    if (node.kind === 'symbol') return dimmed ? theme.nodeSymbolMuted : theme.nodeSymbol;
+    return dimmed ? theme.nodePageMuted : theme.nodePage;
   };
 
   const screenToGraph = (clientX: number, clientY: number): { x: number; y: number } => {
@@ -140,6 +150,105 @@ export function createForceGraph(
       }
     }
     return best;
+  };
+
+  /**
+   * Circle/rect intersection used to pick label positions that avoid nearby nodes.
+   */
+  const circleIntersectsRect = (
+    cx: number,
+    cy: number,
+    radius: number,
+    rx: number,
+    ry: number,
+    rw: number,
+    rh: number,
+  ): boolean => {
+    const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+    const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    return dx * dx + dy * dy <= radius * radius;
+  };
+
+  /**
+   * Rounded label bubble path helper for the node callout card.
+   */
+  const addRoundedRectPath = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ): void => {
+    const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  /**
+   * Pick a label position that stays in view and avoids node overlaps.
+   */
+  const placeLabelBubble = (
+    node: SimNode,
+    boxWidth: number,
+    boxHeight: number,
+    viewWidth: number,
+    viewHeight: number,
+  ): { x: number; y: number } => {
+    const gap = 12;
+    const margin = 8;
+    const r = nodeRadius(node);
+    const minX = (-transform.x) / transform.k + margin;
+    const minY = (-transform.y) / transform.k + margin;
+    const maxX = (viewWidth - transform.x) / transform.k - margin - boxWidth;
+    const maxY = (viewHeight - transform.y) / transform.k - margin - boxHeight;
+    const loX = Math.min(minX, maxX);
+    const hiX = Math.max(minX, maxX);
+    const loY = Math.min(minY, maxY);
+    const hiY = Math.max(minY, maxY);
+    const clamp = (value: number, lo: number, hi: number) =>
+      Math.max(lo, Math.min(hi, value));
+
+    const candidates = [
+      { x: node.x! - boxWidth / 2, y: node.y! + r + gap, weight: 0 },
+      { x: node.x! - boxWidth / 2, y: node.y! - r - gap - boxHeight, weight: 1 },
+      { x: node.x! + r + gap, y: node.y! - boxHeight / 2, weight: 2 },
+      { x: node.x! - r - gap - boxWidth, y: node.y! - boxHeight / 2, weight: 3 },
+    ];
+
+    let best = { x: candidates[0].x, y: candidates[0].y, score: Number.POSITIVE_INFINITY };
+    for (const candidate of candidates) {
+      const x = clamp(candidate.x, loX, hiX);
+      const y = clamp(candidate.y, loY, hiY);
+      const shiftPenalty = Math.hypot(x - candidate.x, y - candidate.y);
+      let overlapPenalty = 0;
+      for (const other of nodes) {
+        if (other.id === node.id || other.x == null || other.y == null) continue;
+        const intersects = circleIntersectsRect(
+          other.x,
+          other.y,
+          nodeRadius(other) + 2,
+          x - 4,
+          y - 4,
+          boxWidth + 8,
+          boxHeight + 8,
+        );
+        if (intersects) overlapPenalty += 1;
+      }
+      const score = overlapPenalty * 120 + shiftPenalty * 2 + candidate.weight;
+      if (score < best.score) best = { x, y, score };
+    }
+    return { x: best.x, y: best.y };
   };
 
   const draw = (): void => {
@@ -182,32 +291,75 @@ export function createForceGraph(
         activeHighlight && !activeHighlight.has(node.id) && (focusId || hoverId || selectedId);
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = nodeColor(node);
-      ctx.globalAlpha = dimmed ? 0.28 : 1;
-      ctx.fill();
-      if (active && !reducedMotion) {
-        ctx.shadowColor = theme.glow;
-        ctx.shadowBlur = 14;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
+      ctx.fillStyle = nodeColor(node, Boolean(dimmed));
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = active ? theme.nodeActive : theme.edgeHighlight;
-      ctx.lineWidth = active ? 1.5 : 0.75;
+      ctx.fill();
+      if (active) {
+        // Keep selection obvious regardless of motion preference.
+        ctx.save();
+        ctx.shadowColor = theme.glow;
+        ctx.shadowBlur = 18;
+        ctx.fill();
+        ctx.restore();
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = theme.glow;
+        ctx.lineWidth = 1.75;
+        ctx.stroke();
+      }
+      ctx.strokeStyle = active ? theme.nodeActive : dimmed ? theme.edge : theme.edgeHighlight;
+      ctx.lineWidth = active ? 1.5 : dimmed ? 0.65 : 0.75;
       ctx.stroke();
     }
 
     const labelNode = nodes.find((n) => n.id === (hoverId ?? selectedId));
     if (labelNode && labelNode.x != null && labelNode.y != null) {
-      ctx.font = '600 11px system-ui, sans-serif';
-      ctx.fillStyle = theme.label;
-      ctx.textAlign = 'center';
+      const titleFont = '600 12px system-ui, sans-serif';
+      const sublabelFont = '500 10px ui-monospace, monospace';
+      const titleLineHeight = 14;
+      const sublabelLineHeight = 12;
+      const lineGap = 4;
+      const padX = 10;
+      const padY = 8;
+
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(labelNode.label, labelNode.x, labelNode.y + nodeRadius(labelNode) + 4);
+      ctx.font = titleFont;
+      const titleWidth = ctx.measureText(labelNode.label).width;
+      let sublabelWidth = 0;
       if (labelNode.sublabel) {
-        ctx.font = '400 10px ui-monospace, monospace';
+        ctx.font = sublabelFont;
+        sublabelWidth = ctx.measureText(labelNode.sublabel).width;
+      }
+
+      const boxWidth = Math.max(136, Math.ceil(Math.max(titleWidth, sublabelWidth) + padX * 2));
+      const boxHeight =
+        padY * 2 +
+        titleLineHeight +
+        (labelNode.sublabel ? lineGap + sublabelLineHeight : 0);
+      const boxPos = placeLabelBubble(labelNode, boxWidth, boxHeight, w, h);
+
+      addRoundedRectPath(boxPos.x, boxPos.y, boxWidth, boxHeight, 8);
+      ctx.fillStyle = theme.stageBg;
+      ctx.globalAlpha = 0.94;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = theme.edgeHighlight;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.font = titleFont;
+      ctx.fillStyle = theme.label;
+      ctx.fillText(labelNode.label, boxPos.x + padX, boxPos.y + padY);
+      if (labelNode.sublabel) {
+        ctx.font = sublabelFont;
         ctx.fillStyle = theme.labelMuted;
-        ctx.fillText(labelNode.sublabel, labelNode.x, labelNode.y + nodeRadius(labelNode) + 18);
+        ctx.fillText(
+          labelNode.sublabel,
+          boxPos.x + padX,
+          boxPos.y + padY + titleLineHeight + lineGap,
+        );
       }
     }
 
@@ -289,9 +441,10 @@ export function createForceGraph(
           .distance((l) => (l.kind === 'tag' ? 48 : l.kind === 'calls' ? 72 : 64))
           .strength(0.55),
       )
-      .force('charge', forceManyBody().strength(-120))
+      .force('charge', forceManyBody().strength(-145))
       .force('center', forceCenter(cx, cy))
-      .force('collide', forceCollide<SimNode>().radius((d) => nodeRadius(d) + 6))
+      // Wider collision padding keeps bubbles from stacking in dense neighborhoods.
+      .force('collide', forceCollide<SimNode>().radius((d) => nodeRadius(d) + 10))
       .alpha(reducedMotion ? 0 : 0.9)
       .alphaDecay(reducedMotion ? 1 : 0.04);
 
