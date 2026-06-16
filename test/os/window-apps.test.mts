@@ -25,11 +25,12 @@ import {
   windowManager,
 } from '../../src/os/window-manager.ts';
 
-const WINDOW_APPS = ['settings', 'models', 'bench', 'compare', 'calendar'] as const;
+const WINDOW_APPS = ['settings', 'models', 'brain', 'bench', 'compare', 'calendar'] as const;
 
 const CONTENT_BY_APP: Record<(typeof WINDOW_APPS)[number], string> = {
   settings: 'settingsView',
   models: 'modelsView',
+  brain: 'brainView',
   bench: 'benchmarkView',
   compare: 'compareView',
   calendar: 'calendarView',
@@ -45,6 +46,7 @@ function setupWindowAppsDom(win: import('happy-dom').Window): void {
     <div id="appBody"></div>
     <main id="settingsView" class="settings-page mn-os-app-layer" data-os-app="settings"></main>
     <main id="modelsView" class="models-page mn-os-app-layer" data-os-app="models"></main>
+    <main id="brainView" class="brain-page mn-os-app-layer" data-os-app="brain"></main>
     <main id="benchmarkView" class="benchmark-page mn-os-app-layer" data-os-app="bench"></main>
     <main id="compareView" class="compare-page mn-os-app-layer" data-os-app="compare"></main>
     <main id="calendarView" class="calendar-page mn-os-app-layer" data-os-app="calendar"></main>

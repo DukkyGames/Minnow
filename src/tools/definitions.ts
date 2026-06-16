@@ -1304,15 +1304,199 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'recall_chat_context',
+    label: 'Recall chat context',
+    description:
+      'Search archived turns for the active chat via Brain (browser-side).',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'recall_chat_context',
+      'Recall facts from archived chat turns stored in the Brain wiki for the active chat. Returns verbatim source quotes and page paths. Use when you need a decision or detail from earlier in a long conversation that is no longer in the live context.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language recall query',
+        },
+        topK: {
+          type: 'number',
+          description: 'Max facts to return (default 5)',
+        },
+        scope: {
+          type: 'string',
+          enum: ['chat', 'workspace'],
+          description:
+            'Retrieve scope: chat (default, active chat only) or workspace (all archived chats in workspace)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'recall_turn_full',
+    label: 'Recall turn full',
+    description: 'Reassemble one original chat turn verbatim (browser-side).',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'recall_turn_full',
+      'Reassemble the full verbatim text of a prior user turn (0-based index) from chat runs or history. Returns token estimate so you know the cost before injecting.',
+      {
+        turnIndex: {
+          type: 'number',
+          description: '0-based user turn index to recall',
+        },
+      },
+      ['turnIndex'],
+    ),
+  },
+  {
+    id: 'brain_search',
+    label: 'Brain search',
+    description:
+      'Semantic/hybrid search over the Brain wiki (workspace-scoped). Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_search',
+      'Search the Brain wiki for relevant pages using keyword and optional semantic hybrid retrieval. Use for fuzzy prose lookup (why, decisions, domain model, gotchas). Scoped to the active workspace plus global pages.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language search query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max pages to return (default 8, max 20)',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tag filter',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'brain_read_page',
+    label: 'Brain read page',
+    description: 'Read a Brain wiki page by relative path. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_read_page',
+      'Read one wiki page from ~/.minnow/brain/pages by relative path (e.g. facts/preference.md, edgeflight/overview.md).',
+      {
+        path: {
+          type: 'string',
+          description: 'Relative path under pages/ (e.g. facts/api-preference.md)',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'brain_list',
+    label: 'Brain list pages',
+    description: 'List the Brain wiki page tree. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_list',
+      'Return the nested tree of wiki pages (metadata only) under ~/.minnow/brain/pages/.',
+      {},
+    ),
+  },
+  {
+    id: 'brain_write_page',
+    label: 'Brain write page',
+    description: 'Create or update a Brain wiki page. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_write_page',
+      'Create or update a wiki page (YAML frontmatter + markdown body). Use for durable knowledge: decisions, domain model, conventions, gotchas. Paths are sandboxed under ~/.minnow/brain/pages/.',
+      {
+        path: {
+          type: 'string',
+          description: 'Relative path under pages/ ending in .md',
+        },
+        title: {
+          type: 'string',
+          description: 'Page title',
+        },
+        body: {
+          type: 'string',
+          description: 'Markdown body (may include [[wikilinks]])',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags for retrieval',
+        },
+        summary: {
+          type: 'string',
+          description: 'Optional one-line summary for the catalog',
+        },
+      },
+      ['path', 'title', 'body'],
+    ),
+  },
+  {
+    id: 'brain_append_log',
+    label: 'Brain append log',
+    description: 'Append a changelog entry to brain log.md. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_append_log',
+      'Append a timestamped line to ~/.minnow/brain/log.md (wiki changelog).',
+      {
+        entry: {
+          type: 'string',
+          description: 'Changelog note to append',
+        },
+      },
+      ['entry'],
+    ),
+  },
+  {
+    id: 'brain_ingest_source',
+    label: 'Brain ingest source',
+    description: 'Ingest a non-code source into the Brain wiki. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_ingest_source',
+      'Store raw source text under ~/.minnow/brain/sources/ and synthesize one or more wiki pages from it.',
+      {
+        content: {
+          type: 'string',
+          description: 'Raw source text to ingest',
+        },
+        filename: {
+          type: 'string',
+          description: 'Optional original filename hint',
+        },
+        title: {
+          type: 'string',
+          description: 'Optional source title for synthesis',
+        },
+      },
+      ['content'],
+    ),
+  },
+  {
     id: 'save_memory',
     label: 'Save memory',
     description:
-      'Persist a note for future chats (preferences, decisions, project facts). Requires npm start.',
+      'Persist a discrete fact to pages/facts/ (alias for brain_write_page). Requires npm start.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'save_memory',
-      'Save a durable memory entry under ~/.minnow/memory for retrieval in later sessions. Use when the user asks you to remember something, or when you learn a stable preference, convention, or project fact worth carrying into future chats. Do not save secrets, one-off task state, or ephemeral details.',
+      'Save a durable fact under ~/.minnow/brain/pages/facts/ for retrieval in later sessions. Alias for writing a facts/ wiki page. Use when the user asks you to remember something, or when you learn a stable preference, convention, or project fact. Do not save secrets, one-off task state, or ephemeral details.',
       {
         title: {
           type: 'string',
@@ -1329,6 +1513,109 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['title', 'body'],
+    ),
+  },
+  {
+    id: 'repo_map',
+    label: 'Repo map',
+    description:
+      'Token-budgeted signature map of the indexed workspace codebase. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'repo_map',
+      'Return a low-resolution map of top-ranked symbols (signatures only) within a token budget. Start code navigation tasks here, then zoom with find_symbol / read_symbol. Falls back to reindex when cold.',
+      {
+        focus: {
+          type: 'string',
+          description: 'Optional substring to focus the map (file path or symbol name)',
+        },
+        token_budget: {
+          type: 'number',
+          description: 'Optional token budget override (default from config.brain.code.repoMapTokenBudget)',
+        },
+        focus_files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional file paths to bias PageRank personalization',
+        },
+      },
+    ),
+  },
+  {
+    id: 'find_symbol',
+    label: 'Find symbol',
+    description: 'Search the code index for a symbol definition. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'find_symbol',
+      'Find symbol definitions by name using the Brain code index (FTS5) with LSP workspace-symbol fallback. Use for where-is / what-is-this-symbol questions. Use grep for exact string matches.',
+      {
+        query: {
+          type: 'string',
+          description: 'Symbol name or search query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max results (default 15)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'who_calls',
+    label: 'Who calls',
+    description: 'List incoming call edges for a symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'who_calls',
+      'Return exact call sites that invoke a symbol (graph edges from the code index, not string search).',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
+    ),
+  },
+  {
+    id: 'read_symbol',
+    label: 'Read symbol',
+    description: 'Read the current source span for a symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'read_symbol',
+      'Read the live source lines for a symbol definition from disk (not a cached span). Use after find_symbol to zoom in.',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
+    ),
+  },
+  {
+    id: 'explain_symbol',
+    label: 'Explain symbol',
+    description: 'Find wiki pages anchored to a code symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'explain_symbol',
+      'Return Brain wiki pages whose anchors[] explain a symbol (code → meaning bridge). Use before read_symbol when you need design context for implementation code.',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<qualified.name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
     ),
   },
   {

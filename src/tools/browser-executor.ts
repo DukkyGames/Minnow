@@ -19,6 +19,8 @@ import {
   WEB_TEXT_MAX_BYTES,
 } from '../lib/fetch-web-content.mjs';
 import { toolLaunchMinnowApp } from './os-launch-tool';
+import { toolRecallChatContext } from './recall-chat-context';
+import { toolRecallTurnFull } from './recall-turn-full';
 
 /** Allowed characters for safe math evaluation (digits, operators, whitespace, commas). */
 const SAFE_CALC_CHARS = /^[0-9+\-*/().%\s,]+$/;
@@ -56,6 +58,10 @@ export async function executeBrowserTool(
         return toolGetSystemInfo();
       case 'launch_minnow_app':
         return toolLaunchMinnowApp(args);
+      case 'recall_chat_context':
+        return await toolRecallChatContext(args);
+      case 'recall_turn_full':
+        return toolRecallTurnFull(args);
       default:
         return `Error: unknown browser tool "${name}"`;
     }

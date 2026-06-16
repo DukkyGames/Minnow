@@ -35,5 +35,5 @@ export async function toolSaveMemory(args) {
     source: 'agent',
   });
 
-  return `Saved memory "${entry.title}" (id: ${entry.id}). It will appear in future chats when memory retrieval runs.`;
+  return `Saved memory "${entry.title}" (id: ${entry.id}) under pages/facts/. It will appear in future chats when Brain retrieval runs.`;
 }

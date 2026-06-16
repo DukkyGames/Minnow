@@ -870,6 +870,7 @@ async function renderWorkAgentsSection(): Promise<void> {
         initialDisabled: agent.disabled === true,
         initialMaxInputTokens: agent.maxInputTokens ?? null,
         initialContextPolicy: agent.contextEnforcementPolicy ?? 'slide',
+        initialArchive: agent.archive,
         onModelSaved: () => {
           void renderWorkAgentsSection();
         },

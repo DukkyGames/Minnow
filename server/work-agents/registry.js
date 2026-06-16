@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parsePromptMarkdown } from '../prompts/parse.js';
 import { getMinnowHome } from '../config/home.js';
+import { normalizeArchiveConfig } from '../config/validators.js';
 import {
   assertValidWorkAgentId,
   builtinWorkAgentsDir,
@@ -34,8 +35,17 @@ function parseExtendedRecord(raw) {
         values.push(lines[j].trimStart().slice(2).trim());
         j += 1;
       }
-      if (values.length) record[key] = values;
-      i = j - 1;
+      if (values.length) {
+        record[key] = values;
+        i = j - 1;
+        continue;
+      }
+      if (key === 'archive') {
+        const nested = parseNestedScalarBlock(lines, i);
+        record.archive = nested.record;
+        i = nested.nextIndex;
+        continue;
+      }
       continue;
     }
 
@@ -55,6 +65,34 @@ function parseNullableString(value) {
   if (value === null || value === 'null' || value === '') return null;
   if (typeof value === 'string' && value.trim()) return value.trim();
   return null;
+}
+
+function parseNestedScalarBlock(lines, startIndex) {
+  const record = {};
+  let i = startIndex + 1;
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      i += 1;
+      continue;
+    }
+    if (!/^\s/.test(line)) break;
+    const colon = trimmed.indexOf(':');
+    if (colon <= 0) break;
+    const key = trimmed.slice(0, colon).trim();
+    let value = trimmed.slice(colon + 1).trim();
+    if (value === 'true') value = true;
+    else if (value === 'false') value = false;
+    else if (value === 'null') value = null;
+    else {
+      const num = Number(value);
+      if (value !== '' && Number.isFinite(num)) value = num;
+    }
+    record[key] = value;
+    i += 1;
+  }
+  return { record, nextIndex: i - 1 };
 }
 
 function parseWorkAgentMeta(raw, relativePath) {
@@ -81,9 +119,14 @@ function parseWorkAgentMeta(raw, relativePath) {
 
   const policy = ext.contextEnforcementPolicy;
   const contextEnforcementPolicy =
-    policy === 'summarize' || policy === 'slide' || policy === 'truncate'
+    policy === 'summarize' ||
+    policy === 'slide' ||
+    policy === 'truncate' ||
+    policy === 'archive'
       ? policy
       : 'slide';
+
+  const archive = normalizeArchiveConfig(ext.archive);
 
   return {
     id: parsed.id,
@@ -98,17 +141,39 @@ function parseWorkAgentMeta(raw, relativePath) {
     disabled: ext.disabled === true,
     maxInputTokens,
     contextEnforcementPolicy,
+    ...(archive ? { archive } : {}),
   };
 }
 
 function mergeDefinition(builtin, override) {
   if (!override) return { ...builtin };
+  const mergedArchive =
+    override.archive !== undefined
+      ? { ...(builtin.archive ?? {}), ...override.archive }
+      : builtin.archive;
   return {
     ...builtin,
     providerId:
       override.providerId !== undefined ? override.providerId : builtin.providerId,
     modelId: override.modelId !== undefined ? override.modelId : builtin.modelId,
     disabled: override.disabled !== undefined ? override.disabled : builtin.disabled,
+    maxInputTokens:
+      override.maxInputTokens !== undefined
+        ? override.maxInputTokens
+        : builtin.maxInputTokens,
+    contextEnforcementPolicy:
+      override.contextEnforcementPolicy !== undefined
+        ? override.contextEnforcementPolicy
+        : builtin.contextEnforcementPolicy,
+    minRecentTurns:
+      override.minRecentTurns !== undefined
+        ? override.minRecentTurns
+        : builtin.minRecentTurns,
+    summaryReserveTokens:
+      override.summaryReserveTokens !== undefined
+        ? override.summaryReserveTokens
+        : builtin.summaryReserveTokens,
+    ...(mergedArchive !== undefined ? { archive: mergedArchive } : {}),
   };
 }
 

@@ -13,6 +13,7 @@ import {
 import { getCurrentRoute } from './router';
 import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
+import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { windowManager } from './window-manager';
 import { syncSchedulerSidePanel } from './scheduler-side-panel';
 import { WINDOW_MOUNTED_APPS, runWindowTeardown } from './window-mounted-apps';
@@ -25,6 +26,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   bench: 'benchmarkView',
   compare: 'compareView',
   models: 'modelsView',
+  brain: 'brainView',
   scheduler: 'schedulerView',
   calendar: 'calendarView',
   email: 'emailView',
@@ -95,6 +97,7 @@ function closeAllAppPages(): void {
     'benchmarkView',
     'compareView',
     'modelsView',
+    'brainView',
     'schedulerView',
     'calendarView',
     'emailView',
@@ -154,6 +157,13 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'models': {
       const { openModels } = await import('../ui/models-page');
       openModels((route.modelsSection ?? options?.modelsSection ?? 'recommend') as import('../ui/models-page').ModelsSectionId);
+      break;
+    }
+    case 'brain': {
+      const { openBrain } = await import('../ui/brain-page');
+      openBrain(
+        (route.brainSection ?? options?.brainSection ?? 'graph') as import('../ui/brain-page').BrainSectionId,
+      );
       break;
     }
     case 'scheduler': {
@@ -331,8 +341,10 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
   syncSchedulerSidePanel();
 
   const blur = shouldBlurDesktop(snapshot);
+  const immersive = shouldSuppressDesktopChrome();
   stage.classList.toggle('is-in-app', blur);
   stage.classList.toggle('is-in-app-fullscreen', blur);
+  stage.classList.toggle('is-immersive-app', immersive);
 
   if (snapshot.view === 'desktop') {
     hideAllLayers();
@@ -402,6 +414,7 @@ export function initAppHost(): void {
   mountAppLayers();
   windowManager.ensureLayer();
   subscribeInstances((snap) => syncFromSnapshot(snap));
+  windowManager.subscribe(() => syncFromSnapshot(getInstanceSnapshot()));
   syncFromSnapshot(getInstanceSnapshot());
 }
 

@@ -1,4 +1,5 @@
 import { STATS_STRIP_OPEN_KEY } from '../constants';
+import { getArchiveDisabledReason } from '../chat/archive/index';
 import { getActiveChat } from '../state/sessions';
 import { formatUsd } from '../usage/token-ledger';
 import type { LastStats, ModelInfo, Stats, Usage } from '../types';
@@ -114,7 +115,14 @@ export function updateStatsExpandPreview(): void {
   if (!preview) return;
   const tps = document.getElementById('stripTPS')!.textContent.trim();
   const total = document.getElementById('stripTotal')!.textContent.trim();
-  preview.textContent = `${tps} t/s · ${total} tokens`;
+  const trim = getActiveChat().lastContextTrim;
+  const archiveChip =
+    trim?.archived != null && trim.archived > 0
+      ? ` · archive: ${trim.archived}→${trim.recalled ?? 0}`
+      : '';
+  const archiveDisabled = getArchiveDisabledReason();
+  const disabledChip = archiveDisabled ? ` · archive: disabled — ${archiveDisabled}` : '';
+  preview.textContent = `${tps} t/s · ${total} tokens${archiveChip}${disabledChip}`;
 }
 
 /** Refresh bottom metrics strip and token bars from latest turn data. */

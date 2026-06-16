@@ -1,5 +1,7 @@
 /**
  * HTTP handlers for /api/memory/* (Vite configureServer middleware).
+ * Thin adapter delegating to the brain wiki store (MIN-B3).
+ * TRACKING: remove when UI and tools migrate to /api/brain (MIN-B4+).
  */
 
 import {
@@ -15,7 +17,7 @@ import {
   loadAllEntriesWithBodies,
   ensureMemoryStore,
 } from './store.js';
-import { retrieveMemoryBlock, retrieveMemoryBlockHybrid } from './retrieve.js';
+import { retrieveMemoryBlockHybrid } from './retrieve.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
@@ -27,7 +29,7 @@ import {
   reindexAllMemoryEntries,
 } from './vector-store.js';
 import { clearReindexNeeded } from './vector-sync.js';
-import { handleSynthesisRequest } from './synthesis-routes.js';
+import { handleSynthesisRequest } from '../brain/synthesis-routes.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -298,7 +300,7 @@ export async function handleMemoryRequest(req, res, pathname) {
   }
 }
 
-/** Startup hook: ensure memory store layout exists. */
+/** Startup hook: ensure memory adapter + brain store layout exists. */
 export async function initMemoryApi() {
   await ensureMemoryStore();
 }

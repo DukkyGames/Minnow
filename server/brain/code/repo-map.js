@@ -1,0 +1,104 @@
+/**
+ * Token-budgeted repo map rendering from ranked symbols.
+ */
+
+import { estimateTokens } from './rank.js';
+
+/**
+ * Render signature-only lines until the token budget is exhausted.
+ * Symbols must be pre-sorted by rank (pagerank DESC) — output follows that order
+ * so high-value symbols are not displaced by alphabetical file sorting.
+ * @param {Array<{
+ *   id: string,
+ *   file: string,
+ *   signature: string,
+ *   pagerank?: number,
+ *   kind?: string,
+ * }>} symbols — pre-sorted by rank descending
+ * @param {number} tokenBudget
+ * @param {{ focus?: string }} [opts]
+ */
+export function renderRepoMap(symbols, tokenBudget, opts = {}) {
+  const budget = Math.max(50, Math.floor(tokenBudget));
+  const lines = [];
+  let used = 0;
+  const focus = opts.focus?.trim().toLowerCase();
+
+  if (focus) {
+    lines.push(`# Repo map (focus: ${opts.focus})`);
+    used += estimateTokens(lines[0]);
+  } else {
+    lines.push('# Repo map');
+    used += estimateTokens(lines[0]);
+  }
+
+  let currentFile = null;
+  let matched = 0;
+
+  for (const sym of symbols) {
+    if (focus) {
+      const hay = `${sym.id} ${sym.file} ${sym.signature}`.toLowerCase();
+      if (!hay.includes(focus)) continue;
+    }
+    matched += 1;
+
+    if (sym.file !== currentFile) {
+      currentFile = sym.file;
+      const header = `\n## ${currentFile}`;
+      const headerTokens = estimateTokens(header);
+      if (used + headerTokens > budget) break;
+      lines.push(header);
+      used += headerTokens;
+    }
+
+    const sig = sym.signature?.trim() || `${sym.kind ?? 'symbol'} ${sym.id}`;
+    const line = `- ${sig}`;
+    const lineTokens = estimateTokens(line);
+    if (used + lineTokens > budget) {
+      lines.push('- … (truncated to token budget)');
+      return { text: lines.join('\n'), truncated: true, tokenEstimate: used };
+    }
+    lines.push(line);
+    used += lineTokens;
+  }
+
+  if (matched === 0 && focus) {
+    lines.push('\n(no symbols matched focus — try grep or a broader term)');
+    return { text: lines.join('\n'), truncated: false, tokenEstimate: used };
+  }
+
+  if (lines.length === 1) {
+    lines.push('\n(no indexed symbols — run reindex or use grep)');
+  }
+
+  return { text: lines.join('\n'), truncated: false, tokenEstimate: used };
+}
+
+/**
+ * Score how many expected navigation targets appear in the rendered map text.
+ * Used by MIN-B11 repo-map benchmarks (higher is better within the same budget).
+ * @param {string} mapText
+ * @param {string[]} expectedNeedles — symbol names or signatures agents need
+ */
+export function scoreRepoMapHits(mapText, expectedNeedles) {
+  const hay = String(mapText ?? '').toLowerCase();
+  let hits = 0;
+  for (const needle of expectedNeedles) {
+    if (hay.includes(String(needle).toLowerCase())) hits += 1;
+  }
+  return hits;
+}
+
+/**
+ * Earliest line index (0-based) where a needle appears, or -1 when absent.
+ * @param {string} mapText
+ * @param {string} needle
+ */
+export function firstLineIndexForNeedle(mapText, needle) {
+  const lines = String(mapText ?? '').split(/\r?\n/);
+  const target = String(needle).toLowerCase();
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].toLowerCase().includes(target)) return i;
+  }
+  return -1;
+}

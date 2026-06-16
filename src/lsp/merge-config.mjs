@@ -25,6 +25,34 @@ export function mergeLspConfig(defaults, user) {
   };
 }
 
+/** Built-in servers known to implement workspace/symbol when init capabilities are unavailable. */
+const DEFAULT_WORKSPACE_SYMBOL_SERVER_IDS = new Set([
+  'typescript',
+  'pyright',
+  'rust',
+  'gopls',
+  'clangd',
+  'lua-ls',
+  'terraform',
+  'zls',
+  'fake',
+]);
+
+/**
+ * Whether an LSP server should receive workspace/symbol requests.
+ * @param {string} id
+ * @param {Record<string, unknown> | undefined} cfg
+ * @param {Record<string, unknown> | undefined} [serverCapabilities]
+ */
+export function serverSupportsWorkspaceSymbols(id, cfg, serverCapabilities) {
+  if (cfg?.workspaceSymbols === false) return false;
+  if (cfg?.workspaceSymbols === true) return true;
+  const provider = serverCapabilities?.workspaceSymbolProvider;
+  if (provider === true) return true;
+  if (provider === false) return false;
+  return DEFAULT_WORKSPACE_SYMBOL_SERVER_IDS.has(id);
+}
+
 /** Servers matching file extension that are not disabled. */
 export function matchServersForPath(merged, filePath) {
   const ext = filePath.includes('.')

@@ -152,4 +152,44 @@ describe('resolveSubAgentTools', () => {
     assert.ok(tools.some((t) => t.function.name === 'web_search'));
     assert.ok(tools.some((t) => t.function.name === 'get_datetime'));
   });
+
+  test('inherits brain wiki tools from parent when not denied', () => {
+    const brainTools = [
+      'brain_search',
+      'brain_read_page',
+      'brain_list',
+      'brain_write_page',
+      'brain_append_log',
+      'brain_ingest_source',
+      'save_memory',
+    ].map((name) => ({
+      type: 'function' as const,
+      function: {
+        name,
+        description: name,
+        parameters: { type: 'object', properties: {} },
+      },
+    }));
+
+    const cfg: SubAgentTypeConfig = {
+      enabled: true,
+      providerId: 'lm-studio-local',
+      modelId: '',
+      maxConcurrent: 1,
+      timeoutMs: 300000,
+      workAgentId: null,
+      allowedTools: null,
+      deniedTools: ['spawn_sub_agent', 'list_sub_agents', 'get_sub_agent_status'],
+      systemPromptPath: null,
+    };
+
+    const tools = resolveSubAgentTools(cfg, 'generalPurpose', [
+      ...parentEnabled,
+      ...brainTools,
+    ]);
+    const names = tools.map((t) => t.function.name);
+    for (const name of brainTools.map((t) => t.function.name)) {
+      assert.ok(names.includes(name), `expected sub-agent to inherit ${name}`);
+    }
+  });
 });
