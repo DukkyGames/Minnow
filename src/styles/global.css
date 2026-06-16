@@ -110,6 +110,8 @@ body {
 .research-page { display: none; }
 .global-bugs-page { display: none; }
 .experts-page { display: none; }
+.brain-page { display: none; }
+.brain-page.is-open { display: flex; }
 .chat-app-page { display: none; }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,106 +1,106 @@
 /**
- * Models full-page app — hardware recommendations + moved provider/model settings.
+ * Brain full-page app — wiki browser and maintenance sections (MIN-B5).
  */
 
-import '../styles/models-page.css';
+import '../styles/brain-page.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
-import { renderModelsSection } from './models-sections';
+import { renderBrainSection } from './brain/sections';
 
-export type ModelsSectionId =
-  | 'recommend'
-  | 'installed'
-  | 'settings'
-  | 'voice'
-  | 'providers'
-  | 'routing'
-  | 'sampler'
-  | 'thinking'
-  | 'usage';
+export type BrainSectionId =
+  | 'wiki'
+  | 'edit'
+  | 'log'
+  | 'schema'
+  | 'proposals'
+  | 'ingest'
+  | 'lint'
+  | 'settings';
 
-const SECTIONS: ModelsSectionId[] = [
-  'recommend',
-  'installed',
+const SECTIONS: BrainSectionId[] = [
+  'wiki',
+  'edit',
+  'log',
+  'schema',
+  'proposals',
+  'ingest',
+  'lint',
   'settings',
-  'voice',
-  'providers',
-  'routing',
-  'sampler',
-  'thinking',
-  'usage',
 ];
 
-const SECTION_LABELS: Record<ModelsSectionId, string> = {
-  recommend: 'What fits',
-  installed: 'Installed',
+const SECTION_LABELS: Record<BrainSectionId, string> = {
+  wiki: 'Wiki',
+  edit: 'Edit',
+  log: 'Log',
+  schema: 'Schema',
+  proposals: 'Proposals',
+  ingest: 'Ingest',
+  lint: 'Lint',
   settings: 'Settings',
-  voice: 'Voice',
-  providers: 'Providers',
-  routing: 'Routing',
-  sampler: 'Sampler',
-  thinking: 'Thinking',
-  usage: 'Usage & cost',
 };
 
-let activeSection: ModelsSectionId = 'recommend';
+let activeSection: BrainSectionId = 'wiki';
 let staticBindingsDone = false;
 
-function getModelsRoot(): HTMLElement | null {
-  return document.getElementById('modelsView');
+function getBrainRoot(): HTMLElement | null {
+  return document.getElementById('brainView');
 }
 
 function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
 }
 
-function parseHashSection(): ModelsSectionId {
+function parseHashSection(): BrainSectionId {
   const hash = window.location.hash.replace(/^#\/?/, '');
-  const match = hash.match(/^(?:app\/models|models)(?:\/([\w-]+))?/);
-  const id = match?.[1] as ModelsSectionId | undefined;
+  const match = hash.match(/^(?:app\/brain|brain)(?:\/([\w-]+))?/);
+  const id = match?.[1] as BrainSectionId | undefined;
   if (id && SECTIONS.includes(id)) return id;
-  return 'recommend';
+  return 'wiki';
 }
 
-function setActiveSection(section: ModelsSectionId): void {
+function setActiveSection(section: BrainSectionId, options?: { editPath?: string }): void {
   activeSection = section;
   for (const id of SECTIONS) {
-    const panel = document.getElementById(`modelsSection-${id}`);
+    const panel = document.getElementById(`brainSection-${id}`);
     const nav = document.querySelector(
-      `[data-models-nav="${id}"]`,
+      `[data-brain-nav="${id}"]`,
     ) as HTMLButtonElement | null;
     panel?.classList.toggle('is-active', id === section);
     nav?.setAttribute('aria-current', id === section ? 'page' : 'false');
   }
 
   if (!isOsEmbedded()) {
-    const nextHash = `#/app/models/${section}`;
+    const nextHash = `#/app/brain/${section}`;
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
     }
   }
 
-  void renderModelsSection(section);
+  void renderBrainSection(section, options);
 }
 
 function bindStaticSections(): void {
   if (staticBindingsDone) return;
   staticBindingsDone = true;
 
-  document.getElementById('btnModelsPageBack')?.addEventListener('click', () => {
-    if (requestCloseWindowApp('models')) return;
-    closeModels();
+  document.getElementById('btnBrainPageBack')?.addEventListener('click', () => {
+    if (requestCloseWindowApp('brain')) return;
+    closeBrain();
   });
 
   for (const id of SECTIONS) {
     document
-      .querySelector(`[data-models-nav="${id}"]`)
+      .querySelector(`[data-brain-nav="${id}"]`)
       ?.addEventListener('click', () => setActiveSection(id));
   }
 }
 
 function closeOtherFullPages(): void {
+  void import('./models-page').then((m) => {
+    if (m.isModelsPageOpen()) m.closeModels({ skipNavigate: true });
+  });
   void import('./experts/experts-hub').then((m) => {
     if (m.isExpertsPageOpen()) m.closeExpertsHub({ skipNavigate: true });
   });
@@ -120,18 +120,15 @@ function closeOtherFullPages(): void {
     const root = document.getElementById('benchmarkView');
     if (root?.classList.contains('is-open')) m.closeBenchmark({ skipNavigate: true });
   });
-  void import('./brain-page').then((m) => {
-    if (m.isBrainPageOpen()) m.closeBrain({ skipNavigate: true });
-  });
   void import('./settings-page').then((m) => {
     const settingsRoot = document.getElementById('settingsView');
     if (settingsRoot?.classList.contains('is-open')) m.closeSettings({ skipNavigate: true });
   });
 }
 
-/** Open the Models app (optional section deep link). */
-export function openModels(section?: ModelsSectionId): void {
-  const root = getModelsRoot();
+/** Open the Brain app (optional section deep link). */
+export function openBrain(section?: BrainSectionId, options?: { editPath?: string }): void {
+  const root = getBrainRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
 
@@ -152,17 +149,21 @@ export function openModels(section?: ModelsSectionId): void {
   bindStaticSections();
 
   const target = section ?? parseHashSection();
-  // OS router may open a deep link before initApp finishes; refresh when already active.
-  if (wasAlreadyOpen && target === activeSection) {
-    void renderModelsSection(target);
+  if (wasAlreadyOpen && target === activeSection && !options?.editPath) {
+    void renderBrainSection(target, options);
     return;
   }
-  setActiveSection(target);
+  setActiveSection(target, options);
 }
 
-/** Close Models and return to chat or desktop. */
-export function closeModels(options?: { skipNavigate?: boolean }): void {
-  const root = getModelsRoot();
+/** Jump to Edit with a pre-filled wiki path. */
+export function openBrainEditForPath(relPath: string): void {
+  openBrain('edit', { editPath: relPath });
+}
+
+/** Close Brain and return to chat or desktop. */
+export function closeBrain(options?: { skipNavigate?: boolean }): void {
+  const root = getBrainRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
 
@@ -171,11 +172,11 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     document.querySelector('header.topbar')?.classList.remove('hidden');
-    if (!options?.skipNavigate && window.location.hash.includes('/models')) {
+    if (!options?.skipNavigate && window.location.hash.includes('/brain')) {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    if (!requestCloseWindowApp('models')) {
+    if (!requestCloseWindowApp('brain')) {
       navigateToDesktop();
     }
   }
@@ -185,32 +186,32 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
   );
 }
 
-export function openModelsFromTopbar(): void {
-  openModels('recommend');
+export function openBrainFromTopbar(): void {
+  openBrain('wiki');
 }
 
-export function isModelsPageOpen(): boolean {
-  return Boolean(getModelsRoot()?.classList.contains('is-open'));
+export function isBrainPageOpen(): boolean {
+  return Boolean(getBrainRoot()?.classList.contains('is-open'));
 }
 
 function onHashChange(): void {
   const hash = window.location.hash;
-  if (hash.startsWith('#/app/models') || hash.startsWith('#/models')) {
-    openModels(parseHashSection());
+  if (hash.startsWith('#/app/brain') || hash.startsWith('#/brain')) {
+    openBrain(parseHashSection());
     return;
   }
   if (isOsEmbedded() && isOsAppHash(hash)) return;
-  if (getModelsRoot()?.classList.contains('is-open')) {
-    closeModels();
+  if (getBrainRoot()?.classList.contains('is-open')) {
+    closeBrain();
   }
 }
 
-export function initModelsPage(): void {
-  registerWindowTeardown('models', () => closeModels({ skipNavigate: true }));
+export function initBrainPage(): void {
+  registerWindowTeardown('brain', () => closeBrain({ skipNavigate: true }));
   bindStaticSections();
   window.addEventListener('hashchange', onHashChange);
-  if (window.location.hash.includes('/models')) {
-    openModels(parseHashSection());
+  if (window.location.hash.includes('/brain')) {
+    openBrain(parseHashSection());
   }
 }
 

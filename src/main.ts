@@ -206,6 +206,9 @@ function registerWindowHandlers(): void {
   window.openModelsFromTopbar = () => {
     void import('./ui/models-page').then((m) => m.openModelsFromTopbar());
   };
+  window.openBrainFromTopbar = () => {
+    void import('./ui/brain-page').then((m) => m.openBrainFromTopbar());
+  };
   window.openCompareFromTopbar = () => {
     void import('./ui/compare-page').then((m) => m.openCompareFromTopbar());
   };
@@ -335,6 +338,8 @@ export async function initApp(): Promise<void> {
   benchmarkPage.initBenchmarkPage();
   const modelsPage = await import('./ui/models-page');
   modelsPage.initModelsPage();
+  const brainPage = await import('./ui/brain-page');
+  brainPage.initBrainPage();
   const comparePage = await import('./ui/compare-page');
   comparePage.initComparePage();
   const schedulerPage = await import('./ui/scheduler-page');

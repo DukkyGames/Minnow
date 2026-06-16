@@ -18,6 +18,7 @@ declare global {
     openSettingsFromTopbar: () => void;
     openBenchmarkFromTopbar: () => void;
     openModelsFromTopbar: () => void;
+    openBrainFromTopbar: () => void;
     openCompareFromTopbar: () => void;
     openResearchFromTopbar: () => void;
     openExpertLabFromTopbar: () => void;

@@ -25,6 +25,7 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   bench: 'benchmarkView',
   compare: 'compareView',
   models: 'modelsView',
+  brain: 'brainView',
   scheduler: 'schedulerView',
   calendar: 'calendarView',
   email: 'emailView',
@@ -95,6 +96,7 @@ function closeAllAppPages(): void {
     'benchmarkView',
     'compareView',
     'modelsView',
+    'brainView',
     'schedulerView',
     'calendarView',
     'emailView',
@@ -154,6 +156,13 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
     case 'models': {
       const { openModels } = await import('../ui/models-page');
       openModels((route.modelsSection ?? options?.modelsSection ?? 'recommend') as import('../ui/models-page').ModelsSectionId);
+      break;
+    }
+    case 'brain': {
+      const { openBrain } = await import('../ui/brain-page');
+      openBrain(
+        (route.brainSection ?? options?.brainSection ?? 'wiki') as import('../ui/brain-page').BrainSectionId,
+      );
       break;
     }
     case 'scheduler': {

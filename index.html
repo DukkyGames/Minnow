@@ -1215,6 +1215,170 @@
   </div>
 </main>
 
+<main id="brainView" class="brain-page" aria-label="Brain">
+  <header class="brain-page-header">
+    <button type="button" class="icon-btn" id="btnBrainPageBack" aria-label="Back">
+      <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h1 class="brain-page-header__title">Brain</h1>
+  </header>
+  <div class="brain-page-body">
+    <nav class="brain-nav" aria-label="Brain sections">
+      <button type="button" data-brain-nav="wiki" aria-current="page">Wiki</button>
+      <button type="button" data-brain-nav="edit">Edit</button>
+      <button type="button" data-brain-nav="log">Log</button>
+      <button type="button" data-brain-nav="schema">Schema</button>
+      <button type="button" data-brain-nav="proposals">Proposals</button>
+      <button type="button" data-brain-nav="ingest">Ingest</button>
+      <button type="button" data-brain-nav="lint">Lint</button>
+      <button type="button" data-brain-nav="settings">Settings</button>
+    </nav>
+    <div class="brain-content">
+      <section id="brainSection-wiki" class="brain-section is-active">
+        <h2>Wiki</h2>
+        <p class="brain-lead">Browse the CORTEX wiki — path-based wikilinks and backlinks.</p>
+        <p id="brainWikiOffline" class="brain-muted hidden">Start npm start to load the wiki.</p>
+        <div class="brain-wiki-layout">
+          <aside id="brainWikiTree" class="brain-wiki-tree-mount" aria-label="Page tree"></aside>
+          <div id="brainWikiViewer" class="brain-wiki-viewer" aria-live="polite"></div>
+        </div>
+      </section>
+      <section id="brainSection-edit" class="brain-section">
+        <h2>Edit</h2>
+        <p class="brain-lead">Create or update a wiki page (frontmatter + markdown body).</p>
+        <div class="brain-form-grid">
+          <label>Path
+            <input type="text" id="brainEditPath" placeholder="facts/my-note.md" autocomplete="off">
+          </label>
+          <label>Title
+            <input type="text" id="brainEditTitle" maxlength="200">
+          </label>
+          <label>Tags (comma-separated)
+            <input type="text" id="brainEditTags" autocomplete="off">
+          </label>
+          <label>Body
+            <textarea id="brainEditBody" rows="14"></textarea>
+          </label>
+          <div class="brain-field-row">
+            <button type="button" class="brain-action-btn" id="brainEditLoad">Load</button>
+            <button type="button" class="brain-action-btn is-primary" id="brainEditSave">Save</button>
+          </div>
+          <p id="brainEditStatus" class="brain-status" aria-live="polite"></p>
+        </div>
+      </section>
+      <section id="brainSection-log" class="brain-section">
+        <h2>Log</h2>
+        <p class="brain-lead">Read-only changelog from <code>log.md</code>.</p>
+        <p id="brainLogOffline" class="brain-muted hidden">Offline</p>
+        <div id="brainLogBody"></div>
+      </section>
+      <section id="brainSection-schema" class="brain-section">
+        <h2>Schema</h2>
+        <p class="brain-lead">View and edit the wiki taxonomy in <code>schema.md</code>.</p>
+        <p id="brainSchemaOffline" class="brain-muted hidden">Offline</p>
+        <textarea id="brainSchemaEditor" rows="16" style="width:100%;max-width:40rem;font-family:var(--font-mono,ui-monospace,monospace)"></textarea>
+        <div class="brain-field-row">
+          <button type="button" class="brain-action-btn" id="brainSchemaReload">Reload</button>
+          <button type="button" class="brain-action-btn is-primary" id="brainSchemaSave">Save</button>
+        </div>
+        <p id="brainSchemaStatus" class="brain-status" aria-live="polite"></p>
+      </section>
+      <section id="brainSection-proposals" class="brain-section">
+        <h2>Proposals</h2>
+        <p class="brain-lead">Review AI-suggested memories before they enter the wiki.</p>
+        <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
+        <div id="brainProposalsPanel" class="settings-group settings-group--flat">
+          <p id="brainProposalsCount" class="settings-memory-stat">Pending: —</p>
+          <p id="brainProposalsOffline" class="field-hint settings-memory-offline hidden">
+            Start npm start to review proposals.
+          </p>
+          <div id="brainProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
+        </div>
+      </section>
+      <section id="brainSection-ingest" class="brain-section">
+        <h2>Ingest</h2>
+        <p class="brain-lead">Submit a raw source; the utility model synthesizes wiki pages.</p>
+        <div class="brain-form-grid">
+          <label>Title (optional)
+            <input type="text" id="brainIngestTitle">
+          </label>
+          <label>Filename hint (optional)
+            <input type="text" id="brainIngestFilename" placeholder="notes.txt">
+          </label>
+          <label>Source content
+            <textarea id="brainIngestBody" rows="12"></textarea>
+          </label>
+          <div class="brain-field-row">
+            <button type="button" class="brain-action-btn is-primary" id="brainIngestSubmit">Ingest</button>
+          </div>
+          <p id="brainIngestStatus" class="brain-status" aria-live="polite"></p>
+          <div id="brainIngestResult"></div>
+        </div>
+      </section>
+      <section id="brainSection-lint" class="brain-section">
+        <h2>Lint</h2>
+        <p class="brain-lead">Health report: orphans, stale pages, broken links, contradictions.</p>
+        <p id="brainLintOffline" class="brain-muted hidden">Offline</p>
+        <div class="brain-field-row">
+          <button type="button" class="brain-action-btn is-primary" id="brainLintRun">Run lint</button>
+        </div>
+        <div id="brainLintBody"></div>
+      </section>
+      <section id="brainSection-settings" class="brain-section">
+        <h2>Settings</h2>
+        <p class="brain-lead">Memory synthesis cadence and semantic embeddings for retrieval.</p>
+        <p id="brainSettingsStatusLine" class="brain-muted">Checking wiki status…</p>
+        <p id="brainSettingsStatus" class="brain-status" aria-live="polite"></p>
+        <div class="brain-settings-stack">
+          <div class="brain-settings-group">
+            <h3>Auto-learning cadence</h3>
+            <p id="brainSynthesisOffline" class="brain-muted hidden">Offline</p>
+            <div class="brain-form-grid">
+              <label><input type="checkbox" id="brainSynthesisEnabled" checked> Enable post-turn memory synthesis</label>
+              <label>Extraction throttle (message pairs)
+                <input type="number" id="brainSynthesisThrottle" class="settings-input settings-input--narrow" min="1" value="4">
+              </label>
+              <p id="brainSynthesisThrottleHint" class="brain-muted">Runs after every 4 completed user+assistant turns.</p>
+              <button type="button" class="brain-action-btn is-primary" id="brainSynthesisSave">Save synthesis settings</button>
+            </div>
+          </div>
+          <div class="brain-settings-group">
+            <h3>Semantic embeddings</h3>
+            <p id="brainEmbeddingsOffline" class="brain-muted hidden">Offline</p>
+            <p id="brainEmbeddingsStatus" class="brain-muted">Checking embeddings…</p>
+            <span id="brainEmbeddingsReindexBadge" class="settings-memory-badge settings-memory-badge--pinned hidden">Reindex needed</span>
+            <div class="brain-form-grid">
+              <label><input type="checkbox" id="brainEmbeddingsEnabled"> Enable hybrid vector retrieval</label>
+              <label>Backend
+                <select id="brainEmbeddingsBackend">
+                  <option value="local">Local (@xenova/transformers)</option>
+                  <option value="provider">Provider API</option>
+                </select>
+              </label>
+              <label>Model id
+                <input type="text" id="brainEmbeddingsModel" autocomplete="off">
+              </label>
+              <div id="brainEmbeddingsProviderRow" class="hidden">
+                <label>Provider id
+                  <input type="text" id="brainEmbeddingsProvider" autocomplete="off">
+                </label>
+              </div>
+              <label>Vector blend
+                <span id="brainEmbeddingsBlendLabel" class="brain-muted">50% vector</span>
+                <input type="range" id="brainEmbeddingsBlend" min="0" max="1" step="0.05" value="0.5">
+              </label>
+              <div class="brain-field-row">
+                <button type="button" class="brain-action-btn" id="brainEmbeddingsSave">Save embeddings</button>
+                <button type="button" class="brain-action-btn" id="brainEmbeddingsReindex">Reindex all</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
 <main id="benchmarkView" class="benchmark-page" aria-label="Benchmark">
   <nav class="benchmark-tabs" role="tablist" aria-label="Benchmark views">
     <button type="button" class="benchmark-tab is-active" role="tab" data-tab="overview" aria-selected="true" id="benchmarkTabBtnOverview">Overview</button>
