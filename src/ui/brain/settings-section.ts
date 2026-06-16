@@ -1,7 +1,14 @@
 /**
- * Brain app — Settings section: synthesis cadence + embeddings (config.memory / config.synthesis).
+ * Brain app — Settings: synthesis, embeddings, and code index (config.brain.*).
  */
 
+import {
+  fetchBrainCodeConfig,
+  fetchBrainCodeStatus,
+  fetchBrainStatus,
+  saveBrainCodeConfig,
+} from '../../brain/client';
+import type { BrainCodeStatus } from '../../brain/types';
 import {
   fetchMemoryEmbeddingsStatus,
   reindexMemoryEmbeddings,
@@ -11,7 +18,6 @@ import {
   fetchSynthesisConfig,
   saveSynthesisConfig,
 } from '../../synthesis/client';
-import { fetchBrainStatus } from '../../brain/client';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -114,6 +120,52 @@ function bindSettingsSection(): void {
       await refreshEmbeddingsFields();
     })();
   });
+
+  document.getElementById('brainCodeSettingsSave')?.addEventListener('click', () => {
+    void (async () => {
+      const enabledEl = document.getElementById(
+        'brainCodeEnabled',
+      ) as HTMLInputElement | null;
+      const includeEl = document.getElementById(
+        'brainCodeIncludeGlobs',
+      ) as HTMLTextAreaElement | null;
+      const excludeEl = document.getElementById(
+        'brainCodeExcludeGlobs',
+      ) as HTMLTextAreaElement | null;
+      const budgetEl = document.getElementById(
+        'brainCodeTokenBudget',
+      ) as HTMLInputElement | null;
+      const cadenceEl = document.getElementById(
+        'brainCodeReindexCadence',
+      ) as HTMLSelectElement | null;
+      const embEl = document.getElementById(
+        'brainCodeEmbeddingsEnabled',
+      ) as HTMLInputElement | null;
+      const budget = Number(budgetEl?.value ?? 1500);
+      if (!Number.isFinite(budget) || budget < 200) {
+        setStatus('err', 'Token budget must be at least 200');
+        return;
+      }
+      const parseLines = (raw: string) =>
+        raw
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+      const saved = await saveBrainCodeConfig({
+        enabled: enabledEl?.checked === true,
+        includeGlobs: parseLines(includeEl?.value ?? ''),
+        excludeGlobs: parseLines(excludeEl?.value ?? ''),
+        repoMapTokenBudget: Math.round(budget),
+        reindexCadence:
+          cadenceEl?.value === 'on-switch' || cadenceEl?.value === 'git-hook'
+            ? cadenceEl.value
+            : 'on-demand',
+        codeEmbeddingsEnabled: embEl?.checked === true,
+      });
+      setStatus(saved ? 'ok' : 'err', saved ? 'Code index settings saved' : 'Save failed');
+      if (saved) await refreshCodeSettingsFields();
+    })();
+  });
 }
 
 function toggleProviderRow(): void {
@@ -182,6 +234,59 @@ async function refreshEmbeddingsFields(): Promise<void> {
   toggleProviderRow();
 }
 
+function formatCodeSettingsLine(status: BrainCodeStatus): string {
+  const when = status.lastIndexedAt
+    ? new Date(status.lastIndexedAt).toLocaleString()
+    : 'never';
+  return `${status.repo} · ${status.symbolCount} symbols · last indexed ${when}`;
+}
+
+function globsToText(globs: string[]): string {
+  return globs.join('\n');
+}
+
+async function refreshCodeSettingsFields(): Promise<void> {
+  const offlineEl = document.getElementById('brainCodeSettingsOffline');
+  const statusEl = document.getElementById('brainCodeSettingsStatus');
+  const enabledEl = document.getElementById('brainCodeEnabled') as HTMLInputElement | null;
+  const includeEl = document.getElementById('brainCodeIncludeGlobs') as HTMLTextAreaElement | null;
+  const excludeEl = document.getElementById('brainCodeExcludeGlobs') as HTMLTextAreaElement | null;
+  const budgetEl = document.getElementById('brainCodeTokenBudget') as HTMLInputElement | null;
+  const cadenceEl = document.getElementById('brainCodeReindexCadence') as HTMLSelectElement | null;
+  const embEl = document.getElementById('brainCodeEmbeddingsEnabled') as HTMLInputElement | null;
+
+  const [config, status] = await Promise.all([
+    fetchBrainCodeConfig(),
+    fetchBrainCodeStatus(),
+  ]);
+  offlineEl?.classList.toggle('hidden', config !== null);
+
+  if (statusEl) {
+    statusEl.textContent = status
+      ? formatCodeSettingsLine(status)
+      : 'Code index unavailable.';
+  }
+
+  if (!config) return;
+
+  if (enabledEl && !enabledEl.matches(':focus')) enabledEl.checked = config.enabled;
+  if (includeEl && !includeEl.matches(':focus')) {
+    includeEl.value = globsToText(config.includeGlobs);
+  }
+  if (excludeEl && !excludeEl.matches(':focus')) {
+    excludeEl.value = globsToText(config.excludeGlobs);
+  }
+  if (budgetEl && !budgetEl.matches(':focus')) {
+    budgetEl.value = String(config.repoMapTokenBudget);
+  }
+  if (cadenceEl && !cadenceEl.matches(':focus')) {
+    cadenceEl.value = config.reindexCadence;
+  }
+  if (embEl && !embEl.matches(':focus')) {
+    embEl.checked = config.codeEmbeddingsEnabled;
+  }
+}
+
 async function refreshBrainStatusLine(): Promise<void> {
   const line = document.getElementById('brainSettingsStatusLine');
   if (!line) return;
@@ -200,5 +305,6 @@ export async function renderSettingsSection(): Promise<void> {
     refreshBrainStatusLine(),
     refreshSynthesisFields(),
     refreshEmbeddingsFields(),
+    refreshCodeSettingsFields(),
   ]);
 }

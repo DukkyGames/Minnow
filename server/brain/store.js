@@ -18,7 +18,7 @@ import {
   isValidPageId,
   resolvePagePath,
 } from './paths.js';
-import { DEFAULT_BRAIN_CODE_CONFIG } from './code/config.js';
+import { DEFAULT_BRAIN_CODE_CONFIG, normalizeBrainCodeConfig } from './code/config.js';
 import {
   DEFAULT_BRAIN_CONFIG,
   scheduleEntryVectorSync,
@@ -98,10 +98,21 @@ export async function saveBrainConfig(partial) {
     nextEmb.reindexNeeded = true;
   }
 
+  const partialCode =
+    partial?.code && typeof partial.code === 'object' ? partial.code : null;
+  const existingCode =
+    existing.code && typeof existing.code === 'object'
+      ? { ...DEFAULT_BRAIN_CODE_CONFIG, ...existing.code }
+      : { ...DEFAULT_BRAIN_CODE_CONFIG };
+  const nextCode = partialCode
+    ? normalizeBrainCodeConfig({ ...existingCode, ...partialCode })
+    : existingCode;
+
   config.brain = {
     ...existing,
     ...partial,
     embeddings: nextEmb,
+    code: nextCode,
   };
 
   if (partialEmb) {
