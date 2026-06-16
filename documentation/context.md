@@ -1183,7 +1183,7 @@ The app supports **multiple chat sessions** with a **collapsible left sidebar**.
 - Sidebar order is **newest `lastMessageAt` first** (last committed user/assistant/tool history entry); opening or renaming a chat does not reorder. Legacy sessions without `lastMessageAt` fall back to `updatedAt` until the next message.
 - At most **50** chats; oldest by `lastMessageAt` (then `updatedAt`) pruned on save (active chat never removed).
 - **QuotaExceededError** → status pill hint.
-- Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace.
+- Delete chat: confirm dialog; deleting active chat prefers another chat in the **same workspace**, or creates a new empty chat scoped to that workspace. On MinnowOS desktop chat (`isDesktopChatActive`), `deleteChat` in [`sidebar.ts`](../src/ui/sidebar.ts) refreshes `#desktopChatSessionList` and the desktop transcript via [`desktop-chat-rail.ts`](../src/ui/desktop-chat-rail.ts) / [`activateDesktopChatSession`](../src/os/desktop-chat.ts) — not only legacy `#chatList`.
 
 ### Stream persistence across reload (feature 22 / C5)
 

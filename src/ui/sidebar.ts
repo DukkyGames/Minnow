@@ -1,4 +1,5 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
+import { isDesktopChatActive } from '../os/desktop-state';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import {
@@ -647,8 +648,14 @@ export function deleteChat(chatId: string, evt?: Event): void {
     const active = getActiveChat();
     recordChatOpened(active.id);
     syncModelSelectForActiveChat();
-    renderChatFromHistory(active);
     renderStatsForChat(active);
+    if (isDesktopChatActive()) {
+      void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(active.id));
+    } else {
+      renderChatFromHistory(active);
+    }
+  } else if (isDesktopChatActive()) {
+    void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
   renderSidebar();
   scheduleSaveSessions();
