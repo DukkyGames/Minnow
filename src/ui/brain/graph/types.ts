@@ -40,10 +40,14 @@ export interface GraphEdge {
 export interface ForceGraphTheme {
   stageBg: string;
   nodePage: string;
+  nodePageMuted: string;
   nodeTag: string;
+  nodeTagMuted: string;
   nodeSymbol: string;
+  nodeSymbolMuted: string;
   nodeActive: string;
   nodeOrphan: string;
+  nodeOrphanMuted: string;
   edge: string;
   edgeHighlight: string;
   label: string;
