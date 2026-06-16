@@ -4,6 +4,14 @@
 
 import { detectLocalServer } from '../tools/client';
 import type {
+  BrainCodeCallsOfResult,
+  BrainCodeConfig,
+  BrainCodeFindResult,
+  BrainCodeReadSymbolResult,
+  BrainCodeReindexResult,
+  BrainCodeRepoMap,
+  BrainCodeStatus,
+  BrainCodeWhoCallsResult,
   BrainIngestResult,
   BrainLintReport,
   BrainPage,
@@ -116,4 +124,93 @@ export async function lintBrainWiki(options?: {
     method: 'POST',
     body: JSON.stringify({ includeLlm: options?.includeLlm !== false }),
   });
+}
+
+/** Code index status for the active workspace. */
+export async function fetchBrainCodeStatus(): Promise<BrainCodeStatus | null> {
+  return brainFetch<BrainCodeStatus>('/api/brain/code/status');
+}
+
+/** Load config.brain.code settings. */
+export async function fetchBrainCodeConfig(): Promise<BrainCodeConfig | null> {
+  const data = await brainFetch<{ code: BrainCodeConfig }>('/api/brain/code/config');
+  return data?.code ?? null;
+}
+
+/** Persist partial config.brain.code settings. */
+export async function saveBrainCodeConfig(
+  partial: Partial<BrainCodeConfig>,
+): Promise<BrainCodeConfig | null> {
+  const ok = await detectLocalServer();
+  if (!ok) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/brain/code/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { code: BrainCodeConfig };
+    return data.code ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Reindex the workspace code graph. */
+export async function reindexBrainCode(): Promise<BrainCodeReindexResult | null> {
+  return brainFetch<BrainCodeReindexResult>('/api/brain/code/reindex', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** Token-budgeted signature repo map. */
+export async function fetchBrainCodeRepoMap(options?: {
+  focus?: string;
+  tokenBudget?: number;
+}): Promise<BrainCodeRepoMap | null> {
+  const qs = new URLSearchParams();
+  if (options?.focus?.trim()) qs.set('focus', options.focus.trim());
+  if (options?.tokenBudget && options.tokenBudget > 0) {
+    qs.set('tokenBudget', String(options.tokenBudget));
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return brainFetch<BrainCodeRepoMap>(`/api/brain/code/repo-map${suffix}`);
+}
+
+/** FTS5 + LSP symbol search. */
+export async function findBrainCodeSymbol(
+  query: string,
+  limit = 20,
+): Promise<BrainCodeFindResult | null> {
+  const qs = new URLSearchParams({
+    query: query.trim(),
+    limit: String(limit),
+  });
+  return brainFetch<BrainCodeFindResult>(`/api/brain/code/find-symbol?${qs}`);
+}
+
+/** Incoming call edges for a symbol. */
+export async function fetchBrainCodeWhoCalls(
+  symbol: string,
+): Promise<BrainCodeWhoCallsResult | null> {
+  const qs = new URLSearchParams({ symbol });
+  return brainFetch<BrainCodeWhoCallsResult>(`/api/brain/code/who-calls?${qs}`);
+}
+
+/** Outgoing call edges for a symbol. */
+export async function fetchBrainCodeCallsOf(
+  symbol: string,
+): Promise<BrainCodeCallsOfResult | null> {
+  const qs = new URLSearchParams({ symbol });
+  return brainFetch<BrainCodeCallsOfResult>(`/api/brain/code/calls-of?${qs}`);
+}
+
+/** Read the live source span for a symbol. */
+export async function fetchBrainCodeReadSymbol(
+  symbol: string,
+): Promise<BrainCodeReadSymbolResult | null> {
+  const qs = new URLSearchParams({ symbol });
+  return brainFetch<BrainCodeReadSymbolResult>(`/api/brain/code/read-symbol?${qs}`);
 }

@@ -1,5 +1,5 @@
 /**
- * Brain wiki API types (MIN-B5).
+ * Brain wiki + code index API types (MIN-B5 / MIN-B8).
  */
 
 /** Page metadata from catalog.json / readPage. */
@@ -62,4 +62,91 @@ export interface BrainLintReport {
   missingLinks: Array<{ from: string; target: string; summary: string }>;
   contradictions: Array<{ pages: string[]; summary: string }>;
   embeddingsEnabled: boolean;
+}
+
+/** When to trigger background reindex (automation wired in MIN-B10). */
+export type BrainCodeReindexCadence = 'on-demand' | 'on-switch' | 'git-hook';
+
+/** config.brain.code settings. */
+export interface BrainCodeConfig {
+  enabled: boolean;
+  includeGlobs: string[];
+  excludeGlobs: string[];
+  repoMapTokenBudget: number;
+  reindexCadence: BrainCodeReindexCadence;
+  codeEmbeddingsEnabled: boolean;
+}
+
+/** GET /api/brain/code/status. */
+export interface BrainCodeStatus extends BrainCodeConfig {
+  repo: string;
+  symbolCount: number;
+  edgeCount: number;
+  fileCount: number;
+  lastIndexedAt: string | null;
+}
+
+/** Symbol row from find_symbol / graph queries. */
+export interface BrainCodeSymbolMatch {
+  id: string;
+  repo: string;
+  kind: string;
+  name: string;
+  file: string;
+  line_start: number;
+  line_end: number;
+  signature: string;
+  source?: string;
+}
+
+/** GET/POST /api/brain/code/find-symbol. */
+export interface BrainCodeFindResult {
+  matches: BrainCodeSymbolMatch[];
+  error?: string;
+}
+
+/** GET/POST /api/brain/code/repo-map. */
+export interface BrainCodeRepoMap {
+  text: string;
+  truncated: boolean;
+  tokenEstimate: number;
+}
+
+/** Edge endpoint in who_calls / calls_of. */
+export interface BrainCodeSymbolRef {
+  symbolId: string;
+  name: string;
+  file: string;
+  line: number;
+  signature: string;
+  kind: string;
+}
+
+/** GET/POST /api/brain/code/who-calls. */
+export interface BrainCodeWhoCallsResult {
+  symbol: BrainCodeSymbolMatch | null;
+  callers: BrainCodeSymbolRef[];
+  error?: string;
+}
+
+/** GET/POST /api/brain/code/calls-of. */
+export interface BrainCodeCallsOfResult {
+  symbol: BrainCodeSymbolMatch | null;
+  callees: BrainCodeSymbolRef[];
+  error?: string;
+}
+
+/** GET/POST /api/brain/code/read-symbol. */
+export interface BrainCodeReadSymbolResult {
+  symbol: BrainCodeSymbolMatch | null;
+  text: string;
+  error?: string;
+}
+
+/** POST /api/brain/code/reindex. */
+export interface BrainCodeReindexResult {
+  ok: boolean;
+  repo: string;
+  indexedFiles: number;
+  results?: Array<{ file: string; symbols: number; edges: number; error?: string }>;
 }

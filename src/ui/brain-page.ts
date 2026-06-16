@@ -17,6 +17,7 @@ export type BrainSectionId =
   | 'proposals'
   | 'ingest'
   | 'lint'
+  | 'code'
   | 'settings';
 
 const SECTIONS: BrainSectionId[] = [
@@ -27,6 +28,7 @@ const SECTIONS: BrainSectionId[] = [
   'proposals',
   'ingest',
   'lint',
+  'code',
   'settings',
 ];
 
@@ -38,6 +40,7 @@ const SECTION_LABELS: Record<BrainSectionId, string> = {
   proposals: 'Proposals',
   ingest: 'Ingest',
   lint: 'Lint',
+  code: 'Code',
   settings: 'Settings',
 };
 

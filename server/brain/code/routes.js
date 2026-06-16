@@ -12,6 +12,7 @@ import {
   reindexCode,
   whoCalls,
 } from './query.js';
+import { saveBrainConfig } from '../store.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -66,6 +67,19 @@ export async function handleCodeIndexRequest(req, res, pathname) {
 
     if (pathname === '/api/brain/code/status' && req.method === 'GET') {
       sendJson(res, 200, await queryCodeStatus());
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/config' && req.method === 'GET') {
+      const code = await loadBrainCodeConfig();
+      sendJson(res, 200, { code });
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/config' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const brain = await saveBrainConfig({ code: body });
+      sendJson(res, 200, { code: brain.code });
       return true;
     }
 

@@ -3,6 +3,7 @@
  */
 
 import type { BrainSectionId } from '../brain-page';
+import { renderCodeSection } from './code-section';
 import { renderEditSection } from './edit-section';
 import { renderIngestSection } from './ingest-section';
 import { renderLintSection } from './lint-section';
@@ -38,6 +39,9 @@ export async function renderBrainSection(
       break;
     case 'lint':
       await renderLintSection();
+      break;
+    case 'code':
+      await renderCodeSection();
       break;
     case 'settings':
       await renderSettingsSection();

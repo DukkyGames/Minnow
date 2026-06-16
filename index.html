@@ -1231,6 +1231,7 @@
       <button type="button" data-brain-nav="proposals">Proposals</button>
       <button type="button" data-brain-nav="ingest">Ingest</button>
       <button type="button" data-brain-nav="lint">Lint</button>
+      <button type="button" data-brain-nav="code">Code</button>
       <button type="button" data-brain-nav="settings">Settings</button>
     </nav>
     <div class="brain-content">
@@ -1324,9 +1325,41 @@
         </div>
         <div id="brainLintBody"></div>
       </section>
+      <section id="brainSection-code" class="brain-section">
+        <h2>Code</h2>
+        <p class="brain-lead">Browse the indexed repo map, search symbols, and inspect call graphs.</p>
+        <p id="brainCodeOffline" class="brain-muted hidden">Start npm start to use the code index.</p>
+        <div class="brain-code-toolbar brain-field-row">
+          <p id="brainCodeStatusLine" class="brain-muted">Checking index…</p>
+          <button type="button" class="brain-action-btn is-primary" id="brainCodeReindex">Reindex</button>
+        </div>
+        <p id="brainCodeActionStatus" class="brain-status" aria-live="polite"></p>
+        <div class="brain-code-layout">
+          <div class="brain-code-map-panel">
+            <div class="brain-field-row brain-code-map-controls">
+              <label class="brain-code-focus-label">Focus
+                <input type="search" id="brainCodeFocus" placeholder="filter map…" autocomplete="off">
+              </label>
+              <span id="brainCodeMapBudget" class="brain-muted" aria-live="polite"></span>
+            </div>
+            <pre id="brainCodeMap" class="brain-code-map" aria-label="Repo map"></pre>
+          </div>
+          <div class="brain-code-search-panel">
+            <label class="brain-code-search-label">Find symbol
+              <input type="search" id="brainCodeSearch" placeholder="function or class name" autocomplete="off">
+            </label>
+            <ul id="brainCodeResults" class="brain-code-results" aria-label="Symbol matches"></ul>
+            <div id="brainCodeDetail" class="brain-code-detail" hidden></div>
+            <aside id="brainCodeExplain" class="brain-code-explain" aria-disabled="true">
+              <h3 class="brain-section-subtitle">Explain</h3>
+              <p class="brain-muted">Anchored symbol explanations will ship in a later release.</p>
+            </aside>
+          </div>
+        </div>
+      </section>
       <section id="brainSection-settings" class="brain-section">
         <h2>Settings</h2>
-        <p class="brain-lead">Memory synthesis cadence and semantic embeddings for retrieval.</p>
+        <p class="brain-lead">Memory synthesis cadence, semantic embeddings, and code index settings.</p>
         <p id="brainSettingsStatusLine" class="brain-muted">Checking wiki status…</p>
         <p id="brainSettingsStatus" class="brain-status" aria-live="polite"></p>
         <div class="brain-settings-stack">
@@ -1371,6 +1404,33 @@
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsSave">Save embeddings</button>
                 <button type="button" class="brain-action-btn" id="brainEmbeddingsReindex">Reindex all</button>
               </div>
+            </div>
+          </div>
+          <div class="brain-settings-group">
+            <h3>Code index</h3>
+            <p id="brainCodeSettingsOffline" class="brain-muted hidden">Offline</p>
+            <p id="brainCodeSettingsStatus" class="brain-muted">Checking code index…</p>
+            <div class="brain-form-grid">
+              <label><input type="checkbox" id="brainCodeEnabled" checked> Enable workspace code index</label>
+              <label>Include globs (one per line)
+                <textarea id="brainCodeIncludeGlobs" rows="4" spellcheck="false"></textarea>
+              </label>
+              <label>Exclude globs (one per line)
+                <textarea id="brainCodeExcludeGlobs" rows="3" spellcheck="false"></textarea>
+              </label>
+              <label>Repo map token budget
+                <input type="number" id="brainCodeTokenBudget" class="settings-input settings-input--narrow" min="200" max="8000" step="100" value="1500">
+              </label>
+              <label>Reindex cadence
+                <select id="brainCodeReindexCadence">
+                  <option value="on-demand">On demand</option>
+                  <option value="on-switch">On workspace switch</option>
+                  <option value="git-hook">Git hook</option>
+                </select>
+              </label>
+              <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
+              <p class="brain-muted">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
+              <button type="button" class="brain-action-btn is-primary" id="brainCodeSettingsSave">Save code index settings</button>
             </div>
           </div>
         </div>

@@ -41,6 +41,12 @@ describe('brain router', () => {
     assert.equal(route.appId, 'brain');
     assert.equal(route.brainSection, 'wiki');
   });
+
+  test('parseOsHash resolves brain code deep link', () => {
+    const route = parseOsHash('#/app/brain/code');
+    assert.equal(route.appId, 'brain');
+    assert.equal(route.brainSection, 'code');
+  });
 });
 
 describe('brain markup contract', () => {
@@ -53,5 +59,9 @@ describe('brain markup contract', () => {
     assert.match(html, /id="brainProposalsList"/);
     assert.match(html, /id="brainSection-settings"/);
     assert.match(html, /id="brainSynthesisEnabled"/);
+    assert.match(html, /data-brain-nav="code"/);
+    assert.match(html, /id="brainSection-code"/);
+    assert.match(html, /id="brainCodeReindex"/);
+    assert.match(html, /id="brainCodeSettingsSave"/);
   });
 });
