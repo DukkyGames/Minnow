@@ -28,6 +28,14 @@ export interface ForceGraphApi {
   selectNode(id: string | null): void;
   setHoverNode(id: string | null): void;
   fitToView(): void;
+  /** Fit the viewport to a subset of nodes (or all nodes when `ids` is omitted). */
+  fitToNodes(ids?: Set<string>): void;
+  /** Pan to a specific node while preserving the current zoom level. */
+  centerOnNode(id: string): void;
+  /** Zoom to a node's neighborhood and make that highlight sticky (design brief "focus subtree"). */
+  focusNode(id: string): void;
+  /** Remove the sticky focus highlight; reverts to normal selection highlight. */
+  clearFocus(): void;
   zoomBy(factor: number): void;
   resize(): void;
   destroy(): void;
@@ -77,6 +85,10 @@ export function createForceGraph(
   let selectedId: string | null = null;
   let hoverId: string | null = null;
   let highlightIds: Set<string> | null = null;
+  // When set, the highlight is sticky (double-click "focus subtree") rather than transient.
+  let focusId: string | null = null;
+  // Signals that the next simulation end should auto-fit the viewport.
+  let pendingFit = false;
   let edgeReveal = reducedMotion ? 1 : 0;
   let rafId = 0;
   let destroyed = false;
@@ -167,7 +179,7 @@ export function createForceGraph(
       const r = nodeRadius(node);
       const active = node.id === selectedId;
       const dimmed =
-        activeHighlight && !activeHighlight.has(node.id) && (hoverId || selectedId);
+        activeHighlight && !activeHighlight.has(node.id) && (focusId || hoverId || selectedId);
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
       ctx.fillStyle = nodeColor(node);
@@ -220,6 +232,49 @@ export function createForceGraph(
     rafId = requestAnimationFrame(tickLoop);
   };
 
+  // Compute bounding box and fit the viewport to a subset of nodes (or all when ids omitted).
+  const fitToNodes = (ids?: Set<string>): void => {
+    const target = ids ? nodes.filter((n) => ids.has(n.id)) : nodes;
+    if (!target.length) {
+      transform = zoomIdentity;
+      select(canvas).call(zoomBehavior.transform, zoomIdentity);
+      return;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of target) {
+      if (n.x == null || n.y == null) continue;
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x);
+      maxY = Math.max(maxY, n.y);
+    }
+    if (!isFinite(minX)) return;
+    const rect = canvas.getBoundingClientRect();
+    const pad = 48;
+    const gw = Math.max(1, maxX - minX);
+    const gh = Math.max(1, maxY - minY);
+    const k = Math.min((rect.width - pad * 2) / gw, (rect.height - pad * 2) / gh, 2.5);
+    const tx = rect.width / 2 - ((minX + maxX) / 2) * k;
+    const ty = rect.height / 2 - ((minY + maxY) / 2) * k;
+    transform = zoomIdentity.translate(tx, ty).scale(k);
+    select(canvas).call(zoomBehavior.transform, transform);
+  };
+
+  // Pan to a specific node while preserving the current zoom level.
+  const centerOnNode = (id: string): void => {
+    const node = nodes.find((n) => n.id === id);
+    if (!node || node.x == null || node.y == null) return;
+    const rect = canvas.getBoundingClientRect();
+    const k = transform.k;
+    const tx = rect.width / 2 - node.x * k;
+    const ty = rect.height / 2 - node.y * k;
+    transform = zoomIdentity.translate(tx, ty).scale(k);
+    select(canvas).call(zoomBehavior.transform, transform);
+  };
+
   const restartSimulation = (): void => {
     simulation?.stop();
     const rect = canvas.getBoundingClientRect();
@@ -240,7 +295,22 @@ export function createForceGraph(
       .alpha(reducedMotion ? 0 : 0.9)
       .alphaDecay(reducedMotion ? 1 : 0.04);
 
-    if (reducedMotion) simulation.tick(120);
+    if (reducedMotion) {
+      simulation.tick(120);
+      // For reduced motion, nodes are positioned synchronously — fit immediately.
+      if (pendingFit) {
+        pendingFit = false;
+        fitToNodes();
+      }
+    } else {
+      // Fit the viewport once the simulation has fully cooled.
+      simulation.on('end', () => {
+        if (pendingFit) {
+          pendingFit = false;
+          fitToNodes();
+        }
+      });
+    }
   };
 
   const zoomBehavior: ZoomBehavior<HTMLCanvasElement, unknown> = zoom<HTMLCanvasElement, unknown>()
@@ -301,6 +371,8 @@ export function createForceGraph(
       return;
     }
     lastClick = node ? { id: node.id, at: now } : { id: '', at: 0 };
+    // Background click clears persistent focus.
+    if (!node) focusId = null;
     selectedId = node?.id ?? null;
     highlightIds = selectedId ? computeNeighborSet(selectedId) : null;
     callbacks.onSelect?.(node);
@@ -329,6 +401,22 @@ export function createForceGraph(
     attributeFilter: ['data-theme', 'class'],
   });
 
+  // Observe canvas layout changes and redraw without restarting the simulation.
+  const resizeObserver = new ResizeObserver(() => {
+    resizeCanvas();
+    draw();
+  });
+  resizeObserver.observe(canvas);
+
+  // Clear focus when Escape is pressed anywhere in the document.
+  const handleKeydown = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') {
+      focusId = null;
+      highlightIds = selectedId ? computeNeighborSet(selectedId) : null;
+    }
+  };
+  document.addEventListener('keydown', handleKeydown);
+
   resizeCanvas();
   rafId = requestAnimationFrame(tickLoop);
 
@@ -339,42 +427,38 @@ export function createForceGraph(
       edgeReveal = reducedMotion ? 1 : 0;
       selectedId = null;
       hoverId = null;
+      focusId = null;
       highlightIds = null;
+      pendingFit = true;
       restartSimulation();
     },
     selectNode(id) {
       selectedId = id;
+      // Navigating to a node clears any persistent focus highlight.
+      focusId = null;
       highlightIds = id ? computeNeighborSet(id) : null;
     },
     setHoverNode(id) {
       hoverId = id;
     },
     fitToView() {
-      if (!nodes.length) {
-        transform = zoomIdentity;
-        select(canvas).call(zoomBehavior.transform, zoomIdentity);
-        return;
-      }
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const n of nodes) {
-        if (n.x == null || n.y == null) continue;
-        minX = Math.min(minX, n.x);
-        minY = Math.min(minY, n.y);
-        maxX = Math.max(maxX, n.x);
-        maxY = Math.max(maxY, n.y);
-      }
-      const rect = canvas.getBoundingClientRect();
-      const pad = 48;
-      const gw = Math.max(1, maxX - minX);
-      const gh = Math.max(1, maxY - minY);
-      const k = Math.min((rect.width - pad * 2) / gw, (rect.height - pad * 2) / gh, 2.5);
-      const tx = rect.width / 2 - ((minX + maxX) / 2) * k;
-      const ty = rect.height / 2 - ((minY + maxY) / 2) * k;
-      transform = zoomIdentity.translate(tx, ty).scale(k);
-      select(canvas).call(zoomBehavior.transform, transform);
+      fitToNodes();
+    },
+    fitToNodes(ids) {
+      fitToNodes(ids);
+    },
+    centerOnNode(id) {
+      centerOnNode(id);
+    },
+    focusNode(id) {
+      focusId = id;
+      selectedId = id;
+      highlightIds = computeNeighborSet(id);
+      fitToNodes(highlightIds);
+    },
+    clearFocus() {
+      focusId = null;
+      highlightIds = selectedId ? computeNeighborSet(selectedId) : null;
     },
     zoomBy(factor) {
       const rect = canvas.getBoundingClientRect();
@@ -392,6 +476,8 @@ export function createForceGraph(
       cancelAnimationFrame(rafId);
       simulation?.stop();
       themeObserver.disconnect();
+      resizeObserver.disconnect();
+      document.removeEventListener('keydown', handleKeydown);
       select(canvas).on('.zoom', null).on('.drag', null);
     },
     getTransform() {

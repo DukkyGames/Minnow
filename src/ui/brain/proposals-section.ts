@@ -19,7 +19,7 @@ export async function renderProposalsSection(): Promise<void> {
   if (!panel) return;
   await mountMemoryProposalsPanel(panel, setProposalsStatus, {
     onMemoryAccepted: () => {
-      void import('./wiki-section').then((m) => m.renderWikiSection());
+      void import('./graph-section').then((m) => m.renderGraphSection());
     },
   }, {
     list: '#brainProposalsList',

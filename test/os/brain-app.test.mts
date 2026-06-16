@@ -72,5 +72,6 @@ describe('brain markup contract', () => {
     assert.match(html, /id="brainCodeRemapRepo"/);
     assert.match(html, /id="brainCodeReindex"/);
     assert.match(html, /id="brainCodeSettingsSave"/);
+    assert.match(html, /id="brainGraphOrphanToggle"/);
   });
 });

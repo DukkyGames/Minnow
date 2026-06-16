@@ -245,11 +245,11 @@ async function renderCallGraph(
         if (node?.symbolId) void selectSymbol(node.symbolId);
       },
     });
-    window.addEventListener('resize', () => codeGraphApi?.resize());
+    // Resize is handled internally by the engine's ResizeObserver — no window listener needed.
   }
 
   codeGraphApi.setData(data.nodes, data.edges);
-  requestAnimationFrame(() => codeGraphApi?.fitToView());
+  // Auto-fit is driven by the engine's pendingFit / simulation 'end' handler — no RAF needed.
 
   const inspector = document.getElementById('brainInspector');
   if (inspector) {
