@@ -229,7 +229,10 @@ const DEFAULT_PROPOSAL_SELECTORS: ProposalsPanelSelectors = {
 export async function mountMemoryProposalsPanel(
   container: HTMLElement,
   setStatus: StatusFn,
-  hooks?: { onMemoryAccepted?: () => void | Promise<void> },
+  hooks?: {
+    onMemoryAccepted?: () => void | Promise<void>;
+    renderEmpty?: (mount: HTMLElement) => void;
+  },
   selectors: ProposalsPanelSelectors = DEFAULT_PROPOSAL_SELECTORS,
 ): Promise<void> {
   if (!panelBound) {
@@ -279,10 +282,14 @@ export async function mountMemoryProposalsPanel(
   }
 
   if (!total) {
-    const empty = document.createElement('p');
-    empty.className = 'settings-section-note';
-    empty.textContent = 'No pending proposals.';
-    listEl.append(empty);
+    if (hooks?.renderEmpty) {
+      hooks.renderEmpty(listEl);
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'settings-section-note';
+      empty.textContent = 'No pending proposals.';
+      listEl.append(empty);
+    }
     return;
   }
 

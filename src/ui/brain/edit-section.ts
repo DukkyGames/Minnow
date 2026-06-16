@@ -3,15 +3,49 @@
  */
 
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
+import { setBrainHeaderActions } from '../brain-page';
 import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
+import { renderBrainMarkdown } from './wikilink-markdown';
 
 let bindingsDone = false;
+let previewBound = false;
 
 function setEditStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   const el = document.getElementById('brainEditStatus');
   if (!el) return;
   el.textContent = message;
   el.dataset.kind = kind;
+}
+
+/** Refresh the live markdown preview pane from the body textarea. */
+function refreshEditPreview(): void {
+  const bodyEl = document.getElementById('brainEditBody') as HTMLTextAreaElement | null;
+  const previewEl = document.getElementById('brainEditPreview');
+  if (!bodyEl || !previewEl) return;
+
+  const body = bodyEl.value;
+  if (!body.trim()) {
+    previewEl.replaceChildren();
+    previewEl.classList.add('brain-muted');
+    previewEl.textContent = 'Start typing in the body to see a live preview.';
+    return;
+  }
+
+  previewEl.classList.remove('brain-muted');
+  renderBrainMarkdown(previewEl, body, (path) => {
+    void import('../brain-page').then((m) => m.openBrainEditForPath(path));
+  });
+}
+
+function mountEditHeaderActions(): void {
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'brain-action-btn is-primary';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', () => {
+    void saveEditForm();
+  });
+  setBrainHeaderActions(saveBtn);
 }
 
 function bindEditSection(): void {
@@ -29,6 +63,13 @@ function bindEditSection(): void {
   document.getElementById('brainEditSave')?.addEventListener('click', () => {
     void saveEditForm();
   });
+}
+
+function bindEditPreview(): void {
+  if (previewBound) return;
+  previewBound = true;
+  const bodyEl = document.getElementById('brainEditBody');
+  bodyEl?.addEventListener('input', refreshEditPreview);
 }
 
 async function loadEditForm(): Promise<void> {
@@ -50,6 +91,7 @@ async function loadEditForm(): Promise<void> {
     titleEl.value = '';
     tagsEl.value = '';
     bodyEl.value = '';
+    refreshEditPreview();
     setEditStatus('ok', 'New page — fill in title and body, then save.');
     return;
   }
@@ -57,6 +99,7 @@ async function loadEditForm(): Promise<void> {
   titleEl.value = page.meta.title;
   tagsEl.value = (page.meta.tags ?? []).join(', ');
   bodyEl.value = page.body;
+  refreshEditPreview();
   setEditStatus('ok', `Loaded ${relPath}`);
 }
 
@@ -72,6 +115,7 @@ async function prepareNewPage(): Promise<void> {
   titleEl.value = '';
   tagsEl.value = '';
   bodyEl.value = '';
+  refreshEditPreview();
   setEditStatus('ok', 'New page — enter a path, title, and body, then save.');
   pathEl.focus();
 }
@@ -117,6 +161,9 @@ async function saveEditForm(): Promise<void> {
 /** Mount edit section and optionally pre-fill a path from Wiki. */
 export async function renderEditSection(prefillPath?: string): Promise<void> {
   bindEditSection();
+  bindEditPreview();
+  mountEditHeaderActions();
+
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;
   if (pathEl && prefillPath) {
     pathEl.value = prefillPath;
@@ -131,4 +178,5 @@ export async function renderEditSection(prefillPath?: string): Promise<void> {
     const fromGraph = getGraphSelectedPath();
     if (fromGraph) pathEl.value = fromGraph;
   }
+  refreshEditPreview();
 }

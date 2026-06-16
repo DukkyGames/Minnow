@@ -4,6 +4,7 @@
 
 import { fetchBrainLog } from '../../brain/client';
 import { renderBrainMarkdown } from './wikilink-markdown';
+import { renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage } from './graph-section';
 
 /** Render the wiki changelog. */
@@ -12,6 +13,7 @@ export async function renderLogSection(): Promise<void> {
   const offlineEl = document.getElementById('brainLogOffline');
   if (!mount) return;
 
+  renderBrainLoading(mount, 'Loading changelog…');
   const log = await fetchBrainLog();
   const online = log !== null;
   offlineEl?.classList.toggle('hidden', online);

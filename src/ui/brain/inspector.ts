@@ -5,6 +5,7 @@
 import { fetchBrainPage } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
 import { computeBrainBacklinks } from './tree-utils';
+import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { renderBrainMarkdown } from './wikilink-markdown';
 
 export type InspectorNavigateFn = (relPath: string) => void;
@@ -22,19 +23,23 @@ export async function renderBrainInspector(
   mount.setAttribute('aria-hidden', 'false');
   mount.replaceChildren();
 
-  const loading = document.createElement('p');
-  loading.className = 'brain-inspector__loading';
-  loading.textContent = 'Loading page…';
-  mount.append(loading);
+  const inner = document.createElement('div');
+  inner.className = 'brain-inspector__inner';
+  mount.append(inner);
+
+  const loadingMount = document.createElement('div');
+  inner.append(loadingMount);
+  renderBrainLoading(loadingMount, 'Loading page…');
 
   const page = await fetchBrainPage(relPath);
-  mount.replaceChildren();
+  inner.replaceChildren();
 
   if (!page) {
-    const err = document.createElement('p');
-    err.className = 'brain-error';
-    err.textContent = `Could not load ${relPath}.`;
-    mount.append(err);
+    renderBrainEmptyState(inner, {
+      icon: 'file',
+      title: 'Page unavailable',
+      message: `Could not load ${relPath}.`,
+    });
     return;
   }
 
@@ -45,7 +50,7 @@ export async function renderBrainInspector(
   closeBtn.innerHTML =
     '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   closeBtn.addEventListener('click', () => closeBrainInspector(mount));
-  mount.append(closeBtn);
+  inner.append(closeBtn);
 
   const head = document.createElement('header');
   head.className = 'brain-inspector__head';
@@ -58,10 +63,15 @@ export async function renderBrainInspector(
   head.append(title, pathLine);
 
   if (page.meta.tags?.length) {
-    const tags = document.createElement('p');
-    tags.className = 'brain-inspector__tags';
-    tags.textContent = page.meta.tags.join(' · ');
-    head.append(tags);
+    const chips = document.createElement('div');
+    chips.className = 'brain-inspector__tag-chips brain-chip-row';
+    for (const tag of page.meta.tags) {
+      const chip = document.createElement('span');
+      chip.className = 'brain-chip';
+      chip.textContent = tag;
+      chips.append(chip);
+    }
+    head.append(chips);
   }
 
   if (page.meta.summary?.trim()) {
@@ -71,7 +81,7 @@ export async function renderBrainInspector(
     head.append(summary);
   }
 
-  mount.append(head);
+  inner.append(head);
 
   const backlinks = computeBrainBacklinks(catalogPages, page.path);
   const backSection = document.createElement('section');
@@ -101,12 +111,12 @@ export async function renderBrainInspector(
     }
     backSection.append(list);
   }
-  mount.append(backSection);
+  inner.append(backSection);
 
   const bodyWrap = document.createElement('div');
   bodyWrap.className = 'brain-inspector__body';
   renderBrainMarkdown(bodyWrap, page.body, navigate);
-  mount.append(bodyWrap);
+  inner.append(bodyWrap);
 
   const actions = document.createElement('div');
   actions.className = 'brain-inspector__actions';
@@ -116,7 +126,7 @@ export async function renderBrainInspector(
   editBtn.textContent = 'Edit page';
   editBtn.addEventListener('click', () => onEdit(page.path));
   actions.append(editBtn);
-  mount.append(actions);
+  inner.append(actions);
 }
 
 /** Collapse the inspector panel. */
@@ -137,6 +147,10 @@ export function renderSymbolInspector(
   mount.setAttribute('aria-hidden', 'false');
   mount.replaceChildren();
 
+  const inner = document.createElement('div');
+  inner.className = 'brain-inspector__inner';
+  mount.append(inner);
+
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'brain-inspector__close icon-btn';
@@ -144,7 +158,7 @@ export function renderSymbolInspector(
   closeBtn.innerHTML =
     '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   closeBtn.addEventListener('click', () => closeBrainInspector(mount));
-  mount.append(closeBtn);
+  inner.append(closeBtn);
 
   const head = document.createElement('header');
   head.className = 'brain-inspector__head';
@@ -155,12 +169,12 @@ export function renderSymbolInspector(
   pathLine.className = 'brain-inspector__path';
   pathLine.textContent = meta;
   head.append(title, pathLine);
-  mount.append(head);
+  inner.append(head);
 
   if (source?.trim()) {
     const pre = document.createElement('pre');
     pre.className = 'brain-code-def';
     pre.textContent = source;
-    mount.append(pre);
+    inner.append(pre);
   }
 }
