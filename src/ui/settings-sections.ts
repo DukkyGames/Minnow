@@ -119,6 +119,7 @@ import { renderDeepResearchSettingsSection } from './settings-research-section';
 import { renderSamplerSettingsSection } from './settings-sampler';
 import { renderThinkingSettingsSection } from './settings-thinking';
 import { renderWebhooksSettingsSection } from './settings-webhooks';
+import { renderOAuthSettingsSection } from './settings-oauth';
 import {
   loadTerminalMeta,
   saveTerminalMeta,
@@ -1717,6 +1718,12 @@ async function renderWebhooksSection(): Promise<void> {
   await renderWebhooksSettingsSection(mount);
 }
 
+async function renderOAuthSection(): Promise<void> {
+  const mount = clearMount('settingsOAuthBody');
+  if (!mount) return;
+  await renderOAuthSettingsSection(mount);
+}
+
 async function renderEvalsSection(): Promise<void> {
   const mount = clearMount('settingsEvalsBody');
   if (!mount) return;
@@ -2149,6 +2156,9 @@ export async function refreshSettingsSection(
       break;
     case 'webhooks':
       await renderWebhooksSection();
+      break;
+    case 'oauth':
+      await renderOAuthSection();
       break;
     case 'evals':
       await renderEvalsSection();

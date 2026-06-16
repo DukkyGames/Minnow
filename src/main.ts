@@ -341,6 +341,8 @@ export async function initApp(): Promise<void> {
   schedulerPage.initSchedulerPage();
   const calendarPage = await import('./ui/calendar-page');
   calendarPage.initCalendarPage();
+  const emailPage = await import('./ui/email-page');
+  emailPage.initEmailPage();
   const researchPage = await import('./research/panel');
   researchPage.initResearchPage();
   const chatApp = await import('./ui/chat-app');

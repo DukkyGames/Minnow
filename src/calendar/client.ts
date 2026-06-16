@@ -36,6 +36,9 @@ export interface CalDavAccount {
   url: string;
   username: string;
   lastSyncAt?: string;
+  syncBackend?: 'caldav' | 'google' | 'microsoft';
+  oauthConnectionId?: string;
+  provider?: 'google' | 'microsoft';
 }
 
 async function parseJson<T>(res: Response): Promise<T> {

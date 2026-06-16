@@ -3,7 +3,7 @@
 Tier: 3  
 Effort: XL  
 Priority: Later  
-Status: Planned  
+Status: Shipped (MIN-126)  
 Depends on: #12 and #13  
 Recommended scope: read-only triage first  
 Linear: [MIN-126](https://linear.app/minnowai/issue/MIN-126/odysseus-port-09-email-integration)
@@ -223,20 +223,20 @@ interface EmailMessage {
 
 ## Implementation TODOs
 
-- [ ] Add email account encrypted config
-- [ ] Add IMAP connection and folder listing
-- [ ] Add paginated inbox fetch
-- [ ] Add thread normalization
-- [ ] Document IMAP/SMTP limitations, especially Outlook accounts that block basic auth
-- [ ] Add Email MinnowOS app shell
-- [ ] Add read-only thread UI
-- [ ] Wrap email body content with #13 before LLM triage
-- [ ] Add AI triage
-- [ ] Add background polling and cache refresh
-- [ ] Add `list_mail` tool
-- [ ] Add draft reply flow
-- [ ] Add SMTP send with explicit user action
-- [ ] Update `documentation/context.md`
+- [x] Add email account encrypted config
+- [x] Add IMAP connection and folder listing
+- [x] Add paginated inbox fetch
+- [x] Add thread normalization
+- [x] Document IMAP/SMTP limitations, especially Outlook accounts that block basic auth
+- [x] Add Email MinnowOS app shell
+- [x] Add read-only thread UI
+- [x] Wrap email body content with #13 before LLM triage
+- [x] Add AI triage
+- [x] Add background polling and cache refresh
+- [x] Add `list_mail` tool
+- [x] Add draft reply flow
+- [x] Add SMTP send with explicit user action
+- [x] Update `documentation/context.md`
 
 ## Odysseus Tests to Port
 

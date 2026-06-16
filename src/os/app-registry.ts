@@ -85,6 +85,14 @@ export const APPS: readonly AppDefinition[] = [
     presentationMode: 'window',
   },
   {
+    id: 'email',
+    name: 'Email',
+    icon: 'email',
+    tag: 'IMAP triage and draft replies',
+    description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
+    presentationMode: 'fullscreen',
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: 'gear',

@@ -21,6 +21,13 @@ import {
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
 import { toolManageCalendar } from '../calendar/tool-handler.js';
+import {
+  toolDraftReply,
+  toolEmailAction,
+  toolGenerateReplyVariants,
+  toolListMail,
+  toolSummarizeInbox,
+} from '../email/tool-handler.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
 import {
@@ -898,6 +905,11 @@ const SERVER_TOOL_HANDLERS = {
   },
   save_memory: toolSaveMemory,
   manage_calendar: toolManageCalendar,
+  list_mail: toolListMail,
+  draft_reply: toolDraftReply,
+  summarize_inbox: toolSummarizeInbox,
+  generate_reply_variants: toolGenerateReplyVariants,
+  email_action: toolEmailAction,
 };
 
 /**

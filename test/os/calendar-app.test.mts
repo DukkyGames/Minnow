@@ -93,6 +93,16 @@ describe('calendar router', () => {
   });
 });
 
+describe('calendar oauth UI', () => {
+  test('calendar panel mounts OAuth connect panel', () => {
+    const source = fs.readFileSync(
+      new URL('../../src/ui/calendar/calendar-panel.ts', import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /mountOAuthConnectPanel/);
+  });
+});
+
 describe('calendar markup contract', () => {
   test('index.html defines calendarView shell', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');

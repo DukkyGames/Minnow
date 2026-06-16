@@ -27,7 +27,13 @@ const THOUGHT_TAG_OPEN_RE = /<thought(\s+[^>]*)?>/gi;
 const THOUGHT_TAG_CLOSE_RE = /<\/thought>/gi;
 const GEMMA_THOUGHT_CHANNEL_CAPTURE_RE =
   /<\|channel>thought\s*\n?([\s\S]*?)<channel\|>\s*/gi;
-const QWEN_THINKING_RE = /^Thinking Process:.*?(?=\n\n#|\n\n\*\*|\Z)/is;
+/** Split before markdown headings, bold lines, or common email / reply openings. */
+const REPLY_BODY_START =
+  '(?:#|\\*\\*|Dear |Hi[,! ]|Hello |Thanks|Thank you |Best[, ]|Regards|Sincerely|I hope|Looking forward|Sounds good)';
+const QWEN_THINKING_RE = new RegExp(
+  `^Thinking(?:\\s+Process)?:.*?(?=\\n\\n${REPLY_BODY_START}|\\Z)`,
+  'is',
+);
 const PROMPT_ECHO_RES = [
   /^The user asks:.*?(?=\n\n#|\n\n\*\*[A-Z]|\Z)/s,
   /^We need to.*?(?=\n\n#|\n\n\*\*[A-Z]|\Z)/s,
@@ -133,7 +139,7 @@ function stripReasoningProse(text) {
   }
 
   const REASONING_PREFIX_RE =
-    /^\s*(?:the user (?:wants|is|asks|needs|wrote|said|told|messaged|requested)|i (?:need|should|have|'ll|will|am going)(?: to)? (?:write|draft|reply|respond|read|check|look|review|consider|think|provide|generate|produce|craft|compose|acknowledge|summarize|answer|give|keep|aim|make|address|focus|use|just|simply|analyze|format|create|build|note|decide)|let me (?:think|look|see|check|read|review|consider|draft|write|analyze|format|summarize|create|produce|craft|note|extract|identify|figure)|looking at (?:the|this|that)|(?:okay|alright|hmm|right|so|well|first|next|now)[,.]?\s+(?:the|i|let|so|now|this|here)|based on (?:the|this|what|context)|to (?:draft|write|reply|respond|summarize|answer))\b/i;
+    /^\s*(?:thinking(?:\s+process)?\s*:|the user (?:wants|is|asks|needs|wrote|said|told|messaged|requested)|i (?:need|should|have|'ll|will|am going)(?: to)? (?:write|draft|reply|respond|read|check|look|review|consider|think|provide|generate|produce|craft|compose|acknowledge|summarize|answer|give|keep|aim|make|address|focus|use|just|simply|analyze|format|create|build|note|decide)|let me (?:think|look|see|check|read|review|consider|draft|write|analyze|format|summarize|create|produce|craft|note|extract|identify|figure)|looking at (?:the|this|that)|(?:okay|alright|hmm|right|so|well|first|next|now)[,.]?\s+(?:the|i|let|so|now|this|here)|based on (?:the|this|what|context)|to (?:draft|write|reply|respond|summarize|answer))\b/i;
 
   let firstKeep = 0;
   for (let i = 0; i < paragraphs.length; i += 1) {
@@ -160,6 +166,19 @@ export function stripThinking(text) {
     return text;
   }
   return stripThink(text, { prose: false, promptEcho: true });
+}
+
+/**
+ * Strip reasoning from short-form model output (email drafts, compose rewrites).
+ * Enables prose heuristics in addition to tagged thinking blocks.
+ * @param {string | null | undefined} text
+ * @returns {string | null | undefined}
+ */
+export function stripDraftOutput(text) {
+  if (text == null) {
+    return text;
+  }
+  return stripThink(text, { prose: true, promptEcho: true });
 }
 
 /**

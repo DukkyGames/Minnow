@@ -40,6 +40,7 @@ export { getSearch, setSearch, getPage, setPage, getResearchCacheDir, RESEARCH_C
 export { prepareResearchFetchUrl } from './fetch-prep.js';
 export {
   stripThinking,
+  stripDraftOutput,
   stripThink,
   isLowQuality,
   parseStopDecision,

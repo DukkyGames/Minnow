@@ -28,6 +28,7 @@ export type SettingsSectionId =
   | 'editor'
   | 'skills'
   | 'webhooks'
+  | 'oauth'
   | 'features'
   | 'evals';
 
@@ -58,6 +59,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   editor: 'Editor',
   skills: 'Skills',
   webhooks: 'Webhooks',
+  oauth: 'OAuth',
   features: 'Orchestration',
   evals: 'Evals',
 };
@@ -97,7 +99,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'integrations',
     label: 'Tools & integrations',
-    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills', 'webhooks'],
+    sections: ['search', 'deep-research', 'servers', 'tools', 'mcp', 'lsp', 'editor', 'skills', 'webhooks', 'oauth'],
   },
   {
     id: 'advanced',

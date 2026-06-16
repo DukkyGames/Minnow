@@ -73,6 +73,9 @@ export async function createCalDavAccount(input) {
     lastSyncAt: null,
     createdAt: now,
     updatedAt: now,
+    syncBackend: 'caldav',
+    oauthConnectionId: null,
+    provider: null,
   });
 
   return getCalDavAccountRow(id);
