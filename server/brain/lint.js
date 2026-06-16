@@ -11,6 +11,7 @@ import {
   loadBrainConfig,
 } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
+import { detectAndApplyAnchorDrift } from './code/anchors.js';
 
 const LINT_SYSTEM_PROMPT = `You review a personal wiki for contradictions and broken wikilinks.
 
@@ -102,6 +103,7 @@ async function detectContradictionsWithLlm(pages) {
  * @param {{ includeLlm?: boolean }} [opts]
  */
 export async function lintBrainWiki(opts = {}) {
+  const anchorDrift = await detectAndApplyAnchorDrift();
   const catalog = await loadCatalog();
   const pages = catalog.pages.length > 0 ? catalog.pages : await listPages();
   const orphans = findOrphanPages({ pages });
@@ -128,10 +130,16 @@ export async function lintBrainWiki(opts = {}) {
       title: p.title,
       status: p.status,
     })),
+    anchorDrift: anchorDrift.map((d) => ({
+      path: d.path,
+      title: d.title,
+      symbolIds: d.symbolIds,
+      summary: `Anchored symbol(s) changed: ${d.symbolIds.join(', ')}`,
+    })),
     missingLinks,
     contradictions,
     extensions: {
-      anchorDrift: 'MIN-B9',
+      anchorDrift: anchorDrift.length > 0 ? 'active' : 'ok',
     },
     embeddingsEnabled: brainConfig.embeddings?.enabled === true,
   };

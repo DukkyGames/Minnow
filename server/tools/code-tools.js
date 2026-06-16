@@ -4,6 +4,7 @@
 
 import {
   callsOf,
+  explainSymbol,
   findSymbol,
   loadBrainCodeConfig,
   queryCodeStatus,
@@ -121,4 +122,28 @@ export async function toolReadSymbol(args) {
   return [`# ${row.signature}`, `id: ${row.id}`, `file: ${row.file}:${row.line_start}-${row.line_end}`, '', text].join(
     '\n',
   );
+}
+
+/**
+ * Reverse lookup: wiki pages that explain a symbol (anchor bridge).
+ * @param {Record<string, unknown>} args
+ */
+export async function toolExplainSymbol(args) {
+  const disabled = await ensureCodeEnabled();
+  if (disabled) return disabled;
+
+  const symbol = String(args?.symbol ?? '').trim();
+  if (!symbol) return 'Error: symbol is required (id or name).';
+
+  const { symbolId, pages, error } = await explainSymbol(symbol);
+  if (error) return `Error: ${error}`;
+  if (!pages.length) {
+    return `No wiki pages anchor ${symbolId ?? symbol}. Try brain_search for prose notes.`;
+  }
+
+  const lines = pages.map(
+    (p) =>
+      `- **${p.title}** — \`${p.path}\`${p.status === 'stale' ? ' _(stale)_' : ''}\n  ${p.summary || '(no summary)'}`,
+  );
+  return [`Wiki pages explaining ${symbolId}:`, '', ...lines].join('\n');
 }

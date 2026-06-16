@@ -27,14 +27,13 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 | Fuzzy prose lookup across the wiki | `brain_search` |
 | Exact string or regex in repo files | `grep` |
 | Where is a symbol / what calls it / signature map | `repo_map` → `find_symbol` / `who_calls` / `read_symbol` |
+| What does this code mean / design intent for a symbol | `explain_symbol` → `read_symbol` |
 | List or browse wiki structure | `brain_list` |
 | Quick durable fact | `save_memory` (alias → `pages/facts/`) |
 | Raw document → wiki pages | `brain_ingest_source` |
 | Wiki maintenance note | `brain_append_log` |
 
-<!-- MIN-B7: code-tool routing lines (explain_code, code_search, …) slot in here -->
-**Code tasks:** start with `repo_map` (low-res overview), then `find_symbol` / `read_symbol` to zoom; use `who_calls` for call graph edges. Exact strings in files → `grep`.
-<!-- MIN-B9: explain_symbol routing line slots in here -->
+**Code tasks:** start with `repo_map` (low-res overview), then `find_symbol` / `read_symbol` to zoom; use `who_calls` for call graph edges. For design intent behind a symbol, use `explain_symbol` then `read_symbol`. Exact strings in files → `grep`.
 
 ### How to use retrieved notes
 

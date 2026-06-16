@@ -239,3 +239,4 @@ function resolveSymbolId(db, repo, symbolRef) {
 }
 
 export { reindexCode };
+export { explainSymbol, resolveAnchorsToCode } from './anchors.js';

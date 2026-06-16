@@ -1554,6 +1554,24 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'explain_symbol',
+    label: 'Explain symbol',
+    description: 'Find wiki pages anchored to a code symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'explain_symbol',
+      'Return Brain wiki pages whose anchors[] explain a symbol (code → meaning bridge). Use before read_symbol when you need design context for implementation code.',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<qualified.name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
+    ),
+  },
+  {
     id: 'manage_calendar',
     label: 'Manage calendar',
     description:

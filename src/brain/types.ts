@@ -59,6 +59,12 @@ export interface BrainLintReport {
   pageCount: number;
   orphans: Array<{ path: string; title: string; status?: string }>;
   stale: Array<{ path: string; title: string; status?: string }>;
+  anchorDrift?: Array<{
+    path: string;
+    title: string;
+    symbolIds: string[];
+    summary: string;
+  }>;
   missingLinks: Array<{ from: string; target: string; summary: string }>;
   contradictions: Array<{ pages: string[]; summary: string }>;
   embeddingsEnabled: boolean;
@@ -149,4 +155,22 @@ export interface BrainCodeReindexResult {
   repo: string;
   indexedFiles: number;
   results?: Array<{ file: string; symbols: number; edges: number; error?: string }>;
+}
+
+/** Wiki page anchored to a symbol (explain_symbol). */
+export interface BrainCodeExplainPage {
+  pageId: string;
+  path: string;
+  title: string;
+  summary: string;
+  status?: string;
+  symbolId: string;
+  symbolHashAtSynth?: string;
+}
+
+/** GET/POST /api/brain/code/explain. */
+export interface BrainCodeExplainResult {
+  symbolId?: string;
+  pages: BrainCodeExplainPage[];
+  error?: string;
 }
