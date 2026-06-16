@@ -172,6 +172,9 @@ function bindSettingsSection(): void {
       const embEl = document.getElementById(
         'brainCodeEmbeddingsEnabled',
       ) as HTMLInputElement | null;
+      const scaffoldEl = document.getElementById(
+        'brainCodeAutoScaffold',
+      ) as HTMLInputElement | null;
       const budget = Number(budgetEl?.value ?? 1500);
       if (!Number.isFinite(budget) || budget < 200) {
         setStatus('err', 'Token budget must be at least 200');
@@ -192,6 +195,7 @@ function bindSettingsSection(): void {
             ? cadenceEl.value
             : 'on-demand',
         codeEmbeddingsEnabled: embEl?.checked === true,
+        autoScaffoldIndexConfig: scaffoldEl?.checked !== false,
       });
       setStatus(saved ? 'ok' : 'err', saved ? 'Code index settings saved' : 'Save failed');
       if (saved) await refreshCodeSettingsFields();
@@ -298,6 +302,7 @@ async function refreshCodeSettingsFields(): Promise<void> {
   const budgetEl = document.getElementById('brainCodeTokenBudget') as HTMLInputElement | null;
   const cadenceEl = document.getElementById('brainCodeReindexCadence') as HTMLSelectElement | null;
   const embEl = document.getElementById('brainCodeEmbeddingsEnabled') as HTMLInputElement | null;
+  const scaffoldEl = document.getElementById('brainCodeAutoScaffold') as HTMLInputElement | null;
 
   const [config, status] = await Promise.all([
     fetchBrainCodeConfig(),
@@ -328,6 +333,9 @@ async function refreshCodeSettingsFields(): Promise<void> {
   }
   if (embEl && !embEl.matches(':focus')) {
     embEl.checked = config.codeEmbeddingsEnabled;
+  }
+  if (scaffoldEl && !scaffoldEl.matches(':focus')) {
+    scaffoldEl.checked = config.autoScaffoldIndexConfig !== false;
   }
   await refreshGitHookStatus();
 }

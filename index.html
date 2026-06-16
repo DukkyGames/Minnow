@@ -1430,6 +1430,8 @@
                 </select>
               </label>
               <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
+              <label><input type="checkbox" id="brainCodeAutoScaffold" checked> Auto-create <code>.minnow/brain-jsconfig.json</code> when the workspace has JS/TS but no tsconfig/jsconfig</label>
+              <p class="brain-muted">Indexing scaffold lives under <code>.minnow/</code> and is not written to the repo root. Disable if you manage project config yourself.</p>
               <p class="brain-muted">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
               <div class="brain-settings-actions">
                 <button type="button" class="brain-action-btn" id="brainCodeGitHookInstall">Install git post-commit hook</button>

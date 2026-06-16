@@ -81,6 +81,8 @@ export interface BrainCodeConfig {
   repoMapTokenBudget: number;
   reindexCadence: BrainCodeReindexCadence;
   codeEmbeddingsEnabled: boolean;
+  /** Write .minnow/brain-jsconfig.json when JS/TS sources lack ts/js config. */
+  autoScaffoldIndexConfig: boolean;
 }
 
 /** GET /api/brain/code/status. */
@@ -170,6 +172,12 @@ export interface BrainCodeReindexResult {
   repo: string;
   indexedFiles: number;
   results?: Array<{ file: string; symbols: number; edges: number; error?: string }>;
+  scaffold?: {
+    created: boolean;
+    path?: string;
+    skipped?: boolean;
+    reason?: string;
+  };
 }
 
 /** Wiki page anchored to a symbol (explain_symbol). */
