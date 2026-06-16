@@ -205,6 +205,9 @@ export async function readResource(resource) {
     if (!data?.editorAiCompletion) {
       patch.editorAiCompletion = DEFAULT_META.editorAiCompletion;
     }
+    if (!data?.editorIntentMode) {
+      patch.editorIntentMode = DEFAULT_META.editorIntentMode;
+    }
     if (!data?.editorSettings) {
       patch.editorSettings = DEFAULT_META.editorSettings;
     }

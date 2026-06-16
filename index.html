@@ -1780,6 +1780,10 @@
     <header class="file-viewer-header">
       <div class="file-viewer-tabs" id="fileViewerTabs" role="tablist" aria-label="Open files"></div>
       <span class="file-viewer-diagnostics" id="fileViewerDiagnostics" hidden></span>
+      <span class="file-viewer-intent-status" id="fileViewerIntentStatus" hidden aria-live="polite"></span>
+      <button type="button" class="file-viewer-intent-toggle" id="btnFileViewerIntent" aria-pressed="false" title="Intent mode (Ctrl+I)" disabled>
+        Intent
+      </button>
       <button type="button" class="icon-btn file-viewer-save" id="btnFileViewerSave" aria-label="Save file" title="Save (Ctrl+S)" disabled>
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
       </button>
