@@ -1,0 +1,35 @@
+/**
+ * Scheduler job editor — floating window body styles.
+ */
+
+@import './scheduler-page.css';
+
+.scheduler-editor-window-body {
+  padding: 0;
+  background: var(--mn-bg);
+}
+
+.mn-os-window-body.scheduler-editor-window-body .scheduler-editor {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  min-height: 100%;
+  padding: 14px 16px 18px;
+}
+
+.mn-os-window-body.scheduler-editor-window-body .scheduler-editor__fields {
+  gap: 12px;
+}
+
+.mn-os-window-body.scheduler-editor-window-body .scheduler-textarea {
+  min-height: 5.5rem;
+}
+
+.mn-os-window-body.scheduler-editor-window-body .scheduler-editor__actions {
+  position: sticky;
+  bottom: 0;
+  margin: 16px -16px -18px;
+  padding: 12px 16px 16px;
+  background: color-mix(in srgb, var(--mn-bg) 94%, transparent);
+  backdrop-filter: blur(8px);
+}

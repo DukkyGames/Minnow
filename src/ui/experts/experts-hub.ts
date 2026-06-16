@@ -39,8 +39,9 @@ import {
   openExpertChatInShell,
   teardownExpertScopeShell,
 } from './experts-scope';
-import { appendChatRow } from '../sidebar';
-import { isOsAppHash, isOsShellEnabled } from '../../os/page-bridge';
+import { appendChatRow, deleteChat } from '../sidebar';
+import { isOsAppHash, isOsEmbedded } from '../../os/page-bridge';
+import { isDesktopExpertsActive, isDesktopExpertsHubActive } from '../../os/desktop-state';
 import { launchApp, navigateToDesktop } from '../../os/router';
 
 export { openExpertChatInShell } from './experts-scope';
@@ -204,6 +205,7 @@ function renderExpertList(): void {
 function renderExpertDetail(): void {
   const mount = document.getElementById('expertsDetailMount');
   if (!mount) return;
+  showExpertsActionError(null);
   mount.replaceChildren();
 
   if (!selectedExpertId) return;
@@ -271,6 +273,10 @@ function renderExpertDetail(): void {
         onActivate: (c) => {
           void openExpertChatInShell(c);
         },
+        onDelete: (c) => {
+          deleteChat(c.id);
+          renderExpertDetail();
+        },
       });
     }
   }
@@ -297,7 +303,8 @@ function renderExpertDetail(): void {
     editBtn.type = 'button';
     editBtn.className = 'experts-btn-ghost';
     editBtn.textContent = 'Edit';
-    editBtn.addEventListener('click', () => {
+    editBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
       void openEditExpertStep(selectedExpertId!);
     });
 
@@ -305,8 +312,14 @@ function renderExpertDetail(): void {
     deleteBtn.type = 'button';
     deleteBtn.className = 'experts-btn-ghost is-danger';
     deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', () => {
-      void deleteExpertFromHub(selectedExpertId!, expert.meta.label);
+    deleteBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const expertId = selectedExpertId!;
+      const label = expert.meta.label;
+      if (!confirm(`Delete "${label}"? This cannot be undone.`)) {
+        return;
+      }
+      void deleteExpertConfirmed(expertId);
     });
 
     actions.appendChild(editBtn);
@@ -438,8 +451,18 @@ export async function startExpertChat(expertId: string): Promise<void> {
 export function returnToExpertsHub(): void {
   const expertId = selectedExpertId;
   teardownExpertScopeShell();
-  if (isOsShellEnabled()) {
-    launchApp('experts');
+  if (isOsEmbedded()) {
+    void import('../../os/experts-desktop').then(async (desktop) => {
+      if (isDesktopExpertsHubActive()) {
+        desktop.closeDesktopExpertsLab();
+      }
+      if (!isDesktopExpertsActive()) {
+        launchApp('experts', expertId ? { expertId } : undefined);
+        return;
+      }
+      desktop.renderDesktopExpertsHero(expertId);
+    });
+    return;
   }
   if (expertId) {
     openExperts({ step: 'browse', expertId });
@@ -502,7 +525,11 @@ function markEditDirty(): void {
 async function openEditExpertStep(expertId: string): Promise<void> {
   const loaded = await loadUserExpertForEdit(expertId);
   if (!loaded) {
-    setFormError('expertsEditError', 'Could not load this expert.');
+    setStep('edit');
+    setFormError(
+      'expertsEditError',
+      'Could not load this expert. Run npm start if the tool server is offline.',
+    );
     return;
   }
 
@@ -607,8 +634,12 @@ function cancelEditExpert(): void {
   setStep('browse');
 }
 
-async function deleteExpertFromHub(expertId: string, label: string): Promise<void> {
-  if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+function showExpertsActionError(message: string | null): void {
+  setFormError('expertsActionError', message);
+}
+
+async function deleteExpertConfirmed(expertId: string): Promise<void> {
+  showExpertsActionError(null);
   try {
     await deleteUserExpert(expertId);
     if (selectedExpertId === expertId) selectedExpertId = null;
@@ -616,7 +647,7 @@ async function deleteExpertFromHub(expertId: string, label: string): Promise<voi
     setStep('browse');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    alert(message);
+    showExpertsActionError(message);
   }
 }
 
@@ -638,14 +669,18 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
 
   setExpertsPageOpen(false);
   root.classList.remove('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.remove('hidden');
     document.querySelector('header.topbar')?.classList.remove('hidden');
     if (!options?.skipNavigate && window.location.hash.startsWith('#/experts')) {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (isDesktopExpertsActive()) {
+      void import('../../os/desktop-state').then((m) => m.deactivateDesktopExperts());
+    } else {
+      navigateToDesktop();
+    }
   }
   void import('../preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -705,7 +740,7 @@ export function openExperts(options?: OpenExpertsOptions): void {
 
   setExpertsPageOpen(true);
   root.classList.add('is-open');
-  if (!isOsShellEnabled()) {
+  if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
     document.getElementById('drawer')?.setAttribute('aria-hidden', 'true');
@@ -731,6 +766,10 @@ export function openExperts(options?: OpenExpertsOptions): void {
 }
 
 export function openExpertLabFromTopbar(): void {
+  if (isOsEmbedded()) {
+    launchApp('experts', { openLab: true });
+    return;
+  }
   openExperts();
 }
 
@@ -819,13 +858,17 @@ function bindStaticControls(): void {
   });
 }
 
+function isEmbeddedDesktopHash(hash: string): boolean {
+  return hash === '#/' || hash === '#' || hash === '#/desktop' || isOsAppHash(hash);
+}
+
 function onHashChange(): void {
   const hash = window.location.hash;
-  if (hash.startsWith('#/experts')) {
-    openExperts();
+  if (hash.startsWith('#/experts') || hash.startsWith('#/app/experts')) {
+    launchApp('experts');
     return;
   }
-  if (isOsShellEnabled() && isOsAppHash(hash)) return;
+  if (isOsEmbedded() && isEmbeddedDesktopHash(hash)) return;
   if (isExpertsPageOpen()) {
     closeExpertsHub();
   }
@@ -834,8 +877,11 @@ function onHashChange(): void {
 export function initExpertsHub(): void {
   bindStaticControls();
   window.addEventListener('hashchange', onHashChange);
-  if (window.location.hash.startsWith('#/experts')) {
-    openExperts();
+  if (
+    window.location.hash.startsWith('#/experts') ||
+    window.location.hash.startsWith('#/app/experts')
+  ) {
+    launchApp('experts');
   }
 }
 

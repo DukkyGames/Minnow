@@ -5,6 +5,7 @@
 import { spawnSubAgent } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import {
+  DEFAULT_DEV_SERVER_PORT,
   fetchDevServerStatus,
   fetchWorkspaceStartup,
   postDevServerStart,
@@ -41,7 +42,7 @@ let activeChatId: string | null = null;
 let managedRunId: string | null = null;
 let streamRunId: string | null = null;
 let startAgentRunId: string | null = null;
-let cachedSettings: DevServerSettings = { port: 5173, network: 'local' };
+let cachedSettings: DevServerSettings = { port: DEFAULT_DEV_SERVER_PORT, network: 'local' };
 let settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastLifecycleStatus: DevServerLifecycleStatus = 'stopped';
 let lastLifecycleError: string | null = null;
@@ -53,7 +54,7 @@ Inspect package.json, README, and common scripts to determine how to start the l
 Write startup.md with YAML frontmatter:
 - command (required): one shell line to start the dev server
 - cwd (optional): relative directory only (e.g. . or apps/web), default .
-- healthUrl (optional): HTTP URL to probe when running (e.g. http://localhost:5173/)
+- healthUrl (optional): HTTP URL to probe when running (e.g. http://localhost:3000/)
 - port (optional): display hint
 - stop.command (optional): shell command to stop when not using PID kill
 

@@ -4,21 +4,19 @@
 
 import {
   createCalDavAccount,
-  createCalendarEvent,
   deleteCalDavAccount,
-  deleteCalendarEvent,
   exportIcsUrl,
   fetchCalDavAccounts,
   fetchCalendars,
   fetchEvents,
   importIcsFile,
   syncCalDav,
-  updateCalendarEvent,
   type CalDavAccount,
   type CalendarEvent,
   type CalendarRow,
 } from '../../calendar/client';
 import { getMaxInlineEvents, loadCalendarPrefs, type CalendarPrefs } from '../../calendar/prefs';
+import { openEventEditorWindow } from './event-editor-window';
 import { openCalendarSettings } from './calendar-settings';
 import { mountOAuthConnectPanel } from '../oauth-connect';
 
@@ -99,80 +97,110 @@ export async function renderCalendarPanel(
     selectedEventId: null as string | null,
     loading: false,
     caldavFormOpen: false,
+    railExpanded: true,
+    menuOpen: false,
     dayPopover: null as { day: Date; anchorEl: HTMLElement } | null,
   };
 
   mount.innerHTML = '';
-  mount.className = 'calendar-panel-mount';
-
-  const panel = document.createElement('div');
-  panel.className = 'calendar-panel';
-  mount.appendChild(panel);
+  mount.className = 'calendar-panel-mount mn-os-window-content calendar-window';
 
   const toolbar = document.createElement('div');
-  toolbar.className = 'calendar-toolbar';
-  panel.appendChild(toolbar);
+  toolbar.className = 'calendar-toolbar-compact';
+  mount.appendChild(toolbar);
+
+  const navGroup = document.createElement('div');
+  navGroup.className = 'calendar-toolbar-compact__nav';
+  toolbar.appendChild(navGroup);
 
   const prevBtn = document.createElement('button');
   prevBtn.type = 'button';
-  prevBtn.className = 'calendar-btn';
+  prevBtn.className = 'calendar-btn calendar-btn--ghost calendar-btn--icon';
   prevBtn.textContent = '←';
   prevBtn.setAttribute('aria-label', 'Previous');
-  toolbar.appendChild(prevBtn);
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'calendar-title';
-  toolbar.appendChild(titleEl);
-
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = 'calendar-btn';
-  nextBtn.textContent = '→';
-  nextBtn.setAttribute('aria-label', 'Next');
-  toolbar.appendChild(nextBtn);
+  navGroup.appendChild(prevBtn);
 
   const todayBtn = document.createElement('button');
   todayBtn.type = 'button';
   todayBtn.className = 'calendar-btn calendar-btn--ghost';
   todayBtn.textContent = 'Today';
-  toolbar.appendChild(todayBtn);
+  navGroup.appendChild(todayBtn);
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'calendar-btn calendar-btn--ghost calendar-btn--icon';
+  nextBtn.textContent = '→';
+  nextBtn.setAttribute('aria-label', 'Next');
+  navGroup.appendChild(nextBtn);
+
+  const titleEl = document.createElement('h3');
+  titleEl.className = 'calendar-title';
+  toolbar.appendChild(titleEl);
+
+  const actionsGroup = document.createElement('div');
+  actionsGroup.className = 'calendar-toolbar-compact__actions';
+  toolbar.appendChild(actionsGroup);
 
   const modeSelect = document.createElement('select');
   modeSelect.className = 'calendar-select';
   modeSelect.innerHTML = '<option value="month">Month</option><option value="week">Week</option>';
   modeSelect.value = state.mode;
-  toolbar.appendChild(modeSelect);
+  actionsGroup.appendChild(modeSelect);
 
   const newBtn = document.createElement('button');
   newBtn.type = 'button';
-  newBtn.className = 'calendar-btn calendar-btn--primary';
-  newBtn.textContent = 'New event';
-  toolbar.appendChild(newBtn);
+  newBtn.className = 'calendar-btn calendar-btn--primary calendar-btn--icon';
+  newBtn.textContent = '+';
+  newBtn.setAttribute('aria-label', 'New event');
+  actionsGroup.appendChild(newBtn);
+
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'calendar-toolbar-menu';
+  actionsGroup.appendChild(menuWrap);
+
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'calendar-btn calendar-btn--ghost calendar-btn--icon';
+  menuBtn.textContent = '⋯';
+  menuBtn.setAttribute('aria-label', 'More actions');
+  menuBtn.setAttribute('aria-haspopup', 'menu');
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuWrap.appendChild(menuBtn);
+
+  const menuPanel = document.createElement('div');
+  menuPanel.className = 'calendar-toolbar-menu__panel hidden';
+  menuPanel.hidden = true;
+  menuPanel.setAttribute('role', 'menu');
+  menuWrap.appendChild(menuPanel);
 
   const importBtn = document.createElement('button');
   importBtn.type = 'button';
   importBtn.className = 'calendar-btn calendar-btn--ghost';
   importBtn.textContent = 'Import ICS';
-  toolbar.appendChild(importBtn);
+  importBtn.setAttribute('role', 'menuitem');
+  menuPanel.appendChild(importBtn);
 
   const exportBtn = document.createElement('button');
   exportBtn.type = 'button';
   exportBtn.className = 'calendar-btn calendar-btn--ghost';
   exportBtn.textContent = 'Export ICS';
-  toolbar.appendChild(exportBtn);
+  exportBtn.setAttribute('role', 'menuitem');
+  menuPanel.appendChild(exportBtn);
 
   const syncBtn = document.createElement('button');
   syncBtn.type = 'button';
   syncBtn.className = 'calendar-btn calendar-btn--ghost';
   syncBtn.textContent = 'Sync CalDAV';
-  toolbar.appendChild(syncBtn);
+  syncBtn.setAttribute('role', 'menuitem');
+  menuPanel.appendChild(syncBtn);
 
   const settingsBtn = document.createElement('button');
   settingsBtn.type = 'button';
   settingsBtn.className = 'calendar-btn calendar-btn--ghost';
   settingsBtn.textContent = 'Settings';
+  settingsBtn.setAttribute('role', 'menuitem');
   settingsBtn.setAttribute('aria-label', 'Calendar settings');
-  toolbar.appendChild(settingsBtn);
+  menuPanel.appendChild(settingsBtn);
 
   const dayPopoverEl = document.createElement('div');
   dayPopoverEl.className = 'calendar-day-popover hidden';
@@ -180,21 +208,33 @@ export async function renderCalendarPanel(
   dayPopoverEl.setAttribute('role', 'listbox');
   document.body.appendChild(dayPopoverEl);
 
-  const layout = document.createElement('div');
-  layout.className = 'calendar-layout';
-  panel.appendChild(layout);
+  const windowBody = document.createElement('div');
+  windowBody.className = 'calendar-window-body';
+  mount.appendChild(windowBody);
 
-  const sidebar = document.createElement('aside');
-  sidebar.className = 'calendar-sidebar';
-  layout.appendChild(sidebar);
+  const rail = document.createElement('aside');
+  rail.className = 'calendar-rail';
+  windowBody.appendChild(rail);
+
+  const railToggle = document.createElement('button');
+  railToggle.type = 'button';
+  railToggle.className = 'calendar-rail__toggle';
+  railToggle.textContent = '◀';
+  railToggle.setAttribute('aria-label', 'Toggle calendars sidebar');
+  railToggle.setAttribute('aria-expanded', 'true');
+  rail.appendChild(railToggle);
+
+  const railContent = document.createElement('div');
+  railContent.className = 'calendar-rail__content';
+  rail.appendChild(railContent);
 
   const calendarList = document.createElement('div');
   calendarList.className = 'calendar-list';
-  sidebar.appendChild(calendarList);
+  railContent.appendChild(calendarList);
 
   const caldavSection = document.createElement('div');
   caldavSection.className = 'calendar-caldav';
-  sidebar.appendChild(caldavSection);
+  railContent.appendChild(caldavSection);
 
   const oauthMount = document.createElement('div');
   oauthMount.className = 'calendar-oauth-mount';
@@ -237,30 +277,19 @@ export async function renderCalendarPanel(
     'Connect Google Calendar, Fastmail, Nextcloud, or any CalDAV server. Passwords are encrypted locally.';
   caldavSection.appendChild(caldavHint);
 
-  const main = document.createElement('div');
-  main.className = 'calendar-main';
-  layout.appendChild(main);
+  const gridWrap = document.createElement('div');
+  gridWrap.className = 'calendar-grid-wrap';
+  windowBody.appendChild(gridWrap);
 
   const grid = document.createElement('div');
   grid.className = 'calendar-grid';
-  main.appendChild(grid);
-
-  const eventOverlay = document.createElement('div');
-  eventOverlay.className = 'calendar-event-overlay hidden';
-  eventOverlay.hidden = true;
-
-  const drawer = document.createElement('aside');
-  drawer.className = 'calendar-drawer';
-  drawer.setAttribute('role', 'dialog');
-  drawer.setAttribute('aria-modal', 'true');
-  eventOverlay.appendChild(drawer);
-  document.body.appendChild(eventOverlay);
+  gridWrap.appendChild(grid);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = '.ics,text/calendar';
   fileInput.hidden = true;
-  panel.appendChild(fileInput);
+  mount.appendChild(fileInput);
 
   function setStatus(stateKind: 'ok' | 'err', message: string): void {
     options.onStatus?.(stateKind, message);
@@ -364,7 +393,7 @@ export async function renderCalendarPanel(
         item.append(time, title);
         item.addEventListener('click', () => {
           closeDayPopover();
-          openDrawer(event);
+          openEventEditor(event);
         });
         dayPopoverEl.appendChild(item);
       }
@@ -562,7 +591,7 @@ export async function renderCalendarPanel(
       chip.title = 'Sync conflict';
       chip.classList.add('is-conflict');
     }
-    chip.addEventListener('click', () => openDrawer(event));
+    chip.addEventListener('click', () => openEventEditor(event));
     container.appendChild(chip);
   }
 
@@ -615,141 +644,60 @@ export async function renderCalendarPanel(
     }
   }
 
-  /** Close the event create/edit popup. */
-  function closeDrawer(): void {
-    drawer.innerHTML = '';
-    eventOverlay.hidden = true;
-    eventOverlay.classList.add('hidden');
-    state.selectedEventId = null;
-  }
-
-  function openDrawer(event: CalendarEvent | null): void {
+  /** Open the event editor child window for create or edit. */
+  function openEventEditor(event: CalendarEvent | null): void {
     closeDayPopover();
-    drawer.innerHTML = '';
+    closeToolbarMenu();
     state.selectedEventId = event?.id ?? null;
-
-    const heading = document.createElement('h4');
-    heading.textContent = event ? 'Edit event' : 'New event';
-    drawer.appendChild(heading);
-
-    const form = document.createElement('form');
-    form.className = 'calendar-form';
-    drawer.appendChild(form);
-
-    const titleInput = document.createElement('input');
-    titleInput.required = true;
-    titleInput.placeholder = 'Title';
-    titleInput.value = event?.title ?? '';
-    form.appendChild(titleInput);
-
-    const startInput = document.createElement('input');
-    startInput.type = 'datetime-local';
-    startInput.required = true;
-    startInput.value = event ? toLocalInput(event.startsAt) : toLocalInput(new Date().toISOString());
-    form.appendChild(startInput);
-
-    const endInput = document.createElement('input');
-    endInput.type = 'datetime-local';
-    endInput.required = true;
-    endInput.value = event
-      ? toLocalInput(event.endsAt)
-      : toLocalInput(new Date(Date.now() + 60 * 60 * 1000).toISOString());
-    form.appendChild(endInput);
-
-    const allDayLabel = document.createElement('label');
-    allDayLabel.className = 'calendar-check';
-    const allDayInput = document.createElement('input');
-    allDayInput.type = 'checkbox';
-    allDayInput.checked = Boolean(event?.allDay);
-    allDayLabel.append(allDayInput, document.createTextNode(' All day'));
-    form.appendChild(allDayLabel);
-
-    const locationInput = document.createElement('input');
-    locationInput.placeholder = 'Location';
-    locationInput.value = event?.location ?? '';
-    form.appendChild(locationInput);
-
-    const descInput = document.createElement('textarea');
-    descInput.rows = 3;
-    descInput.placeholder = 'Description';
-    descInput.value = event?.description ?? '';
-    form.appendChild(descInput);
-
-    const actions = document.createElement('div');
-    actions.className = 'calendar-form-actions';
-    form.appendChild(actions);
-
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'submit';
-    saveBtn.className = 'calendar-btn calendar-btn--primary';
-    saveBtn.textContent = event ? 'Save' : 'Create';
-    actions.appendChild(saveBtn);
-
-    if (event) {
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'calendar-btn calendar-btn--danger';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', async () => {
-        const baseId = event.recurrenceId ?? event.id.split('::')[0];
-        if (!window.confirm('Delete this event?')) {
-          return;
-        }
-        try {
-          await deleteCalendarEvent(baseId);
-          closeDrawer();
-          setStatus('ok', 'Event deleted');
-          await reloadEvents();
-        } catch (err) {
-          setStatus('err', err instanceof Error ? err.message : String(err));
-        }
-      });
-      actions.appendChild(deleteBtn);
-    }
-
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'calendar-btn calendar-btn--ghost';
-    closeBtn.textContent = 'Close';
-    closeBtn.addEventListener('click', () => closeDrawer());
-    actions.appendChild(closeBtn);
-
-    eventOverlay.hidden = false;
-    eventOverlay.classList.remove('hidden');
-    titleInput.focus();
-
-    form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const calendarId = event?.calendarId ?? state.calendars[0]?.id;
-      if (!calendarId) {
-        setStatus('err', 'No calendar available');
-        return;
-      }
-      const payload = {
-        title: titleInput.value.trim(),
-        calendarId,
-        startsAt: fromLocalInput(startInput.value),
-        endsAt: fromLocalInput(endInput.value),
-        allDay: allDayInput.checked,
-        location: locationInput.value.trim() || undefined,
-        description: descInput.value.trim() || undefined,
-      };
-      try {
-        if (event) {
-          const baseId = event.recurrenceId ?? event.id.split('::')[0];
-          await updateCalendarEvent(baseId, payload);
-          setStatus('ok', 'Event updated');
-        } else {
-          await createCalendarEvent(payload);
-          setStatus('ok', 'Event created');
-        }
-        closeDrawer();
-        await reloadEvents();
-      } catch (err) {
-        setStatus('err', err instanceof Error ? err.message : String(err));
-      }
+    openEventEditorWindow({
+      event,
+      calendars: state.calendars,
+      onStatus: setStatus,
+      onSaved: reloadEvents,
     });
   }
+
+  function closeToolbarMenu(): void {
+    state.menuOpen = false;
+    menuPanel.hidden = true;
+    menuPanel.classList.add('hidden');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleToolbarMenu(): void {
+    state.menuOpen = !state.menuOpen;
+    menuPanel.hidden = !state.menuOpen;
+    menuPanel.classList.toggle('hidden', !state.menuOpen);
+    menuBtn.setAttribute('aria-expanded', state.menuOpen ? 'true' : 'false');
+  }
+
+  function applyRailState(): void {
+    rail.classList.toggle('calendar-rail--collapsed', !state.railExpanded);
+    railToggle.textContent = state.railExpanded ? '◀' : '▶';
+    railToggle.setAttribute('aria-expanded', state.railExpanded ? 'true' : 'false');
+  }
+
+  function toggleRail(): void {
+    state.railExpanded = !state.railExpanded;
+    if (state.railExpanded) {
+      rail.classList.add('calendar-rail--force-expanded');
+    } else {
+      rail.classList.remove('calendar-rail--force-expanded');
+    }
+    applyRailState();
+  }
+
+  const layoutObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect.width ?? 0;
+    const narrow = width < 720;
+    windowBody.classList.toggle('calendar-window-body--narrow', narrow);
+    if (narrow && !rail.classList.contains('calendar-rail--force-expanded')) {
+      state.railExpanded = false;
+      applyRailState();
+    }
+  });
+  layoutObserver.observe(windowBody);
+  applyRailState();
 
   async function reloadEvents(): Promise<void> {
     state.loading = true;
@@ -803,9 +751,26 @@ export async function renderCalendarPanel(
     await reloadEvents();
   });
 
-  newBtn.addEventListener('click', () => openDrawer(null));
+  newBtn.addEventListener('click', () => openEventEditor(null));
 
-  importBtn.addEventListener('click', () => fileInput.click());
+  menuBtn.addEventListener('click', () => toggleToolbarMenu());
+
+  railToggle.addEventListener('click', () => toggleRail());
+
+  importBtn.addEventListener('click', () => {
+    closeToolbarMenu();
+    fileInput.click();
+  });
+
+  exportBtn.addEventListener('click', () => {
+    closeToolbarMenu();
+    const calendarId = state.calendars[0]?.id;
+    if (!calendarId) {
+      return;
+    }
+    window.open(exportIcsUrl(calendarId), '_blank');
+  });
+
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     fileInput.value = '';
@@ -822,15 +787,8 @@ export async function renderCalendarPanel(
     }
   });
 
-  exportBtn.addEventListener('click', () => {
-    const calendarId = state.calendars[0]?.id;
-    if (!calendarId) {
-      return;
-    }
-    window.open(exportIcsUrl(calendarId), '_blank');
-  });
-
   syncBtn.addEventListener('click', async () => {
+    closeToolbarMenu();
     try {
       const accounts = state.caldavAccounts.length
         ? state.caldavAccounts
@@ -856,6 +814,7 @@ export async function renderCalendarPanel(
   });
 
   settingsBtn.addEventListener('click', () => {
+    closeToolbarMenu();
     void openCalendarSettings({
       calendars: state.calendars,
       onStatus: setStatus,
@@ -870,13 +829,13 @@ export async function renderCalendarPanel(
     });
   });
 
-  eventOverlay.addEventListener('click', (event) => {
-    if (event.target === eventOverlay) {
-      closeDrawer();
-    }
-  });
-
   document.addEventListener('pointerdown', (event) => {
+    if (state.menuOpen) {
+      const target = event.target as Node;
+      if (!menuWrap.contains(target)) {
+        closeToolbarMenu();
+      }
+    }
     if (!state.dayPopover || dayPopoverEl.hidden) {
       return;
     }
@@ -892,12 +851,12 @@ export async function renderCalendarPanel(
       return;
     }
     if (ev.key === 'Escape') {
-      if (state.dayPopover) {
-        closeDayPopover();
+      if (state.menuOpen) {
+        closeToolbarMenu();
         return;
       }
-      if (!eventOverlay.hidden) {
-        closeDrawer();
+      if (state.dayPopover) {
+        closeDayPopover();
         return;
       }
     }
@@ -911,16 +870,6 @@ export async function renderCalendarPanel(
   mountCalDavForm();
 
   await reloadAll();
-}
-
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromLocalInput(value: string): string {
-  return new Date(value).toISOString();
 }
 
 /** Short relative time label for last-sync timestamps. */

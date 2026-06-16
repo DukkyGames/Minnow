@@ -1,7 +1,10 @@
 import '../styles/minnowos-shell.css';
 import '../styles/minnowos-desktop.css';
 import '../styles/minnowos-wallpaper.css';
+import '../styles/minnowos-windows.css';
 import '../styles/minnowos-apps.css';
+import '../styles/scheduler-side-panel.css';
+import '../styles/research-page.css';
 
 import { initAppHost } from './app-host';
 import { renderDesktop } from './desktop';
@@ -49,6 +52,20 @@ function ensureShellDom(): {
     desktopLayer.id = 'osDesktopLayer';
     desktopLayer.className = 'mn-os-desktop-layer';
     stage.appendChild(desktopLayer);
+  }
+
+  if (!document.getElementById('osWindowsLayer')) {
+    const windowsLayer = document.createElement('div');
+    windowsLayer.id = 'osWindowsLayer';
+    windowsLayer.className = 'mn-os-windows-layer';
+    stage.appendChild(windowsLayer);
+  }
+
+  if (!document.getElementById('osSidePanelsLayer')) {
+    const sidePanelsLayer = document.createElement('div');
+    sidePanelsLayer.id = 'osSidePanelsLayer';
+    sidePanelsLayer.className = 'mn-os-side-panels-layer';
+    stage.appendChild(sidePanelsLayer);
   }
 
   if (!document.getElementById('osAppsLayer')) {
@@ -113,6 +130,7 @@ export function initOsShell(): void {
   };
 
   initAppHost();
+  void import('./scheduler-side-panel').then((m) => m.initSchedulerSidePanel());
   // Re-apply route now that app layers are mounted (router may have queued an app open).
   void import('./router').then(async (m) => {
     m.syncOsRouteFromHash();

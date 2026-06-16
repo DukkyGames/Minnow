@@ -1,5 +1,21 @@
+import {
+  activateDesktopChat,
+  activateDesktopExperts,
+  activateDesktopResearch,
+  consumePendingDesktopChatActivation,
+  consumePendingDesktopExpertsActivation,
+  consumePendingDesktopResearchActivation,
+  deactivateDesktopExperts,
+  deactivateDesktopResearch,
+  isDesktopExpertsActive,
+  isDesktopResearchActive,
+  queueDesktopChatActivation,
+  queueDesktopExpertsActivation,
+  queueDesktopResearchActivation,
+} from './desktop-state';
 import { isAppId } from './app-registry';
 import {
+  closeInstance,
   getForegroundAppId,
   getInstanceSnapshot,
   getOsView,
@@ -32,6 +48,9 @@ export function resolveLegacyHash(hash: string): {
   hash: string;
   settingsSection?: string;
   modelsSection?: string;
+  desktopChat?: boolean;
+  desktopResearch?: boolean;
+  desktopExperts?: boolean;
 } {
   const trimmed = hash || '#/';
   if (trimmed.startsWith('#/settings')) {
@@ -70,10 +89,19 @@ export function resolveLegacyHash(hash: string): {
     return { hash: `#/app/models/${section}`, modelsSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
-    return { hash: '#/app/research' };
+    return { hash: '#/desktop', desktopResearch: true };
+  }
+  if (trimmed === '#/app/research' || trimmed.startsWith('#/app/research/')) {
+    return { hash: '#/desktop', desktopResearch: true };
   }
   if (trimmed === '#/experts' || trimmed.startsWith('#/experts/')) {
-    return { hash: '#/app/experts' };
+    return { hash: '#/desktop', desktopExperts: true };
+  }
+  if (trimmed === '#/app/experts' || trimmed.startsWith('#/app/experts/')) {
+    return { hash: '#/desktop', desktopExperts: true };
+  }
+  if (trimmed === '#/app/chat' || trimmed.startsWith('#/app/chat/')) {
+    return { hash: '#/desktop', desktopChat: true };
   }
   return { hash: trimmed };
 }
@@ -129,6 +157,20 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'desktop') {
     syncForegroundLifecycle(null);
     showDesktop();
+    const pendingResearch = consumePendingDesktopResearchActivation();
+    if (pendingResearch !== null) {
+      void activateDesktopResearch(pendingResearch);
+      return;
+    }
+    const pendingExperts = consumePendingDesktopExpertsActivation();
+    if (pendingExperts !== null) {
+      void activateDesktopExperts(pendingExperts);
+      return;
+    }
+    const pendingChat = consumePendingDesktopChatActivation();
+    if (pendingChat !== null) {
+      void activateDesktopChat(pendingChat);
+    }
     return;
   }
 
@@ -161,6 +203,15 @@ function applyRouteFromHash(): void {
     if (legacy.hash !== raw) {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
+      if (legacy.desktopChat) {
+        queueDesktopChatActivation(pendingLaunchOptions);
+      }
+      if (legacy.desktopResearch) {
+        queueDesktopResearchActivation(pendingLaunchOptions);
+      }
+      if (legacy.desktopExperts) {
+        queueDesktopExpertsActivation(pendingLaunchOptions);
+      }
       window.location.hash = legacy.hash;
       return;
     }
@@ -190,6 +241,40 @@ export function navigateToDesktop(): void {
 
 /** Launch or foreground an app and update the hash. */
 export function launchApp(appId: AppId, options?: LaunchOptions): void {
+  if (appId === 'chat') {
+    queueDesktopChatActivation(options);
+    navigateToDesktop();
+    return;
+  }
+  if (appId === 'research') {
+    if (getOsView() === 'desktop' && isDesktopResearchActive()) {
+      deactivateDesktopResearch();
+      return;
+    }
+    queueDesktopResearchActivation(options);
+    navigateToDesktop();
+    return;
+  }
+  if (appId === 'experts') {
+    if (getOsView() === 'desktop' && isDesktopExpertsActive()) {
+      deactivateDesktopExperts();
+      return;
+    }
+    queueDesktopExpertsActivation(options);
+    navigateToDesktop();
+    return;
+  }
+  if (appId === 'scheduler') {
+    const snap = getInstanceSnapshot();
+    const existing = snap.instances.find((i) => i.appId === 'scheduler');
+    if (existing && snap.foregroundId === existing.id && getOsView() === 'desktop') {
+      closeInstance(existing.id);
+      if (window.location.hash.includes('scheduler')) {
+        navigateToDesktop();
+      }
+      return;
+    }
+  }
   if (options?.settingsSection) {
     pendingSettingsSection = options.settingsSection;
   }

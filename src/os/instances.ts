@@ -1,4 +1,5 @@
-import type { AppId, AppInstance, LaunchOptions, OsView } from './types';
+import type { AppId, AppInstance, LaunchOptions, OsView, PresentationMode } from './types';
+import { getPresentationMode } from './app-registry';
 
 export interface InstanceSnapshot {
   view: OsView;
@@ -49,10 +50,32 @@ export function getForegroundInstanceId(): string | null {
   return foregroundId;
 }
 
-/** Foreground app id when view is `app`; otherwise null. */
+/** Foreground app id for the focused surface, if any. */
 export function getForegroundAppId(): AppId | null {
-  if (view !== 'app' || !foregroundId) return null;
+  if (!foregroundId) return null;
   return instances.find((i) => i.id === foregroundId)?.appId ?? null;
+}
+
+/** Presentation mode of the focused surface. */
+export function getForegroundPresentationMode(): PresentationMode | null {
+  const appId = getForegroundAppId();
+  return appId ? getPresentationMode(appId) : null;
+}
+
+function viewForPresentationMode(mode: PresentationMode): OsView {
+  return mode === 'window' || mode === 'sidePanel' || mode === 'desktop' ? 'desktop' : 'app';
+}
+
+function pickNextForeground(excludeId: string): string | null {
+  const remaining = instances.filter((i) => i.id !== excludeId);
+  const windowed = remaining.filter((i) => {
+    const mode = getPresentationMode(i.appId);
+    return mode === 'window' || mode === 'sidePanel';
+  });
+  // Only rotate among floating surfaces — never resurrect a background fullscreen app
+  // (e.g. Code) when the user closes the last window they opened on the desktop.
+  if (windowed.length === 0) return null;
+  return windowed[windowed.length - 1]?.id ?? null;
 }
 
 /** Read-only snapshot for UI renderers. */
@@ -70,8 +93,9 @@ export function subscribeInstances(listener: InstanceListener): () => void {
 
 /** Show the desktop launcher (does not close instances). */
 export function showDesktop(): void {
-  if (view === 'desktop') return;
+  if (view === 'desktop' && !foregroundId) return;
   view = 'desktop';
+  foregroundId = null;
   emit();
 }
 
@@ -83,12 +107,13 @@ function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions
 
 /** Launch or foreground an app; returns the active instance id. */
 export function launchInstance(appId: AppId, options?: LaunchOptions): string {
+  const mode = getPresentationMode(appId);
   const existing = instances.find((i) => i.appId === appId);
   if (existing) {
     foregroundId = existing.id;
     applyLaunchOptionsToInstance(existing, options);
     existing.unread = 0;
-    view = 'app';
+    view = viewForPresentationMode(mode);
     emit();
     return existing.id;
   }
@@ -103,9 +128,21 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
   };
   instances = [...instances, inst];
   foregroundId = inst.id;
-  view = 'app';
+  view = viewForPresentationMode(mode);
   emit();
   return inst.id;
+}
+
+/** Foreground a running instance without changing launch options. */
+export function focusInstance(id: string): boolean {
+  const inst = instances.find((i) => i.id === id);
+  if (!inst) return false;
+  const nextView = viewForPresentationMode(getPresentationMode(inst.appId));
+  if (foregroundId === id && view === nextView) return true;
+  foregroundId = id;
+  view = nextView;
+  emit();
+  return true;
 }
 
 /** Foreground a minimized instance and clear its unread badge. */
@@ -114,18 +151,25 @@ export function restoreInstance(id: string): boolean {
   if (!inst) return false;
   foregroundId = id;
   inst.unread = 0;
-  view = 'app';
+  view = viewForPresentationMode(getPresentationMode(inst.appId));
   emit();
   return true;
 }
 
-/** Close an instance; returns to desktop when it was foreground. */
+/** Close an instance; focuses another open surface or returns to desktop. */
 export function closeInstance(id: string): boolean {
   const idx = instances.findIndex((i) => i.id === id);
   if (idx < 0) return false;
   instances = instances.filter((i) => i.id !== id);
   if (foregroundId === id) {
-    foregroundId = null;
+    foregroundId = pickNextForeground(id);
+    if (!foregroundId) {
+      view = 'desktop';
+    } else {
+      const next = instances.find((i) => i.id === foregroundId);
+      view = next ? viewForPresentationMode(getPresentationMode(next.appId)) : 'desktop';
+    }
+  } else if (instances.length === 0) {
     view = 'desktop';
   }
   emit();

@@ -19,6 +19,8 @@ export type OsIconName =
   | 'arrowDown'
   | 'grid'
   | 'close'
+  | 'minimize'
+  | 'maximize'
   | 'bell'
   | 'fish';
 
@@ -50,6 +52,8 @@ const PATHS: Record<SvgIconName, string> = {
   arrowDown: '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  minimize: '<path d="M5 12h14"/>',
+  maximize: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
   fish: '<path d="M16.5 12c-2 3-5.5 4.5-9 4.5 1-1.5 1-3 1-4.5s0-3-1-4.5c3.5 0 7 1.5 9 4.5Z"/><path d="M16.5 12 21 8.5v7L16.5 12Z"/><circle cx="9.5" cy="11" r=".6" fill="currentColor" stroke="none"/>',
 };

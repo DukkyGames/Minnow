@@ -5,7 +5,14 @@ import { renderConcierge } from './concierge';
 import { renderMiniPreviews } from './mini-previews';
 import { renderWallpaper, type WallpaperRenderOptions } from './wallpaper';
 import { getAppearanceAssetObjectUrl } from '../appearance/asset-store';
+import { wireDesktopChatRail } from '../ui/desktop-chat-rail';
+import { isDesktopExpertsActive, isDesktopResearchActive, subscribeDesktopState } from './desktop-state';
+import { wireDesktopResearchControls } from './research-desktop';
+import { windowManager } from './window-manager';
+import { createOsIcon } from './icons';
+import { ICON_CHEVRON_LEFT } from '../constants';
 import type { AppId, DesktopPrefs, LaunchOptions } from './types';
+
 function greetingFor(d: Date): string {
   const h = d.getHours();
   if (h < 5) return 'Still up';
@@ -27,10 +34,11 @@ function msUntilNextMinute(d: Date): number {
   return (60 - d.getSeconds()) * 1000 - d.getMilliseconds();
 }
 
-/** Render the MinnowOS desktop (greeting, concierge, mini-previews). */
+/** Render the MinnowOS desktop (greeting, concierge, chat surface, mini-previews). */
 export function renderDesktop(root: HTMLElement): () => void {
   root.replaceChildren();
   root.className = 'mn-os-desktop';
+  root.id = 'osDesktopLayer';
 
   const prefs = loadDesktopPrefs();
   const now = new Date();
@@ -50,7 +58,8 @@ export function renderDesktop(root: HTMLElement): () => void {
     renderWallpaper(wallpaperMount, options);
   }
 
-  void paintWallpaper(prefs);  root.appendChild(wallpaperMount);
+  void paintWallpaper(prefs);
+  root.appendChild(wallpaperMount);
 
   const stage = document.createElement('div');
   stage.className = 'mn-os-desk-stage';
@@ -72,12 +81,160 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   hero.append(greetTime, greet, greetSub);
 
+  const expertsHeroMount = document.createElement('div');
+  expertsHeroMount.id = 'desktopExpertsHeroMount';
+  expertsHeroMount.className = 'mn-os-experts-hero-mount hidden';
+  expertsHeroMount.setAttribute('aria-hidden', 'true');
+  hero.appendChild(expertsHeroMount);
+
   const conciergeMount = document.createElement('div');
+  conciergeMount.className = 'mn-os-concierge-mount';
   const onLaunch = (appId: AppId, options: LaunchOptions) => launchApp(appId, options);
   renderConcierge(conciergeMount, onLaunch);
   hero.appendChild(conciergeMount);
-  stage.appendChild(hero);
+
+  const desktopChat = document.createElement('div');
+  desktopChat.className = 'mn-os-desktop-chat';
+
+  const rail = document.createElement('aside');
+  rail.className = 'mn-os-chat-rail is-collapsed';
+  rail.setAttribute('aria-label', 'Chat sessions');
+
+  const railTab = document.createElement('button');
+  railTab.type = 'button';
+  railTab.id = 'btnDesktopChatRailToggle';
+  railTab.className = 'mn-os-chat-rail-tab';
+  railTab.setAttribute('aria-label', 'Show chat sessions');
+  railTab.setAttribute('aria-expanded', 'false');
+  railTab.appendChild(createOsIcon('chat', { size: 18 }));
+
+  const railPanel = document.createElement('div');
+  railPanel.className = 'mn-os-chat-rail-panel';
+
+  const railMain = document.createElement('div');
+  railMain.className = 'mn-os-chat-rail-main';
+
+  const railHeader = document.createElement('div');
+  railHeader.className = 'chat-sidebar-header';
+
+  const railTitle = document.createElement('span');
+  railTitle.className = 'chat-sidebar-title';
+  railTitle.textContent = 'Chats';
+
+  const railCollapse = document.createElement('button');
+  railCollapse.type = 'button';
+  railCollapse.id = 'btnDesktopChatRailCollapse';
+  railCollapse.className = 'icon-btn';
+  railCollapse.setAttribute('aria-label', 'Collapse chat sessions');
+  railCollapse.innerHTML = ICON_CHEVRON_LEFT;
+
+  railHeader.append(railTitle, railCollapse);
+
+  const railNewChat = document.createElement('button');
+  railNewChat.type = 'button';
+  railNewChat.id = 'btnDesktopChatNew';
+  railNewChat.className = 'chat-new-wide';
+  railNewChat.textContent = '+ New chat';
+
+  const railList = document.createElement('div');
+  railList.id = 'desktopChatSessionList';
+  railList.className = 'chat-list mn-os-chat-rail-list';
+  railList.setAttribute('role', 'list');
+
+  railMain.append(railHeader, railNewChat, railList);
+  railPanel.appendChild(railMain);
+  rail.append(railTab, railPanel);
+
+  const transcript = document.createElement('div');
+  transcript.className = 'mn-os-chat-transcript';
+  transcript.setAttribute('role', 'log');
+  transcript.setAttribute('aria-live', 'polite');
+  transcript.setAttribute('aria-label', 'Messages');
+
+  const transcriptCol = document.createElement('div');
+  transcriptCol.id = 'desktopChatCol';
+  transcriptCol.className = 'mn-os-chat-col';
+  transcript.appendChild(transcriptCol);
+
+  const desktopResearch = document.createElement('div');
+  desktopResearch.className = 'mn-os-desktop-research dr';
+  desktopResearch.setAttribute('aria-label', 'Research');
+
+  const researchProgress = document.createElement('div');
+  researchProgress.id = 'desktopResearchProgressMount';
+  researchProgress.className = 'mn-os-research-card mn-os-research-progress';
+  researchProgress.setAttribute('aria-live', 'polite');
+
+  const researchProgressChrome = document.createElement('div');
+  researchProgressChrome.className = 'mn-os-research-progress-chrome';
+
+  const researchCancel = document.createElement('button');
+  researchCancel.type = 'button';
+  researchCancel.id = 'btnDesktopResearchCancel';
+  researchCancel.className = 'dr-cancel mn-os-research-cancel';
+  researchCancel.textContent = 'Cancel';
+  researchCancel.hidden = true;
+
+  researchProgressChrome.appendChild(researchCancel);
+
+  const researchProgressBody = document.createElement('div');
+  researchProgressBody.id = 'desktopResearchProgressBody';
+  researchProgressBody.className = 'mn-os-research-progress-body';
+
+  researchProgress.append(researchProgressChrome, researchProgressBody);
+
+  const researchResult = document.createElement('div');
+  researchResult.id = 'desktopResearchResultMount';
+  researchResult.className = 'mn-os-research-card mn-os-research-result';
+
+  const researchResultChrome = document.createElement('div');
+  researchResultChrome.className = 'mn-os-research-result-chrome';
+
+  const researchClose = document.createElement('button');
+  researchClose.type = 'button';
+  researchClose.id = 'btnDesktopResearchClose';
+  researchClose.className = 'dr-cancel mn-os-research-close';
+  researchClose.textContent = 'Close';
+  researchClose.hidden = true;
+
+  researchResultChrome.appendChild(researchClose);
+
+  const researchResultBody = document.createElement('div');
+  researchResultBody.id = 'desktopResearchResultBody';
+  researchResultBody.className = 'mn-os-research-result-body';
+
+  researchResult.append(researchResultChrome, researchResultBody);
+
+  desktopResearch.append(researchProgress, researchResult);
+
+  const desktopExperts = document.createElement('div');
+  desktopExperts.id = 'desktopExpertsMount';
+  desktopExperts.className = 'mn-os-desktop-experts';
+  desktopExperts.setAttribute('aria-label', "Experts' Lab");
+
+  desktopChat.append(transcript);
+  stage.append(hero, desktopChat, desktopResearch, desktopExperts);
+  root.append(rail);
   root.appendChild(stage);
+
+  const composerDock = document.createElement('div');
+  composerDock.className = 'mn-os-composer-dock';
+
+  const researchComposerActions = document.createElement('div');
+  researchComposerActions.className = 'mn-os-composer-research-actions';
+
+  const researchLibrary = document.createElement('button');
+  researchLibrary.type = 'button';
+  researchLibrary.id = 'btnDesktopResearchLibrary';
+  researchLibrary.className = 'mn-os-research-toolbar-btn';
+  researchLibrary.textContent = 'Library';
+
+  researchComposerActions.appendChild(researchLibrary);
+  composerDock.appendChild(researchComposerActions);
+  root.appendChild(composerDock);
+
+  wireDesktopChatRail();
+  wireDesktopResearchControls();
 
   const previewsMount = document.createElement('div');
   previewsMount.className = 'mn-os-desktop-previews';
@@ -105,7 +262,10 @@ export function renderDesktop(root: HTMLElement): () => void {
     const d = new Date();
     const formatted = formatDateTime(d);
     greetTime.textContent = `${formatted.time} · ${formatted.date}`;
-    greet.textContent = `${greetingFor(d)}.`;
+    // Research/experts mode uses fixed hero copy; only refresh the time-of-day greeting when idle/chat.
+    if (!isDesktopResearchActive() && !isDesktopExpertsActive()) {
+      greet.textContent = `${greetingFor(d)}.`;
+    }
   }
 
   let clockInterval: number | undefined;
@@ -115,14 +275,21 @@ export function renderDesktop(root: HTMLElement): () => void {
   }, msUntilNextMinute(new Date()));
 
   const unsubInstances = subscribeInstances(() => refreshPreviews());
+  const unsubWindows = windowManager.subscribe(() => refreshPreviews());
   const unsubPrefs = subscribeDesktopPrefs((p) => {
     applyWallpaper(p);
     refreshPreviews();
   });
+  const unsubDesktopState = subscribeDesktopState(() => {
+    rail.hidden = false;
+  });
+
   return () => {
     clearTimeout(clockAlignTimeout);
     if (clockInterval !== undefined) clearInterval(clockInterval);
     unsubInstances();
+    unsubWindows();
     unsubPrefs();
+    unsubDesktopState();
   };
 }

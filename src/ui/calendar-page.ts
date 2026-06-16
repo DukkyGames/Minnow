@@ -3,11 +3,13 @@
  */
 
 import '../styles/calendar.css';
+import '../styles/calendar-window.css';
 import '../styles/oauth-connect.css';
 
 import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
-import { navigateToDesktop } from '../os/router';
+import { launchApp, navigateToDesktop } from '../os/router';
+import { registerWindowTeardown, requestCloseWindowApp } from '../os/window-mounted-apps';
 import { renderCalendarPanel } from './calendar/calendar-panel';
 
 let initialized = false;
@@ -52,16 +54,22 @@ function mountHeaderIcon(): void {
 export function initCalendarPage(): void {
   if (initialized) return;
   initialized = true;
+  registerWindowTeardown('calendar', () => closeCalendar({ skipNavigate: true }));
   mountHeaderIcon();
   window.addEventListener('hashchange', onHashChange);
   if (
     window.location.hash === '#/calendar' ||
     window.location.hash.startsWith('#/app/calendar')
   ) {
-    void openCalendar();
+    if (isOsShellEnabled()) {
+      launchApp('calendar');
+    } else {
+      void openCalendar();
+    }
   }
 }
 
+/** Mount calendar content (window frame is opened by app-host / launchApp). */
 export async function openCalendar(): Promise<void> {
   const root = getRoot();
   if (!root) return;
@@ -83,7 +91,9 @@ export function closeCalendar(options?: { skipNavigate?: boolean }): void {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('calendar')) {
+      navigateToDesktop();
+    }
   }
 }
 
@@ -94,6 +104,10 @@ export function isCalendarPageOpen(): boolean {
 function onHashChange(): void {
   const hash = window.location.hash;
   if (hash === '#/calendar' || hash.startsWith('#/app/calendar')) {
+    if (isOsShellEnabled()) {
+      launchApp('calendar');
+      return;
+    }
     void openCalendar();
     return;
   }
@@ -106,7 +120,7 @@ function onHashChange(): void {
 /** Menubar shortcut — opens the Calendar app in MinnowOS. */
 export function openCalendarFromMenubar(): void {
   if (isOsShellEnabled()) {
-    void import('../os/router').then((m) => m.launchApp('calendar'));
+    launchApp('calendar');
     return;
   }
   void openCalendar();

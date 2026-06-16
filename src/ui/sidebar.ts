@@ -1,4 +1,5 @@
 ﻿import { isChatsWorkspacePath } from '../lib/chats-workspace';
+import { isDesktopChatActive } from '../os/desktop-state';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import {
@@ -158,6 +159,8 @@ interface AppendChatRowOptions {
   inGroup?: boolean;
   /** Override default switchChat activation (e.g. Experts hub before shell opens). */
   onActivate?: (chat: Chat) => void;
+  /** Override default deleteChat (e.g. Experts hub detail list refresh). */
+  onDelete?: (chat: Chat) => void;
 }
 
 /** Sidebar row highlight id; suppressed while a board folder owns the main column. */
@@ -292,7 +295,14 @@ export function appendChatRow(
   deleteBtn.className = 'chat-delete-btn';
   deleteBtn.textContent = '\u{1F5D1}';
   deleteBtn.setAttribute('aria-label', `Delete chat: ${chat.name}`);
-  deleteBtn.addEventListener('click', (e) => deleteChat(chat.id, e));
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (options?.onDelete) {
+      options.onDelete(chat);
+      return;
+    }
+    deleteChat(chat.id, e);
+  });
 
   actions.appendChild(renameBtn);
   actions.appendChild(deleteBtn);
@@ -638,8 +648,14 @@ export function deleteChat(chatId: string, evt?: Event): void {
     const active = getActiveChat();
     recordChatOpened(active.id);
     syncModelSelectForActiveChat();
-    renderChatFromHistory(active);
     renderStatsForChat(active);
+    if (isDesktopChatActive()) {
+      void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(active.id));
+    } else {
+      renderChatFromHistory(active);
+    }
+  } else if (isDesktopChatActive()) {
+    void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
   renderSidebar();
   scheduleSaveSessions();

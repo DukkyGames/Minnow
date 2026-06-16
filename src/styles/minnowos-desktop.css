@@ -31,7 +31,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4vh 24px 16vh;
+  padding: 10px 24px 16vh;
   gap: 36px;
   overflow: auto;
 }
@@ -356,6 +356,7 @@
 }
 
 .mn-os-tile-dock .mn-os-tile-ico {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -365,6 +366,20 @@
   border: 1px solid var(--os-border-strong);
   color: var(--os-accent);
   transition: 0.18s var(--os-ease);
+}
+
+.mn-os-tile-dock.is-open:not(.is-active) .mn-os-tile-ico {
+  border-color: color-mix(in srgb, var(--os-accent-glow) 48%, var(--os-border-strong));
+}
+
+.mn-os-tile-dock.is-active {
+  color: var(--os-text);
+}
+
+.mn-os-tile-dock.is-active .mn-os-tile-ico {
+  background: var(--os-accent-soft);
+  border-color: var(--os-accent-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 65%, transparent);
 }
 
 .mn-os-tile-dock .mn-os-tile-name {
@@ -680,4 +695,1139 @@
   .mn-os-mini-card {
     animation: none !important;
   }
+}
+
+/* ---------- desktop chat (Phase 2) ---------- */
+
+#osDesktopLayer {
+  --os-chat-stage-top: 10px;
+  /* Dock panel sits 22px above the viewport bottom; composer floats just above it */
+  --os-dock-panel-inset: 22px;
+  --os-dock-block-height: 6.25rem;
+  --os-composer-dock-gap: 10px;
+  --os-composer-row-height: 4.75rem;
+  --os-composer-dock-bottom: calc(
+    var(--os-dock-panel-inset) + var(--os-dock-block-height) + var(--os-composer-dock-gap)
+  );
+  /* Stage + transcript clearance: composer offset + row height + breathing room */
+  --os-chat-composer-reserve: calc(
+    var(--os-composer-dock-bottom) + var(--os-composer-row-height) + var(--os-composer-dock-gap)
+  );
+  --os-chat-transcript-bottom: var(--os-chat-composer-reserve);
+  --os-chat-message-gap: 14px;
+  /* Research dock adds Library row above the composer input */
+  --os-research-toolbar-row: 1.75rem;
+  --os-research-composer-reserve: calc(
+    var(--os-chat-composer-reserve) + var(--os-research-toolbar-row) + var(--os-composer-dock-gap)
+  );
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desk-hero {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer .mn-os-desk-hero {
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desktop-chat {
+  opacity: 1;
+  pointer-events: auto;
+  margin-inline: auto;
+  align-self: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.mn-os-desktop-chat {
+  flex: 1;
+  width: 100%;
+  max-width: 920px;
+  display: flex;
+  gap: 0;
+  min-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms var(--os-ease-out) 80ms;
+}
+
+.mn-os-chat-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 18;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 280ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .mn-os-chat-rail {
+  pointer-events: auto;
+}
+
+/* Collapsed: floating chat icon tab on the left window edge */
+.mn-os-chat-rail-tab {
+  pointer-events: auto;
+  align-self: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-left: max(10px, env(safe-area-inset-left, 0px));
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--os-border-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
+  backdrop-filter: blur(14px);
+  color: var(--os-text-dim);
+  cursor: pointer;
+  box-shadow:
+    0 12px 32px -14px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--os-text) 5%, transparent);
+  transition:
+    color 0.16s var(--os-ease),
+    border-color 0.16s var(--os-ease),
+    background 0.16s var(--os-ease),
+    box-shadow 0.16s var(--os-ease),
+    opacity 0.2s var(--os-ease-out);
+}
+
+.mn-os-chat-rail.is-expanded .mn-os-chat-rail-tab {
+  display: none;
+}
+
+.mn-os-chat-rail-tab:hover {
+  color: var(--os-text);
+  border-color: var(--os-accent-glow);
+  background: var(--os-surface-2);
+}
+
+.mn-os-chat-rail-tab:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 2px;
+}
+
+/* Expanded: full Code-style session sidebar at the left edge */
+.mn-os-chat-rail-panel {
+  flex: none;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  border-right: 1px solid transparent;
+  background: var(--mn-surface-1);
+  transition:
+    width 280ms var(--os-ease-out),
+    opacity 220ms var(--os-ease-out),
+    border-color 220ms var(--os-ease-out);
+}
+
+.mn-os-chat-rail.is-expanded .mn-os-chat-rail-panel {
+  width: var(--sidebar-w, 240px);
+  opacity: 1;
+  pointer-events: auto;
+  border-right-color: var(--mn-border);
+  box-shadow: 8px 0 32px -16px rgba(0, 0, 0, 0.28);
+}
+
+.mn-os-chat-rail-main {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w, 240px);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mn-os-chat-rail-main .chat-sidebar-header {
+  flex: none;
+}
+
+.mn-os-chat-rail-main .chat-new-wide {
+  flex: none;
+}
+
+.mn-os-chat-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.mn-os-chat-transcript {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scroll-padding-bottom: 12px;
+  padding:
+    16px
+    20px
+    var(--os-chat-transcript-bottom);
+  background: transparent;
+}
+
+/* Centered transcript column — mirrors .chat-area rhythm (impeccable 8efe228a, variant 1) */
+.mn-os-chat-col {
+  width: 100%;
+  max-width: min(760px, 100%);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--os-chat-message-gap);
+  min-height: 0;
+}
+
+.mn-os-chat-transcript .msg,
+.mn-os-chat-transcript .tool-call-msg,
+.mn-os-chat-transcript .sub-agent-card {
+  max-width: 100%;
+  width: 100%;
+}
+
+.mn-os-chat-transcript .msg-bubble.msg-bubble--md {
+  max-width: min(720px, 72ch);
+}
+
+.mn-os-chat-transcript .thought-stage,
+.mn-os-chat-transcript .thoughts-panel-wrap {
+  max-width: 100%;
+}
+
+.mn-os-chat-transcript .msg.user .msg-bubble {
+  max-width: min(85%, 42rem);
+}
+
+.mn-os-chat-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--os-text-dim);
+}
+
+.mn-os-composer-dock {
+  position: absolute;
+  left: 50%;
+  bottom: var(--os-composer-dock-bottom);
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 48px));
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 280ms var(--os-ease-out);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mn-os-composer-research-actions {
+  display: none;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+#osDesktopLayer.is-research-mode .mn-os-composer-research-actions {
+  display: flex;
+}
+
+#osDesktopLayer.is-composer-docked .mn-os-composer-dock {
+  opacity: 1;
+  /* Pass clicks through the dock shell; only composer children are interactive. */
+  pointer-events: none;
+}
+
+#osDesktopLayer.is-composer-docked .mn-os-composer-dock > * {
+  pointer-events: auto;
+}
+
+#osDesktopLayer.is-research-mode .mn-os-composer-dock {
+  opacity: 1;
+  z-index: 40;
+}
+
+.mn-os-desktop-composer {
+  width: 100%;
+}
+
+.mn-os-desktop-composer.is-busy {
+  opacity: 0.85;
+}
+
+.mn-os-desktop-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 15px;
+  margin-bottom: 15px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--os-border-strong);
+  border-radius: 16px;
+  box-shadow:
+    0 18px 50px -18px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mn-os-desktop-input-row:focus-within {
+  border-color: var(--os-accent-glow);
+  box-shadow:
+    0 0 0 4px var(--os-accent-soft),
+    0 18px 50px -18px rgba(0, 0, 0, 0.7);
+}
+
+.mn-os-desktop-comp-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition:
+    background 0.18s var(--os-ease-out),
+    color 0.18s var(--os-ease-out);
+}
+
+.mn-os-desktop-comp-btn .icon-svg,
+.mn-os-desktop-comp-btn .composer-mic-btn__icon {
+  width: 20px;
+  height: 20px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-desktop-comp-btn:hover {
+    background: var(--os-surface-3);
+    color: var(--os-text);
+  }
+}
+
+/* Desktop mic: no chrome at rest; recording/busy states come from voice.css */
+.mn-os-desktop-input-row .composer-mic-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--os-text-dim);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-desktop-input-row
+    .composer-mic-btn:not(.composer-mic-btn--recording):not(.composer-mic-btn--busy):hover {
+    background: var(--os-surface-3);
+    color: var(--os-text);
+  }
+}
+
+.mn-os-desktop-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mn-os-desktop-field {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--os-text);
+  font-size: 16px;
+  padding: 10px 4px;
+  resize: none;
+  max-height: 160px;
+  line-height: 1.35;
+}
+
+.mn-os-desktop-field::placeholder {
+  color: var(--os-text-faint);
+}
+
+.mn-os-desktop-context {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+
+.mn-os-desktop-send {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 11px;
+  border: none;
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background 0.18s var(--os-ease-out),
+    color 0.18s var(--os-ease-out),
+    box-shadow 0.18s var(--os-ease-out),
+    transform 0.12s var(--os-ease-out);
+}
+
+.mn-os-desktop-send .minnow-glyph {
+  width: 20px;
+  height: 20px;
+  transform: rotate(180deg);
+  transform-origin: center center;
+}
+
+/* Fish swims while concierge plans (.is-busy) or desktop chat streams (.is-streaming). */
+.mn-os-desktop-composer:is(.is-busy, .is-streaming) .mn-os-desktop-send {
+  opacity: 1;
+  overflow: hidden;
+}
+
+.mn-os-desktop-composer:is(.is-busy, .is-streaming) .mn-os-desktop-send .minnow-glyph {
+  animation:
+    mn-os-fish-enter 0.5s var(--os-ease-out) forwards,
+    mn-os-fish-orbit 2.4s linear 0.5s infinite;
+}
+
+/* Glide from idle (center, facing left) onto the orbit start at the right. */
+@keyframes mn-os-fish-enter {
+  0% {
+    transform: rotate(0deg) translate(0) rotate(180deg);
+  }
+
+  50% {
+    transform: rotate(0deg) translate(2.5px) rotate(225deg);
+  }
+
+  100% {
+    transform: rotate(0deg) translate(5px) rotate(270deg);
+  }
+}
+
+/* Loop clockwise inside the 40×40 send button (−90° = 270°). */
+@keyframes mn-os-fish-orbit {
+  from {
+    transform: rotate(0deg) translate(5px) rotate(270deg);
+  }
+
+  to {
+    transform: rotate(360deg) translate(5px) rotate(270deg);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-desktop-send:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--os-surface-2) 92%, transparent);
+    color: var(--os-accent);
+    box-shadow: inset 0 0 0 1px var(--os-accent);
+  }
+}
+
+.mn-os-desktop-send:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.mn-os-desktop-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#osDesktopLayer.is-chat-active .mn-os-cc-chips {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-chat-active .context-usage-ring {
+  animation: mn-os-context-fade-in 320ms var(--os-ease-out) 120ms both;
+}
+
+@keyframes mn-os-context-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+#osDesktopLayer:not(.is-chat-active) .mn-os-desk-stage {
+  justify-content: center;
+  align-items: center;
+  padding: 10px 24px;
+}
+
+/* Idle hero: chat transcript is hidden — keep it out of flex flow so the hero centers vertically */
+#osDesktopLayer:not(.is-chat-active) .mn-os-desktop-chat {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: 100%;
+  max-width: 920px;
+  margin-inline: auto;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+#osDesktopLayer.is-chat-active .mn-os-desk-stage {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: var(--os-chat-stage-top);
+  padding-bottom: var(--os-chat-composer-reserve);
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #osDesktopLayer .mn-os-desk-hero,
+  .mn-os-desktop-chat,
+  .mn-os-chat-rail,
+  .mn-os-chat-rail-panel,
+  .mn-os-composer-dock,
+  .mn-os-desktop-research,
+  #osDesktopLayer.is-chat-active .mn-os-cc-chips,
+  #osDesktopLayer.is-research-mode .mn-os-cc-chips,
+  #osDesktopLayer.is-experts-mode .mn-os-cc-chips,
+  #osDesktopLayer.is-chat-active .context-usage-ring,
+  .mn-os-desktop-composer:is(.is-busy, .is-streaming) .mn-os-desktop-send .minnow-glyph {
+    transition-duration: 0.001ms !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- desktop research (Phase 4) ---------- */
+
+#osDesktopLayer.is-research-active .mn-os-desk-hero {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-research-mode .mn-os-cc-chips {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--os-ease-out);
+}
+
+.mn-os-desktop-research {
+  position: absolute;
+  inset: 8vh 24px 18vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  overflow: auto;
+  padding: 0 8px 24px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 9;
+  transition: opacity 380ms var(--os-ease-out) 80ms;
+}
+
+#osDesktopLayer.is-research-idle .mn-os-greet-sub {
+  color: var(--os-accent);
+}
+
+#osDesktopLayer.is-research-mode .mn-os-desktop-research {
+  opacity: 1;
+}
+
+#osDesktopLayer.is-research-active .mn-os-desktop-research {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 8px;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+#osDesktopLayer.is-research-active .mn-os-research-result:has(.mn-os-research-result-body > *),
+#osDesktopLayer.is-research-active
+  #desktopResearchResultMount:has(.mn-os-research-result-body > *) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#desktopResearchResultMount {
+  padding: 15px;
+}
+
+#desktopResearchResultMount.mn-os-research-result:not(:has(.mn-os-research-result-body > *)) {
+  display: none;
+}
+
+.mn-os-research-result-chrome {
+  display: flex;
+  justify-content: flex-end;
+  margin: -9px 0 4px;
+  pointer-events: auto;
+}
+
+.mn-os-research-result-chrome:has([hidden]) {
+  display: none;
+}
+
+#osDesktopLayer.is-research-active .mn-os-research-result-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#osDesktopLayer.is-research-active .mn-os-research-result .dr-report {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 24px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mn-os-research-toolbar-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-2) 88%, transparent);
+  color: var(--os-text-dim);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mn-os-research-toolbar-btn:hover {
+  color: var(--os-text);
+  background: var(--os-surface-3);
+}
+
+.mn-os-research-card {
+  width: min(760px, 100%);
+  background: color-mix(in srgb, var(--os-surface-2) 85%, transparent);
+  border: 1px solid var(--os-border-strong);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 18px 50px -18px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mn-os-research-card:empty {
+  display: none;
+}
+
+.mn-os-research-card.hidden {
+  display: none !important;
+}
+
+.mn-os-research-progress:not(:has(.dr-prog)) {
+  display: none;
+}
+
+.mn-os-research-progress-chrome {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 0;
+  pointer-events: auto;
+}
+
+.mn-os-research-progress-chrome:has([hidden]) {
+  display: none;
+}
+
+.mn-os-research-progress-body {
+  min-width: 0;
+}
+
+.mn-os-desktop-research .dr-cancel.mn-os-research-cancel {
+  padding: 8px 15px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#btnDesktopResearchClose.dr-cancel.mn-os-research-close {
+  padding: 8px 15px;
+  font-size: 12px;
+  margin-top: 5px;
+  margin-bottom: 5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Beat :is(#researchView, .mn-os-desktop-research) .dr-prog — one nested card only */
+#desktopResearchProgressMount.mn-os-research-progress {
+  padding: 0 24px 22px;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-prog,
+.mn-os-research-result .dr-report {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  margin: 0;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-prog {
+  padding: 12px 0 0;
+  border-radius: 0;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress:has(
+    .mn-os-research-progress-chrome:not(:has([hidden]))
+  )
+  .dr-prog {
+  padding-top: 8px;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-stepper {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#desktopResearchProgressMount.mn-os-research-progress .dr-stepper-labels {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#osDesktopLayer.is-research-active .mn-os-desk-stage {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: 4vh;
+  padding-bottom: var(--os-research-composer-reserve);
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
+/* ---------- desktop experts (Experts' Lab on desktop) ---------- */
+
+#osDesktopLayer.is-experts-mode .mn-os-cc-chips {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-experts-idle .mn-os-greet-sub {
+  color: var(--os-accent);
+}
+
+#osDesktopLayer.is-experts-idle .mn-os-experts-hero-mount {
+  display: flex;
+}
+
+#osDesktopLayer.is-experts-active .mn-os-experts-hero-mount {
+  display: none;
+}
+
+.mn-os-experts-hero-mount {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+  max-width: min(720px, 100%);
+  margin-inline: auto;
+}
+
+.mn-os-experts-hero-mount.hidden {
+  display: none;
+}
+
+.mn-os-experts-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+.mn-os-expert-hero-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--os-text);
+  cursor: pointer;
+  border-radius: 10px;
+  border: 1px solid var(--os-border);
+  background: var(--os-surface-2);
+  transition:
+    border-color 0.15s var(--os-ease),
+    background 0.15s var(--os-ease),
+    color 0.15s var(--os-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-expert-hero-btn:hover {
+    background: var(--os-surface-3);
+    border-color: var(--os-border-strong);
+    color: var(--os-text);
+  }
+}
+
+.mn-os-expert-hero-btn.is-selected {
+  border-color: var(--os-accent);
+  background: color-mix(in srgb, var(--os-accent) 8%, var(--os-surface-2));
+}
+
+.mn-os-expert-hero-btn:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 2px;
+}
+
+.mn-os-expert-hero-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.mn-os-expert-hero-role {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--os-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mn-os-experts-hero-empty {
+  margin: 0;
+  padding: 12px 2px;
+  font-size: 13px;
+  color: var(--os-text-dim);
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
+.mn-os-experts-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mn-os-expert-hero-lab-btn,
+.mn-os-expert-hero-new-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--os-ease),
+    border-color 0.15s var(--os-ease),
+    color 0.15s var(--os-ease);
+}
+
+.mn-os-expert-hero-lab-btn {
+  border: 1px solid var(--os-border-strong);
+  background: var(--os-accent);
+  color: var(--os-on-accent);
+}
+
+.mn-os-expert-hero-new-btn {
+  border: 1px solid var(--os-border);
+  background: var(--os-surface-2);
+  color: var(--os-text-dim);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-os-expert-hero-lab-btn:hover {
+    filter: brightness(1.08);
+  }
+
+  .mn-os-expert-hero-new-btn:hover {
+    color: var(--os-text);
+    background: var(--os-surface-3);
+    border-color: var(--os-border-strong);
+  }
+}
+
+.mn-os-desktop-experts {
+  position: absolute;
+  inset: 8vh 24px 18vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 9;
+  transition: opacity 380ms var(--os-ease-out) 80ms;
+}
+
+#osDesktopLayer.is-experts-active .mn-os-desktop-experts {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#osDesktopLayer.is-experts-idle .mn-os-desktop-experts {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+#osDesktopLayer.is-experts-active .mn-os-desk-hero {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  transition:
+    opacity 450ms var(--os-ease-out),
+    transform 450ms var(--os-ease-out);
+}
+
+#osDesktopLayer.is-experts-active .mn-os-desktop-experts {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: min(1120px, 100%);
+  margin-inline: auto;
+  /* Breathing room so drop-shadow is not clipped by the stage flex box. */
+  padding: 28px 24px;
+  min-height: 0;
+  overflow: visible;
+  box-sizing: border-box;
+  filter: drop-shadow(0 18px 50px rgba(0, 0, 0, 0.55));
+}
+
+#osDesktopLayer.is-experts-active .mn-os-desk-stage {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: 4vh;
+  padding-bottom: var(--os-research-composer-reserve);
+  min-height: 0;
+  overflow: visible;
+  gap: 0;
+}
+
+#osDesktopLayer.is-experts-mode .mn-os-composer-dock {
+  opacity: 1;
+  z-index: 40;
+}
+
+#desktopExpertsMount .experts-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--os-border-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--os-surface-2) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  /* Outer elevation is painted on #desktopExpertsMount (drop-shadow) — avoids
+     overflow + backdrop-filter clipping box-shadow on the panel itself. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* Reparented from #osAppsLayer — beat .mn-os-app-layer:not(.is-active) visibility:hidden */
+#desktopExpertsMount .experts-page.mn-os-app-layer {
+  position: relative;
+  inset: auto;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.mn-os-chat-rail-panel #expertScopeChrome {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 12px 10px 10px;
+}
+
+.mn-os-chat-rail-panel #expertScopeChatList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ---------- impeccable live: desktop chat transcript layout (8efe228a) ---------- */
+
+.mn-os-chat-transcript-variants {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.mn-os-chat-variant {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.mn-os-chat-variant > .mn-os-chat-transcript {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(100dvh - var(--os-menubar-h, 46px) - var(--os-chat-stage-top) - 160px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mn-os-chat-variant-hint {
+  margin: 0;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--os-text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Variant 1 — centered column: fixes left drift + composer overlap */
+.mn-os-chat-variant--centered > .mn-os-chat-transcript {
+  padding:
+    16px
+    20px
+    calc(var(--p-bottom-clearance, 140) * 1px);
+}
+
+.mn-os-chat-variant--centered[data-p-density='airy'] .mn-os-chat-col {
+  --os-chat-message-gap: 22px;
+}
+
+.mn-os-chat-variant--centered[data-p-density='snug'] .mn-os-chat-col {
+  --os-chat-message-gap: 14px;
+}
+
+.mn-os-chat-variant--centered[data-p-density='packed'] .mn-os-chat-col {
+  --os-chat-message-gap: 8px;
+}
+
+.mn-os-chat-variant--centered > .mn-os-chat-transcript .mn-os-chat-col {
+  width: 100%;
+  max-width: min(760px, 100%);
+  margin-inline: auto;
+}
+
+/* Variant 2 — inset panel: bordered scrollport centered in chat block */
+.mn-os-chat-variant--inset > .mn-os-chat-transcript {
+  margin: 4px 0 0;
+  padding:
+    calc(10px + var(--p-inset-depth, 0.45) * 18px)
+    calc(12px + var(--p-inset-depth, 0.45) * 10px)
+    calc(var(--p-bottom-clearance, 148) * 1px);
+  background: color-mix(
+    in srgb,
+    var(--os-surface-1) calc(var(--p-inset-depth, 0.45) * 100%),
+    transparent
+  );
+  border: 1px solid var(--os-border-strong);
+  border-radius: var(--os-r-lg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--os-text) 4%, transparent);
+}
+
+.mn-os-chat-variant--inset[data-p-density='airy'] .mn-os-chat-col {
+  padding-block: 8px;
+}
+
+.mn-os-chat-variant--inset[data-p-density='snug'] .mn-os-chat-col {
+  padding-block: 2px;
+}
+
+.mn-os-chat-variant--inset[data-p-density='packed'] .mn-os-chat-col {
+  padding-block: 0;
+}
+
+.mn-os-chat-variant--inset > .mn-os-chat-transcript .mn-os-chat-col {
+  margin-inline: auto;
+}
+
+/* Variant 3 — full-bleed scrollport with composer fade mask */
+.mn-os-chat-variant--bleed > .mn-os-chat-transcript {
+  padding: 0 4px calc(var(--p-bottom-clearance, 132) * 1px);
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(100% - calc(var(--p-fade-strength, 0.55) * 96px)),
+    transparent 100%
+  );
+}
+
+.mn-os-chat-variant--bleed:not([data-p-full-bleed]) > .mn-os-chat-transcript {
+  padding-inline: 12px;
+}
+
+.mn-os-chat-variant--bleed[data-p-full-bleed] > .mn-os-chat-transcript {
+  margin-inline: -8px;
+  padding-inline: 16px;
+}
+
+.mn-os-chat-variant--bleed > .mn-os-chat-transcript .mn-os-chat-col {
+  max-width: min(760px, 100%);
+  margin-inline: auto;
 }

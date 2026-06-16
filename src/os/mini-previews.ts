@@ -1,7 +1,22 @@
-import { APPS, getAppById } from './app-registry';
+import { APPS, getAppById, getPresentationMode } from './app-registry';
 import { createAppIcon, createOsIcon } from './icons';
+import { isWindowMountedApp } from './window-mounted-apps';
+import { windowManager } from './window-manager';
 import type { AppInstance } from './types';
 import type { DesktopPrefs } from './types';
+
+/** Whether an instance should appear in the desktop mini-stack. */
+function shouldShowInMiniStack(
+  inst: AppInstance,
+  snapshot: { foregroundId: string | null; view: 'desktop' | 'app' },
+): boolean {
+  // Window-mode apps stay visible as floating frames until minimized.
+  if (isWindowMountedApp(inst.appId) && getPresentationMode(inst.appId) === 'window') {
+    const win = windowManager.findWindowByInstance(inst.id);
+    return win?.minimized ?? false;
+  }
+  return inst.id !== snapshot.foregroundId || snapshot.view === 'desktop';
+}
 
 /** Render minimized instance previews (card or tile style). */
 export function renderMiniPreviews(
@@ -20,9 +35,7 @@ export function renderMiniPreviews(
   // Mini-stack cards belong on the desktop launcher only — not over foreground apps.
   if (snapshot.view === 'app') return;
 
-  const minimized = snapshot.instances.filter(
-    (i) => i.id !== snapshot.foregroundId || snapshot.view === 'desktop',
-  );
+  const minimized = snapshot.instances.filter((i) => shouldShowInMiniStack(i, snapshot));
 
   if (minimized.length === 0) return;
 

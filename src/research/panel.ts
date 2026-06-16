@@ -34,6 +34,10 @@ import {
 } from '../state/sessions';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
+import {
+  deactivateDesktopResearch,
+  isDesktopResearchActive,
+} from '../os/desktop-state';
 
 type ResearchPanelTab = 'run' | 'library';
 
@@ -418,11 +422,22 @@ function closeOtherOverlays(): void {
 
 /** Whether the Deep Research page is open. */
 export function isResearchPageOpen(): boolean {
+  if (isOsShellEnabled() && isDesktopResearchActive()) {
+    return true;
+  }
   return getRoot()?.classList.contains('is-open') ?? false;
 }
 
 /** Close Deep Research and return to chat or desktop. */
 export function closeResearch(options?: { skipNavigate?: boolean }): void {
+  if (isOsShellEnabled()) {
+    deactivateDesktopResearch();
+    if (!options?.skipNavigate) {
+      navigateToDesktop();
+    }
+    return;
+  }
+
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) {
@@ -430,13 +445,9 @@ export function closeResearch(options?: { skipNavigate?: boolean }): void {
   }
   void cancelActiveRun();
   root.classList.remove('is-open');
-  if (!isOsShellEnabled()) {
-    shell.classList.remove('hidden');
-    if (!options?.skipNavigate && window.location.hash.startsWith('#/research')) {
-      window.location.hash = '#/';
-    }
-  } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+  shell.classList.remove('hidden');
+  if (!options?.skipNavigate && window.location.hash.startsWith('#/research')) {
+    window.location.hash = '#/';
   }
   void import('../ui/preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -450,6 +461,17 @@ export interface OpenResearchOptions {
 
 /** Open Deep Research (`#/research` or OS `#/app/research`). */
 export function openResearch(options?: OpenResearchOptions): void {
+  if (isOsShellEnabled()) {
+    void import('../os/router').then(({ launchApp }) => {
+      launchApp('research', {
+        seed: options?.seed,
+        autoRun: options?.autoRun || pendingAutoRun,
+      });
+    });
+    pendingAutoRun = false;
+    return;
+  }
+
   const root = getRoot();
   const shell = getChatShell();
   if (!root || !shell) {

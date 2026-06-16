@@ -1,10 +1,10 @@
 ---
 command: npm run dev
 cwd: .
-healthUrl: http://localhost:5173/
-port: 5173
+healthUrl: http://localhost:3000/
+port: 3000
 stop:
-  command: npx kill-port 5173
+  command: npx kill-port 3000
 ---
 
 # Startup guide

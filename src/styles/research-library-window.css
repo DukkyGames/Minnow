@@ -1,0 +1,18 @@
+/**
+ * Research library — floating window body styles.
+ */
+
+.research-library-window-body {
+  padding: 0;
+  background: var(--mn-bg, var(--os-surface-1));
+  overflow: auto;
+}
+
+.mn-os-window-body.research-library-window-body .dr-lib {
+  min-height: 100%;
+  padding: 16px 18px 20px;
+}
+
+.mn-os-window-body.research-library-window-body .dr-lib-grid {
+  max-height: none;
+}

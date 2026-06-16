@@ -26,6 +26,7 @@ import {
 import { initSettingsSearchFinder } from './settings-search-finder';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import {
   mountSettingsSearchToMenubar,
   unmountSettingsSearchFromMenubar,
@@ -257,7 +258,9 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('settings')) {
+      navigateToDesktop();
+    }
   }
   void import('./preview-electron-visibility').then((m) =>
     m.syncElectronPreviewHostVisibility(),
@@ -293,12 +296,14 @@ function onHashChange(): void {
 
 /** Wire nav, back button, and hash routing. */
 export function initSettingsPage(): void {
+  registerWindowTeardown('settings', () => closeSettings({ skipNavigate: true }));
   upgradeSettingsCheckboxes();
   initSettingsSearchFinder();
 
   document
     .getElementById('btnSettingsPageBack')
     ?.addEventListener('click', () => {
+      if (requestCloseWindowApp('settings')) return;
       if (isOsEmbedded()) navigateToDesktop();
       else closeSettings();
     });

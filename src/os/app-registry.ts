@@ -1,4 +1,4 @@
-import type { AppId } from './types';
+import type { AppId, PresentationMode } from './types';
 
 /** Launcher metadata for each MinnowOS app. */
 export interface AppDefinition {
@@ -7,6 +7,7 @@ export interface AppDefinition {
   icon: string;
   tag: string;
   description: string;
+  presentationMode: PresentationMode;
 }
 
 /** Canonical app list — ported from MinnowOS prototype `data.jsx`. */
@@ -17,6 +18,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'code',
     tag: 'Build & ship in a live workspace',
     description: 'Reef-side editor, dev server, files',
+    presentationMode: 'fullscreen',
   },
   {
     id: 'chat',
@@ -24,6 +26,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'chat',
     tag: 'Just talk to your model',
     description: 'General assistant — tools, files, and app routing',
+    presentationMode: 'desktop',
   },
   {
     id: 'research',
@@ -31,6 +34,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'research',
     tag: 'Send a sub-agent to dig deep',
     description: 'Multi-step web + source synthesis',
+    presentationMode: 'desktop',
   },
   {
     id: 'experts',
@@ -38,6 +42,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'flask',
     tag: 'Compose & test expert agents',
     description: 'Personas, tools, eval harness',
+    presentationMode: 'desktop',
   },
   {
     id: 'bench',
@@ -45,6 +50,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'bench',
     tag: 'Measure models head-to-head',
     description: 'Throughput, latency, quality',
+    presentationMode: 'window',
   },
   {
     id: 'compare',
@@ -52,6 +58,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'compare',
     tag: 'Blind A/B model preference',
     description: 'Side-by-side votes, reveal, win rates',
+    presentationMode: 'window',
   },
   {
     id: 'models',
@@ -59,6 +66,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'chip',
     tag: 'Download, run & tune models',
     description: 'Local runtimes, providers, recommendations',
+    presentationMode: 'window',
   },
   {
     id: 'scheduler',
@@ -66,6 +74,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'scheduler',
     tag: 'Recurring agent jobs & reminders',
     description: 'Interval and cron schedules while Minnow is running',
+    presentationMode: 'sidePanel',
   },
   {
     id: 'calendar',
@@ -73,6 +82,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'calendar',
     tag: 'Local events, ICS, and CalDAV',
     description: 'Month and week views with agent-assisted scheduling',
+    presentationMode: 'window',
   },
   {
     id: 'email',
@@ -80,6 +90,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'email',
     tag: 'IMAP triage and draft replies',
     description: 'Read-only inbox sync, AI summaries, and explicit-send SMTP',
+    presentationMode: 'fullscreen',
   },
   {
     id: 'settings',
@@ -87,6 +98,7 @@ export const APPS: readonly AppDefinition[] = [
     icon: 'gear',
     tag: 'Appearance, prompts, agents',
     description: 'App, prompting, and integration settings',
+    presentationMode: 'window',
   },
 ] as const;
 
@@ -100,4 +112,9 @@ export function isAppId(value: string): value is AppId {
 /** Lookup launcher metadata by id. */
 export function getAppById(id: AppId): AppDefinition | undefined {
   return APPS.find((a) => a.id === id);
+}
+
+/** Shell presentation mode for an app (defaults to fullscreen when unknown). */
+export function getPresentationMode(id: AppId): PresentationMode {
+  return getAppById(id)?.presentationMode ?? 'fullscreen';
 }

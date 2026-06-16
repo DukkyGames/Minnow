@@ -317,9 +317,8 @@
 }
 
 .calendar-event-chip {
-  border: none;
-  border-left: 3px solid var(--event-color, var(--mn-accent));
-  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--event-color, var(--mn-accent)) 38%, transparent);
+  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 14%, transparent);
   color: var(--mn-fg);
   border-radius: 4px;
   padding: 2px 4px;
@@ -389,9 +388,8 @@
   align-items: center;
   gap: 8px;
   min-height: 28px;
-  border: none;
-  border-left: 3px solid var(--event-color, var(--mn-accent));
-  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--event-color, var(--mn-accent)) 32%, transparent);
+  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 12%, transparent);
   border-radius: 6px;
   padding: 4px 8px;
   text-align: left;
@@ -401,7 +399,7 @@
 }
 
 .calendar-day-popover-item:hover {
-  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 18%, transparent);
+  background: color-mix(in srgb, var(--event-color, var(--mn-accent)) 20%, transparent);
 }
 
 .calendar-day-popover-time {

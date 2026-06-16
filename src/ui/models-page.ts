@@ -5,6 +5,7 @@
 import '../styles/models-page.css';
 
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
+import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { renderModelsSection } from './models-sections';
 
@@ -88,6 +89,7 @@ function bindStaticSections(): void {
   staticBindingsDone = true;
 
   document.getElementById('btnModelsPageBack')?.addEventListener('click', () => {
+    if (requestCloseWindowApp('models')) return;
     closeModels();
   });
 
@@ -170,7 +172,9 @@ export function closeModels(options?: { skipNavigate?: boolean }): void {
       window.location.hash = '#/';
     }
   } else if (!options?.skipNavigate) {
-    navigateToDesktop();
+    if (!requestCloseWindowApp('models')) {
+      navigateToDesktop();
+    }
   }
 
   void import('./preview-electron-visibility').then((m) =>
@@ -199,6 +203,7 @@ function onHashChange(): void {
 }
 
 export function initModelsPage(): void {
+  registerWindowTeardown('models', () => closeModels({ skipNavigate: true }));
   bindStaticSections();
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.includes('/models')) {

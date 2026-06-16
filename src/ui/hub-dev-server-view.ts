@@ -2,9 +2,10 @@
  * Pure hub dev-server cell view model (testable without DOM / terminal).
  */
 
-import type {
-  DevServerLifecycleStatus,
-  DevServerNetwork,
+import {
+  DEFAULT_DEV_SERVER_PORT,
+  type DevServerLifecycleStatus,
+  type DevServerNetwork,
 } from '../config/startup-api';
 
 export type HubDevServerUiState =
@@ -94,7 +95,7 @@ export function deriveHubDevServerView(
   status: DevServerLifecycleStatus,
   error?: string | null,
   _runId?: string | null,
-  port: number = 5173,
+  port: number = DEFAULT_DEV_SERVER_PORT,
   network: DevServerNetwork = 'local',
   healthUrl?: string | null,
 ): HubDevServerViewModel {

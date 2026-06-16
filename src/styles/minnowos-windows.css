@@ -1,0 +1,294 @@
+/* ============================================================
+   MinnowOS — floating window chrome, snap preview, shadows
+   Z-order: wallpaper < windows < side panels < dock < menubar
+   ============================================================ */
+
+.mn-os-windows-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.mn-os-side-panels-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.mn-os-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  min-height: 180px;
+  border-radius: var(--os-r-lg);
+  border: 1px solid var(--os-border-strong);
+  background: color-mix(in srgb, var(--os-surface-1) 92%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 18px 48px color-mix(in srgb, var(--os-bg) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--os-border) 40%, transparent);
+  overflow: hidden;
+  pointer-events: auto;
+  transition:
+    box-shadow 0.2s var(--os-ease-out),
+    border-color 0.2s var(--os-ease-out),
+    opacity 0.2s var(--os-ease-out),
+    transform 0.2s var(--os-ease-out);
+}
+
+.mn-os-window.is-focused {
+  border-color: color-mix(in srgb, var(--os-accent) 45%, var(--os-border-strong));
+  box-shadow:
+    0 22px 56px color-mix(in srgb, var(--os-bg) 50%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 70%, transparent);
+}
+
+.mn-os-window.is-minimized {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96) translateY(12px);
+}
+
+.mn-os-window.is-maximized,
+.mn-os-window.is-snapped {
+  border-radius: 0;
+}
+
+.mn-os-window-titlebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--os-border);
+  background: color-mix(in srgb, var(--os-surface-2) 70%, transparent);
+  user-select: none;
+}
+
+.mn-os-window-drag {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  cursor: move;
+}
+
+.mn-os-window-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--os-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mn-os-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.mn-os-window-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--os-text-dim);
+  cursor: pointer;
+  transition: 0.14s var(--os-ease);
+}
+
+.mn-os-window-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.mn-os-window-btn:hover {
+  background: var(--os-surface-2);
+  color: var(--os-text);
+  border-color: var(--os-border);
+}
+
+.mn-os-window-btn--close:hover {
+  background: color-mix(in srgb, #e5484d 18%, var(--os-surface-2));
+  color: #ffb4b4;
+  border-color: color-mix(in srgb, #e5484d 35%, var(--os-border));
+}
+
+.mn-os-window-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  background: var(--os-bg);
+}
+
+.mn-os-window-resize-grips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mn-os-window-grip {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.mn-os-window-grip--n {
+  top: -3px;
+  left: 10px;
+  right: 10px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.mn-os-window-grip--s {
+  bottom: -3px;
+  left: 10px;
+  right: 10px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.mn-os-window-grip--e {
+  right: -3px;
+  top: 10px;
+  bottom: 10px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.mn-os-window-grip--w {
+  left: -3px;
+  top: 10px;
+  bottom: 10px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.mn-os-window-grip--ne {
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.mn-os-window-grip--nw {
+  top: -3px;
+  left: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.mn-os-window-grip--se {
+  bottom: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.mn-os-window-grip--sw {
+  bottom: -3px;
+  left: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.mn-os-window-snap-preview {
+  position: absolute;
+  z-index: 1;
+  border-radius: var(--os-r-md);
+  border: 2px solid color-mix(in srgb, var(--os-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--os-accent-soft) 35%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--os-accent-glow) 50%, transparent);
+  pointer-events: none;
+  animation: mn-os-snap-in 0.15s var(--os-ease-out);
+}
+
+@keyframes mn-os-snap-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Windowed app layers inside a frame — override fullscreen-layer hide rules */
+.mn-os-window-body > .mn-os-app-layer {
+  position: relative;
+  inset: auto;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  background: var(--os-bg);
+}
+
+/* Windowed settings fills the frame body instead of the viewport */
+.mn-os-window-body > .settings-page,
+.mn-os-window-body > .models-page,
+.mn-os-window-body > .benchmark-page,
+.mn-os-window-body > .compare-page,
+.mn-os-window-body > .experts-page,
+.mn-os-window-body > .calendar-page,
+html.minnow-os-enabled .mn-os-window-body .settings-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .models-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .benchmark-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .compare-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .experts-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .calendar-page.is-open {
+  display: flex !important;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.mn-os-window-body > .settings-page .settings-page-header,
+.mn-os-window-body > .models-page .models-page-header {
+  min-height: 44px;
+}
+
+/* Stage: blur desktop only for fullscreen / legacy layer apps */
+.mn-os-stage.is-in-app-fullscreen .mn-os-desktop-layer {
+  transform: scale(0.965);
+  filter: blur(7px) brightness(0.6);
+  opacity: 0.5;
+}
+
+.mn-os-stage.is-in-app-fullscreen .mn-os-apps-layer {
+  z-index: 45;
+}
+
+/* Desktop composer uses z-index 40 in research mode — suppress all desktop chrome in fullscreen apps. */
+:is(.mn-os-stage.is-in-app-fullscreen, #osDesktopLayer.is-suppressed-by-fullscreen-app)
+  :is(
+    .mn-os-composer-dock,
+    .mn-os-chat-rail,
+    .mn-os-desk-stage,
+    .mn-os-desktop-previews
+  ) {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

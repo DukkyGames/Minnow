@@ -12,6 +12,68 @@ import { applyWorkspaceSwitch } from '../ui/workspace-button';
 import { createChatWithMode } from '../ui/sidebar';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 
+/** Re-render the Code transcript and sync chrome for the active workspace chat. */
+async function refreshCodeChatSurface(): Promise<void> {
+  const { getActiveChat } = await import('../state/sessions');
+  const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
+  const { renderSidebar } = await import('../ui/sidebar');
+  const { syncModeSelectorFromActiveChat } = await import('../ui/mode-selector');
+  const { syncThinkingControlFromActiveChat } = await import('../ui/composer-thinking');
+  const { syncViewModeToggleFromActiveChat } = await import('../ui/view-mode-toggle');
+  const { refreshChatJumpChipVisibility } = await import('../ui/chat-scroll');
+
+  const chat = getActiveChat();
+  renderChatFromHistory(chat);
+  renderStatsForChat(chat);
+  syncModeSelectorFromActiveChat();
+  syncThinkingControlFromActiveChat();
+  syncViewModeToggleFromActiveChat();
+  syncComposerFromStreamingState();
+  renderSidebar();
+  refreshChatJumpChipVisibility();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
+}
+
+/**
+ * Foreground Code with the project workspace chat — not the desktop assistant thread.
+ * Desktop chat renders into `#desktopChatCol`; this restores `#chatArea` on Code open.
+ */
+export async function restoreCodeSessionOnForeground(): Promise<void> {
+  const { getChatsWorkspacePath, isChatsWorkspacePath } = await import('../lib/chats-workspace');
+  const {
+    getActiveChat,
+    resolveActiveChatIdForWorkspace,
+    sessionState,
+  } = await import('../state/sessions');
+
+  if (!sessionState) return;
+
+  await getChatsWorkspacePath();
+
+  const workspacePath = getWorkspacePath();
+  const active = getActiveChat();
+  const activeIsAssistant = isChatsWorkspacePath(active.workspacePath ?? '');
+  const targetId = resolveActiveChatIdForWorkspace(
+    workspacePath,
+    sessionState,
+    active.modelId ?? '',
+  );
+
+  const { switchChat } = await import('../ui/sidebar');
+
+  if (targetId !== sessionState.activeId) {
+    switchChat(targetId);
+    return;
+  }
+
+  if (activeIsAssistant) {
+    switchChat(targetId);
+    return;
+  }
+
+  await refreshCodeChatSurface();
+}
+
 /** Switch workspace, create a mode-scoped chat, and auto-send the seed message. */
 export async function applyCodeLaunchOptions(options: LaunchOptions): Promise<void> {
   const seed = options.seed?.trim();
