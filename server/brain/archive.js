@@ -11,16 +11,18 @@ import {
   appendLog,
   createPage,
   listPages,
+  loadBrainConfig,
   readPage,
   updatePage,
 } from './store.js';
 import { getBrainPagesDir } from './paths.js';
-import { createVectorStore } from '../engine/vector-store.js';
+import { createVectorStore, cosineSimilarity } from '../engine/vector-store.js';
 import { getEnginePaths } from './engine-paths.js';
 import { isValidPageId } from './paths.js';
+import { syncEntryVector } from './vector-sync.js';
 
 const vectorStore = createVectorStore(getEnginePaths, { isValidEntryId: isValidPageId });
-const { syncDeleteEntryVector } = vectorStore;
+const { syncDeleteEntryVector, getEntryVector, loadVectorStore } = vectorStore;
 
 const ARCHIVE_BUNDLE_PROMPT = `You compress a span of chat turns into structured wiki knowledge for later retrieval.
 
@@ -202,6 +204,187 @@ function parseArchiveBundleJson(raw) {
   };
 }
 
+const ARCHIVE_RETRY_APPEND =
+  '\n\nPrevious output had invalid quotes. Return fewer facts; every sourceQuote MUST be copied verbatim from the transcript.';
+
+/**
+ * Run LLM bundle with optional stricter retry when quote validation fails.
+ * @param {object[]} turns
+ * @param {number[]} sourceTurnIndices
+ * @param {boolean} extractiveOnly
+ */
+async function buildBundleWithRetry(turns, sourceTurnIndices, extractiveOnly) {
+  if (extractiveOnly) {
+    const bundle = buildExtractiveArchiveBundle(turns, sourceTurnIndices);
+    const validated = validateArchiveBundleServer(bundle, turns, sourceTurnIndices);
+    return { bundle, validated };
+  }
+
+  const cfg = await loadSynthesisConfig();
+  const modelBinding = await resolveSynthesisModel(cfg);
+  const transcript = turns
+    .map((t, i) => serializeTurnForBundle(t, sourceTurnIndices[i] ?? i))
+    .join('\n\n');
+
+  const attemptBundle = async (strict) => {
+    if (!modelBinding?.providerId || !modelBinding?.model) return null;
+    try {
+      const llmRaw = await llmCall({
+        providerId: modelBinding.providerId,
+        model: modelBinding.model,
+        messages: [
+          {
+            role: 'system',
+            content: strict ? `${ARCHIVE_BUNDLE_PROMPT}${ARCHIVE_RETRY_APPEND}` : ARCHIVE_BUNDLE_PROMPT,
+          },
+          { role: 'user', content: transcript.slice(0, 48_000) },
+        ],
+        temperature: 0.2,
+        maxTokens: 4096,
+        timeoutMs: 60_000,
+      });
+      return parseArchiveBundleJson(llmRaw);
+    } catch {
+      return null;
+    }
+  };
+
+  let bundle = await attemptBundle(false);
+  let validated = bundle
+    ? validateArchiveBundleServer(bundle, turns, sourceTurnIndices)
+    : { ok: false, facts: [], errors: ['no bundle'] };
+
+  if (!validated.ok) {
+    await appendLog('archive bundle validation failed — retrying with stricter prompt');
+    const retryBundle = await attemptBundle(true);
+    if (retryBundle) {
+      bundle = retryBundle;
+      validated = validateArchiveBundleServer(bundle, turns, sourceTurnIndices);
+    }
+  }
+
+  if (!bundle || !validated.ok) {
+    bundle = buildExtractiveArchiveBundle(turns, sourceTurnIndices);
+    validated = validateArchiveBundleServer(bundle, turns, sourceTurnIndices);
+  }
+
+  return { bundle, validated };
+}
+
+/** Link new archive page to similar neighbors via frontmatter similarTo. */
+async function attachSimilarArchiveLinks(workspaceKey, chatId, page, body) {
+  const brainConfig = await loadBrainConfig();
+  if (brainConfig.embeddings?.enabled !== true) return;
+
+  try {
+    await syncEntryVector(page.meta, body, brainConfig);
+    const store = await loadVectorStore();
+    const newVector =
+      store.vectors[page.meta.id] ?? (await getEntryVector(page.meta.id));
+    if (!newVector?.length) return;
+
+    const prefix = archiveFolderPrefix(workspaceKey, chatId);
+    const pages = await listPages();
+    const neighbors = [];
+    for (const other of pages) {
+      if (other.path === page.meta.path) continue;
+      if (!other.path.startsWith(`${prefix}/`) || !other.path.includes('turns-')) continue;
+      const vec = store.vectors[other.id] ?? (await getEntryVector(other.id));
+      if (!vec?.length) continue;
+      const score = cosineSimilarity(newVector, vec);
+      if (score >= 0.82) neighbors.push({ path: other.path, score });
+    }
+    neighbors.sort((a, b) => b.score - a.score);
+    const similarTo = neighbors.slice(0, 5).map((n) => n.path);
+    if (similarTo.length) {
+      await updatePage(page.meta.path, { similarTo });
+    }
+  } catch {
+    /* similarity is best-effort */
+  }
+}
+
+/**
+ * Promote recurring entity slugs to workspace concepts/ after 2+ chats.
+ * @param {string} workspaceKey
+ * @param {string} slug
+ * @param {string} chatId
+ * @param {{ title?: string, kind?: string }} ent
+ */
+export async function maybePromoteEntity(workspaceKey, slug, chatId, ent) {
+  const key = String(workspaceKey ?? '').trim() || 'workspace';
+  const entitySlug = String(slug ?? '').trim();
+  if (!entitySlug) return;
+
+  const pages = await listPages();
+  const archivePrefix = `workspaces/${key}/archive/`;
+  const matches = pages.filter(
+    (p) =>
+      p.path.startsWith(archivePrefix) &&
+      p.path.endsWith(`/entities/${entitySlug}.md`),
+  );
+  const chatIds = new Set(matches.map((p) => {
+    const m = p.path.match(/\/archive\/([^/]+)\//);
+    return m ? m[1] : '';
+  }).filter(Boolean));
+  chatIds.add(chatId);
+  if (chatIds.size < 2) return;
+
+  const conceptPath = `workspaces/${key}/concepts/${entitySlug}.md`;
+  const promotedFrom = [...chatIds];
+  const body = `# ${String(ent.title ?? entitySlug)}\n\nKind: ${String(ent.kind ?? 'concept')}\n\nPromoted from chats: ${promotedFrom.join(', ')}`;
+  try {
+    await createPage({
+      relPath: conceptPath,
+      title: String(ent.title ?? entitySlug),
+      body,
+      tags: ['concept', 'archive-promoted'],
+      source: 'archive',
+      summary: `Promoted concept (${promotedFrom.length} chats)`,
+    });
+  } catch (e) {
+    if (e && typeof e === 'object' && 'statusCode' in e && e.statusCode === 409) {
+      await updatePage(conceptPath, { title: String(ent.title ?? entitySlug), body });
+    }
+  }
+
+  for (const match of matches) {
+    const linkBody = `# ${String(ent.title ?? entitySlug)}\n\nSee [[../../concepts/${entitySlug}]]`;
+    try {
+      await updatePage(match.path, { body: linkBody });
+    } catch {
+      /* skip */
+    }
+  }
+}
+
+/** Create rollup index when a chat has 3+ turn bundles and no rollup yet. */
+export async function maybeCreateArchiveRollup(workspaceKey, chatId) {
+  const prefix = archiveFolderPrefix(workspaceKey, chatId);
+  const pages = await listPages();
+  const turnPages = pages
+    .filter((p) => p.path.startsWith(`${prefix}/`) && p.path.includes('turns-'))
+    .sort((a, b) => a.path.localeCompare(b.path));
+  if (turnPages.length < 3) return;
+
+  const rollupPath = `${prefix}/index.md`;
+  if (pages.some((p) => p.path === rollupPath)) return;
+
+  const links = turnPages
+    .map((p) => `- [[${p.path.replace(/\.md$/i, '')}]] — ${p.title}`)
+    .join('\n');
+  const body = `## Archived turn bundles\n\n${links}`;
+  await createPage({
+    relPath: rollupPath,
+    title: 'Chat archive summary',
+    body,
+    tags: ['archive', 'archive-rollup', `chat:${chatId}`],
+    source: 'archive',
+    summary: `Rollup for ${turnPages.length} archived spans`,
+    chatId,
+  });
+}
+
 /**
  * @param {{ chatId: string, workspaceKey: string, turns: object[], sourceTurnIndices: number[], extractiveOnly?: boolean }} input
  */
@@ -219,39 +402,11 @@ export async function bundleArchiveRange(input) {
     throw err;
   }
 
-  let bundle = null;
-  if (input.extractiveOnly === true) {
-    bundle = buildExtractiveArchiveBundle(turns, sourceTurnIndices);
-  } else {
-    const cfg = await loadSynthesisConfig();
-    const modelBinding = await resolveSynthesisModel(cfg);
-    if (modelBinding?.providerId && modelBinding?.model) {
-      const transcript = turns
-        .map((t, i) => serializeTurnForBundle(t, sourceTurnIndices[i] ?? i))
-        .join('\n\n');
-      try {
-        const llmRaw = await llmCall({
-          providerId: modelBinding.providerId,
-          model: modelBinding.model,
-          messages: [
-            { role: 'system', content: ARCHIVE_BUNDLE_PROMPT },
-            { role: 'user', content: transcript.slice(0, 48_000) },
-          ],
-          temperature: 0.2,
-          maxTokens: 4096,
-          timeoutMs: 60_000,
-        });
-        bundle = parseArchiveBundleJson(llmRaw);
-      } catch {
-        bundle = null;
-      }
-    }
-    if (!bundle) {
-      bundle = buildExtractiveArchiveBundle(turns, sourceTurnIndices);
-    }
-  }
-
-  const validated = validateArchiveBundleServer(bundle, turns, sourceTurnIndices);
+  const { bundle, validated } = await buildBundleWithRetry(
+    turns,
+    sourceTurnIndices,
+    input.extractiveOnly === true,
+  );
   if (!validated.ok) {
     const err = new Error(`Archive bundle validation failed: ${validated.errors.join('; ')}`);
     err.statusCode = 422;
@@ -305,7 +460,11 @@ export async function bundleArchiveRange(input) {
     } catch {
       /* entity page may already exist */
     }
+    await maybePromoteEntity(workspaceKey, entSlug, chatId, ent);
   }
+
+  await attachSimilarArchiveLinks(workspaceKey, chatId, page, body);
+  await maybeCreateArchiveRollup(workspaceKey, chatId);
 
   await appendLog(`archive bundled ${relPath} for chat ${chatId}`);
   return {

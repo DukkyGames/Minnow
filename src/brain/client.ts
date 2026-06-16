@@ -56,6 +56,16 @@ export async function fetchBrainStatus(): Promise<BrainStatus | null> {
   return brainFetch<BrainStatus>('/api/brain/status');
 }
 
+/** Brain embeddings health (archive policy gate). */
+export async function fetchBrainEmbeddingsStatus(): Promise<{
+  enabled: boolean;
+  healthy: boolean;
+  model?: string;
+  backend?: string;
+} | null> {
+  return brainFetch('/api/brain/embeddings/status');
+}
+
 /** Nested folder tree of wiki pages. */
 export async function fetchBrainTree(): Promise<BrainTreeNode | null> {
   const data = await brainFetch<{ tree: BrainTreeNode }>('/api/brain/tree');

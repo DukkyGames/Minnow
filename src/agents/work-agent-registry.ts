@@ -133,6 +133,10 @@ export function mergeWorkAgentDefinition(
       override.summaryReserveTokens !== undefined
         ? override.summaryReserveTokens
         : builtin.summaryReserveTokens,
+    archive:
+      override.archive !== undefined
+        ? { ...(builtin.archive ?? {}), ...override.archive }
+        : builtin.archive,
   };
 }
 

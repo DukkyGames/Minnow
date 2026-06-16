@@ -16,6 +16,8 @@ export interface ArchiveConfig {
   retrievalTopK: number;
   /** Optional embedding model override; else Brain engine default. */
   embeddingModelId?: string;
+  /** When true, reorder retrieve hits with a small LLM pass (default off). */
+  llmRerank?: boolean;
 }
 
 export const DEFAULT_ARCHIVE_CONFIG: ArchiveConfig = {
@@ -23,7 +25,44 @@ export const DEFAULT_ARCHIVE_CONFIG: ArchiveConfig = {
   pressureThreshold: 0.75,
   minRecentTurns: 4,
   retrievalTopK: 5,
+  llmRerank: false,
 };
+
+/** Clamp archive numeric fields (mirrors server/config/validators.js). */
+export function normalizeArchiveConfig(
+  raw: Partial<ArchiveConfig> | undefined,
+): ArchiveConfig | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Partial<ArchiveConfig> = {};
+  const staleness = Number(raw.stalenessTurns);
+  if (Number.isFinite(staleness)) {
+    out.stalenessTurns = Math.min(200, Math.max(1, Math.floor(staleness)));
+  }
+  const pressure = Number(raw.pressureThreshold);
+  if (Number.isFinite(pressure)) {
+    out.pressureThreshold = Math.min(0.99, Math.max(0.1, pressure));
+  }
+  const minRecent = Number(raw.minRecentTurns);
+  if (Number.isFinite(minRecent)) {
+    out.minRecentTurns = Math.min(50, Math.max(1, Math.floor(minRecent)));
+  }
+  const topK = Number(raw.retrievalTopK);
+  if (Number.isFinite(topK)) {
+    out.retrievalTopK = Math.min(20, Math.max(1, Math.floor(topK)));
+  }
+  if (typeof raw.embeddingModelId === 'string' && raw.embeddingModelId.trim()) {
+    out.embeddingModelId = raw.embeddingModelId.trim().slice(0, 128);
+  }
+  if (typeof raw.llmRerank === 'boolean') {
+    out.llmRerank = raw.llmRerank;
+  }
+  return Object.keys(out).length ? { ...DEFAULT_ARCHIVE_CONFIG, ...out } : undefined;
+}
+
+/** Archive retrieve scope — chat-scoped by default; workspace is opt-in via tool. */
+export type ArchiveRetrieveScope =
+  | { chatId: string }
+  | { mode: 'workspace' };
 
 /** One contiguous history span selected for archival. */
 export interface ArchiveHistoryRange {

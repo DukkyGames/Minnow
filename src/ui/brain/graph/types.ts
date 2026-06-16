@@ -6,7 +6,7 @@
 export type GraphNodeKind = 'page' | 'tag' | 'symbol';
 
 /** Edge relationship between graph vertices. */
-export type GraphEdgeKind = 'wikilink' | 'tag' | 'calls';
+export type GraphEdgeKind = 'wikilink' | 'tag' | 'calls' | 'similar';
 
 /** One node in the force-directed graph (simulation mutates x/y/vx/vy). */
 export interface GraphNode {

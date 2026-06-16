@@ -91,6 +91,7 @@ export async function patchWorkAgentOverride(
     contextEnforcementPolicy?: import('../chat/context-budget').ContextEnforcementPolicy;
     minRecentTurns?: number;
     summaryReserveTokens?: number;
+    archive?: import('../chat/archive/types').ArchiveConfig | null;
     sampler?: import('./sampler-types').SamplerPreset | null;
     thinkingMode?: import('./thinking-types').ThinkingTriState | null;
   },
