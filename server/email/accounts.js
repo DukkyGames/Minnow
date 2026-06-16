@@ -29,7 +29,10 @@ export const DEFAULT_POLLING_MINUTES = 15;
  * @property {{ host: string, port: number, tls: boolean }} imap
  * @property {{ host: string, port: number, starttls: boolean } | undefined} smtp
  * @property {string} username
- * @property {string} secretRef
+ * @property {string} [secretRef]
+ * @property {'password' | 'oauth'} [authType]
+ * @property {'google' | 'microsoft'} [provider]
+ * @property {string} [oauthConnectionId]
  * @property {string | undefined} fromAddress
  * @property {boolean} isDefault
  * @property {boolean} pollingEnabled
@@ -114,9 +117,12 @@ export function redactAccount(account) {
     return account;
   }
   const { secretRef, ...rest } = account;
+  const authType = account.authType === 'oauth' ? 'oauth' : 'password';
   return {
     ...rest,
-    hasPassword: Boolean(secretRef),
+    authType,
+    hasPassword: authType === 'password' ? Boolean(secretRef) : false,
+    hasOAuth: authType === 'oauth' && Boolean(account.oauthConnectionId),
   };
 }
 
@@ -155,6 +161,9 @@ export async function readAccountPassword(accountId) {
   if (!account) {
     throw new Error('Email account not found');
   }
+  if (account.authType === 'oauth') {
+    throw new Error('OAuth email accounts do not use a password — use the OAuth token transport');
+  }
   const envelope = await readEncryptedJsonFile(emailSecretPath(accountId));
   if (!isEncryptedSecretPayload(envelope)) {
     throw new Error('Email credentials are missing or corrupt');
@@ -175,7 +184,6 @@ export async function createEmailAccount(input, password) {
 
   const id = randomUUID();
   const secretRef = emailSecretPath(id);
-  await fs.mkdir(secretRef.replace(/[^/]+$/, ''), { recursive: true });
   await writeEncryptedJsonFile(secretRef, await encryptSecretPayload(pass));
 
   const account = {
@@ -276,4 +284,59 @@ export async function resolveDefaultAccountId() {
   }
   const def = accounts.find((row) => row.isDefault);
   return (def ?? accounts[0]).id;
+}
+
+/**
+ * Find an OAuth-linked email account.
+ * @param {string} oauthConnectionId
+ */
+export async function findEmailAccountByOAuthConnection(oauthConnectionId) {
+  const accounts = await listEmailAccounts();
+  return accounts.find((row) => row.oauthConnectionId === oauthConnectionId) ?? null;
+}
+
+/**
+ * Create an email account backed by OAuth (no IMAP password).
+ * @param {{ oauthConnectionId: string, provider: 'google' | 'microsoft', label: string, username: string, fromAddress?: string }} input
+ */
+export async function createOAuthEmailAccount(input) {
+  const oauthConnectionId = String(input.oauthConnectionId ?? '').trim();
+  const provider = input.provider;
+  const username = String(input.username ?? '').trim();
+  const label = String(input.label ?? '').trim() || username;
+  if (!oauthConnectionId || !username) {
+    throw new Error('oauthConnectionId and username are required');
+  }
+  if (provider !== 'google' && provider !== 'microsoft') {
+    throw new Error('provider must be google or microsoft');
+  }
+
+  const existing = await findEmailAccountByOAuthConnection(oauthConnectionId);
+  if (existing) {
+    return existing;
+  }
+
+  const id = randomUUID();
+  const account = {
+    id,
+    label,
+    username,
+    fromAddress: String(input.fromAddress ?? username).trim() || username,
+    authType: 'oauth',
+    provider,
+    oauthConnectionId,
+    imap: { host: 'oauth.local', port: 993, tls: true },
+    isDefault: false,
+    pollingEnabled: true,
+    pollingIntervalMinutes: DEFAULT_POLLING_MINUTES,
+    folders: provider === 'microsoft' ? ['inbox'] : DEFAULT_FOLDERS.slice(),
+  };
+
+  const file = await readAccountsFile();
+  if (file.accounts.length === 0) {
+    account.isDefault = true;
+  }
+  file.accounts.push(account);
+  await writeAccountsFile(file);
+  return account;
 }

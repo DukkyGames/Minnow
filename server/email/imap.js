@@ -15,6 +15,7 @@ import {
   stripHtmlToText,
 } from './parse-body.js';
 import { mergeMessagesIntoCache } from './cache.js';
+import { withImapErrors } from './imap-errors.js';
 
 /** Default page size for inbox fetch. */
 export const DEFAULT_FETCH_LIMIT = 50;
@@ -51,18 +52,20 @@ export async function testImapConnection(accountId) {
     throw new Error('Email account not found');
   }
   const password = await readAccountPassword(accountId);
-  const client = createImapClient(account, password);
-  try {
-    await client.connect();
-    await client.logout();
-    return { ok: true };
-  } finally {
+  return withImapErrors(account, async () => {
+    const client = createImapClient(account, password);
     try {
-      await client.close();
-    } catch {
-      /* ignore */
+      await client.connect();
+      await client.logout();
+      return { ok: true };
+    } finally {
+      try {
+        await client.close();
+      } catch {
+        /* ignore */
+      }
     }
-  }
+  });
 }
 
 /**
@@ -75,32 +78,34 @@ export async function listImapFolders(accountId) {
     throw new Error('Email account not found');
   }
   const password = await readAccountPassword(accountId);
-  const client = createImapClient(account, password);
-  try {
-    await client.connect();
-    const folders = [];
-    const list = await client.list();
-    for (const entry of list) {
-      folders.push({
-        path: entry.path,
-        name: entry.name,
-        specialUse: entry.specialUse ?? null,
-        subscribed: entry.subscribed ?? true,
-      });
-    }
-    return folders;
-  } finally {
+  return withImapErrors(account, async () => {
+    const client = createImapClient(account, password);
     try {
-      await client.logout();
-    } catch {
-      /* ignore */
+      await client.connect();
+      const folders = [];
+      const list = await client.list();
+      for (const entry of list) {
+        folders.push({
+          path: entry.path,
+          name: entry.name,
+          specialUse: entry.specialUse ?? null,
+          subscribed: entry.subscribed ?? true,
+        });
+      }
+      return folders;
+    } finally {
+      try {
+        await client.logout();
+      } catch {
+        /* ignore */
+      }
+      try {
+        await client.close();
+      } catch {
+        /* ignore */
+      }
     }
-    try {
-      await client.close();
-    } catch {
-      /* ignore */
-    }
-  }
+  });
 }
 
 /**
@@ -185,60 +190,62 @@ export async function syncFolderMessages(accountId, options = {}) {
   const offset = Math.max(0, Number(options.offset) || 0);
 
   const password = await readAccountPassword(accountId);
-  const client = createImapClient(account, password);
+  return withImapErrors(account, async () => {
+    const client = createImapClient(account, password);
 
-  /** @type {Array<Record<string, unknown>>} */
-  const parsedMessages = [];
-  let highestUid = 0;
+    /** @type {Array<Record<string, unknown>>} */
+    const parsedMessages = [];
+    let highestUid = 0;
 
-  try {
-    await client.connect();
-    const lock = await client.getMailboxLock(folder);
     try {
-      const status = await client.status(folder, { uidNext: true, messages: true });
-      if (!status.messages) {
-        return { messages: [], total: 0, folder };
-      }
-
-      const search = await client.search({ all: true }, { uid: true });
-      const uids = Array.isArray(search) ? search.slice().sort((a, b) => b - a) : [];
-      const pageUids = uids.slice(offset, offset + limit);
-
-      for (const uid of pageUids) {
-        highestUid = Math.max(highestUid, uid);
-        const downloaded = await client.download(uid.toString(), undefined, { uid: true });
-        if (!downloaded?.content) {
-          continue;
+      await client.connect();
+      const lock = await client.getMailboxLock(folder);
+      try {
+        const status = await client.status(folder, { uidNext: true, messages: true });
+        if (!status.messages) {
+          return { messages: [], total: 0, folder, synced: 0 };
         }
-        const chunks = [];
-        for await (const chunk of downloaded.content) {
-          chunks.push(chunk);
+
+        const search = await client.search({ all: true }, { uid: true });
+        const uids = Array.isArray(search) ? search.slice().sort((a, b) => b - a) : [];
+        const pageUids = uids.slice(offset, offset + limit);
+
+        for (const uid of pageUids) {
+          highestUid = Math.max(highestUid, uid);
+          const downloaded = await client.download(uid.toString(), undefined, { uid: true });
+          if (!downloaded?.content) {
+            continue;
+          }
+          const chunks = [];
+          for await (const chunk of downloaded.content) {
+            chunks.push(chunk);
+          }
+          const source = Buffer.concat(chunks);
+          const row = await parseRawMessage(source, { uid, folder });
+          parsedMessages.push(row);
         }
-        const source = Buffer.concat(chunks);
-        const row = await parseRawMessage(source, { uid, folder });
-        parsedMessages.push(row);
+      } finally {
+        lock.release();
       }
     } finally {
-      lock.release();
+      try {
+        await client.logout();
+      } catch {
+        /* ignore */
+      }
+      try {
+        await client.close();
+      } catch {
+        /* ignore */
+      }
     }
-  } finally {
-    try {
-      await client.logout();
-    } catch {
-      /* ignore */
-    }
-    try {
-      await client.close();
-    } catch {
-      /* ignore */
-    }
-  }
 
-  const cache = await mergeMessagesIntoCache(accountId, parsedMessages, folder, highestUid);
-  return {
-    messages: parsedMessages,
-    total: cache.messages.filter((row) => String(row.folder) === folder).length,
-    folder,
-    synced: parsedMessages.length,
-  };
+    const cache = await mergeMessagesIntoCache(accountId, parsedMessages, folder, highestUid);
+    return {
+      messages: parsedMessages,
+      total: cache.messages.filter((row) => String(row.folder) === folder).length,
+      folder,
+      synced: parsedMessages.length,
+    };
+  });
 }

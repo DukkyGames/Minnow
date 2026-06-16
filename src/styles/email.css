@@ -123,6 +123,16 @@
   color: var(--mn-accent-fg, #fff);
 }
 
+.email-btn-danger {
+  color: var(--mn-danger, #c45);
+  border-color: color-mix(in srgb, var(--mn-danger, #c45) 35%, var(--mn-border));
+}
+
+.email-btn-danger:hover:not(:disabled) {
+  border-color: var(--mn-danger, #c45);
+  background: color-mix(in srgb, var(--mn-danger, #c45) 12%, var(--mn-bg-elevated, var(--mn-bg)));
+}
+
 .email-inbox-list {
   display: flex;
   flex-direction: column;
@@ -272,6 +282,17 @@
 
 .email-field + .email-field {
   margin-top: 10px;
+}
+
+.email-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.email-field-checkbox .email-field-label {
+  margin: 0;
 }
 
 .email-field-label {

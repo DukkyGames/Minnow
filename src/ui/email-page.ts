@@ -3,6 +3,7 @@
  */
 
 import '../styles/email.css';
+import '../styles/oauth-connect.css';
 
 import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';

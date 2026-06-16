@@ -5,6 +5,7 @@
 import nodemailer from 'nodemailer';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
 import { listCachedThread } from './cache.js';
+import { sendOAuthEmail } from './transport.js';
 
 /**
  * Infer nodemailer transport security from account SMTP settings.
@@ -83,15 +84,26 @@ export async function sendEmail(input) {
   if (!account) {
     throw new Error('Email account not found');
   }
-  if (!account.smtp?.host) {
-    throw new Error('SMTP is not configured for this account');
-  }
 
   const to = String(input.to ?? '').trim();
   const subject = String(input.subject ?? '').trim();
   const body = String(input.body ?? '');
   if (!to || !subject) {
     throw new Error('to and subject are required');
+  }
+
+  if (account.authType === 'oauth') {
+    return sendOAuthEmail(account, {
+      to,
+      subject,
+      body,
+      inReplyTo: input.inReplyTo || undefined,
+      references: input.references || undefined,
+    });
+  }
+
+  if (!account.smtp?.host) {
+    throw new Error('SMTP is not configured for this account');
   }
 
   const password = await readAccountPassword(input.accountId);

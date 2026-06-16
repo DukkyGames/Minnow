@@ -34,6 +34,17 @@ describe('email router', () => {
   });
 });
 
+describe('email oauth UI', () => {
+  test('email panel includes OAuth connect actions', () => {
+    const source = fs.readFileSync(
+      new URL('../../src/ui/oauth-connect.ts', import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /Sign in with Google/);
+    assert.match(source, /Sign in with Microsoft/);
+  });
+});
+
 describe('email markup contract', () => {
   test('index.html defines emailView shell', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');

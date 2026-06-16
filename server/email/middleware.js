@@ -12,7 +12,11 @@ import {
   updateEmailAccount,
 } from './accounts.js';
 import { listCachedMessages, listCachedThread } from './cache.js';
-import { listImapFolders, syncFolderMessages, testImapConnection } from './imap.js';
+import {
+  listEmailFolders,
+  syncFolderMessages,
+  testEmailConnection,
+} from './transport.js';
 import { triageMessage } from './triage.js';
 import { draftReply, sendEmail } from './smtp.js';
 
@@ -124,13 +128,13 @@ export function createEmailMiddleware() {
         }
 
         if (tail === 'test' && req.method === 'POST') {
-          const result = await testImapConnection(accountId);
+          const result = await testEmailConnection(accountId);
           sendJson(res, 200, result);
           return;
         }
 
         if (tail === 'folders' && req.method === 'GET') {
-          const folders = await listImapFolders(accountId);
+          const folders = await listEmailFolders(accountId);
           sendJson(res, 200, { folders });
           return;
         }

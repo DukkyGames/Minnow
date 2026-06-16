@@ -3,7 +3,7 @@
  */
 
 import { listEmailAccounts } from './accounts.js';
-import { syncFolderMessages } from './imap.js';
+import { syncFolderMessages } from './transport.js';
 
 /** Minimum interval between poll ticks. */
 export const POLL_TICK_MS = 60_000;

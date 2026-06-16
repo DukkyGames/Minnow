@@ -4,6 +4,7 @@
 
 import {
   createEmailAccount,
+  deleteEmailAccount,
   draftEmailReply,
   fetchEmailAccounts,
   fetchEmailMessages,
@@ -12,9 +13,11 @@ import {
   syncEmailFolder,
   testEmailAccount,
   triageEmailMessage,
+  updateEmailAccount,
   type EmailAccount,
   type EmailMessage,
 } from '../../email/client';
+import { mountOAuthConnectPanel } from '../oauth-connect';
 
 export interface EmailPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -44,32 +47,69 @@ function urgencyClass(urgency?: string): string {
   return 'email-urgency-normal';
 }
 
-/** Render account setup wizard when no accounts exist. */
-function renderSetupForm(
-  mount: HTMLElement,
-  options: EmailPanelOptions,
-  onSaved: () => void,
-): void {
+interface AccountFormOptions extends EmailPanelOptions {
+  title?: string;
+  /** When set, form edits this account instead of creating a new one. */
+  existing?: EmailAccount;
+  /** First account becomes default automatically when none exist yet. */
+  isFirstAccount?: boolean;
+  onSaved: () => void;
+  onCancel?: () => void;
+}
+
+/** Render create- or edit-account form. */
+function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): void {
+  const editing = Boolean(options.existing);
   mount.replaceChildren();
   const card = el('section', 'email-setup-card');
-  card.appendChild(el('h3', 'email-setup-title', 'Connect an email account'));
+  card.appendChild(
+    el(
+      'h3',
+      'email-setup-title',
+      options.title ?? (editing ? 'Edit email account' : 'Connect an email account'),
+    ),
+  );
   card.appendChild(
     el(
       'p',
       'email-setup-note',
-      'IMAP read-only triage first. Many Outlook tenants block basic auth — use Gmail app passwords or Fastmail. SMTP is optional for send.',
+      editing
+        ? 'Update connection settings. Leave the password blank to keep the current one.'
+        : 'IMAP read-only triage first. Many Outlook tenants block basic auth — use Gmail app passwords or Fastmail. SMTP is optional for send.',
     ),
   );
 
+  const existing = options.existing;
   const form = el('form', 'email-setup-form');
-  const fields: Array<{ id: string; label: string; type?: string; value?: string }> = [
-    { id: 'label', label: 'Account label' },
-    { id: 'username', label: 'Email / username' },
-    { id: 'password', label: 'Password / app password', type: 'password' },
-    { id: 'imapHost', label: 'IMAP host', value: 'imap.gmail.com' },
-    { id: 'imapPort', label: 'IMAP port', value: '993' },
-    { id: 'smtpHost', label: 'SMTP host (optional)', value: 'smtp.gmail.com' },
-    { id: 'smtpPort', label: 'SMTP port (optional)', value: '587' },
+  const fields: Array<{ id: string; label: string; type?: string; value?: string; placeholder?: string }> = [
+    { id: 'label', label: 'Account label', value: existing?.label },
+    { id: 'username', label: 'Email / username', value: existing?.username },
+    {
+      id: 'password',
+      label: editing ? 'New password (optional)' : 'Password / app password',
+      type: 'password',
+      placeholder: editing ? 'Leave blank to keep current password' : undefined,
+    },
+    {
+      id: 'imapHost',
+      label: 'IMAP host',
+      value: existing?.imap.host ?? 'imap.gmail.com',
+    },
+    {
+      id: 'imapPort',
+      label: 'IMAP port',
+      value: String(existing?.imap.port ?? 993),
+    },
+    {
+      id: 'smtpHost',
+      label: 'SMTP host (optional)',
+      value: existing?.smtp?.host ?? (editing ? '' : 'smtp.gmail.com'),
+    },
+    {
+      id: 'smtpPort',
+      label: 'SMTP port (optional)',
+      value: String(existing?.smtp?.port ?? 587),
+    },
   ];
 
   for (const field of fields) {
@@ -80,12 +120,36 @@ function renderSetupForm(
     input.name = field.id;
     if (field.type) input.type = field.type;
     if (field.value) input.value = field.value;
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (!editing && field.id === 'password') input.required = true;
     row.appendChild(input);
     form.appendChild(row);
   }
 
+  if (editing && existing) {
+    const defaultRow = el('label', 'email-field email-field-checkbox');
+    const defaultInput = el('input') as HTMLInputElement;
+    defaultInput.type = 'checkbox';
+    defaultInput.name = 'isDefault';
+    defaultInput.id = 'email-isDefault';
+    defaultInput.checked = existing.isDefault;
+    defaultRow.appendChild(defaultInput);
+    defaultRow.appendChild(el('span', 'email-field-label', 'Default account'));
+    form.appendChild(defaultRow);
+  }
+
   const actions = el('div', 'email-actions');
-  const saveBtn = el('button', 'email-btn email-btn-primary', 'Save account') as HTMLButtonElement;
+  if (options.onCancel) {
+    const cancelBtn = el('button', 'email-btn', 'Cancel') as HTMLButtonElement;
+    cancelBtn.type = 'button';
+    cancelBtn.addEventListener('click', options.onCancel);
+    actions.appendChild(cancelBtn);
+  }
+  const saveBtn = el(
+    'button',
+    'email-btn email-btn-primary',
+    editing ? 'Save changes' : 'Save account',
+  ) as HTMLButtonElement;
   saveBtn.type = 'submit';
   actions.appendChild(saveBtn);
   form.appendChild(actions);
@@ -93,30 +157,47 @@ function renderSetupForm(
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = new FormData(form);
+    const smtpHost = String(data.get('smtpHost') ?? '').trim();
+    const password = String(data.get('password') ?? '');
+    const payload: Record<string, unknown> = {
+      label: String(data.get('label') ?? '').trim(),
+      username: String(data.get('username') ?? '').trim(),
+      imap: {
+        host: String(data.get('imapHost') ?? '').trim(),
+        port: Number(data.get('imapPort') ?? 993),
+        tls: existing?.imap.tls ?? true,
+      },
+      smtp: smtpHost
+        ? {
+            host: smtpHost,
+            port: Number(data.get('smtpPort') ?? 587),
+            starttls: existing?.smtp?.starttls ?? true,
+          }
+        : undefined,
+      folders: existing?.folders ?? ['INBOX'],
+      pollingEnabled: existing?.pollingEnabled ?? false,
+      pollingIntervalMinutes: existing?.pollingIntervalMinutes ?? 15,
+      isDefault: editing
+        ? data.get('isDefault') === 'on'
+        : Boolean(options.isFirstAccount),
+    };
+    if (password.trim()) {
+      payload.password = password;
+    }
+
     try {
-      await createEmailAccount({
-        label: String(data.get('label') ?? '').trim(),
-        username: String(data.get('username') ?? '').trim(),
-        password: String(data.get('password') ?? ''),
-        imap: {
-          host: String(data.get('imapHost') ?? '').trim(),
-          port: Number(data.get('imapPort') ?? 993),
-          tls: true,
-        },
-        smtp: String(data.get('smtpHost') ?? '').trim()
-          ? {
-              host: String(data.get('smtpHost') ?? '').trim(),
-              port: Number(data.get('smtpPort') ?? 587),
-              starttls: true,
-            }
-          : undefined,
-        folders: ['INBOX'],
-        pollingEnabled: false,
-        pollingIntervalMinutes: 15,
-        isDefault: true,
-      });
-      options.onStatus?.('ok', 'Account saved');
-      onSaved();
+      if (editing && existing) {
+        await updateEmailAccount(existing.id, payload);
+        options.onStatus?.('ok', 'Account updated');
+      } else {
+        if (!password.trim()) {
+          options.onStatus?.('err', 'Password is required');
+          return;
+        }
+        await createEmailAccount({ ...payload, password });
+        options.onStatus?.('ok', 'Account saved');
+      }
+      options.onSaved();
     } catch (err) {
       options.onStatus?.('err', err instanceof Error ? err.message : 'Save failed');
     }
@@ -286,11 +367,31 @@ export async function renderEmailPanel(
   }
 
   if (accounts.length === 0) {
-    renderSetupForm(mount, options, () => {
-      void renderEmailPanel(mount, options);
+    const wrap = el('div', 'email-setup-shell');
+    const oauthMount = el('div', 'email-oauth-mount');
+    wrap.appendChild(oauthMount);
+    const manualMount = el('div', 'email-manual-mount');
+    wrap.appendChild(manualMount);
+    mount.replaceChildren(wrap);
+    await mountOAuthConnectPanel({
+      mount: oauthMount,
+      onStatus: options.onStatus,
+      onChange: () => {
+        void renderEmailPanel(mount, options);
+      },
+    });
+    renderAccountForm(manualMount, {
+      ...options,
+      title: 'Advanced / other provider (IMAP)',
+      isFirstAccount: true,
+      onSaved: () => {
+        void renderEmailPanel(mount, options);
+      },
     });
     return;
   }
+
+  let accountFormMode: 'none' | 'add' | 'edit' = 'none';
 
   let activeAccount = accounts.find((row) => row.isDefault) ?? accounts[0];
   let activeFolder = activeAccount.folders[0] ?? 'INBOX';
@@ -327,17 +428,92 @@ export async function renderEmailPanel(
   triageBtn.type = 'button';
   const testBtn = el('button', 'email-btn', 'Test IMAP') as HTMLButtonElement;
   testBtn.type = 'button';
+  const addAccountBtn = el('button', 'email-btn', 'Add account') as HTMLButtonElement;
+  addAccountBtn.type = 'button';
+  const editAccountBtn = el('button', 'email-btn', 'Edit account') as HTMLButtonElement;
+  editAccountBtn.type = 'button';
+  const removeAccountBtn = el('button', 'email-btn email-btn-danger', 'Remove account') as HTMLButtonElement;
+  removeAccountBtn.type = 'button';
 
   toolbar.appendChild(accountSelect);
   toolbar.appendChild(folderSelect);
   toolbar.appendChild(syncBtn);
   toolbar.appendChild(triageBtn);
   toolbar.appendChild(testBtn);
+  toolbar.appendChild(addAccountBtn);
+  toolbar.appendChild(editAccountBtn);
+  toolbar.appendChild(removeAccountBtn);
   shell.appendChild(toolbar);
 
   const body = el('div', 'email-body');
   shell.appendChild(body);
   mount.replaceChildren(shell);
+
+  const setToolbarFormMode = (formOpen: boolean) => {
+    syncBtn.disabled = formOpen;
+    triageBtn.disabled = formOpen;
+    testBtn.disabled = formOpen;
+    removeAccountBtn.disabled = formOpen;
+    accountSelect.disabled = formOpen;
+    folderSelect.disabled = formOpen;
+    addAccountBtn.disabled = accountFormMode === 'edit';
+    editAccountBtn.disabled = accountFormMode === 'add';
+  };
+
+  const closeAccountForm = () => {
+    accountFormMode = 'none';
+    addAccountBtn.textContent = 'Add account';
+    editAccountBtn.textContent = 'Edit account';
+    setToolbarFormMode(false);
+    void loadInbox();
+  };
+
+  const setAccountFormMode = (mode: 'none' | 'add' | 'edit') => {
+    if (mode === 'none') {
+      closeAccountForm();
+      return;
+    }
+
+    accountFormMode = mode;
+    addAccountBtn.textContent = mode === 'add' ? 'Cancel' : 'Add account';
+    editAccountBtn.textContent = mode === 'edit' ? 'Cancel' : 'Edit account';
+    setToolbarFormMode(true);
+
+    if (mode === 'add') {
+      body.replaceChildren();
+      const oauthMount = el('div', 'email-oauth-mount');
+      body.appendChild(oauthMount);
+      const formMount = el('div', 'email-manual-mount');
+      body.appendChild(formMount);
+      void mountOAuthConnectPanel({
+        mount: oauthMount,
+        onStatus: options.onStatus,
+        onChange: () => {
+          void renderEmailPanel(mount, options);
+        },
+      });
+      renderAccountForm(formMount, {
+        ...options,
+        title: 'Add email account (IMAP)',
+        isFirstAccount: false,
+        onSaved: () => {
+          void renderEmailPanel(mount, options);
+        },
+        onCancel: closeAccountForm,
+      });
+      return;
+    }
+
+    renderAccountForm(body, {
+      ...options,
+      title: 'Edit email account',
+      existing: activeAccount,
+      onSaved: () => {
+        void renderEmailPanel(mount, options);
+      },
+      onCancel: closeAccountForm,
+    });
+  };
 
   const loadInbox = async () => {
     body.replaceChildren(el('p', 'email-loading', 'Loading messages…'));
@@ -422,6 +598,30 @@ export async function renderEmailPanel(
       options.onStatus?.('err', err instanceof Error ? err.message : 'IMAP test failed');
     } finally {
       testBtn.disabled = false;
+    }
+  });
+
+  addAccountBtn.addEventListener('click', () => {
+    setAccountFormMode(accountFormMode === 'add' ? 'none' : 'add');
+  });
+
+  editAccountBtn.addEventListener('click', () => {
+    setAccountFormMode(accountFormMode === 'edit' ? 'none' : 'edit');
+  });
+
+  removeAccountBtn.addEventListener('click', async () => {
+    const label = activeAccount.label || activeAccount.username;
+    if (!window.confirm(`Remove email account "${label}"? Cached messages for this account will remain until cleared.`)) {
+      return;
+    }
+    removeAccountBtn.disabled = true;
+    try {
+      await deleteEmailAccount(activeAccount.id);
+      options.onStatus?.('ok', 'Account removed');
+      void renderEmailPanel(mount, options);
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Remove failed');
+      removeAccountBtn.disabled = false;
     }
   });
 

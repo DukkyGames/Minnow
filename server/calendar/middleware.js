@@ -10,6 +10,7 @@ import {
   syncCalDavAccount,
   writeBackLocalChanges,
 } from './caldav.js';
+import { syncCalendarAccount } from './sync-backend.js';
 import { exportCalendarIcs, importIcsToCalendar } from './ics.js';
 import { listUpcomingEvents } from './store.js';
 import {
@@ -277,7 +278,7 @@ export function createCalendarMiddleware() {
           sendJson(res, 400, { error: 'accountId is required' });
           return;
         }
-        const pull = await syncCalDavAccount(accountId);
+        const pull = await syncCalendarAccount(accountId);
         const push = await writeBackLocalChanges(accountId);
         sendJson(res, 200, { ...pull, ...push });
         return;
