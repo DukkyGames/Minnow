@@ -387,7 +387,9 @@ async function runReindex(): Promise<void> {
 
   setActionStatus(
     'ok',
-    `Indexed ${result.indexedFiles} changed file${result.indexedFiles === 1 ? '' : 's'} in ${result.repo}`,
+    `Indexed ${result.indexedFiles} changed file${result.indexedFiles === 1 ? '' : 's'} in ${result.repo}${
+      result.scaffold?.created ? ` · created ${result.scaffold.path}` : ''
+    }`,
   );
   await refreshCodeStatus();
   await refreshRepoMap();

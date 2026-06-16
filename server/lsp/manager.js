@@ -13,7 +13,10 @@ import {
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
-import { matchServersForPath } from '../../src/lsp/merge-config.mjs';
+import {
+  matchServersForPath,
+  serverSupportsWorkspaceSymbols,
+} from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
 import { getWorkspaceRoot } from '../workspace/root.js';
 
@@ -373,7 +376,31 @@ function typescriptInitializationOptions() {
     tsserver: {
       fallbackPath: getBundledTsserverPath(),
     },
+    typescript: {
+      implicitProjectConfiguration: {
+        checkJs: true,
+        module: 'ESNext',
+        target: 'ES2022',
+      },
+    },
   };
+}
+
+/** Benign workspace/symbol failures — skip instead of surfacing to callers. */
+function isSkippableWorkspaceSymbolError(message) {
+  const text = String(message ?? '');
+  if (/Unhandled method workspace\/symbol/i.test(text)) return true;
+  if (/connection got disposed/i.test(text)) return true;
+  return false;
+}
+
+/** User-facing hint when TypeScript has no loaded project for workspace search. */
+function formatWorkspaceSymbolErrors(errors) {
+  const joined = errors.join('; ');
+  if (/No Project/i.test(joined)) {
+    return `${joined} — add tsconfig.json or jsconfig.json at the workspace root, then reindex.`;
+  }
+  return joined;
 }
 
 function discardLspState(serverId, state) {
@@ -439,6 +466,7 @@ async function connectLspServer(serverId, config) {
     child,
     diagnostics: new Map(),
     ready: false,
+    serverCapabilities: {},
   };
 
   connection.onNotification('textDocument/publishDiagnostics', (params) => {
@@ -451,7 +479,7 @@ async function connectLspServer(serverId, config) {
 
   try {
     connection.listen();
-    await connection.sendRequest('initialize', {
+    const initResult = await connection.sendRequest('initialize', {
       processId: process.pid,
       rootUri: workspaceRootUri(),
       ...(serverId === 'typescript'
@@ -489,6 +517,10 @@ async function connectLspServer(serverId, config) {
         },
       },
     });
+    state.serverCapabilities =
+      initResult && typeof initResult === 'object' && initResult.capabilities
+        ? initResult.capabilities
+        : {};
     connection.sendNotification('initialized', {});
     state.ready = true;
     return state;
@@ -978,6 +1010,9 @@ export async function getLspWorkspaceSymbols(query) {
   for (const { id, config } of ctx.servers) {
     try {
       const state = await getConnection(id, config);
+      if (!serverSupportsWorkspaceSymbols(id, config, state.serverCapabilities)) {
+        continue;
+      }
       const result = await state.connection.sendRequest('workspace/symbol', {
         query: q,
       });
@@ -992,11 +1027,12 @@ export async function getLspWorkspaceSymbols(query) {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (isSkippableWorkspaceSymbolError(message)) continue;
       errors.push(`[${id}] ${message}`);
     }
   }
   if (symbols.length === 0 && errors.length > 0) {
-    return { symbols: [], error: errors.join('; ') };
+    return { symbols: [], error: formatWorkspaceSymbolErrors(errors) };
   }
   return { symbols, ...(errors.length > 0 ? { warnings: errors } : {}) };
 }
@@ -1157,6 +1193,16 @@ export function getLspDocumentSyncForTest(relativePath) {
   const entry = documentSync.get(fileUri);
   if (!entry) return null;
   return { version: entry.version, text: entry.text };
+}
+
+/** Stop specific language servers (e.g. after scaffolded tsconfig so tsserver reloads). */
+export function shutdownLspServers(serverIds) {
+  const ids = new Set(serverIds.map((id) => String(id)));
+  for (const id of ids) {
+    pendingConnections.delete(id);
+    const state = processes.get(id);
+    if (state) discardLspState(id, state);
+  }
 }
 
 export function shutdownAllLsp() {

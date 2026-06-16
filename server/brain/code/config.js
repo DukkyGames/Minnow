@@ -23,6 +23,8 @@ export const DEFAULT_BRAIN_CODE_CONFIG = {
   reindexCadence: /** @type {CodeReindexCadence} */ ('on-demand'),
   /** Reserved for MIN-B11 semantic code search. */
   codeEmbeddingsEnabled: false,
+  /** Write .minnow/brain-jsconfig.json when a JS/TS workspace has no ts/js config. */
+  autoScaffoldIndexConfig: true,
 };
 
 /**
@@ -51,5 +53,6 @@ export function normalizeBrainCodeConfig(raw) {
       : DEFAULT_BRAIN_CODE_CONFIG.repoMapTokenBudget,
     reindexCadence: validCadence,
     codeEmbeddingsEnabled: src.codeEmbeddingsEnabled === true,
+    autoScaffoldIndexConfig: src.autoScaffoldIndexConfig !== false,
   };
 }
