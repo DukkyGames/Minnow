@@ -88,6 +88,12 @@ const SCAFFOLD_DIRS = [
   'evals/runs',
   'scheduler-runs',
   'calendar',
+  'brain',
+  'brain/pages',
+  'brain/pages/facts',
+  'brain/pages/workspaces',
+  'brain/sources',
+  'brain/code',
   'research',
   'research/cache',
   'tts-cache',
@@ -414,6 +420,9 @@ export async function ensureMinnowLayout() {
       }
     }
   }
+
+  const { ensureBrainStore } = await import('../brain/store.js');
+  await ensureBrainStore();
 
   return home;
 }
