@@ -3,6 +3,7 @@
  */
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 import { getEmbedder, embedTexts } from '../engine/embeddings.js';
 import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from './paths.js';
@@ -16,6 +17,12 @@ import {
   applyMemoryProposalEdits,
 } from './proposals.js';
 import { retrieveBrainBlockHybrid, loadAllPagesWithBodies } from './retrieve.js';
+import {
+  bundleArchiveRange,
+  deleteChatArchive,
+  getArchiveStatus,
+  reconcileOrphanArchives,
+} from './archive.js';
 import { handleCodeIndexRequest } from './code/routes.js';
 import { handleSynthesisRequest } from './synthesis-routes.js';
 import { slugifyFactTitle } from './synthesis.js';
@@ -196,17 +203,54 @@ export async function handleBrainRequest(req, res, pathname) {
         profile === 'lite'
           ? brain.maxInjectCharsLite ?? 800
           : brain.maxInjectCharsFull ?? 4000;
-      const { block, ids } = await retrieveBrainBlockHybrid(
+      const { block, ids, hits } = await retrieveBrainBlockHybrid(
         {
           query: body.query,
           limit: body.limit ?? 8,
           tags: body.tags,
           maxChars,
           workspaceKey: body.workspaceKey,
+          scope: body.scope,
+          includeHits: body.includeHits === true,
         },
         brain,
       );
-      sendJson(res, 200, { block, ids });
+      sendJson(res, 200, { block, ids, ...(hits ? { hits } : {}) });
+      return true;
+    }
+
+    if (pathname === '/api/brain/archive' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await bundleArchiveRange(body);
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (pathname === '/api/brain/archive/status' && req.method === 'GET') {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const chatId = url.searchParams.get('chatId') ?? '';
+      const workspaceKey = url.searchParams.get('workspaceKey') ?? '';
+      let pending = [];
+      const pendingRaw = url.searchParams.get('pending');
+      if (pendingRaw) {
+        try {
+          pending = JSON.parse(pendingRaw);
+        } catch {
+          pending = [];
+        }
+      }
+      const status = await getArchiveStatus(chatId, workspaceKey, pending);
+      sendJson(res, 200, status);
+      return true;
+    }
+
+    const archiveChatMatch = pathname.match(/^\/api\/brain\/archive\/chat\/([^/]+)$/);
+    if (archiveChatMatch && req.method === 'DELETE') {
+      const chatId = decodeURIComponent(archiveChatMatch[1]);
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const workspaceKey = url.searchParams.get('workspaceKey') ?? '';
+      const result = await deleteChatArchive(chatId, workspaceKey);
+      sendJson(res, 200, result);
       return true;
     }
 
@@ -460,6 +504,21 @@ export async function handleBrainAndSynthesisRequest(req, res, pathname) {
 /** Startup hook: ensure brain wiki layout exists. */
 export async function initBrainApi() {
   await ensureBrainStore();
+  try {
+    const sessionsPath = path.join(getMinnowHome(), 'sessions', 'state.json');
+    const raw = await fs.readFile(sessionsPath, 'utf8');
+    const state = JSON.parse(raw);
+    const ids = new Set(
+      (Array.isArray(state?.chats) ? state.chats : [])
+        .map((c) => String(c?.id ?? '').trim())
+        .filter(Boolean),
+    );
+    if (ids.size > 0) {
+      void reconcileOrphanArchives(ids);
+    }
+  } catch {
+    /* no sessions file yet */
+  }
   const { warmRecentWorkspaceCodeIndexes } = await import('./code/workspace-cache.js');
   void warmRecentWorkspaceCodeIndexes();
 }

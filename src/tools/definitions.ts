@@ -1304,6 +1304,47 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'recall_chat_context',
+    label: 'Recall chat context',
+    description:
+      'Search archived turns for the active chat via Brain (browser-side).',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'recall_chat_context',
+      'Recall facts from archived chat turns stored in the Brain wiki for the active chat. Returns verbatim source quotes and page paths. Use when you need a decision or detail from earlier in a long conversation that is no longer in the live context.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language recall query',
+        },
+        topK: {
+          type: 'number',
+          description: 'Max facts to return (default 5)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'recall_turn_full',
+    label: 'Recall turn full',
+    description: 'Reassemble one original chat turn verbatim (browser-side).',
+    category: 'utility',
+    serverRequired: false,
+    definition: toolSchema(
+      'recall_turn_full',
+      'Reassemble the full verbatim text of a prior user turn (0-based index) from chat runs or history. Returns token estimate so you know the cost before injecting.',
+      {
+        turnIndex: {
+          type: 'number',
+          description: '0-based user turn index to recall',
+        },
+      },
+      ['turnIndex'],
+    ),
+  },
+  {
     id: 'brain_search',
     label: 'Brain search',
     description:

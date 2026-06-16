@@ -2,7 +2,7 @@
  * Validate session, tool, and system-prompt payloads before writing to disk.
  */
 
-import { ALL_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -555,6 +555,39 @@ function backfillBrainTools(config, raw) {
       config.enabled[id] = true;
     }
   }
+  for (const id of ARCHIVE_RECALL_TOOL_IDS) {
+    if (!toolIdWasStored(raw, id)) {
+      config.permissions.default[id] = 'ask';
+      config.enabled[id] = true;
+    }
+  }
+}
+
+/** Clamp archive policy numeric fields (MIN-139). */
+export function normalizeArchiveConfig(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const row = /** @type {Record<string, unknown>} */ (raw);
+  const out = {};
+  const staleness = Number(row.stalenessTurns);
+  if (Number.isFinite(staleness)) {
+    out.stalenessTurns = Math.min(200, Math.max(1, Math.floor(staleness)));
+  }
+  const pressure = Number(row.pressureThreshold);
+  if (Number.isFinite(pressure)) {
+    out.pressureThreshold = Math.min(0.99, Math.max(0.1, pressure));
+  }
+  const minRecent = Number(row.minRecentTurns);
+  if (Number.isFinite(minRecent)) {
+    out.minRecentTurns = Math.min(50, Math.max(1, Math.floor(minRecent)));
+  }
+  const topK = Number(row.retrievalTopK);
+  if (Number.isFinite(topK)) {
+    out.retrievalTopK = Math.min(20, Math.max(1, Math.floor(topK)));
+  }
+  if (typeof row.embeddingModelId === 'string' && row.embeddingModelId.trim()) {
+    out.embeddingModelId = row.embeddingModelId.trim().slice(0, 128);
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function defaultPermissionForTool(id, enabled) {
@@ -2422,12 +2455,24 @@ export function normalizeSubAgentsConfig(body) {
       policy !== undefined &&
       policy !== 'summarize' &&
       policy !== 'slide' &&
-      policy !== 'truncate'
+      policy !== 'truncate' &&
+      policy !== 'archive'
     ) {
       delete row.contextEnforcementPolicy;
       warnings.push(
         `Invalid contextEnforcementPolicy for types.${typeId}; removed`,
       );
+    } else if (policy === 'archive') {
+      warnings.push(
+        `Sub-agent type "${typeId}" uses archive policy; treated as slide at runtime`,
+      );
+      row.contextEnforcementPolicy = 'slide';
+    }
+
+    if (row.archive !== undefined) {
+      const normalized = normalizeArchiveConfig(row.archive);
+      if (normalized) row.archive = normalized;
+      else delete row.archive;
     }
 
     if (row.minRecentTurns !== undefined) {

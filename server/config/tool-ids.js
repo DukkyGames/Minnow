@@ -1,5 +1,8 @@
 /** Built-in tool ids (keep in sync with src/tools/definitions.ts). */
 
+/** Archive recall tools — browser-side, permission `ask` (MIN-139). */
+export const ARCHIVE_RECALL_TOOL_IDS = ['recall_chat_context', 'recall_turn_full'];
+
 /** Wiki tools seeded at permission `full` (no prompt) on first run and back-fill. */
 export const BRAIN_WIKI_TOOL_IDS = [
   'brain_search',
@@ -107,4 +110,6 @@ export const ALL_TOOL_IDS = [
   'manage_calendar',
   'list_mail',
   'draft_reply',
+  'recall_chat_context',
+  'recall_turn_full',
 ];

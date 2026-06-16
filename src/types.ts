@@ -540,6 +540,12 @@ export interface Chat {
   codeChangeTotals?: ChatCodeChangeTotals;
   /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
   codeChangeBackfillAt?: number;
+  /** Last archive policy trim stats (MIN-139). */
+  lastContextTrim?: {
+    archived?: number;
+    recalled?: number;
+    recallTokens?: number;
+  };
 }
 
 export type {

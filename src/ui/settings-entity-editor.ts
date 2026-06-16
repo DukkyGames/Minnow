@@ -32,6 +32,7 @@ const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }
   { value: 'slide', label: 'Slide (drop oldest turns)' },
   { value: 'truncate', label: 'Truncate (drop oldest messages)' },
   { value: 'summarize', label: 'Summarize (compress dropped turns)' },
+  { value: 'archive', label: 'Archive (Brain wiki)' },
 ];
 
 function buildSummarySchemaSelect(initial: string): HTMLSelectElement {

@@ -39,6 +39,8 @@ import {
   closeMobileSidebar,
 } from './layout';
 import { bootGenerationResumeForChat } from '../chat/generation-resume';
+import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
+import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
 import {
   renderChatFromHistory,
   renderStatsForChat,
@@ -615,6 +617,13 @@ export function deleteChat(chatId: string, evt?: Event): void {
   if (idx < 0) return;
   const victim = sessionState!.chats[idx];
   if (!confirm(`Delete "${victim.name}"? Messages in this chat cannot be recovered.`)) return;
+
+  const victimAgent = resolveActiveWorkAgent(victim);
+  cleanupChatArchiveOnDelete(
+    victim.id,
+    victim.workspacePath ?? '',
+    victimAgent?.contextEnforcementPolicy,
+  );
 
   const wasActive = sessionState!.activeId === chatId;
   sessionState!.chats.splice(idx, 1);
