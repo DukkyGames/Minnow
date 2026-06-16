@@ -3,6 +3,8 @@
  */
 
 import { mountMemoryProposalsPanel } from '../memory-proposals-panel';
+import { renderBrainEmptyState } from './empty-state';
+import { openBrain } from '../brain-page';
 
 type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -20,6 +22,15 @@ export async function renderProposalsSection(): Promise<void> {
   await mountMemoryProposalsPanel(panel, setProposalsStatus, {
     onMemoryAccepted: () => {
       void import('./graph-section').then((m) => m.renderGraphSection());
+    },
+    renderEmpty: (mount) => {
+      renderBrainEmptyState(mount, {
+        icon: 'inbox',
+        title: "You're all caught up",
+        message: 'No pending synthesis proposals. Ingest new sources to generate wiki pages.',
+        ctaLabel: 'Go to Ingest',
+        onCta: () => openBrain('ingest'),
+      });
     },
   }, {
     list: '#brainProposalsList',

@@ -22,6 +22,7 @@ import { navigateBrainGraphPage } from './graph-section';
 import { buildCallGraph } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import { renderSymbolInspector } from './inspector';
+import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
 import { setWorkspacePath } from '../../config/workspace-api';
 import { setWorkspaceFromServer } from '../../state/workspace';
@@ -156,11 +157,7 @@ async function selectSymbol(symbolId: string): Promise<void> {
 
   detail.hidden = false;
   detail.replaceChildren();
-
-  const loading = document.createElement('p');
-  loading.className = 'brain-muted';
-  loading.textContent = 'Loading symbol…';
-  detail.append(loading);
+  renderBrainLoading(detail, 'Loading symbol…');
 
   const [def, callers, callees] = await Promise.all([
     fetchBrainCodeReadSymbol(symbolId),
@@ -262,6 +259,19 @@ async function renderCallGraph(
   }
 }
 
+/** Show the default Explain panel empty state. */
+function showExplainEmpty(message: string, options?: { icon?: 'search' | 'offline' }): void {
+  const emptyEl = document.getElementById('brainCodeExplainEmpty');
+  const listEl = document.getElementById('brainCodeExplainList');
+  listEl?.replaceChildren();
+  if (!emptyEl) return;
+  renderBrainEmptyState(emptyEl, {
+    icon: options?.icon ?? 'search',
+    title: options?.icon === 'offline' ? 'Explain unavailable' : 'Select a symbol',
+    message,
+  });
+}
+
 /** Show wiki pages that anchor the selected symbol. */
 async function refreshExplainPanel(symbolId: string): Promise<void> {
   const panel = document.getElementById('brainCodeExplain');
@@ -271,25 +281,20 @@ async function refreshExplainPanel(symbolId: string): Promise<void> {
 
   panel.removeAttribute('aria-disabled');
   listEl.replaceChildren();
-  emptyEl.hidden = true;
-
-  const loading = document.createElement('li');
-  loading.className = 'brain-muted';
-  loading.textContent = 'Loading anchored pages…';
-  listEl.append(loading);
+  emptyEl.replaceChildren();
+  renderBrainLoading(emptyEl, 'Loading anchored pages…');
 
   const result = await fetchBrainCodeExplain(symbolId);
   listEl.replaceChildren();
+  emptyEl.replaceChildren();
 
   if (!result) {
-    emptyEl.hidden = false;
-    emptyEl.textContent = 'Explain unavailable. Start npm start.';
+    showExplainEmpty('Explain unavailable. Start npm start.', { icon: 'offline' });
     return;
   }
 
   if (!result.pages.length) {
-    emptyEl.hidden = false;
-    emptyEl.textContent = 'No wiki pages anchor this symbol yet.';
+    showExplainEmpty('No wiki pages anchor this symbol yet. Link symbols from wiki pages to see them here.');
     return;
   }
 
@@ -402,8 +407,7 @@ async function runSymbolSearch(query: string): Promise<void> {
     const explainEmpty = document.getElementById('brainCodeExplainEmpty');
     explainList?.replaceChildren();
     if (explainEmpty) {
-      explainEmpty.hidden = false;
-      explainEmpty.textContent = 'Select a symbol to see anchored wiki pages.';
+      showExplainEmpty('Select a symbol to see anchored wiki pages.');
     }
     return;
   }
@@ -501,6 +505,7 @@ function bindCodeSection(): void {
 /** Load Code section: status, repo map, wire controls once. */
 export async function renderCodeSection(): Promise<void> {
   bindCodeSection();
+  showExplainEmpty('Select a symbol to see anchored wiki pages.');
   await refreshCodeStatus();
   await refreshRepoMap();
 }

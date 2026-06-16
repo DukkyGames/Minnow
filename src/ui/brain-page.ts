@@ -51,6 +51,32 @@ const SECTION_LABELS: Record<BrainSectionId, string> = {
   settings: 'Settings',
 };
 
+/** Section titles shown in the consolidated page header. */
+const SECTION_TITLES: Record<BrainSectionId, string> = {
+  graph: 'Knowledge graph',
+  edit: 'Edit',
+  log: 'Log',
+  schema: 'Schema',
+  proposals: 'Proposals',
+  ingest: 'Ingest',
+  lint: 'Lint',
+  code: 'Code',
+  settings: 'Settings',
+};
+
+/** One-line descriptions for the page header lead line. */
+const SECTION_LEADS: Record<BrainSectionId, string> = {
+  graph: 'Explore wiki pages, tags, and wikilinks on an interactive canvas.',
+  edit: 'Create or update a wiki page (frontmatter + markdown body).',
+  log: 'Read-only changelog from log.md.',
+  schema: 'View and edit the wiki taxonomy in schema.md.',
+  proposals: 'Review AI-suggested memories before they enter the wiki.',
+  ingest: 'Submit a raw source; the utility model synthesizes wiki pages.',
+  lint: 'Health report: orphans, stale pages, broken links, contradictions.',
+  code: 'Browse the indexed repo map, search symbols, and inspect call graphs.',
+  settings: 'Memory synthesis cadence, semantic embeddings, and code index settings.',
+};
+
 let activeSection: BrainSectionId = 'graph';
 let staticBindingsDone = false;
 
@@ -74,9 +100,32 @@ function parseHashSection(): BrainSectionId {
   return resolveSectionId(match?.[1]);
 }
 
+function updatePageHeader(section: BrainSectionId): void {
+  const titleEl = document.getElementById('brainPageHeaderTitle');
+  const leadEl = document.getElementById('brainPageHeaderLead');
+  const backBtn = document.getElementById('btnBrainPageBack');
+  if (titleEl) titleEl.textContent = SECTION_TITLES[section];
+  if (leadEl) leadEl.textContent = SECTION_LEADS[section];
+  backBtn?.classList.toggle('hidden', isOsEmbedded());
+}
+
+/** Populate the header action slot (cleared on every section switch). */
+export function setBrainHeaderActions(...nodes: Node[]): void {
+  const mount = document.getElementById('brainPageHeaderActions');
+  if (!mount) return;
+  mount.replaceChildren(...nodes);
+}
+
+export function clearBrainHeaderActions(): void {
+  setBrainHeaderActions();
+}
+
 function setActiveSection(section: BrainSectionId, options?: { editPath?: string }): void {
   const prevSection = activeSection;
   activeSection = section;
+  updatePageHeader(section);
+  clearBrainHeaderActions();
+  getBrainRoot()?.classList.toggle('is-graph-canvas-bg', section === 'graph');
   for (const id of SECTIONS) {
     const panel = document.getElementById(`brainSection-${id}`);
     const nav = document.querySelector(
@@ -168,6 +217,7 @@ export function openBrain(section?: BrainSectionId, options?: { editPath?: strin
 
   const target = section ?? parseHashSection();
   if (wasAlreadyOpen && target === activeSection && !options?.editPath) {
+    updatePageHeader(target);
     void renderBrainSection(target, options);
     return;
   }
@@ -240,4 +290,4 @@ export function initBrainPage(): void {
   }
 }
 
-export { SECTION_LABELS };
+export { SECTION_LABELS, SECTION_TITLES, SECTION_LEADS };

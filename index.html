@@ -1215,15 +1215,20 @@
   </div>
 </main>
 
-<main id="brainView" class="brain-page" aria-label="Brain">
-  <header class="brain-page-header">
+<main id="brainView" class="brain-page is-graph-canvas-bg" aria-label="Brain">
+  <div class="brain-page-chrome">
+  <header class="brain-page-header brain-overlay-surface">
     <button type="button" class="icon-btn" id="btnBrainPageBack" aria-label="Back">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
-    <h1 class="brain-page-header__title">Brain</h1>
+    <div class="brain-page-header__main">
+      <h1 class="brain-page-header__title" id="brainPageHeaderTitle">Knowledge graph</h1>
+      <p class="brain-page-header__lead" id="brainPageHeaderLead">Explore wiki pages, tags, and wikilinks on an interactive canvas.</p>
+    </div>
+    <div class="brain-page-header__actions" id="brainPageHeaderActions"></div>
   </header>
   <div class="brain-page-body">
-    <nav class="brain-rail" aria-label="Brain sections">
+    <nav class="brain-rail brain-overlay-surface" aria-label="Brain sections">
       <button type="button" class="brain-rail__btn" data-brain-nav="graph" aria-current="page" title="Graph">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.5 7.5 10.5 16M16.5 7.5 13.5 16M8 6h8"/></svg>
         <span class="brain-rail__label">Graph</span>
@@ -1264,136 +1269,159 @@
     <div class="brain-stage">
     <div class="brain-content">
       <section id="brainSection-graph" class="brain-section brain-section--graph is-active">
-        <div class="brain-section-head">
-          <h2>Knowledge graph</h2>
-          <p class="brain-lead">Explore wiki pages, tags, and wikilinks on an interactive canvas.</p>
-        </div>
-        <p id="brainGraphOffline" class="brain-state-banner hidden">Start npm start to load the brain.</p>
-        <p id="brainGraphEmpty" class="brain-state-banner hidden">No pages yet. Create one or run Ingest.</p>
-        <div id="brainGraphStage" class="brain-graph-stage">
-          <div class="brain-graph-toolbar" role="toolbar" aria-label="Graph controls">
-            <label class="brain-graph-search">
-              <span class="visually-hidden">Search nodes</span>
-              <input type="search" id="brainGraphSearch" placeholder="Search pages…" autocomplete="off">
-            </label>
-            <span id="brainGraphStats" class="brain-graph-stats">—</span>
-            <button type="button" class="brain-action-btn" id="brainGraphFit">Fit</button>
-            <button type="button" class="brain-action-btn" id="brainGraphZoomIn" aria-label="Zoom in">+</button>
-            <button type="button" class="brain-action-btn" id="brainGraphZoomOut" aria-label="Zoom out">−</button>
-            <button type="button" class="brain-action-btn" id="brainGraphLayoutToggle" aria-pressed="false">Tree</button>
-            <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="true">Tags</button>
-            <button type="button" class="brain-action-btn" id="brainGraphOrphanToggle" aria-pressed="false">Orphans</button>
-            <button type="button" class="brain-action-btn is-primary" id="brainGraphNewPage">New page</button>
-          </div>
-          <p id="brainGraphDenseNote" class="brain-muted brain-graph-dense hidden">Dense graph: showing a capped subset. Use search to focus.</p>
-          <div class="brain-graph-layout">
-            <aside id="brainGraphTreePanel" class="brain-graph-tree-panel">
-              <div class="brain-graph-tree-head">
-                <h3 class="brain-section-subtitle">Pages</h3>
-                <button type="button" class="brain-action-btn brain-graph-tree-toggle icon-btn" id="brainGraphTreeToggle" aria-expanded="true" aria-label="Collapse tree panel">
-                  <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                </button>
-              </div>
-              <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
-            </aside>
-            <div id="brainGraphCanvasWrap" class="brain-graph-canvas-wrap">
-              <canvas id="brainGraphCanvas" class="brain-graph-canvas" aria-label="Knowledge graph"></canvas>
-              <div id="brainGraphFirstRun" class="brain-graph-hint hidden">
-                <p>Click a node to inspect. Double-click to focus neighbors. Drag to pin positions.</p>
-                <button type="button" class="brain-action-btn" id="brainGraphDismissHint">Got it</button>
-              </div>
+        <p id="brainGraphOffline" class="brain-state-banner brain-card hidden">Start npm start to load the brain.</p>
+        <p id="brainGraphEmpty" class="brain-state-banner brain-card hidden">No pages yet. Create one or run Ingest.</p>
+        <div id="brainGraphStage" class="brain-graph-stage brain-graph-overlays">
+          <div class="brain-graph-toolbar brain-overlay-card" role="toolbar" aria-label="Graph controls">
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__search">
+              <label class="brain-graph-search">
+                <span class="visually-hidden">Search nodes</span>
+                <input type="search" id="brainGraphSearch" placeholder="Search pages…" autocomplete="off">
+              </label>
+              <span id="brainGraphStats" class="brain-graph-stats">—</span>
             </div>
-            <div id="brainGraphTreeOnly" class="brain-graph-tree-only hidden" aria-label="Tree layout"></div>
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__zoom" role="group" aria-label="Zoom">
+              <button type="button" class="brain-action-btn brain-action-btn--icon" id="brainGraphZoomOut" aria-label="Zoom out">−</button>
+              <button type="button" class="brain-action-btn" id="brainGraphFit">Fit</button>
+              <button type="button" class="brain-action-btn brain-action-btn--icon" id="brainGraphZoomIn" aria-label="Zoom in">+</button>
+            </div>
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__toggles" role="group" aria-label="View options">
+              <button type="button" class="brain-action-btn" id="brainGraphLayoutToggle" aria-pressed="false">Tree</button>
+              <button type="button" class="brain-action-btn" id="brainGraphTagToggle" aria-pressed="true">Tags</button>
+              <button type="button" class="brain-action-btn" id="brainGraphOrphanToggle" aria-pressed="false">Orphans</button>
+            </div>
+            <div class="brain-graph-toolbar__group brain-graph-toolbar__primary">
+              <button type="button" class="brain-action-btn is-primary" id="brainGraphNewPage">New page</button>
+            </div>
+          </div>
+          <p id="brainGraphDenseNote" class="brain-muted brain-graph-dense brain-overlay-card hidden">Dense graph: showing a capped subset. Use search to focus.</p>
+          <aside id="brainGraphTreePanel" class="brain-graph-tree-panel brain-overlay-card">
+            <div class="brain-graph-tree-head">
+              <h3 class="brain-section-subtitle">Pages</h3>
+              <button type="button" class="brain-action-btn brain-graph-tree-toggle icon-btn" id="brainGraphTreeToggle" aria-expanded="true" aria-label="Collapse tree panel">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+            </div>
+            <div id="brainGraphTree" class="brain-graph-tree-mount" aria-label="Page tree"></div>
+          </aside>
+          <div id="brainGraphTreeOnly" class="brain-graph-tree-only brain-overlay-card hidden" aria-label="Tree layout"></div>
+          <div id="brainGraphLegend" class="brain-graph-legend brain-overlay-card" aria-label="Node types"></div>
+          <div id="brainGraphFirstRun" class="brain-graph-hint brain-overlay-card hidden">
+            <p>Click a node to inspect. Double-click to focus neighbors. Drag to pin positions.</p>
+            <button type="button" class="brain-action-btn" id="brainGraphDismissHint">Got it</button>
           </div>
         </div>
       </section>
       <section id="brainSection-edit" class="brain-section brain-section--panel">
-        <div class="brain-section-head">
-          <h2>Edit</h2>
-          <p class="brain-lead">Create or update a wiki page (frontmatter + markdown body).</p>
-        </div>
-        <div class="brain-form-grid">
-          <label>Path
-            <input type="text" id="brainEditPath" placeholder="facts/my-note.md" autocomplete="off">
-          </label>
-          <label>Title
-            <input type="text" id="brainEditTitle" maxlength="200">
-          </label>
-          <label>Tags (comma-separated)
-            <input type="text" id="brainEditTags" autocomplete="off">
-          </label>
-          <label>Body
-            <textarea id="brainEditBody" rows="14"></textarea>
-          </label>
-          <div class="brain-field-row">
-            <button type="button" class="brain-action-btn" id="brainEditNew">New page</button>
-            <button type="button" class="brain-action-btn" id="brainEditLoad">Load</button>
-            <button type="button" class="brain-action-btn is-primary" id="brainEditSave">Save</button>
+        <div class="brain-section__cols">
+          <div class="brain-card brain-section__main">
+            <div class="brain-form-grid">
+              <label>Path
+                <input type="text" id="brainEditPath" placeholder="facts/my-note.md" autocomplete="off">
+              </label>
+              <label>Title
+                <input type="text" id="brainEditTitle" maxlength="200">
+              </label>
+              <label>Tags (comma-separated)
+                <input type="text" id="brainEditTags" autocomplete="off">
+              </label>
+              <label>Body
+                <textarea id="brainEditBody" rows="14"></textarea>
+              </label>
+              <div class="brain-field-row">
+                <button type="button" class="brain-action-btn" id="brainEditNew">New page</button>
+                <button type="button" class="brain-action-btn" id="brainEditLoad">Load</button>
+                <button type="button" class="brain-action-btn is-primary" id="brainEditSave">Save</button>
+              </div>
+              <p id="brainEditStatus" class="brain-status" aria-live="polite"></p>
+            </div>
           </div>
-          <p id="brainEditStatus" class="brain-status" aria-live="polite"></p>
+          <aside class="brain-card brain-card--aside brain-section__aside">
+            <h3 class="brain-card__title">Preview</h3>
+            <div id="brainEditPreview" class="brain-markdown brain-edit-preview brain-muted">Start typing in the body to see a live preview.</div>
+          </aside>
         </div>
       </section>
-      <section id="brainSection-log" class="brain-section">
-        <h2>Log</h2>
-        <p class="brain-lead">Read-only changelog from <code>log.md</code>.</p>
-        <p id="brainLogOffline" class="brain-muted hidden">Offline</p>
-        <div id="brainLogBody"></div>
-      </section>
-      <section id="brainSection-schema" class="brain-section">
-        <h2>Schema</h2>
-        <p class="brain-lead">View and edit the wiki taxonomy in <code>schema.md</code>.</p>
-        <p id="brainSchemaOffline" class="brain-muted hidden">Offline</p>
-        <textarea id="brainSchemaEditor" rows="16" style="width:100%;max-width:40rem;font-family:var(--font-mono,ui-monospace,monospace)"></textarea>
-        <div class="brain-field-row">
-          <button type="button" class="brain-action-btn" id="brainSchemaReload">Reload</button>
-          <button type="button" class="brain-action-btn is-primary" id="brainSchemaSave">Save</button>
-        </div>
-        <p id="brainSchemaStatus" class="brain-status" aria-live="polite"></p>
-      </section>
-      <section id="brainSection-proposals" class="brain-section">
-        <h2>Proposals</h2>
-        <p class="brain-lead">Review AI-suggested memories before they enter the wiki.</p>
-        <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
-        <div id="brainProposalsPanel" class="settings-group settings-group--flat">
-          <p id="brainProposalsCount" class="settings-memory-stat">Pending: —</p>
-          <p id="brainProposalsOffline" class="field-hint settings-memory-offline hidden">
-            Start npm start to review proposals.
-          </p>
-          <div id="brainProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
+      <section id="brainSection-log" class="brain-section brain-section--centered">
+        <div class="brain-card">
+          <p id="brainLogOffline" class="brain-muted hidden">Offline</p>
+          <div id="brainLogBody"></div>
         </div>
       </section>
-      <section id="brainSection-ingest" class="brain-section">
-        <h2>Ingest</h2>
-        <p class="brain-lead">Submit a raw source; the utility model synthesizes wiki pages.</p>
-        <div class="brain-form-grid">
-          <label>Title (optional)
-            <input type="text" id="brainIngestTitle">
-          </label>
-          <label>Filename hint (optional)
-            <input type="text" id="brainIngestFilename" placeholder="notes.txt">
-          </label>
-          <label>Source content
-            <textarea id="brainIngestBody" rows="12"></textarea>
-          </label>
-          <div class="brain-field-row">
-            <button type="button" class="brain-action-btn is-primary" id="brainIngestSubmit">Ingest</button>
+      <section id="brainSection-schema" class="brain-section brain-section--panel">
+        <div class="brain-section__cols">
+          <div class="brain-card brain-section__main">
+            <p id="brainSchemaOffline" class="brain-muted hidden">Offline</p>
+            <textarea id="brainSchemaEditor" rows="16" style="width:100%;font-family:var(--font-mono,ui-monospace,monospace)"></textarea>
+            <div class="brain-field-row">
+              <button type="button" class="brain-action-btn" id="brainSchemaReload">Reload</button>
+              <button type="button" class="brain-action-btn is-primary" id="brainSchemaSave">Save</button>
+            </div>
+            <p id="brainSchemaStatus" class="brain-status" aria-live="polite"></p>
           </div>
-          <p id="brainIngestStatus" class="brain-status" aria-live="polite"></p>
-          <div id="brainIngestResult"></div>
+          <aside class="brain-card brain-card--aside brain-section__aside">
+            <h3 class="brain-card__title">Schema reference</h3>
+            <div id="brainSchemaPreview" class="brain-schema-preview">Edit schema.md to define wiki taxonomy fields and tags.</div>
+          </aside>
         </div>
       </section>
-      <section id="brainSection-lint" class="brain-section">
-        <h2>Lint</h2>
-        <p class="brain-lead">Health report: orphans, stale pages, broken links, contradictions.</p>
-        <p id="brainLintOffline" class="brain-muted hidden">Offline</p>
-        <div class="brain-field-row">
-          <button type="button" class="brain-action-btn is-primary" id="brainLintRun">Run lint</button>
+      <section id="brainSection-proposals" class="brain-section brain-section--centered">
+        <div class="brain-card">
+          <p id="brainProposalsStatus" class="brain-status" aria-live="polite"></p>
+          <div id="brainProposalsPanel" class="settings-group settings-group--flat">
+            <p id="brainProposalsCount" class="settings-memory-stat">Pending: —</p>
+            <p id="brainProposalsOffline" class="field-hint settings-memory-offline hidden">
+              Start npm start to review proposals.
+            </p>
+            <div id="brainProposalsList" class="settings-proposals-list" role="list" aria-label="Pending synthesis proposals"></div>
+          </div>
         </div>
-        <div id="brainLintBody"></div>
+      </section>
+      <section id="brainSection-ingest" class="brain-section brain-section--panel">
+        <div class="brain-section__cols">
+          <div class="brain-card brain-section__main">
+            <div class="brain-form-grid">
+              <label>Title (optional)
+                <input type="text" id="brainIngestTitle">
+              </label>
+              <label>Filename hint (optional)
+                <input type="text" id="brainIngestFilename" placeholder="notes.txt">
+              </label>
+              <label>Source content
+                <textarea id="brainIngestBody" rows="12"></textarea>
+              </label>
+              <div class="brain-field-row">
+                <button type="button" class="brain-action-btn is-primary" id="brainIngestSubmit">Ingest</button>
+              </div>
+              <p id="brainIngestStatus" class="brain-status" aria-live="polite"></p>
+              <div id="brainIngestResult"></div>
+            </div>
+          </div>
+          <aside class="brain-card brain-card--aside brain-section__aside brain-ingest-guide">
+            <h3 class="brain-card__title">How synthesis works</h3>
+            <p>Paste raw notes, transcripts, or docs. The utility model extracts facts and writes wiki pages under <code>brain/pages/</code>.</p>
+            <h4>Workflow</h4>
+            <ol>
+              <li>Paste source content and optional title hint.</li>
+              <li>Submit — synthesis runs against your configured utility model.</li>
+              <li>Review proposals before they merge into the wiki.</li>
+              <li>Open new pages from the graph or Edit section.</li>
+            </ol>
+            <h4>Tips</h4>
+            <p>Shorter, focused sources produce cleaner pages. Use Schema to define tags and field conventions first.</p>
+          </aside>
+        </div>
+      </section>
+      <section id="brainSection-lint" class="brain-section brain-section--centered">
+        <div class="brain-card">
+          <p id="brainLintOffline" class="brain-muted hidden">Offline</p>
+          <div class="brain-field-row">
+            <button type="button" class="brain-action-btn is-primary" id="brainLintRun">Run lint</button>
+          </div>
+          <div id="brainLintBody"></div>
+        </div>
       </section>
       <section id="brainSection-code" class="brain-section">
-        <h2>Code</h2>
-        <p class="brain-lead">Browse the indexed repo map, search symbols, and inspect call graphs.</p>
         <p id="brainCodeOffline" class="brain-muted hidden">Start npm start to use the code index.</p>
         <div class="brain-code-toolbar brain-field-row">
           <p id="brainCodeStatusLine" class="brain-muted">Checking index…</p>
@@ -1402,7 +1430,7 @@
         </div>
         <p id="brainCodeActionStatus" class="brain-status" aria-live="polite"></p>
         <div class="brain-code-layout">
-          <div class="brain-code-map-panel">
+          <div class="brain-code-map-panel brain-card">
             <div class="brain-field-row brain-code-map-controls">
               <label class="brain-code-focus-label">Focus
                 <input type="search" id="brainCodeFocus" placeholder="filter map…" autocomplete="off">
@@ -1411,7 +1439,7 @@
             </div>
             <pre id="brainCodeMap" class="brain-code-map" aria-label="Repo map"></pre>
           </div>
-          <div class="brain-code-search-panel">
+          <div class="brain-code-search-panel brain-card">
             <label class="brain-code-search-label">Find symbol
               <input type="search" id="brainCodeSearch" placeholder="function or class name" autocomplete="off">
             </label>
@@ -1423,19 +1451,17 @@
             </div>
             <aside id="brainCodeExplain" class="brain-code-explain">
               <h3 class="brain-section-subtitle">Explain</h3>
-              <p id="brainCodeExplainEmpty" class="brain-muted">Select a symbol to see anchored wiki pages.</p>
+              <div id="brainCodeExplainEmpty"></div>
               <ul id="brainCodeExplainList" class="brain-code-explain-list" aria-label="Anchored wiki pages"></ul>
             </aside>
           </div>
         </div>
       </section>
-      <section id="brainSection-settings" class="brain-section">
-        <h2>Settings</h2>
-        <p class="brain-lead">Memory synthesis cadence, semantic embeddings, and code index settings.</p>
+      <section id="brainSection-settings" class="brain-section brain-section--centered">
         <p id="brainSettingsStatusLine" class="brain-muted">Checking wiki status…</p>
         <p id="brainSettingsStatus" class="brain-status" aria-live="polite"></p>
         <div class="brain-settings-stack">
-          <div class="brain-settings-group">
+          <div class="brain-settings-group brain-card">
             <h3>Auto-learning cadence</h3>
             <p id="brainSynthesisOffline" class="brain-muted hidden">Offline</p>
             <div class="brain-form-grid">
@@ -1444,10 +1470,12 @@
                 <input type="number" id="brainSynthesisThrottle" class="settings-input settings-input--narrow" min="1" value="4">
               </label>
               <p id="brainSynthesisThrottleHint" class="brain-muted">Runs after every 4 completed user+assistant turns.</p>
-              <button type="button" class="brain-action-btn is-primary" id="brainSynthesisSave">Save synthesis settings</button>
+              <div class="brain-field-row">
+                <button type="button" class="brain-action-btn is-primary" id="brainSynthesisSave">Save synthesis settings</button>
+              </div>
             </div>
           </div>
-          <div class="brain-settings-group">
+          <div class="brain-settings-group brain-card">
             <h3>Semantic embeddings</h3>
             <p id="brainEmbeddingsOffline" class="brain-muted hidden">Offline</p>
             <p id="brainEmbeddingsStatus" class="brain-muted">Checking embeddings…</p>
@@ -1478,7 +1506,7 @@
               </div>
             </div>
           </div>
-          <div class="brain-settings-group">
+          <div class="brain-settings-group brain-card">
             <h3>Code index</h3>
             <p id="brainCodeSettingsOffline" class="brain-muted hidden">Offline</p>
             <p id="brainCodeSettingsStatus" class="brain-muted">Checking code index…</p>
@@ -1515,8 +1543,12 @@
         </div>
       </section>
     </div>
-    <aside id="brainInspector" class="brain-inspector" aria-label="Node inspector" aria-hidden="true"></aside>
+    <aside id="brainInspector" class="brain-inspector brain-overlay-card" aria-label="Node inspector" aria-hidden="true"></aside>
     </div>
+  </div>
+  </div>
+  <div id="brainGraphCanvasWrap" class="brain-graph-canvas-wrap brain-graph-page-bg" aria-hidden="false">
+    <canvas id="brainGraphCanvas" class="brain-graph-canvas" aria-label="Knowledge graph"></canvas>
   </div>
 </main>
 

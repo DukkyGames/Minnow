@@ -245,6 +245,11 @@
   background: var(--os-bg);
 }
 
+.mn-os-window-body > .brain-page {
+  height: 100%;
+  min-height: 0;
+}
+
 /* Windowed settings fills the frame body instead of the viewport */
 .mn-os-window-body > .settings-page,
 .mn-os-window-body > .models-page,
@@ -252,12 +257,14 @@
 .mn-os-window-body > .compare-page,
 .mn-os-window-body > .experts-page,
 .mn-os-window-body > .calendar-page,
+.mn-os-window-body > .brain-page,
 html.minnow-os-enabled .mn-os-window-body .settings-page.is-open,
 html.minnow-os-enabled .mn-os-window-body .models-page.is-open,
 html.minnow-os-enabled .mn-os-window-body .benchmark-page.is-open,
 html.minnow-os-enabled .mn-os-window-body .compare-page.is-open,
 html.minnow-os-enabled .mn-os-window-body .experts-page.is-open,
-html.minnow-os-enabled .mn-os-window-body .calendar-page.is-open {
+html.minnow-os-enabled .mn-os-window-body .calendar-page.is-open,
+html.minnow-os-enabled .mn-os-window-body .brain-page.is-open {
   display: flex !important;
   height: 100%;
   min-height: 0;

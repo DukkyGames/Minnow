@@ -5,12 +5,21 @@
 import { fetchBrainSchema, saveBrainSchema } from '../../brain/client';
 
 let bindingsDone = false;
+let previewBound = false;
 
 function setSchemaStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   const el = document.getElementById('brainSchemaStatus');
   if (!el) return;
   el.textContent = message;
   el.dataset.kind = kind;
+}
+
+function refreshSchemaPreview(): void {
+  const editor = document.getElementById('brainSchemaEditor') as HTMLTextAreaElement | null;
+  const preview = document.getElementById('brainSchemaPreview');
+  if (!editor || !preview) return;
+  const text = editor.value.trim();
+  preview.textContent = text || 'Edit schema.md to define wiki taxonomy fields and tags.';
 }
 
 function bindSchemaSection(): void {
@@ -34,9 +43,17 @@ function bindSchemaSection(): void {
   });
 }
 
+function bindSchemaPreview(): void {
+  if (previewBound) return;
+  previewBound = true;
+  const editor = document.getElementById('brainSchemaEditor');
+  editor?.addEventListener('input', refreshSchemaPreview);
+}
+
 /** Load schema.md into the editor. */
 export async function renderSchemaSection(): Promise<void> {
   bindSchemaSection();
+  bindSchemaPreview();
   const editor = document.getElementById('brainSchemaEditor') as HTMLTextAreaElement | null;
   const offlineEl = document.getElementById('brainSchemaOffline');
   if (!editor) return;
@@ -48,11 +65,13 @@ export async function renderSchemaSection(): Promise<void> {
   if (!online) {
     editor.value = '';
     editor.disabled = true;
+    refreshSchemaPreview();
     setSchemaStatus('err', 'Offline — start npm start.');
     return;
   }
 
   editor.disabled = false;
   editor.value = schema ?? '';
+  refreshSchemaPreview();
   setSchemaStatus('ok', 'Schema loaded.');
 }

@@ -4,8 +4,9 @@
 
 import { lintBrainWiki } from '../../brain/client';
 import type { BrainLintReport } from '../../brain/types';
+import { renderBrainEmptyState, renderBrainLoading } from './empty-state';
 import { navigateBrainGraphPage, setGraphOrphanPaths } from './graph-section';
-import { openBrain } from '../brain-page';
+import { openBrain, setBrainHeaderActions } from '../brain-page';
 
 let bindingsDone = false;
 
@@ -114,16 +115,23 @@ function bindLintSection(): void {
   });
 }
 
+function mountLintHeaderActions(): void {
+  const runBtn = document.createElement('button');
+  runBtn.type = 'button';
+  runBtn.className = 'brain-action-btn is-primary';
+  runBtn.textContent = 'Run lint';
+  runBtn.addEventListener('click', () => {
+    void runLint();
+  });
+  setBrainHeaderActions(runBtn);
+}
+
 async function runLint(): Promise<void> {
   const mount = document.getElementById('brainLintBody');
   const offlineEl = document.getElementById('brainLintOffline');
   if (!mount) return;
 
-  mount.replaceChildren();
-  const loading = document.createElement('p');
-  loading.className = 'brain-muted';
-  loading.textContent = 'Running lint…';
-  mount.append(loading);
+  renderBrainLoading(mount, 'Running lint…');
 
   const report = await lintBrainWiki({ includeLlm: true });
   offlineEl?.classList.toggle('hidden', report !== null);
@@ -145,14 +153,19 @@ async function runLint(): Promise<void> {
 /** Show lint intro; run button wired once. */
 export async function renderLintSection(): Promise<void> {
   bindLintSection();
+  mountLintHeaderActions();
   const mount = document.getElementById('brainLintBody');
   if (!mount || mount.dataset.lintRan === '1') return;
-  mount.replaceChildren();
-  const lead = document.createElement('p');
-  lead.className = 'brain-muted';
-  lead.textContent =
-    'Check orphans, stale pages, broken wikilinks, and optional LLM contradiction scan.';
-  mount.append(lead);
+  renderBrainEmptyState(mount, {
+    icon: 'sparkle',
+    title: 'Wiki health check',
+    message:
+      'Check orphans, stale pages, broken wikilinks, and optional LLM contradiction scan.',
+    ctaLabel: 'Run lint',
+    onCta: () => {
+      void runLint();
+    },
+  });
 }
 
 export { runLint };

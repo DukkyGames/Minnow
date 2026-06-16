@@ -51,7 +51,7 @@ export function readForceGraphTheme(root: HTMLElement = document.documentElement
   const pick = (name: string, fallback: string) =>
     style.getPropertyValue(name).trim() || fallback;
   return {
-    stageBg: pick('--brain-stage-bg', 'oklch(97% 0.01 250)'),
+    stageBg: pick('--brain-stage-bg', pick('--mn-bg', 'oklch(97% 0 0)')),
     nodePage: pick('--brain-node-page', 'oklch(55% 0.08 250)'),
     nodeTag: pick('--brain-node-tag', 'oklch(62% 0.1 155)'),
     nodeSymbol: pick('--brain-node-symbol', 'oklch(58% 0.12 285)'),
