@@ -28,6 +28,14 @@ import {
   toolListMail,
   toolSummarizeInbox,
 } from '../email/tool-handler.js';
+import {
+  toolBrainAppendLog,
+  toolBrainIngestSource,
+  toolBrainList,
+  toolBrainReadPage,
+  toolBrainSearch,
+  toolBrainWritePage,
+} from '../tools/brain-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
 import {
@@ -903,6 +911,12 @@ const SERVER_TOOL_HANDLERS = {
     const { listLspServers } = await import('../lsp/manager.js');
     return JSON.stringify(await listLspServers(), null, 2);
   },
+  brain_search: toolBrainSearch,
+  brain_read_page: toolBrainReadPage,
+  brain_list: toolBrainList,
+  brain_write_page: toolBrainWritePage,
+  brain_append_log: toolBrainAppendLog,
+  brain_ingest_source: toolBrainIngestSource,
   save_memory: toolSaveMemory,
   manage_calendar: toolManageCalendar,
   list_mail: toolListMail,

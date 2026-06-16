@@ -2,7 +2,7 @@
  * Validate session, tool, and system-prompt payloads before writing to disk.
  */
 
-import { ALL_TOOL_IDS } from './tool-ids.js';
+import { ALL_TOOL_IDS, BRAIN_WIKI_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -527,6 +527,43 @@ function normalizePermissionsFromStored(stored, seedDefault) {
   return { default: merged };
 }
 
+/** True when a tool id was present in persisted tools.json (enabled or permissions). */
+function toolIdWasStored(raw, id) {
+  if (!raw || typeof raw !== 'object') return false;
+  const stored = /** @type {Record<string, unknown>} */ (raw);
+  if (stored.enabled && typeof stored.enabled === 'object') {
+    if (Object.prototype.hasOwnProperty.call(stored.enabled, id)) return true;
+  }
+  if (stored.permissions && typeof stored.permissions === 'object') {
+    if (isLegacyFlatPermissions(stored.permissions)) {
+      if (Object.prototype.hasOwnProperty.call(stored.permissions, id)) return true;
+    } else {
+      const def = /** @type {Record<string, unknown>} */ (stored.permissions).default;
+      if (def && typeof def === 'object' && Object.prototype.hasOwnProperty.call(def, id)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Insert missing brain wiki tool ids at `full` for upgraded configs (Correction 6). */
+function backfillBrainWikiTools(config, raw) {
+  for (const id of BRAIN_WIKI_TOOL_IDS) {
+    if (!toolIdWasStored(raw, id)) {
+      config.permissions.default[id] = 'full';
+      config.enabled[id] = true;
+    }
+  }
+}
+
+function defaultPermissionForTool(id, enabled) {
+  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+    return enabled ? 'full' : 'off';
+  }
+  return enabled ? 'ask' : 'off';
+}
+
 export function normalizeToolConfig(raw) {
   const DEFAULT_ENABLED_TOOL_IDS = new Set([
     'get_datetime',
@@ -535,13 +572,19 @@ export function normalizeToolConfig(raw) {
     'wikipedia_search',
     'save_memory',
     'ask_question',
+    'brain_search',
+    'brain_read_page',
+    'brain_list',
+    'brain_write_page',
+    'brain_append_log',
+    'brain_ingest_source',
   ]);
   const enabled = {};
   const permissionsDefault = {};
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissionsDefault[id] = on ? 'ask' : 'off';
+    permissionsDefault[id] = defaultPermissionForTool(id, on);
   }
 
   const config = {
@@ -579,16 +622,18 @@ export function normalizeToolConfig(raw) {
 
   if (!hadPermissionsInFile) {
     for (const id of ALL_TOOL_IDS) {
-      config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
+      config.permissions.default[id] = defaultPermissionForTool(id, config.enabled[id] === true);
     }
   } else {
     for (const id of ALL_TOOL_IDS) {
       const v = config.permissions.default[id];
       if (!isToolPermissionMode(v)) {
-        config.permissions.default[id] = config.enabled[id] ? 'ask' : 'off';
+        config.permissions.default[id] = defaultPermissionForTool(id, config.enabled[id] === true);
       }
     }
   }
+
+  backfillBrainWikiTools(config, raw);
 
   for (const id of ALL_TOOL_IDS) {
     const mode = config.permissions.default[id];

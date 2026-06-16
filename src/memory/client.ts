@@ -3,6 +3,8 @@
  */
 
 import { detectLocalServer } from '../tools/client';
+import { brainWorkspaceKeyFromPath } from '../lib/brain-workspace-key';
+import { getWorkspacePath } from '../state/workspace';
 import type {
   MemoryEntryMeta,
   MemoryEntryWithBody,
@@ -92,7 +94,7 @@ export async function fetchMemoryEnabled(): Promise<boolean> {
   return status?.enabled !== false;
 }
 
-/** Retrieve formatted memory block for prompt injection. */
+/** Retrieve formatted memory block for prompt injection (via Brain wiki retrieve). */
 export async function retrieveMemoryBlock(options: {
   query?: string;
   profile?: PromptProfile;
@@ -101,12 +103,15 @@ export async function retrieveMemoryBlock(options: {
   const enabled = await fetchMemoryEnabled();
   if (!enabled) return '';
 
-  const data = await memoryFetch<MemoryRetrieveResult>('/api/memory/retrieve', {
+  const workspaceKey = brainWorkspaceKeyFromPath(getWorkspacePath());
+
+  const data = await memoryFetch<MemoryRetrieveResult>('/api/brain/retrieve', {
     method: 'POST',
     body: JSON.stringify({
       query: options.query ?? '',
       profile: options.profile ?? 'full',
       limit: options.limit ?? 8,
+      workspaceKey,
     }),
   });
   return data?.block?.trim() ?? '';

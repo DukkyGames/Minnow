@@ -1,4 +1,18 @@
 /** Built-in tool ids (keep in sync with src/tools/definitions.ts). */
+
+/** Wiki tools seeded at permission `full` (no prompt) on first run and back-fill. */
+export const BRAIN_WIKI_TOOL_IDS = [
+  'brain_search',
+  'brain_read_page',
+  'brain_list',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
+  'save_memory',
+];
+
+export const BRAIN_WIKI_TOOL_ID_SET = new Set(BRAIN_WIKI_TOOL_IDS);
+
 export const ALL_TOOL_IDS = [
   'web_search',
   'wikipedia_search',
@@ -62,6 +76,12 @@ export const ALL_TOOL_IDS = [
   'get_lsp_diagnostics',
   'list_lsp_servers',
   'save_memory',
+  'brain_search',
+  'brain_read_page',
+  'brain_list',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
   'manage_calendar',
   'list_mail',
   'draft_reply',

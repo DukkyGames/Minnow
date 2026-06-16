@@ -1304,15 +1304,152 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'brain_search',
+    label: 'Brain search',
+    description:
+      'Semantic/hybrid search over the Brain wiki (workspace-scoped). Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_search',
+      'Search the Brain wiki for relevant pages using keyword and optional semantic hybrid retrieval. Use for fuzzy prose lookup (why, decisions, domain model, gotchas). Scoped to the active workspace plus global pages.',
+      {
+        query: {
+          type: 'string',
+          description: 'Natural-language search query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max pages to return (default 8, max 20)',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tag filter',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'brain_read_page',
+    label: 'Brain read page',
+    description: 'Read a Brain wiki page by relative path. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_read_page',
+      'Read one wiki page from ~/.minnow/brain/pages by relative path (e.g. facts/preference.md, edgeflight/overview.md).',
+      {
+        path: {
+          type: 'string',
+          description: 'Relative path under pages/ (e.g. facts/api-preference.md)',
+        },
+      },
+      ['path'],
+    ),
+  },
+  {
+    id: 'brain_list',
+    label: 'Brain list pages',
+    description: 'List the Brain wiki page tree. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_list',
+      'Return the nested tree of wiki pages (metadata only) under ~/.minnow/brain/pages/.',
+      {},
+    ),
+  },
+  {
+    id: 'brain_write_page',
+    label: 'Brain write page',
+    description: 'Create or update a Brain wiki page. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_write_page',
+      'Create or update a wiki page (YAML frontmatter + markdown body). Use for durable knowledge: decisions, domain model, conventions, gotchas. Paths are sandboxed under ~/.minnow/brain/pages/.',
+      {
+        path: {
+          type: 'string',
+          description: 'Relative path under pages/ ending in .md',
+        },
+        title: {
+          type: 'string',
+          description: 'Page title',
+        },
+        body: {
+          type: 'string',
+          description: 'Markdown body (may include [[wikilinks]])',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags for retrieval',
+        },
+        summary: {
+          type: 'string',
+          description: 'Optional one-line summary for the catalog',
+        },
+      },
+      ['path', 'title', 'body'],
+    ),
+  },
+  {
+    id: 'brain_append_log',
+    label: 'Brain append log',
+    description: 'Append a changelog entry to brain log.md. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_append_log',
+      'Append a timestamped line to ~/.minnow/brain/log.md (wiki changelog).',
+      {
+        entry: {
+          type: 'string',
+          description: 'Changelog note to append',
+        },
+      },
+      ['entry'],
+    ),
+  },
+  {
+    id: 'brain_ingest_source',
+    label: 'Brain ingest source',
+    description: 'Ingest a non-code source into the Brain wiki. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'brain_ingest_source',
+      'Store raw source text under ~/.minnow/brain/sources/ and synthesize one or more wiki pages from it.',
+      {
+        content: {
+          type: 'string',
+          description: 'Raw source text to ingest',
+        },
+        filename: {
+          type: 'string',
+          description: 'Optional original filename hint',
+        },
+        title: {
+          type: 'string',
+          description: 'Optional source title for synthesis',
+        },
+      },
+      ['content'],
+    ),
+  },
+  {
     id: 'save_memory',
     label: 'Save memory',
     description:
-      'Persist a note for future chats (preferences, decisions, project facts). Requires npm start.',
+      'Persist a discrete fact to pages/facts/ (alias for brain_write_page). Requires npm start.',
     category: 'utility',
     serverRequired: true,
     definition: toolSchema(
       'save_memory',
-      'Save a durable memory entry under ~/.minnow/memory for retrieval in later sessions. Use when the user asks you to remember something, or when you learn a stable preference, convention, or project fact worth carrying into future chats. Do not save secrets, one-off task state, or ephemeral details.',
+      'Save a durable fact under ~/.minnow/brain/pages/facts/ for retrieval in later sessions. Alias for writing a facts/ wiki page. Use when the user asks you to remember something, or when you learn a stable preference, convention, or project fact. Do not save secrets, one-off task state, or ephemeral details.',
       {
         title: {
           type: 'string',

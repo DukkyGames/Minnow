@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { ALL_TOOL_IDS } from './tool-ids.js';
+import { ALL_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './tool-ids.js';
 import { defaultServersConfig } from './validators.js';
 
 /** Cached resolved home path for this process. */
@@ -308,7 +308,20 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'wikipedia_search',
   'save_memory',
   'ask_question',
+  'brain_search',
+  'brain_read_page',
+  'brain_list',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
 ]);
+
+function defaultPermissionForTool(id, enabled) {
+  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+    return enabled ? 'full' : 'off';
+  }
+  return enabled ? 'ask' : 'off';
+}
 
 function defaultToolsJson() {
   const enabled = {};
@@ -316,7 +329,7 @@ function defaultToolsJson() {
   for (const id of ALL_TOOL_IDS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(id);
     enabled[id] = on;
-    permissionsDefault[id] = on ? 'ask' : 'off';
+    permissionsDefault[id] = defaultPermissionForTool(id, on);
   }
   return {
     enabled,
