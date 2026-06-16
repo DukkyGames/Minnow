@@ -48,6 +48,7 @@ export function expandDesktopChatRail(): void {
   if (railExpanded) return;
   railExpanded = true;
   syncRailClasses();
+  void refreshDesktopChatRail();
 }
 
 /** Collapse the session rail back to the left-edge tab. */
@@ -134,6 +135,12 @@ export async function createNewDesktopChat(): Promise<void> {
   rememberActiveChatForApp(CHAT_APP_ID, chat.id);
   scheduleSaveSessions();
 
+  const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
+  if (!isDesktopChatActive()) {
+    await activateDesktopChat({ chatId: chat.id });
+    return;
+  }
+
   const desktopChat = await import('../os/desktop-chat');
   desktopChat.activateDesktopChatSession(chat.id);
   renderDesktopChatRail(path);
@@ -167,7 +174,15 @@ export function renderDesktopChatRail(chatsWorkspacePath?: string | null): void 
     appendChatRow(list, chat, activeId, {
       draggable: false,
       onActivate: (item) => {
-        void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(item.id));
+        void (async () => {
+          const { isDesktopChatActive, activateDesktopChat } = await import('../os/desktop-state');
+          if (!isDesktopChatActive()) {
+            await activateDesktopChat({ chatId: item.id });
+            return;
+          }
+          const desktopChat = await import('../os/desktop-chat');
+          desktopChat.activateDesktopChatSession(item.id);
+        })();
       },
     });
   }
@@ -196,6 +211,8 @@ export function wireDesktopChatRail(): void {
       void createNewDesktopChat();
     });
   }
+
+  void refreshDesktopChatRail();
 }
 
 /** Ensure workspace path is loaded before first rail paint. */

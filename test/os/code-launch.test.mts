@@ -166,4 +166,66 @@ describe('applyCodeLaunchOptions', () => {
       'seed should remain in composer or chat history after send attempt',
     );
   });
+
+  test('restoreCodeSessionOnForeground switches off desktop assistant chat', async () => {
+    const CHATS_WS = '/home/user/.minnow/chats';
+    const { resetChatsWorkspacePathCache } = await import('../../src/lib/chats-workspace.ts');
+    resetChatsWorkspacePathCache();
+
+    const g = globalThis as typeof globalThis & { fetch: typeof fetch };
+    const prevFetch = g.fetch;
+    g.fetch = (async (url: RequestInfo | URL) => {
+      const path = String(url);
+      if (path.includes('/api/chats-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ path: CHATS_WS, fileCount: 0 }),
+        } as Response;
+      }
+      return prevFetch(url);
+    }) as typeof fetch;
+
+    setSessionStateForTests({
+      version: 5,
+      activeId: 'assistant-chat',
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: { [CURRENT_WS]: 'chat-existing' },
+      lastActiveChatIdByApp: { chat: 'assistant-chat' },
+      chats: [
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'chat-existing',
+          name: 'Project thread',
+          workspacePath: CURRENT_WS,
+          modeId: 'build',
+          history: [{ role: 'user', content: 'Code workspace hello' }],
+        },
+        {
+          ...createEmptyChatObject('model-a'),
+          id: 'assistant-chat',
+          name: 'Desktop hello',
+          workspacePath: CHATS_WS,
+          modeId: 'general',
+          history: [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hello! How can I help you today?' },
+          ],
+        },
+      ],
+    });
+
+    const { restoreCodeSessionOnForeground } = await import('../../src/os/code-launch.ts');
+    await restoreCodeSessionOnForeground();
+
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+    assert.equal(getActiveChat().id, 'chat-existing');
+    assert.match(document.getElementById('chatArea')?.textContent ?? '', /Code workspace hello/);
+    assert.doesNotMatch(
+      document.getElementById('chatArea')?.textContent ?? '',
+      /How can I help you today/,
+    );
+
+    g.fetch = prevFetch;
+    resetChatsWorkspacePathCache();
+  });
 });

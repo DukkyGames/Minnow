@@ -12,6 +12,9 @@ export type DevServerLifecycleStatus =
 
 export type DevServerNetwork = 'local' | 'lan';
 
+/** Default workspace dev-server port (distinct from Minnow's own Vite port 5173). */
+export const DEFAULT_DEV_SERVER_PORT = 3000;
+
 export interface DevServerSettings {
   port: number;
   network: DevServerNetwork;

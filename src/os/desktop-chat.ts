@@ -5,6 +5,7 @@
 import { sendMessage } from '../chat/messaging';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { getWorkspacePath } from '../state/workspace';
 import type { DesktopChatActivateOptions } from './desktop-state';
 import {
   CHAT_APP_ID,
@@ -16,6 +17,7 @@ import {
   isExpertChat,
   newChatId,
   rememberActiveChatForApp,
+  rememberWorkspaceActiveChat,
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
@@ -186,6 +188,8 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
 
   const ready = await ensureChatsWorkspaceReady();
   if (ready && sessionState) {
+    rememberWorkspaceActiveChat(getWorkspacePath());
+
     const state = sessionState;
     if (options?.chatId?.trim()) {
       try {
