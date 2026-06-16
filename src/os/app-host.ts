@@ -3,7 +3,6 @@ import {
   CALENDAR_WINDOW_MIN_HEIGHT,
   CALENDAR_WINDOW_MIN_WIDTH,
 } from './calendar-constants';
-import { isDesktopExpertsActive } from './desktop-state';
 import { isOsShellEnabled } from './page-bridge';
 import {
   getForegroundAppId,
@@ -90,7 +89,6 @@ function hideAllLayers(): void {
 }
 
 function closeAllAppPages(): void {
-  const keepExpertsOpen = isDesktopExpertsActive();
   for (const id of [
     'settingsView',
     'benchmarkView',
@@ -102,7 +100,14 @@ function closeAllAppPages(): void {
     'expertsView',
     'chatView',
   ]) {
-    if (keepExpertsOpen && id === 'expertsView') continue;
+    if (id === 'expertsView') {
+      const view = document.getElementById('expertsView');
+      const desktopMount = document.getElementById('desktopExpertsMount');
+      // Lab panel on the desktop overlay — preserve is-open while reparented there.
+      if (view && desktopMount?.contains(view)) {
+        continue;
+      }
+    }
     document.getElementById(id)?.classList.remove('is-open');
   }
 }
@@ -324,9 +329,6 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
 
   if (snapshot.view === 'desktop') {
     hideAllLayers();
-    if (isDesktopExpertsActive()) {
-      setLayerActive(layerForApp('experts'), true);
-    }
     const hadFullscreenForeground =
       lastForegroundApp !== null &&
       usesFullscreenLayer(getPresentationMode(lastForegroundApp));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { resetAppHostForTests } from '../../src/os/app-host.ts';
-import { resetInstancesForTests } from '../../src/os/instances.ts';
+import { initAppHost, resetAppHostForTests, syncAppHostForTests } from '../../src/os/app-host.ts';
+import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
   activateDesktopExperts,
   getDesktopState,
@@ -17,6 +17,7 @@ import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import {
   initOsRouter,
   launchApp,
+  navigateToDesktop,
   parseOsHash,
   resetOsRouterForTests,
   resolveLegacyHash,
@@ -102,6 +103,7 @@ describe('desktop experts state', () => {
     resetAppHostForTests();
     const layer = document.getElementById('osDesktopLayer')!;
     cleanupDesktop = renderDesktop(layer);
+    initAppHost();
     initOsRouter();
   });
 
@@ -202,5 +204,30 @@ describe('desktop experts state', () => {
 
   test('parseOsHash still accepts desktop route', () => {
     assert.deepEqual(parseOsHash('#/desktop'), { view: 'desktop' });
+  });
+
+  test('returning from Code does not fullscreen experts in osAppsLayer', async () => {
+    await activateDesktopExperts();
+    await import('../../src/ui/experts/experts-hub.ts').then((m) => m.refreshExpertsEnabledState());
+    await new Promise((r) => setTimeout(r, 0));
+
+    const expertsView = document.getElementById('expertsView');
+    const appsLayer = document.getElementById('osAppsLayer');
+    assert.ok(expertsView && appsLayer?.contains(expertsView));
+    assert.equal(expertsView.classList.contains('is-open'), false);
+
+    launchInstance('code');
+    syncAppHostForTests();
+    assert.equal(expertsView.classList.contains('is-active'), false);
+
+    navigateToDesktop();
+    await new Promise((r) => setTimeout(r, 0));
+    syncAppHostForTests();
+
+    assert.equal(isDesktopExpertsActive(), true);
+    assert.equal(getDesktopState(), 'expertsIdle');
+    assert.equal(expertsView.classList.contains('is-active'), false);
+    assert.equal(expertsView.classList.contains('is-open'), false);
+    assert.ok(appsLayer?.contains(expertsView));
   });
 });
