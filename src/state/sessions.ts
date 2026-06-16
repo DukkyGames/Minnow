@@ -908,6 +908,18 @@ function rememberActiveChatForWorkspaceKey(workspaceKey: string): void {
   state.lastActiveChatIdByWorkspace[workspaceKey] = state.activeId;
 }
 
+/** Persist the active chat when it belongs to the given project workspace (before desktop chat). */
+export function rememberWorkspaceActiveChat(workspacePath: string): void {
+  const state = sessionState;
+  if (!state?.activeId) return;
+  const key = normalizeWorkspacePath(workspacePath);
+  if (!key) return;
+  const active = getActiveChat();
+  if (normalizeWorkspacePath(active.workspacePath ?? '') !== key) return;
+  rememberActiveChatForWorkspaceKey(key);
+  scheduleSaveSessions();
+}
+
 /** Chats for the given workspace (newest first); empty workspace key returns none. */
 export function getChatsForWorkspace(
   workspacePath: string,

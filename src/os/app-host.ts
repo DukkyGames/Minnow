@@ -192,6 +192,9 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
       } else if (options?.seed?.trim() || options?.modeId || options?.workspacePath?.trim()) {
         const { applyCodeLaunchOptions } = await import('./code-launch');
         await applyCodeLaunchOptions(options);
+      } else {
+        const { restoreCodeSessionOnForeground } = await import('./code-launch');
+        await restoreCodeSessionOnForeground();
       }
       break;
     }

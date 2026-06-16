@@ -22,9 +22,16 @@ export function isOsEmbedded(): boolean {
   return isOsShellEnabled();
 }
 
+/** True when Code is the active fullscreen app (desktop modes may still be queued). */
+function isCodeForeground(): boolean {
+  return getOsView() === 'app' && getForegroundAppId() === 'code';
+}
+
 /** True when the legacy chat workspace (`#appBody`) should be hidden. */
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
+  // Code reparents #appBody into the fullscreen layer — never hide it while Code is foreground.
+  if (isCodeForeground()) return false;
   if (isDesktopChatActive()) return true;
   if (isDesktopResearchActive()) return true;
   if (isDesktopExpertsActive()) return true;
@@ -44,14 +51,26 @@ export function syncLegacyChromeVisibility(): void {
   topbar?.classList.toggle('hidden', hideLegacy);
 
   const view = getOsView();
+  const codeForeground = isCodeForeground();
   document.documentElement.classList.toggle('os-desktop', view === 'desktop');
   document.documentElement.classList.toggle('os-in-app', view === 'app');
-  document.documentElement.classList.toggle('os-desktop-chat', isDesktopChatActive());
-  document.documentElement.classList.toggle('os-desktop-research', isDesktopResearchActive());
-  document.documentElement.classList.toggle('os-desktop-experts', isDesktopExpertsActive());
+  document.documentElement.classList.toggle(
+    'os-desktop-chat',
+    !codeForeground && isDesktopChatActive(),
+  );
+  document.documentElement.classList.toggle(
+    'os-desktop-research',
+    !codeForeground && isDesktopResearchActive(),
+  );
+  document.documentElement.classList.toggle(
+    'os-desktop-experts',
+    !codeForeground && isDesktopExpertsActive(),
+  );
 
   const fg = getForegroundAppId();
-  if (isDesktopChatActive()) {
+  if (codeForeground) {
+    document.documentElement.dataset.osApp = 'code';
+  } else if (isDesktopChatActive()) {
     document.documentElement.dataset.osApp = 'chat';
   } else if (isDesktopResearchActive()) {
     document.documentElement.dataset.osApp = 'research';
@@ -68,6 +87,15 @@ export function syncLegacyChromeVisibility(): void {
   );
 
   void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
+
+  syncDesktopLayerSuppression(codeForeground);
+}
+
+/** Hide desktop chat/research/experts chrome while Code is the fullscreen foreground app. */
+function syncDesktopLayerSuppression(codeForeground: boolean): void {
+  document
+    .getElementById('osDesktopLayer')
+    ?.classList.toggle('is-suppressed-by-fullscreen-app', codeForeground);
 }
 
 /** Called when an app becomes foreground — sync DOM + dataset for page modules. */
@@ -105,5 +133,12 @@ export function initOsPageBridge(): void {
 export function resetOsPageBridgeForTests(): void {
   visibilityBound = false;
   delete document.documentElement.dataset.osApp;
-  document.documentElement.classList.remove('os-desktop', 'os-in-app');
+  document.documentElement.classList.remove(
+    'os-desktop',
+    'os-in-app',
+    'os-desktop-chat',
+    'os-desktop-research',
+    'os-desktop-experts',
+  );
+  document.getElementById('osDesktopLayer')?.classList.remove('is-suppressed-by-fullscreen-app');
 }

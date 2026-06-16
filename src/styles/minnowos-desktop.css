@@ -778,12 +778,11 @@
   flex-direction: row;
   align-items: stretch;
   pointer-events: none;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 280ms var(--os-ease-out);
 }
 
 #osDesktopLayer.is-chat-active .mn-os-chat-rail {
-  opacity: 1;
   pointer-events: auto;
 }
 

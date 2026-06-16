@@ -15,7 +15,8 @@ import path from 'node:path';
  * @property {DevServerNetwork} [network]
  */
 
-const DEFAULT_PORT = 5173;
+/** Default hub dev-server port (not Minnow's Vite port 5173). */
+const DEFAULT_PORT = 3000;
 const DEFAULT_NETWORK = /** @type {DevServerNetwork} */ ('local');
 
 /**
