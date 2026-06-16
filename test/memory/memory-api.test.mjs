@@ -10,6 +10,7 @@ import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { handleMemoryRequest, initMemoryApi } from '../../server/memory/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +83,7 @@ describe('memory API', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });

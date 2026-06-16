@@ -13,6 +13,12 @@ import { getMinnowHome } from '../../config/home.js';
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByWorkspaceKey = new Map();
 
+/** LRU order for open handles — oldest at index 0. */
+const dbCacheLru = [];
+
+/** Cap in-memory SQLite handles so many MRU workspaces do not leak file descriptors. */
+export const MAX_OPEN_CODE_DBS = 8;
+
 /** Absolute path for a workspace code-index database file. */
 export function codeDbPath(workspaceKey) {
   const slug = String(workspaceKey ?? '').trim() || 'workspace';
@@ -92,6 +98,26 @@ function codeDbCacheKey(workspaceKey) {
   return `${getMinnowHome()}\0${slug}`;
 }
 
+/** Move a cache key to the MRU end of the LRU list. */
+function touchCodeDbCache(cacheKey) {
+  const idx = dbCacheLru.indexOf(cacheKey);
+  if (idx >= 0) dbCacheLru.splice(idx, 1);
+  dbCacheLru.push(cacheKey);
+}
+
+/** Close the least-recently-used handle when the cache is full. */
+function evictOldestCodeDbIfNeeded() {
+  while (dbCacheLru.length >= MAX_OPEN_CODE_DBS) {
+    const oldest = dbCacheLru.shift();
+    if (!oldest) break;
+    const db = dbByWorkspaceKey.get(oldest);
+    if (db) {
+      db.close();
+      dbByWorkspaceKey.delete(oldest);
+    }
+  }
+}
+
 /**
  * Open (or reuse) the code index DB for a workspace key.
  * @param {string} [workspaceKey]
@@ -104,7 +130,12 @@ export function getCodeDb(workspaceKey) {
     'workspace';
   const cacheKey = codeDbCacheKey(key);
   const existing = dbByWorkspaceKey.get(cacheKey);
-  if (existing) return existing;
+  if (existing) {
+    touchCodeDbCache(cacheKey);
+    return existing;
+  }
+
+  evictOldestCodeDbIfNeeded();
 
   const dir = getBrainCodeDir();
   fs.mkdirSync(dir, { recursive: true });
@@ -113,6 +144,7 @@ export function getCodeDb(workspaceKey) {
   db.pragma('foreign_keys = ON');
   initSchema(db);
   dbByWorkspaceKey.set(cacheKey, db);
+  touchCodeDbCache(cacheKey);
   return db;
 }
 
@@ -122,6 +154,12 @@ export function closeCodeDbForTests() {
     db.close();
   }
   dbByWorkspaceKey.clear();
+  dbCacheLru.length = 0;
+}
+
+/** Test helper — count of open in-memory code-index handles. */
+export function openCodeDbCountForTests() {
+  return dbByWorkspaceKey.size;
 }
 
 /** Remove symbols and FTS rows for one file before re-indexing it. */

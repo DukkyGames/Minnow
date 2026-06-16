@@ -47,6 +47,19 @@ describe('code index rank', () => {
     assert.ok((weights.get('ws:a') ?? 0) > (weights.get('ws:b') ?? 0));
   });
 
+  it('renderRepoMap walks symbols in rank order (not alphabetical files)', () => {
+    const symbols = [
+      { id: 'ws:a', file: 'src/z.ts', signature: 'function topRank()', kind: 'function', pagerank: 0.9 },
+      { id: 'ws:b', file: 'src/a.ts', signature: 'function bottomRank()', kind: 'function', pagerank: 0.1 },
+    ];
+    const map = renderRepoMap(symbols, 200);
+    const topAt = map.text.indexOf('topRank');
+    const bottomAt = map.text.indexOf('bottomRank');
+    assert.ok(topAt >= 0);
+    assert.ok(bottomAt >= 0);
+    assert.ok(topAt < bottomAt);
+  });
+
   it('renderRepoMap respects the token budget', () => {
     const symbols = [];
     for (let i = 0; i < 200; i += 1) {
