@@ -68,6 +68,23 @@ export function isValidPageId(id) {
 }
 
 /**
+ * Derive a stable wiki workspace key from an absolute workspace root.
+ * Matches pages/workspaces/<key>/ folder names (basename slug).
+ * @param {string} workspacePath
+ * @returns {string}
+ */
+export function brainWorkspaceKeyFromPath(workspacePath) {
+  const trimmed = String(workspacePath ?? '').trim();
+  if (!trimmed) return '';
+  const base = path.basename(path.resolve(trimmed));
+  const slug = base
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'workspace';
+}
+
+/**
  * Reject unsafe relative page paths before joining under pages/.
  * @param {string} relPath
  */

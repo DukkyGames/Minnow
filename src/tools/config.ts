@@ -8,6 +8,7 @@ import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults'
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
+import { BRAIN_WIKI_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './brain-tool-ids';
 import { isMinnowElectronShell } from './minnow-shell';
 import {
   createEmptyToolPermissionsConfig,
@@ -28,6 +29,13 @@ export { defaultToolConfig } from '../config/defaults';
 export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 
 const PERMISSION_SET = new Set<ToolPermissionMode>(['full', 'ask', 'off']);
+
+function defaultPermissionForBuiltIn(id: string, enabled: boolean): ToolPermissionMode {
+  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+    return enabled ? 'full' : 'off';
+  }
+  return enabled ? 'ask' : 'off';
+}
 
 /** True when `value` is a valid stored permission string. */
 export function isToolPermissionMode(value: unknown): value is ToolPermissionMode {
@@ -79,6 +87,40 @@ export function normalizePermissionsFromStored(
   }
 
   return { default: merged };
+}
+
+/** True when a tool id was present in persisted tools.json (enabled or permissions). */
+function toolIdWasStored(raw: unknown, id: string): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const stored = raw as {
+    enabled?: Record<string, unknown>;
+    permissions?: Record<string, unknown> & { default?: Record<string, unknown> };
+  };
+  if (stored.enabled && typeof stored.enabled === 'object') {
+    if (Object.prototype.hasOwnProperty.call(stored.enabled, id)) return true;
+  }
+  if (stored.permissions && typeof stored.permissions === 'object') {
+    if (isLegacyFlatPermissions(stored.permissions)) {
+      if (Object.prototype.hasOwnProperty.call(stored.permissions, id)) return true;
+    } else if (
+      stored.permissions.default &&
+      typeof stored.permissions.default === 'object' &&
+      Object.prototype.hasOwnProperty.call(stored.permissions.default, id)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Insert missing brain wiki tool ids at `full` for upgraded configs (Correction 6). */
+function backfillBrainWikiTools(config: ToolConfig, raw: unknown): void {
+  for (const id of BRAIN_WIKI_TOOL_IDS) {
+    if (!toolIdWasStored(raw, id)) {
+      config.permissions.default[id] = 'full';
+      config.enabled[id] = true;
+    }
+  }
 }
 
 /**
@@ -165,17 +207,23 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
 
   if (!hadPermissionsInFile) {
     for (const tool of BUILT_IN_TOOLS) {
-      config.permissions.default[tool.id] =
-        config.enabled[tool.id] === true ? 'ask' : 'off';
+      config.permissions.default[tool.id] = defaultPermissionForBuiltIn(
+        tool.id,
+        config.enabled[tool.id] === true,
+      );
     }
   } else {
     for (const tool of BUILT_IN_TOOLS) {
       if (!isToolPermissionMode(config.permissions.default[tool.id])) {
-        config.permissions.default[tool.id] =
-          config.enabled[tool.id] === true ? 'ask' : 'off';
+        config.permissions.default[tool.id] = defaultPermissionForBuiltIn(
+          tool.id,
+          config.enabled[tool.id] === true,
+        );
       }
     }
   }
+
+  backfillBrainWikiTools(config, raw);
 
   syncEnabledFromPermissions(config);
 

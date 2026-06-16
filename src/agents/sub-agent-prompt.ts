@@ -86,9 +86,9 @@ export function appendSubAgentAskQuestionRules(
 
 const SUB_AGENT_SAVE_MEMORY_RULES = `
 
-### Memory (sub-agent)
-Notes below are from prior sessions — treat as context and verify against the codebase.
-Use \`save_memory\` for stable preferences or explicit "remember this" requests (not secrets or one-off state). Confirm only after the tool succeeds.`;
+### Brain wiki (sub-agent)
+Notes below are from the Brain wiki — treat as context and verify against the codebase.
+Use \`brain_search\` for fuzzy lookup; \`brain_read_page\` / \`brain_write_page\` for structured pages; \`save_memory\` for quick facts under pages/facts/. Skip secrets and one-off state. Confirm only after a write tool succeeds.`;
 
 /** Inject retrieved memories and optional save_memory guidance for sub-agents. */
 export async function appendSubAgentMemorySection(
@@ -147,10 +147,13 @@ function appendSubAgentSaveMemoryRules(
   systemPrompt: string,
   enabledToolNames: string[],
 ): string {
-  if (!enabledToolNames.includes('save_memory')) {
+  const hasBrainTool = enabledToolNames.some((name) =>
+    ['save_memory', 'brain_search', 'brain_read_page', 'brain_write_page'].includes(name),
+  );
+  if (!hasBrainTool) {
     return systemPrompt;
   }
-  if (systemPrompt.includes('save_memory')) {
+  if (systemPrompt.includes('brain_search') || systemPrompt.includes('save_memory')) {
     return systemPrompt;
   }
   return `${systemPrompt}${SUB_AGENT_SAVE_MEMORY_RULES}`;

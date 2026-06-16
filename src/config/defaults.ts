@@ -7,6 +7,7 @@ import { BUILT_IN_TOOLS } from '../tools/definitions';
 import {
   createEmptyToolPermissionsConfig,
   type ToolConfig,
+  type ToolPermissionMode,
 } from '../tools/tool-settings-types';
 import type { SessionState, SystemPromptSettings } from '../types';
 import { defaultSkillConfig as buildDefaultSkillConfig } from '../skills/config';
@@ -29,7 +30,33 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'create_chat_with_mode',
   'propose_mode_switch',
   'launch_minnow_app',
+  'brain_search',
+  'brain_read_page',
+  'brain_list',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
 ]);
+
+/** Brain wiki tools default to permission `full` (no prompt). */
+const BRAIN_WIKI_TOOL_IDS = [
+  'brain_search',
+  'brain_read_page',
+  'brain_list',
+  'brain_write_page',
+  'brain_append_log',
+  'brain_ingest_source',
+  'save_memory',
+] as const;
+
+const BRAIN_WIKI_TOOL_ID_SET = new Set<string>(BRAIN_WIKI_TOOL_IDS);
+
+function defaultPermissionForTool(id: string, enabled: boolean): ToolPermissionMode {
+  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+    return enabled ? 'full' : 'off';
+  }
+  return enabled ? 'ask' : 'off';
+}
 
 /** Default tool toggles for new `tools.json` (matches server seed). */
 export function defaultToolConfig(): ToolConfig {
@@ -38,8 +65,7 @@ export function defaultToolConfig(): ToolConfig {
   for (const tool of BUILT_IN_TOOLS) {
     const on = DEFAULT_ENABLED_TOOL_IDS.has(tool.id);
     enabled[tool.id] = on;
-    // Enabled tools require user approval; disabled tools stay off.
-    permissions.default[tool.id] = on ? 'ask' : 'off';
+    permissions.default[tool.id] = defaultPermissionForTool(tool.id, on);
   }
   return {
     enabled,

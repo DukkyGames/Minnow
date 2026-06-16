@@ -71,6 +71,16 @@ describe('normalizeToolConfig', () => {
     });
     assert.equal(config.permissions.default.execute_command, 'ask');
   });
+
+  test('back-fills missing brain wiki tool ids at full', () => {
+    const config = normalizeToolConfig({
+      enabled: { save_memory: true },
+      permissions: { default: { save_memory: 'ask' } },
+    });
+    assert.equal(config.permissions.default.save_memory, 'ask');
+    assert.equal(config.permissions.default.brain_search, 'full');
+    assert.equal(config.enabled.brain_write_page, true);
+  });
 });
 
 describe('resolveEffectivePermission', () => {
