@@ -68,6 +68,19 @@
   border-color: color-mix(in srgb, #0078d4 40%, var(--mn-border));
 }
 
+.oauth-connect-btn--imap {
+  align-self: flex-start;
+}
+
+.oauth-connect-divider {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mn-fg-muted);
+}
+
 .oauth-connect-btn--danger {
   color: var(--mn-danger, #c45);
   border-color: color-mix(in srgb, var(--mn-danger, #c45) 35%, var(--mn-border));
@@ -113,6 +126,26 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.email-manual-mount--hidden {
+  display: none;
+}
+
+.email-manual-mount--highlight .email-setup-card {
+  animation: email-manual-highlight 1.6s ease-out;
+}
+
+@keyframes email-manual-highlight {
+  0%,
+  15% {
+    border-color: var(--mn-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--mn-accent) 25%, transparent);
+  }
+  100% {
+    border-color: var(--mn-border);
+    box-shadow: none;
+  }
 }
 
 .settings-oauth-form .settings-form-actions {

@@ -47,6 +47,16 @@ function urgencyClass(urgency?: string): string {
   return 'email-urgency-normal';
 }
 
+/** Expand the IMAP setup form and scroll it into view. */
+function revealImapSetup(manualMount: HTMLElement): void {
+  manualMount.classList.remove('email-manual-mount--hidden');
+  manualMount.classList.add('email-manual-mount--highlight');
+  manualMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  window.setTimeout(() => {
+    manualMount.classList.remove('email-manual-mount--highlight');
+  }, 1600);
+}
+
 interface AccountFormOptions extends EmailPanelOptions {
   title?: string;
   /** When set, form edits this account instead of creating a new one. */
@@ -370,19 +380,23 @@ export async function renderEmailPanel(
     const wrap = el('div', 'email-setup-shell');
     const oauthMount = el('div', 'email-oauth-mount');
     wrap.appendChild(oauthMount);
-    const manualMount = el('div', 'email-manual-mount');
+    const manualMount = el('div', 'email-manual-mount email-manual-mount--hidden');
     wrap.appendChild(manualMount);
     mount.replaceChildren(wrap);
     await mountOAuthConnectPanel({
       mount: oauthMount,
       onStatus: options.onStatus,
+      showImapAlternative: true,
+      onShowImap: () => {
+        revealImapSetup(manualMount);
+      },
       onChange: () => {
         void renderEmailPanel(mount, options);
       },
     });
     renderAccountForm(manualMount, {
       ...options,
-      title: 'Advanced / other provider (IMAP)',
+      title: 'Connect with IMAP',
       isFirstAccount: true,
       onSaved: () => {
         void renderEmailPanel(mount, options);
@@ -483,18 +497,22 @@ export async function renderEmailPanel(
       body.replaceChildren();
       const oauthMount = el('div', 'email-oauth-mount');
       body.appendChild(oauthMount);
-      const formMount = el('div', 'email-manual-mount');
+      const formMount = el('div', 'email-manual-mount email-manual-mount--hidden');
       body.appendChild(formMount);
       void mountOAuthConnectPanel({
         mount: oauthMount,
         onStatus: options.onStatus,
+        showImapAlternative: true,
+        onShowImap: () => {
+          revealImapSetup(formMount);
+        },
         onChange: () => {
           void renderEmailPanel(mount, options);
         },
       });
       renderAccountForm(formMount, {
         ...options,
-        title: 'Add email account (IMAP)',
+        title: 'Connect with IMAP',
         isFirstAccount: false,
         onSaved: () => {
           void renderEmailPanel(mount, options);

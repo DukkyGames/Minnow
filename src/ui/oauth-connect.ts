@@ -20,6 +20,10 @@ export interface OAuthConnectOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
   /** Show "Also connect calendar" checkbox (default true). */
   showCalendarCheckbox?: boolean;
+  /** Show "Connect with IMAP" for password/app-password providers (Email app). */
+  showImapAlternative?: boolean;
+  /** Reveal the IMAP setup form when the user picks manual connect. */
+  onShowImap?: () => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -39,17 +43,23 @@ function providerLabel(provider: OAuthProviderId): string {
 
 /** Render OAuth connect controls into mount. */
 export async function mountOAuthConnectPanel(options: OAuthConnectOptions): Promise<void> {
-  const { mount, onChange, onStatus, showCalendarCheckbox = true } = options;
+  const {
+    mount,
+    onChange,
+    onStatus,
+    showCalendarCheckbox = true,
+    showImapAlternative = false,
+    onShowImap,
+  } = options;
   mount.replaceChildren();
 
   const panel = el('div', 'oauth-connect-panel');
   mount.appendChild(panel);
 
-  const lead = el(
-    'p',
-    'oauth-connect-lead',
-    'Connect with OAuth for Gmail, Outlook, and calendar sync — no app passwords required.',
-  );
+  const leadText = showImapAlternative
+    ? 'Connect with OAuth for Gmail, Outlook, and calendar sync — no app passwords required. Or use IMAP for Fastmail, iCloud, and other providers.'
+    : 'Connect with OAuth for Gmail, Outlook, and calendar sync — no app passwords required.';
+  const lead = el('p', 'oauth-connect-lead', leadText);
   panel.appendChild(lead);
 
   const optionsRow = el('div', 'oauth-connect-options');
@@ -183,6 +193,22 @@ export async function mountOAuthConnectPanel(options: OAuthConnectOptions): Prom
   msBtn.type = 'button';
   msBtn.addEventListener('click', () => void connect('microsoft'));
   btnRow.appendChild(msBtn);
+
+  if (showImapAlternative && onShowImap) {
+    const divider = el('p', 'oauth-connect-divider', 'or');
+    panel.appendChild(divider);
+
+    const imapBtn = el(
+      'button',
+      'oauth-connect-btn oauth-connect-btn--imap',
+      'Connect with IMAP',
+    ) as HTMLButtonElement;
+    imapBtn.type = 'button';
+    imapBtn.addEventListener('click', () => {
+      onShowImap();
+    });
+    panel.appendChild(imapBtn);
+  }
 
   await renderConnections();
 }
