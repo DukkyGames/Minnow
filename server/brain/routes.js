@@ -460,4 +460,6 @@ export async function handleBrainAndSynthesisRequest(req, res, pathname) {
 /** Startup hook: ensure brain wiki layout exists. */
 export async function initBrainApi() {
   await ensureBrainStore();
+  const { warmRecentWorkspaceCodeIndexes } = await import('./code/workspace-cache.js');
+  void warmRecentWorkspaceCodeIndexes();
 }

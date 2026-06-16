@@ -445,14 +445,17 @@ export async function runCascade(opts = {}) {
 }
 
 /**
- * Workspace switch hook — hash-check when cadence is on-switch.
+ * Workspace switch hook — warm cached SQLite, then hash-check when cadence is on-switch.
  * @param {string} [previousRoot]
  */
 export async function onWorkspaceSwitched(previousRoot) {
   void previousRoot;
+  const { warmCodeIndexOnWorkspaceSwitch } = await import('./workspace-cache.js');
+  warmCodeIndexOnWorkspaceSwitch();
+
   const code = await loadBrainCodeConfig();
   if (!isCascadeTriggerEnabled('workspace-switch', code)) {
-    return { skipped: true, reason: 'cadence' };
+    return { skipped: true, reason: 'cadence', warmed: true };
   }
   return runCascade({ trigger: 'workspace-switch', codeConfig: code, force: true });
 }
