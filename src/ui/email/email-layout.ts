@@ -230,16 +230,42 @@ export async function renderEmailLayout(
     shell.classList.toggle("has-selection", Boolean(selectedId));
   };
 
-  const loadFolders = async () => {
-    sidebar.replaceChildren();
+  let sidebarBuilt = false;
 
-    try {
-      folderRows = await fetchEmailFolders(options.account.id);
-    } catch {
-      folderRows = options.account.folders.map((path) => ({
-        path,
-        name: folderLabel(path),
-      }));
+  let refreshSeq = 0;
+
+  /** Show a lightweight overlay while fetching a new folder's messages. */
+  const setListLoading = (loading: boolean) => {
+    listPane.classList.toggle("is-loading", loading);
+
+    let overlay = listPane.querySelector(".email-list-loading");
+
+    if (loading && !overlay) {
+      overlay = el("div", "email-list-loading");
+
+      overlay.setAttribute("aria-live", "polite");
+
+      overlay.appendChild(el("p", "email-loading", "Loading messages…"));
+
+      listPane.appendChild(overlay);
+    } else if (!loading && overlay) {
+      overlay.remove();
+    }
+  };
+
+  /** Fetch folder paths and unread counts from the server (no DOM updates). */
+  const fetchFolderMetadata = async (fetchRemoteFolders: boolean) => {
+    if (fetchRemoteFolders) {
+      try {
+        folderRows = await fetchEmailFolders(options.account.id);
+      } catch {
+        if (folderRows.length === 0) {
+          folderRows = options.account.folders.map((path) => ({
+            path,
+            name: folderLabel(path),
+          }));
+        }
+      }
     }
 
     try {
@@ -249,75 +275,149 @@ export async function renderEmailLayout(
     } catch {
       unreadByFolder = {};
     }
+  };
 
-    const composeBtn = el("button", "email-compose-btn") as HTMLButtonElement;
-    composeBtn.type = "button";
-    composeBtn.innerHTML = `${EMAIL_ICONS.compose}<span>Compose</span>`;
-    composeBtn.setAttribute("aria-label", "Compose new message");
+  /** Highlight the active folder without rebuilding the sidebar. */
+  const updateSidebarActiveFolder = () => {
+    for (const btn of sidebar.querySelectorAll<HTMLButtonElement>(
+      ".email-nav-item[data-folder]",
+    )) {
+      btn.classList.toggle("is-active", btn.dataset.folder === activeFolder);
+    }
+  };
 
-    composeBtn.addEventListener("click", () => {
-      selectedId = null;
+  /** Sync unread badges on existing folder buttons. */
+  const updateSidebarUnreadBadges = () => {
+    for (const btn of sidebar.querySelectorAll<HTMLButtonElement>(
+      ".email-nav-item[data-folder]",
+    )) {
+      const path = btn.dataset.folder ?? "";
 
-      composeMode = "new";
+      const unread = unreadByFolder[path];
 
-      updateSelectionLayout();
+      let badge = btn.querySelector(".email-nav-unread");
 
-      void renderReader();
-    });
+      if (unread && unread > 0) {
+        if (!badge) {
+          badge = el(
+            "span",
+            "email-nav-unread",
+            String(unread > 99 ? "99+" : unread),
+          );
 
-    sidebar.appendChild(composeBtn);
+          btn.appendChild(badge);
+        } else {
+          badge.textContent = String(unread > 99 ? "99+" : unread);
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    }
+  };
 
-    const title = el("p", "email-nav-title", "Folders");
+  /** Switch folders — update selection immediately, fetch messages in background. */
+  const selectFolder = (path: string) => {
+    if (path === activeFolder) return;
 
-    sidebar.appendChild(title);
+    activeFolder = path;
 
-    const list = el("div", "email-nav-list");
+    offset = 0;
+
+    selectedId = null;
+
+    composeMode = null;
+
+    updateSelectionLayout();
+
+    updateSidebarActiveFolder();
+
+    void refreshMessages({ showLoading: true });
+  };
+
+  /** Build sidebar once; subsequent refreshes only patch badges. */
+  const renderSidebar = () => {
+    if (!sidebarBuilt) {
+      sidebar.replaceChildren();
+
+      const composeBtn = el("button", "email-compose-btn") as HTMLButtonElement;
+
+      composeBtn.type = "button";
+
+      composeBtn.innerHTML = `${EMAIL_ICONS.compose}<span>Compose</span>`;
+
+      composeBtn.setAttribute("aria-label", "Compose new message");
+
+      composeBtn.addEventListener("click", () => {
+        selectedId = null;
+
+        composeMode = "new";
+
+        updateSelectionLayout();
+
+        void renderReader();
+      });
+
+      sidebar.appendChild(composeBtn);
+
+      sidebar.appendChild(el("p", "email-nav-title", "Folders"));
+
+      const list = el("div", "email-nav-list");
+
+      sidebar.appendChild(list);
+
+      sidebarBuilt = true;
+    }
+
+    const list = sidebar.querySelector(".email-nav-list");
+
+    if (!list) return;
+
+    list.replaceChildren();
 
     for (const folder of folderRows) {
       const btn = el("button", "email-nav-item") as HTMLButtonElement;
 
       btn.type = "button";
 
-      const label = el(
-        "span",
-        "email-nav-item-label",
-        folderLabel(folder.path),
-      );
+      btn.dataset.folder = folder.path;
 
-      btn.appendChild(label);
+      btn.appendChild(
+        el("span", "email-nav-item-label", folderLabel(folder.path)),
+      );
 
       const unread = unreadByFolder[folder.path];
 
       if (unread && unread > 0) {
-        const badge = el(
-          "span",
-          "email-nav-unread",
-          String(unread > 99 ? "99+" : unread),
+        btn.appendChild(
+          el(
+            "span",
+            "email-nav-unread",
+            String(unread > 99 ? "99+" : unread),
+          ),
         );
-
-        btn.appendChild(badge);
       }
 
       btn.classList.toggle("is-active", folder.path === activeFolder);
 
       btn.addEventListener("click", () => {
-        activeFolder = folder.path;
-
-        offset = 0;
-
-        selectedId = null;
-
-        composeMode = null;
-
-        updateSelectionLayout();
-
-        void refreshAll();
+        selectFolder(folder.path);
       });
 
       list.appendChild(btn);
     }
+  };
 
-    sidebar.appendChild(list);
+  /** Refresh sidebar badges; re-fetch remote folder list only when requested. */
+  const refreshSidebar = async (fetchRemoteFolders = false) => {
+    await fetchFolderMetadata(fetchRemoteFolders);
+
+    if (!sidebarBuilt || fetchRemoteFolders) {
+      renderSidebar();
+    } else {
+      updateSidebarUnreadBadges();
+
+      updateSidebarActiveFolder();
+    }
   };
 
   const renderListToolbar = () => {
@@ -444,7 +544,7 @@ export async function renderEmailLayout(
 
         offset = 0;
 
-        void refreshAll();
+        void refreshMessages({ showLoading: true });
       }, 300);
     });
 
@@ -479,7 +579,7 @@ export async function renderEmailLayout(
 
       offset = 0;
 
-      void refreshAll();
+      void refreshMessages({ showLoading: true });
     });
 
     toolbar.appendChild(filterSelect);
@@ -493,7 +593,7 @@ export async function renderEmailLayout(
     prevBtn.addEventListener("click", () => {
       offset = Math.max(0, offset - limit);
 
-      void refreshAll();
+      void refreshMessages({ showLoading: true });
     });
 
     const pageLabel = el("span", "email-list-page", "");
@@ -506,7 +606,7 @@ export async function renderEmailLayout(
       if (offset + limit < total) {
         offset += limit;
 
-        void refreshAll();
+        void refreshMessages({ showLoading: true });
       }
     });
 
@@ -542,6 +642,10 @@ export async function renderEmailLayout(
           messages.find((row) => row.id === selectedId) ?? selectedThread[0],
 
         onStatus: options.onStatus,
+
+        onRefresh: () => {
+          void refreshMessages({ showLoading: true });
+        },
 
         onSent: () => {
           composeMode = null;
@@ -942,6 +1046,10 @@ export async function renderEmailLayout(
 
           onStatus: options.onStatus,
 
+          onRefresh: () => {
+            void refreshMessages({ showLoading: true });
+          },
+
           onSent: () => {
             composeMode = null;
 
@@ -1157,11 +1265,15 @@ export async function renderEmailLayout(
     total = result.total;
   };
 
-  const refreshAll = async () => {
+  const refreshMessages = async (opts?: { showLoading?: boolean }) => {
+    const seq = ++refreshSeq;
+
+    if (opts?.showLoading) setListLoading(true);
+
     try {
       await loadMessages();
 
-      await loadFolders();
+      if (seq !== refreshSeq) return;
 
       await renderList();
 
@@ -1177,8 +1289,28 @@ export async function renderEmailLayout(
         await renderReader();
       } else if (composeMode === "new") {
         await renderReader();
+      } else {
+        readerPane.replaceChildren();
+
+        updateSelectionLayout();
+
+        const empty = el("div", "email-reader-empty");
+
+        empty.appendChild(el("p", "email-empty-title", "No message selected"));
+
+        empty.appendChild(
+          el(
+            "p",
+            "email-empty-copy",
+            "Choose a thread from the list, or compose a new message.",
+          ),
+        );
+
+        readerPane.appendChild(empty);
       }
     } catch (err) {
+      if (seq !== refreshSeq) return;
+
       listPane.replaceChildren(
         el(
           "p",
@@ -1186,10 +1318,30 @@ export async function renderEmailLayout(
           err instanceof Error ? err.message : "List load failed",
         ),
       );
+    } finally {
+      if (seq === refreshSeq && opts?.showLoading) setListLoading(false);
     }
   };
 
-  await loadFolders();
+  const refreshAll = async (fetchRemoteFolders = false) => {
+    await Promise.all([
+      refreshMessages(),
+      refreshSidebar(fetchRemoteFolders),
+    ]);
+  };
 
-  await refreshAll();
+  // Bootstrap sidebar from cached account folders so panes are not empty while fetching.
+  folderRows = options.account.folders.map((path) => ({
+    path,
+    name: folderLabel(path),
+  }));
+
+  renderSidebar();
+
+  setListLoading(true);
+
+  await Promise.all([
+    refreshMessages({ showLoading: true }),
+    refreshSidebar(true),
+  ]);
 }

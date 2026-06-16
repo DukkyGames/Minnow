@@ -1,84 +1,64 @@
 /**
-
  * Inline compose block for the reading pane footer.
-
  */
 
 import type { EmailAccount, EmailMessage } from "../../email/client";
-
-import { draftEmailReply, sendEmailMessage } from "../../email/client";
-
+import {
+  draftEmailReply,
+  improveEmailText,
+  sendEmailMessage,
+} from "../../email/client";
 import { regenerateReplyVariants } from "../../email/client-ext";
+import { createComposeBodyEditor } from "./email-compose-editor";
 
 export type ComposeMode = "reply" | "replyAll" | "forward" | "new";
 
 export interface EmailComposeOptions {
   account: EmailAccount;
-
   mode: ComposeMode;
-
   threadId?: string;
-
   messages?: EmailMessage[];
-
   selectedMessage?: EmailMessage;
-
   onStatus?: (state: "ok" | "err", message: string) => void;
-
   onSent?: () => void;
+  onRefresh?: () => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-
   className?: string,
-
   text?: string,
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
-
   if (className) node.className = className;
-
   if (text !== undefined) node.textContent = text;
-
   return node;
 }
 
-/** Extract bare email from a From/To header. */
-
 function extractEmail(header: string): string {
   const match = header.match(/<([^>]+)>/);
-
   return (match?.[1] ?? header).trim();
 }
-
-/** Collect unique recipient emails from thread messages. */
 
 function collectRecipients(
   messages: EmailMessage[],
   accountEmail: string,
 ): string[] {
   const seen = new Set<string>();
-
   const out: string[] = [];
-
   const self = accountEmail.toLowerCase();
 
   for (const msg of messages) {
     const from = extractEmail(msg.from).toLowerCase();
-
     if (from && from !== self && !seen.has(from)) {
       seen.add(from);
-
       out.push(extractEmail(msg.from));
     }
 
     for (const to of msg.to ?? []) {
       const addr = extractEmail(to).toLowerCase();
-
       if (addr && addr !== self && !seen.has(addr)) {
         seen.add(addr);
-
         out.push(extractEmail(to));
       }
     }
@@ -87,108 +67,176 @@ function collectRecipients(
   return out;
 }
 
-/**
+function buildThreadContext(messages: EmailMessage[] | undefined): string {
+  if (!messages?.length) return "";
+  return messages
+    .slice(-4)
+    .map(
+      (row) =>
+        `${row.from}: ${(row.bodyText ?? row.bodyPreview ?? "").slice(0, 400)}`,
+    )
+    .join("\n\n");
+}
 
- * Mount inline compose UI at the bottom of the reading pane.
-
- */
+/** Ghost action in the compose header (matches dashboard reprompt weight). */
+function headAction(label: string, title: string): HTMLButtonElement {
+  const button = el(
+    "button",
+    "email-compose-head-btn",
+    label,
+  ) as HTMLButtonElement;
+  button.type = "button";
+  button.title = title;
+  return button;
+}
 
 export function mountEmailCompose(
   mount: HTMLElement,
   options: EmailComposeOptions,
 ): void {
   mount.replaceChildren();
-
   mount.className = "email-compose is-open";
 
-  const head = el("div", "email-compose-head");
+  const canAutoGenerate =
+    Boolean(options.threadId) &&
+    (options.mode === "reply" || options.mode === "replyAll");
 
+  const head = el("div", "email-compose-head");
   head.appendChild(el("p", "email-compose-title", composeTitle(options.mode)));
 
+  const headActions = el("div", "email-compose-head-actions");
+  const draftBtn = headAction("Draft", "Write a reply from the thread");
+  const redraftBtn = headAction("Redraft", "Rewrite with optional instructions");
+  redraftBtn.hidden = true;
+  const headStatus = el("span", "email-compose-head-status");
+  headStatus.setAttribute("aria-live", "polite");
+
+  if (canAutoGenerate) {
+    headActions.appendChild(draftBtn);
+    headActions.appendChild(redraftBtn);
+    headActions.appendChild(headStatus);
+    head.appendChild(headActions);
+  }
   mount.appendChild(head);
 
-  const tabs = el("div", "email-compose-tabs");
+  const repromptRow = el("div", "email-compose-reprompt");
+  repromptRow.hidden = true;
+  const repromptInput = el("input", "email-input email-compose-reprompt-input") as HTMLInputElement;
+  repromptInput.placeholder = "Optional instructions for the draft…";
+  repromptInput.autocomplete = "off";
+  const repromptApply = el(
+    "button",
+    "email-btn email-compose-reprompt-apply",
+    "Apply",
+  ) as HTMLButtonElement;
+  repromptApply.type = "button";
+  repromptApply.title = "Apply instructions";
+  repromptRow.appendChild(repromptInput);
+  repromptRow.appendChild(repromptApply);
+  if (canAutoGenerate) {
+    mount.appendChild(repromptRow);
+  }
 
+  const tabs = el("div", "email-compose-tabs");
   for (const mode of ["reply", "replyAll", "forward", "new"] as ComposeMode[]) {
     const tab = el("button", "email-compose-tab") as HTMLButtonElement;
-
     tab.type = "button";
-
     tab.textContent =
       mode === "replyAll"
         ? "Reply all"
         : mode.charAt(0).toUpperCase() + mode.slice(1);
-
     tab.classList.toggle("is-active", mode === options.mode);
-
     tab.addEventListener("click", () => {
       mountEmailCompose(mount, { ...options, mode });
     });
-
     tabs.appendChild(tab);
   }
-
   mount.appendChild(tabs);
 
-  const fieldRow = (label: string, input: HTMLElement) => {
-    const row = el("label", "email-compose-field");
+  const fieldRow = (
+    label: string,
+    input: HTMLElement,
+    rowOptions?: { labelledBy?: string },
+  ) => {
+    const isNativeControl =
+      input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement;
+    const row = el(
+      isNativeControl ? "label" : "div",
+      "email-compose-field",
+    );
 
-    row.appendChild(el("span", "email-compose-field-label", label));
+    const labelEl = el("span", "email-compose-field-label", label);
+    if (rowOptions?.labelledBy) {
+      labelEl.id = rowOptions.labelledBy;
+      input.setAttribute("aria-labelledby", rowOptions.labelledBy);
+    }
 
+    row.appendChild(labelEl);
     row.appendChild(input);
-
     mount.appendChild(row);
   };
 
   const toInput = el("input", "email-input") as HTMLInputElement;
-
   toInput.placeholder = "Recipients";
-
   toInput.name = "to";
 
   const ccInput = el("input", "email-input") as HTMLInputElement;
-
   ccInput.placeholder = "Cc (optional)";
-
   ccInput.name = "cc";
 
   const subjectInput = el("input", "email-input") as HTMLInputElement;
-
   subjectInput.placeholder = "Subject";
-
   subjectInput.name = "subject";
 
-  const bodyArea = el("textarea", "email-compose-body") as HTMLTextAreaElement;
+  const threadContext = buildThreadContext(options.messages);
 
-  bodyArea.rows = 8;
-
-  bodyArea.placeholder = "Write your message…";
+  const bodyEditor = createComposeBodyEditor({
+    onImprove: async (selection, mode, instructions) => {
+      const result = await improveEmailText({
+        text: selection,
+        fullBody: bodyEditor.getPlainText(),
+        threadContext: threadContext || undefined,
+        mode,
+        instructions,
+      });
+      return result.text;
+    },
+  });
 
   fieldRow("To", toInput);
-
   if (options.mode === "replyAll" || options.mode === "forward") {
     fieldRow("Cc", ccInput);
   }
-
   fieldRow("Subject", subjectInput);
 
-  fieldRow("Message", bodyArea);
-
   const variantRow = el("div", "email-compose-variants");
+  if (canAutoGenerate) {
+    mount.appendChild(variantRow);
+  }
 
-  mount.appendChild(variantRow);
+  fieldRow("Message", bodyEditor.root, { labelledBy: "email-compose-body-label" });
+
+  let aiBusy = false;
+  let repromptMode: "draft" | "variants" | null = null;
+
+  const setAiBusy = (busy: boolean, message = ""): void => {
+    aiBusy = busy;
+    draftBtn.disabled = busy;
+    redraftBtn.disabled = busy;
+    repromptApply.disabled = busy;
+    repromptInput.disabled = busy;
+    mount.classList.toggle("is-ai-busy", busy);
+    headStatus.textContent = message;
+  };
 
   const applyModeDefaults = () => {
     const latest = options.messages?.[options.messages.length - 1];
-
     const accountEmail =
       options.account.username || options.account.fromAddress || "";
 
     if (options.mode === "new") {
       toInput.value = "";
-
       subjectInput.value = "";
-
       return;
     }
 
@@ -196,20 +244,16 @@ export function mountEmailCompose(
 
     if (options.mode === "reply") {
       toInput.value = extractEmail(latest.from);
-
       subjectInput.value = latest.subject.startsWith("Re:")
         ? latest.subject
         : `Re: ${latest.subject}`;
     }
 
     if (options.mode === "replyAll") {
-      const recipients = collectRecipients(
+      toInput.value = collectRecipients(
         options.messages ?? [],
         accountEmail,
-      );
-
-      toInput.value = recipients.join(", ");
-
+      ).join(", ");
       subjectInput.value = latest.subject.startsWith("Re:")
         ? latest.subject
         : `Re: ${latest.subject}`;
@@ -217,132 +261,199 @@ export function mountEmailCompose(
 
     if (options.mode === "forward") {
       toInput.value = "";
-
       subjectInput.value = latest.subject.startsWith("Fwd:")
         ? latest.subject
         : `Fwd: ${latest.subject}`;
 
-      if (!bodyArea.value.trim()) {
+      if (!bodyEditor.getPlainText().trim()) {
         const quoted = (latest.bodyText ?? latest.bodyPreview ?? "").trim();
-
-        bodyArea.value = quoted
-          ? `\n\n---------- Forwarded message ----------\n${quoted}`
-          : "";
+        bodyEditor.setPlainText(
+          quoted
+            ? `\n\n---------- Forwarded message ----------\n${quoted}`
+            : "",
+        );
       }
     }
   };
 
+  const generateReply = async (instructions?: string): Promise<void> => {
+    if (!options.threadId || aiBusy) return;
+
+    setAiBusy(true, "Drafting…");
+    try {
+      const draft = await draftEmailReply({
+        accountId: options.account.id,
+        threadId: options.threadId,
+        instructions: instructions?.trim() || undefined,
+      });
+
+      if (draft.to) toInput.value = draft.to;
+      if (draft.subject) subjectInput.value = draft.subject;
+      if (draft.body) bodyEditor.setPlainText(draft.body);
+
+      redraftBtn.hidden = false;
+      options.onStatus?.("ok", "Draft ready");
+    } catch (err) {
+      options.onStatus?.(
+        "err",
+        err instanceof Error ? err.message : "Draft failed",
+      );
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   const loadDraft = async () => {
+    applyModeDefaults();
+
     if (
       !options.threadId ||
       options.mode === "new" ||
       options.mode === "forward"
     ) {
-      applyModeDefaults();
-
       return;
     }
 
-    try {
-      const draft = await draftEmailReply({
-        accountId: options.account.id,
-
-        threadId: options.threadId,
-      });
-
-      if (!toInput.value) toInput.value = draft.to;
-
-      if (!subjectInput.value) subjectInput.value = draft.subject;
-
-      if (!bodyArea.value.trim()) bodyArea.value = draft.body;
-    } catch {
-      applyModeDefaults();
+    if (canAutoGenerate && !bodyEditor.getPlainText().trim()) {
+      await generateReply();
     }
   };
 
   const renderVariants = () => {
     variantRow.replaceChildren();
+    if (!canAutoGenerate) return;
 
     const msg = options.selectedMessage;
-
     const variants = msg?.replyVariants ?? [];
 
-    if (variants.length === 0) return;
+    if (variants.length === 0) {
+      const refreshAlts = el(
+        "button",
+        "email-dash-variant-reprompt",
+        "Suggest alt drafts",
+      ) as HTMLButtonElement;
+      refreshAlts.type = "button";
+      refreshAlts.addEventListener("click", async () => {
+        if (!options.threadId || !msg) return;
+        refreshAlts.disabled = true;
+        try {
+          await regenerateReplyVariants({
+            accountId: options.account.id,
+            messageId: msg.id,
+            threadId: options.threadId,
+          });
+          options.onStatus?.("ok", "Alt drafts ready");
+          options.onRefresh?.();
+        } catch (err) {
+          options.onStatus?.(
+            "err",
+            err instanceof Error ? err.message : "Alt drafts failed",
+          );
+        } finally {
+          refreshAlts.disabled = false;
+        }
+      });
+      variantRow.appendChild(refreshAlts);
+      return;
+    }
 
     variantRow.appendChild(
-      el("span", "email-compose-variants-label", "Quick drafts"),
+      el("span", "email-compose-variants-label", "Alt drafts"),
     );
 
     const chips = el("div", "email-compose-variant-chips");
-
     for (const variant of variants) {
       const chip = el("button", "email-dash-variant-chip") as HTMLButtonElement;
-
       chip.type = "button";
-
       chip.textContent = variant.label;
-
+      chip.title = variant.body.slice(0, 160);
       chip.addEventListener("click", () => {
-        bodyArea.value = variant.body;
+        bodyEditor.setPlainText(variant.body);
+        redraftBtn.hidden = false;
       });
-
       chips.appendChild(chip);
     }
-
     variantRow.appendChild(chips);
 
-    const regen = el(
+    const refreshAlts = el(
       "button",
-      "email-btn email-compose-regen",
-      "Regenerate",
+      "email-dash-variant-reprompt",
+      "Refresh",
     ) as HTMLButtonElement;
-
-    regen.type = "button";
-
-    regen.addEventListener("click", async () => {
+    refreshAlts.type = "button";
+    refreshAlts.title = "Regenerate alt drafts";
+    refreshAlts.addEventListener("click", () => {
       if (!options.threadId || !msg) return;
+      repromptMode = "variants";
+      repromptRow.hidden = false;
+      repromptInput.placeholder = "How should the alt drafts change? (optional)";
+      repromptInput.focus();
+    });
+    variantRow.appendChild(refreshAlts);
+  };
 
-      const instructions =
-        window.prompt("Reprompt instructions (optional)") ?? "";
+  draftBtn.addEventListener("click", () => void generateReply());
 
+  redraftBtn.addEventListener("click", () => {
+    repromptMode = "draft";
+    repromptRow.hidden = false;
+    repromptInput.placeholder = "Optional instructions for the draft…";
+    repromptInput.focus();
+  });
+
+  repromptApply.addEventListener("click", async () => {
+    const instructions = repromptInput.value.trim();
+    repromptInput.value = "";
+
+    if (repromptMode === "variants") {
+      const msg = options.selectedMessage;
+      if (!options.threadId || !msg) return;
+      setAiBusy(true, "Refreshing alts…");
       try {
         await regenerateReplyVariants({
           accountId: options.account.id,
-
           messageId: msg.id,
-
           threadId: options.threadId,
-
-          instructions: instructions.trim() || undefined,
+          instructions: instructions || undefined,
         });
-
-        options.onStatus?.("ok", "Variants updated");
-
-        options.onSent?.();
+        options.onStatus?.("ok", "Alt drafts updated");
+        options.onRefresh?.();
       } catch (err) {
         options.onStatus?.(
           "err",
-          err instanceof Error ? err.message : "Regenerate failed",
+          err instanceof Error ? err.message : "Refresh failed",
         );
+      } finally {
+        setAiBusy(false);
+        repromptMode = null;
       }
-    });
+      return;
+    }
 
-    variantRow.appendChild(regen);
-  };
+    void generateReply(instructions);
+    repromptMode = null;
+  });
+
+  repromptInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      repromptApply.click();
+    }
+    if (event.key === "Escape") {
+      repromptInput.value = "";
+      repromptInput.blur();
+    }
+  });
 
   void loadDraft();
-
   renderVariants();
 
   const actions = el("div", "email-compose-actions");
 
   const discardBtn = el("button", "email-btn", "Discard") as HTMLButtonElement;
-
   discardBtn.type = "button";
-
   discardBtn.addEventListener("click", () => {
     mount.replaceChildren();
-
     mount.className = "email-reader-compose-mount";
   });
 
@@ -351,24 +462,20 @@ export function mountEmailCompose(
     "email-btn email-btn-primary",
     "Send",
   ) as HTMLButtonElement;
-
   sendBtn.type = "button";
 
   sendBtn.addEventListener("click", async () => {
     const to = toInput.value.trim();
-
     const subject = subjectInput.value.trim();
-
-    const body = bodyArea.value;
+    const body = bodyEditor.getPlainText();
+    const bodyHtml = bodyEditor.getHtml();
 
     if (!to || !subject) {
       options.onStatus?.("err", "To and subject are required");
-
       return;
     }
 
     const ok = window.confirm(`Send to ${to}?\n\nSubject: ${subject}`);
-
     if (!ok) return;
 
     const latest = options.messages?.[options.messages.length - 1];
@@ -376,22 +483,16 @@ export function mountEmailCompose(
     try {
       await sendEmailMessage({
         accountId: options.account.id,
-
         to,
-
         subject,
-
         body,
-
+        bodyHtml,
         inReplyTo: options.mode !== "new" ? latest?.messageId : undefined,
-
         references: options.mode !== "new" ? latest?.messageId : undefined,
-
         confirmed: true,
       });
 
       options.onStatus?.("ok", "Email sent");
-
       options.onSent?.();
     } catch (err) {
       options.onStatus?.(
@@ -402,18 +503,13 @@ export function mountEmailCompose(
   });
 
   actions.appendChild(discardBtn);
-
   actions.appendChild(sendBtn);
-
   mount.appendChild(actions);
 }
 
 function composeTitle(mode: ComposeMode): string {
   if (mode === "reply") return "Reply";
-
   if (mode === "replyAll") return "Reply all";
-
   if (mode === "forward") return "Forward";
-
   return "New message";
 }

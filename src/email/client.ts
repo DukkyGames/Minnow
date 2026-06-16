@@ -214,11 +214,29 @@ export async function draftEmailReply(input: {
   return data.draft;
 }
 
+export type ComposeImproveMode = 'improve' | 'correct' | 'shorten' | 'expand';
+
+export async function improveEmailText(input: {
+  text: string;
+  fullBody?: string;
+  threadContext?: string;
+  mode?: ComposeImproveMode;
+  instructions?: string;
+}): Promise<{ text: string }> {
+  const res = await fetch('/api/email/improve-text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return parseJson(res);
+}
+
 export async function sendEmailMessage(input: {
   accountId: string;
   to: string;
   subject: string;
   body: string;
+  bodyHtml?: string;
   inReplyTo?: string;
   references?: string;
   confirmed: boolean;

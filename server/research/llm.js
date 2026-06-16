@@ -4,7 +4,7 @@
  */
 
 import { getProviderRuntime as defaultGetProviderRuntime } from '../providers/store.js';
-import { stripThinking } from './strip-thinking.js';
+import { stripDraftOutput, stripThinking } from './strip-thinking.js';
 
 /** Injectable deps for unit tests (mock fetch + provider runtime). */
 export const llmCallDeps = {
@@ -28,6 +28,7 @@ const MAX_ATTEMPTS = 2;
  * @property {number} [maxTokens]
  * @property {number} [timeoutMs]
  * @property {AbortSignal} [signal]
+ * @property {boolean} [stripProse] When true, strip untagged leading reasoning prose (email drafts).
  */
 
 /**
@@ -175,6 +176,7 @@ export async function llmCall({
   maxTokens = 4096,
   timeoutMs = 60000,
   signal,
+  stripProse = false,
 }) {
   if (!providerId) {
     throw new Error('providerId is required');
@@ -200,7 +202,7 @@ export async function llmCall({
         maxTokens,
         signal: controller.signal,
       });
-      return stripThinking(raw) ?? '';
+      return (stripProse ? stripDraftOutput(raw) : stripThinking(raw)) ?? '';
     } catch (err) {
       lastError = err;
       if (isAbortError(err)) {

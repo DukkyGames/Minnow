@@ -2,11 +2,10 @@
  * Opt-in background email polling with agent hooks on new mail.
  */
 
-import { listEmailAccounts, getEmailAccount } from './accounts.js';
+import { listEmailAccounts } from './accounts.js';
 import { readMessageCache } from './cache.js';
 import { syncFolderMessages } from './transport.js';
-import { onNewMessages, buildInboxSummary } from './agent.js';
-import { emitEmailEvent } from './events.js';
+import { runAgentHooksAfterFolderSync } from './agent.js';
 
 /** Minimum interval between poll ticks. */
 export const POLL_TICK_MS = 60_000;
@@ -53,14 +52,7 @@ export async function runEmailPollTick() {
           synced += 1;
 
           const incoming = Array.isArray(result.messages) ? result.messages : [];
-          const newRows = incoming.filter((row) => Number(row.uid) > prevHighest);
-          if (newRows.length > 0) {
-            const fullAccount = (await getEmailAccount(account.id)) ?? account;
-            await onNewMessages(account.id, newRows, fullAccount);
-          } else {
-            await buildInboxSummary(account.id);
-            emitEmailEvent('summary_updated', { accountId: account.id });
-          }
+          await runAgentHooksAfterFolderSync(account.id, folder, incoming, prevHighest);
         } catch (err) {
           console.warn(
             `[email] poll failed for ${account.id}/${folder}:`,

@@ -175,15 +175,18 @@ export async function syncGraphMailFolder(accountId, options = {}) {
 
 /**
  * @param {import('./accounts.js').EmailAccount} account
- * @param {{ to: string, subject: string, body: string }} mail
+ * @param {{ to: string, subject: string, body: string, bodyHtml?: string, inReplyTo?: string, references?: string }} mail
  */
 export async function sendGraphMailMessage(account, mail) {
+  const bodyHtml = mail.bodyHtml?.trim();
   const data = await graphFetch(account, '/me/sendMail', {
     method: 'POST',
     body: JSON.stringify({
       message: {
         subject: mail.subject,
-        body: { contentType: 'Text', content: mail.body },
+        body: bodyHtml
+          ? { contentType: 'HTML', content: bodyHtml }
+          : { contentType: 'Text', content: mail.body },
         toRecipients: [
           {
             emailAddress: { address: mail.to },

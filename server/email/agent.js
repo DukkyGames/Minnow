@@ -5,7 +5,12 @@
 import { randomUUID } from 'node:crypto';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { llmCall } from '../research/llm.js';
-import { loadSynthesisConfig, resolveSynthesisModel } from '../memory/synthesis-config.js';
+import {
+  loadSynthesisConfig,
+  resolveSynthesisModel,
+  UTILITY_MODEL_UNAVAILABLE_HINT,
+} from '../memory/synthesis-config.js';
+import { getEmailAccount } from './accounts.js';
 import {
   getCachedMessage,
   listCachedMessages,
@@ -182,7 +187,7 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
   const synthesisCfg = await loadSynthesisConfig();
   const model = await resolveSynthesisModel(synthesisCfg);
   if (!model) {
-    throw new Error('No utility model configured for reply variants');
+    throw new Error(`No LLM model configured for reply variants. ${UTILITY_MODEL_UNAVAILABLE_HINT}`);
   }
 
   const threadBlock = thread
@@ -208,6 +213,7 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
     ],
     temperature: 0.4,
     maxTokens: 900,
+    stripProse: true,
   });
 
   const variants = parseReplyVariantsJson(completion);
@@ -217,6 +223,100 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
 
   await updateReplyVariants(accountId, messageKey, variants);
   return { threadId, messageId: messageKey, variants };
+}
+
+/**
+ * Pick synced rows that are new or still missing triage metadata.
+ * @param {Array<Record<string, unknown>>} incoming
+ * @param {string} folder
+ * @param {number} prevHighestUid
+ * @param {(messageKey: string) => boolean} lacksTriageSummary
+ */
+export function filterMessagesForAgentProcessing(
+  incoming,
+  folder,
+  prevHighestUid,
+  lacksTriageSummary,
+) {
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return [];
+  }
+
+  /** @type {Array<Record<string, unknown>>} */
+  const toProcess = [];
+  const seen = new Set();
+
+  for (const row of incoming) {
+    const messageKey = String(row.id ?? `${row.folder ?? folder}:${row.uid}`);
+    if (seen.has(messageKey)) {
+      continue;
+    }
+
+    const isNewUid = Number(row.uid) > prevHighestUid;
+    const needsTriage = isNewUid || lacksTriageSummary(messageKey);
+    if (needsTriage) {
+      seen.add(messageKey);
+      toProcess.push(row);
+    }
+  }
+
+  return toProcess;
+}
+
+/**
+ * After a folder sync, run agent pipelines on new or untriaged messages.
+ * Used by manual sync (Email app) and the background poller.
+ * @param {string} accountId
+ * @param {string} folder
+ * @param {Array<Record<string, unknown>>} incoming
+ * @param {number} prevHighestUid
+ */
+export async function runAgentHooksAfterFolderSync(
+  accountId,
+  folder,
+  incoming,
+  prevHighestUid,
+) {
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    await buildInboxSummary(accountId);
+    emitEmailEvent('summary_updated', { accountId });
+    return { processed: 0 };
+  }
+
+  const account = await getEmailAccount(accountId);
+  if (!account) {
+    await buildInboxSummary(accountId);
+    emitEmailEvent('summary_updated', { accountId });
+    return { processed: 0 };
+  }
+
+  /** @type {Set<string>} */
+  const lacksTriage = new Set();
+  for (const row of incoming) {
+    const messageKey = String(row.id ?? `${row.folder ?? folder}:${row.uid}`);
+    if (Number(row.uid) > prevHighestUid) {
+      continue;
+    }
+    const cached = await getCachedMessage(accountId, messageKey);
+    if (!cached?.triage?.summary) {
+      lacksTriage.add(messageKey);
+    }
+  }
+
+  const toProcess = filterMessagesForAgentProcessing(
+    incoming,
+    folder,
+    prevHighestUid,
+    (messageKey) => lacksTriage.has(messageKey),
+  );
+
+  if (toProcess.length > 0) {
+    return onNewMessages(accountId, toProcess, account);
+  }
+
+  await buildInboxSummary(accountId);
+  emitEmailEvent('summary_updated', { accountId });
+  return { processed: 0 };
 }
 
 /**

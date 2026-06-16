@@ -14,6 +14,7 @@ import { mountOAuthConnectPanel } from '../oauth-connect';
 import { renderEmailDashboard } from './email-dashboard';
 import { renderEmailLayout } from './email-layout';
 import { renderEmailAutomations } from './email-automations';
+import { EMAIL_ICONS } from './email-icons';
 
 export interface EmailPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -28,6 +29,27 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+/** Human provider label for the active account chip in the chrome header. */
+function accountProviderLabel(account: EmailAccount): string {
+  if (account.provider === 'google') return 'Gmail';
+  if (account.provider === 'microsoft') return 'Outlook';
+  const host = account.imap.host.toLowerCase();
+  if (host.includes('gmail') || host.includes('google')) return 'Gmail';
+  if (host.includes('outlook') || host.includes('office365')) return 'Outlook';
+  if (host.includes('fastmail')) return 'Fastmail';
+  return account.imap.host;
+}
+
+/** Icon-only chrome control with accessible name. */
+function chromeIconBtn(icon: string, label: string): HTMLButtonElement {
+  const btn = el('button', 'email-chrome-icon-btn') as HTMLButtonElement;
+  btn.type = 'button';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = icon;
+  return btn;
 }
 
 /** Expand the IMAP setup form and scroll it into view. */
@@ -259,7 +281,12 @@ export async function renderEmailPanel(
   const chrome = el('header', 'email-chrome');
   const body = el('div', 'email-body email-body-fill');
 
-  const accountSelect = el('select', 'email-select') as HTMLSelectElement;
+  const identity = el('div', 'email-chrome-identity');
+  identity.appendChild(el('p', 'email-chrome-kicker', 'Email'));
+
+  const accountWrap = el('div', 'email-chrome-account');
+  const accountSelect = el('select', 'email-chrome-account-select') as HTMLSelectElement;
+  accountSelect.setAttribute('aria-label', 'Active email account');
   for (const account of accounts) {
     const opt = el('option') as HTMLOptionElement;
     opt.value = account.id;
@@ -267,25 +294,46 @@ export async function renderEmailPanel(
     opt.selected = account.id === activeAccount.id;
     accountSelect.appendChild(opt);
   }
-  chrome.appendChild(accountSelect);
+  const accountHint = el(
+    'span',
+    'email-chrome-account-hint',
+    `${accountProviderLabel(activeAccount)} · ${activeAccount.username}`,
+  );
+  accountWrap.appendChild(accountSelect);
+  accountWrap.appendChild(accountHint);
+  identity.appendChild(accountWrap);
 
-  const dashBtn = el('button', 'email-chrome-tab is-active', 'Dashboard') as HTMLButtonElement;
-  const mailBtn = el('button', 'email-chrome-tab', 'Mail') as HTMLButtonElement;
-  const autoBtn = el('button', 'email-chrome-tab', 'Automations') as HTMLButtonElement;
-  dashBtn.type = 'button';
-  mailBtn.type = 'button';
-  autoBtn.type = 'button';
+  const nav = el('nav', 'email-chrome-nav');
+  nav.setAttribute('role', 'tablist');
+  nav.setAttribute('aria-label', 'Email views');
+  const segments = el('div', 'email-chrome-segments');
 
-  const settingsBtn = el('button', 'email-btn', 'Accounts') as HTMLButtonElement;
-  settingsBtn.type = 'button';
-  const testBtn = el('button', 'email-btn', 'Test') as HTMLButtonElement;
-  testBtn.type = 'button';
+  const mkViewTab = (mode: EmailViewMode, label: string, icon: string) => {
+    const btn = el('button', 'email-chrome-segment') as HTMLButtonElement;
+    btn.type = 'button';
+    btn.setAttribute('role', 'tab');
+    btn.dataset.view = mode;
+    btn.innerHTML = `${icon}<span class="email-chrome-segment-label">${label}</span>`;
+    return btn;
+  };
 
-  chrome.appendChild(dashBtn);
-  chrome.appendChild(mailBtn);
-  chrome.appendChild(autoBtn);
-  chrome.appendChild(settingsBtn);
-  chrome.appendChild(testBtn);
+  const dashBtn = mkViewTab('dashboard', 'Dashboard', EMAIL_ICONS.dashboard);
+  const mailBtn = mkViewTab('mail', 'Mail', EMAIL_ICONS.mail);
+  const autoBtn = mkViewTab('automations', 'Automations', EMAIL_ICONS.automations);
+  segments.appendChild(dashBtn);
+  segments.appendChild(mailBtn);
+  segments.appendChild(autoBtn);
+  nav.appendChild(segments);
+
+  const utils = el('div', 'email-chrome-utils');
+  const settingsBtn = chromeIconBtn(EMAIL_ICONS.settings, 'Account settings');
+  const testBtn = chromeIconBtn(EMAIL_ICONS.testConnection, 'Test connection');
+  utils.appendChild(settingsBtn);
+  utils.appendChild(testBtn);
+
+  chrome.appendChild(identity);
+  chrome.appendChild(nav);
+  chrome.appendChild(utils);
 
   shell.appendChild(chrome);
   shell.appendChild(body);
@@ -293,10 +341,14 @@ export async function renderEmailPanel(
 
   const setActiveTab = (mode: EmailViewMode) => {
     viewMode = mode;
-    dashBtn.classList.toggle('is-active', mode === 'dashboard');
-    mailBtn.classList.toggle('is-active', mode === 'mail');
-    autoBtn.classList.toggle('is-active', mode === 'automations');
+    for (const btn of [dashBtn, mailBtn, autoBtn]) {
+      const active = btn.dataset.view === mode;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
   };
+
+  setActiveTab(viewMode);
 
   const renderView = async () => {
     if (accountFormMode !== 'none') {
@@ -359,6 +411,7 @@ export async function renderEmailPanel(
     const next = accounts.find((row) => row.id === accountSelect.value);
     if (!next) return;
     activeAccount = next;
+    accountHint.textContent = `${accountProviderLabel(next)} · ${next.username}`;
     void renderView();
   });
 
@@ -408,6 +461,7 @@ export async function renderEmailPanel(
       onSaved: () => void renderEmailPanel(mount, options),
       onCancel: () => {
         accountFormMode = 'none';
+        settingsBtn.classList.remove('is-active');
         void renderView();
       },
     });
@@ -416,10 +470,12 @@ export async function renderEmailPanel(
   settingsBtn.addEventListener('click', () => {
     if (accountFormMode === 'edit') {
       accountFormMode = 'none';
+      settingsBtn.classList.remove('is-active');
       void renderView();
       return;
     }
     openAccountSetup('edit');
+    settingsBtn.classList.add('is-active');
   });
 
   unsubscribeEvents?.();

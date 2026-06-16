@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { parseReplyVariantsJson } from '../../server/email/agent.js';
+import { parseReplyVariantsJson, filterMessagesForAgentProcessing } from '../../server/email/agent.js';
 
 const VARIANTS_FIXTURE = `[
   {"label": "Brief yes", "body": "Sounds good, I'll be there."},
@@ -22,5 +22,26 @@ describe('parseReplyVariantsJson', () => {
 
   test('returns null for invalid payload', () => {
     assert.equal(parseReplyVariantsJson('not json'), null);
+  });
+});
+
+describe('filterMessagesForAgentProcessing', () => {
+  test('includes new UIDs and rows missing triage', () => {
+    const incoming = [
+      { id: 'INBOX:101', uid: '101', folder: 'INBOX' },
+      { id: 'INBOX:99', uid: '99', folder: 'INBOX' },
+      { id: 'INBOX:100', uid: '100', folder: 'INBOX' },
+    ];
+    const selected = filterMessagesForAgentProcessing(
+      incoming,
+      'INBOX',
+      100,
+      (messageKey) => messageKey === 'INBOX:99',
+    );
+    assert.equal(selected.length, 2);
+    assert.deepEqual(
+      selected.map((row) => row.id),
+      ['INBOX:101', 'INBOX:99'],
+    );
   });
 });

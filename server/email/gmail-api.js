@@ -250,22 +250,39 @@ export async function syncGmailFolder(accountId, options = {}) {
 /**
  * Send email via Gmail API.
  * @param {import('./accounts.js').EmailAccount} account
- * @param {{ to: string, subject: string, body: string, inReplyTo?: string, references?: string }} mail
+ * @param {{ to: string, subject: string, body: string, bodyHtml?: string, inReplyTo?: string, references?: string }} mail
  */
 export async function sendGmailMessage(account, mail) {
   const gmail = await createGmailClient(account);
-  const lines = [
-    `To: ${mail.to}`,
-    `Subject: ${mail.subject}`,
-    'Content-Type: text/plain; charset=utf-8',
-  ];
+  const lines = [`To: ${mail.to}`, `Subject: ${mail.subject}`];
   if (mail.inReplyTo) {
     lines.push(`In-Reply-To: ${mail.inReplyTo}`);
   }
   if (mail.references) {
     lines.push(`References: ${mail.references}`);
   }
-  lines.push('', mail.body);
+
+  const bodyHtml = mail.bodyHtml?.trim();
+  if (bodyHtml) {
+    const boundary = `minnow_alt_${Date.now()}`;
+    lines.push('MIME-Version: 1.0');
+    lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    lines.push('');
+    lines.push(`--${boundary}`);
+    lines.push('Content-Type: text/plain; charset=utf-8');
+    lines.push('');
+    lines.push(mail.body);
+    lines.push(`--${boundary}`);
+    lines.push('Content-Type: text/html; charset=utf-8');
+    lines.push('');
+    lines.push(bodyHtml);
+    lines.push(`--${boundary}--`);
+  } else {
+    lines.push('Content-Type: text/plain; charset=utf-8');
+    lines.push('');
+    lines.push(mail.body);
+  }
+
   const raw = Buffer.from(lines.join('\r\n')).toString('base64url');
 
   const res = await gmail.users.messages.send({

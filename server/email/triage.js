@@ -4,7 +4,11 @@
 
 import { wrapUntrusted } from '../security/untrusted.js';
 import { llmCall } from '../research/llm.js';
-import { loadSynthesisConfig, resolveSynthesisModel } from '../memory/synthesis-config.js';
+import {
+  loadSynthesisConfig,
+  resolveSynthesisModel,
+  UTILITY_MODEL_UNAVAILABLE_HINT,
+} from '../memory/synthesis-config.js';
 import { getCachedMessage, updateMessageTriage } from './cache.js';
 import { getAttachmentSummaryForMessage } from './attachments.js';
 
@@ -112,7 +116,7 @@ export async function triageMessage(accountId, messageKey) {
   const synthesisCfg = await loadSynthesisConfig();
   const model = await resolveSynthesisModel(synthesisCfg);
   if (!model) {
-    throw new Error('No utility model configured for email triage');
+    throw new Error(`No LLM model configured for email triage. ${UTILITY_MODEL_UNAVAILABLE_HINT}`);
   }
 
   const attachmentSummary = await getAttachmentSummaryForMessage(accountId, messageKey);

@@ -11,7 +11,7 @@ import {
   redactAccount,
   updateEmailAccount,
 } from './accounts.js';
-import { listCachedMessages, listCachedThread } from './cache.js';
+import { listCachedMessages, listCachedThread, readMessageCache } from './cache.js';
 import {
   listEmailFolders,
   syncFolderMessages,
@@ -19,6 +19,7 @@ import {
 } from './transport.js';
 import { triageMessage } from './triage.js';
 import { draftReply, sendEmail, sendReplyVariant } from './smtp.js';
+import { improveComposeText } from './compose-ai.js';
 import {
   setMessageFlags,
   moveMessage,
@@ -26,7 +27,11 @@ import {
   deleteMessage,
   bulkMessageAction,
 } from './mail-actions.js';
-import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import {
+  getOrBuildInboxSummary,
+  generateReplyVariants,
+  runAgentHooksAfterFolderSync,
+} from './agent.js';
 import { handleEmailEventsSse } from './events.js';
 import {
   listAutomations,
@@ -222,7 +227,13 @@ export function createEmailMiddleware() {
 
         if (tail === 'sync' && req.method === 'POST') {
           const body = await readJsonBody(req);
+          const account = await getEmailAccount(accountId);
+          const folder = String(body.folder ?? account?.folders?.[0] ?? 'INBOX');
+          const before = await readMessageCache(accountId);
+          const prevHighest = before.folderCursors?.[folder]?.highestUid ?? 0;
           const result = await syncFolderMessages(accountId, body);
+          const incoming = Array.isArray(result.messages) ? result.messages : [];
+          await runAgentHooksAfterFolderSync(accountId, folder, incoming, prevHighest);
           sendJson(res, 200, result);
           return;
         }
@@ -371,6 +382,13 @@ export function createEmailMiddleware() {
         const body = await readJsonBody(req);
         const draft = await draftReply(body);
         sendJson(res, 200, { draft });
+        return;
+      }
+
+      if (url === '/api/email/improve-text' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const result = await improveComposeText(body);
+        sendJson(res, 200, result);
         return;
       }
 

@@ -73,7 +73,7 @@ export async function syncFolderMessages(accountId, options = {}) {
 
 /**
  * @param {import('./accounts.js').EmailAccount} account
- * @param {{ to: string, subject: string, body: string, inReplyTo?: string, references?: string }} mail
+ * @param {{ to: string, subject: string, body: string, bodyHtml?: string, inReplyTo?: string, references?: string }} mail
  */
 export async function sendOAuthEmail(account, mail) {
   const backend = resolveBackend(account);
