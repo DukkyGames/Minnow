@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { ALL_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
 import { defaultServersConfig } from './validators.js';
 
 /** Cached resolved home path for this process. */
@@ -314,10 +314,14 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',
+  'repo_map',
+  'find_symbol',
+  'who_calls',
+  'read_symbol',
 ]);
 
 function defaultPermissionForTool(id, enabled) {
-  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+  if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
   return enabled ? 'ask' : 'off';

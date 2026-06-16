@@ -1469,6 +1469,91 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'repo_map',
+    label: 'Repo map',
+    description:
+      'Token-budgeted signature map of the indexed workspace codebase. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'repo_map',
+      'Return a low-resolution map of top-ranked symbols (signatures only) within a token budget. Start code navigation tasks here, then zoom with find_symbol / read_symbol. Falls back to reindex when cold.',
+      {
+        focus: {
+          type: 'string',
+          description: 'Optional substring to focus the map (file path or symbol name)',
+        },
+        token_budget: {
+          type: 'number',
+          description: 'Optional token budget override (default from config.brain.code.repoMapTokenBudget)',
+        },
+        focus_files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional file paths to bias PageRank personalization',
+        },
+      },
+    ),
+  },
+  {
+    id: 'find_symbol',
+    label: 'Find symbol',
+    description: 'Search the code index for a symbol definition. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'find_symbol',
+      'Find symbol definitions by name using the Brain code index (FTS5) with LSP workspace-symbol fallback. Use for where-is / what-is-this-symbol questions. Use grep for exact string matches.',
+      {
+        query: {
+          type: 'string',
+          description: 'Symbol name or search query',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max results (default 15)',
+        },
+      },
+      ['query'],
+    ),
+  },
+  {
+    id: 'who_calls',
+    label: 'Who calls',
+    description: 'List incoming call edges for a symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'who_calls',
+      'Return exact call sites that invoke a symbol (graph edges from the code index, not string search).',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
+    ),
+  },
+  {
+    id: 'read_symbol',
+    label: 'Read symbol',
+    description: 'Read the current source span for a symbol. Requires npm start.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'read_symbol',
+      'Read the live source lines for a symbol definition from disk (not a cached span). Use after find_symbol to zoom in.',
+      {
+        symbol: {
+          type: 'string',
+          description: 'Symbol id (<repo>:<name>) or bare symbol name',
+        },
+      },
+      ['symbol'],
+    ),
+  },
+  {
     id: 'manage_calendar',
     label: 'Manage calendar',
     description:

@@ -8,7 +8,7 @@ import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults'
 import { isServerStorageMode } from '../config/storage-mode';
 import { setStatus } from '../ui/status';
 import { BUILT_IN_TOOLS, type ToolCategory } from './definitions';
-import { BRAIN_WIKI_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './brain-tool-ids';
+import { BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './brain-tool-ids';
 import { isMinnowElectronShell } from './minnow-shell';
 import {
   createEmptyToolPermissionsConfig,
@@ -31,7 +31,7 @@ export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 const PERMISSION_SET = new Set<ToolPermissionMode>(['full', 'ask', 'off']);
 
 function defaultPermissionForBuiltIn(id: string, enabled: boolean): ToolPermissionMode {
-  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+  if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
   return enabled ? 'ask' : 'off';
@@ -113,9 +113,9 @@ function toolIdWasStored(raw: unknown, id: string): boolean {
   return false;
 }
 
-/** Insert missing brain wiki tool ids at `full` for upgraded configs (Correction 6). */
-function backfillBrainWikiTools(config: ToolConfig, raw: unknown): void {
-  for (const id of BRAIN_WIKI_TOOL_IDS) {
+/** Insert missing Brain tool ids at `full` for upgraded configs (Correction 6). */
+function backfillBrainTools(config: ToolConfig, raw: unknown): void {
+  for (const id of BRAIN_FULL_PERMISSION_TOOL_IDS) {
     if (!toolIdWasStored(raw, id)) {
       config.permissions.default[id] = 'full';
       config.enabled[id] = true;
@@ -223,7 +223,7 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     }
   }
 
-  backfillBrainWikiTools(config, raw);
+  backfillBrainTools(config, raw);
 
   syncEnabledFromPermissions(config);
 

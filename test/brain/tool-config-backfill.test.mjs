@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { normalizeToolConfig } from '../../server/config/validators.js';
-import { BRAIN_WIKI_TOOL_IDS } from '../../server/config/tool-ids.js';
+import { BRAIN_FULL_PERMISSION_TOOL_IDS } from '../../server/config/tool-ids.js';
 
 describe('brain tool config back-fill', () => {
   it('inserts missing brain wiki tool ids at full permission', () => {
@@ -26,7 +26,7 @@ describe('brain tool config back-fill', () => {
 
     assert.equal(config.permissions.default.save_memory, 'ask');
 
-    for (const id of BRAIN_WIKI_TOOL_IDS) {
+    for (const id of BRAIN_FULL_PERMISSION_TOOL_IDS) {
       if (id === 'save_memory') continue;
       assert.equal(
         config.permissions.default[id],

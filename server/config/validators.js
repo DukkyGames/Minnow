@@ -2,7 +2,7 @@
  * Validate session, tool, and system-prompt payloads before writing to disk.
  */
 
-import { ALL_TOOL_IDS, BRAIN_WIKI_TOOL_IDS, BRAIN_WIKI_TOOL_ID_SET } from './tool-ids.js';
+import { ALL_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET } from './tool-ids.js';
 import { normalizeOrchestratePlanPath } from './orchestrate-plan-path.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import {
@@ -547,9 +547,9 @@ function toolIdWasStored(raw, id) {
   return false;
 }
 
-/** Insert missing brain wiki tool ids at `full` for upgraded configs (Correction 6). */
-function backfillBrainWikiTools(config, raw) {
-  for (const id of BRAIN_WIKI_TOOL_IDS) {
+/** Insert missing Brain tool ids at `full` for upgraded configs (Correction 6). */
+function backfillBrainTools(config, raw) {
+  for (const id of BRAIN_FULL_PERMISSION_TOOL_IDS) {
     if (!toolIdWasStored(raw, id)) {
       config.permissions.default[id] = 'full';
       config.enabled[id] = true;
@@ -558,7 +558,7 @@ function backfillBrainWikiTools(config, raw) {
 }
 
 function defaultPermissionForTool(id, enabled) {
-  if (BRAIN_WIKI_TOOL_ID_SET.has(id)) {
+  if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
     return enabled ? 'full' : 'off';
   }
   return enabled ? 'ask' : 'off';
@@ -578,6 +578,10 @@ export function normalizeToolConfig(raw) {
     'brain_write_page',
     'brain_append_log',
     'brain_ingest_source',
+    'repo_map',
+    'find_symbol',
+    'who_calls',
+    'read_symbol',
   ]);
   const enabled = {};
   const permissionsDefault = {};
@@ -633,7 +637,7 @@ export function normalizeToolConfig(raw) {
     }
   }
 
-  backfillBrainWikiTools(config, raw);
+  backfillBrainTools(config, raw);
 
   for (const id of ALL_TOOL_IDS) {
     const mode = config.permissions.default[id];
