@@ -812,6 +812,59 @@ export function mergeSupervisorConfig(patch, base) {
 }
 
 /**
+ * Normalize OAuth BYO credentials stored in config.json.
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} [existing]
+ */
+export function normalizeOAuthConfig(raw, existing = {}) {
+  const base = {
+    google:
+      existing.google && typeof existing.google === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (existing.google) }
+        : { clientId: '', clientSecret: '' },
+    microsoft:
+      existing.microsoft && typeof existing.microsoft === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (existing.microsoft) }
+        : { clientId: '', clientSecret: '', tenantId: 'common' },
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return base;
+  }
+
+  const patch = /** @type {Record<string, unknown>} */ (raw);
+
+  if (patch.google && typeof patch.google === 'object') {
+    const g = /** @type {Record<string, unknown>} */ (patch.google);
+    if (typeof g.clientId === 'string') {
+      base.google.clientId = g.clientId.trim();
+    }
+    if (typeof g.clientSecret === 'string' && g.clientSecret.trim()) {
+      base.google.clientSecret = g.clientSecret.trim();
+    }
+  }
+
+  if (patch.microsoft && typeof patch.microsoft === 'object') {
+    const m = /** @type {Record<string, unknown>} */ (patch.microsoft);
+    if (typeof m.clientId === 'string') {
+      base.microsoft.clientId = m.clientId.trim();
+    }
+    if (typeof m.clientSecret === 'string' && m.clientSecret.trim()) {
+      base.microsoft.clientSecret = m.clientSecret.trim();
+    }
+    if (typeof m.tenantId === 'string' && m.tenantId.trim()) {
+      base.microsoft.tenantId = m.tenantId.trim();
+    }
+  }
+
+  if (!base.microsoft.tenantId) {
+    base.microsoft.tenantId = 'common';
+  }
+
+  return base;
+}
+
+/**
  * Merge allowed fields into config.json meta.
  * @param {object} existing
  * @param {unknown} patch
@@ -1288,6 +1341,15 @@ export function mergeConfigMeta(existing, patch) {
       p.voice,
       base.voice && typeof base.voice === 'object'
         ? /** @type {Record<string, unknown>} */ (base.voice)
+        : {},
+    );
+  }
+
+  if (p.oauth && typeof p.oauth === 'object') {
+    base.oauth = normalizeOAuthConfig(
+      p.oauth,
+      base.oauth && typeof base.oauth === 'object'
+        ? /** @type {Record<string, unknown>} */ (base.oauth)
         : {},
     );
   }

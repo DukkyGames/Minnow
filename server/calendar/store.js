@@ -98,6 +98,27 @@ function initSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_events_calendar ON events(calendar_id);
     CREATE INDEX IF NOT EXISTS idx_events_starts_at ON events(starts_at);
   `);
+  migrateCalendarSchema(database);
+}
+
+/**
+ * Add OAuth calendar columns when upgrading existing databases.
+ * @param {import('better-sqlite3').Database} database
+ */
+function migrateCalendarSchema(database) {
+  const cols = database.prepare('PRAGMA table_info(caldav_accounts)').all();
+  const names = new Set(cols.map((row) => row.name));
+  if (!names.has('sync_backend')) {
+    database.exec(
+      `ALTER TABLE caldav_accounts ADD COLUMN sync_backend TEXT NOT NULL DEFAULT 'caldav'`,
+    );
+  }
+  if (!names.has('oauth_connection_id')) {
+    database.exec(`ALTER TABLE caldav_accounts ADD COLUMN oauth_connection_id TEXT`);
+  }
+  if (!names.has('provider')) {
+    database.exec(`ALTER TABLE caldav_accounts ADD COLUMN provider TEXT`);
+  }
 }
 
 /**
@@ -550,23 +571,41 @@ export function setSyncToken(accountId, href, token) {
 export function upsertCalDavAccountRow(row) {
   getCalendarDb()
     .prepare(
-      `INSERT INTO caldav_accounts (id, label, url, username, secret_ref, last_sync_at, created_at, updated_at)
-       VALUES (@id, @label, @url, @username, @secretRef, @lastSyncAt, @createdAt, @updatedAt)
+      `INSERT INTO caldav_accounts (
+         id, label, url, username, secret_ref, last_sync_at, created_at, updated_at,
+         sync_backend, oauth_connection_id, provider
+       )
+       VALUES (
+         @id, @label, @url, @username, @secretRef, @lastSyncAt, @createdAt, @updatedAt,
+         @syncBackend, @oauthConnectionId, @provider
+       )
        ON CONFLICT(id) DO UPDATE SET
          label = excluded.label,
          url = excluded.url,
          username = excluded.username,
          secret_ref = excluded.secret_ref,
          last_sync_at = excluded.last_sync_at,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at,
+         sync_backend = excluded.sync_backend,
+         oauth_connection_id = excluded.oauth_connection_id,
+         provider = excluded.provider`,
     )
-    .run(row);
+    .run({
+      ...row,
+      syncBackend: row.syncBackend ?? 'caldav',
+      oauthConnectionId: row.oauthConnectionId ?? null,
+      provider: row.provider ?? null,
+    });
 }
 
 /** List CalDAV accounts (without secrets). */
 export function listCalDavAccountRows() {
   const rows = getCalendarDb()
-    .prepare('SELECT id, label, url, username, secret_ref, last_sync_at, created_at, updated_at FROM caldav_accounts ORDER BY label')
+    .prepare(
+      `SELECT id, label, url, username, secret_ref, last_sync_at, created_at, updated_at,
+              sync_backend, oauth_connection_id, provider
+       FROM caldav_accounts ORDER BY label`,
+    )
     .all();
   return rows.map((row) => ({
     id: row.id,
@@ -577,13 +616,20 @@ export function listCalDavAccountRows() {
     lastSyncAt: row.last_sync_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    syncBackend: row.sync_backend ?? 'caldav',
+    oauthConnectionId: row.oauth_connection_id ?? undefined,
+    provider: row.provider ?? undefined,
   }));
 }
 
 /** @param {string} id */
 export function getCalDavAccountRow(id) {
   const row = getCalendarDb()
-    .prepare('SELECT id, label, url, username, secret_ref, last_sync_at, created_at, updated_at FROM caldav_accounts WHERE id = ?')
+    .prepare(
+      `SELECT id, label, url, username, secret_ref, last_sync_at, created_at, updated_at,
+              sync_backend, oauth_connection_id, provider
+       FROM caldav_accounts WHERE id = ?`,
+    )
     .get(id);
   if (!row) {
     return null;
@@ -597,6 +643,9 @@ export function getCalDavAccountRow(id) {
     lastSyncAt: row.last_sync_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    syncBackend: row.sync_backend ?? 'caldav',
+    oauthConnectionId: row.oauth_connection_id ?? undefined,
+    provider: row.provider ?? undefined,
   };
 }
 

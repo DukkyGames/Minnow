@@ -63,4 +63,6 @@ export const ALL_TOOL_IDS = [
   'list_lsp_servers',
   'save_memory',
   'manage_calendar',
+  'list_mail',
+  'draft_reply',
 ];

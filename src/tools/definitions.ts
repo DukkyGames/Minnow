@@ -1371,6 +1371,97 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'list_mail',
+    label: 'List mail',
+    description: 'List recent cached email summaries from a configured IMAP account.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'list_mail',
+      'Return bounded recent email summaries from the local cache (max 20). Sync inbox in the Email app first. Does not expose full mailbox dumps.',
+      {
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        folder: { type: 'string', description: 'IMAP folder (optional — all cached folders)' },
+        query: { type: 'string', description: 'Case-insensitive filter on subject/from/preview' },
+        limit: { type: 'number', description: 'Max rows (default 20, max 20)' },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'draft_reply',
+    label: 'Draft email reply',
+    description: 'Compose a reply draft for a thread — does not send.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'draft_reply',
+      'Create a reply draft for a cached email thread. Returns To/Subject/body for user review. Never sends automatically.',
+      {
+        threadId: { type: 'string', description: 'Thread id from list_mail or the Email app' },
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        instructions: {
+          type: 'string',
+          description: 'Optional guidance for the opening paragraph',
+        },
+      },
+      ['threadId'],
+    ),
+  },
+  {
+    id: 'summarize_inbox',
+    label: 'Summarize inbox',
+    description: 'Return the rolling inbox digest with urgency stats and highlight threads.',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'summarize_inbox',
+      'Return inbox summary text and top triaged highlights from the local cache. Sync inbox first.',
+      {
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+      },
+      [],
+    ),
+  },
+  {
+    id: 'generate_reply_variants',
+    label: 'Generate reply variants',
+    description: 'Create 2–3 labeled reply drafts for a thread (does not send).',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'generate_reply_variants',
+      'Generate labeled reply variant bodies for a cached thread. Never sends automatically.',
+      {
+        threadId: { type: 'string', description: 'Thread id from list_mail or the Email app' },
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        instructions: { type: 'string', description: 'Optional reprompt guidance' },
+        messageId: { type: 'string', description: 'Optional specific message id for variant storage' },
+      },
+      ['threadId'],
+    ),
+  },
+  {
+    id: 'email_action',
+    label: 'Email action',
+    description: 'Archive, delete, or flag a cached message (non-destructive flags only via agent).',
+    category: 'utility',
+    serverRequired: true,
+    definition: toolSchema(
+      'email_action',
+      'Perform a single mail action on a cached message id: archive, delete, read, unread, or flag.',
+      {
+        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
+        messageId: { type: 'string', description: 'Cached message id (folder:uid)' },
+        action: {
+          type: 'string',
+          description: 'One of: archive, delete, read, unread, flag',
+        },
+      },
+      ['messageId', 'action'],
+    ),
+  },
+  {
     id: 'get_lsp_diagnostics',
     label: 'LSP diagnostics',
     description: 'Formatted language-server diagnostics for a project file.',

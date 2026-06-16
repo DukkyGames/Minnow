@@ -465,6 +465,7 @@
         <button type="button" data-settings-nav="editor">Editor</button>
         <button type="button" data-settings-nav="skills">Skills</button>
         <button type="button" data-settings-nav="webhooks">Webhooks</button>
+        <button type="button" data-settings-nav="oauth">OAuth</button>
       </div>
       <div class="settings-nav-group" role="group" aria-labelledby="settingsNavAdvanced">
         <p id="settingsNavAdvanced" class="settings-nav-group__label">Advanced</p>
@@ -902,6 +903,11 @@
         <h2>Webhooks</h2>
         <p class="settings-lead">Outgoing HMAC-signed webhooks for chat completion, session creation, and scheduler events.</p>
         <div id="settingsWebhooksBody" class="settings-section-body"></div>
+      </section>
+      <section id="settingsSection-oauth" class="settings-section">
+        <h2>OAuth</h2>
+        <p class="settings-lead">Google and Microsoft app credentials for Email and Calendar sign-in.</p>
+        <div id="settingsOAuthBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-voice" class="settings-section hidden" hidden aria-hidden="true">
         <h2>Voice</h2>
@@ -1391,6 +1397,13 @@
   <div id="calendarAppBody" class="calendar-body">
     <p id="calendarStatus" class="calendar-status" role="status" aria-live="polite"></p>
     <div id="calendarPanelMount" class="calendar-panel-mount"></div>
+  </div>
+</main>
+
+<main id="emailView" class="email-page" aria-label="Email">
+  <div id="emailAppBody" class="email-body-wrap">
+    <div id="emailPanelMount" class="email-panel-mount"></div>
+    <p id="emailStatus" class="email-status" role="status" aria-live="polite"></p>
   </div>
 </main>
 

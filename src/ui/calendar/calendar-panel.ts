@@ -18,6 +18,7 @@ import {
 import { getMaxInlineEvents, loadCalendarPrefs, type CalendarPrefs } from '../../calendar/prefs';
 import { openEventEditorWindow } from './event-editor-window';
 import { openCalendarSettings } from './calendar-settings';
+import { mountOAuthConnectPanel } from '../oauth-connect';
 
 export interface CalendarPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -235,12 +236,25 @@ export async function renderCalendarPanel(
   caldavSection.className = 'calendar-caldav';
   railContent.appendChild(caldavSection);
 
+  const oauthMount = document.createElement('div');
+  oauthMount.className = 'calendar-oauth-mount';
+  caldavSection.appendChild(oauthMount);
+  void mountOAuthConnectPanel({
+    mount: oauthMount,
+    onStatus: (state, message) => setStatus(state, message),
+    onChange: async () => {
+      await reloadCalDavAccounts();
+      await reloadAll();
+    },
+    showCalendarCheckbox: false,
+  });
+
   const caldavHeader = document.createElement('div');
   caldavHeader.className = 'calendar-caldav-header';
   caldavSection.appendChild(caldavHeader);
 
   const caldavHeading = document.createElement('h4');
-  caldavHeading.textContent = 'CalDAV';
+  caldavHeading.textContent = 'CalDAV (advanced)';
   caldavHeader.appendChild(caldavHeading);
 
   const addCalDavBtn = document.createElement('button');
@@ -437,7 +451,11 @@ export async function renderCalendarPanel(
       meta.className = 'calendar-caldav-meta';
       const label = document.createElement('span');
       label.className = 'calendar-caldav-label';
-      label.textContent = account.label;
+      const backend =
+        account.syncBackend && account.syncBackend !== 'caldav'
+          ? ` [${account.syncBackend}]`
+          : '';
+      label.textContent = `${account.label}${backend}`;
       meta.appendChild(label);
       if (account.lastSyncAt) {
         const synced = document.createElement('span');

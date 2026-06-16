@@ -1,5 +1,5 @@
 /** MinnowOS app identifiers — one per launcher tile. */
-export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'calendar' | 'settings';
+export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'calendar' | 'email' | 'settings';
 
 /** How an app is presented in the MinnowOS shell. */
 export type PresentationMode = 'fullscreen' | 'window' | 'desktop' | 'sidePanel';
