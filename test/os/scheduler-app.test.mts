@@ -23,6 +23,11 @@ import {
 } from '../../src/os/router.ts';
 import { SCHEDULER_EDITOR_INSTANCE_ID } from '../../src/os/scheduler-constants.ts';
 import {
+  initSchedulerSidePanel,
+  isSchedulerSidePanelOpen,
+  resetSchedulerSidePanelForTests,
+} from '../../src/os/scheduler-side-panel.ts';
+import {
   resetWindowManagerForTests,
   windowManager,
 } from '../../src/os/window-manager.ts';
@@ -108,7 +113,9 @@ describe('scheduler side panel shell', () => {
     resetAppHostForTests();
     resetWindowManagerForTests();
     resetOsPageBridgeForTests();
+    resetSchedulerSidePanelForTests();
     initOsRouter();
+    initSchedulerSidePanel();
   });
 
   afterEach(() => {
@@ -117,6 +124,7 @@ describe('scheduler side panel shell', () => {
     resetAppHostForTests();
     resetWindowManagerForTests();
     resetOsPageBridgeForTests();
+    resetSchedulerSidePanelForTests();
   });
 
   test('launchApp(scheduler) keeps desktop view with scheduler foreground', () => {
@@ -162,5 +170,36 @@ describe('scheduler side panel shell', () => {
     syncOsRouteFromHashForTests();
     assert.equal(getForegroundAppId(), 'scheduler');
     assert.equal(getOsView(), 'desktop');
+  });
+
+  test('scheduler side panel stays open when opening a window app', () => {
+    launchApp('scheduler');
+    syncOsRouteFromHashForTests();
+    assert.equal(isSchedulerSidePanelOpen(), true);
+
+    launchApp('settings');
+    syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'settings');
+    assert.equal(isSchedulerSidePanelOpen(), true);
+  });
+
+  test('scheduler side panel hides when Code is foreground', () => {
+    launchApp('scheduler');
+    syncOsRouteFromHashForTests();
+    assert.equal(isSchedulerSidePanelOpen(), true);
+
+    launchApp('code');
+    syncOsRouteFromHashForTests();
+    assert.equal(getForegroundAppId(), 'code');
+    assert.equal(isSchedulerSidePanelOpen(), false);
+  });
+
+  test('scheduler side panel closes when scheduler instance is dismissed', () => {
+    launchApp('scheduler');
+    syncOsRouteFromHashForTests();
+    assert.equal(isSchedulerSidePanelOpen(), true);
+
+    launchApp('scheduler');
+    assert.equal(isSchedulerSidePanelOpen(), false);
   });
 });

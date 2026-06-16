@@ -153,17 +153,25 @@ export function closeSchedulerSidePanel(): void {
   document.documentElement.classList.remove('is-scheduler-side-panel-open');
 }
 
-/** Toggle visibility based on whether scheduler is the foreground app. */
+/** Whether the scheduler side panel should stay visible for the current shell state. */
+function shouldShowSchedulerSidePanel(): boolean {
+  const snap = getInstanceSnapshot();
+  const hasScheduler = snap.instances.some((i) => i.appId === 'scheduler');
+  if (!hasScheduler) return false;
+  // Fullscreen Code hides desktop chrome — tuck the scheduler rail until Code is dismissed.
+  return getForegroundAppId() !== 'code';
+}
+
+/** Show or hide the panel based on scheduler instance + foreground app (hide only for Code). */
 export function syncSchedulerSidePanel(): void {
-  const appId = getForegroundAppId();
-  if (appId === 'scheduler') {
+  if (shouldShowSchedulerSidePanel()) {
     void openSchedulerSidePanel();
     return;
   }
   closeSchedulerSidePanel();
 }
 
-/** Wire instance subscription so the panel tracks scheduler foreground state. */
+/** Wire instance subscription so the panel tracks scheduler open state and Code foreground. */
 export function initSchedulerSidePanel(): void {
   if (bound) return;
   bound = true;

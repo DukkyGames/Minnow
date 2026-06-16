@@ -68,13 +68,14 @@ function viewForPresentationMode(mode: PresentationMode): OsView {
 
 function pickNextForeground(excludeId: string): string | null {
   const remaining = instances.filter((i) => i.id !== excludeId);
-  if (remaining.length === 0) return null;
   const windowed = remaining.filter((i) => {
     const mode = getPresentationMode(i.appId);
     return mode === 'window' || mode === 'sidePanel';
   });
-  const pool = windowed.length > 0 ? windowed : remaining;
-  return pool[pool.length - 1]?.id ?? null;
+  // Only rotate among floating surfaces — never resurrect a background fullscreen app
+  // (e.g. Code) when the user closes the last window they opened on the desktop.
+  if (windowed.length === 0) return null;
+  return windowed[windowed.length - 1]?.id ?? null;
 }
 
 /** Read-only snapshot for UI renderers. */
