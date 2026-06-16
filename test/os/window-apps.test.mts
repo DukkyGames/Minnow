@@ -6,6 +6,7 @@ import {
   syncAppHostForTests,
 } from '../../src/os/app-host.ts';
 import {
+  closeInstance,
   focusInstance,
   getInstanceSnapshot,
   launchInstance,
@@ -158,6 +159,31 @@ describe('window-mounted apps', () => {
     for (const appId of WINDOW_APPS) {
       assert.equal(WINDOW_MOUNTED_APPS.has(appId), true);
     }
+  });
+
+  test('closing a window app does not foreground background Code', async () => {
+    launchInstance('code');
+    assert.equal(getInstanceSnapshot().view, 'app');
+
+    markWindowAppOpen('settings');
+    launchInstance('settings');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const settingsId = getInstanceSnapshot().foregroundId;
+    assert.ok(settingsId);
+    assert.equal(closeInstance(settingsId!), true);
+    syncAppHostForTests();
+
+    const snap = getInstanceSnapshot();
+    assert.equal(snap.view, 'desktop');
+    assert.equal(snap.foregroundId, null);
+    assert.equal(snap.instances.some((i) => i.appId === 'code'), true);
+
+    const codeLayer = document.getElementById('osAppLayer-code');
+    assert.equal(codeLayer?.classList.contains('is-active'), false);
+    const stage = document.getElementById('osStage');
+    assert.equal(stage?.classList.contains('is-in-app-fullscreen'), false);
   });
 
   test('sync keeps foreground window when multiple window apps are open', async () => {
