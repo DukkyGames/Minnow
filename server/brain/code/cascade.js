@@ -563,19 +563,37 @@ export async function uninstallGitHook(workspaceRoot) {
  */
 export async function getGitHookStatus(workspaceRoot) {
   const root = workspaceRoot ?? getEffectiveWorkspaceRoot();
-  const hookPath = path.join(root, '.git', 'hooks', 'post-commit');
+  const gitDir = path.join(root, '.git');
+  const hookPath = path.join(gitDir, 'hooks', 'post-commit');
+  const scriptPath = getGitHookScriptPath();
+
+  let isGitRepo = false;
+  try {
+    await fs.access(gitDir);
+    isGitRepo = true;
+  } catch {
+    return {
+      hookPath,
+      installed: false,
+      isGitRepo: false,
+      scriptPath,
+    };
+  }
+
   try {
     const content = await fs.readFile(hookPath, 'utf8');
     return {
       hookPath,
       installed: content.includes(HOOK_MARKER),
-      scriptPath: getGitHookScriptPath(),
+      isGitRepo: true,
+      scriptPath,
     };
   } catch {
     return {
       hookPath,
       installed: false,
-      scriptPath: getGitHookScriptPath(),
+      isGitRepo: true,
+      scriptPath,
     };
   }
 }

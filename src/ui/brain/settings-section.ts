@@ -128,13 +128,20 @@ function bindSettingsSection(): void {
     void (async () => {
       setStatus('spin', 'Installing git hook…');
       const result = await installBrainGitHook();
+      if (!result) {
+        setStatus('err', 'Git hook install failed — is npm start running?');
+        return;
+      }
+      if (result.error || result.installed === false) {
+        setStatus('err', result.error ?? 'Git hook install failed');
+        await refreshGitHookStatus();
+        return;
+      }
       setStatus(
-        result?.installed ? 'ok' : 'err',
-        result?.installed
-          ? result.alreadyPresent
-            ? 'Git hook already installed'
-            : 'Git post-commit hook installed'
-          : 'Git hook install failed',
+        'ok',
+        result.alreadyPresent
+          ? 'Git hook already installed'
+          : 'Git post-commit hook installed',
       );
       await refreshGitHookStatus();
     })();
@@ -282,12 +289,20 @@ function globsToText(globs: string[]): string {
 
 async function refreshGitHookStatus(): Promise<void> {
   const el = document.getElementById('brainCodeGitHookStatus');
+  const installBtn = document.getElementById('brainCodeGitHookInstall') as HTMLButtonElement | null;
   if (!el) return;
   const status = await fetchBrainGitHookStatus();
   if (!status) {
     el.textContent = 'Hook status unavailable.';
+    if (installBtn) installBtn.disabled = false;
     return;
   }
+  if (status.isGitRepo === false) {
+    el.textContent = 'Workspace is not a git repository — initialize git or switch workspace.';
+    if (installBtn) installBtn.disabled = true;
+    return;
+  }
+  if (installBtn) installBtn.disabled = false;
   el.textContent = status.installed
     ? `Post-commit hook installed at ${status.hookPath}`
     : 'Post-commit hook not installed';

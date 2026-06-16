@@ -92,7 +92,7 @@ export function resolveLegacyHash(hash: string): {
   }
   if (trimmed === '#/brain' || trimmed.startsWith('#/brain/')) {
     const match = trimmed.replace(/^#\/?/, '').match(/^brain(?:\/([\w-]+))?/);
-    const section = match?.[1] ?? 'wiki';
+    const section = match?.[1] ?? 'graph';
     return { hash: `#/app/brain/${section}`, brainSection: section };
   }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
@@ -129,7 +129,7 @@ export function parseOsHash(hash: string): OsRoute {
       route.modelsSection = appMatch[2] ?? pendingModelsSection ?? 'recommend';
     }
     if (route.appId === 'brain') {
-      route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'wiki';
+      route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'graph';
     }
     return route;
   }

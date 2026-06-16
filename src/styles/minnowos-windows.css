@@ -280,14 +280,21 @@ html.minnow-os-enabled .mn-os-window-body .calendar-page.is-open {
   z-index: 45;
 }
 
-/* Desktop composer uses z-index 40 in research mode — suppress all desktop chrome in fullscreen apps. */
-:is(.mn-os-stage.is-in-app-fullscreen, #osDesktopLayer.is-suppressed-by-fullscreen-app)
+/* Immersive apps: hide dock launcher and desktop chrome (chat rail, composer, previews). */
+.mn-os-stage.is-immersive-app #osDockLayer {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+:is(.mn-os-stage.is-immersive-app, #osDesktopLayer.is-suppressed-by-fullscreen-app)
   :is(
     .mn-os-composer-dock,
     .mn-os-chat-rail,
     .mn-os-desk-stage,
     .mn-os-desktop-previews
   ) {
+  display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;

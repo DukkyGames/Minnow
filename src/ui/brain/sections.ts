@@ -11,7 +11,7 @@ import { renderLogSection } from './log-section';
 import { renderProposalsSection } from './proposals-section';
 import { renderSchemaSection } from './schema-section';
 import { renderSettingsSection } from './settings-section';
-import { renderWikiSection } from './wiki-section';
+import { renderGraphSection } from './graph-section';
 
 /** Render a Brain section on first activation. */
 export async function renderBrainSection(
@@ -19,8 +19,8 @@ export async function renderBrainSection(
   options?: { editPath?: string },
 ): Promise<void> {
   switch (section) {
-    case 'wiki':
-      await renderWikiSection();
+    case 'graph':
+      await renderGraphSection();
       break;
     case 'edit':
       await renderEditSection(options?.editPath);

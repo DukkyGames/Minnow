@@ -35,11 +35,17 @@ describe('brain router', () => {
     assert.equal(legacy.brainSection, 'edit');
   });
 
-  test('parseOsHash resolves brain wiki deep link', () => {
+  test('parseOsHash resolves brain graph deep link (legacy wiki alias)', () => {
     const route = parseOsHash('#/app/brain/wiki');
     assert.equal(route.view, 'app');
     assert.equal(route.appId, 'brain');
     assert.equal(route.brainSection, 'wiki');
+  });
+
+  test('parseOsHash resolves brain graph home', () => {
+    const route = parseOsHash('#/app/brain/graph');
+    assert.equal(route.appId, 'brain');
+    assert.equal(route.brainSection, 'graph');
   });
 
   test('parseOsHash resolves brain code deep link', () => {
@@ -53,14 +59,17 @@ describe('brain markup contract', () => {
   test('index.html defines brainView shell', () => {
     const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="brainView"/);
-    assert.match(html, /id="brainSection-wiki"/);
-    assert.match(html, /id="brainWikiTree"/);
+    assert.match(html, /id="brainSection-graph"/);
+    assert.match(html, /id="brainGraphCanvas"/);
+    assert.match(html, /id="brainInspector"/);
+    assert.match(html, /data-brain-nav="graph"/);
     assert.match(html, /data-brain-nav="proposals"/);
     assert.match(html, /id="brainProposalsList"/);
     assert.match(html, /id="brainSection-settings"/);
     assert.match(html, /id="brainSynthesisEnabled"/);
     assert.match(html, /data-brain-nav="code"/);
     assert.match(html, /id="brainSection-code"/);
+    assert.match(html, /id="brainCodeRemapRepo"/);
     assert.match(html, /id="brainCodeReindex"/);
     assert.match(html, /id="brainCodeSettingsSave"/);
   });

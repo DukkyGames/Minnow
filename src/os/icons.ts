@@ -3,6 +3,9 @@
 /** Public path for the Compare app raster glyph. */
 export const COMPARE_ICON_SRC = '/icons/compare.png';
 
+/** Public path for the Brain app raster glyph (brain-circuit). */
+export const BRAIN_ICON_SRC = '/icons/brain-circuit.png';
+
 export type OsIconName =
   | 'code'
   | 'chat'
@@ -26,7 +29,7 @@ export type OsIconName =
   | 'fish';
 
 /** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
-export type RasterIconName = 'compare';
+export type RasterIconName = 'compare' | 'brain';
 
 /** Inline SVG icon ids (excludes raster-backed launcher icons). */
 export type SvgIconName = Exclude<OsIconName, RasterIconName>;
@@ -47,8 +50,6 @@ const PATHS: Record<SvgIconName, string> = {
     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
   chip:
     '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
-  brain:
-    '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588 4 4 0 0 0 7.632 2.582 4 4 0 0 0 1.835-3.435 4 4 0 0 0 1.835-3.435 4 4 0 0 0 2.526-5.77A3 3 0 1 0 12 5Z"/>',
   gear:
     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>',
   arrowUp: '<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>',
@@ -64,6 +65,7 @@ const PATHS: Record<SvgIconName, string> = {
 /** App launcher icons backed by a PNG mask instead of inline SVG paths. */
 const RASTER_ICON_SRC: Record<RasterIconName, string> = {
   compare: COMPARE_ICON_SRC,
+  brain: BRAIN_ICON_SRC,
 };
 
 export interface OsIconOptions {

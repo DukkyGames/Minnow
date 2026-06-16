@@ -18,13 +18,21 @@ import type {
   BrainCodeSymbolRef,
   BrainCodeExplainPage,
 } from '../../brain/types';
-import { navigateBrainWikiPage } from './wiki-section';
+import { navigateBrainGraphPage } from './graph-section';
+import { buildCallGraph } from './graph/graph-data';
+import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
+import { renderSymbolInspector } from './inspector';
+import { openWorkspaceFolderPicker } from '../workspace-folder-picker';
+import { setWorkspacePath } from '../../config/workspace-api';
+import { setWorkspaceFromServer } from '../../state/workspace';
+import { refreshFileTreeViaBridge } from '../file-tree-refresh-bridge';
 
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let focusTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: BrainCodeStatus | null = null;
 let selectedSymbolId: string | null = null;
+let codeGraphApi: ForceGraphApi | null = null;
 
 type ActionStatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
@@ -208,8 +216,50 @@ async function selectSymbol(symbolId: string): Promise<void> {
     'No indexed callees.',
   );
 
-  highlightSearchResult(symbolId);
+  void renderCallGraph(sym, callers?.callers ?? [], callees?.callees ?? [], def?.text);
   void refreshExplainPanel(symbolId);
+  highlightSearchResult(symbolId);
+}
+
+/** Render an expandable call graph for the active symbol. */
+async function renderCallGraph(
+  sym: BrainCodeSymbolMatch,
+  callers: BrainCodeSymbolRef[],
+  callees: BrainCodeSymbolRef[],
+  sourceText?: string,
+): Promise<void> {
+  const panel = document.getElementById('brainCodeGraphPanel');
+  const canvas = document.getElementById('brainCodeGraphCanvas') as HTMLCanvasElement | null;
+  if (!panel || !canvas) return;
+
+  panel.hidden = false;
+  const data = buildCallGraph(sym.id, sym.name, callers, callees);
+
+  if (!codeGraphApi) {
+    codeGraphApi = createForceGraph(canvas, {
+      onSelect: (node) => {
+        if (!node?.symbolId) return;
+        void selectSymbol(node.symbolId);
+      },
+      onDoubleClick: (node) => {
+        if (node?.symbolId) void selectSymbol(node.symbolId);
+      },
+    });
+    window.addEventListener('resize', () => codeGraphApi?.resize());
+  }
+
+  codeGraphApi.setData(data.nodes, data.edges);
+  requestAnimationFrame(() => codeGraphApi?.fitToView());
+
+  const inspector = document.getElementById('brainInspector');
+  if (inspector) {
+    renderSymbolInspector(
+      inspector,
+      sym.name,
+      `${sym.kind} · ${sym.file}:${sym.line_start}`,
+      sourceText,
+    );
+  }
 }
 
 /** Show wiki pages that anchor the selected symbol. */
@@ -257,7 +307,7 @@ function renderExplainPageItem(page: BrainCodeExplainPage): HTMLLIElement {
   btn.className = 'brain-inline-link brain-code-explain-link';
   btn.textContent = page.title;
   btn.addEventListener('click', () => {
-    navigateBrainWikiPage(page.path);
+    navigateBrainGraphPage(page.path);
   });
   li.append(btn);
 
@@ -395,12 +445,33 @@ async function runReindex(): Promise<void> {
   await refreshRepoMap();
 }
 
+/** Switch workspace folder for code index (remap repo). */
+async function remapCodeRepo(): Promise<void> {
+  const result = await openWorkspaceFolderPicker();
+  if (result.cancelled || !result.path) return;
+  setActionStatus('spin', 'Switching workspace…');
+  const info = await setWorkspacePath(result.path);
+  if (!info) {
+    setActionStatus('err', 'Could not switch workspace.');
+    return;
+  }
+  setWorkspaceFromServer(info);
+  refreshFileTreeViaBridge();
+  setActionStatus('ok', `Workspace: ${info.label || info.path}`);
+  await refreshCodeStatus();
+  await refreshRepoMap();
+}
+
 function bindCodeSection(): void {
   if (bindingsDone) return;
   bindingsDone = true;
 
   document.getElementById('brainCodeReindex')?.addEventListener('click', () => {
     void runReindex();
+  });
+
+  document.getElementById('brainCodeRemapRepo')?.addEventListener('click', () => {
+    void remapCodeRepo();
   });
 
   const searchEl = document.getElementById('brainCodeSearch') as HTMLInputElement | null;

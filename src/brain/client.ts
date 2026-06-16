@@ -170,10 +170,22 @@ export async function reindexBrainCode(): Promise<BrainCodeReindexResult | null>
 
 /** Install the optional git post-commit cascade hook in the active workspace. */
 export async function installBrainGitHook(): Promise<BrainCodeGitHookInstallResult | null> {
-  return brainFetch<BrainCodeGitHookInstallResult>('/api/brain/code/git-hook/install', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
+  const ok = await detectLocalServer();
+  if (!ok) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/brain/code/git-hook/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const body = (await res.json()) as BrainCodeGitHookInstallResult;
+    if (!res.ok) {
+      return { installed: false, error: body.error ?? `Install failed (${res.status})` };
+    }
+    return body;
+  } catch {
+    return null;
+  }
 }
 
 /** Remove the Minnow block from the workspace post-commit hook. */
