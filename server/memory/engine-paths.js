@@ -1,20 +1,6 @@
 /**
- * Engine disk paths for the memory feature (~/.minnow/memory/).
+ * Memory back-compat adapter: brain engine paths (MIN-B3).
+ * TRACKING: remove with memory adapter layer.
  */
 
-import path from 'node:path';
-import { getBackupsDir, getMemoryDir } from './paths.js';
-
-/**
- * Resolve injected paths for server/engine disk-touching modules.
- * @returns {{ rootDir: string, vectorsPath: string, proposalsPath: string, backupsDir: string }}
- */
-export function getEnginePaths() {
-  const rootDir = getMemoryDir();
-  return {
-    rootDir,
-    vectorsPath: path.join(rootDir, 'vectors.json'),
-    proposalsPath: path.join(rootDir, 'proposals.json'),
-    backupsDir: getBackupsDir(),
-  };
-}
+export { getEnginePaths } from '../brain/engine-paths.js';

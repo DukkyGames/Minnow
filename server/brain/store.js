@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readConfigJson } from '../config/store.js';
+import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { DEFAULT_EMBEDDINGS_CONFIG } from '../engine/embeddings.js';
 import {
   getBrainDir,
@@ -48,6 +48,8 @@ export async function loadBrainConfig() {
     config.memory?.embeddings && typeof config.memory.embeddings === 'object'
       ? config.memory.embeddings
       : {};
+  const memory =
+    config.memory && typeof config.memory === 'object' ? config.memory : {};
   const embeddings =
     raw.embeddings && typeof raw.embeddings === 'object'
       ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb, ...raw.embeddings }
@@ -55,8 +57,59 @@ export async function loadBrainConfig() {
   return {
     ...DEFAULT_BRAIN_STORE_CONFIG,
     ...raw,
+    enabled: raw.enabled ?? memory.enabled ?? true,
+    maxInjectCharsFull:
+      raw.maxInjectCharsFull ?? memory.maxInjectCharsFull ?? 4000,
+    maxInjectCharsLite:
+      raw.maxInjectCharsLite ?? memory.maxInjectCharsLite ?? 800,
     embeddings,
   };
+}
+
+/** Persist brain settings (and mirrored memory limits when provided). */
+export async function saveBrainConfig(partial) {
+  const config = (await readConfigJson('config.json')) ?? {};
+  const existing =
+    config.brain && typeof config.brain === 'object'
+      ? { ...DEFAULT_BRAIN_STORE_CONFIG, ...config.brain }
+      : { ...DEFAULT_BRAIN_STORE_CONFIG };
+  const memory =
+    config.memory && typeof config.memory === 'object' ? config.memory : {};
+
+  const partialEmb =
+    partial?.embeddings && typeof partial.embeddings === 'object'
+      ? partial.embeddings
+      : null;
+  const existingEmb =
+    existing.embeddings && typeof existing.embeddings === 'object'
+      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...existing.embeddings }
+      : { ...DEFAULT_EMBEDDINGS_CONFIG };
+
+  const nextEmb = partialEmb ? { ...existingEmb, ...partialEmb } : existingEmb;
+  if (
+    partialEmb &&
+    ((partialEmb.backend !== undefined && partialEmb.backend !== existingEmb.backend) ||
+      (partialEmb.modelId !== undefined && partialEmb.modelId !== existingEmb.modelId) ||
+      (partialEmb.providerId !== undefined && partialEmb.providerId !== existingEmb.providerId))
+  ) {
+    nextEmb.reindexNeeded = true;
+  }
+
+  config.brain = {
+    ...existing,
+    ...partial,
+    embeddings: nextEmb,
+  };
+
+  if (partialEmb) {
+    config.memory = {
+      ...memory,
+      embeddings: { ...(memory.embeddings ?? {}), ...nextEmb },
+    };
+  }
+
+  await writeConfigJson('config.json', config);
+  return config.brain;
 }
 
 /**

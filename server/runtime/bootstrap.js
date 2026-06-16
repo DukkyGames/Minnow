@@ -12,6 +12,7 @@ import { initLspConfig } from '../lsp/middleware.js';
 import { initMcpApi } from '../mcp/middleware.js';
 import { initServersApi } from '../servers/index.js';
 import { initMemoryApi } from '../memory/routes.js';
+import { initBrainApi } from '../brain/routes.js';
 import { ensureProviderRegistry } from '../providers/store.js';
 import { syncReefWidgetTemplates } from '../reef/sync-widgets.js';
 import { initPluginsApi } from '../tools/middleware.js';
@@ -32,6 +33,7 @@ export async function bootstrapMinnowRuntime() {
   const workspacePath = await initWorkspaceRoot();
   await ensureProviderRegistry();
   await initMemoryApi();
+  await initBrainApi();
   await initLspConfig();
   await initMcpApi();
   await initServersApi();

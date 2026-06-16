@@ -1,13 +1,6 @@
 /**
- * Memory adapter: binds ~/.minnow/memory paths into the shared retrieve engine.
+ * Memory back-compat adapter: re-exports brain retrieval (MIN-B3).
+ * TRACKING: remove when clients use /api/brain/retrieve (MIN-B4+).
  */
 
-import { bindRetrieveVectorStore } from '../engine/retrieve.js';
-import { createVectorStore } from '../engine/vector-store.js';
-import { getEnginePaths } from './engine-paths.js';
-import { isValidEntryId } from './paths.js';
-
-const vectorStore = createVectorStore(getEnginePaths, { isValidEntryId });
-bindRetrieveVectorStore(vectorStore);
-
-export * from '../engine/retrieve.js';
+export * from '../brain/retrieve.js';
