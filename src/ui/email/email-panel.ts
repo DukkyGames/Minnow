@@ -4,20 +4,16 @@
 
 import {
   createEmailAccount,
-  deleteEmailAccount,
-  draftEmailReply,
   fetchEmailAccounts,
-  fetchEmailMessages,
-  fetchEmailThread,
-  sendEmailMessage,
-  syncEmailFolder,
   testEmailAccount,
-  triageEmailMessage,
   updateEmailAccount,
   type EmailAccount,
-  type EmailMessage,
 } from '../../email/client';
+import { subscribeEmailEvents } from '../../email/client-ext';
 import { mountOAuthConnectPanel } from '../oauth-connect';
+import { renderEmailDashboard } from './email-dashboard';
+import { renderEmailLayout } from './email-layout';
+import { renderEmailAutomations } from './email-automations';
 
 export interface EmailPanelOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
@@ -32,19 +28,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function formatWhen(iso?: string): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
-}
-
-function urgencyClass(urgency?: string): string {
-  if (urgency === 'high') return 'email-urgency-high';
-  if (urgency === 'low') return 'email-urgency-low';
-  return 'email-urgency-normal';
 }
 
 /** Expand the IMAP setup form and scroll it into view. */
@@ -217,149 +200,9 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   mount.appendChild(card);
 }
 
-function renderMessageRow(
-  message: EmailMessage,
-  onOpen: (message: EmailMessage) => void,
-): HTMLElement {
-  const row = el('button', 'email-inbox-row');
-  row.type = 'button';
+type EmailViewMode = 'dashboard' | 'mail' | 'automations' | 'setup';
 
-  const main = el('div', 'email-inbox-main');
-  const subject = el('span', 'email-inbox-subject', message.subject || '(no subject)');
-  const from = el('span', 'email-inbox-from', message.from || 'Unknown sender');
-  main.appendChild(subject);
-  main.appendChild(from);
-
-  if (message.triage?.summary) {
-    main.appendChild(el('span', 'email-inbox-summary', message.triage.summary));
-  }
-
-  const meta = el('div', 'email-inbox-meta');
-  meta.appendChild(el('span', 'email-inbox-date', formatWhen(message.date)));
-
-  if (message.triage?.urgency) {
-    const badge = el('span', `email-urgency-badge ${urgencyClass(message.triage.urgency)}`);
-    badge.textContent = message.triage.urgency;
-    meta.appendChild(badge);
-  }
-
-  if (message.triage?.tags?.length) {
-    const tags = el('span', 'email-inbox-tags', message.triage.tags.join(' · '));
-    meta.appendChild(tags);
-  }
-
-  row.appendChild(main);
-  row.appendChild(meta);
-  row.addEventListener('click', () => onOpen(message));
-  return row;
-}
-
-async function renderThreadView(
-  mount: HTMLElement,
-  account: EmailAccount,
-  threadId: string,
-  options: EmailPanelOptions,
-  onBack: () => void,
-): Promise<void> {
-  mount.replaceChildren();
-  const header = el('div', 'email-thread-hdr');
-  const backBtn = el('button', 'email-btn', '← Inbox') as HTMLButtonElement;
-  backBtn.type = 'button';
-  backBtn.addEventListener('click', onBack);
-  header.appendChild(backBtn);
-  mount.appendChild(header);
-
-  try {
-    const { messages } = await fetchEmailThread(account.id, threadId);
-    const stack = el('div', 'email-thread-stack');
-
-    for (const message of messages) {
-      const card = el('article', 'email-thread-card');
-      card.appendChild(el('h4', 'email-thread-subject', message.subject || '(no subject)'));
-      const meta = el('p', 'email-thread-meta');
-      meta.textContent = `${message.from} · ${formatWhen(message.date)}`;
-      card.appendChild(meta);
-
-      if (message.triage) {
-        const triage = el('div', 'email-thread-triage');
-        triage.appendChild(el('p', '', message.triage.summary));
-        if (message.triage.tags.length) {
-          triage.appendChild(el('span', 'email-inbox-tags', message.triage.tags.join(' · ')));
-        }
-        card.appendChild(triage);
-      }
-
-      card.appendChild(el('div', 'email-thread-body', message.bodyText ?? message.bodyPreview));
-      stack.appendChild(card);
-    }
-
-    mount.appendChild(stack);
-
-    const composer = el('section', 'email-composer');
-    composer.appendChild(el('h4', '', 'Reply draft'));
-    const bodyArea = el('textarea', 'email-composer-body') as HTMLTextAreaElement;
-    bodyArea.rows = 8;
-    composer.appendChild(bodyArea);
-
-    const draftBtn = el('button', 'email-btn', 'Generate draft') as HTMLButtonElement;
-    draftBtn.type = 'button';
-    draftBtn.addEventListener('click', async () => {
-      try {
-        const draft = await draftEmailReply({ accountId: account.id, threadId });
-        bodyArea.value = draft.body;
-        options.onStatus?.('ok', 'Draft ready — review before sending');
-      } catch (err) {
-        options.onStatus?.('err', err instanceof Error ? err.message : 'Draft failed');
-      }
-    });
-
-    const sendBtn = el('button', 'email-btn email-btn-primary', 'Send…') as HTMLButtonElement;
-    sendBtn.type = 'button';
-    sendBtn.disabled = !account.smtp?.host;
-    sendBtn.addEventListener('click', async () => {
-      if (!account.smtp?.host) {
-        options.onStatus?.('err', 'Configure SMTP on this account to send');
-        return;
-      }
-      const latest = messages[messages.length - 1];
-      const draft = await draftEmailReply({ accountId: account.id, threadId });
-      if (!bodyArea.value.trim()) {
-        bodyArea.value = draft.body;
-      }
-      const ok = window.confirm(
-        `Send this email to ${draft.to}?\n\nSubject: ${draft.subject}\n\nThis cannot be undone.`,
-      );
-      if (!ok) return;
-
-      try {
-        await sendEmailMessage({
-          accountId: account.id,
-          to: draft.to,
-          subject: draft.subject,
-          body: bodyArea.value,
-          inReplyTo: latest?.messageId,
-          references: draft.references,
-          confirmed: true,
-        });
-        options.onStatus?.('ok', 'Email sent');
-      } catch (err) {
-        options.onStatus?.('err', err instanceof Error ? err.message : 'Send failed');
-      }
-    });
-
-    const actions = el('div', 'email-actions');
-    actions.appendChild(draftBtn);
-    actions.appendChild(sendBtn);
-    composer.appendChild(actions);
-    mount.appendChild(composer);
-  } catch (err) {
-    mount.appendChild(
-      el('p', 'email-empty', err instanceof Error ? err.message : 'Failed to load thread'),
-    );
-  }
-}
-
-/** Main panel entry — accounts, inbox, and thread drill-down. */
+/** Main panel entry — dashboard default, mail view, automations. */
 export async function renderEmailPanel(
   mount: HTMLElement,
   options: EmailPanelOptions = {},
@@ -406,13 +249,15 @@ export async function renderEmailPanel(
   }
 
   let accountFormMode: 'none' | 'add' | 'edit' = 'none';
+  let viewMode: EmailViewMode = 'dashboard';
+  let pendingThreadId: string | undefined;
+  let unsubscribeEvents: (() => void) | undefined;
 
   let activeAccount = accounts.find((row) => row.isDefault) ?? accounts[0];
-  let activeFolder = activeAccount.folders[0] ?? 'INBOX';
-  let messages: EmailMessage[] = [];
 
-  const shell = el('div', 'email-shell');
-  const toolbar = el('div', 'email-toolbar');
+  const shell = el('div', 'email-shell email-shell-agent');
+  const chrome = el('header', 'email-chrome');
+  const body = el('div', 'email-body email-body-fill');
 
   const accountSelect = el('select', 'email-select') as HTMLSelectElement;
   for (const account of accounts) {
@@ -422,79 +267,117 @@ export async function renderEmailPanel(
     opt.selected = account.id === activeAccount.id;
     accountSelect.appendChild(opt);
   }
+  chrome.appendChild(accountSelect);
 
-  const folderSelect = el('select', 'email-select') as HTMLSelectElement;
-  const refreshFolders = () => {
-    folderSelect.replaceChildren();
-    for (const folder of activeAccount.folders) {
-      const opt = el('option') as HTMLOptionElement;
-      opt.value = folder;
-      opt.textContent = folder;
-      opt.selected = folder === activeFolder;
-      folderSelect.appendChild(opt);
-    }
-  };
-  refreshFolders();
+  const dashBtn = el('button', 'email-chrome-tab is-active', 'Dashboard') as HTMLButtonElement;
+  const mailBtn = el('button', 'email-chrome-tab', 'Mail') as HTMLButtonElement;
+  const autoBtn = el('button', 'email-chrome-tab', 'Automations') as HTMLButtonElement;
+  dashBtn.type = 'button';
+  mailBtn.type = 'button';
+  autoBtn.type = 'button';
 
-  const syncBtn = el('button', 'email-btn', 'Sync') as HTMLButtonElement;
-  syncBtn.type = 'button';
-  const triageBtn = el('button', 'email-btn', 'Triage visible') as HTMLButtonElement;
-  triageBtn.type = 'button';
-  const testBtn = el('button', 'email-btn', 'Test IMAP') as HTMLButtonElement;
+  const settingsBtn = el('button', 'email-btn', 'Accounts') as HTMLButtonElement;
+  settingsBtn.type = 'button';
+  const testBtn = el('button', 'email-btn', 'Test') as HTMLButtonElement;
   testBtn.type = 'button';
-  const addAccountBtn = el('button', 'email-btn', 'Add account') as HTMLButtonElement;
-  addAccountBtn.type = 'button';
-  const editAccountBtn = el('button', 'email-btn', 'Edit account') as HTMLButtonElement;
-  editAccountBtn.type = 'button';
-  const removeAccountBtn = el('button', 'email-btn email-btn-danger', 'Remove account') as HTMLButtonElement;
-  removeAccountBtn.type = 'button';
 
-  toolbar.appendChild(accountSelect);
-  toolbar.appendChild(folderSelect);
-  toolbar.appendChild(syncBtn);
-  toolbar.appendChild(triageBtn);
-  toolbar.appendChild(testBtn);
-  toolbar.appendChild(addAccountBtn);
-  toolbar.appendChild(editAccountBtn);
-  toolbar.appendChild(removeAccountBtn);
-  shell.appendChild(toolbar);
+  chrome.appendChild(dashBtn);
+  chrome.appendChild(mailBtn);
+  chrome.appendChild(autoBtn);
+  chrome.appendChild(settingsBtn);
+  chrome.appendChild(testBtn);
 
-  const body = el('div', 'email-body');
+  shell.appendChild(chrome);
   shell.appendChild(body);
   mount.replaceChildren(shell);
 
-  const setToolbarFormMode = (formOpen: boolean) => {
-    syncBtn.disabled = formOpen;
-    triageBtn.disabled = formOpen;
-    testBtn.disabled = formOpen;
-    removeAccountBtn.disabled = formOpen;
-    accountSelect.disabled = formOpen;
-    folderSelect.disabled = formOpen;
-    addAccountBtn.disabled = accountFormMode === 'edit';
-    editAccountBtn.disabled = accountFormMode === 'add';
+  const setActiveTab = (mode: EmailViewMode) => {
+    viewMode = mode;
+    dashBtn.classList.toggle('is-active', mode === 'dashboard');
+    mailBtn.classList.toggle('is-active', mode === 'mail');
+    autoBtn.classList.toggle('is-active', mode === 'automations');
   };
 
-  const closeAccountForm = () => {
-    accountFormMode = 'none';
-    addAccountBtn.textContent = 'Add account';
-    editAccountBtn.textContent = 'Edit account';
-    setToolbarFormMode(false);
-    void loadInbox();
-  };
-
-  const setAccountFormMode = (mode: 'none' | 'add' | 'edit') => {
-    if (mode === 'none') {
-      closeAccountForm();
+  const renderView = async () => {
+    if (accountFormMode !== 'none') {
       return;
     }
+    body.replaceChildren(el('p', 'email-loading', 'Loading…'));
+    if (viewMode === 'dashboard') {
+      await renderEmailDashboard(body, {
+        account: activeAccount,
+        onStatus: options.onStatus,
+        onRefresh: () => void renderView(),
+        onOpenThread: (threadId) => {
+          pendingThreadId = threadId;
+          setActiveTab('mail');
+          void renderView();
+        },
+        onOpenMail: () => {
+          pendingThreadId = undefined;
+          setActiveTab('mail');
+          void renderView();
+        },
+      });
+      return;
+    }
+    if (viewMode === 'mail') {
+      await renderEmailLayout(body, {
+        account: activeAccount,
+        initialThreadId: pendingThreadId,
+        onStatus: options.onStatus,
+      });
+      pendingThreadId = undefined;
+      return;
+    }
+    if (viewMode === 'automations') {
+      await renderEmailAutomations(body, {
+        account: activeAccount,
+        onStatus: options.onStatus,
+        onClose: () => {
+          setActiveTab('dashboard');
+          void renderView();
+        },
+      });
+    }
+  };
 
+  dashBtn.addEventListener('click', () => {
+    setActiveTab('dashboard');
+    void renderView();
+  });
+  mailBtn.addEventListener('click', () => {
+    setActiveTab('mail');
+    void renderView();
+  });
+  autoBtn.addEventListener('click', () => {
+    setActiveTab('automations');
+    void renderView();
+  });
+
+  accountSelect.addEventListener('change', () => {
+    const next = accounts.find((row) => row.id === accountSelect.value);
+    if (!next) return;
+    activeAccount = next;
+    void renderView();
+  });
+
+  testBtn.addEventListener('click', async () => {
+    testBtn.disabled = true;
+    try {
+      await testEmailAccount(activeAccount.id);
+      options.onStatus?.('ok', 'Connection OK');
+    } catch (err) {
+      options.onStatus?.('err', err instanceof Error ? err.message : 'Test failed');
+    } finally {
+      testBtn.disabled = false;
+    }
+  });
+
+  const openAccountSetup = (mode: 'add' | 'edit') => {
     accountFormMode = mode;
-    addAccountBtn.textContent = mode === 'add' ? 'Cancel' : 'Add account';
-    editAccountBtn.textContent = mode === 'edit' ? 'Cancel' : 'Edit account';
-    setToolbarFormMode(true);
-
+    body.replaceChildren();
     if (mode === 'add') {
-      body.replaceChildren();
       const oauthMount = el('div', 'email-oauth-mount');
       body.appendChild(oauthMount);
       const formMount = el('div', 'email-manual-mount email-manual-mount--hidden');
@@ -503,145 +386,53 @@ export async function renderEmailPanel(
         mount: oauthMount,
         onStatus: options.onStatus,
         showImapAlternative: true,
-        onShowImap: () => {
-          revealImapSetup(formMount);
-        },
-        onChange: () => {
-          void renderEmailPanel(mount, options);
-        },
+        onShowImap: () => revealImapSetup(formMount),
+        onChange: () => void renderEmailPanel(mount, options),
       });
       renderAccountForm(formMount, {
         ...options,
         title: 'Connect with IMAP',
         isFirstAccount: false,
-        onSaved: () => {
-          void renderEmailPanel(mount, options);
+        onSaved: () => void renderEmailPanel(mount, options),
+        onCancel: () => {
+          accountFormMode = 'none';
+          void renderView();
         },
-        onCancel: closeAccountForm,
       });
       return;
     }
-
     renderAccountForm(body, {
       ...options,
       title: 'Edit email account',
       existing: activeAccount,
-      onSaved: () => {
-        void renderEmailPanel(mount, options);
+      onSaved: () => void renderEmailPanel(mount, options),
+      onCancel: () => {
+        accountFormMode = 'none';
+        void renderView();
       },
-      onCancel: closeAccountForm,
     });
   };
 
-  const loadInbox = async () => {
-    body.replaceChildren(el('p', 'email-loading', 'Loading messages…'));
-    try {
-      const result = await fetchEmailMessages(activeAccount.id, {
-        folder: activeFolder,
-        limit: 50,
-      });
-      messages = result.messages;
-      const list = el('div', 'email-inbox-list');
-      if (messages.length === 0) {
-        list.appendChild(
-          el('p', 'email-empty', 'No cached messages — click Sync to fetch from IMAP.'),
-        );
-      } else {
-        for (const message of messages) {
-          list.appendChild(
-            renderMessageRow(message, (row) => {
-              void renderThreadView(body, activeAccount, row.threadId, options, () => {
-                void loadInbox();
-              });
-            }),
-          );
-        }
-      }
-      body.replaceChildren(list);
-    } catch (err) {
-      body.replaceChildren(
-        el('p', 'email-empty is-err', err instanceof Error ? err.message : 'Inbox load failed'),
-      );
-    }
-  };
-
-  accountSelect.addEventListener('change', () => {
-    const next = accounts.find((row) => row.id === accountSelect.value);
-    if (!next) return;
-    activeAccount = next;
-    activeFolder = next.folders[0] ?? 'INBOX';
-    refreshFolders();
-    void loadInbox();
-  });
-
-  folderSelect.addEventListener('change', () => {
-    activeFolder = folderSelect.value;
-    void loadInbox();
-  });
-
-  syncBtn.addEventListener('click', async () => {
-    syncBtn.disabled = true;
-    try {
-      const result = await syncEmailFolder(activeAccount.id, activeFolder);
-      options.onStatus?.('ok', `Synced ${result.synced} messages`);
-      await loadInbox();
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Sync failed');
-    } finally {
-      syncBtn.disabled = false;
-    }
-  });
-
-  triageBtn.addEventListener('click', async () => {
-    triageBtn.disabled = true;
-    try {
-      for (const message of messages.slice(0, 10)) {
-        await triageEmailMessage(activeAccount.id, message.id);
-      }
-      options.onStatus?.('ok', 'Triage updated');
-      await loadInbox();
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Triage failed');
-    } finally {
-      triageBtn.disabled = false;
-    }
-  });
-
-  testBtn.addEventListener('click', async () => {
-    testBtn.disabled = true;
-    try {
-      await testEmailAccount(activeAccount.id);
-      options.onStatus?.('ok', 'IMAP connection OK');
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'IMAP test failed');
-    } finally {
-      testBtn.disabled = false;
-    }
-  });
-
-  addAccountBtn.addEventListener('click', () => {
-    setAccountFormMode(accountFormMode === 'add' ? 'none' : 'add');
-  });
-
-  editAccountBtn.addEventListener('click', () => {
-    setAccountFormMode(accountFormMode === 'edit' ? 'none' : 'edit');
-  });
-
-  removeAccountBtn.addEventListener('click', async () => {
-    const label = activeAccount.label || activeAccount.username;
-    if (!window.confirm(`Remove email account "${label}"? Cached messages for this account will remain until cleared.`)) {
+  settingsBtn.addEventListener('click', () => {
+    if (accountFormMode === 'edit') {
+      accountFormMode = 'none';
+      void renderView();
       return;
     }
-    removeAccountBtn.disabled = true;
-    try {
-      await deleteEmailAccount(activeAccount.id);
-      options.onStatus?.('ok', 'Account removed');
-      void renderEmailPanel(mount, options);
-    } catch (err) {
-      options.onStatus?.('err', err instanceof Error ? err.message : 'Remove failed');
-      removeAccountBtn.disabled = false;
+    openAccountSetup('edit');
+  });
+
+  unsubscribeEvents?.();
+  unsubscribeEvents = subscribeEmailEvents((type, payload) => {
+    if (payload.accountId && payload.accountId !== activeAccount.id) {
+      return;
+    }
+    if (type === 'summary_updated' || type === 'message_new') {
+      if (viewMode === 'dashboard') {
+        void renderView();
+      }
     }
   });
 
-  await loadInbox();
+  await renderView();
 }

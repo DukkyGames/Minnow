@@ -1,11 +1,17 @@
 /**
- * Agent tools: list_mail and draft_reply.
+ * Agent tools: list_mail, draft_reply, summarize_inbox, generate_reply_variants, email_action.
  */
 
 import { resolveDefaultAccountId } from './accounts.js';
 import { listCachedMessages, listCachedThread } from './cache.js';
 import { MAX_TOOL_LIMIT } from './imap.js';
 import { draftReply } from './smtp.js';
+import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import {
+  archiveMessage,
+  deleteMessage,
+  setMessageFlags,
+} from './mail-actions.js';
 
 /**
  * @param {Record<string, unknown>} args
@@ -91,4 +97,101 @@ export async function toolDraftReply(args) {
     '',
     draft.note,
   ].join('\n');
+}
+
+/**
+ * @param {Record<string, unknown>} args
+ */
+export async function toolSummarizeInbox(args) {
+  const accountId =
+    typeof args.accountId === 'string' && args.accountId.trim()
+      ? args.accountId.trim()
+      : await resolveDefaultAccountId();
+
+  if (!accountId) {
+    return 'Error: no email accounts configured';
+  }
+
+  const summary = await getOrBuildInboxSummary(accountId);
+  const lines = [
+    summary.text,
+    '',
+    'Highlights:',
+    ...summary.highlights.map(
+      (row) =>
+        `- [${row.urgency}] ${row.subject} — ${row.summary} (thread=${row.threadId})`,
+    ),
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * @param {Record<string, unknown>} args
+ */
+export async function toolGenerateReplyVariants(args) {
+  const threadId = String(args.threadId ?? '').trim();
+  if (!threadId) {
+    return 'Error: threadId is required';
+  }
+
+  const accountId =
+    typeof args.accountId === 'string' && args.accountId.trim()
+      ? args.accountId.trim()
+      : await resolveDefaultAccountId();
+
+  if (!accountId) {
+    return 'Error: no email accounts configured';
+  }
+
+  const result = await generateReplyVariants(accountId, threadId, {
+    instructions: typeof args.instructions === 'string' ? args.instructions : undefined,
+    messageKey: typeof args.messageId === 'string' ? args.messageId : undefined,
+  });
+
+  return result.variants
+    .map((row) => `- ${row.label}: ${row.body.slice(0, 200)}${row.body.length > 200 ? '…' : ''}`)
+    .join('\n');
+}
+
+/**
+ * @param {Record<string, unknown>} args
+ */
+export async function toolEmailAction(args) {
+  const action = String(args.action ?? '').trim().toLowerCase();
+  const messageId = String(args.messageId ?? '').trim();
+  if (!action || !messageId) {
+    return 'Error: action and messageId are required';
+  }
+
+  const accountId =
+    typeof args.accountId === 'string' && args.accountId.trim()
+      ? args.accountId.trim()
+      : await resolveDefaultAccountId();
+
+  if (!accountId) {
+    return 'Error: no email accounts configured';
+  }
+
+  if (action === 'archive') {
+    await archiveMessage(accountId, messageId);
+    return `Archived message ${messageId}`;
+  }
+  if (action === 'delete') {
+    await deleteMessage(accountId, messageId);
+    return `Deleted message ${messageId}`;
+  }
+  if (action === 'read') {
+    await setMessageFlags(accountId, messageId, { seen: true });
+    return `Marked read: ${messageId}`;
+  }
+  if (action === 'unread') {
+    await setMessageFlags(accountId, messageId, { seen: false });
+    return `Marked unread: ${messageId}`;
+  }
+  if (action === 'flag') {
+    await setMessageFlags(accountId, messageId, { flagged: true });
+    return `Flagged: ${messageId}`;
+  }
+
+  return `Error: unsupported action "${action}" (use archive, delete, read, unread, flag)`;
 }

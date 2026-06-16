@@ -7,6 +7,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { readAccountPassword, getEmailAccount } from './accounts.js';
 import { computeThreadId, normalizeMessageId } from './threads.js';
+import { imapFlagsToObject } from './imap-actions.js';
 import {
   buildBodyPreview,
   decodeMimeHeader,
@@ -14,6 +15,7 @@ import {
   formatFromAddress,
   stripHtmlToText,
 } from './parse-body.js';
+import { sanitizeEmailHtml } from './sanitize-html.js';
 import { mergeMessagesIntoCache } from './cache.js';
 import { withImapErrors } from './imap-errors.js';
 
@@ -111,7 +113,7 @@ export async function listImapFolders(accountId) {
 /**
  * Parse a raw RFC822 source into normalized metadata.
  * @param {Buffer} source
- * @param {{ uid: number, folder: string }} context
+ * @param {{ uid: number, folder: string, flags?: Set<string> | string[] }} context
  */
 export async function parseRawMessage(source, context) {
   const parsed = await simpleParser(source);
@@ -132,8 +134,10 @@ export async function parseRawMessage(source, context) {
   );
 
   const plain = parsed.text ?? '';
-  const htmlText = parsed.html ? stripHtmlToText(parsed.html) : '';
+  const rawHtml = parsed.html ? String(parsed.html) : '';
+  const htmlText = rawHtml ? stripHtmlToText(rawHtml) : '';
   const bodyText = plain.trim() || htmlText;
+  const bodyHtml = rawHtml ? sanitizeEmailHtml(rawHtml) : undefined;
   const bodyPreview = buildBodyPreview(bodyText);
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
 
@@ -166,11 +170,13 @@ export async function parseRawMessage(source, context) {
     date,
     bodyPreview,
     bodyText,
+    bodyHtml,
     bodyHash,
     hasAttachments: attachments.length > 0,
     attachments,
     inReplyTo,
     references,
+    flags: imapFlagsToObject(context.flags),
   };
 }
 
@@ -212,16 +218,18 @@ export async function syncFolderMessages(accountId, options = {}) {
 
         for (const uid of pageUids) {
           highestUid = Math.max(highestUid, uid);
-          const downloaded = await client.download(uid.toString(), undefined, { uid: true });
-          if (!downloaded?.content) {
+          const downloaded = await client.fetchOne(String(uid), { uid: true, flags: true, source: true });
+          if (!downloaded?.source) {
             continue;
           }
-          const chunks = [];
-          for await (const chunk of downloaded.content) {
-            chunks.push(chunk);
-          }
-          const source = Buffer.concat(chunks);
-          const row = await parseRawMessage(source, { uid, folder });
+          const source = Buffer.isBuffer(downloaded.source)
+            ? downloaded.source
+            : Buffer.from(String(downloaded.source));
+          const row = await parseRawMessage(source, {
+            uid,
+            folder,
+            flags: downloaded.flags,
+          });
           parsedMessages.push(row);
         }
       } finally {

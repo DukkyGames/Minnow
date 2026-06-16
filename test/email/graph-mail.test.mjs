@@ -29,4 +29,25 @@ describe('mapGraphMessage', () => {
     assert.match(row.from, /pat@contoso\.com/);
     assert.equal(row.bodyText, 'Full message body');
   });
+
+  test('stores HTML body when Graph returns text/html content', () => {
+    const row = mapGraphMessage(
+      {
+        id: 'AAMkHTML=',
+        subject: 'Styled notice',
+        receivedDateTime: '2024-06-01T09:30:00Z',
+        body: {
+          contentType: 'html',
+          content: '<p>Hello <strong>team</strong></p>',
+        },
+        from: { emailAddress: { address: 'notify@contoso.com' } },
+        toRecipients: [],
+      },
+      'inbox',
+    );
+
+    assert.match(String(row.bodyHtml), /Hello/);
+    assert.match(String(row.bodyHtml), /team/);
+    assert.match(row.bodyText, /Hello/);
+  });
 });

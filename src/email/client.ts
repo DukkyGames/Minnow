@@ -32,15 +32,58 @@ export interface EmailMessage {
   date: string;
   bodyPreview: string;
   bodyText?: string;
+  bodyHtml?: string;
   bodyHash?: string;
   hasAttachments: boolean;
   attachments?: Array<{ filename: string; contentType: string; size: number }>;
+  flags?: {
+    seen: boolean;
+    flagged: boolean;
+    answered?: boolean;
+  };
+  replyVariants?: ReplyVariant[];
   triage?: {
     summary: string;
     tags: string[];
     urgency: 'low' | 'normal' | 'high';
     cachedAt: string;
   };
+}
+
+export interface ReplyVariant {
+  id: string;
+  label: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface EmailInboxSummary {
+  generatedAt: string;
+  text: string;
+  stats: { high: number; normal: number; low: number };
+  unread: number;
+  highlights: Array<{
+    threadId: string;
+    messageId: string;
+    subject: string;
+    from: string;
+    urgency: string;
+    summary: string;
+    unseen: boolean;
+    replyVariants: ReplyVariant[];
+  }>;
+}
+
+export interface EmailAutomation {
+  id: string;
+  name: string;
+  enabled: boolean;
+  accountId: string;
+  trigger: 'on_new_message' | 'on_high_urgency' | 'on_tag_match';
+  action: 'triage' | 'generate_variants' | 'notify' | 'run_scheduler_job';
+  config?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EmailDraft {
@@ -119,12 +162,14 @@ export async function syncEmailFolder(
 
 export async function fetchEmailMessages(
   accountId: string,
-  query?: { folder?: string; offset?: number; limit?: number },
+  query?: { folder?: string; offset?: number; limit?: number; query?: string; filter?: string },
 ): Promise<{ messages: EmailMessage[]; total: number }> {
   const params = new URLSearchParams();
   if (query?.folder) params.set('folder', query.folder);
   if (query?.offset !== undefined) params.set('offset', String(query.offset));
   if (query?.limit !== undefined) params.set('limit', String(query.limit));
+  if (query?.query) params.set('query', query.query);
+  if (query?.filter) params.set('filter', query.filter);
   const qs = params.toString();
   const res = await fetch(
     `/api/email/accounts/${encodeURIComponent(accountId)}/messages${qs ? `?${qs}` : ''}`,

@@ -1,11 +1,10 @@
 /**
- * MinnowOS Email app — read-only IMAP triage with draft/send.
+ * MinnowOS Email app — agent-first inbox dashboard and mail client.
  */
 
 import '../styles/email.css';
 import '../styles/oauth-connect.css';
 
-import { createAppIcon } from '../os/icons';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
 import { renderEmailPanel } from './email/email-panel';
@@ -43,16 +42,9 @@ async function refreshPanel(): Promise<void> {
   await renderEmailPanel(body, { onStatus: setPanelStatus });
 }
 
-function mountHeaderIcon(): void {
-  const slot = document.getElementById('emailPageIcon');
-  if (!slot || slot.childElementCount > 0) return;
-  slot.appendChild(createAppIcon('email', { size: 22 }));
-}
-
 export function initEmailPage(): void {
   if (initialized) return;
   initialized = true;
-  mountHeaderIcon();
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash === '#/email' || window.location.hash.startsWith('#/app/email')) {
     void openEmail();
@@ -67,7 +59,6 @@ export async function openEmail(): Promise<void> {
   if (!isOsShellEnabled()) {
     window.location.hash = '#/email';
   }
-  mountHeaderIcon();
   await refreshPanel();
 }
 

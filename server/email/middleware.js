@@ -18,7 +18,23 @@ import {
   testEmailConnection,
 } from './transport.js';
 import { triageMessage } from './triage.js';
-import { draftReply, sendEmail } from './smtp.js';
+import { draftReply, sendEmail, sendReplyVariant } from './smtp.js';
+import {
+  setMessageFlags,
+  moveMessage,
+  archiveMessage,
+  deleteMessage,
+  bulkMessageAction,
+} from './mail-actions.js';
+import { getOrBuildInboxSummary, generateReplyVariants } from './agent.js';
+import { handleEmailEventsSse } from './events.js';
+import {
+  listAutomations,
+  createAutomation,
+  updateAutomation,
+  deleteAutomation,
+} from './automations.js';
+import { getFolderUnreadCounts } from './cache.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -97,6 +113,52 @@ export function createEmailMiddleware() {
         return;
       }
 
+      if (url === '/api/email/events' && req.method === 'GET') {
+        handleEmailEventsSse(req, res);
+        return;
+      }
+
+      if (url === '/api/email/automations' && req.method === 'GET') {
+        const rules = await listAutomations();
+        sendJson(res, 200, { rules });
+        return;
+      }
+
+      if (url === '/api/email/automations' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const rule = await createAutomation(body);
+        sendJson(res, 201, { rule });
+        return;
+      }
+
+      const automationMatch = url.match(/^\/api\/email\/automations\/([^/]+)$/);
+      if (automationMatch) {
+        const ruleId = decodeURIComponent(automationMatch[1]);
+        if (req.method === 'PUT') {
+          const body = await readJsonBody(req);
+          const rule = await updateAutomation(ruleId, body);
+          sendJson(res, 200, { rule });
+          return;
+        }
+        if (req.method === 'DELETE') {
+          await deleteAutomation(ruleId);
+          sendJson(res, 200, { deleted: true });
+          return;
+        }
+      }
+
+      if (url === '/api/email/messages/bulk' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        const result = await bulkMessageAction(accountId, body);
+        sendJson(res, 200, result);
+        return;
+      }
+
       if (url === '/api/email/accounts' && req.method === 'GET') {
         const accounts = await listEmailAccounts();
         sendJson(res, 200, { accounts: accounts.map(redactAccount) });
@@ -145,8 +207,16 @@ export function createEmailMiddleware() {
           const offset = Number(params.get('offset') ?? 0);
           const limit = Number(params.get('limit') ?? 50);
           const query = params.get('query') ?? undefined;
-          const result = await listCachedMessages(accountId, { folder, offset, limit, query });
+          const filter = params.get('filter') ?? undefined;
+          const result = await listCachedMessages(accountId, { folder, offset, limit, query, filter });
           sendJson(res, 200, result);
+          return;
+        }
+
+        if (tail === 'summary' && req.method === 'GET') {
+          const summary = await getOrBuildInboxSummary(accountId);
+          const unreadByFolder = await getFolderUnreadCounts(accountId);
+          sendJson(res, 200, { summary, unreadByFolder });
           return;
         }
 
@@ -187,6 +257,113 @@ export function createEmailMiddleware() {
         }
         const triage = await triageMessage(accountId, messageKey);
         sendJson(res, 200, { triage });
+        return;
+      }
+
+      const flagsMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/flags$/);
+      if (flagsMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(flagsMatch[1]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        const result = await setMessageFlags(accountId, messageKey, {
+          seen: body.seen,
+          flagged: body.flagged,
+        });
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const moveMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/move$/);
+      if (moveMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(moveMatch[1]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        const destFolder = String(body.destFolder ?? '').trim();
+        if (!accountId || !destFolder) {
+          sendJson(res, 400, { error: 'accountId and destFolder are required' });
+          return;
+        }
+        const result = await moveMessage(accountId, messageKey, destFolder);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const archiveMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/archive$/);
+      if (archiveMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(archiveMatch[1]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId is required' });
+          return;
+        }
+        const result = await archiveMessage(accountId, messageKey);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const variantsMatch = url.match(/^\/api\/email\/messages\/([^/]+)\/reply-variants$/);
+      if (variantsMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(variantsMatch[1]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        const threadId = String(body.threadId ?? '').trim();
+        if (!accountId || !threadId) {
+          sendJson(res, 400, { error: 'accountId and threadId are required' });
+          return;
+        }
+        const result = await generateReplyVariants(accountId, threadId, {
+          messageKey,
+          instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+        });
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const variantSendMatch = url.match(
+        /^\/api\/email\/messages\/([^/]+)\/reply-variants\/([^/]+)\/send$/,
+      );
+      if (variantSendMatch && req.method === 'POST') {
+        const messageKey = decodeURIComponent(variantSendMatch[1]);
+        const variantId = decodeURIComponent(variantSendMatch[2]);
+        const body = await readJsonBody(req);
+        const accountId = String(body.accountId ?? '').trim();
+        const threadId = String(body.threadId ?? '').trim();
+        if (!accountId || !threadId) {
+          sendJson(res, 400, { error: 'accountId and threadId are required' });
+          return;
+        }
+        if (!body.confirmed) {
+          sendJson(res, 400, { error: 'Send requires explicit user confirmation (confirmed: true)' });
+          return;
+        }
+        const result = await sendReplyVariant({
+          accountId,
+          threadId,
+          messageKey,
+          variantId,
+          confirmed: true,
+        });
+        sendJson(res, 200, result);
+        return;
+      }
+
+      const deleteMatch = url.match(/^\/api\/email\/messages\/([^/]+)$/);
+      if (deleteMatch && req.method === 'DELETE') {
+        const messageKey = decodeURIComponent(deleteMatch[1]);
+        const params = parseQuery(req.url ?? '');
+        const accountId = String(params.get('accountId') ?? '').trim();
+        if (!accountId) {
+          sendJson(res, 400, { error: 'accountId query param is required' });
+          return;
+        }
+        const permanent = params.get('permanent') === '1';
+        const result = await deleteMessage(accountId, messageKey, { permanent });
+        sendJson(res, 200, result);
         return;
       }
 

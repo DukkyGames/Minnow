@@ -8,8 +8,15 @@ import { getEmailAccount } from './accounts.js';
 import { getValidAccessToken } from '../oauth/flow.js';
 import { mergeMessagesIntoCache } from './cache.js';
 import { computeThreadId, normalizeMessageId } from './threads.js';
-import { buildBodyPreview } from './parse-body.js';
+import { buildBodyPreview, stripHtmlToText } from './parse-body.js';
+import { sanitizeEmailHtml } from './sanitize-html.js';
 import { DEFAULT_FETCH_LIMIT } from './imap.js';
+import {
+  getCachedMessage,
+  removeMessageFromCache,
+  updateMessageFlags,
+  updateMessageFolder,
+} from './cache.js';
 
 /**
  * Build an authenticated Gmail client for an OAuth email account.
@@ -38,31 +45,53 @@ function decodeGmailBody(data) {
 }
 
 /**
- * Extract plain text from Gmail message payload.
+ * Walk all MIME parts depth-first.
  * @param {import('googleapis').gmail_v1.Schema$MessagePart | undefined} part
+ * @param {(part: import('googleapis').gmail_v1.Schema$MessagePart) => void} visit
  */
-function extractBodyFromPart(part) {
+function walkMimeParts(part, visit) {
   if (!part) {
-    return '';
+    return;
   }
-  if (part.mimeType === 'text/plain' && part.body?.data) {
-    return decodeGmailBody(part.body.data);
-  }
-  if (part.mimeType === 'text/html' && part.body?.data) {
-    const html = decodeGmailBody(part.body.data);
-    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  }
+  visit(part);
   if (Array.isArray(part.parts)) {
     for (const child of part.parts) {
-      const text = extractBodyFromPart(child);
-      if (text) {
-        return text;
-      }
+      walkMimeParts(child, visit);
     }
   }
-  return '';
 }
 
+/**
+ * Extract plain text from Gmail message payload (prefers text/plain).
+ * @param {import('googleapis').gmail_v1.Schema$MessagePart | undefined} payload
+ */
+function extractPlainFromPayload(payload) {
+  let plain = '';
+  let htmlFallback = '';
+  walkMimeParts(payload, (part) => {
+    if (part.mimeType === 'text/plain' && part.body?.data && !plain) {
+      plain = decodeGmailBody(part.body.data);
+    }
+    if (part.mimeType === 'text/html' && part.body?.data && !htmlFallback) {
+      htmlFallback = stripHtmlToText(decodeGmailBody(part.body.data));
+    }
+  });
+  return plain.trim() || htmlFallback;
+}
+
+/**
+ * Extract HTML body from Gmail message payload (first text/html part).
+ * @param {import('googleapis').gmail_v1.Schema$MessagePart | undefined} payload
+ */
+function extractHtmlFromPayload(payload) {
+  let html = '';
+  walkMimeParts(payload, (part) => {
+    if (part.mimeType === 'text/html' && part.body?.data && !html) {
+      html = decodeGmailBody(part.body.data);
+    }
+  });
+  return html.trim();
+}
 /**
  * @param {import('googleapis').gmail_v1.Schema$Message} message
  * @param {string} folder
@@ -88,11 +117,18 @@ export function mapGmailMessage(message, folder) {
     .map((row) => row.trim())
     .filter(Boolean);
   const date = headerMap.date ? new Date(headerMap.date).toISOString() : new Date().toISOString();
-  const bodyText = extractBodyFromPart(message.payload) || message.snippet || '';
+  const bodyText = extractPlainFromPayload(message.payload) || message.snippet || '';
+  const bodyHtml = sanitizeEmailHtml(extractHtmlFromPayload(message.payload));
   const bodyPreview = buildBodyPreview(bodyText);
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
   const threadId = computeThreadId({ messageId, inReplyTo, references, subject });
   const uid = String(message.id ?? '');
+  const labelIds = message.labelIds ?? [];
+  const flags = {
+    seen: !labelIds.includes('UNREAD'),
+    flagged: labelIds.includes('STARRED'),
+    answered: labelIds.includes('SENT') && labelIds.includes('INBOX'),
+  };
 
   const attachments = [];
   const walkParts = (part) => {
@@ -126,11 +162,13 @@ export function mapGmailMessage(message, folder) {
     date,
     bodyPreview,
     bodyText,
+    bodyHtml,
     bodyHash,
     hasAttachments: attachments.length > 0,
     attachments,
     inReplyTo,
     references,
+    flags,
   };
 }
 
@@ -241,4 +279,123 @@ export async function sendGmailMessage(account, mail) {
     accepted: [mail.to],
     rejected: [],
   };
+}
+
+/**
+ * @param {string} accountId
+ * @param {string} messageKey
+ */
+async function resolveGmailMessage(accountId, messageKey) {
+  const message = await getCachedMessage(accountId, messageKey);
+  if (!message) {
+    throw new Error('Cached message not found');
+  }
+  const gmailId = String(message.uid);
+  return { message, gmailId };
+}
+
+/**
+ * @param {string} accountId
+ * @param {string} messageKey
+ * @param {{ seen?: boolean, flagged?: boolean }} flags
+ */
+export async function setGmailMessageFlags(accountId, messageKey, flags) {
+  const { message, gmailId } = await resolveGmailMessage(accountId, messageKey);
+  const account = await getEmailAccount(accountId);
+  if (!account) {
+    throw new Error('Email account not found');
+  }
+  const gmail = await createGmailClient(account);
+
+  /** @type {{ addLabelIds?: string[], removeLabelIds?: string[] }} */
+  const body = {};
+  if (flags.seen === true) {
+    body.removeLabelIds = ['UNREAD'];
+  } else if (flags.seen === false) {
+    body.addLabelIds = ['UNREAD'];
+  }
+  if (flags.flagged === true) {
+    body.addLabelIds = [...(body.addLabelIds ?? []), 'STARRED'];
+  } else if (flags.flagged === false) {
+    body.removeLabelIds = [...(body.removeLabelIds ?? []), 'STARRED'];
+  }
+
+  await gmail.users.messages.modify({
+    userId: 'me',
+    id: gmailId,
+    requestBody: body,
+  });
+
+  const nextFlags = {
+    seen: flags.seen ?? message.flags?.seen ?? false,
+    flagged: flags.flagged ?? message.flags?.flagged ?? false,
+    answered: message.flags?.answered ?? false,
+  };
+  await updateMessageFlags(accountId, messageKey, nextFlags);
+  return { ok: true, flags: nextFlags };
+}
+
+/**
+ * @param {string} accountId
+ * @param {string} messageKey
+ * @param {string} destFolder
+ */
+export async function moveGmailMessage(accountId, messageKey, destFolder) {
+  const { message, gmailId } = await resolveGmailMessage(accountId, messageKey);
+  const account = await getEmailAccount(accountId);
+  if (!account) {
+    throw new Error('Email account not found');
+  }
+  const gmail = await createGmailClient(account);
+  await gmail.users.messages.modify({
+    userId: 'me',
+    id: gmailId,
+    requestBody: {
+      addLabelIds: [destFolder],
+      removeLabelIds: [String(message.folder ?? 'INBOX')],
+    },
+  });
+  await updateMessageFolder(accountId, messageKey, destFolder, gmailId);
+  return { ok: true, folder: destFolder, uid: gmailId };
+}
+
+/** @param {string} accountId @param {string} messageKey */
+export async function archiveGmailMessage(accountId, messageKey) {
+  const { gmailId } = await resolveGmailMessage(accountId, messageKey);
+  const account = await getEmailAccount(accountId);
+  if (!account) {
+    throw new Error('Email account not found');
+  }
+  const gmail = await createGmailClient(account);
+  await gmail.users.messages.modify({
+    userId: 'me',
+    id: gmailId,
+    requestBody: { removeLabelIds: ['INBOX'] },
+  });
+  await updateMessageFolder(accountId, messageKey, 'ARCHIVE', gmailId);
+  return { ok: true, folder: 'ARCHIVE', uid: gmailId };
+}
+
+/**
+ * @param {string} accountId
+ * @param {string} messageKey
+ * @param {{ permanent?: boolean }} [options]
+ */
+export async function deleteGmailMessage(accountId, messageKey, options = {}) {
+  const { message, gmailId } = await resolveGmailMessage(accountId, messageKey);
+  const account = await getEmailAccount(accountId);
+  if (!account) {
+    throw new Error('Email account not found');
+  }
+  const gmail = await createGmailClient(account);
+
+  if (options.permanent) {
+    await gmail.users.messages.delete({ userId: 'me', id: gmailId });
+    await removeMessageFromCache(accountId, messageKey);
+    return { ok: true, deleted: true };
+  }
+
+  await gmail.users.messages.trash({ userId: 'me', id: gmailId });
+  await updateMessageFolder(accountId, messageKey, 'TRASH', gmailId);
+  return { ok: true, folder: 'TRASH', uid: gmailId };
 }

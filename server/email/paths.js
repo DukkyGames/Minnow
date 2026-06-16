@@ -29,3 +29,8 @@ export function emailCacheDir(accountId) {
 export function emailCacheMessagesPath(accountId) {
   return path.join(emailCacheDir(accountId), 'messages.json');
 }
+
+/** Automation rules registry. */
+export function emailAutomationsPath() {
+  return path.join(emailRootDir(), 'automations.json');
+}
