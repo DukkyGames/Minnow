@@ -1,17 +1,18 @@
 /**
- * Memory adapter: binds ~/.minnow/memory paths into the shared backup engine.
+ * Memory back-compat adapter: brain backup (MIN-B3).
+ * TRACKING: remove with memory adapter layer.
  */
 
-import { createBackup } from '../engine/backup.js';
-import { getEnginePaths } from './engine-paths.js';
+import { backupBrain, restoreBrain } from '../brain/backup.js';
 import { ensureMemoryStore, loadAllEntriesWithBodies } from './store.js';
 
-const backup = createBackup(getEnginePaths, {
-  ensureLayout: ensureMemoryStore,
-  countRestoredEntries: async () => {
-    const entries = await loadAllEntriesWithBodies();
-    return entries.length;
-  },
-});
+export async function backupMemory() {
+  await ensureMemoryStore();
+  return backupBrain();
+}
 
-export const { backupMemory, restoreMemory } = backup;
+export async function restoreMemory(backupId) {
+  const result = await restoreBrain(backupId);
+  const entries = await loadAllEntriesWithBodies();
+  return { restored: entries.length, ...result };
+}

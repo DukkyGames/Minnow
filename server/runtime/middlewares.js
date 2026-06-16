@@ -18,6 +18,7 @@ import { createLspMiddleware } from '../lsp/middleware.js';
 import { createMcpMiddleware } from '../mcp/middleware.js';
 import { createServersMiddleware } from '../servers/index.js';
 import { createMemoryMiddleware } from '../memory/middleware.js';
+import { createBrainMiddleware } from '../brain/middleware.js';
 import { createPreviewMiddleware } from '../preview/middleware.js';
 import { createProfilesMiddleware } from '../profiles/middleware.js';
 import { createPromptConfigsMiddleware } from '../prompt-configs/middleware.js';
@@ -66,6 +67,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
     }),
   );
   connectApp.use(createMemoryMiddleware());
+  connectApp.use(createBrainMiddleware());
   connectApp.use(createWebhooksMiddleware());
   connectApp.use(createReefMiddleware());
   connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));

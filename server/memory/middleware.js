@@ -1,5 +1,6 @@
 /**
- * Vite middleware wrapper for memory API routes.
+ * Vite middleware wrapper for memory API routes (back-compat adapter — MIN-B3).
+ * TRACKING: remove when clients migrate to /api/brain (MIN-B4+).
  */
 
 import { handleMemoryRequest } from './routes.js';
