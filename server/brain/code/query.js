@@ -10,8 +10,9 @@ import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { loadBrainConfig } from '../store.js';
 import { normalizeBrainCodeConfig } from './config.js';
 import { getCodeDb, getIndexStats } from './schema.js';
-import { recomputePageRank, reindexCode } from './indexer.js';
+import { recomputePageRank } from './indexer.js';
 import { renderRepoMap } from './repo-map.js';
+import { ensureIndexFreshForQuery } from './cascade.js';
 
 /** Load merged config.brain.code settings. */
 export async function loadBrainCodeConfig() {
@@ -48,6 +49,7 @@ export async function queryCodeStatus() {
  * @param {number} [limit]
  */
 export async function findSymbol(query, limit = 20) {
+  await ensureIndexFreshForQuery();
   const q = String(query ?? '').trim();
   if (!q) return { matches: [], error: 'query is required' };
   const repo = activeRepoKey();
@@ -99,7 +101,8 @@ export async function findSymbol(query, limit = 20) {
  * Incoming call edges for a symbol id or bare name.
  * @param {string} symbolRef
  */
-export function whoCalls(symbolRef) {
+export async function whoCalls(symbolRef) {
+  await ensureIndexFreshForQuery();
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const id = resolveSymbolId(db, repo, symbolRef);
@@ -133,7 +136,8 @@ export function whoCalls(symbolRef) {
  * Outgoing call edges for a symbol id or bare name.
  * @param {string} symbolRef
  */
-export function callsOf(symbolRef) {
+export async function callsOf(symbolRef) {
+  await ensureIndexFreshForQuery();
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const id = resolveSymbolId(db, repo, symbolRef);
@@ -168,6 +172,7 @@ export function callsOf(symbolRef) {
  * @param {string} symbolRef
  */
 export async function readSymbol(symbolRef) {
+  await ensureIndexFreshForQuery();
   const repo = activeRepoKey();
   const db = getCodeDb(repo);
   const id = resolveSymbolId(db, repo, symbolRef);
@@ -194,6 +199,7 @@ export async function readSymbol(symbolRef) {
  * @param {{ repo?: string, focus?: string, tokenBudget?: number, focusFiles?: string[] }} [opts]
  */
 export async function repoMap(opts = {}) {
+  await ensureIndexFreshForQuery();
   const code = await loadBrainCodeConfig();
   const repo = opts.repo?.trim() || activeRepoKey();
   const db = getCodeDb(repo);
@@ -238,5 +244,6 @@ function resolveSymbolId(db, repo, symbolRef) {
   return byName?.id ?? null;
 }
 
-export { reindexCode };
+export { reindexCode } from './indexer.js';
+export { runCascade } from './cascade.js';
 export { explainSymbol, resolveAnchorsToCode } from './anchors.js';

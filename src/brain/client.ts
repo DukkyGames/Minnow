@@ -8,6 +8,8 @@ import type {
   BrainCodeConfig,
   BrainCodeExplainResult,
   BrainCodeFindResult,
+  BrainCodeGitHookInstallResult,
+  BrainCodeGitHookStatus,
   BrainCodeReadSymbolResult,
   BrainCodeReindexResult,
   BrainCodeRepoMap,
@@ -158,12 +160,33 @@ export async function saveBrainCodeConfig(
   }
 }
 
-/** Reindex the workspace code graph. */
+/** Reindex the workspace code graph through the cascade engine. */
 export async function reindexBrainCode(): Promise<BrainCodeReindexResult | null> {
   return brainFetch<BrainCodeReindexResult>('/api/brain/code/reindex', {
     method: 'POST',
     body: JSON.stringify({}),
   });
+}
+
+/** Install the optional git post-commit cascade hook in the active workspace. */
+export async function installBrainGitHook(): Promise<BrainCodeGitHookInstallResult | null> {
+  return brainFetch<BrainCodeGitHookInstallResult>('/api/brain/code/git-hook/install', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** Remove the Minnow block from the workspace post-commit hook. */
+export async function uninstallBrainGitHook(): Promise<{ ok: boolean; removed: boolean } | null> {
+  return brainFetch<{ ok: boolean; removed: boolean }>('/api/brain/code/git-hook/uninstall', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** Report whether the git post-commit hook is installed. */
+export async function fetchBrainGitHookStatus(): Promise<BrainCodeGitHookStatus | null> {
+  return brainFetch<BrainCodeGitHookStatus>('/api/brain/code/git-hook/status');
 }
 
 /** Token-budgeted signature repo map. */

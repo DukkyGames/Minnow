@@ -8,7 +8,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { initBrainApi } from '../../server/brain/routes.js';
+import { shutdownAllLsp } from '../../server/lsp/manager.js';
 import { readPage } from '../../server/brain/store.js';
 import { executeServerTool } from '../../server/runtime/tools-middleware.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -31,6 +33,8 @@ describe('brain wiki tools', () => {
   });
 
   after(async () => {
+    shutdownAllLsp();
+    closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });

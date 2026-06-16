@@ -1431,6 +1431,11 @@
               </label>
               <label><input type="checkbox" id="brainCodeEmbeddingsEnabled"> Enable code embeddings (reserved)</label>
               <p class="brain-muted">Semantic code search is not wired yet; this toggle is saved for a future release.</p>
+              <div class="brain-settings-actions">
+                <button type="button" class="brain-action-btn" id="brainCodeGitHookInstall">Install git post-commit hook</button>
+                <button type="button" class="brain-action-btn" id="brainCodeGitHookUninstall">Remove git hook</button>
+                <span id="brainCodeGitHookStatus" class="brain-muted" aria-live="polite"></span>
+              </div>
               <button type="button" class="brain-action-btn is-primary" id="brainCodeSettingsSave">Save code index settings</button>
             </div>
           </div>

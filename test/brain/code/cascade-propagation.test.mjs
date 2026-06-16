@@ -1,5 +1,5 @@
 /**
- * Code index integration — LSP fake server, SQLite, queries (MIN-B7).
+ * MIN-B10 — code change propagates stale flag to anchored wiki pages (MIN-B9 bridge).
  */
 
 import assert from 'node:assert/strict';
@@ -11,16 +11,17 @@ import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../../server/config/home.js';
 import { invalidateLspConfigCache } from '../../../server/lsp/config-loader.js';
 import { shutdownAllLsp } from '../../../server/lsp/manager.js';
+import { propagateCodeChanges } from '../../../server/brain/code/cascade.js';
+import { reindexCode } from '../../../server/brain/code/indexer.js';
 import { closeCodeDbForTests, getCodeDb } from '../../../server/brain/code/schema.js';
 import { brainWorkspaceKeyFromPath } from '../../../server/brain/paths.js';
-import { reindexCode } from '../../../server/brain/code/indexer.js';
-import { findSymbol, readSymbol, whoCalls } from '../../../server/brain/code/query.js';
-import { executeServerTool } from '../../../server/runtime/tools-middleware.js';
+import { createPage, ensureBrainStore, readPage } from '../../../server/brain/store.js';
 import { setWorkspaceRoot } from '../../../server/workspace/root.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 const SAMPLE_PATH = 'test/fixtures/sample.fake';
+const PAGE_ID = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 const SAMPLE_TEXT = [
   'export const MY_EXPORT = 42;',
   'function callee() { return 1; }',
@@ -60,16 +61,18 @@ async function seedFakeLspHome(homeDir) {
   );
 }
 
-describe('code index integration', () => {
+describe('MIN-B10 cascade propagation', () => {
   let homeDir;
 
   before(async () => {
-    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-code-index-'));
+    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-b10-prop-'));
     await seedFakeLspHome(homeDir);
+    await ensureBrainStore();
     await setWorkspaceRoot(PROJECT_ROOT);
     const abs = path.join(PROJECT_ROOT, SAMPLE_PATH);
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, SAMPLE_TEXT, 'utf8');
+    await reindexCode({ files: [SAMPLE_PATH] });
   });
 
   after(async () => {
@@ -78,56 +81,54 @@ describe('code index integration', () => {
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });
+    await fs.writeFile(path.join(PROJECT_ROOT, SAMPLE_PATH), SAMPLE_TEXT, 'utf8');
   });
 
-  it('reindex stores symbols with stable ids', async () => {
-    const result = await reindexCode({ files: [SAMPLE_PATH] });
-    assert.ok(result.indexedFiles >= 1);
-    const { matches } = await findSymbol('callee', 5);
-    const hit = matches.find((m) => m.name === 'callee');
-    assert.ok(hit, 'expected callee in index');
-    assert.equal(hit.id, 'minnow:MY_EXPORT.callee');
-    assert.equal(hit.file, SAMPLE_PATH);
-  });
-
-  it('who_calls returns graph callers for callee', async () => {
-    const { callers, symbol } = await whoCalls('callee');
-    assert.ok(symbol);
-    assert.ok(callers.length >= 1);
-    assert.ok(callers.some((c) => c.name === 'caller'));
-  });
-
-  it('read_symbol returns live source lines', async () => {
-    const { text, symbol } = await readSymbol('caller');
-    assert.ok(symbol);
-    assert.match(text, /caller/);
-    assert.match(text, /callee\(\)/);
-  });
-
-  it('incremental reindex updates file hash after content change', async () => {
+  it('reindex through cascade marks anchored page stale when symbol span changes', async () => {
     const repo = brainWorkspaceKeyFromPath(PROJECT_ROOT);
+    const symbolId = `${repo}:caller`;
     const db = getCodeDb(repo);
-    const before = db
-      .prepare('SELECT sha256 FROM file_hashes WHERE repo = ? AND file = ?')
-      .get(repo, SAMPLE_PATH);
+
+    await createPage({
+      relPath: 'facts/cascade-caller.md',
+      id: PAGE_ID,
+      title: 'Cascade caller note',
+      anchors: [symbolId],
+      body: 'Anchored before cascade reindex.',
+      skipVectorSync: true,
+    });
+
+    const anchorBefore = db
+      .prepare('SELECT symbol_hash_at_synth FROM anchors WHERE page_id = ? AND symbol_id = ?')
+      .get(PAGE_ID, symbolId);
+    assert.ok(anchorBefore?.symbol_hash_at_synth);
 
     const abs = path.join(PROJECT_ROOT, SAMPLE_PATH);
-    const edited = `${SAMPLE_TEXT}\n// edited marker\n`;
-    await fs.writeFile(abs, edited, 'utf8');
+    await fs.writeFile(
+      abs,
+      [
+        'export const MY_EXPORT = 42;',
+        'function callee() { return 1; }',
+        'function caller() { // drift marker',
+        '  callee();',
+        '}',
+      ].join('\n'),
+      'utf8',
+    );
 
-    await reindexCode({ files: [SAMPLE_PATH] });
-    const after = db
-      .prepare('SELECT sha256 FROM file_hashes WHERE repo = ? AND file = ?')
-      .get(repo, SAMPLE_PATH);
+    const result = await propagateCodeChanges({
+      files: [SAMPLE_PATH],
+      focusFiles: [SAMPLE_PATH],
+      trigger: 'manual',
+    });
 
-    assert.notEqual(before?.sha256, after?.sha256);
+    assert.ok(result.anchorDrift?.length >= 1);
+    assert.ok(result.anchorDrift.some((row) => row.pageId === PAGE_ID));
+
+    const page = await readPage('facts/cascade-caller.md');
+    assert.equal(page.meta.status, 'stale');
+
     await fs.writeFile(abs, SAMPLE_TEXT, 'utf8');
-  });
-
-  it('find_symbol tool formats matches', async () => {
-    await reindexCode({ files: [SAMPLE_PATH] });
-    const out = await executeServerTool('find_symbol', { query: 'MY_EXPORT' });
-    assert.match(out.result, /MY_EXPORT/);
-    assert.match(out.result, /sample\.fake/);
+    await propagateCodeChanges({ files: [SAMPLE_PATH], trigger: 'manual' });
   });
 });

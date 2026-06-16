@@ -10,10 +10,15 @@ import {
   queryCodeStatus,
   readSymbol,
   repoMap,
-  reindexCode,
   whoCalls,
 } from './query.js';
 import { saveBrainConfig } from '../store.js';
+import {
+  getGitHookStatus,
+  installGitHook,
+  runCascade,
+  uninstallGitHook,
+} from './cascade.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -89,10 +94,50 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const files = Array.isArray(body.files)
         ? body.files.map((f) => String(f))
         : undefined;
-      const focusFiles = Array.isArray(body.focusFiles)
-        ? body.focusFiles.map((f) => String(f))
+      const result = await runCascade({
+        trigger: 'manual',
+        files,
+        codeConfig: code,
+        force: true,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/cascade' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const files = Array.isArray(body.files)
+        ? body.files.map((f) => String(f))
         : undefined;
-      const result = await reindexCode({ files, focusFiles, codeConfig: code });
+      const trigger =
+        body.trigger === 'git-hook' ||
+        body.trigger === 'workspace-switch' ||
+        body.trigger === 'lazy-query'
+          ? body.trigger
+          : 'manual';
+      const result = await runCascade({
+        trigger,
+        files,
+        codeConfig: code,
+        force: body.force === true,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/git-hook/status' && req.method === 'GET') {
+      sendJson(res, 200, await getGitHookStatus());
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/git-hook/install' && req.method === 'POST') {
+      const result = await installGitHook();
+      sendJson(res, 200, { ok: true, ...result });
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/git-hook/uninstall' && req.method === 'POST') {
+      const result = await uninstallGitHook();
       sendJson(res, 200, { ok: true, ...result });
       return true;
     }
@@ -127,7 +172,7 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, whoCalls(String(symbol)));
+      sendJson(res, 200, await whoCalls(String(symbol)));
       return true;
     }
 
@@ -135,7 +180,7 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const body = req.method === 'POST' ? await readJsonBody(req) : {};
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
-      sendJson(res, 200, callsOf(String(symbol)));
+      sendJson(res, 200, await callsOf(String(symbol)));
       return true;
     }
 

@@ -10,9 +10,9 @@ import {
   queryCodeStatus,
   readSymbol,
   repoMap,
-  reindexCode,
   whoCalls,
 } from '../brain/code/query.js';
+import { runCascade } from '../brain/code/cascade.js';
 
 async function ensureCodeEnabled() {
   const code = await loadBrainCodeConfig();
@@ -32,8 +32,8 @@ export async function toolRepoMap(args) {
 
   const status = await queryCodeStatus();
   if (!status.symbolCount) {
-    const reindex = await reindexCode();
-    if (!reindex.indexedFiles) {
+    const reindex = await runCascade({ trigger: 'manual', force: true });
+    if (!reindex.indexedFiles && !reindex.skipped) {
       return 'Code index is cold. Reindex failed or workspace has no indexable files. Use `grep` as fallback.';
     }
   }
@@ -92,7 +92,7 @@ export async function toolWhoCalls(args) {
   const symbol = String(args?.symbol ?? '').trim();
   if (!symbol) return 'Error: symbol is required (id or name).';
 
-  const { symbol: row, callers, error } = whoCalls(symbol);
+  const { symbol: row, callers, error } = await whoCalls(symbol);
   if (!row) return error ?? `Symbol not found: ${symbol}`;
 
   if (!callers.length) {

@@ -8,6 +8,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { getBrainCodeDir, brainWorkspaceKeyFromPath } from '../paths.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
+import { getMinnowHome } from '../../config/home.js';
 
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByWorkspaceKey = new Map();
@@ -85,6 +86,12 @@ function initSchema(database) {
   }
 }
 
+/** Cache key combines MINNOW_HOME + workspace slug so parallel tests do not share handles. */
+function codeDbCacheKey(workspaceKey) {
+  const slug = String(workspaceKey ?? '').trim() || 'workspace';
+  return `${getMinnowHome()}\0${slug}`;
+}
+
 /**
  * Open (or reuse) the code index DB for a workspace key.
  * @param {string} [workspaceKey]
@@ -95,7 +102,8 @@ export function getCodeDb(workspaceKey) {
     workspaceKey?.trim() ||
     brainWorkspaceKeyFromPath(getEffectiveWorkspaceRoot()) ||
     'workspace';
-  const existing = dbByWorkspaceKey.get(key);
+  const cacheKey = codeDbCacheKey(key);
+  const existing = dbByWorkspaceKey.get(cacheKey);
   if (existing) return existing;
 
   const dir = getBrainCodeDir();
@@ -104,7 +112,7 @@ export function getCodeDb(workspaceKey) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   initSchema(db);
-  dbByWorkspaceKey.set(key, db);
+  dbByWorkspaceKey.set(cacheKey, db);
   return db;
 }
 
