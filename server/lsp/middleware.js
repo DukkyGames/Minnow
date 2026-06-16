@@ -11,12 +11,15 @@ import {
   seedLspJson,
 } from './config-loader.js';
 import {
+  getLspCallHierarchy,
   getLspCompletions,
   getLspDefinition,
   getLspDiagnostics,
+  getLspDocumentSymbols,
   getLspHover,
   getLspSignatureHelp,
   getLspStructuredDiagnostics,
+  getLspWorkspaceSymbols,
   listLspServers,
   notifyLspDocument,
   resolveLspCompletion,
@@ -255,6 +258,68 @@ export function createLspMiddleware(resolveProjectRoot) {
           editorText,
         );
         sendJson(res, 200, { diagnostics, ...(error ? { error } : {}) });
+        return;
+      }
+
+      if (
+        url === '/api/lsp/document-symbols' &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
+        const body =
+          req.method === 'POST' ? await readJsonBody(req) : {};
+        const search = new URL(req.url ?? '', 'http://local').searchParams;
+        const rel = String(body.path ?? search.get('path') ?? '');
+        if (!rel || rel.includes('..')) {
+          sendJson(res, 400, { error: 'Invalid path' });
+          return;
+        }
+        const abs = path.resolve(projectRoot, rel);
+        const rootNorm = path.resolve(projectRoot);
+        if (!abs.startsWith(rootNorm)) {
+          sendJson(res, 400, { error: 'Path outside project' });
+          return;
+        }
+        const { symbols, error } = await getLspDocumentSymbols(rel);
+        sendJson(res, 200, { symbols, ...(error ? { error } : {}) });
+        return;
+      }
+
+      if (
+        url === '/api/lsp/workspace-symbols' &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
+        const body =
+          req.method === 'POST' ? await readJsonBody(req) : {};
+        const search = new URL(req.url ?? '', 'http://local').searchParams;
+        const query = String(body.query ?? search.get('query') ?? '');
+        const { symbols, error } = await getLspWorkspaceSymbols(query);
+        sendJson(res, 200, { symbols, ...(error ? { error } : {}) });
+        return;
+      }
+
+      if (url === '/api/lsp/call-hierarchy' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const pathCheck = validateProjectRelativePath(body, projectRoot);
+        if (!pathCheck.ok) {
+          sendJson(res, pathCheck.status, { error: pathCheck.error });
+          return;
+        }
+        const posCheck = validateLspPosition(body);
+        if (!posCheck.ok) {
+          sendJson(res, posCheck.status, { error: posCheck.error });
+          return;
+        }
+        const { item, incomingCalls, outgoingCalls, error } = await getLspCallHierarchy(
+          pathCheck.rel,
+          posCheck.line,
+          posCheck.character,
+        );
+        sendJson(res, 200, {
+          item,
+          incomingCalls,
+          outgoingCalls,
+          ...(error ? { error } : {}),
+        });
         return;
       }
 
