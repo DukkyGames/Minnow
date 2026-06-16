@@ -4,12 +4,27 @@
 
 import { fetchBrainTree } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
-import { flattenBrainTree } from './tree-utils';
+import { flattenBrainTree, filterBrainTreeForDisplay, isBrainArchivePagePath } from './tree-utils';
 import { buildPageGraph, filterGraphByQuery } from './graph/graph-data';
 import { createForceGraph, type ForceGraphApi } from './graph/force-graph';
 import type { GraphNode } from './graph/types';
 import { closeBrainInspector, renderBrainInspector } from './inspector';
 import { setBrainHeaderActions } from '../brain-page';
+
+const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
+
+function readShowArchivesPref(): boolean {
+  try {
+    return localStorage.getItem(SHOW_ARCHIVES_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function filterCatalogPages(pages: BrainPageMeta[]): BrainPageMeta[] {
+  if (readShowArchivesPref()) return pages;
+  return pages.filter((p) => !isBrainArchivePagePath(p.path));
+}
 
 let selectedPath: string | null = null;
 let catalogPages: BrainPageMeta[] = [];
@@ -181,6 +196,21 @@ function bindGraphToolbar(): void {
     btn?.setAttribute('aria-pressed', highlightOrphans ? 'true' : 'false');
     void refreshGraphCanvas();
   });
+
+  document.getElementById('brainGraphArchiveToggle')?.addEventListener('click', () => {
+    const next = !readShowArchivesPref();
+    try {
+      localStorage.setItem(SHOW_ARCHIVES_KEY, next ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+    const btn = document.getElementById('brainGraphArchiveToggle');
+    btn?.setAttribute('aria-pressed', next ? 'true' : 'false');
+    void renderGraphSection();
+  });
+
+  const archiveBtn = document.getElementById('brainGraphArchiveToggle');
+  archiveBtn?.setAttribute('aria-pressed', readShowArchivesPref() ? 'true' : 'false');
 
   // Bind the first-run hint dismiss button once here so it never re-attaches.
   document.getElementById('brainGraphDismissHint')?.addEventListener('click', () => {
@@ -434,8 +464,11 @@ export async function renderGraphSection(): Promise<void> {
     return;
   }
 
-  catalogPages = flattenBrainTree(tree);
-  const treeRecord = tree as unknown as Record<string, unknown>;
+  catalogPages = filterCatalogPages(flattenBrainTree(tree));
+  const treeRecord = filterBrainTreeForDisplay(
+    tree,
+    readShowArchivesPref(),
+  ) as Record<string, unknown>;
   renderGraphTree(treeMount, treeRecord);
   if (treeOnlyMount) renderGraphTree(treeOnlyMount, treeRecord);
 

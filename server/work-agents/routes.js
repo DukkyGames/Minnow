@@ -18,6 +18,7 @@ import {
 } from './registry.js';
 import { normalizeSamplerPreset } from '../agents/sampler.js';
 import { normalizeThinkingTriState } from '../agents/thinking.js';
+import { normalizeArchiveConfig } from '../config/validators.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -117,6 +118,11 @@ export async function handleWorkAgentsRequest(req, res, pathname, search) {
       if ('thinkingMode' in body) {
         patch.thinkingMode =
           body.thinkingMode === null ? null : normalizeThinkingTriState(body.thinkingMode);
+      }
+      if ('archive' in body) {
+        const normalized = normalizeArchiveConfig(body.archive);
+        if (normalized) patch.archive = normalized;
+        else patch.archive = body.archive === null ? null : undefined;
       }
       await patchWorkAgentOverride(agentId, patch);
       const agent = await getWorkAgentById(PROJECT_ROOT, agentId);

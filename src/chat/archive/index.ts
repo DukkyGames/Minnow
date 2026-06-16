@@ -8,6 +8,7 @@ import { getWorkspacePath } from '../../state/workspace';
 import { estimateApiMessagesTokens } from '../context-budget';
 import { resolveContextLimit } from '../context-usage';
 import { buildArchivePreludeBlock } from './auto-prelude';
+import { splitRangeForBundling } from './chunking';
 import { applyMemoizedCollapse, replaceArchivedRangesWithPlaceholder } from './collapse';
 import { detectStaleTurnRanges } from './staleness';
 import {
@@ -98,6 +99,11 @@ export async function applyArchivePolicy(
     contextLimit,
   });
 
+  const chunkedRanges = staleRanges.flatMap((range) => {
+    const turns = sliceTurnsForRange(messages, range, history.length);
+    return splitRangeForBundling(range, turns);
+  });
+
   const empty: ArchivePreResult = {
     messages,
     archived: 0,
@@ -105,11 +111,11 @@ export async function applyArchivePolicy(
     recallTokens: 0,
     collapsedRanges: [],
   };
-  if (staleRanges.length === 0) return empty;
+  if (chunkedRanges.length === 0) return empty;
 
   const workspaceKey =
     brainWorkspaceKeyFromPath(chat.workspacePath || getWorkspacePath()) || 'workspace';
-  const readiness = await pollArchiveReadiness(chat.id, workspaceKey, staleRanges);
+  const readiness = await pollArchiveReadiness(chat.id, workspaceKey, chunkedRanges);
 
   if (!readiness.allReady) {
     for (const range of readiness.pending) {
@@ -122,6 +128,8 @@ export async function applyArchivePolicy(
     }
     return empty;
   }
+
+  clearArchiveDisabledReason();
 
   const collapsed = replaceArchivedRangesWithPlaceholder(
     messages,
@@ -141,6 +149,10 @@ export async function applyArchivePolicy(
       workspaceKey,
       chat.id,
       config.retrievalTopK,
+      {
+        embeddingModelId: config.embeddingModelId,
+        llmRerank: config.llmRerank,
+      },
     );
     const hits = retrieve?.hits ?? [];
     const prelude = buildArchivePreludeBlock(hits, config.retrievalTopK);

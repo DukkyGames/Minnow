@@ -4,7 +4,12 @@
 
 import { detectLocalServer } from '../../tools/client';
 import type { ApiMessage } from '../../types';
-import type { ArchiveBundleRequest, ArchiveHistoryRange, ArchiveRecallHit } from './types';
+import type {
+  ArchiveBundleRequest,
+  ArchiveHistoryRange,
+  ArchiveRecallHit,
+  ArchiveRetrieveScope,
+} from './types';
 
 export interface ArchiveStatusResponse {
   chatId: string;
@@ -21,6 +26,11 @@ export interface ArchiveRetrieveResponse {
   block: string;
   ids: string[];
   hits?: ArchiveRecallHit[];
+}
+
+export interface ArchiveRetrieveOptions {
+  embeddingModelId?: string;
+  llmRerank?: boolean;
 }
 
 async function archiveFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
@@ -65,23 +75,42 @@ export async function fetchArchiveStatus(
   return archiveFetch<ArchiveStatusResponse>(`/api/brain/archive/status?${params}`);
 }
 
-/** Scoped retrieve over a chat's archive folder. */
+/** Scoped retrieve over archive pages (chat or workspace). */
+export async function retrieveArchive(
+  query: string,
+  workspaceKey: string,
+  scope: ArchiveRetrieveScope,
+  topK: number,
+  options?: ArchiveRetrieveOptions,
+): Promise<ArchiveRetrieveResponse | null> {
+  const body: Record<string, unknown> = {
+    query,
+    workspaceKey,
+    limit: topK,
+    includeHits: true,
+    scope: 'chatId' in scope ? { chatId: scope.chatId } : { mode: 'workspace' },
+  };
+  if (options?.embeddingModelId?.trim()) {
+    body.embeddingModelId = options.embeddingModelId.trim();
+  }
+  if (options?.llmRerank === true) {
+    body.llmRerank = true;
+  }
+  return archiveFetch<ArchiveRetrieveResponse>('/api/brain/retrieve', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** Chat-scoped archive retrieve (auto-prelude default). */
 export async function retrieveChatArchive(
   query: string,
   workspaceKey: string,
   chatId: string,
   topK: number,
+  options?: ArchiveRetrieveOptions,
 ): Promise<ArchiveRetrieveResponse | null> {
-  return archiveFetch<ArchiveRetrieveResponse>('/api/brain/retrieve', {
-    method: 'POST',
-    body: JSON.stringify({
-      query,
-      workspaceKey,
-      limit: topK,
-      includeHits: true,
-      scope: { chatId },
-    }),
-  });
+  return retrieveArchive(query, workspaceKey, { chatId }, topK, options);
 }
 
 /** Remove a chat's archive folder (fire-and-forget on delete). */

@@ -212,6 +212,8 @@ export async function handleBrainRequest(req, res, pathname) {
           workspaceKey: body.workspaceKey,
           scope: body.scope,
           includeHits: body.includeHits === true,
+          embeddingModelId: body.embeddingModelId,
+          llmRerank: body.llmRerank === true,
         },
         brain,
       );

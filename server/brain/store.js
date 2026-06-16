@@ -205,6 +205,9 @@ export function serializePage(meta, body) {
       `sourceTurnIndices: [${meta.sourceTurnIndices.map((n) => String(n)).join(', ')}]`,
     );
   }
+  if (Array.isArray(meta.similarTo) && meta.similarTo.length > 0) {
+    archiveLines.push(`similarTo: ${serializeArrayField(meta.similarTo)}`);
+  }
   const archiveBlock = archiveLines.length ? `${archiveLines.join('\n')}\n` : '';
   return `---
 id: ${quoteYamlString(meta.id)}
@@ -274,6 +277,7 @@ export function buildCatalogEntry(front, relPath, body) {
     ...(Array.isArray(front.sourceTurnIndices)
       ? { sourceTurnIndices: front.sourceTurnIndices }
       : {}),
+    ...(Array.isArray(front.similarTo) ? { similarTo: front.similarTo } : {}),
     ...parts,
   };
 }
@@ -523,6 +527,9 @@ export async function updatePage(relPath, input) {
     meta.status = 'current';
   }
   if (input.input_hash !== undefined) meta.input_hash = String(input.input_hash);
+  if (input.similarTo !== undefined) {
+    meta.similarTo = Array.isArray(input.similarTo) ? input.similarTo.map(String) : [];
+  }
   meta.updatedAt = new Date().toISOString();
 
   const body = input.body !== undefined ? String(input.body) : existing.body;

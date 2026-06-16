@@ -1322,6 +1322,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           type: 'number',
           description: 'Max facts to return (default 5)',
         },
+        scope: {
+          type: 'string',
+          enum: ['chat', 'workspace'],
+          description:
+            'Retrieve scope: chat (default, active chat only) or workspace (all archived chats in workspace)',
+        },
       },
       ['query'],
     ),

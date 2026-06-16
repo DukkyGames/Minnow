@@ -7,6 +7,7 @@ import { createVectorStore } from '../engine/vector-store.js';
 import { getEnginePaths } from './engine-paths.js';
 import { isValidPageId } from './paths.js';
 import { archiveFolderPrefix } from './archive.js';
+import { rerankArchiveHits, llmRerankArchiveHits } from './archive-rerank.js';
 import { listPages, readPage, loadBrainConfig, loadCatalog, computeBacklinks } from './store.js';
 
 const vectorStore = createVectorStore(getEnginePaths, { isValidEntryId: isValidPageId });
@@ -52,6 +53,25 @@ export function scopePagesToChatArchive(pages, workspaceKey, chatId, includeGlob
   });
 }
 
+/**
+ * Workspace-wide archive + promoted concepts (opt-in cross-chat recall).
+ * @param {Array<{ path: string }>} pages
+ * @param {string} workspaceKey
+ * @param {boolean} [includeGlobal]
+ */
+export function scopePagesToWorkspaceArchive(pages, workspaceKey, includeGlobal = false) {
+  const key = String(workspaceKey ?? '').trim().replace(/\\/g, '/');
+  const archivePrefix = key ? `workspaces/${key}/archive/` : '';
+  const conceptsPrefix = key ? `workspaces/${key}/concepts/` : '';
+  return pages.filter((page) => {
+    const rel = String(page.path ?? '').replace(/\\/g, '/');
+    if (archivePrefix && rel.startsWith(archivePrefix)) return true;
+    if (conceptsPrefix && rel.startsWith(conceptsPrefix)) return true;
+    if (includeGlobal && !rel.startsWith('workspaces/')) return true;
+    return false;
+  });
+}
+
 /** Extract first blockquote line from archive page body as sourceQuote. */
 function extractSourceQuote(body) {
   const match = String(body ?? '').match(/^>\s*(.+)$/m);
@@ -59,7 +79,7 @@ function extractSourceQuote(body) {
 }
 
 /** Build rich hits for archive auto-prelude / recall tools. */
-export async function buildRetrieveHits(entries, ids) {
+export async function buildRetrieveHits(entries, ids, scoreById = null) {
   const idSet = new Set(ids ?? []);
   const catalog = await loadCatalog();
   const backlinks = computeBacklinks(catalog);
@@ -76,6 +96,7 @@ export async function buildRetrieveHits(entries, ids) {
       sourceQuote: extractSourceQuote(row.body),
       frontmatter: row.meta,
       backlinks: backlinks[linkKey] ?? backlinks[relPath] ?? [],
+      score: scoreById?.get(id),
     });
   }
   return hits;
@@ -98,17 +119,28 @@ export async function loadAllPagesWithBodies() {
 
 /**
  * Hybrid retrieve over scoped wiki pages (workspace filter applied before engine call).
- * @param {{ query?: string, limit?: number, tags?: string[], maxChars?: number, workspaceKey?: string, scope?: { chatId?: string, includeGlobal?: boolean }, includeHits?: boolean }} opts
+ * @param {{ query?: string, limit?: number, tags?: string[], maxChars?: number, workspaceKey?: string, scope?: { chatId?: string, mode?: string, includeGlobal?: boolean }, includeHits?: boolean, embeddingModelId?: string, llmRerank?: boolean }} opts
  * @param {object} [brainConfig]
  */
 export async function retrieveBrainBlockHybrid(opts = {}, brainConfig) {
-  const config = brainConfig ?? (await loadBrainConfig());
+  let config = brainConfig ?? (await loadBrainConfig());
+  if (opts.embeddingModelId) {
+    config = {
+      ...config,
+      embeddings: {
+        ...(config.embeddings ?? {}),
+        modelId: String(opts.embeddingModelId).trim(),
+      },
+    };
+  }
   const all = await loadAllPagesWithBodies();
   let scopedMetas = scopePagesToWorkspace(
     all.map((row) => row.meta),
     opts.workspaceKey,
   );
   const chatId = opts.scope?.chatId ? String(opts.scope.chatId).trim() : '';
+  const workspaceArchive =
+    opts.scope?.mode === 'workspace' || opts.scope?.workspaceArchive === true;
   if (chatId) {
     scopedMetas = scopePagesToChatArchive(
       scopedMetas,
@@ -116,12 +148,28 @@ export async function retrieveBrainBlockHybrid(opts = {}, brainConfig) {
       chatId,
       opts.scope?.includeGlobal === true,
     );
+  } else if (workspaceArchive) {
+    scopedMetas = scopePagesToWorkspaceArchive(
+      scopedMetas,
+      opts.workspaceKey ?? '',
+      opts.scope?.includeGlobal === true,
+    );
   }
   const scopedPaths = new Set(scopedMetas.map((m) => m.path));
   const entries = all.filter((row) => scopedPaths.has(row.meta.path));
   const { block, ids } = await retrieveMemoryBlockHybrid(entries, opts, config);
   if (opts.includeHits === true) {
-    const hits = await buildRetrieveHits(entries, ids);
+    let hits = await buildRetrieveHits(entries, ids);
+    if (chatId || workspaceArchive) {
+      hits = rerankArchiveHits(hits);
+      if (opts.llmRerank === true) {
+        hits = await llmRerankArchiveHits(
+          hits,
+          String(opts.query ?? ''),
+          opts.limit ?? 8,
+        );
+      }
+    }
     return { block, ids, hits };
   }
   return { block, ids };

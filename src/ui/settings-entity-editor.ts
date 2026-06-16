@@ -22,6 +22,16 @@ import {
 } from '../chat/prompts/prompt-baseline-resolve';
 import { mountPromptDiffControls } from './prompt-diff-panel';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import {
+  DEFAULT_ARCHIVE_CONFIG,
+  normalizeArchiveConfig,
+  type ArchiveConfig,
+} from '../chat/archive/types';
+import {
+  clearArchiveDisabledReason,
+  getArchiveDisabledReason,
+} from '../chat/archive/index';
+import { fetchBrainEmbeddingsStatus } from '../brain/client';
 import { listSummarySchemaPresetIds } from '../agents/sub-agent-summary-schemas';
 import { listProviders } from '../providers/store';
 import { fillModelSelect } from './settings-model-binding';
@@ -55,10 +65,130 @@ function buildContextPolicySelect(initial: ContextEnforcementPolicy): HTMLSelect
     const node = document.createElement('option');
     node.value = opt.value;
     node.textContent = opt.label;
+    if (opt.value === 'archive') {
+      node.title =
+        'Requires Brain embeddings (local or provider). Configure in Brain settings.';
+    }
     sel.appendChild(node);
   }
   sel.value = initial;
   return sel;
+}
+
+/** Disable archive policy when Brain embeddings are off or unhealthy. */
+async function applyArchiveEmbeddingsGate(sel: HTMLSelectElement): Promise<void> {
+  const archiveOpt = [...sel.options].find((o) => o.value === 'archive');
+  if (!archiveOpt) return;
+  const status = await fetchBrainEmbeddingsStatus();
+  const ok = status?.enabled === true && status?.healthy === true;
+  archiveOpt.disabled = !ok;
+  archiveOpt.title = ok
+    ? 'Offload stale turns to Brain wiki pages'
+    : 'Requires Brain embeddings (local or provider). Configure in Brain settings.';
+  if (!ok && sel.value === 'archive') {
+    sel.value = 'slide';
+  }
+}
+
+function buildArchiveNumberInput(
+  value: number,
+  min: number,
+  max: number,
+  step = '1',
+): HTMLInputElement {
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'settings-select settings-kv-input';
+  input.min = String(min);
+  input.max = String(max);
+  input.step = step;
+  input.value = String(value);
+  return input;
+}
+
+function mountArchiveDisabledBanner(container: HTMLElement, onDismiss: () => void): () => void {
+  const banner = el('div', 'settings-field-hint settings-archive-disabled-banner');
+  banner.hidden = true;
+  const text = el('span', '', '');
+  const dismiss = el('button', 'settings-action-btn', 'Dismiss');
+  dismiss.type = 'button';
+  dismiss.addEventListener('click', () => {
+    clearArchiveDisabledReason();
+    banner.hidden = true;
+    onDismiss();
+  });
+  banner.appendChild(text);
+  banner.appendChild(dismiss);
+  container.prepend(banner);
+
+  return () => {
+    const reason = getArchiveDisabledReason();
+    if (!reason) {
+      banner.hidden = true;
+      return;
+    }
+    text.textContent = `Archive self-disabled: ${reason}`;
+    banner.hidden = false;
+  };
+}
+
+function mountArchiveTuningBlock(
+  container: HTMLElement,
+  initial: ArchiveConfig,
+  isSubAgent = false,
+): {
+  root: HTMLElement;
+  readConfig: () => ArchiveConfig;
+} {
+  const root = el('details', 'settings-archive-tuning');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Archive tuning';
+  root.appendChild(summary);
+
+  if (isSubAgent) {
+    const hint = el(
+      'p',
+      'settings-field-hint',
+      'Saved for reference — sub-agents still use slide at runtime.',
+    );
+    root.appendChild(hint);
+  }
+
+  const stalenessInput = buildArchiveNumberInput(initial.stalenessTurns, 1, 200);
+  const pressureInput = buildArchiveNumberInput(initial.pressureThreshold, 0.1, 0.99, '0.01');
+  const minRecentInput = buildArchiveNumberInput(initial.minRecentTurns, 1, 50);
+  const topKInput = buildArchiveNumberInput(initial.retrievalTopK, 1, 20);
+  const embeddingInput = document.createElement('input');
+  embeddingInput.type = 'text';
+  embeddingInput.className = 'settings-select settings-kv-input';
+  embeddingInput.placeholder = 'Brain default';
+  embeddingInput.value = initial.embeddingModelId ?? '';
+
+  const grid = el('div', 'settings-model-row');
+  grid.appendChild(el('label', 'settings-field-label', 'Staleness turns'));
+  grid.appendChild(stalenessInput);
+  grid.appendChild(el('label', 'settings-field-label', 'Pressure threshold'));
+  grid.appendChild(pressureInput);
+  grid.appendChild(el('label', 'settings-field-label', 'Min recent turns'));
+  grid.appendChild(minRecentInput);
+  grid.appendChild(el('label', 'settings-field-label', 'Retrieval top K'));
+  grid.appendChild(topKInput);
+  grid.appendChild(el('label', 'settings-field-label', 'Embedding model id'));
+  grid.appendChild(embeddingInput);
+  root.appendChild(grid);
+
+  return {
+    root,
+    readConfig: () =>
+      normalizeArchiveConfig({
+        stalenessTurns: Number(stalenessInput.value),
+        pressureThreshold: Number(pressureInput.value),
+        minRecentTurns: Number(minRecentInput.value),
+        retrievalTopK: Number(topKInput.value),
+        embeddingModelId: embeddingInput.value.trim() || undefined,
+        llmRerank: initial.llmRerank,
+      }) ?? { ...DEFAULT_ARCHIVE_CONFIG },
+  };
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -247,6 +377,7 @@ interface WorkAgentEditorOptions {
   initialDisabled: boolean;
   initialMaxInputTokens: number | null;
   initialContextPolicy: ContextEnforcementPolicy;
+  initialArchive?: ArchiveConfig;
   onModelSaved?: () => void;
 }
 
@@ -377,6 +508,30 @@ export function mountWorkAgentConfigEditor(
     options.initialMaxInputTokens != null ? String(options.initialMaxInputTokens) : '';
 
   const contextPolicySel = buildContextPolicySelect(options.initialContextPolicy);
+  void applyArchiveEmbeddingsGate(contextPolicySel);
+
+  const archiveInitial = {
+    ...DEFAULT_ARCHIVE_CONFIG,
+    ...(options.initialArchive ?? {}),
+  };
+  const archiveBlock = mountArchiveTuningBlock(container, archiveInitial);
+  (archiveBlock.root as HTMLDetailsElement).open =
+    options.initialContextPolicy === 'archive';
+  archiveBlock.root.hidden = options.initialContextPolicy !== 'archive';
+
+  const refreshArchiveBanner = mountArchiveDisabledBanner(container, () => {
+    refreshArchiveBanner();
+  });
+  refreshArchiveBanner();
+
+  contextPolicySel.addEventListener('change', () => {
+    const isArchive = contextPolicySel.value === 'archive';
+    archiveBlock.root.hidden = !isArchive;
+    if (!isArchive) {
+      clearArchiveDisabledReason();
+      refreshArchiveBanner();
+    }
+  });
 
   const { row: disabledRow, input: disabledCb } = createSettingsToggleRow('Disabled', {
     checked: !!options.initialDisabled,
@@ -388,6 +543,7 @@ export function mountWorkAgentConfigEditor(
   budgetBlock.appendChild(contextPolicySel);
 
   container.appendChild(budgetBlock);
+  container.appendChild(archiveBlock.root);
   container.appendChild(disabledRow);
 
   const saveBtn = el('button', 'settings-action-btn', 'Save agent settings');
@@ -397,15 +553,22 @@ export function mountWorkAgentConfigEditor(
       const rawCap = maxInputTokensInput.value.trim();
       const maxInputTokens =
         rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
-      const agent = await patchWorkAgentOverride(options.agentId, {
+      const policy = contextPolicySel.value as ContextEnforcementPolicy;
+      const patch: Parameters<typeof patchWorkAgentOverride>[1] = {
         disabled: !disabledCb.checked,
         maxInputTokens,
-        contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
-      });
+        contextEnforcementPolicy: policy,
+      };
+      if (policy === 'archive') {
+        patch.archive = archiveBlock.readConfig();
+      }
+      const agent = await patchWorkAgentOverride(options.agentId, patch);
       if (!agent) {
         setStatus('err', 'Could not save work agent settings');
         return;
       }
+      if (policy !== 'archive') clearArchiveDisabledReason();
+      refreshArchiveBanner();
       setStatus('ok', 'Work agent settings saved');
       options.onModelSaved?.();
     })();

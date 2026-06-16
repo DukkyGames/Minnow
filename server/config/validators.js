@@ -587,6 +587,9 @@ export function normalizeArchiveConfig(raw) {
   if (typeof row.embeddingModelId === 'string' && row.embeddingModelId.trim()) {
     out.embeddingModelId = row.embeddingModelId.trim().slice(0, 128);
   }
+  if (typeof row.llmRerank === 'boolean') {
+    out.llmRerank = row.llmRerank;
+  }
   return Object.keys(out).length ? out : undefined;
 }
 

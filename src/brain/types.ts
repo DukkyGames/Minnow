@@ -16,6 +16,8 @@ export interface BrainPageMeta {
   createdAt: string;
   updatedAt: string;
   links: string[];
+  /** Archive similarity neighbors (from frontmatter similarTo). */
+  similarTo?: string[];
   status?: string;
 }
 

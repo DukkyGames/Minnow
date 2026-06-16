@@ -68,21 +68,45 @@ export function buildPageGraph(
       });
     }
 
-    if (!includeTags) continue;
-    for (const tag of page.tags ?? []) {
-      const tagId = `tag:${tag}`;
-      if (!nodes.has(tagId)) {
-        nodes.set(tagId, {
-          id: tagId,
+    if (includeTags) {
+      for (const tag of page.tags ?? []) {
+        const tagId = `tag:${tag}`;
+        if (!nodes.has(tagId)) {
+          nodes.set(tagId, {
+            id: tagId,
+            kind: 'tag',
+            label: tag,
+          });
+        }
+        edges.push({
+          id: `tag:${fromId}->${tagId}`,
+          source: fromId,
+          target: tagId,
           kind: 'tag',
-          label: tag,
+        });
+      }
+    }
+
+    for (const rawSimilar of page.similarTo ?? []) {
+      const targetPath = String(rawSimilar).includes('.md') ? rawSimilar : `${rawSimilar}.md`;
+      const normalized = normPath(targetPath);
+      let resolved = pages.find((p) => normPath(p.path) === normalized)?.path;
+      if (!resolved && pathSet.has(targetPath)) resolved = targetPath;
+      if (!resolved) continue;
+      const toId = `page:${resolved}`;
+      if (!nodes.has(toId)) {
+        nodes.set(toId, {
+          id: toId,
+          kind: 'page',
+          label: resolved.split('/').pop()?.replace(/\.md$/i, '') ?? normalized,
+          path: resolved,
         });
       }
       edges.push({
-        id: `tag:${fromId}->${tagId}`,
+        id: `similar:${fromId}->${toId}`,
         source: fromId,
-        target: tagId,
-        kind: 'tag',
+        target: toId,
+        kind: 'similar',
       });
     }
   }
