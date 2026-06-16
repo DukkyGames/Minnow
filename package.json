@@ -42,6 +42,7 @@
     "test:oauth": "node --test test/oauth/*.test.mjs",
     "test:terminal-pty": "node test/terminal/pty-session.test.mjs",
     "test:memory": "node --test test/memory/*.test.mjs",
+    "test:engine": "node --test test/engine/*.test.mjs",
     "test:lsp": "node --test test/lsp/*.test.mjs",
     "test:mcp": "node --test test/mcp/*.test.mjs",
     "test:research": "node --experimental-test-module-mocks ./node_modules/tsx/dist/cli.mjs --test test/research/*.test.mts && node --test test/research/*.test.mjs",
