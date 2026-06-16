@@ -32,6 +32,8 @@ import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
 import { ensurePinnedSkill } from '../skills/pinned-skill';
+import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
+import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
@@ -1218,6 +1220,12 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   const victim = state.chats[idx];
+  const victimAgent = resolveActiveWorkAgent(victim);
+  cleanupChatArchiveOnDelete(
+    victim.id,
+    victim.workspacePath ?? '',
+    victimAgent?.contextEnforcementPolicy,
+  );
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
   state.chats.splice(idx, 1);

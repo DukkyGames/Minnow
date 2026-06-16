@@ -32,7 +32,7 @@ import {
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 const DEFAULT_CATALOG = { version: 1, generatedAt: null, pages: [] };
 
-const VALID_SOURCES = new Set(['user', 'agent', 'synthesis', 'ingest']);
+const VALID_SOURCES = new Set(['user', 'agent', 'synthesis', 'ingest', 'archive']);
 const VALID_STATUS = new Set(['current', 'stale', 'orphan']);
 
 /** Default brain section in config.json when missing. */
@@ -165,9 +165,14 @@ function parseFrontmatterBlock(block) {
     }
     if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
       const inner = rawValue.slice(1, -1).trim();
-      front[key] = inner
+      const items = inner
         ? inner.split(',').map((v) => v.trim().replace(/^["']|["']$/g, ''))
         : [];
+      if (key === 'sourceTurnIndices') {
+        front[key] = items.map((v) => Number(v)).filter((n) => Number.isFinite(n));
+      } else {
+        front[key] = items;
+      }
       continue;
     }
     front[key] = rawValue.replace(/^["']|["']$/g, '');
@@ -191,6 +196,16 @@ export function serializePage(meta, body) {
   const anchors = Array.isArray(meta.anchors) ? meta.anchors : [];
   const source = VALID_SOURCES.has(meta.source) ? meta.source : 'user';
   const status = VALID_STATUS.has(meta.status) ? meta.status : 'current';
+  const archiveLines = [];
+  if (meta.chatId) {
+    archiveLines.push(`chatId: ${quoteYamlString(meta.chatId)}`);
+  }
+  if (Array.isArray(meta.sourceTurnIndices) && meta.sourceTurnIndices.length > 0) {
+    archiveLines.push(
+      `sourceTurnIndices: [${meta.sourceTurnIndices.map((n) => String(n)).join(', ')}]`,
+    );
+  }
+  const archiveBlock = archiveLines.length ? `${archiveLines.join('\n')}\n` : '';
   return `---
 id: ${quoteYamlString(meta.id)}
 title: ${quoteYamlString(meta.title ?? 'Untitled')}
@@ -203,7 +218,7 @@ updatedAt: ${quoteYamlString(meta.updatedAt)}
 anchors: ${serializeArrayField(anchors)}
 status: ${status}
 input_hash: ${quoteYamlString(meta.input_hash ?? '')}
----
+${archiveBlock}---
 
 ${body}`;
 }
@@ -255,6 +270,10 @@ export function buildCatalogEntry(front, relPath, body) {
     status: VALID_STATUS.has(front.status) ? front.status : 'current',
     input_hash: String(front.input_hash ?? ''),
     links,
+    ...(front.chatId ? { chatId: String(front.chatId) } : {}),
+    ...(Array.isArray(front.sourceTurnIndices)
+      ? { sourceTurnIndices: front.sourceTurnIndices }
+      : {}),
     ...parts,
   };
 }
@@ -465,6 +484,10 @@ export async function createPage(input) {
     status: VALID_STATUS.has(input.status) ? input.status : 'current',
     input_hash: String(input.input_hash ?? ''),
   };
+  if (input.chatId) meta.chatId = String(input.chatId);
+  if (Array.isArray(input.sourceTurnIndices)) {
+    meta.sourceTurnIndices = input.sourceTurnIndices.map((n) => Number(n));
+  }
 
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, serializePage(meta, body), 'utf8');

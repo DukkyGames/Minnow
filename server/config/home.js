@@ -319,6 +319,8 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'who_calls',
   'read_symbol',
   'explain_symbol',
+  'recall_chat_context',
+  'recall_turn_full',
 ]);
 
 function defaultPermissionForTool(id, enabled) {

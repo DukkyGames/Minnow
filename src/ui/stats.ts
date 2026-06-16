@@ -114,7 +114,12 @@ export function updateStatsExpandPreview(): void {
   if (!preview) return;
   const tps = document.getElementById('stripTPS')!.textContent.trim();
   const total = document.getElementById('stripTotal')!.textContent.trim();
-  preview.textContent = `${tps} t/s · ${total} tokens`;
+  const trim = getActiveChat().lastContextTrim;
+  const archiveChip =
+    trim?.archived != null && trim.archived > 0
+      ? ` · archive: ${trim.archived}→${trim.recalled ?? 0}`
+      : '';
+  preview.textContent = `${tps} t/s · ${total} tokens${archiveChip}`;
 }
 
 /** Refresh bottom metrics strip and token bars from latest turn data. */
