@@ -142,6 +142,44 @@ export function flattenDocumentSymbols(symbols, repo, file, lines, prefix = '') 
 }
 
 /**
+ * Normalize a ripgrep file path to a workspace-relative posix path.
+ * Handles absolute paths and duplicated root prefixes on Windows.
+ * @param {string} root
+ * @param {string} relOrAbs
+ */
+export function normalizeIndexableRelPath(root, relOrAbs) {
+  const normalizedRoot = path.resolve(root);
+  const rootPosix = normalizedRoot.replace(/\\/g, '/');
+  let candidate = String(relOrAbs ?? '').trim().replace(/\\/g, '/');
+  if (!candidate) return '';
+
+  const marker = `${rootPosix}/`;
+  const doubled = `${rootPosix}/${rootPosix}/`;
+  if (candidate.includes(doubled)) {
+    candidate = candidate.split(doubled).pop() ?? candidate;
+  }
+  while (candidate.startsWith(marker)) {
+    candidate = candidate.slice(marker.length);
+  }
+
+  let abs = path.isAbsolute(candidate)
+    ? path.resolve(candidate)
+    : path.resolve(normalizedRoot, candidate);
+  let rel = path.relative(normalizedRoot, abs).replace(/\\/g, '/');
+
+  if (!rel || rel.startsWith('..')) {
+    const tail = candidate.includes(marker) ? candidate.split(marker).pop() : candidate;
+    if (tail) {
+      abs = path.resolve(normalizedRoot, tail);
+      rel = path.relative(normalizedRoot, abs).replace(/\\/g, '/');
+    }
+  }
+
+  if (!rel || rel.startsWith('..')) return '';
+  return rel;
+}
+
+/**
  * List indexable files via ripgrep (respects .gitignore).
  * @param {string} root
  * @param {string[]} includeGlobs
@@ -166,10 +204,9 @@ export async function listIndexableFiles(root, includeGlobs, excludeGlobs) {
     .map((line) => line.trim().replace(/\\/g, '/'))
     .filter(Boolean);
   const normalizedRoot = path.resolve(root);
-  return rel.filter((p) => {
-    const abs = path.resolve(normalizedRoot, p);
-    return abs.startsWith(normalizedRoot);
-  });
+  return rel
+    .map((p) => normalizeIndexableRelPath(normalizedRoot, p))
+    .filter(Boolean);
 }
 
 /**
@@ -322,7 +359,7 @@ export async function reindexCode(opts = {}) {
   const codeConfig = opts.codeConfig ?? normalizeBrainCodeConfig(null);
   const db = getCodeDb(repo);
 
-  let files = opts.files?.map((f) => f.replace(/\\/g, '/')) ?? null;
+  let files = opts.files?.map((f) => normalizeIndexableRelPath(root, f)).filter(Boolean) ?? null;
   if (!files) {
     files = await listIndexableFiles(root, codeConfig.includeGlobs, codeConfig.excludeGlobs);
   }

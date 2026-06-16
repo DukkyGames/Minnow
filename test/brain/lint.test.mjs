@@ -9,6 +9,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { resetMinnowHomeCache, ensureMinnowLayout } from '../../server/config/home.js';
 import { lintBrainWiki, findMissingLinkTargets } from '../../server/brain/lint.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { createPage, ensureBrainStore } from '../../server/brain/store.js';
 
 const PAGE_A = '11111111-1111-1111-1111-111111111111';
@@ -25,6 +26,7 @@ before(async () => {
 });
 
 after(async () => {
+  closeCodeDbForTests();
   delete process.env.MINNOW_HOME;
   resetMinnowHomeCache();
   await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
@@ -66,6 +68,6 @@ describe('brain lint', () => {
     assert.ok(Array.isArray(report.stale));
     assert.ok(Array.isArray(report.missingLinks));
     assert.ok(Array.isArray(report.contradictions));
-    assert.equal(report.extensions.anchorDrift, 'MIN-B9');
+    assert.ok(['ok', 'active'].includes(report.extensions.anchorDrift));
   });
 });

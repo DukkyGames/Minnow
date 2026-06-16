@@ -6,6 +6,7 @@ import { detectLocalServer } from '../tools/client';
 import type {
   BrainCodeCallsOfResult,
   BrainCodeConfig,
+  BrainCodeExplainResult,
   BrainCodeFindResult,
   BrainCodeReadSymbolResult,
   BrainCodeReindexResult,
@@ -213,4 +214,12 @@ export async function fetchBrainCodeReadSymbol(
 ): Promise<BrainCodeReadSymbolResult | null> {
   const qs = new URLSearchParams({ symbol });
   return brainFetch<BrainCodeReadSymbolResult>(`/api/brain/code/read-symbol?${qs}`);
+}
+
+/** Wiki pages that anchor a symbol (code → meaning). */
+export async function fetchBrainCodeExplain(
+  symbol: string,
+): Promise<BrainCodeExplainResult | null> {
+  const qs = new URLSearchParams({ symbol });
+  return brainFetch<BrainCodeExplainResult>(`/api/brain/code/explain?${qs}`);
 }

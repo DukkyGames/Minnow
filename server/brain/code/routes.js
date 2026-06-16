@@ -4,6 +4,7 @@
 
 import {
   callsOf,
+  explainSymbol,
   findSymbol,
   loadBrainCodeConfig,
   queryCodeStatus,
@@ -143,6 +144,14 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const url = new URL(req.url ?? '', 'http://localhost');
       const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
       sendJson(res, 200, await readSymbol(String(symbol)));
+      return true;
+    }
+
+    if (pathname === '/api/brain/code/explain' && (req.method === 'GET' || req.method === 'POST')) {
+      const body = req.method === 'POST' ? await readJsonBody(req) : {};
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const symbol = url.searchParams.get('symbol') ?? body.symbol ?? '';
+      sendJson(res, 200, await explainSymbol(String(symbol)));
       return true;
     }
 

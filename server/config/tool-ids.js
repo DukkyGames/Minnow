@@ -17,6 +17,7 @@ export const BRAIN_CODE_TOOL_IDS = [
   'find_symbol',
   'who_calls',
   'read_symbol',
+  'explain_symbol',
 ];
 
 /** All Brain tools that default to permission `full`. */
@@ -102,6 +103,7 @@ export const ALL_TOOL_IDS = [
   'find_symbol',
   'who_calls',
   'read_symbol',
+  'explain_symbol',
   'manage_calendar',
   'list_mail',
   'draft_reply',

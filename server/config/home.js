@@ -318,6 +318,7 @@ const DEFAULT_ENABLED_TOOL_IDS = new Set([
   'find_symbol',
   'who_calls',
   'read_symbol',
+  'explain_symbol',
 ]);
 
 function defaultPermissionForTool(id, enabled) {

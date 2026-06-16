@@ -37,6 +37,7 @@ import {
   toolBrainWritePage,
 } from '../tools/brain-tools.js';
 import {
+  toolExplainSymbol,
   toolFindSymbol,
   toolReadSymbol,
   toolRepoMap,
@@ -928,6 +929,7 @@ const SERVER_TOOL_HANDLERS = {
   find_symbol: toolFindSymbol,
   who_calls: toolWhoCalls,
   read_symbol: toolReadSymbol,
+  explain_symbol: toolExplainSymbol,
   manage_calendar: toolManageCalendar,
   list_mail: toolListMail,
   draft_reply: toolDraftReply,

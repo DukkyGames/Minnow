@@ -71,6 +71,12 @@ function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
 
   renderIssueList(mount, 'Orphans', report.orphans.map((o) => ({ ...o, summary: o.title })), 'No orphan pages.');
   renderIssueList(mount, 'Stale', report.stale.map((o) => ({ ...o, summary: o.title })), 'No stale pages.');
+  renderIssueList(
+    mount,
+    'Anchor drift',
+    (report.anchorDrift ?? []).map((d) => ({ path: d.path, summary: d.summary })),
+    'All anchored symbols match the code index.',
+  );
   renderIssueList(mount, 'Missing links', report.missingLinks, 'All wikilinks resolve.');
   renderIssueList(
     mount,

@@ -4,6 +4,7 @@
 
 import {
   fetchBrainCodeCallsOf,
+  fetchBrainCodeExplain,
   fetchBrainCodeReadSymbol,
   fetchBrainCodeRepoMap,
   fetchBrainCodeStatus,
@@ -15,7 +16,9 @@ import type {
   BrainCodeStatus,
   BrainCodeSymbolMatch,
   BrainCodeSymbolRef,
+  BrainCodeExplainPage,
 } from '../../brain/types';
+import { navigateBrainWikiPage } from './wiki-section';
 
 let bindingsDone = false;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -206,6 +209,77 @@ async function selectSymbol(symbolId: string): Promise<void> {
   );
 
   highlightSearchResult(symbolId);
+  void refreshExplainPanel(symbolId);
+}
+
+/** Show wiki pages that anchor the selected symbol. */
+async function refreshExplainPanel(symbolId: string): Promise<void> {
+  const panel = document.getElementById('brainCodeExplain');
+  const listEl = document.getElementById('brainCodeExplainList');
+  const emptyEl = document.getElementById('brainCodeExplainEmpty');
+  if (!panel || !listEl || !emptyEl) return;
+
+  panel.removeAttribute('aria-disabled');
+  listEl.replaceChildren();
+  emptyEl.hidden = true;
+
+  const loading = document.createElement('li');
+  loading.className = 'brain-muted';
+  loading.textContent = 'Loading anchored pages…';
+  listEl.append(loading);
+
+  const result = await fetchBrainCodeExplain(symbolId);
+  listEl.replaceChildren();
+
+  if (!result) {
+    emptyEl.hidden = false;
+    emptyEl.textContent = 'Explain unavailable. Start npm start.';
+    return;
+  }
+
+  if (!result.pages.length) {
+    emptyEl.hidden = false;
+    emptyEl.textContent = 'No wiki pages anchor this symbol yet.';
+    return;
+  }
+
+  for (const page of result.pages) {
+    listEl.append(renderExplainPageItem(page));
+  }
+}
+
+/** Build one clickable anchored-page row for the Explain panel. */
+function renderExplainPageItem(page: BrainCodeExplainPage): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'brain-code-explain-item';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'brain-inline-link brain-code-explain-link';
+  btn.textContent = page.title;
+  btn.addEventListener('click', () => {
+    navigateBrainWikiPage(page.path);
+  });
+  li.append(btn);
+
+  if (page.status === 'stale') {
+    const badge = document.createElement('span');
+    badge.className = 'brain-code-explain-stale';
+    badge.textContent = 'stale';
+    li.append(badge);
+  }
+
+  if (page.summary?.trim()) {
+    const summary = document.createElement('p');
+    summary.className = 'brain-code-explain-summary';
+    summary.textContent = page.summary;
+    li.append(summary);
+  }
+
+  const path = document.createElement('span');
+  path.className = 'brain-muted brain-code-explain-path';
+  path.textContent = page.path;
+  li.append(path);
+  return li;
 }
 
 /** Mark the active row in the search results list. */
@@ -274,6 +348,13 @@ async function runSymbolSearch(query: string): Promise<void> {
       detail.replaceChildren();
     }
     selectedSymbolId = null;
+    const explainList = document.getElementById('brainCodeExplainList');
+    const explainEmpty = document.getElementById('brainCodeExplainEmpty');
+    explainList?.replaceChildren();
+    if (explainEmpty) {
+      explainEmpty.hidden = false;
+      explainEmpty.textContent = 'Select a symbol to see anchored wiki pages.';
+    }
     return;
   }
 

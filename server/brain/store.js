@@ -20,6 +20,10 @@ import {
 } from './paths.js';
 import { DEFAULT_BRAIN_CODE_CONFIG, normalizeBrainCodeConfig } from './code/config.js';
 import {
+  deleteAnchorsForPage,
+  syncAnchorsForPage,
+} from './code/anchors.js';
+import {
   DEFAULT_BRAIN_CONFIG,
   scheduleEntryVectorSync,
   syncDeleteEntryVector,
@@ -464,6 +468,7 @@ export async function createPage(input) {
 
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, serializePage(meta, body), 'utf8');
+  syncAnchorsForPage(id, meta.anchors);
   await appendLog(`created ${relPath} (${id})`);
   await rebuildCatalog();
 
@@ -491,11 +496,17 @@ export async function updatePage(relPath, input) {
     meta.anchors = Array.isArray(input.anchors) ? input.anchors : [];
   }
   if (input.status !== undefined && VALID_STATUS.has(input.status)) meta.status = input.status;
+  else if (input.anchors !== undefined || input.body !== undefined) {
+    meta.status = 'current';
+  }
   if (input.input_hash !== undefined) meta.input_hash = String(input.input_hash);
   meta.updatedAt = new Date().toISOString();
 
   const body = input.body !== undefined ? String(input.body) : existing.body;
   await fs.writeFile(abs, serializePage(meta, body), 'utf8');
+  if (!input.skipAnchorSync) {
+    syncAnchorsForPage(meta.id, meta.anchors);
+  }
   await appendLog(`updated ${relPath} (${meta.id})`);
   await rebuildCatalog();
 
@@ -510,6 +521,7 @@ export async function deletePage(relPath) {
   const existing = await readPage(relPath);
   const abs = await resolvePagePath(relPath);
   await fs.unlink(abs);
+  deleteAnchorsForPage(existing.meta.id);
   await appendLog(`deleted ${relPath} (${existing.meta.id})`);
   await rebuildCatalog();
   void syncDeleteEntryVector(existing.meta.id);
