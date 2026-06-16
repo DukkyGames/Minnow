@@ -11,6 +11,17 @@ import { renderBrainMarkdown } from './wikilink-markdown';
 export type InspectorNavigateFn = (relPath: string) => void;
 export type InspectorEditFn = (relPath: string) => void;
 
+/** Content mount inside #brainInspector (resize handle stays as a sibling). */
+function getInspectorContent(mount: HTMLElement): HTMLElement {
+  let content = mount.querySelector('.brain-inspector__content') as HTMLElement | null;
+  if (!content) {
+    content = document.createElement('div');
+    content.className = 'brain-inspector__content';
+    mount.append(content);
+  }
+  return content;
+}
+
 /** Mount or refresh the right-hand node inspector for a wiki page. */
 export async function renderBrainInspector(
   mount: HTMLElement,
@@ -21,11 +32,12 @@ export async function renderBrainInspector(
 ): Promise<void> {
   mount.classList.add('is-open');
   mount.setAttribute('aria-hidden', 'false');
-  mount.replaceChildren();
+  const content = getInspectorContent(mount);
+  content.replaceChildren();
 
   const inner = document.createElement('div');
   inner.className = 'brain-inspector__inner';
-  mount.append(inner);
+  content.append(inner);
 
   const loadingMount = document.createElement('div');
   inner.append(loadingMount);
@@ -133,7 +145,7 @@ export async function renderBrainInspector(
 export function closeBrainInspector(mount: HTMLElement): void {
   mount.classList.remove('is-open');
   mount.setAttribute('aria-hidden', 'true');
-  mount.replaceChildren();
+  mount.querySelector('.brain-inspector__content')?.replaceChildren();
 }
 
 /** Show symbol details in the inspector (code call graph). */
@@ -145,11 +157,12 @@ export function renderSymbolInspector(
 ): void {
   mount.classList.add('is-open');
   mount.setAttribute('aria-hidden', 'false');
-  mount.replaceChildren();
+  const content = getInspectorContent(mount);
+  content.replaceChildren();
 
   const inner = document.createElement('div');
   inner.className = 'brain-inspector__inner';
-  mount.append(inner);
+  content.append(inner);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';

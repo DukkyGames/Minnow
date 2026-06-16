@@ -9,6 +9,7 @@ import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
 import { navigateToDesktop } from '../os/router';
 import { closeBrainInspector } from './brain/inspector';
+import { initBrainInspectorResize } from './brain/inspector-resize';
 import { renderBrainSection } from './brain/sections';
 
 export type BrainSectionId =
@@ -284,6 +285,7 @@ function onHashChange(): void {
 export function initBrainPage(): void {
   registerWindowTeardown('brain', () => closeBrain({ skipNavigate: true }));
   bindStaticSections();
+  initBrainInspectorResize();
   window.addEventListener('hashchange', onHashChange);
   if (window.location.hash.includes('/brain')) {
     openBrain(parseHashSection());
