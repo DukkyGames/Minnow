@@ -11,7 +11,23 @@ export const BRAIN_WIKI_TOOL_IDS = [
   'save_memory',
 ];
 
+/** Code-index tools seeded at permission `full` (MIN-B7). */
+export const BRAIN_CODE_TOOL_IDS = [
+  'repo_map',
+  'find_symbol',
+  'who_calls',
+  'read_symbol',
+];
+
+/** All Brain tools that default to permission `full`. */
+export const BRAIN_FULL_PERMISSION_TOOL_IDS = [
+  ...BRAIN_WIKI_TOOL_IDS,
+  ...BRAIN_CODE_TOOL_IDS,
+];
+
 export const BRAIN_WIKI_TOOL_ID_SET = new Set(BRAIN_WIKI_TOOL_IDS);
+export const BRAIN_CODE_TOOL_ID_SET = new Set(BRAIN_CODE_TOOL_IDS);
+export const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set(BRAIN_FULL_PERMISSION_TOOL_IDS);
 
 export const ALL_TOOL_IDS = [
   'web_search',
@@ -82,6 +98,10 @@ export const ALL_TOOL_IDS = [
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',
+  'repo_map',
+  'find_symbol',
+  'who_calls',
+  'read_symbol',
   'manage_calendar',
   'list_mail',
   'draft_reply',

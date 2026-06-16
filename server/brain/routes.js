@@ -16,6 +16,7 @@ import {
   applyMemoryProposalEdits,
 } from './proposals.js';
 import { retrieveBrainBlockHybrid, loadAllPagesWithBodies } from './retrieve.js';
+import { handleCodeIndexRequest } from './code/routes.js';
 import { handleSynthesisRequest } from './synthesis-routes.js';
 import { slugifyFactTitle } from './synthesis.js';
 import { clearReindexNeeded } from './vector-sync.js';
@@ -429,6 +430,9 @@ export async function handleBrainRequest(req, res, pathname) {
       sendJson(res, 200, { ok: true, ...result });
       return true;
     }
+
+    const codeHandled = await handleCodeIndexRequest(req, res, pathname);
+    if (codeHandled) return true;
 
     sendJson(res, 404, { error: 'Not found' });
     return true;

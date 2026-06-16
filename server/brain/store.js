@@ -18,6 +18,7 @@ import {
   isValidPageId,
   resolvePagePath,
 } from './paths.js';
+import { DEFAULT_BRAIN_CODE_CONFIG } from './code/config.js';
 import {
   DEFAULT_BRAIN_CONFIG,
   scheduleEntryVectorSync,
@@ -54,6 +55,7 @@ export async function loadBrainConfig() {
     raw.embeddings && typeof raw.embeddings === 'object'
       ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb, ...raw.embeddings }
       : { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb };
+  const codeRaw = raw.code && typeof raw.code === 'object' ? raw.code : {};
   return {
     ...DEFAULT_BRAIN_STORE_CONFIG,
     ...raw,
@@ -63,6 +65,7 @@ export async function loadBrainConfig() {
     maxInjectCharsLite:
       raw.maxInjectCharsLite ?? memory.maxInjectCharsLite ?? 800,
     embeddings,
+    code: { ...DEFAULT_BRAIN_CODE_CONFIG, ...codeRaw },
   };
 }
 

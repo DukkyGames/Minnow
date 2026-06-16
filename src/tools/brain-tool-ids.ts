@@ -1,5 +1,5 @@
 /**
- * Brain wiki tool ids (keep in sync with server/config/tool-ids.js).
+ * Brain tool ids (keep in sync with server/config/tool-ids.js).
  * Seeded at permission `full` on first run and back-filled on config load.
  */
 
@@ -13,4 +13,18 @@ export const BRAIN_WIKI_TOOL_IDS = [
   'save_memory',
 ] as const;
 
+export const BRAIN_CODE_TOOL_IDS = [
+  'repo_map',
+  'find_symbol',
+  'who_calls',
+  'read_symbol',
+] as const;
+
+export const BRAIN_FULL_PERMISSION_TOOL_IDS = [
+  ...BRAIN_WIKI_TOOL_IDS,
+  ...BRAIN_CODE_TOOL_IDS,
+] as const;
+
 export const BRAIN_WIKI_TOOL_ID_SET = new Set<string>(BRAIN_WIKI_TOOL_IDS);
+export const BRAIN_CODE_TOOL_ID_SET = new Set<string>(BRAIN_CODE_TOOL_IDS);
+export const BRAIN_FULL_PERMISSION_TOOL_ID_SET = new Set<string>(BRAIN_FULL_PERMISSION_TOOL_IDS);

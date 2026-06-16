@@ -36,6 +36,12 @@ import {
   toolBrainSearch,
   toolBrainWritePage,
 } from '../tools/brain-tools.js';
+import {
+  toolFindSymbol,
+  toolReadSymbol,
+  toolRepoMap,
+  toolWhoCalls,
+} from '../tools/code-tools.js';
 import { toolSaveMemory } from '../tools/memory-tools.js';
 import { toolReadDocument } from '../tools/read-document.js';
 import {
@@ -918,6 +924,10 @@ const SERVER_TOOL_HANDLERS = {
   brain_append_log: toolBrainAppendLog,
   brain_ingest_source: toolBrainIngestSource,
   save_memory: toolSaveMemory,
+  repo_map: toolRepoMap,
+  find_symbol: toolFindSymbol,
+  who_calls: toolWhoCalls,
+  read_symbol: toolReadSymbol,
   manage_calendar: toolManageCalendar,
   list_mail: toolListMail,
   draft_reply: toolDraftReply,
