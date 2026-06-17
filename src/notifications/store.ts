@@ -85,6 +85,20 @@ export function markNotificationRead(id: string): void {
   emit();
 }
 
+/** Mark every unread inbox row linked to a chat (opening the thread dismisses its alerts). */
+export function markNotificationsReadForChat(chatId: string): void {
+  const trimmed = chatId.trim();
+  if (!trimmed) return;
+  let changed = false;
+  for (const row of items) {
+    if (!row.read && row.chatId === trimmed) {
+      row.read = true;
+      changed = true;
+    }
+  }
+  if (changed) emit();
+}
+
 /** Mark all notifications read. */
 export function markAllNotificationsRead(): void {
   if (!items.some((n) => !n.read)) return;

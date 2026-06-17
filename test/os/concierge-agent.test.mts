@@ -119,6 +119,13 @@ describe('fallbackConciergePlan', () => {
     assert.equal(plan.autoRun, true);
   });
 
+  test('opens research idle for navigation-only chip text', () => {
+    const plan = fallbackConciergePlan('Research a topic');
+    assert.equal(plan.appId, 'research');
+    assert.equal(plan.seed, undefined);
+    assert.equal(plan.autoRun, false);
+  });
+
   test('defaults unknown text to chat', () => {
     const plan = fallbackConciergePlan('xyzzy');
     assert.equal(plan.appId, 'chat');

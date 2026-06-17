@@ -474,14 +474,39 @@ export async function verifySha256(filePath, expectedHex) {
   }
 }
 
-export async function extractArchive(archivePath, destDir) {
+/** Tar exclude patterns applied to every .zip on Windows (colon paths are invalid on NTFS). */
+export const WIN_ZIP_TAR_EXCLUDES = ['*:*'];
+
+/**
+ * Build tar argv for archive extraction, including optional exclude globs.
+ * @param {string} archivePath
+ * @param {string} destDir
+ * @param {string[]} excludePatterns
+ * @returns {string[]}
+ */
+export function buildTarExtractArgs(archivePath, destDir, excludePatterns = []) {
+  const args = ['-xf', archivePath, '-C', destDir];
+  for (const pattern of excludePatterns) {
+    if (pattern) args.push(`--exclude=${pattern}`);
+  }
+  return args;
+}
+
+/**
+ * @param {string} archivePath
+ * @param {string} destDir
+ * @param {{ exclude?: string[] }} [options]
+ */
+export async function extractArchive(archivePath, destDir, options = {}) {
   await fsp.mkdir(destDir, { recursive: true });
   if (archivePath.endsWith('.zip')) {
-    await runProcess(
-      process.platform === 'win32' ? 'tar' : 'tar',
-      ['-xf', archivePath, '-C', destDir],
-      { cwd: destDir },
-    );
+    const excludePatterns = [...(options.exclude ?? [])];
+    if (process.platform === 'win32') {
+      excludePatterns.push(...WIN_ZIP_TAR_EXCLUDES);
+    }
+    await runProcess('tar', buildTarExtractArgs(archivePath, destDir, excludePatterns), {
+      cwd: destDir,
+    });
     return;
   }
   if (archivePath.endsWith('.gz') && !archivePath.endsWith('.tar.gz')) {

@@ -75,10 +75,11 @@ export function initBrainInspectorResize(): void {
     dragging = false;
     inspector.classList.remove('is-resizing');
     handle.classList.remove('dragging');
-    document.body.style.cursor = '';
+    document.body.style.removeProperty('cursor');
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', stopDrag);
     window.removeEventListener('pointercancel', stopDrag);
+    window.removeEventListener('blur', stopDrag);
 
     const width = inspector.getBoundingClientRect().width;
     if (width >= MIN_WIDTH) saveWidth(width);
@@ -95,5 +96,8 @@ export function initBrainInspectorResize(): void {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', stopDrag);
     window.addEventListener('pointercancel', stopDrag);
+    window.addEventListener('blur', stopDrag);
   });
+
+  handle.addEventListener('lostpointercapture', stopDrag);
 }

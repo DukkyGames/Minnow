@@ -1,5 +1,6 @@
 import type { AppId, AppInstance, LaunchOptions, OsView, PresentationMode } from './types';
 import { getPresentationMode } from './app-registry';
+import { windowManager } from './window-manager';
 
 export interface InstanceSnapshot {
   view: OsView;
@@ -114,6 +115,10 @@ export function launchInstance(appId: AppId, options?: LaunchOptions): string {
     applyLaunchOptionsToInstance(existing, options);
     existing.unread = 0;
     view = viewForPresentationMode(mode);
+    if (mode === 'window') {
+      const win = windowManager.findWindowByInstance(existing.id);
+      if (win?.minimized) windowManager.minimize(win.id, false);
+    }
     emit();
     return existing.id;
   }

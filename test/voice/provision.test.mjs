@@ -7,7 +7,10 @@ import { describe, test } from 'node:test';
 import {
   buildTorchPackage,
   isCudaHardware,
+  patchQwenTtsCheckModelInputsInVenv,
+  resolveQwenTtsPackageDir,
 } from '../../server/voice/provision.js';
+import { getVoiceVenvDir } from '../../server/voice/paths.js';
 
 describe('voice provision torch packages', () => {
   test('buildTorchPackage selects CUDA wheels when CUDA hardware is present', () => {
@@ -32,5 +35,22 @@ describe('voice provision torch packages', () => {
     assert.equal(isCudaHardware({ backend: 'cuda' }), true);
     assert.equal(isCudaHardware({ backend: 'cpu_x86' }), false);
     assert.equal(isCudaHardware(null), false);
+  });
+
+  test('resolveQwenTtsPackageDir finds qwen_tts when voice venv is installed', () => {
+    const venvDir = getVoiceVenvDir();
+    const pkgDir = resolveQwenTtsPackageDir(venvDir);
+    if (!pkgDir) return;
+    assert.match(pkgDir.replace(/\\/g, '/'), /qwen_tts$/);
+  });
+
+  test('patchQwenTtsCheckModelInputsInVenv is idempotent', async () => {
+    const venvDir = getVoiceVenvDir();
+    const pkgDir = resolveQwenTtsPackageDir(venvDir);
+    if (!pkgDir) return;
+    const first = await patchQwenTtsCheckModelInputsInVenv(venvDir);
+    const second = await patchQwenTtsCheckModelInputsInVenv(venvDir);
+    assert.equal(second, 0);
+    assert.ok(first >= 0);
   });
 });

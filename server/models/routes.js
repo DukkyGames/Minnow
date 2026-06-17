@@ -87,7 +87,12 @@ export async function handleModelsRequest(req, res, pathname) {
       Connection: 'keep-alive',
     });
     const send = (event) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        /* client disconnected — keep download running */
+        return;
+      }
       if (event.status === 'completed' || event.status === 'failed' || event.status === 'cancelled') {
         res.end();
       }

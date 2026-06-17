@@ -80,4 +80,43 @@ describe('notification store', () => {
     store.rememberDedupeKey('a');
     assert.equal(store.hasDedupeKey('a'), true);
   });
+
+  test('markNotificationsReadForChat clears only matching unread rows', () => {
+    store.appendNotification({
+      id: 'n1',
+      kind: 'chat_turn_complete',
+      title: 'Alpha',
+      preview: 'Hello',
+      chatId: 'chat-a',
+      appId: 'code',
+      createdAt: 1,
+      read: false,
+    });
+    store.appendNotification({
+      id: 'n2',
+      kind: 'chat_turn_complete',
+      title: 'Beta',
+      preview: 'Hi',
+      chatId: 'chat-b',
+      appId: 'code',
+      createdAt: 2,
+      read: false,
+    });
+    store.appendNotification({
+      id: 'n3',
+      kind: 'scheduler',
+      title: 'Scheduler',
+      preview: 'Job done',
+      appId: 'scheduler',
+      createdAt: 3,
+      read: false,
+    });
+
+    store.markNotificationsReadForChat('chat-a');
+
+    assert.equal(store.getUnreadNotificationCount(), 2);
+    assert.equal(store.getNotifications().find((n) => n.id === 'n1')?.read, true);
+    assert.equal(store.getNotifications().find((n) => n.id === 'n2')?.read, false);
+    assert.equal(store.getNotifications().find((n) => n.id === 'n3')?.read, false);
+  });
 });

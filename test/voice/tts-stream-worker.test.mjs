@@ -125,5 +125,7 @@ describe('TTS stream worker source contract', () => {
     assert.match(src, /Qwen3-TTS-streaming\.git/);
     assert.match(src, /flash-attn/);
     assert.match(src, /MINNOW_TTS_USE_COMPILE/);
+    assert.match(src, /patchQwenTtsCheckModelInputs/);
+    assert.match(src, /@check_model_inputs\(\)/);
   });
 });

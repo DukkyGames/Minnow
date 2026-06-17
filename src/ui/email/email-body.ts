@@ -29,6 +29,14 @@ const EMAIL_PURIFY_CONFIG = {
 
 type BodySource = Pick<EmailMessage, 'bodyHtml' | 'bodyText' | 'bodyPreview'>;
 
+/** Reader toggle: formatted HTML vs plain-text alternative. */
+export type EmailBodyViewMode = 'html' | 'plain';
+
+/** True when the message has both sanitized HTML and a plain-text alternative. */
+export function emailBodySupportsViewToggle(message: BodySource): boolean {
+  return Boolean(message.bodyHtml?.trim() && (message.bodyText ?? message.bodyPreview ?? '').trim());
+}
+
 /** Harden external links opened from formatted mail bodies. */
 function secureLinks(root: HTMLElement): void {
   root.querySelectorAll('a[href]').forEach((anchor) => {
@@ -44,11 +52,23 @@ function secureLinks(root: HTMLElement): void {
 }
 
 /**
- * Render a message body into the reading pane (HTML when available, else plain text).
+ * Render a message body into the reading pane.
+ * Defaults to HTML when available; plain mode shows only the text alternative.
  */
-export function renderEmailBody(mount: HTMLElement, message: BodySource): void {
+export function renderEmailBody(
+  mount: HTMLElement,
+  message: BodySource,
+  viewMode: EmailBodyViewMode = 'html',
+): void {
   mount.replaceChildren();
   const html = message.bodyHtml?.trim();
+  const plain = message.bodyText ?? message.bodyPreview ?? '';
+
+  if (viewMode === 'plain' && html && plain.trim()) {
+    mount.classList.remove('html-body');
+    mount.textContent = plain;
+    return;
+  }
 
   if (html) {
     mount.classList.add('html-body');
@@ -59,5 +79,5 @@ export function renderEmailBody(mount: HTMLElement, message: BodySource): void {
   }
 
   mount.classList.remove('html-body');
-  mount.textContent = message.bodyText ?? message.bodyPreview ?? '';
+  mount.textContent = plain;
 }

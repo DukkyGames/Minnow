@@ -215,6 +215,7 @@ function openMenu(): void {
   chip.setAttribute('aria-expanded', 'true');
   chip.classList.add('is-open');
   positionPanel(chip, panel);
+  attachGlobalListeners();
 }
 
 function toggleMenu(): void {

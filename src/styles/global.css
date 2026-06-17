@@ -47,6 +47,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Explicit caret color — `auto` + theme color transitions can hide the caret (MIN-168). */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+textarea,
+[contenteditable='true'] {
+  caret-color: var(--mn-fg);
+}
+
 /* Thin theme scrollbars — bench instrument hairlines (DESIGN.md) */
 :root {
   --scrollbar-size: 8px;

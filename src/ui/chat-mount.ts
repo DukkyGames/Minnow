@@ -8,8 +8,12 @@ import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
 
 /** True when desktop chat or the legacy Chat app is the active UI. */
 export function isChatAppForeground(): boolean {
+  const foregroundAppId = getForegroundAppId();
+  // Code fullscreen keeps desktop chat state for return navigation, but Code owns the UI.
+  if (foregroundAppId === 'code') return false;
   if (isDesktopChatActive()) return true;
-  if (getForegroundAppId() === 'chat') return true;
+  if (foregroundAppId === 'chat') return true;
+  if (foregroundAppId != null) return false;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
 }
 
@@ -40,7 +44,8 @@ function getChatAppMessageCol(): HTMLElement | null {
 /** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
-  if (isDesktopChatActive()) {
+  const codeForeground = getForegroundAppId() === 'code';
+  if (!codeForeground && isDesktopChatActive()) {
     const desktopCol = document.getElementById('desktopChatCol');
     if (desktopCol) return desktopCol;
   }

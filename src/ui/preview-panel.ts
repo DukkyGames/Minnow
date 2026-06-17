@@ -20,9 +20,9 @@ import { detectEmbedBlockedFrame } from './preview-embed-detect';
 import {
   isFullscreenOverlayObscuringWorkspace,
   isPreviewPaneDomVisible,
+  scheduleElectronPreviewHostLayoutSync,
   scheduleElectronPreviewHostVisibilitySync,
-  shouldShowElectronPreviewHost,
-  syncElectronPreviewHostVisibility,
+  syncElectronPreviewHostLayout,
 } from './preview-electron-visibility';
 import { HTTP_URL_RE, parsePreviewAddress } from './preview-url';
 
@@ -38,7 +38,6 @@ const EMBED_BLOCKED_MESSAGE =
 
 let controlsBound = false;
 let boundsObserver: ResizeObserver | null = null;
-let boundsRaf = 0;
 let autoReloadDebounce: ReturnType<typeof setTimeout> | null = null;
 let deferredPreviewLoadTimer: ReturnType<typeof setTimeout> | null = null;
 let frameBlockedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -261,49 +260,17 @@ function onPreviewLoadFailed(detail: {
   showPreviewStatus(message, externalUrl);
 }
 
-function scheduleSyncPreviewBounds(): void {
-  if (boundsRaf) return;
-  boundsRaf = requestAnimationFrame(() => {
-    boundsRaf = 0;
-    void syncPreviewBounds();
-  });
-}
-
-async function syncPreviewBounds(): Promise<void> {
-  const api = getPreviewApi();
-  const body = getPreviewBody();
-  if (!api || !body) return;
-  if (!shouldShowElectronPreviewHost()) {
-    await api.hide();
-    return;
-  }
-  const rect = body.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) {
-    await api.hide();
-    return;
-  }
-  await api.setBounds({
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height,
-  });
-}
-
 function startBoundsObserver(): void {
   const body = getPreviewBody();
   if (!body || boundsObserver || !usesElectronPreview()) return;
   boundsObserver = new ResizeObserver(() => {
-    scheduleElectronPreviewHostVisibilitySync();
-    scheduleSyncPreviewBounds();
+    scheduleElectronPreviewHostLayoutSync();
   });
   boundsObserver.observe(body);
   window.addEventListener('resize', () => {
-    scheduleElectronPreviewHostVisibilitySync();
-    scheduleSyncPreviewBounds();
+    scheduleElectronPreviewHostLayoutSync();
   });
-  scheduleElectronPreviewHostVisibilitySync();
-  scheduleSyncPreviewBounds();
+  scheduleElectronPreviewHostLayoutSync();
 }
 
 function markPreviewHostMode(): void {
@@ -313,15 +280,15 @@ function markPreviewHostMode(): void {
 }
 
 async function showPreviewHost(): Promise<void> {
-  await syncElectronPreviewHostVisibility();
-  scheduleSyncPreviewBounds();
+  await syncElectronPreviewHostLayout();
+  scheduleElectronPreviewHostLayoutSync();
   requestAnimationFrame(() => {
-    scheduleSyncPreviewBounds();
+    scheduleElectronPreviewHostLayoutSync();
   });
 }
 
 async function hidePreviewHost(): Promise<void> {
-  await syncElectronPreviewHostVisibility();
+  await syncElectronPreviewHostLayout();
 }
 
 async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): Promise<void> {
@@ -794,6 +761,9 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
       loadPreviewSource(source);
     } else if (!usesElectronPreview()) {
       clearPreviewFrame();
+    }
+    if (usesElectronPreview()) {
+      scheduleElectronPreviewHostLayoutSync();
     }
   };
 

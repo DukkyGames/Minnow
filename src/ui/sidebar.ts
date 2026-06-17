@@ -11,6 +11,7 @@ import {
   renameGroup,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
+import { isChatAppForeground } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import {
   createEmptyChatObject,
@@ -78,6 +79,7 @@ import {
   resolveChatItemDotState,
   syncChatItemDotsInDom,
 } from './chat-item-dot';
+import { acknowledgeChatViewed } from '../notifications/acknowledge';
 
 /** Read canonical model id + optional provider from the top-bar composite select value. */
 function readTopBarModelBinding(): { modelId: string; providerId?: string } {
@@ -651,6 +653,7 @@ export function switchChat(id: string): void {
     suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
   }
   if (!sessionState || id === sessionState.activeId) {
+    if (sessionState) acknowledgeChatViewed(id);
     closeMobileSidebar();
     applySidebarVisuals();
     return;
@@ -672,10 +675,15 @@ export function switchChat(id: string): void {
     if (boardGroup) boardGroup.viewMode = 'chat';
   }
   sessionState.activeId = id;
-  chat.unread = false;
-  recordChatOpened(id);
+  acknowledgeChatViewed(id);
   syncModelSelectForActiveChat();
-  renderChatFromHistory(chat);
+  if (isDesktopChatActive()) {
+    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(id));
+  } else if (isChatAppForeground()) {
+    renderChatFromHistory(chat, '#chatAppMessageCol');
+  } else {
+    renderChatFromHistory(chat);
+  }
   void import('../usage/code-change-backfill').then((m) =>
     m.ensureChatCodeChangeBackfillOnSwitch(chat).then(() => {
       updateCodeChangeStrip(chat);
