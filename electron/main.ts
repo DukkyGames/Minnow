@@ -97,8 +97,30 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
   trackWindowState(win);
 
+  const showFallbackTimer = setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      console.warn('[electron] Showing window after load timeout');
+      win.show();
+    }
+  }, 15_000);
+
   win.once('ready-to-show', () => {
+    clearTimeout(showFallbackTimer);
     win.show();
+  });
+
+  win.on('closed', () => {
+    clearTimeout(showFallbackTimer);
+  });
+
+  // If Vite is still warming up or load fails, avoid an invisible window on first launch.
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(
+      `[electron] Failed to load ${validatedURL}: ${errorDescription} (${errorCode})`,
+    );
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+    }
   });
 
   return win;
