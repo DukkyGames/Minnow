@@ -3,7 +3,11 @@
  */
 
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import { listModes } from '../chat/modes/registry';
+import { enqueuePendingMode } from '../chat/pending-mode';
+import { isActiveChatStreaming } from '../chat/streaming-state';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
+import { getActiveChat } from '../state/sessions';
 import { createChatWithMode } from '../ui/sidebar';
 import { setChatMode } from '../ui/mode-selector';
 import { enqueueAskQuestion } from './ask-question-queue';
@@ -141,6 +145,24 @@ export function executeSetChatMode(args: Record<string, unknown>): string {
   if (!HANDOFF_MODES.has(modeId)) {
     return `Error: mode_id must be one of: ${[...HANDOFF_MODES].join(', ')}`;
   }
+
+  const chat = getActiveChat();
+  const modeLabel = listModes().find((m) => m.id === modeId)?.label ?? modeId;
+
+  if (chat.modeId === modeId) {
+    return JSON.stringify({ ok: true, modeId, label: modeLabel });
+  }
+
+  if (isActiveChatStreaming()) {
+    enqueuePendingMode(chat, modeId);
+    return JSON.stringify({
+      ok: true,
+      deferred: true,
+      modeId,
+      label: modeLabel,
+    });
+  }
+
   const result = setChatMode(modeId);
   if (!result.ok) {
     return `Error: ${result.error ?? 'could not switch mode'}`;

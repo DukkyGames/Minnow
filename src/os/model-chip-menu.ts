@@ -19,6 +19,10 @@ import {
   syncModelSelectPicker,
 } from '../ui/model-select-picker';
 import { closeOsNotificationsMenu } from './notifications-menu';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from '../ui/preview-electron-visibility';
 
 let panelEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
@@ -127,6 +131,7 @@ function detachGlobalListeners(): void {
 export function closeOsModelChipMenu(): void {
   if (!menuOpen) return;
   menuOpen = false;
+  unregisterChromePopover();
   detachGlobalListeners();
   panelEl?.classList.add('hidden');
   anchorChip?.setAttribute('aria-expanded', 'false');
@@ -211,6 +216,7 @@ function openMenu(): void {
   const panel = ensurePanel();
   rebuildMenuList();
   menuOpen = true;
+  registerChromePopover();
   panel.classList.remove('hidden');
   chip.setAttribute('aria-expanded', 'true');
   chip.classList.add('is-open');

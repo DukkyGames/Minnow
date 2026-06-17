@@ -1,5 +1,5 @@
 /**
- * Workspace-scoped content search via ripgrep (POLISH-021 / MIN-103).
+ * Workspace-scoped content search via ripgrep (POLISH-021 / MIN-103, MIN-196).
  */
 
 import { execFile } from 'node:child_process';
@@ -7,17 +7,26 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { rgPath } from '@vscode/ripgrep';
+import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
 
 const execFileAsync = promisify(execFile);
 
-/** Default max matching lines returned per request. */
-export const GREP_DEFAULT_HEAD_LIMIT = 200;
+/** Default max lines returned per request. */
+export const GREP_DEFAULT_HEAD_LIMIT = 50;
 
 /** Hard cap for head_limit argument. */
-export const GREP_MAX_HEAD_LIMIT = 500;
+export const GREP_MAX_HEAD_LIMIT = 200;
+
+/** Max total output characters (UTF-16 code units) before truncation. */
+export const GREP_MAX_OUTPUT_CHARS = 32000;
+
+/** Max characters per emitted line. */
+export const GREP_MAX_LINE_CHARS = 400;
 
 /** Skip files larger than this when ripgrep scans (bytes). */
 const GREP_MAX_FILE_BYTES = '2M';
+
+const VALID_OUTPUT_MODES = new Set(['content', 'count', 'files_with_matches']);
 
 /**
  * Clamp a numeric tool argument into [min, max].
@@ -53,41 +62,133 @@ export function isRipgrepMatchLine(line) {
 }
 
 /**
- * Truncate ripgrep stdout to at most maxMatchLines primary matches.
- * @param {string} stdout
- * @param {number} maxMatchLines
- * @returns {{ text: string, truncated: boolean, matchCount: number }}
+ * Cap a single output line to maxLineChars.
+ * @param {string} line
+ * @param {number} maxLineChars
  */
-export function truncateRipgrepOutput(stdout, maxMatchLines) {
+function capLineLength(line, maxLineChars) {
+  if (line.length <= maxLineChars) return line;
+  if (maxLineChars <= 3) return line.slice(0, maxLineChars);
+  return `${line.slice(0, maxLineChars - 3)}...`;
+}
+
+/**
+ * Apply offset pagination, line count, per-line length, and total char caps.
+ * @param {string} stdout
+ * @param {{
+ *   offset?: number,
+ *   headLimit?: number,
+ *   maxLineChars?: number,
+ *   maxOutputChars?: number,
+ * }} [options]
+ * @returns {{ text: string, truncated: boolean, lineCount: number, nextOffset: number }}
+ */
+export function capGrepOutput(stdout, options = {}) {
+  const offset = Math.max(0, options.offset ?? 0);
+  const headLimit = options.headLimit ?? GREP_DEFAULT_HEAD_LIMIT;
+  const maxLineChars = options.maxLineChars ?? GREP_MAX_LINE_CHARS;
+  const maxOutputChars = options.maxOutputChars ?? GREP_MAX_OUTPUT_CHARS;
+
   const lines = stdout.split(/\r?\n/);
   const kept = [];
-  let matchCount = 0;
+  let skipped = 0;
+  let totalChars = 0;
   let truncated = false;
 
-  for (const line of lines) {
-    if (line === '') {
-      if (kept.length > 0 && kept[kept.length - 1] !== '') {
-        kept.push('');
-      }
+  for (const rawLine of lines) {
+    if (rawLine === '') continue;
+
+    if (skipped < offset) {
+      skipped += 1;
       continue;
     }
-    if (isRipgrepMatchLine(line)) {
-      if (matchCount >= maxMatchLines) {
-        truncated = true;
-        break;
-      }
-      matchCount += 1;
+
+    if (kept.length >= headLimit) {
+      truncated = true;
+      break;
     }
-    if (!truncated) {
-      kept.push(line);
+
+    const line = capLineLength(rawLine, maxLineChars);
+    const addedChars = line.length + (kept.length > 0 ? 1 : 0);
+    if (totalChars + addedChars > maxOutputChars) {
+      truncated = true;
+      break;
     }
+
+    kept.push(line);
+    totalChars += addedChars;
   }
 
-  while (kept.length > 0 && kept[kept.length - 1] === '') {
-    kept.pop();
+  let text = kept.join('\n');
+  const lineCount = kept.length;
+  const nextOffset = offset + lineCount;
+
+  if (truncated) {
+    const hint =
+      lineCount > 0
+        ? `use offset=${nextOffset} to continue`
+        : `use offset=${offset} with a smaller head_limit`;
+    text = `${text}\n(truncated at ${lineCount} lines; ${hint})`;
   }
 
-  return { text: kept.join('\n'), truncated, matchCount };
+  const beforeUtf8 = text;
+  text = truncateUtf8(text, maxOutputChars);
+  if (text !== beforeUtf8) {
+    truncated = true;
+  }
+
+  return { text, truncated, lineCount, nextOffset };
+}
+
+/**
+ * @deprecated Use capGrepOutput — kept for existing imports/tests.
+ * @param {string} stdout
+ * @param {number} maxMatchLines
+ */
+export function truncateRipgrepOutput(stdout, maxMatchLines) {
+  return capGrepOutput(stdout, { headLimit: maxMatchLines });
+}
+
+/**
+ * Build ripgrep CLI args for the requested output mode.
+ * @param {{
+ *   outputMode: string,
+ *   literal: boolean,
+ *   caseInsensitive: boolean,
+ *   context: number,
+ *   glob: string,
+ *   maxCount: number,
+ * }} opts
+ */
+function buildRipgrepArgs(opts) {
+  const rgArgs = ['--max-filesize', GREP_MAX_FILE_BYTES];
+
+  if (opts.outputMode === 'content') {
+    rgArgs.push('-n', '--no-heading');
+    if (opts.context > 0) {
+      rgArgs.push('-C', String(opts.context));
+    }
+  } else if (opts.outputMode === 'count') {
+    rgArgs.push('--count');
+  } else if (opts.outputMode === 'files_with_matches') {
+    rgArgs.push('--files-with-matches');
+  }
+
+  if (opts.maxCount > 0) {
+    rgArgs.push('--max-count', String(opts.maxCount));
+  }
+
+  if (opts.literal) {
+    rgArgs.push('-F');
+  }
+  if (opts.caseInsensitive) {
+    rgArgs.push('-i');
+  }
+  if (opts.glob) {
+    rgArgs.push('-g', opts.glob);
+  }
+
+  return rgArgs;
 }
 
 /**
@@ -122,10 +223,16 @@ export async function runGrepSearch(args, deps) {
     GREP_MAX_HEAD_LIMIT,
     GREP_DEFAULT_HEAD_LIMIT,
   );
+  const offset = clampInt(args?.offset, 0, Number.MAX_SAFE_INTEGER, 0);
   const context = clampInt(args?.context, 0, 5, 0);
   const caseInsensitive = args?.case_insensitive === true;
   const glob =
     typeof args?.glob === 'string' && args.glob.trim() ? args.glob.trim() : '';
+  const outputModeRaw =
+    typeof args?.output_mode === 'string' ? args.output_mode.trim() : 'content';
+  const outputMode = VALID_OUTPUT_MODES.has(outputModeRaw)
+    ? outputModeRaw
+    : 'content';
 
   const resolved = deps.resolveSafePath(
     typeof args?.path === 'string' && args.path.trim() ? args.path.trim() : '.',
@@ -142,19 +249,14 @@ export async function runGrepSearch(args, deps) {
   const searchTarget = resolved;
   const rgPattern = literal ? escapeRegexLiteral(pattern) : pattern;
 
-  const rgArgs = ['--max-filesize', GREP_MAX_FILE_BYTES, '-n', '--no-heading'];
-  if (literal) {
-    rgArgs.push('-F');
-  }
-  if (caseInsensitive) {
-    rgArgs.push('-i');
-  }
-  if (context > 0) {
-    rgArgs.push('-C', String(context));
-  }
-  if (glob) {
-    rgArgs.push('-g', glob);
-  }
+  const rgArgs = buildRipgrepArgs({
+    outputMode,
+    literal,
+    caseInsensitive,
+    context: outputMode === 'content' ? context : 0,
+    glob,
+    maxCount: headLimit + offset,
+  });
   rgArgs.push(rgPattern, searchTarget);
 
   let stdout = '';
@@ -184,9 +286,12 @@ export async function runGrepSearch(args, deps) {
     return `No matches for "${pattern}" under ${displayRoot}`;
   }
 
-  const { text, truncated, matchCount } = truncateRipgrepOutput(trimmed, headLimit);
-  const suffix = truncated
-    ? `\n(truncated at ${matchCount} matching lines)`
-    : '';
-  return `${text}${suffix}`;
+  const { text } = capGrepOutput(trimmed, {
+    offset,
+    headLimit,
+    maxLineChars: GREP_MAX_LINE_CHARS,
+    maxOutputChars: GREP_MAX_OUTPUT_CHARS,
+  });
+
+  return text;
 }

@@ -120,8 +120,15 @@ function applyActiveTabView(kind: TerminalTabKind): void {
 
   if (isDevServer) {
     scrollDevServerIfPinned();
+    void import('./hub-dev-server').then(({ syncDevServerConsoleStopVisibility }) => {
+      syncDevServerConsoleStopVisibility(true);
+    });
     return;
   }
+
+  void import('./hub-dev-server').then(({ syncDevServerConsoleStopVisibility }) => {
+    syncDevServerConsoleStopVisibility(false);
+  });
 
   requestAnimationFrame(() => {
     onTerminalPanelResize();

@@ -421,7 +421,45 @@ export function appendBubble(
 export function setAssistantErrorBubble(bubble: HTMLDivElement, message: string): void {
   bubble.classList.remove('msg-bubble--md', 'msg-bubble--awaiting');
   bubble.classList.add('msg-bubble--error');
+  bubble.replaceChildren();
   bubble.textContent = message;
+}
+
+export interface AssistantErrorRecoveryOptions {
+  chatId: string;
+  forkHistoryIndex: number;
+  onRecover?: () => void;
+}
+
+/**
+ * Error bubble with a recovery action when history could not be auto-rolled back.
+ * Clears the failed tail and replays from the user message at `forkHistoryIndex`.
+ */
+export function setAssistantErrorBubbleWithRecovery(
+  bubble: HTMLDivElement,
+  message: string,
+  recovery: AssistantErrorRecoveryOptions,
+): void {
+  bubble.classList.remove('msg-bubble--md', 'msg-bubble--awaiting');
+  bubble.classList.add('msg-bubble--error');
+  bubble.replaceChildren();
+
+  const text = document.createElement('span');
+  text.textContent = message;
+  bubble.appendChild(text);
+
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'msg-error-recover-btn';
+  action.textContent = 'Clear last failed turn';
+  action.addEventListener('click', () => {
+    action.disabled = true;
+    void import('../chat/resend-from-index.ts').then((mod) =>
+      mod.resendFromIndex(recovery.chatId, recovery.forkHistoryIndex),
+    );
+    recovery.onRecover?.();
+  });
+  bubble.appendChild(action);
 }
 
 /** DOM row for an in-flight assistant reply (prose bubble hidden until first token). */

@@ -150,6 +150,35 @@ describe('workspace dev-server API', () => {
     await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
   });
 
+  test('stop while starting before health passes', async () => {
+    const startupPath = path.join(workspaceDir, 'startup.md');
+    const healthPort = 38474;
+    const healthUrl = `http://127.0.0.1:${healthPort}/`;
+    const command = 'node -e "setInterval(()=>{}, 60000)"';
+
+    await fs.writeFile(
+      startupPath,
+      `---\ncommand: ${command}\ncwd: .\nhealthUrl: ${healthUrl}\n---\n`,
+      'utf8',
+    );
+
+    const start = await httpJson(baseUrl, '/api/workspace/dev-server/start', 'POST');
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ok, true);
+    assert.equal(start.json.status, 'starting');
+
+    const mid = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+    assert.equal(mid.json.status, 'starting');
+
+    const stop = await httpJson(baseUrl, '/api/workspace/dev-server/stop', 'POST');
+    assert.equal(stop.json.ok, true);
+    assert.equal(stop.json.status, 'stopped');
+
+    const after = await httpJson(baseUrl, '/api/workspace/dev-server/status');
+    assert.equal(after.json.status, 'stopped');
+    assert.equal(after.json.runId, null);
+  });
+
   test('status poll promotes starting to running when health becomes ok', async () => {
     const startupPath = path.join(workspaceDir, 'startup.md');
     const healthPort = 38473;

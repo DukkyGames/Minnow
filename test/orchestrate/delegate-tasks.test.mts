@@ -121,22 +121,14 @@ describe('orchestrate delegate_tasks', () => {
     assert.equal(getBoardExecutionMode(undefined), 'manual');
   });
 
-  test('delegate_tasks omitted from tools when executionMode is manual', () => {
+  test('delegate_tasks omitted from planner tools in manual and auto modes', () => {
     const base = filterToolsByMode(BUILT_IN_TOOLS, 'orchestrate').map((t) => t.definition);
-    const manual = applyOrchestrateAutoToolFilter(base, 'manual').map(
-      (d) => d.function.name,
-    );
-    assert.ok(!manual.includes('delegate_tasks'));
     const withDelegate = base.some((d) => d.function.name === 'delegate_tasks');
-    const auto = applyOrchestrateAutoToolFilter(base, 'auto').map((d) => d.function.name);
-    assert.equal(auto.includes('delegate_tasks'), withDelegate);
-  });
-
-  test('delegate_tasks available when executionMode is auto', () => {
-    const base = filterToolsByMode(BUILT_IN_TOOLS, 'orchestrate').map((t) => t.definition);
-    const names = applyOrchestrateAutoToolFilter(base, 'auto').map((d) => d.function.name);
-    const inCatalog = base.some((d) => d.function.name === 'delegate_tasks');
-    assert.equal(names.includes('delegate_tasks'), inCatalog);
+    assert.ok(withDelegate, 'delegate_tasks remains in orchestrate catalog');
+    for (const mode of ['manual', 'auto'] as const) {
+      const names = applyOrchestrateAutoToolFilter(base, mode).map((d) => d.function.name);
+      assert.ok(!names.includes('delegate_tasks'), `expected omit in ${mode}`);
+    }
   });
 
   test('orchestrate mode denies spawn_sub_agent via tool policy', () => {
@@ -215,6 +207,8 @@ describe('orchestrator auto reports', () => {
     assert.match(message, /W1-A/);
     assert.match(message, /Lifecycle: complete/);
     assert.match(message, /Shipped the API/);
+    assert.doesNotMatch(message, /delegate_tasks/);
+    assert.match(message, /automatically/i);
   });
 
   test('deliverOrchestratorTaskReport dedupes by task and kind', async () => {

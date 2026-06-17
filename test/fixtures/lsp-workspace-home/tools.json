@@ -46,6 +46,7 @@
     "board_init": false,
     "board_update_task": false,
     "board_get_state": false,
+    "delegate_tasks": false,
     "bug_add": false,
     "bug_update": false,
     "bug_get_state": false,
@@ -62,7 +63,9 @@
     "get_lsp_diagnostics": false,
     "list_lsp_servers": false,
     "save_memory": true,
-    "manage_calendar": false
+    "manage_calendar": false,
+    "list_mail": false,
+    "draft_reply": false
   },
   "permissions": {
     "default": {
@@ -112,6 +115,7 @@
       "board_init": "off",
       "board_update_task": "off",
       "board_get_state": "off",
+      "delegate_tasks": "off",
       "bug_add": "off",
       "bug_update": "off",
       "bug_get_state": "off",
@@ -128,7 +132,9 @@
       "get_lsp_diagnostics": "off",
       "list_lsp_servers": "off",
       "save_memory": "ask",
-      "manage_calendar": "off"
+      "manage_calendar": "off",
+      "list_mail": "off",
+      "draft_reply": "off"
     }
   },
   "keys": {

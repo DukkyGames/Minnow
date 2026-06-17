@@ -60,4 +60,31 @@ describe('provider paths', () => {
     assert.equal(out.data[0].catalogVision, true);
     assert.equal(out.data[0].capabilities, undefined);
   });
+
+  it('openai-v1 preserves top-level context_length as max_context_length', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [{ id: 'gpt-4o-mini', object: 'model', context_length: 128_000 }],
+    });
+    assert.equal(out.data.length, 1);
+    assert.equal(out.data[0].id, 'gpt-4o-mini');
+    assert.equal(out.data[0].max_context_length, 128_000);
+    assert.equal(out.data[0].state, 'loaded');
+  });
+
+  it('openai-v1 extracts nested meta.context_length (OpenRouter-style)', () => {
+    const out = normalizeModelsResponse('openai-v1', {
+      data: [
+        {
+          id: 'anthropic/claude-3.5-sonnet',
+          meta: { context_length: 200_000 },
+        },
+      ],
+    });
+    assert.equal(out.data[0].max_context_length, 200_000);
+  });
+
+  it('openai-v1 string model ids default to loaded llm rows', () => {
+    const out = normalizeModelsResponse('openai-v1', { data: ['gpt-4o'] });
+    assert.deepEqual(out.data[0], { id: 'gpt-4o', type: 'llm', state: 'loaded' });
+  });
 });

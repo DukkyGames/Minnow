@@ -77,7 +77,7 @@ export function buildOrchestratorTaskReportMessage(
   }
   lines.push(
     '',
-    'Use `board_get_state` for the full board. Call `delegate_tasks` to start the next ready planned tasks when Auto-pilot is on.',
+    'Use `board_get_state` for the full board. Auto-pilot starts the next ready planned tasks automatically.',
   );
   return lines.join('\n');
 }

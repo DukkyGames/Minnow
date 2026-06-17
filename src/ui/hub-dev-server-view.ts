@@ -67,7 +67,7 @@ export function formatHubDevServerMeta(
   port: number | null | undefined,
   network: DevServerNetwork,
 ): string {
-  if (status === 'starting') return `starting… ${formatPortMeta(port, network)}`;
+  if (status === 'starting') return `starting… ${formatPortMeta(port, network)} · click to stop`;
   if (status === 'running') return `running ${formatPortMeta(port, network)}`;
   if (status === 'stopping') return 'stopping…';
   if (status === 'error') {
@@ -140,7 +140,7 @@ export function deriveHubDevServerView(
       label: 'Dev server',
       meta: formatHubDevServerMeta(status, error, port, network),
       openUrl,
-      primaryDisabled: true,
+      primaryDisabled: false,
       showConsole: true,
       settingsDisabled: true,
       port,

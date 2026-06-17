@@ -4,14 +4,10 @@
 
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 
-/** Hide delegate_tasks unless the board is in auto-pilot mode. */
+/** Hide delegate_tasks from the planner LLM — auto-pilot delegates programmatically. */
 export function applyOrchestrateAutoToolFilter(
   defs: OpenAIFunctionDefinition[],
-  executionMode: 'manual' | 'auto' | undefined,
+  _executionMode: 'manual' | 'auto' | undefined,
 ): OpenAIFunctionDefinition[] {
-  const autoPilot = executionMode === 'auto';
-  return defs.filter((def) => {
-    if (def.function.name === 'delegate_tasks') return autoPilot;
-    return true;
-  });
+  return defs.filter((def) => def.function.name !== 'delegate_tasks');
 }

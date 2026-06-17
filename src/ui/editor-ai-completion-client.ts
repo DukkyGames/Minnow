@@ -35,6 +35,31 @@ export interface EditorAiBinding {
   modelId: string;
 }
 
+/** Shown in the file viewer status bar and Quick Edit panel when modelId is empty. */
+export const EDITOR_AI_NO_MODEL_MESSAGE =
+  'No model assigned for editor AI. Select a model in the chat bar or pin one in Settings → Editor.';
+
+export type EditorAiBindingValidation =
+  | { ok: true }
+  | { ok: false; message: string };
+
+/** Require a provider and model before editor AI requests (inline completion, Quick Edit). */
+export function validateEditorAiBinding(
+  binding: EditorAiBinding,
+): EditorAiBindingValidation {
+  if (!binding.providerId.trim()) {
+    return {
+      ok: false,
+      message:
+        'No provider configured for editor AI. Add one in Settings → Providers.',
+    };
+  }
+  if (!binding.modelId.trim()) {
+    return { ok: false, message: EDITOR_AI_NO_MODEL_MESSAGE };
+  }
+  return { ok: true };
+}
+
 /** Resolve provider/model from config + active chat (mirrors reef widget binding). */
 export async function resolveEditorAiBinding(
   config: EditorAiCompletionConfig,

@@ -17,6 +17,7 @@ import {
   notifyChatStreamEnded,
   notifyChatStreamActivity,
 } from '../chat/streaming-state';
+import { flushPendingMode } from '../chat/pending-mode';
 import {
   clearPendingSteer,
   consumePendingSteer,
@@ -146,7 +147,8 @@ import {
   assistantProseHasVisibleContent,
   removeOrphanStreamingRow,
   revealAssistantProseBubble,
-  setAssistantErrorBubble,
+  renderChatFromHistory,
+  setAssistantErrorBubbleWithRecovery,
 } from '../ui/messages';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
@@ -235,6 +237,7 @@ import {
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
+import { copyHistoryForOutboundApi, clearPostToolTailBeforeSend, rollbackFailedTurnHistory } from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   augmentImpeccableSkillBody,
@@ -484,12 +487,13 @@ export function buildApiMessages(
   });
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
-  const multimodalUserIdx = indexOfMultimodalUserMessage(chat.history, pending);
+  const outboundHistory = copyHistoryForOutboundApi(chat.history);
+  const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
   const vlm = isVisionModel(modelId);
 
-  for (let i = 0; i < chat.history.length; i += 1) {
-    const m = chat.history[i];
+  for (let i = 0; i < outboundHistory.length; i += 1) {
+    const m = outboundHistory[i];
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -862,6 +866,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = modelId || chat.modelId;
 
   if (pushUser) {
+    if (clearPostToolTailBeforeSend(chat)) {
+      scheduleSaveSessions();
+    }
     const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
     const modelUserContent = artifactAppendix
       ? `${historyContent}${artifactAppendix}`
@@ -1205,6 +1212,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
       : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
 
+    // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
+    let activeResumeGenerationId = resumeGenerationId;
+
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
@@ -1298,7 +1308,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           chat,
           provider,
           turnBody,
-          resumeGenerationId,
+          activeResumeGenerationId,
           bubble,
           cursor,
           chatSignal,
@@ -1336,6 +1346,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         } else {
           throw streamErr;
         }
+      }
+
+      if (activeResumeGenerationId) {
+        activeResumeGenerationId = undefined;
       }
 
       cancelAssistantBubbleRenderDebounce();
@@ -1837,20 +1851,37 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
     }
+    const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
+    const failedForkIndex =
+      failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
+    const rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
+    if (rolledBack) {
+      recordChatMessage(chat);
+      scheduleSaveSessions();
+      renderSidebar();
+      if (isStreamDomVisible(chat.id)) {
+        renderChatFromHistory(chat);
+      }
+    }
     cancelAssistantBubbleRenderDebounce();
+    const lost =
+      e.message === GENERATION_LOST_ON_RESTART_MESSAGE
+        ? GENERATION_LOST_ON_RESTART_MESSAGE
+        : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
     if (isStreamDomVisible(chat.id)) {
-      if (cursor.parentElement) cursor.remove();
-      revealProse();
-      const lost =
-        e.message === GENERATION_LOST_ON_RESTART_MESSAGE
-          ? GENERATION_LOST_ON_RESTART_MESSAGE
-          : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
-      setAssistantErrorBubble(bubble, lost);
+      if (!rolledBack) {
+        if (cursor.parentElement) cursor.remove();
+        revealProse();
+        setAssistantErrorBubbleWithRecovery(bubble, lost, {
+          chatId: chat.id,
+          forkHistoryIndex: failedForkIndex,
+        });
+      }
       const msg = e.message ?? '';
       const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
       const attachHint =
         getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-      setStatus('err', statusMsg + attachHint);
+      setStatus('err', (rolledBack ? lost : statusMsg) + attachHint);
     }
   } finally {
     setContextInFlightOverlay(null);
@@ -1905,6 +1936,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (ownsGlobalStreaming) {
       notifyChatStreamEnded(chat.id);
       setStreaming(false, chat.id);
+      flushPendingMode(chat);
       syncOrchestrateInitSplitChrome(chat);
       setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
@@ -1936,14 +1968,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const run = findRunById(chat, turnRunId);
       const start = run?.outputHistoryStart;
       const end = run?.outputHistoryEnd;
+      const persistOutput = turnRunStatus !== 'failed';
       const outputMessages =
-        start !== undefined && end !== undefined && end >= start
+        persistOutput &&
+        start !== undefined &&
+        end !== undefined &&
+        end >= start
           ? chat.history.slice(start, end + 1).map((m) => ({ ...m }))
           : undefined;
       finalizeRun(chat, turnRunId, {
         status: turnRunStatus,
-        outputHistoryStart: start,
-        outputHistoryEnd: end,
+        outputHistoryStart: persistOutput ? start : undefined,
+        outputHistoryEnd: persistOutput ? end : undefined,
         outputMessages,
       });
       scheduleSaveSessions();

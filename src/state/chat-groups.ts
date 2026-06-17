@@ -174,25 +174,9 @@ export function getPlannerChatForGroup(group: ChatGroup): Chat | undefined {
   return requireSession().chats.find((c) => c.id === id);
 }
 
-/** Open folder board view in the main column (focuses planner chat when a task chat was active). */
-export function openBoardGroup(groupId: string): void {
+/** Mount board view for a folder after session fields are set. */
+function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
-  const group = findGroupById(groupId);
-  if (!group?.orchestrateBoard) return;
-
-  const plannerId = group.plannerChatId?.trim();
-  const active = state.chats.find((c) => c.id === state.activeId);
-  if (
-    plannerId &&
-    active &&
-    active.id !== plannerId &&
-    (active.boardGroupId === groupId || active.groupId === groupId)
-  ) {
-    state.activeId = plannerId;
-    const planner = state.chats.find((c) => c.id === plannerId);
-    if (planner) planner.unread = false;
-  }
-
   state.activeBoardGroupId = groupId;
   group.viewMode = 'board';
   scheduleSaveSessions();
@@ -206,6 +190,32 @@ export function openBoardGroup(groupId: string): void {
   });
 }
 
+/** Open folder board view in the main column (focuses planner chat when a task chat was active). */
+export function openBoardGroup(groupId: string): void {
+  const state = requireSession();
+  const group = findGroupById(groupId);
+  if (!group?.orchestrateBoard) return;
+
+  const plannerId = group.plannerChatId?.trim();
+  const active = state.chats.find((c) => c.id === state.activeId);
+  if (plannerId && active && active.id !== plannerId) {
+    const inFolder =
+      active.boardGroupId === groupId || active.groupId === groupId;
+    if (!inFolder) {
+      void import('../ui/sidebar').then((m) => {
+        m.switchChat(plannerId);
+        activateBoardGroupView(groupId, group);
+      });
+      return;
+    }
+    state.activeId = plannerId;
+    const planner = state.chats.find((c) => c.id === plannerId);
+    if (planner) planner.unread = false;
+  }
+
+  activateBoardGroupView(groupId, group);
+}
+
 /** Return to planner chat view and clear board main-column focus. */
 export function closeBoardGroupView(group: ChatGroup): void {
   const state = requireSession();
@@ -216,7 +226,16 @@ export function closeBoardGroupView(group: ChatGroup): void {
   scheduleSaveSessions();
   const plannerId = group.plannerChatId?.trim();
   if (plannerId) {
-    void import('../ui/sidebar').then((m) => m.switchChat(plannerId));
+    void import('../ui/sidebar').then(async (sidebar) => {
+      if (plannerId !== state.activeId) {
+        sidebar.switchChat(plannerId);
+        return;
+      }
+      sidebar.renderSidebar();
+      const { renderChatFromHistory } = await import('../ui/messages');
+      const planner = state.chats.find((c) => c.id === plannerId);
+      if (planner) renderChatFromHistory(planner);
+    });
     return;
   }
   void import('../ui/sidebar').then((m) => m.renderSidebar());

@@ -397,7 +397,7 @@ export function mountWorkAgentConfigEditor(
       const maxInputTokens =
         rawCap === '' ? null : Math.max(1, Math.floor(Number(rawCap) || 0));
       const agent = await patchWorkAgentOverride(options.agentId, {
-        disabled: !disabledCb.checked,
+        disabled: disabledCb.checked,
         maxInputTokens,
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
       });
@@ -567,7 +567,7 @@ export function mountWorkAgentEditor(
       const agent = await patchWorkAgentOverride(options.agentId, {
         providerId: binding.providerId || null,
         modelId: binding.modelId || null,
-        disabled: !disabledCb.checked,
+        disabled: disabledCb.checked,
         maxInputTokens,
         contextEnforcementPolicy: contextPolicySel.value as ContextEnforcementPolicy,
       });

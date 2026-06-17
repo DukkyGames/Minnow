@@ -1,5 +1,5 @@
 /**
- * Slash-command skill picker anchored above #msgInput.
+ * Slash-command skill picker anchored above the active composer textarea.
  */
 
 import { streaming } from '../app-state';
@@ -26,13 +26,29 @@ function ensurePicker(): void {
   listEl = document.createElement('ul');
   listEl.className = 'skill-picker__list';
   pickerEl.appendChild(listEl);
+}
 
-  const wrap = document.querySelector('.input-wrap');
+/** Anchor the shared picker popover to the active composer wrap. */
+function anchorPickerToInput(el: HTMLTextAreaElement): void {
+  ensurePicker();
+  if (!pickerEl) return;
+
+  const wrap = el.parentElement;
   if (wrap) {
-    wrap.appendChild(pickerEl);
-  } else {
+    if (pickerEl.parentElement !== wrap) {
+      wrap.appendChild(pickerEl);
+    }
+    return;
+  }
+
+  if (pickerEl.parentElement !== document.body) {
     document.body.appendChild(pickerEl);
   }
+}
+
+function bindActiveInput(el: HTMLTextAreaElement): void {
+  inputEl = el;
+  anchorPickerToInput(el);
 }
 
 function filteredSkills(): SkillListItem[] {
@@ -116,6 +132,7 @@ function closePicker(): void {
 }
 
 function openPickerAt(start: number, query: string): void {
+  if (inputEl) anchorPickerToInput(inputEl);
   ensurePicker();
   open = true;
   slashStart = start;
@@ -203,21 +220,42 @@ export function handleSkillPickerKeydown(e: KeyboardEvent): boolean {
   return false;
 }
 
-/** Mount slash picker listeners on the composer. */
-export function mountSlashPicker(msgInput: HTMLTextAreaElement): void {
-  inputEl = msgInput;
-  inputEl.setAttribute('aria-autocomplete', 'list');
-  inputEl.setAttribute('aria-controls', 'skillPicker');
+/** Mount slash picker listeners on one composer textarea (idempotent). */
+export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): void {
+  if (composerInput.dataset.slashPickerBound === '1') return;
+  composerInput.dataset.slashPickerBound = '1';
 
-  msgInput.addEventListener('input', () => {
+  composerInput.setAttribute('aria-autocomplete', 'list');
+  composerInput.setAttribute('aria-controls', 'skillPicker');
+
+  composerInput.addEventListener('focus', () => {
+    bindActiveInput(composerInput);
+  });
+
+  composerInput.addEventListener('input', () => {
+    bindActiveInput(composerInput);
     detectSlashContext();
   });
 
-  msgInput.addEventListener('keydown', (e) => {
-    if (handleSkillPickerKeydown(e)) return;
+  composerInput.addEventListener('keydown', (e) => {
+    if (inputEl !== composerInput) bindActiveInput(composerInput);
+    handleSkillPickerKeydown(e);
   });
 
-  msgInput.addEventListener('blur', () => {
+  composerInput.addEventListener('blur', () => {
     window.setTimeout(() => closePicker(), 150);
   });
+}
+
+/** @deprecated Use initComposerSlashPicker */
+export function mountSlashPicker(msgInput: HTMLTextAreaElement): void {
+  initComposerSlashPicker(msgInput);
+}
+
+/** Wire slash picker on every known composer input present in the DOM. */
+export function initAllComposerSlashPickers(): void {
+  for (const id of ['msgInput', 'chatAppInput', 'desktopInput']) {
+    const el = document.getElementById(id) as HTMLTextAreaElement | null;
+    if (el) initComposerSlashPicker(el);
+  }
 }

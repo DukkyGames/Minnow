@@ -21,7 +21,10 @@ import { encodeModelSelectKey } from '../../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../../providers/model-capabilities';
 import { resolveProvider } from '../../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../../types';
-import { resolveEditorAiBinding } from '../editor-ai-completion-client';
+import {
+  resolveEditorAiBinding,
+  validateEditorAiBinding,
+} from '../editor-ai-completion-client';
 import { sanitizeQuickEditText } from './diff-apply';
 
 export interface QuickEditRequestInput {
@@ -69,13 +72,21 @@ function ingestChunk(
   return extractMessageText(chunk.choices?.[0]?.message).trim();
 }
 
-/** Stream a quick-edit replacement; returns null when backend is unavailable. */
+export interface QuickEditFetchResult {
+  text: string | null;
+  error?: string;
+}
+
+/** Stream a quick-edit replacement; returns error text when model or backend is unavailable. */
 export async function fetchQuickEditReplacement(
   input: QuickEditRequestInput,
-): Promise<string | null> {
+): Promise<QuickEditFetchResult> {
   const config = await loadEditorAiCompletionConfig();
   const binding = await resolveEditorAiBinding(config);
-  if (!binding.providerId.trim()) return null;
+  const validation = validateEditorAiBinding(binding);
+  if (validation.ok === false) {
+    return { text: null, error: validation.message };
+  }
 
   const provider = await resolveProvider(binding.providerId);
   const messages = buildQuickEditMessages(input);
@@ -105,7 +116,10 @@ export async function fetchQuickEditReplacement(
   try {
     ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
   } catch {
-    return null;
+    return {
+      text: null,
+      error: 'Quick edit request failed — check provider and model in Settings.',
+    };
   }
 
   const contentAcc = new StreamingContentAccumulator();
@@ -117,12 +131,12 @@ export async function fetchQuickEditReplacement(
       input.selectionText,
     );
 
-  return new Promise<string | null>((resolve) => {
+  return new Promise<QuickEditFetchResult>((resolve) => {
     let settled = false;
-    const finish = (text: string | null): void => {
+    const finish = (text: string | null, error?: string): void => {
       if (settled) return;
       settled = true;
-      resolve(text);
+      resolve(error ? { text: null, error } : { text });
     };
 
     const unsubscribe = subscribeToGeneration(generationId, {
@@ -143,7 +157,10 @@ export async function fetchQuickEditReplacement(
       },
       onTransportError: () => {
         unsubscribe();
-        finish(null);
+        finish(
+          null,
+          'Quick edit request failed — check provider and model in Settings.',
+        );
       },
     });
 

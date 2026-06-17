@@ -14,6 +14,10 @@ import type { NotificationRecord } from '../notifications/types';
 import { getAppById } from './app-registry';
 import { createAppIcon, createOsIcon, type OsIconName } from './icons';
 import { closeOsModelChipMenu } from './model-chip-menu';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from '../ui/preview-electron-visibility';
 
 let panelEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
@@ -120,6 +124,7 @@ function detachGlobalListeners(): void {
 export function closeOsNotificationsMenu(): void {
   if (!menuOpen) return;
   menuOpen = false;
+  unregisterChromePopover();
   detachGlobalListeners();
   panelEl?.classList.add('hidden');
   anchorBell?.setAttribute('aria-expanded', 'false');
@@ -207,6 +212,7 @@ function openMenu(): void {
   const panel = ensurePanel();
   rebuildList();
   menuOpen = true;
+  registerChromePopover();
   panel.classList.remove('hidden');
   bell.setAttribute('aria-expanded', 'true');
   bell.classList.add('is-open');

@@ -77,7 +77,7 @@ import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
 import { initNotificationProducers } from './notifications/producers';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
-import { mountSlashPicker } from './ui/skill-picker';
+import { initAllComposerSlashPickers } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
@@ -303,8 +303,8 @@ export async function initApp(): Promise<void> {
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) {
     initComposerInput(msgInput);
-    mountSlashPicker(msgInput);
   }
+  initAllComposerSlashPickers();
   initComposerDrop();
   const filePanel = await import('./ui/init-file-panel');
   await filePanel.initFilePanel();

@@ -515,6 +515,8 @@ export interface Chat {
   currentGenerationId?: string;
   /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
   pendingSteerMessage?: string;
+  /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
+  pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */

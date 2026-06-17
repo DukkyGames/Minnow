@@ -531,7 +531,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         head_limit: {
           type: 'number',
-          description: 'Max matching lines to return (default 200, max 500)',
+          description: 'Max lines to return (default 50, max 200)',
+        },
+        offset: {
+          type: 'number',
+          description: 'Skip this many result lines before applying head_limit (default 0)',
+        },
+        output_mode: {
+          type: 'string',
+          enum: ['content', 'count', 'files_with_matches'],
+          description:
+            'Output format: content (path:line:snippet), count (path:match_count), or files_with_matches (paths only). Default content.',
         },
       },
       ['pattern'],

@@ -71,6 +71,14 @@ function statusReadout(enabled: boolean): HTMLElement {
   return wrap;
 }
 
+function isEffectiveModelMissing(config: EditorAiCompletionConfig): boolean {
+  if (!isPinnedModelSource(config)) {
+    const chat = getActiveChat();
+    return !chat.modelId?.trim();
+  }
+  return !config.modelId.trim();
+}
+
 function isPinnedModelSource(config: EditorAiCompletionConfig): boolean {
   return !config.useChatModel || config.providerId.trim().length > 0;
 }
@@ -85,6 +93,14 @@ function formatEffectiveModel(config: EditorAiCompletionConfig): string {
   const provider = config.providerId.trim() || '—';
   const model = config.modelId.trim() || '—';
   return `${provider} / ${model}`;
+}
+
+function appendModelWarning(mount: HTMLElement): void {
+  const warning = el('p', 'settings-server-banner settings-editor-model-warning');
+  warning.setAttribute('role', 'status');
+  warning.textContent =
+    'No model assigned — editor AI and Quick Edit will show an error until you select a model in the chat bar or pin one below.';
+  mount.append(warning);
 }
 
 function appendCrosslinks(mount: HTMLElement): void {
@@ -178,6 +194,7 @@ function mountModelSourceBlock(
       modelSelect,
       config.providerId || providerSelect.value,
       config.modelId,
+      { includeEmptyOption: false },
     );
   })();
 
@@ -207,7 +224,9 @@ function mountModelSourceBlock(
   });
 
   providerSelect.addEventListener('change', () => {
-    void fillModelSelect(modelSelect, providerSelect.value, '').then(() => {
+    void fillModelSelect(modelSelect, providerSelect.value, '', {
+      includeEmptyOption: false,
+    }).then(() => {
       refreshEffective();
       if (providerSelect.value.trim()) persistPinned();
     });
@@ -239,7 +258,7 @@ function renderEditorSettingsBody(
   const overview = appendSettingsGroup(
     mount,
     'Overview',
-    'Inline suggestions in the file viewer. Symbol completion still comes from language servers.',
+    'Inline suggestions in the file viewer. Symbol completion (Ctrl+Space) comes from language servers and does not require a chat model.',
   );
 
   appendSummaryKv(overview, [
@@ -421,6 +440,9 @@ function renderEditorSettingsBody(
     'Model source',
     'Uses the top-bar provider and model for this chat unless you pin a different pair.',
   );
+  if (isEffectiveModelMissing(config)) {
+    appendModelWarning(modelGroup);
+  }
   mountModelSourceBlock(modelGroup, config, refresh);
 }
 

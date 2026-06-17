@@ -42,10 +42,10 @@ After `board_init`, **stop**. The user operates the Kanban (start/stop task chat
 
 ### Auto-pilot mode
 
-When the board has **Auto-pilot** on (`executionMode: auto` — user toggle or you set via board state after init):
+When the board has **Auto-pilot** on (`executionMode: auto` — user toggle on the board):
 
-- Call **`delegate_tasks`** with `taskIds` for ready **planned** tasks (respects wave order and `maxConcurrentTasks`).
-- Task lifecycle reports (`completed` / `failed` / `stalled`) are delivered to this chat automatically — use them to decide the next `delegate_tasks` wave.
+- **Delegation is automatic** — ready planned tasks start without you calling tools (respects wave order and `maxConcurrentTasks`).
+- Task lifecycle reports (`completed` / `failed` / `stalled`) are delivered to this chat automatically — summarize progress or handle failures; do **not** call `delegate_tasks`.
 - You may call **`board_get_state`** and **`board_update_task`** for metadata; do **not** spawn sub-agents.
 
 ## Board tools (this mode)
@@ -55,7 +55,7 @@ When the board has **Auto-pilot** on (`executionMode: auto` — user toggle or y
 | `board_init` | Create/replace the board from parsed plan (required fields below) |
 | `board_get_state` | Read board JSON (check `executionMode`, tasks, waves) |
 | `board_update_task` | Optional metadata; do not fake execution progress |
-| `delegate_tasks` | **Auto-pilot only** — start planned tasks by id |
+| `delegate_tasks` | Internal — auto-pilot starts tasks programmatically; do not call |
 
 **Do not use:** `spawn_sub_agent`, `cancel_sub_agent`, `report_orchestrator_status` (removed).
 
@@ -81,4 +81,4 @@ When the board has **Auto-pilot** on (`executionMode: auto` — user toggle or y
 - `tasks[].id` — stable id from plan headings (e.g. `W1-A`)
 - `board_update_task` uses **`task_id`**, not `id`
 
-After `board_init` in **manual** mode, end your turn. In **auto-pilot**, you may call `delegate_tasks` for the first ready wave.
+After `board_init`, end your turn. If the user enables **Auto-pilot** on the board, the next ready wave starts automatically.

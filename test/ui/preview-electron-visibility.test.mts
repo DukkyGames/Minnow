@@ -3,6 +3,10 @@ import { describe, test, beforeEach, afterEach } from 'node:test';
 import {
   isFullscreenOverlayObscuringWorkspace,
   isPreviewPaneDomVisible,
+  isChromePopoverOpen,
+  registerChromePopover,
+  unregisterChromePopover,
+  resetChromePopoverRegistryForTests,
   shouldShowElectronPreviewHost,
 } from '../../src/ui/preview-electron-visibility.ts';
 import {
@@ -19,6 +23,7 @@ describe('preview-electron-visibility', () => {
   beforeEach(() => {
     elements.clear();
     resetFilePanelStateForTests();
+    resetChromePopoverRegistryForTests();
     Object.defineProperty(globalThis, 'document', {
       value: {
         getElementById: (id: string) => {
@@ -105,5 +110,30 @@ describe('preview-electron-visibility', () => {
     elements.get('previewPane')!.classList.delete('hidden');
     elements.get('globalBugsView')!.classList.add('is-open');
     assert.equal(shouldShowElectronPreviewHost(), false);
+  });
+
+  test('isChromePopoverOpen tracks register and unregister', () => {
+    assert.equal(isChromePopoverOpen(), false);
+    registerChromePopover();
+    assert.equal(isChromePopoverOpen(), true);
+    unregisterChromePopover();
+    assert.equal(isChromePopoverOpen(), false);
+  });
+
+  test('shouldShowElectronPreviewHost is false when chrome popover is open', () => {
+    Object.assign(globalThis.window, {
+      minnow: { preview: { show: async () => {}, hide: async () => {} } },
+    });
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    assert.equal(shouldShowElectronPreviewHost(), true);
+    registerChromePopover();
+    assert.equal(shouldShowElectronPreviewHost(), false);
+    unregisterChromePopover();
+    assert.equal(shouldShowElectronPreviewHost(), true);
   });
 });
