@@ -17,6 +17,7 @@ import {
   verifyStandalonePythonExe,
   writeSearxngSettings,
 } from '../../server/servers/searxng.js';
+import { createVenv } from '../../server/servers/provisioner.js';
 import {
   getServerDir,
   getServerMetaPath,
@@ -32,6 +33,14 @@ function venvPythonPath() {
   return process.platform === 'win32'
     ? path.join(venvDir, 'Scripts', 'python.exe')
     : path.join(venvDir, 'bin', 'python3');
+}
+
+/** Create a real venv for tests that need a working interpreter. */
+async function ensureTestVenv() {
+  const venvDir = getServerVenvDir('searxng');
+  await fsp.rm(venvDir, { recursive: true, force: true });
+  const systemPython = process.env.SEARXNG_TEST_PYTHON ?? 'python';
+  await createVenv(systemPython, venvDir);
 }
 
 describe('searxng provisioner', () => {
@@ -85,9 +94,8 @@ describe('searxng provisioner', () => {
   });
 
   it('getSpawnSpec returns venv python, searx module, settings env, and cwd', async () => {
+    await ensureTestVenv();
     const python = venvPythonPath();
-    await fsp.mkdir(path.dirname(python), { recursive: true });
-    await fsp.writeFile(python, '', 'utf8');
 
     const spec = await getSpawnSpec(FIXED_PORT);
     assert.equal(spec.command, python);
@@ -101,9 +109,7 @@ describe('searxng provisioner', () => {
   });
 
   it('getInstallStatus reads meta after fake install layout', async () => {
-    const python = venvPythonPath();
-    await fsp.mkdir(path.dirname(python), { recursive: true });
-    await fsp.writeFile(python, '', 'utf8');
+    await ensureTestVenv();
     const searxInit = path.join(getServerDir('searxng'), 'src', 'searx', '__init__.py');
     await fsp.mkdir(path.dirname(searxInit), { recursive: true });
     await fsp.writeFile(searxInit, '', 'utf8');
@@ -131,6 +137,30 @@ describe('searxng provisioner', () => {
     assert.equal(status.installed, false);
     assert.equal(status.version, null);
     assert.equal(status.sizeBytes, 0);
+  });
+
+  it('getInstallStatus reports not installed when pyvenv.cfg is missing', async () => {
+    const python = venvPythonPath();
+    await fsp.mkdir(path.dirname(python), { recursive: true });
+    await fsp.writeFile(python, '', 'utf8');
+    const searxInit = path.join(getServerDir('searxng'), 'src', 'searx', '__init__.py');
+    await fsp.mkdir(path.dirname(searxInit), { recursive: true });
+    await fsp.writeFile(searxInit, '', 'utf8');
+
+    const status = await getInstallStatus();
+    assert.equal(status.installed, false);
+  });
+
+  it('getSpawnSpec rejects corrupted venv without pyvenv.cfg', async () => {
+    const python = venvPythonPath();
+    await fsp.rm(getServerVenvDir('searxng'), { recursive: true, force: true });
+    await fsp.mkdir(path.dirname(python), { recursive: true });
+    await fsp.writeFile(python, '', 'utf8');
+
+    await assert.rejects(
+      () => getSpawnSpec(FIXED_PORT),
+      /corrupted|pyvenv\.cfg/i,
+    );
   });
 
   it('patchValkeydbForWindows replaces import pwd on win32 only', async () => {

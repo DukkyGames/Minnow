@@ -5,11 +5,14 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { waitForVite } from './wait-for-vite.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
 
 function run(command, args, env = process.env) {
   return new Promise((resolve, reject) => {
@@ -27,21 +30,34 @@ function run(command, args, env = process.env) {
   });
 }
 
+/** Resolve the platform Electron executable (not the .cmd shim). */
 function electronBinaryPath() {
-  return process.platform === 'win32'
-    ? path.join(repoRoot, 'node_modules', '.bin', 'electron.cmd')
-    : path.join(repoRoot, 'node_modules', '.bin', 'electron');
+  try {
+    return require('electron');
+  } catch {
+    return null;
+  }
 }
 
 function mainJsPath() {
   return path.join(repoRoot, 'electron', 'dist', 'main.js');
 }
 
+function preloadMjsPath() {
+  return path.join(repoRoot, 'electron', 'dist', 'preload.mjs');
+}
+
+function isElectronBuildReady() {
+  return fs.existsSync(mainJsPath()) && fs.existsSync(preloadMjsPath());
+}
+
 async function ensureElectronBuild() {
-  const mainJs = mainJsPath();
-  if (fs.existsSync(mainJs)) return;
-  console.log('[electron] Compiling main process…');
+  if (isElectronBuildReady()) return;
+  console.log('[electron] Compiling main process (first run)…');
   await run('npm', ['run', 'electron:build']);
+  if (!isElectronBuildReady()) {
+    throw new Error('Electron build incomplete. Run npm run electron:build.');
+  }
 }
 
 /**
@@ -54,11 +70,18 @@ export async function spawnElectronShell(options = {}) {
   const foreground = options.foreground === true;
 
   const electronBin = electronBinaryPath();
-  if (!fs.existsSync(electronBin)) {
+  if (!electronBin || !fs.existsSync(electronBin)) {
     throw new Error('Electron binary not found. Run npm install.');
   }
 
   await ensureElectronBuild();
+
+  // Cold Vite starts (especially on a new machine) pre-bundle deps before the first
+  // page is servable; launching Electron too early leaves the window hidden forever.
+  if (dev) {
+    console.log(`[electron] Waiting for Vite on port ${port}…`);
+    await waitForVite(port);
+  }
 
   const mainJs = mainJsPath();
   const env = {
@@ -74,7 +97,7 @@ export async function spawnElectronShell(options = {}) {
     env,
     stdio: foreground ? 'inherit' : 'ignore',
     detached: !foreground,
-    shell: process.platform === 'win32',
+    windowsHide: false,
   });
 
   child.on('error', (err) => {
