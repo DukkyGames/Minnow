@@ -107,18 +107,39 @@ function bindSettingsSection(): void {
         providerId: providerEl?.value.trim() ?? '',
         blendWeight: Number(blendEl?.value ?? 0.5),
       });
-      setStatus(saved ? 'ok' : 'err', saved ? 'Embeddings settings saved' : 'Save failed');
-      if (saved) await refreshEmbeddingsFields();
+      setStatus(saved.kind === 'ok' ? 'ok' : 'err', saved.kind === 'ok' ? 'Embeddings settings saved' : saved.error);
+      if (saved.kind === 'ok') await refreshEmbeddingsFields();
     })();
   });
 
   document.getElementById('brainEmbeddingsReindex')?.addEventListener('click', () => {
     void (async () => {
       setStatus('spin', 'Reindexing vectors…');
+      const enabledEl = document.getElementById(
+        'brainEmbeddingsEnabled',
+      ) as HTMLInputElement | null;
+      const backendEl = document.getElementById(
+        'brainEmbeddingsBackend',
+      ) as HTMLSelectElement | null;
+      const modelEl = document.getElementById('brainEmbeddingsModel') as HTMLInputElement | null;
+      const providerEl = document.getElementById(
+        'brainEmbeddingsProvider',
+      ) as HTMLInputElement | null;
+      const saved = await saveMemoryEmbeddingsConfig({
+        enabled: enabledEl?.checked === true,
+        backend: backendEl?.value === 'provider' ? 'provider' : 'local',
+        modelId: modelEl?.value.trim() ?? '',
+        providerId: providerEl?.value.trim() ?? '',
+        blendWeight: Number(blendEl?.value ?? 0.5),
+      });
+      if (saved.kind === 'err') {
+        setStatus('err', saved.error);
+        return;
+      }
       const result = await reindexMemoryEmbeddings();
       setStatus(
-        result?.ok ? 'ok' : 'err',
-        result?.ok ? `Indexed ${result.indexed} pages` : 'Reindex failed',
+        result.kind === 'ok' ? 'ok' : 'err',
+        result.kind === 'ok' ? `Indexed ${result.value.indexed} pages` : result.error,
       );
       await refreshEmbeddingsFields();
     })();

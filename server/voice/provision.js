@@ -339,9 +339,8 @@ export async function provision(onProgress) {
     else skippedPackages.push(pkg.label);
   }
 
-  if (installedPackages.some((label) => label.includes('qwen-tts'))) {
-    await patchQwenTtsCheckModelInputs(venvPython, progress);
-  }
+  // Always attempt — idempotent; covers repair when qwen-tts is already on disk (MIN-170).
+  await patchQwenTtsCheckModelInputs(venvPython, progress);
 
   if (await maybeInstallFlashAttn(venvPython, cudaAvailable, progress)) {
     installedPackages.push('flash-attn');

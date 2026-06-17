@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
+import {
+  activateDesktopChat,
+  resetDesktopStateForTests,
+} from '../../src/os/desktop-state.ts';
+import {
+  initOsPageBridge,
+  resetOsPageBridgeForTests,
+} from '../../src/os/page-bridge.ts';
 
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts',
@@ -9,7 +18,7 @@ const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
   '../../src/ui/sub-agent-cards.ts',
 );
 
-function setupDom() {
+function setupCodeDom() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
@@ -20,13 +29,46 @@ function setupDom() {
   return window;
 }
 
+function setupDesktopDom(win: Window) {
+  win.document.body.innerHTML = `
+    <div id="osDesktopLayer" class="mn-os-desktop-layer"></div>
+    <main id="chatView" class="chat-app-page is-open"></main>
+    <div id="desktopChatCol"></div>
+    <textarea id="msgInput"></textarea>
+    <textarea id="desktopInput"></textarea>
+    <button id="sendBtn"></button>
+    <button id="desktopSendBtn"></button>
+  `;
+}
+
+const sampleRun = (chatId: string) => ({
+  runId: '22222222-2222-2222-2222-222222222222',
+  type: 'explore',
+  task: 'List files under src/',
+  status: 'running' as const,
+  parentChatId: chatId,
+  parentToolCallId: null,
+  parentTurnId: 'turn-1',
+  summary: '',
+  error: null,
+  startedAt: '2026-05-20T12:00:00.000Z',
+  endedAt: null,
+  toolTurns: 0,
+  cancelled: false,
+  messages: [],
+  liveNestedToolCalls: 1,
+});
+
 describe('sub-agent cards', { concurrency: false }, () => {
   afterEach(() => {
     setSessionStateForTests(null);
+    resetDesktopStateForTests();
+    resetInstancesForTests();
+    resetOsPageBridgeForTests();
   });
 
   test('upsertSubAgentCardForRun mounts a card for the active chat', () => {
-    setupDom();
+    setupCodeDom();
     const chat = createEmptyChatObject('');
     chat.id = 'chat-sub-1';
     setSessionStateForTests({
@@ -36,30 +78,71 @@ describe('sub-agent cards', { concurrency: false }, () => {
       chats: [chat],
     });
 
-    const run = {
-      runId: '22222222-2222-2222-2222-222222222222',
-      type: 'explore',
-      task: 'List files under src/',
-      status: 'running',
-      parentChatId: chat.id,
-      parentToolCallId: null,
-      parentTurnId: 'turn-1',
-      summary: '',
-      error: null,
-      startedAt: '2026-05-20T12:00:00.000Z',
-      endedAt: null,
-      toolTurns: 0,
-      cancelled: false,
-      messages: [],
-      liveNestedToolCalls: 1,
-    };
-
-    const el = upsertSubAgentCardForRun(run, chat.id);
+    const el = upsertSubAgentCardForRun(sampleRun(chat.id), chat.id);
     assert.ok(el);
     assert.ok(el.classList.contains('sub-agent-card--active'));
     assert.ok(el.textContent?.includes('Working'));
     assert.ok(el.textContent?.includes('explore'));
     assert.ok(el.textContent?.includes('List files'));
+    assert.equal(document.getElementById('chatArea')?.querySelector('.sub-agent-card'), el);
+
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('upsertSubAgentCardForRun mounts into #desktopChatCol when desktop chat is active', async () => {
+    const win = new Window();
+    const g = globalThis as typeof globalThis & {
+      window: Window;
+      document: Document;
+      HTMLElement: typeof HTMLElement;
+      Node: typeof Node;
+      fetch: typeof fetch;
+    };
+    g.window = win as unknown as Window & typeof globalThis.window;
+    g.document = win.document;
+    g.HTMLElement = win.HTMLElement;
+    g.Node = win.Node;
+    setupDesktopDom(win);
+    resetInstancesForTests();
+    resetDesktopStateForTests();
+    resetOsPageBridgeForTests();
+    initOsPageBridge();
+
+    g.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes('/api/chats-workspace')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, path: '/home/user/.minnow/chats', fileCount: 0 }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    const chat = createEmptyChatObject('model-a');
+    chat.id = 'chat-desktop-sub';
+    setSessionStateForTests({
+      version: 5,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      lastActiveChatIdByApp: { chat: chat.id },
+      chats: [chat],
+    });
+
+    await activateDesktopChat({ chatId: chat.id });
+
+    const { getActiveChat } = await import('../../src/state/sessions.ts');
+    const { isDesktopChatActive } = await import('../../src/os/desktop-state.ts');
+    assert.equal(isDesktopChatActive(), true);
+    const activeId = getActiveChat().id;
+
+    const el = upsertSubAgentCardForRun(sampleRun(activeId), activeId);
+    assert.ok(el);
+    const desktopCol = document.getElementById('desktopChatCol');
+    assert.ok(desktopCol);
+    assert.equal(desktopCol.querySelector('.sub-agent-card'), el);
+    assert.equal(document.getElementById('chatArea'), null);
 
     clearSubAgentCardDomRegistry();
   });

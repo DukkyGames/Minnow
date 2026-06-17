@@ -891,6 +891,10 @@
   }
 }
 
+:is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-lib-card.is-menu-open {
+  z-index: 20;
+}
+
 :is(#researchView, .mn-os-desktop-research, .research-library-window-body) .dr-lib-card {
   position: relative;
   background: var(--mn-surface-0, var(--mn-bg-elevated));

@@ -9,6 +9,7 @@ import {
   type LlamaServeSettings,
   type ServeRecord,
 } from '../../models/api-client';
+import { ensureLlamaRuntimeInstalled } from './llama-install-prompt';
 import { setStatus } from '../status';
 
 export interface OpenServeDialogOptions {
@@ -91,6 +92,13 @@ function selectInput(
  * Open the serve dialog and return the started serve record, or null when cancelled.
  */
 export function openServeDialog(opts: OpenServeDialogOptions): Promise<ServeRecord | null> {
+  return ensureLlamaRuntimeInstalled().then((ready) => {
+    if (!ready) return null;
+    return openServeDialogInner(opts);
+  });
+}
+
+function openServeDialogInner(opts: OpenServeDialogOptions): Promise<ServeRecord | null> {
   return new Promise((resolve) => {
     const backdrop = el('div', 'models-serve-dialog__backdrop');
     const dialog = el('div', 'models-serve-dialog');

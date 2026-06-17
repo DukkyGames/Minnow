@@ -28,7 +28,6 @@ import { getServesIndexPath, modelsLogDir } from './paths.js';
 import { validatePort, validateRuntime, validateServeId } from './validate.js';
 import {
   buildLlamaServerEnv,
-  ensureLlamaServer,
   getInstalledLlamaVariant,
   llamaServerSpawnCwd,
   resolveLlamaServer,
@@ -269,9 +268,11 @@ export async function startServe(body) {
   let llamaVariant = 'cpu';
   if (runtime === 'llama-cpp') {
     await stopExistingLlamaCppServes();
-    llamaServerPath = (await resolveLlamaServer()).path ?? (await ensureLlamaServer());
+    llamaServerPath = (await resolveLlamaServer()).path;
     if (!llamaServerPath) {
-      throw new Error('llama-server not found — install llama.cpp server binaries');
+      throw new Error(
+        'llama-server is not installed — install from Models or Settings → Servers before serving',
+      );
     }
     llamaVariant = (await getInstalledLlamaVariant()) ?? 'cpu';
   }

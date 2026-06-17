@@ -6,7 +6,13 @@ import { EditorView } from '@codemirror/view';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 import {
   resolveEditorCompletionRawText,
+  preflightEditorAiBinding,
+  resolveEditorAiBinding,
+  EDITOR_AI_NO_MODEL_MESSAGE,
 } from '../../src/ui/editor-ai-completion-client.ts';
+import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
+import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
+import { setEditorAiCompletionConfigForTests } from '../../src/config/editor-ai-completion.ts';
 import { StreamingContentAccumulator } from '../../src/api/message-content.ts';
 import {
   BenchmarkStreamReasoningAccumulator,
@@ -43,6 +49,95 @@ describe('resolveEditorCompletionRawText', () => {
       resolveBenchmarkCompletionText(content.getText(), reasoning.getText()),
       'code();',
     );
+  });
+});
+
+describe('editor AI model binding (MIN-133)', () => {
+  test('preflight fails when model id is empty', () => {
+    assert.equal(
+      preflightEditorAiBinding({ providerId: 'lm-studio-local', modelId: '' }),
+      EDITOR_AI_NO_MODEL_MESSAGE,
+    );
+    assert.equal(
+      preflightEditorAiBinding({ providerId: 'p', modelId: 'llama-3' }),
+      null,
+    );
+  });
+
+  test('resolveEditorAiBinding uses top-bar model when following chat', async () => {
+    const window = new Window();
+    globalThis.window = window;
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const chat = createEmptyChatObject('');
+    chat.providerId = 'stale-provider';
+    chat.modelId = '';
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
+
+    const select = document.createElement('select');
+    select.id = 'modelSelect';
+    const opt = document.createElement('option');
+    opt.value = encodeModelSelectKey('ollama-local', 'qwen2.5-coder');
+    select.appendChild(opt);
+    select.value = opt.value;
+    document.body.appendChild(select);
+
+    setEditorAiCompletionConfigForTests({
+      enabled: true,
+      debounceMs: 450,
+      maxPrefixLines: 80,
+      maxSuffixLines: 40,
+      maxPrefixChars: 6000,
+      maxSuffixChars: 2000,
+      temperature: 0.3,
+      maxTokens: 256,
+      useChatModel: true,
+      providerId: '',
+      modelId: '',
+      includeImportContext: true,
+      includeLspHover: true,
+      useNativeFim: true,
+      enableCompletionCache: true,
+    });
+
+    const { getEditorAiCompletionConfigSync } = await import(
+      '../../src/config/editor-ai-completion.ts'
+    );
+    const resolved = await resolveEditorAiBinding(getEditorAiCompletionConfigSync());
+    assert.equal(resolved.providerId, 'ollama-local');
+    assert.equal(resolved.modelId, 'qwen2.5-coder');
+  });
+
+  test('resolveEditorAiBinding requires explicit model when pinned', async () => {
+    const chat = createEmptyChatObject('chat-model');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
+
+    setEditorAiCompletionConfigForTests({
+      enabled: true,
+      debounceMs: 450,
+      maxPrefixLines: 80,
+      maxSuffixLines: 40,
+      maxPrefixChars: 6000,
+      maxSuffixChars: 2000,
+      temperature: 0.3,
+      maxTokens: 256,
+      useChatModel: false,
+      providerId: 'lm-studio-local',
+      modelId: '',
+      includeImportContext: true,
+      includeLspHover: true,
+      useNativeFim: true,
+      enableCompletionCache: true,
+    });
+
+    const { getEditorAiCompletionConfigSync } = await import(
+      '../../src/config/editor-ai-completion.ts'
+    );
+    const binding = await resolveEditorAiBinding(getEditorAiCompletionConfigSync());
+    assert.equal(binding.providerId, 'lm-studio-local');
+    assert.equal(binding.modelId, '');
+    assert.equal(preflightEditorAiBinding(binding), EDITOR_AI_NO_MODEL_MESSAGE);
   });
 });
 

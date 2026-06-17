@@ -104,6 +104,13 @@ export interface LlamaRuntimeStatus {
   installableVariants: string[];
 }
 
+export interface LlamaInstallJob {
+  phase: 'idle' | 'installing' | 'completed' | 'failed';
+  percent: number;
+  message: string;
+  error: string | null;
+}
+
 export interface ModelsConfigView {
   hfTokenConfigured: boolean;
   hfTokenMasked: string;
@@ -270,6 +277,21 @@ export async function installLlamaRuntime(payload?: {
     body: JSON.stringify(payload ?? {}),
   });
   return parseJson(res);
+}
+
+/** Subscribe to llama.cpp runtime install progress via SSE. */
+export function subscribeLlamaInstallProgress(
+  onEvent: (event: LlamaInstallJob) => void,
+): () => void {
+  const source = new EventSource('/api/models/llama-runtime/install/stream');
+  source.onmessage = (msg) => {
+    try {
+      onEvent(JSON.parse(msg.data) as LlamaInstallJob);
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  return () => source.close();
 }
 
 export async function startModelServe(payload: {
