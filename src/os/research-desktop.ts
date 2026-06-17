@@ -153,6 +153,12 @@ async function showResultForId(researchId: string): Promise<void> {
         },
         onRunAgain: () => {
           dismissDesktopResearchResult();
+          const input = getComposerInput();
+          if (input && currentQuery) {
+            input.value = currentQuery;
+            input.dispatchEvent(new window.Event('input', { bubbles: true }));
+          }
+          input?.focus();
         },
         onDiscuss: () => {
           void import('../research/panel').then((m) => m.discussResearchReport(researchId));
@@ -171,6 +177,7 @@ async function showResultForId(researchId: string): Promise<void> {
           void showDesktopResearchLibrary();
         },
       },
+      { savedToLibrary: true },
     );
     syncResearchResultChrome();
   } catch (err) {
@@ -213,7 +220,7 @@ export async function startDesktopResearchRun(
   if (running) {
     return;
   }
-  const query = (extra.query ?? getComposerInput()?.value ?? '').trim();
+  const query = (extra.query ?? getComposerInput()?.value ?? currentQuery ?? '').trim();
   if (!query) {
     setStatus('err', 'Enter a research question');
     return;

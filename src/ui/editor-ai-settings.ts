@@ -72,7 +72,7 @@ function statusReadout(enabled: boolean): HTMLElement {
 }
 
 function isPinnedModelSource(config: EditorAiCompletionConfig): boolean {
-  return !config.useChatModel || config.providerId.trim().length > 0;
+  return !config.useChatModel;
 }
 
 function formatEffectiveModel(config: EditorAiCompletionConfig): string {
@@ -162,9 +162,19 @@ function mountModelSourceBlock(
   };
 
   const persistPinned = (): void => {
+    const providerId = providerSelect.value.trim();
+    const modelId = modelSelect.value.trim();
+    if (!providerId) {
+      setStatus('err', 'Choose a provider to pin');
+      return;
+    }
+    if (!modelId) {
+      setStatus('err', 'Choose a model to pin (required for inline completion)');
+      return;
+    }
     void saveEditorAiCompletionConfig({
-      providerId: providerSelect.value.trim(),
-      modelId: modelSelect.value.trim(),
+      providerId,
+      modelId,
       useChatModel: false,
     }).then(() => {
       setStatus('ok', 'Pinned model saved');
@@ -178,6 +188,7 @@ function mountModelSourceBlock(
       modelSelect,
       config.providerId || providerSelect.value,
       config.modelId,
+      { includeEmptyOption: false },
     );
   })();
 
@@ -207,9 +218,11 @@ function mountModelSourceBlock(
   });
 
   providerSelect.addEventListener('change', () => {
-    void fillModelSelect(modelSelect, providerSelect.value, '').then(() => {
+    void fillModelSelect(modelSelect, providerSelect.value, '', {
+      includeEmptyOption: false,
+    }).then(() => {
       refreshEffective();
-      if (providerSelect.value.trim()) persistPinned();
+      if (providerSelect.value.trim() && modelSelect.value.trim()) persistPinned();
     });
   });
 

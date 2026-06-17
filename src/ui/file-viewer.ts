@@ -25,7 +25,8 @@ import {
   refreshFileTreeViaBridge,
   renderFileTreeViaBridge,
 } from './file-tree-refresh-bridge';
-import { loadEditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { loadEditorAiCompletionConfig, getEditorAiCompletionConfigSync } from '../config/editor-ai-completion';
+import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
 import { editorCoreExtensions } from './editor-core-extensions';
@@ -80,6 +81,7 @@ let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
+let editorAiModelSelectListener: (() => void) | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 
 /** Strip "N: " prefixes from read_file_range output. */
@@ -179,9 +181,32 @@ function snapshotActiveTabFromEditor(): void {
   snapshotActiveTabEditorContent(text, dirty);
 }
 
+function detachEditorAiModelSelectListener(): void {
+  if (!editorAiModelSelectListener) return;
+  document
+    .getElementById('modelSelect')
+    ?.removeEventListener('change', editorAiModelSelectListener);
+  editorAiModelSelectListener = null;
+}
+
+/** Clear stale "no model" hint when the user picks a model while editing. */
+function attachEditorAiModelSelectListener(): void {
+  detachEditorAiModelSelectListener();
+  editorAiModelSelectListener = () => {
+    if (!editorAiStatusEl || editorAiStatusEl.hidden) return;
+    if (editorAiStatusEl.textContent === EDITOR_AI_NO_MODEL_MESSAGE) {
+      editorAiStatusEl.hidden = true;
+    }
+  };
+  document
+    .getElementById('modelSelect')
+    ?.addEventListener('change', editorAiModelSelectListener);
+}
+
 function destroyEditor(): void {
   snapshotActiveTabFromEditor();
   closeLspDocument();
+  detachEditorAiModelSelectListener();
   if (editorView) {
     editorView.destroy();
     editorView = null;
@@ -307,7 +332,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     const aiExts = useEditorAi
       ? editorAiCompletionExtensions({
           filePath: path,
-          config: editorAiConfig,
+          getConfig: getEditorAiCompletionConfigSync,
           canRequest: () => getLocalServerAvailable(),
           onStatus: (message) => {
             if (!editorAiStatusEl) return;
@@ -320,6 +345,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
           },
         })
       : [];
+    if (useEditorAi) attachEditorAiModelSelectListener();
     const quickEditExts =
       !tab.readOnlyExcerpt && getLocalServerAvailable()
         ? editorQuickEditExtensions({

@@ -694,9 +694,10 @@
                 placeholder="Xenova/all-MiniLM-L6-v2" autocomplete="off">
             </div>
             <div class="field hidden" id="settingsMemoryEmbeddingsProviderRow">
-              <label for="settingsMemoryEmbeddingsProvider">Provider id</label>
-              <input type="text" id="settingsMemoryEmbeddingsProvider" class="settings-input"
-                placeholder="provider folder id under ~/.minnow/providers/" autocomplete="off">
+              <label for="settingsMemoryEmbeddingsProvider">Provider</label>
+              <select id="settingsMemoryEmbeddingsProvider" class="settings-select">
+                <option value="">Select a provider</option>
+              </select>
             </div>
             <div class="field">
               <label for="settingsMemoryEmbeddingsBlend">
@@ -707,6 +708,7 @@
             </div>
             <div class="settings-actions">
               <button type="button" id="settingsMemoryEmbeddingsSave" class="settings-action-btn">Save embeddings settings</button>
+              <button type="button" id="settingsMemoryEmbeddingsDownload" class="settings-action-btn">Download model</button>
               <button type="button" id="settingsMemoryEmbeddingsReindex" class="settings-action-btn">Reindex all</button>
             </div>
           </div>

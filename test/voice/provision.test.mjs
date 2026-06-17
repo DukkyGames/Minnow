@@ -3,6 +3,9 @@
  */
 
 import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import {
   buildTorchPackage,
@@ -52,5 +55,32 @@ describe('voice provision torch packages', () => {
     const second = await patchQwenTtsCheckModelInputsInVenv(venvDir);
     assert.equal(second, 0);
     assert.ok(first >= 0);
+  });
+
+  test('patchQwenTtsCheckModelInputsInVenv rewrites decorator call form (MIN-170)', async () => {
+    const venvDir = await mkdtemp(join(tmpdir(), 'minnow-voice-patch-'));
+    const pkgDir = join(venvDir, 'Lib', 'site-packages', 'qwen_tts');
+    const pyPath = join(pkgDir, 'sample.py');
+    await mkdir(pkgDir, { recursive: true });
+    const source = [
+      'from transformers.utils.generic import check_model_inputs',
+      '',
+      'class Demo:',
+      '    @check_model_inputs()',
+      '    def forward(self):',
+      '        pass',
+      '',
+    ].join('\n');
+    await writeFile(pyPath, source, 'utf8');
+
+    try {
+      const patched = await patchQwenTtsCheckModelInputsInVenv(venvDir);
+      assert.equal(patched, 1);
+      const text = await readFile(pyPath, 'utf8');
+      assert.match(text, /@check_model_inputs\n/);
+      assert.doesNotMatch(text, /@check_model_inputs\(\)/);
+    } finally {
+      await rm(venvDir, { recursive: true, force: true });
+    }
   });
 });

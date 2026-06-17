@@ -4,7 +4,10 @@
  */
 
 import { apiMessageContentToText, contentPartsToText } from '../api/message-content.ts';
-import { estimateTokensFromText } from './prompts/token-estimate-core';
+import {
+  ESTIMATE_IMAGE_URL_TOKENS,
+  estimateTokensFromText,
+} from './prompts/token-estimate-core';
 import type { ApiMessage, ContentPart } from '../types';
 
 import type { ArchiveConfig } from './archive/types';
@@ -65,7 +68,7 @@ export function serializeApiMessageForEstimate(msg: ApiMessage): string {
     if (Array.isArray(msg.content)) {
       let extra = 0;
       for (const part of msg.content) {
-        if (part.type === 'image_url') extra += 256;
+        if (part.type === 'image_url') extra += ESTIMATE_IMAGE_URL_TOKENS;
       }
       return text + ' '.repeat(extra);
     }

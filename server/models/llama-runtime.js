@@ -31,6 +31,63 @@ const BINARY_BASE = 'llama-server';
 /** @type {Promise<string> | null} */
 let installPromise = null;
 
+/**
+ * @typedef {{ phase: 'idle' | 'installing' | 'completed' | 'failed', percent: number, message: string, error: string | null }} LlamaInstallJob
+ */
+
+/** @type {LlamaInstallJob | null} */
+let installJob = null;
+
+/** @type {Set<(job: LlamaInstallJob) => void>} */
+const installListeners = new Set();
+
+function emitInstallJob() {
+  if (!installJob) return;
+  for (const listener of installListeners) {
+    try {
+      listener(installJob);
+    } catch {
+      /* ignore listener errors */
+    }
+  }
+}
+
+/**
+ * @param {Partial<LlamaInstallJob>} patch
+ */
+function setInstallJob(patch) {
+  installJob = {
+    phase: installJob?.phase ?? 'idle',
+    percent: installJob?.percent ?? 0,
+    message: installJob?.message ?? '',
+    error: installJob?.error ?? null,
+    ...patch,
+  };
+  emitInstallJob();
+}
+
+/** @returns {LlamaInstallJob | null} */
+export function getLlamaInstallJob() {
+  return installJob;
+}
+
+/**
+ * @param {(job: LlamaInstallJob) => void} listener
+ * @returns {() => void}
+ */
+export function subscribeLlamaInstallProgress(listener) {
+  if (installJob) listener(installJob);
+  installListeners.add(listener);
+  return () => installListeners.delete(listener);
+}
+
+/** Test helper — clear install progress subscribers and job state. */
+export function resetLlamaInstallJobForTests() {
+  installJob = null;
+  installListeners.clear();
+  installPromise = null;
+}
+
 /** User-managed llama.cpp install root. */
 export function getManagedLlamaRoot() {
   return path.join(getMinnowHome(), 'models-runtime', 'llama-cpp');
@@ -344,7 +401,16 @@ export async function ensureLlamaServer(opts = {}) {
  * @param {{ variant?: string, tag?: string, reinstall?: boolean, onProgress?: (patch: { percent: number, message: string }) => void }} opts
  */
 async function installManagedLlamaServer(opts) {
-  const onProgress = opts.onProgress;
+  const onProgress = (patch) => {
+    setInstallJob({
+      phase: 'installing',
+      percent: patch.percent,
+      message: patch.message,
+      error: null,
+    });
+    opts.onProgress?.(patch);
+  };
+  setInstallJob({ phase: 'installing', percent: 0, message: 'Starting install', error: null });
   const tag = opts.tag ?? LLAMA_CPP_RELEASE_TAG;
   const config = await readLlamaCppConfig();
   const assets = await fetchReleaseAssetList(tag);
@@ -361,7 +427,7 @@ async function installManagedLlamaServer(opts) {
 
   const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/${tag}`;
 
-  onProgress?.({ percent: 2, message: `Resolving llama.cpp ${tag} (${variant})` });
+  onProgress({ percent: 2, message: `Resolving llama.cpp ${tag} (${variant})` });
 
   let release;
   try {
@@ -382,19 +448,19 @@ async function installManagedLlamaServer(opts) {
   const managedRoot = getManagedLlamaRoot();
 
   try {
-    onProgress?.({ percent: 5, message: `Downloading ${mainZip}` });
+    onProgress({ percent: 5, message: `Downloading ${mainZip}` });
     const mainArchivePath = path.join(tmpRoot, mainZip);
     await downloadToFile(mainAsset.browser_download_url, mainArchivePath, (pct) => {
-      onProgress?.({ percent: pct, message: `Downloading ${mainZip}` });
+      onProgress({ percent: pct, message: `Downloading ${mainZip}` });
     });
 
     if (companionZip) {
       const companionAsset = assetByName.get(companionZip);
       if (companionAsset?.browser_download_url) {
-        onProgress?.({ percent: 50, message: `Downloading ${companionZip}` });
+        onProgress({ percent: 50, message: `Downloading ${companionZip}` });
         const companionPath = path.join(tmpRoot, companionZip);
         await downloadToFile(companionAsset.browser_download_url, companionPath);
-        onProgress?.({ percent: 70, message: 'Extracting CUDA runtime' });
+        onProgress({ percent: 70, message: 'Extracting CUDA runtime' });
         const companionExtract = path.join(tmpRoot, 'companion');
         await extractArchive(companionPath, companionExtract);
         await fsp.rm(managedRoot, { recursive: true, force: true });
@@ -403,7 +469,7 @@ async function installManagedLlamaServer(opts) {
       }
     }
 
-    onProgress?.({ percent: 85, message: 'Extracting llama-server' });
+    onProgress({ percent: 85, message: 'Extracting llama-server' });
     if (!companionZip) {
       await fsp.rm(managedRoot, { recursive: true, force: true });
       await fsp.mkdir(managedRoot, { recursive: true });
@@ -433,8 +499,13 @@ async function installManagedLlamaServer(opts) {
       'utf8',
     );
 
-    onProgress?.({ percent: 100, message: 'llama-server ready' });
+    onProgress({ percent: 100, message: 'llama-server ready' });
+    setInstallJob({ phase: 'completed', percent: 100, message: 'llama-server ready', error: null });
     return installed;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setInstallJob({ phase: 'failed', percent: 0, message, error: message });
+    throw err;
   } finally {
     await fsp.rm(tmpRoot, { recursive: true, force: true });
   }

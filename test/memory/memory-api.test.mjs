@@ -192,6 +192,12 @@ describe('memory API', () => {
     assert.match(res.json.error, /disabled/i);
   });
 
+  test('embeddings warmup rejects when disabled', async () => {
+    const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/warmup');
+    assert.equal(res.status, 400);
+    assert.match(res.json.error, /disabled/i);
+  });
+
   test('embeddings config can be updated', async () => {
     const res = await httpRequest(baseUrl, 'PUT', '/api/memory/embeddings/config', {
       enabled: false,

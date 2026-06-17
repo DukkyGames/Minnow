@@ -7,11 +7,21 @@ import {
   applyUiDesignerToolFilter,
   prepareUiDesignerTurn,
 } from '../../agents/ui-designer/runner';
+import { getModelRowForSelectOrCanonicalId } from '../../api/models';
+import { contextLengthFromModelRow } from '../../lib/context-length';
 import { normalizeModeId } from '../modes/types';
 import { getActiveChat } from '../../state/sessions';
-import type { Chat } from '../../types';
+import type { ApiMessage, Chat } from '../../types';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
+import { pushOutboundSystemMessages } from '../../tools/api-system-messages';
+import {
+  agentContextBudgetFromWorkAgent,
+  applyContextBudget,
+  estimateApiMessagesTokens,
+  resolveContextBudget,
+  serializeApiMessageForEstimate,
+} from '../context-budget';
 import {
   resolveOutboundSystemMessages,
   type BuildComposeContextOptions,
@@ -20,18 +30,20 @@ import {
   computeOutboundPromptEstimateFromParts,
   estimateTokensFromText,
   formatTokenEstimateLabel,
+  historyToApiMessagesForEstimate,
   TOKEN_ESTIMATE_TOOLTIP,
   type OutboundPromptEstimate,
 } from './token-estimate-core';
 
 export {
+  ESTIMATE_IMAGE_URL_TOKENS,
   computeOutboundPromptEstimateFromParts,
   estimateHistoryTokens,
   estimateTokensFromText,
   estimateToolsTokens,
   formatTokenEstimateLabel,
+  historyToApiMessagesForEstimate,
   serializeMessageContentForEstimate,
-  serializeThinkingForEstimate,
   TOKEN_ESTIMATE_TOOLTIP,
   type OutboundPromptEstimate,
 } from './token-estimate-core';
@@ -39,6 +51,8 @@ export {
 export interface ResolveOutboundPromptEstimateOptions {
   chat?: Chat;
   composeOptions?: BuildComposeContextOptions;
+  /** Active model id — used to mirror per-agent context budget trimming. */
+  modelId?: string;
 }
 
 function readLegacySystemPromptText(): string {
@@ -71,6 +85,69 @@ function resolveEnabledToolsForEstimate(chat: Chat): OpenAIFunctionDefinition[] 
   return applyUiDesignerToolFilter(enabledTools, uiDesignerCtx);
 }
 
+function resolveModelLimitForEstimate(modelId: string | undefined, chat: Chat): number | null {
+  const fromChat = chat.modelInfo?.context_length;
+  if (typeof fromChat === 'number' && Number.isFinite(fromChat) && fromChat > 0) {
+    return fromChat;
+  }
+  const id = modelId?.trim();
+  if (!id) return null;
+  const cached = getModelRowForSelectOrCanonicalId(id);
+  if (cached) return contextLengthFromModelRow(cached);
+  return null;
+}
+
+function buildOutboundApiMessagesForEstimate(
+  chat: Chat,
+  systemText: string,
+  userRulesText: string,
+): ApiMessage[] {
+  const messages: ApiMessage[] = [];
+  pushOutboundSystemMessages(messages, {
+    composedSystemPrompt: systemText,
+    legacySysPrompt: '',
+    userRulesContent: userRulesText || undefined,
+  });
+  messages.push(...historyToApiMessagesForEstimate(chat.history));
+  return messages;
+}
+
+function countHistoryTokensFromApiMessages(messages: ApiMessage[]): number {
+  let total = 0;
+  for (const msg of messages) {
+    if (msg.role === 'system') continue;
+    total += estimateTokensFromText(serializeApiMessageForEstimate(msg));
+  }
+  return total;
+}
+
+/** Apply the same per-agent context budget trimming used before each provider send. */
+function applyBudgetTrimToHistoryTokens(
+  chat: Chat,
+  modelId: string | undefined,
+  systemText: string,
+  userRulesText: string,
+  rawHistoryTokens: number,
+): number {
+  const apiMessages = buildOutboundApiMessagesForEstimate(chat, systemText, userRulesText);
+  const workAgent = resolveActiveWorkAgent(chat);
+  const agentConfig = workAgent
+    ? agentContextBudgetFromWorkAgent(workAgent)
+    : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
+  const budgetResolved = resolveContextBudget({
+    agentConfig,
+    modelLimit: resolveModelLimitForEstimate(modelId, chat),
+  });
+  if (budgetResolved.effectiveLimit == null) {
+    return rawHistoryTokens;
+  }
+  if (estimateApiMessagesTokens(apiMessages) <= budgetResolved.effectiveLimit) {
+    return rawHistoryTokens;
+  }
+  const applied = applyContextBudget(apiMessages, budgetResolved, agentConfig);
+  return countHistoryTokensFromApiMessages(applied.messages);
+}
+
 /**
  * Approximate first tool-loop request size for the active (or given) chat.
  */
@@ -97,11 +174,29 @@ export async function resolveOutboundPromptEstimate(
 
   const legacyFallback = !outbound.composed && !!legacyText;
 
-  return computeOutboundPromptEstimateFromParts({
+  const estimate = computeOutboundPromptEstimateFromParts({
     systemText: outbound.composed,
     history: chat.history,
     tools: resolveEnabledToolsForEstimate(chat),
     userRulesText: outbound.userRules ?? '',
     legacyFallback,
   });
+
+  const trimmedHistory = applyBudgetTrimToHistoryTokens(
+    chat,
+    options?.modelId,
+    outbound.composed,
+    outbound.userRules ?? '',
+    estimate.history,
+  );
+
+  if (trimmedHistory === estimate.history) {
+    return estimate;
+  }
+
+  return {
+    ...estimate,
+    history: trimmedHistory,
+    total: estimate.composedSystem + estimate.userRules + trimmedHistory + estimate.tools,
+  };
 }

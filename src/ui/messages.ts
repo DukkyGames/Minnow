@@ -171,6 +171,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       renderPersistedSubAgentCardsForChat(chat);
     } else {
       area.innerHTML = '';
+      renderPersistedSubAgentCardsForChat(chat);
     }
     scrollChatToBottom();
     refreshContextUsageRing();

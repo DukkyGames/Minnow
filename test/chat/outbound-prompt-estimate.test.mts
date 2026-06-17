@@ -10,6 +10,7 @@ import {
   estimateTokensFromText,
   estimateToolsTokens,
   formatTokenEstimateLabel,
+  historyToApiMessagesForEstimate,
   serializeMessageContentForEstimate,
 } from '../../src/chat/prompts/token-estimate-core.ts';
 import type { Message } from '../../src/types.ts';
@@ -32,6 +33,24 @@ describe('estimateTokensFromText', () => {
   });
 });
 
+describe('historyToApiMessagesForEstimate', () => {
+  test('omits assistant thinking segments from API-shaped rows', () => {
+    const history: Message[] = [
+      { role: 'user', content: 'hi' },
+      {
+        role: 'assistant',
+        content: 'answer',
+        thinking: ['hidden reasoning'],
+      },
+    ];
+    const api = historyToApiMessagesForEstimate(history);
+    assert.equal(api.length, 2);
+    assert.equal(api[1].role, 'assistant');
+    assert.equal(api[1].content, 'answer');
+    assert.equal('thinking' in api[1], false);
+  });
+});
+
 describe('estimateHistoryTokens', () => {
   test('sums user and assistant string content', () => {
     const history: Message[] = [
@@ -41,7 +60,7 @@ describe('estimateHistoryTokens', () => {
     assert.equal(estimateHistoryTokens(history), 2);
   });
 
-  test('assistant thinking segments are included in serialized content', () => {
+  test('assistant thinking segments are excluded from serialized content', () => {
     const history: Message[] = [
       {
         role: 'assistant',
@@ -50,10 +69,8 @@ describe('estimateHistoryTokens', () => {
       },
     ];
     const serialized = serializeMessageContentForEstimate(history[0]);
-    assert.match(serialized, /answer/);
-    assert.match(serialized, /reason A/);
-    assert.match(serialized, /reason B/);
-    assert.ok(estimateHistoryTokens(history) > estimateTokensFromText('answer'));
+    assert.equal(serialized, 'answer');
+    assert.equal(estimateHistoryTokens(history), estimateTokensFromText('answer'));
   });
 
   test('assistant tool_calls include JSON in serialized content', () => {

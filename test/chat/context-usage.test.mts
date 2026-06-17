@@ -47,16 +47,40 @@ describe('estimateAttachmentTokens', () => {
     ];
     assert.equal(estimateAttachmentTokens(attachments), 0);
   });
+
+  test('caps image dataUrl at fixed per-image budget (not full base64)', () => {
+    const attachments: Attachment[] = [
+      {
+        id: 'img1',
+        name: 'photo.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        size: 1_000_000,
+        dataUrl: `data:image/png;base64,${'A'.repeat(40_000)}`,
+      },
+    ];
+    assert.equal(estimateAttachmentTokens(attachments), 256);
+  });
 });
 
 describe('estimateInFlightOverlayTokens', () => {
-  test('sums partial prose, thinking, and pending tool JSON', () => {
+  test('counts only pending tool-call JSON (not streaming completion)', () => {
     const tokens = estimateInFlightOverlayTokens({
       partialAssistantText: 'abcd',
       thinkingText: 'efgh',
       pendingToolCallsJson: '{"name":"read_file"}',
     });
-    assert.equal(tokens, 7);
+    assert.equal(tokens, 5);
+  });
+
+  test('returns zero when only streaming prose or reasoning is present', () => {
+    assert.equal(
+      estimateInFlightOverlayTokens({
+        partialAssistantText: 'abcd',
+        thinkingText: 'efgh',
+      }),
+      0,
+    );
   });
 });
 

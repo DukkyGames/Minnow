@@ -213,6 +213,32 @@ export async function handleMemoryRequest(req, res, pathname) {
       return true;
     }
 
+    if (pathname === '/api/memory/embeddings/warmup' && req.method === 'POST') {
+      const started = Date.now();
+      const memory = await loadMemoryConfig();
+      const emb = memory.embeddings ?? {};
+      if (!emb.enabled) {
+        sendJson(res, 400, { error: 'Embeddings are disabled' });
+        return true;
+      }
+
+      const embedder = await getEmbedder(memory);
+      const [vector] = await embedTexts(embedder, ['warmup'], emb.queryTimeoutMs);
+      if (!Array.isArray(vector) || vector.length === 0) {
+        sendJson(res, 500, { error: 'Warmup produced empty embedding' });
+        return true;
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        model: embedder.id,
+        backend: embedder.backend,
+        dim: vector.length,
+        durationMs: Date.now() - started,
+      });
+      return true;
+    }
+
     if (pathname === '/api/memory/embeddings/reindex' && req.method === 'POST') {
       const started = Date.now();
       const memory = await loadMemoryConfig();
