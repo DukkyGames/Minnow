@@ -110,4 +110,10 @@ describe('visual report category class', () => {
     assert.doesNotMatch(page, /<div class="hero-image"/);
     assert.doesNotMatch(page, /<figure class="section-image"/);
   });
+
+  it('includes hardened export dropdown script', () => {
+    const page = generateVisualReport('Export test', '## Section\n\nBody.', [], {}, null, null);
+    assert.match(page, /if \(!exportBtn \|\| !exportMenu\) return;/);
+    assert.match(page, /exportMenu\.addEventListener\('click', function\(e\) \{ e\.stopPropagation\(\); \}\)/);
+  });
 });

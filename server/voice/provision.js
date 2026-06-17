@@ -86,6 +86,71 @@ async function maybeUninstallCpuTorch(venvPython, cudaAvailable, meta, onProgres
 }
 
 /**
+ * Locate qwen_tts under a voice venv site-packages (Windows + Unix layouts).
+ * @param {string} venvDir
+ * @returns {string | null}
+ */
+export function resolveQwenTtsPackageDir(venvDir) {
+  const winRoot = path.join(venvDir, 'Lib', 'site-packages', 'qwen_tts');
+  if (fs.existsSync(winRoot)) return winRoot;
+
+  const libDir = path.join(venvDir, 'lib');
+  if (!fs.existsSync(libDir)) return null;
+
+  for (const name of fs.readdirSync(libDir)) {
+    if (!name.startsWith('python')) continue;
+    const candidate = path.join(libDir, name, 'site-packages', 'qwen_tts');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * qwen-tts uses `@check_model_inputs()` but transformers expects `@check_model_inputs`
+ * (no call parens). Applies to transformers 4.57.x and 5.x — see MIN-170.
+ * @param {string} venvDir
+ * @returns {Promise<number>} files patched (0 when qwen-tts is not installed)
+ */
+export async function patchQwenTtsCheckModelInputsInVenv(venvDir) {
+  const root = resolveQwenTtsPackageDir(venvDir);
+  if (!root) return 0;
+
+  let patched = 0;
+  async function walk(dir) {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      if (!ent.isFile() || !ent.name.endsWith('.py')) continue;
+      const text = await fsp.readFile(full, 'utf8');
+      if (!text.includes('@check_model_inputs()')) continue;
+      await fsp.writeFile(
+        full,
+        text.replaceAll('@check_model_inputs()', '@check_model_inputs'),
+        'utf8',
+      );
+      patched += 1;
+    }
+  }
+  await walk(root);
+  return patched;
+}
+
+/**
+ * @param {string} venvPython
+ * @param {(message: string) => void} [onProgress]
+ * @returns {Promise<number>}
+ */
+export async function patchQwenTtsCheckModelInputs(venvPython, onProgress) {
+  onProgress?.('Patching qwen-tts transformers decorator compatibility');
+  const venvDir = path.resolve(venvPython, '..', '..');
+  return patchQwenTtsCheckModelInputsInVenv(venvDir);
+}
+
+/**
  * qwen-tts can pull a PyPI torchaudio that does not match our torch build — re-pin both.
  * @param {string} venvPython
  * @param {boolean} cudaAvailable
@@ -272,6 +337,10 @@ export async function provision(onProgress) {
     const ok = await pipInstallPackage(venvPython, { ...pkg, optional: true }, progress);
     if (ok) installedPackages.push(pkg.label);
     else skippedPackages.push(pkg.label);
+  }
+
+  if (installedPackages.some((label) => label.includes('qwen-tts'))) {
+    await patchQwenTtsCheckModelInputs(venvPython, progress);
   }
 
   if (await maybeInstallFlashAttn(venvPython, cudaAvailable, progress)) {

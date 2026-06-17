@@ -28,10 +28,12 @@ const reportScript = `(function() {
 
   var exportBtn = document.getElementById('btn-export');
   var exportMenu = document.getElementById('export-menu');
+  if (!exportBtn || !exportMenu) return;
   exportBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     exportMenu.classList.toggle('open');
   });
+  exportMenu.addEventListener('click', function(e) { e.stopPropagation(); });
   document.addEventListener('click', function() { exportMenu.classList.remove('open'); });
 
   document.getElementById('btn-pdf').addEventListener('click', function() {

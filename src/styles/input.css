@@ -160,6 +160,7 @@
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-md);
   color: var(--mn-fg);
+  caret-color: var(--mn-fg);
   font-family: var(--font-ui);
   font-size: 14px;
   padding: 11px 14px;

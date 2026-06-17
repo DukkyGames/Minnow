@@ -135,6 +135,41 @@ describe('window-mounted apps', () => {
     assert.equal(document.getElementById('modelsView')?.classList.contains('is-open'), false);
   });
 
+  test('minimize stays minimized after app-host sync', async () => {
+    markWindowAppOpen('settings');
+    const instanceId = launchInstance('settings');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const win = windowManager.findWindowByInstance(instanceId);
+    assert.ok(win);
+    windowManager.minimize(win.id, true);
+    syncAppHostForTests();
+
+    assert.equal(windowManager.getWindows()[0]?.minimized, true);
+    assert.equal(
+      windowManager.getFrame(win.id)?.root.classList.contains('is-minimized'),
+      true,
+    );
+  });
+
+  test('re-launch restores minimized window-mounted app', async () => {
+    markWindowAppOpen('settings');
+    const instanceId = launchInstance('settings');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const win = windowManager.findWindowByInstance(instanceId);
+    assert.ok(win);
+    windowManager.minimize(win.id, true);
+    syncAppHostForTests();
+    assert.equal(windowManager.getWindows()[0]?.minimized, true);
+
+    launchInstance('settings');
+    syncAppHostForTests();
+    assert.equal(windowManager.getWindows()[0]?.minimized, false);
+  });
+
   test('mini-previews show window-mounted apps only when minimized', () => {
     const mount = document.createElement('div');
     const prefs = loadDesktopPrefs();

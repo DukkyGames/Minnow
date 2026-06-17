@@ -69,10 +69,11 @@ function bindSplitResizer(): void {
     if (!dragging) return;
     dragging = false;
     resizer.classList.remove('dragging');
-    document.body.style.cursor = '';
+    document.body.style.removeProperty('cursor');
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', stopDrag);
     window.removeEventListener('pointercancel', stopDrag);
+    window.removeEventListener('blur', stopDrag);
   };
 
   resizer.addEventListener('pointerdown', (e) => {
@@ -84,7 +85,10 @@ function bindSplitResizer(): void {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', stopDrag);
     window.addEventListener('pointercancel', stopDrag);
+    window.addEventListener('blur', stopDrag);
   });
+
+  resizer.addEventListener('lostpointercapture', stopDrag);
 }
 
 function bindFilePanelControls(): void {

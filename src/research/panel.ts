@@ -58,19 +58,39 @@ function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
 }
 
+function resolveResearchReportUrl(researchId: string): string {
+  const path = researchReportUrl(researchId);
+  return path.startsWith('/') && !path.startsWith('//')
+    ? `${window.location.origin}${path}`
+    : path;
+}
+
+/**
+ * Open the visual report outside the hidden workspace preview pane.
+ * Electron uses the system browser so toolbar export (PDF/HTML) works reliably.
+ */
+function openResearchReportInNewSurface(url: string): void {
+  if (window.minnow?.app.openExternal) {
+    void window.minnow.app.openExternal(url);
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 /** Open visual report in Electron preview or a new browser tab. */
 export function openResearchReport(researchId: string): void {
-  const path = researchReportUrl(researchId);
-  const url =
-    path.startsWith('/') && !path.startsWith('//')
-      ? `${window.location.origin}${path}`
-      : path;
+  const url = resolveResearchReportUrl(researchId);
+  // Preview lives under #appBody, which research full-page / desktop overlay hides.
+  if (isResearchPageOpen()) {
+    openResearchReportInNewSurface(url);
+    return;
+  }
   void import('../ui/preview-panel').then((m) => {
     if (typeof window.minnow?.preview !== 'undefined') {
       void m.openUrlInPreviewPanel(url);
       return;
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openResearchReportInNewSurface(url);
   });
 }
 

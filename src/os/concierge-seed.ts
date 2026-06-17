@@ -9,6 +9,13 @@ import type { AppId } from './types';
 const FILLER_PREFIX_RE =
   /^(?:let'?s|let us|please|can you|could you|help me|i want to|i'?d like to|we should|go ahead and)\s+/i;
 
+/** Open research mode without a concrete topic (desktop concierge chip, etc.). */
+const RESEARCH_TOPIC_PLACEHOLDER_RE =
+  /^(?:research|investigate|look into|deep dive)(?:\s+(?:a|an))?\s+(?:topic|something|anything|subject)$/;
+
+/** Bare research verbs with no topic — open mode idle. */
+const RESEARCH_BARE_VERB_RE = /^(?:research|investigate|look into|deep dive)$/;
+
 /** Open/switch workspace without a concrete task (Code app). */
 const CODE_NAVIGATION_RE =
   /^(?:let'?s|i(?:'d| would) like to|please|can we|help me|want to)?\s*(?:code|work|develop|program|hack)\s+(?:in|on|inside|within)\s+(?:our|my|the)\s+/i;
@@ -28,6 +35,14 @@ export function normalizeConciergeText(text: string): string {
     .replace(/\s+/g, ' ')
     .replace(FILLER_PREFIX_RE, '')
     .trim();
+}
+
+/** True when the user only wants to open Research without a concrete topic. */
+export function isNavigationOnlyResearchRequest(userText: string): boolean {
+  const norm = normalizeConciergeText(userText);
+  if (!norm) return false;
+  if (RESEARCH_TOPIC_PLACEHOLDER_RE.test(norm)) return true;
+  return RESEARCH_BARE_VERB_RE.test(norm);
 }
 
 /** True when the user is opening Code in a workspace without a specific task. */
@@ -81,6 +96,10 @@ export function sanitizeConciergeSeed(input: SanitizeSeedInput): SanitizeSeedRes
   let autoRun = input.autoRun;
 
   if (input.appId === 'code' && isNavigationOnlyCodeRequest(userText)) {
+    return { seed: undefined, autoRun: false };
+  }
+
+  if (input.appId === 'research' && isNavigationOnlyResearchRequest(userText)) {
     return { seed: undefined, autoRun: false };
   }
 

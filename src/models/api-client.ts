@@ -168,6 +168,23 @@ export function subscribeDownloadProgress(
       /* ignore malformed */
     }
   };
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) {
+      void listModelDownloads()
+        .then((jobs) => jobs.find((job) => job.id === jobId))
+        .then((job) => {
+          if (!job) return;
+          onEvent({
+            jobId: job.id,
+            status: job.status,
+            bytesReceived: job.bytesReceived,
+            totalBytes: job.totalBytes,
+            error: job.error,
+          });
+        })
+        .catch(() => {});
+    }
+  };
   return () => source.close();
 }
 

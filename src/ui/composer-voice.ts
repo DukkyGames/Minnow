@@ -11,6 +11,7 @@ import { recordedBlobToWav } from '../voice/recorded-audio';
 import { connectMicAnalyser, watchSilence } from '../voice/silence-detector';
 import { DictationRange } from '../voice/dictation-range';
 import { SttStreamClient } from '../voice/stt-stream-client';
+import { ensureVoiceWorker } from '../voice/api-client';
 import { fetchSttStatus } from './voice-controls';
 
 type MicState = 'idle' | 'recording' | 'transcribing';
@@ -33,6 +34,8 @@ let autoGainControl = true;
 let micAnalyserDisconnect: (() => void) | null = null;
 let stopSilenceWatch: (() => void) | null = null;
 let micDetecting = false;
+/** Composer textarea pinned when dictation starts (avoids stale routing on async stop). */
+let dictationInputEl: HTMLTextAreaElement | null = null;
 
 const MIC_BUTTON_IDS = ['btnComposerMic', 'btnChatAppMic', 'btnDesktopMic'] as const;
 
@@ -68,10 +71,17 @@ function insertTranscript(input: HTMLTextAreaElement, text: string): void {
   input.focus();
 }
 
+function resolveDictationInput(): HTMLTextAreaElement | null {
+  return dictationInputEl ?? getActiveComposerSurface().inputEl;
+}
+
 /** Toggle dictation styling on the active composer textarea. */
 function setComposerDictating(active: boolean): void {
-  const { inputEl } = getActiveComposerSurface();
-  inputEl.classList.toggle('composer-dictating', active);
+  resolveDictationInput()?.classList.toggle('composer-dictating', active);
+}
+
+function clearDictationInput(): void {
+  dictationInputEl = null;
 }
 
 /** Sync visual classes and ARIA on every composer mic button. */
@@ -230,8 +240,8 @@ async function handleBatchRecordingStop(): Promise<void> {
   setStatus('spin', 'Transcribing…');
   try {
     const text = await transcribeBlob(blob);
-    const { inputEl } = getActiveComposerSurface();
-    if (text) {
+    const inputEl = resolveDictationInput();
+    if (text && inputEl) {
       insertTranscript(inputEl, text);
       setStatus('ok', 'Transcribed');
     } else {
@@ -244,6 +254,7 @@ async function handleBatchRecordingStop(): Promise<void> {
       openModels('voice');
     }
   } finally {
+    clearDictationInput();
     setMicButtonsState('idle');
   }
 }
@@ -254,10 +265,18 @@ async function handleStreamingRecordingStop(): Promise<void> {
   const range = dictationRange;
   sttStreamClient = null;
   dictationRange = null;
-  const { inputEl } = getActiveComposerSurface();
+  const inputEl = resolveDictationInput();
 
   if (!client) {
+    clearDictationInput();
     setMicButtonsState('idle');
+    return;
+  }
+
+  if (!inputEl) {
+    clearDictationInput();
+    setMicButtonsState('idle');
+    setStatus('err', 'Composer input not found');
     return;
   }
 
@@ -284,13 +303,18 @@ async function handleStreamingRecordingStop(): Promise<void> {
       openModels('voice');
     }
   } finally {
+    clearDictationInput();
     setMicButtonsState('idle');
-    inputEl.focus();
+    inputEl?.focus();
   }
 }
 
 async function startStreamingRecording(): Promise<void> {
-  const { inputEl } = getActiveComposerSurface();
+  const inputEl = resolveDictationInput();
+  if (!inputEl) {
+    setStatus('err', 'Composer input not found');
+    return;
+  }
   dictationRange = new DictationRange();
   dictationRange.start(inputEl);
   setComposerDictating(true);
@@ -387,19 +411,45 @@ async function startRecording(): Promise<void> {
     return;
   }
 
-  const status = await fetchSttStatus();
+  let status = await fetchSttStatus();
   if (!status?.enabled) {
     setStatus('err', 'Speech-to-text is disabled. Open Models → Voice.');
     openModels('voice');
     return;
   }
-  if (!status.healthy) {
-    setStatus('err', 'STT provider is not configured. Open Models → Voice.');
+
+  if (!status.healthy && status.backend === 'local') {
+    setStatus('spin', 'Starting voice server…');
+    try {
+      await ensureVoiceWorker();
+      status = await fetchSttStatus();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Voice server could not start';
+      setStatus('err', message);
+      openModels('voice');
+      return;
+    }
+  }
+
+  if (!status?.healthy) {
+    const message =
+      status?.backend === 'local'
+        ? (status.warning ?? 'Voice worker is not ready. Open Models → Voice.')
+        : 'STT provider is not configured. Open Models → Voice.';
+    setStatus('err', message);
     openModels('voice');
     return;
   }
 
   useStreamingStt = status.backend === 'local' && status.streamingSupported === true;
+
+  const { inputEl } = getActiveComposerSurface();
+  if (!inputEl) {
+    setStatus('err', 'Composer input not found');
+    return;
+  }
+  dictationInputEl = inputEl;
 
   try {
     if (useStreamingStt) {
@@ -412,6 +462,7 @@ async function startRecording(): Promise<void> {
     sttStreamClient = null;
     dictationRange = null;
     stopMediaTracks();
+    clearDictationInput();
     setMicButtonsState('idle');
     const error = err as DOMException;
     if (error?.name === 'NotAllowedError') {

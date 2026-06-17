@@ -23,6 +23,7 @@ import {
 } from '../state/sessions';
 import { refreshChatJumpChipVisibility } from '../ui/chat-scroll';
 import { syncChatItemDotsInDom } from '../ui/chat-item-dot';
+import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import {
   handleComposerPrimaryAction,
   initComposerSteerInputListener,
@@ -158,12 +159,13 @@ export function activateDesktopChatSession(chatId: string): void {
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
-  chat.unread = false;
+  acknowledgeChatViewed(chatId);
   renderDesktopChatRail(chatsWorkspacePath);
   renderDesktopChatMessages();
   syncChatItemDotsInDom();
   syncDesktopComposerSendState();
   refreshContextUsageRing();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
 }
 
 function onChatStreamEnded(chatId: string): void {
@@ -196,7 +198,7 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
         const chat = state.chats.find((c) => c.id === options.chatId?.trim());
         if (chat) {
           state.activeId = chat.id;
-          chat.unread = false;
+          acknowledgeChatViewed(chat.id);
           if (isExpertChat(chat)) {
             const expertId =
               chat.expertId?.trim() || chat.expertSelection?.expertId?.trim() || '';

@@ -36,6 +36,12 @@ const SEARXNG_GIT_REF = 'e964708c0';
 export const SEARXNG_SOURCE_REF = SEARXNG_GIT_REF;
 
 /**
+ * Unix deployment templates in the upstream repo (symlinks + colon gitlink paths).
+ * Not needed for pip install; tar extraction fails on Windows without excludes (MIN-158).
+ */
+export const SEARXNG_ZIP_TAR_EXCLUDES = ['*utils/templates*'];
+
+/**
  * @typedef {object} SearxngInstallStatus
  * @property {boolean} installed
  * @property {string | null} version
@@ -384,7 +390,7 @@ async function installSearxngFromSource(venvPython, onProgress) {
     try {
       await downloadToFile(zipUrl, archivePath);
       const extractDir = path.join(tmpRoot, 'extract');
-      await extractArchive(archivePath, extractDir);
+      await extractArchive(archivePath, extractDir, { exclude: SEARXNG_ZIP_TAR_EXCLUDES });
       const entries = await fsp.readdir(extractDir);
       const inner =
         entries.length === 1 && entries[0]

@@ -44,6 +44,11 @@ const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
   voice: 'voice',
 };
 
+/** Legacy full-page overlays that keep their hash and must not trigger OS routing. */
+export function isLegacyOverlayHash(hash: string): boolean {
+  return hash === '#/bugs' || hash.startsWith('#/bugs/');
+}
+
 /** Map legacy hashes to MinnowOS routes before parsing. */
 export function resolveLegacyHash(hash: string): {
   hash: string;
@@ -217,6 +222,10 @@ function applyRouteFromHash(): void {
   applyingRoute = true;
   try {
     const raw = window.location.hash;
+    // Global bugs (#/bugs) is a legacy overlay — global-bugs-page owns the route.
+    if (isLegacyOverlayHash(raw)) {
+      return;
+    }
     const legacy = resolveLegacyHash(raw);
     if (legacy.hash !== raw) {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;

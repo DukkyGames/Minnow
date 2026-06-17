@@ -87,6 +87,63 @@ export async function startVoiceWorker(): Promise<{
   return parseJson(res);
 }
 
+const VOICE_WORKER_POLL_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Whether the voice worker is installed and reporting ready health. */
+export function isVoiceWorkerReady(status: VoiceRuntimeStatus): boolean {
+  return status.installed && status.running && status.health === 'ready';
+}
+
+/**
+ * Start the Python voice worker when installed but stopped; poll until ready.
+ * No-op when the worker is already healthy.
+ */
+export async function ensureVoiceWorker(options?: {
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+}): Promise<VoiceRuntimeStatus> {
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const pollIntervalMs = options?.pollIntervalMs ?? VOICE_WORKER_POLL_MS;
+
+  let status = await fetchRuntimeStatus();
+
+  if (!status.installed) {
+    throw new Error('Voice runtime is not installed. Open Models → Voice.');
+  }
+
+  if (status.health === 'installing') {
+    throw new Error('Voice runtime is installing. Wait for install to finish.');
+  }
+
+  if (isVoiceWorkerReady(status)) {
+    return status;
+  }
+
+  if (!status.running || status.health === 'stopped' || status.health === 'error') {
+    await startVoiceWorker();
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    status = await fetchRuntimeStatus();
+    if (isVoiceWorkerReady(status)) {
+      return status;
+    }
+    if (status.health === 'error') {
+      throw new Error('Voice worker failed to start. Open Models → Voice.');
+    }
+    await sleep(pollIntervalMs);
+  }
+
+  throw new Error('Voice worker did not become ready in time. Open Models → Voice.');
+}
+
 /** Stop the Python voice worker process. */
 export async function stopVoiceWorker(): Promise<{ ok: boolean; wasRunning: boolean }> {
   const res = await fetch('/api/voice/runtime/stop', { method: 'POST' });
