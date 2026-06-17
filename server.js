@@ -174,16 +174,7 @@ async function main() {
     console.log('Opened in system browser (MINNOW_BROWSER=1). Built-in Chromium preview uses the Electron shell by default.');
   } else {
     const port = new URL(localUrl).port || String(PORT);
-    void spawnElectronShell({ port, dev: true, foreground: false })
-      .then(() => {
-        console.log('Minnow desktop: Electron shell launched (Chromium in-app browser).');
-        console.log('Use MINNOW_BROWSER=1 to open the system browser instead.');
-      })
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
-        openBrowser(localUrl);
-      });
+    launchElectronShell(port, localUrl, appRoot);
   }
 }
 

@@ -5,10 +5,15 @@
  */
 
 import { spawnElectronShell } from './spawn-electron.mjs';
+import { waitForVite } from './wait-for-vite.mjs';
 
 const port = process.env.PORT || '5173';
+const devUrl = `http://localhost:${port}/`;
 
 async function main() {
+  console.log(`[electron:dev] Waiting for ${devUrl}…`);
+  await waitForVite(port);
+
   console.log('[electron:dev] Launching Electron…');
   const child = await spawnElectronShell({ port, dev: true, foreground: true });
   if (!child) {
