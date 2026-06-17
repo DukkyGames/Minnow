@@ -9,7 +9,6 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { waitForVite } from './wait-for-vite.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -75,13 +74,6 @@ export async function spawnElectronShell(options = {}) {
   }
 
   await ensureElectronBuild();
-
-  // Cold Vite starts (especially on a new machine) pre-bundle deps before the first
-  // page is servable; launching Electron too early leaves the window hidden forever.
-  if (dev) {
-    console.log(`[electron] Waiting for Vite on port ${port}…`);
-    await waitForVite(port);
-  }
 
   const mainJs = mainJsPath();
   const env = {

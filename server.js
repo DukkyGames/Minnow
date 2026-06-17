@@ -32,7 +32,6 @@ import {
   resolveSafePath,
   runWithPathAccess,
 } from './server/runtime/path-access.js';
-import { spawnElectronShell } from './scripts/spawn-electron.mjs';
 
 const PORT = Number(process.env.PORT) || 5173;
 
@@ -54,6 +53,32 @@ function openBrowser(url) {
   }
 
   const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.unref();
+}
+
+/** Launch Electron in a child process (avoids Vite self-fetch deadlock). */
+function launchElectronShell(port, localUrl, appRoot) {
+  const launcher = path.join(appRoot, 'scripts', 'launch-electron-after-vite.mjs');
+  const child = spawn(process.execPath, [launcher, '--port', String(port)], {
+    cwd: appRoot,
+    env: process.env,
+    stdio: 'inherit',
+    detached: true,
+  });
+
+  child.on('error', (err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
+    openBrowser(localUrl);
+  });
+
+  child.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      console.warn(`[minnow] Electron launch failed (exit ${code}); opening system browser.`);
+      openBrowser(localUrl);
+    }
+  });
+
   child.unref();
 }
 
