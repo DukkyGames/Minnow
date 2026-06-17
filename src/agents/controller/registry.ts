@@ -4,6 +4,9 @@
 
 import type { SubAgentRun } from '../types';
 import type { RunInternals } from './types';
+import { loadRegistry, mirrorRegistryEntry } from './persistence';
+
+export { loadRegistry };
 
 const runs = new Map<string, RunInternals>();
 const parentTurnRuns = new Map<string, Set<string>>();
@@ -17,6 +20,7 @@ export function getRunInternals(runId: string): RunInternals | undefined {
 /** Register a new run row. */
 export function registerRun(runId: string, internals: RunInternals): void {
   runs.set(runId, internals);
+  mirrorRegistryEntry(internals.run);
 }
 
 /** Public read-only view of a sub-agent run. */

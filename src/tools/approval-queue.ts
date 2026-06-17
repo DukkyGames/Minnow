@@ -32,6 +32,11 @@ interface Queued {
 const queue: Queued[] = [];
 let draining = false;
 
+/** True while a tool approval modal is open or queued (progress-stall pause). */
+export function hasPendingToolApproval(): boolean {
+  return draining || queue.length > 0;
+}
+
 /**
  * Queues a modal request. Resolves when the user chooses an action or closes the dialog.
  */

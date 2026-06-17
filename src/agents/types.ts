@@ -15,6 +15,37 @@ import type { ThinkingTriState } from './thinking-types';
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
+/** Fine-grained run lifecycle (MIN-140 Phase 2 watchdog). */
+export type RunLifecycle =
+  | 'queued'
+  | 'dispatching'
+  | 'running'
+  | 'suspect'
+  | 'recovering'
+  | 'completed'
+  | 'done_unacked'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+/** Map coarse {@link SubAgentStatus} to default lifecycle when unset. */
+export function deriveLifecycleFromStatus(status: SubAgentStatus): RunLifecycle {
+  switch (status) {
+    case 'queued':
+      return 'queued';
+    case 'running':
+      return 'running';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return 'running';
+  }
+}
+
 /** Why a sub-agent run reached a terminal status (parent status tools). */
 export type SubAgentTerminalReason =
   | 'success'
@@ -62,6 +93,12 @@ export interface SubAgentsFile {
   checkInNudgeMs?: number;
   /** Max tool rounds for all sub-agent types (Settings → Tools). */
   maxToolTurns?: number;
+  /** Heartbeat tick interval H (ms); observe-only until Phase 2 watchdog. */
+  heartbeatIntervalMs?: number;
+  /** Progress stall threshold P (ms); observe-only until Phase 2. */
+  progressStallMs?: number;
+  /** Heartbeat dead threshold D (ms); observe-only until Phase 2. */
+  heartbeatDeadMs?: number;
   /** @deprecated Use `maxToolTurns`. Migrated on load. */
   defaultMaxToolTurns?: number;
   defaultMaxInputTokens?: number | null;
@@ -76,6 +113,8 @@ export interface SubAgentRun {
   type: string;
   task: string;
   status: SubAgentStatus;
+  /** Watchdog lifecycle; defaults from {@link deriveLifecycleFromStatus}(status). */
+  lifecycle?: RunLifecycle;
   /** Parent chat id for tool approval UI when sub-agent tools run. */
   parentChatId: string | null;
   /** Parent assistant `tool_calls[].id` when spawned from the main tool loop (UI anchor). */
@@ -116,6 +155,18 @@ export interface SubAgentRun {
   usage?: Usage;
   /** Timing stats per turn, averaged when rolled into parent lastStats. */
   stats?: Stats;
+  /** Last heartbeat tick (ms since visibility baseline; MIN-140 Phase 1). */
+  lastHeartbeatAt?: number | null;
+  /** Last progress bump (ms since visibility baseline; MIN-140 Phase 1). */
+  lastProgressAt?: number | null;
+  /** Monotonic progress counter (tool calls, stream deltas, transcript updates). */
+  progressSeq?: number;
+  /** Dispatch attempt (1-based; Phase 3 recovery may increment). */
+  attempt?: number;
+  /** Idempotency key minted at dispatch (Phase 3 result commit). */
+  idempotencyKey?: string | null;
+  /** Committed result ref when write-ahead completes (Phase 3). */
+  committedResultRef?: string | null;
 }
 
 /** Input to spawn a sub-agent. */

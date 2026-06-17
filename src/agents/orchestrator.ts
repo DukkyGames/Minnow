@@ -23,4 +23,6 @@ export {
   restartSubAgent,
   spawnSubAgent,
   waitForSubAgent,
+  initControllerPersistence,
+  ensureControllerReady,
 } from './controller/controller';

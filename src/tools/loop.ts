@@ -15,6 +15,7 @@ import {
   isChatStreaming,
   isStreamDomVisible,
   notifyChatStreamEnded,
+  notifyChatStreamActivity,
 } from '../chat/streaming-state';
 import {
   clearPendingSteer,
@@ -230,7 +231,7 @@ import { createSubAgentRunId } from '../agents/sub-agent-run-id';
 import {
   detectLocalServer,
   executeTool,
-  getEnabledToolDefinitionsForMode,
+  getEnabledToolDefinitionsForChat,
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
@@ -293,7 +294,7 @@ interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   presence_penalty?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
-  tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;
+  tools?: ReturnType<typeof getEnabledToolDefinitionsForChat>;
   tool_choice?: 'auto';
 }
 
@@ -985,6 +986,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 
   if (ownsGlobalStreaming) {
+    if (pushUser && chat.boardTaskId) {
+      const { markBoardTaskInProgressFromChat } = await import(
+        '../state/orchestrate-board-store'
+      );
+      markBoardTaskInProgressFromChat(chat);
+    }
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     if (
@@ -1130,7 +1137,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const userRow = chat.history[forkHistoryIndex] as UserMessage | undefined;
     const userContent = userRow?.content ?? historyContent;
     const activeModeId = normalizeModeId(chat.modeId);
-    let snapTools = getEnabledToolDefinitionsForMode(activeModeId);
+    let snapTools = getEnabledToolDefinitionsForChat(chat);
     if (activeWorkAgent?.allowedTools?.length) {
       const allow = new Set(activeWorkAgent.allowedTools);
       snapTools = snapTools.filter((t) => allow.has(t.function.name));
@@ -1208,7 +1215,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncSteerQueuedHint();
       }
 
-      let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
+      let enabledTools = getEnabledToolDefinitionsForChat(chat);
       if (activeWorkAgent?.allowedTools?.length) {
         const allow = new Set(activeWorkAgent.allowedTools);
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
@@ -1306,6 +1313,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           undefined,
           () => {
             syncTurnContextUsage(chat.id, livePartialText, thoughtController);
+            notifyChatStreamActivity(chat.id);
           },
           turnRunId,
         );

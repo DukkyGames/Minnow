@@ -41,6 +41,7 @@ import type {
   SubAgentStatus,
   SubAgentTerminalReason,
 } from '../types';
+import { deriveLifecycleFromStatus } from '../types';
 import {
   associateParentChat,
   associateParentTurn,
@@ -67,7 +68,32 @@ import {
   setQueueDispatch,
   setQueueFail,
 } from './scheduler';
-import { observeSubAgentToolCall } from './watchdog';
+import {
+  observeSubAgentToolCall,
+  registerWatchdogHandlers,
+  resetWatchdogState,
+  setRunLifecycle,
+  startWatchdog,
+  stopWatchdog,
+} from './watchdog';
+import {
+  applySupervisionToRun,
+  bindRunSupervision,
+  bumpProgress,
+  resetWrapperState,
+  setHeartbeatConfig,
+  startHeartbeat,
+  stopHeartbeat,
+} from './wrapper';
+import {
+  commitRunResult,
+  isNonMutatingPersistedRecord,
+  mirrorRegistryEntry,
+  persistRegistryEntry,
+  reconcilePersistedRegistry,
+  supersedeOlderAttempts,
+  type PersistedRunRecord,
+} from './persistence';
 import type { RunInternals } from './types';
 
 const AGGREGATE_MAX_BYTES = 32 * 1024;
@@ -88,6 +114,22 @@ function nowIso(): string {
 function setStatus(run: SubAgentRun, status: SubAgentStatus): void {
   run.status = status;
   if (status === 'cancelled') run.cancelled = true;
+  if (
+    run.lifecycle == null ||
+    run.lifecycle === 'running' ||
+    run.lifecycle === 'dispatching' ||
+    run.lifecycle === 'queued' ||
+    run.lifecycle === 'suspect' ||
+    run.lifecycle === 'recovering'
+  ) {
+    run.lifecycle = deriveLifecycleFromStatus(status);
+  }
+  mirrorRegistryEntry(run);
+}
+
+function applyTerminalLifecycle(run: SubAgentRun, status: SubAgentStatus): void {
+  run.lifecycle = deriveLifecycleFromStatus(status);
+  mirrorRegistryEntry(run);
 }
 
 function utf8ByteLength(text: string): number {
@@ -181,6 +223,13 @@ export function buildAggregateResult(run: SubAgentRun): AggregateResult {
   return out;
 }
 
+async function commitResultIfNeeded(run: SubAgentRun): Promise<void> {
+  if (!run.boardTaskId) return;
+  const aggregate = buildAggregateResult(run);
+  const ref = await commitRunResult(run, aggregate);
+  if (ref) run.committedResultRef = ref;
+}
+
 function settleRun(
   internals: RunInternals,
   status: SubAgentStatus,
@@ -189,17 +238,76 @@ function settleRun(
 ): void {
   const { run } = internals;
   setStatus(run, status);
+  applyTerminalLifecycle(run, status);
   run.summary = summary;
   run.error = error;
   run.endedAt = nowIso();
   run.liveNestedToolCalls = undefined;
   run.liveCurrentToolName = undefined;
+  stopHeartbeat(run.runId);
   clearTimeoutFor(internals);
   releaseConcurrencySlot(internals);
   internals.queued = false;
   drainQueue();
   emitSubAgentRunUpdated(run);
   syncBoardTaskOnSettle(run, status, error);
+  mirrorRegistryEntry(run);
+}
+
+/** Settle after write-ahead result commit for successful completions. */
+async function settleRunCompleted(
+  internals: RunInternals,
+  summary: string,
+): Promise<void> {
+  const { run } = internals;
+  try {
+    await commitResultIfNeeded(run);
+  } catch (err) {
+    console.warn('[controller] write-ahead result commit failed', err);
+  }
+  settleRun(internals, 'completed', summary, null);
+}
+
+/** Sync linked board task when watchdog surfaces suspect/recovering/blocked. */
+function syncBoardTaskOnLifecycle(
+  run: SubAgentRun,
+  phase: 'suspect' | 'recovering' | 'blocked',
+  error?: string | null,
+): void {
+  const taskId = run.boardTaskId;
+  const chatId = run.parentChatId;
+  if (!taskId || !chatId) return;
+  const chat = findChatById(chatId);
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  if (!chat || !group?.orchestrateBoard) return;
+
+  if (phase === 'suspect' || phase === 'recovering') {
+    updateTask(
+      group,
+      taskId,
+      {
+        status: 'in_progress',
+        error: error ?? undefined,
+      },
+      chat,
+    );
+    return;
+  }
+
+  if (phase === 'blocked') {
+    updateTask(
+      group,
+      taskId,
+      {
+        status: 'blocked',
+        endedAt: Date.now(),
+        error: error ?? 'blocked',
+        assignedRunId: null,
+        lastRunId: run.runId,
+      },
+      chat,
+    );
+  }
 }
 
 /** Map terminal sub-agent status onto linked board task. */
@@ -232,8 +340,12 @@ function syncBoardTaskOnSettle(
     return;
   }
   if (status === 'failed' || status === 'cancelled' || maxTurnFailure) {
+    if (error === 'watchdog_tier1_restart') return;
+    const watchdogBlocked =
+      error === 'timeout' ||
+      (typeof error === 'string' && error.startsWith('watchdog_tier2:'));
     updateTask(group, taskId, {
-      status: 'failed',
+      status: watchdogBlocked ? 'blocked' : 'failed',
       endedAt,
       error:
         error ||
@@ -250,6 +362,7 @@ function syncBoardTaskOnSettle(
 /** Push a transcript snapshot to the run row and notify UI subscribers. */
 function publishRunMessages(run: SubAgentRun, messages: ApiMessage[]): void {
   run.messages = cloneSubAgentMessages(messages);
+  bumpProgress(run.runId);
   emitSubAgentRunUpdated(run);
 }
 
@@ -280,7 +393,16 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     }
 
     setStatus(run, 'running');
+    run.lifecycle = 'dispatching';
     if (!run.startedAt) run.startedAt = nowIso();
+    setHeartbeatConfig({
+      heartbeatIntervalMs: config.heartbeatIntervalMs,
+      progressStallMs: config.progressStallMs,
+      heartbeatDeadMs: config.heartbeatDeadMs,
+    });
+    bindRunSupervision(run.runId, run);
+    startHeartbeat(run.runId, () => emitSubAgentRunUpdated(run));
+    setRunLifecycle(run, 'running');
     emitSubAgentRunUpdated(run);
 
     const parentChat = run.parentChatId ? findChatById(run.parentChatId) : undefined;
@@ -401,7 +523,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
       run.structuredOutcome = output.structuredOutcome;
     }
 
-    settleRun(internals, 'completed', output.summary, null);
+    await settleRunCompleted(internals, output.summary);
   } catch (err) {
     if (run.status === 'cancelled') return;
     const message = err instanceof Error ? err.message : String(err);
@@ -416,6 +538,7 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
 async function spawnSubAgentInternal(
   input: SpawnSubAgentInput,
 ): Promise<SpawnSubAgentResult> {
+  await ensureControllerReady();
   const config = await loadSubAgentConfig();
   if (!config.enabled) {
     throw new Error('Error: sub-agents disabled');
@@ -434,6 +557,7 @@ async function spawnSubAgentInternal(
     type: input.type,
     task: input.task,
     status: 'queued',
+    lifecycle: 'queued',
     parentChatId: input.parentChatId ?? null,
     parentToolCallId: input.parentToolCallId ?? null,
     parentTurnId: input.parentTurnId ?? null,
@@ -448,6 +572,9 @@ async function spawnSubAgentInternal(
     ...(input.category ? { category: input.category } : {}),
     ...(input.boardTaskId ? { boardTaskId: input.boardTaskId } : {}),
   };
+
+  applySupervisionToRun(run);
+  bindRunSupervision(runId, run);
 
   if (input.boardTaskId && input.parentChatId) {
     const parentChat = findChatById(input.parentChatId);
@@ -465,6 +592,7 @@ async function spawnSubAgentInternal(
       );
       appendTaskRunHistory(boardGroup, input.boardTaskId, runId, parentChat);
     }
+    void supersedeOlderAttempts(input.boardTaskId, run.attempt ?? 1);
   }
 
   const abort = new AbortController();
@@ -661,6 +789,7 @@ export function recordToolCallForRun(
     internals.run.parentChatId,
   );
   internals.run.liveNestedToolCalls = (internals.run.liveNestedToolCalls ?? 0) + 1;
+  bumpProgress(runId);
   emitSubAgentRunUpdated(internals.run);
 }
 
@@ -801,7 +930,11 @@ export function assertSubAgentRunReadableByParent(
 
 /** Test reset: clear controller state. */
 export function resetSubAgentOrchestrator(): void {
+  stopWatchdog();
+  resetWatchdogState();
   clearSubAgentRunListeners();
+  resetWrapperState();
+  controllerInitPromise = null;
   forEachRunInternals((internals) => {
     clearTimeoutFor(internals);
     internals.abort.abort();
@@ -815,5 +948,227 @@ export function resetSubAgentOrchestrator(): void {
     settleRun(internals, 'failed', '', message);
   });
 }
+
+async function tier1RestartSubAgent(runId: string, reason: string): Promise<void> {
+  const internals = getRunInternals(runId);
+  if (!internals) return;
+
+  const old = internals.run;
+  const {
+    type,
+    task,
+    parentTurnId,
+    parentChatId,
+    parentToolCallId,
+    boardTaskId,
+    category,
+    idempotencyKey,
+    attempt,
+  } = old;
+
+  cancelSubAgent(runId, 'watchdog_tier1_restart');
+
+  const note = `Watchdog tier-1 recovery (${reason})`;
+  const nextTask = `${note}\n\n${task}`;
+
+  const result = await spawnSubAgentInternal({
+    type,
+    task: nextTask,
+    wait: false,
+    parentTurnId,
+    parentChatId: parentChatId ?? undefined,
+    parentToolCallId: parentToolCallId ?? undefined,
+    boardTaskId: boardTaskId ?? undefined,
+    category,
+  });
+
+  const next = getRunInternals(result.runId);
+  if (!next) return;
+
+  applySupervisionToRun(next.run, {
+    attempt: (attempt ?? 1) + 1,
+    idempotencyKey: idempotencyKey ?? undefined,
+  });
+  bindRunSupervision(next.run.runId, next.run);
+  setRunLifecycle(next.run, 'dispatching');
+  syncBoardTaskOnLifecycle(next.run, 'recovering', reason);
+}
+
+function tier2SurfaceSubAgent(runId: string, reason: string): void {
+  const internals = getRunInternals(runId);
+  if (!internals) return;
+  const message = `watchdog_tier2:${reason}`;
+  syncBoardTaskOnLifecycle(internals.run, 'blocked', message);
+  cancelSubAgent(runId, message);
+}
+
+function finalizeDoneUnackedSubAgent(runId: string): void {
+  const internals = getRunInternals(runId);
+  if (!internals) return;
+  void (async () => {
+    try {
+      await commitResultIfNeeded(internals.run);
+    } catch {
+      /* best-effort write-ahead */
+    }
+    settleRun(internals, 'completed', internals.run.summary || 'completed', null);
+  })();
+}
+
+async function finalizeReconciledCompleted(
+  record: PersistedRunRecord,
+  result: AggregateResult,
+): Promise<void> {
+  const endedAt = new Date().toISOString();
+  const completed: PersistedRunRecord = {
+    ...record,
+    lifecycle: 'completed',
+    status: 'completed',
+    summary: result.summary,
+    error: null,
+    endedAt,
+    committedResultRef: record.committedResultRef,
+  };
+  await persistRegistryEntry({
+    runId: completed.runId,
+    type: completed.type,
+    task: completed.task,
+    status: 'completed',
+    lifecycle: 'completed',
+    parentChatId: completed.parentChatId,
+    parentToolCallId: null,
+    parentTurnId: null,
+    summary: completed.summary,
+    error: null,
+    startedAt: completed.startedAt,
+    endedAt,
+    toolTurns: result.toolTurns ?? 0,
+    maxToolTurns: 0,
+    cancelled: false,
+    messages: [],
+    boardTaskId: completed.boardTaskId,
+    attempt: completed.attempt,
+    idempotencyKey: completed.idempotencyKey,
+    committedResultRef: completed.committedResultRef,
+    category: completed.category,
+  });
+
+  const taskId = record.boardTaskId;
+  const chatId = record.parentChatId;
+  if (!taskId || !chatId) return;
+  const chat = findChatById(chatId);
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  if (!chat || !group?.orchestrateBoard) return;
+  updateTask(
+    group,
+    taskId,
+    {
+      status: 'complete',
+      endedAt: Date.now(),
+      assignedRunId: null,
+      lastRunId: record.runId,
+      error: undefined,
+    },
+    chat,
+  );
+}
+
+async function reconcileInterruptedRecord(record: PersistedRunRecord): Promise<void> {
+  const endedAt = new Date().toISOString();
+  await persistRegistryEntry({
+    runId: record.runId,
+    type: record.type,
+    task: record.task,
+    status: 'failed',
+    lifecycle: 'interrupted',
+    parentChatId: record.parentChatId,
+    parentToolCallId: null,
+    parentTurnId: null,
+    summary: record.summary,
+    error: 'interrupted',
+    startedAt: record.startedAt,
+    endedAt,
+    toolTurns: 0,
+    maxToolTurns: 0,
+    cancelled: false,
+    messages: [],
+    boardTaskId: record.boardTaskId,
+    attempt: record.attempt,
+    idempotencyKey: record.idempotencyKey,
+    committedResultRef: record.committedResultRef,
+    category: record.category,
+  });
+
+  const taskId = record.boardTaskId;
+  const chatId = record.parentChatId;
+  if (!taskId || !chatId) return;
+
+  const canRedispatch =
+    isNonMutatingPersistedRecord(record) && (record.attempt ?? 1) < 2;
+
+  if (canRedispatch) {
+    const note = 'Startup reconciliation tier-1 recovery (interrupted)';
+    await spawnSubAgentInternal({
+      type: record.type,
+      task: `${note}\n\n${record.task}`,
+      wait: false,
+      parentChatId: chatId,
+      boardTaskId: taskId,
+      category: record.category,
+    });
+    return;
+  }
+
+  const chat = findChatById(chatId);
+  const group = chat ? getBoardGroupForChat(chat) : undefined;
+  if (!chat || !group?.orchestrateBoard) return;
+  updateTask(
+    group,
+    taskId,
+    {
+      status: 'blocked',
+      endedAt: Date.now(),
+      error: 'interrupted',
+      assignedRunId: null,
+      lastRunId: record.runId,
+    },
+    chat,
+  );
+}
+
+let controllerInitPromise: Promise<void> | null = null;
+
+/** Load persisted registry and reconcile non-terminal runs (once per session). */
+export function initControllerPersistence(): Promise<void> {
+  if (!controllerInitPromise) {
+    controllerInitPromise = reconcilePersistedRegistry({
+      finalizeCompleted: finalizeReconciledCompleted,
+      reconcileInterrupted: reconcileInterruptedRecord,
+    });
+  }
+  return controllerInitPromise;
+}
+
+/** Await startup reconciliation before spawning (optional guard). */
+export async function ensureControllerReady(): Promise<void> {
+  await initControllerPersistence();
+}
+
+registerWatchdogHandlers({
+  tier1Restart: tier1RestartSubAgent,
+  tier2Surface: tier2SurfaceSubAgent,
+  finalizeDoneUnacked: finalizeDoneUnackedSubAgent,
+  onLifecycleChange: (run) => {
+    mirrorRegistryEntry(run);
+    if (run.lifecycle === 'suspect' || run.lifecycle === 'recovering') {
+      syncBoardTaskOnLifecycle(run, run.lifecycle, run.error);
+    }
+    emitSubAgentRunUpdated(run);
+  },
+});
+
+void initControllerPersistence().then(() => {
+  startWatchdog();
+});
 
 export { resetSubAgentOrchestrator as resetSubAgentController };

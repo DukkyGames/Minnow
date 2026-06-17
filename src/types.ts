@@ -331,6 +331,8 @@ export interface OrchestrateBoardState {
   activeParentTurnId?: string;
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
+  /** Manual board vs auto-pilot delegation (default manual). */
+  executionMode?: 'manual' | 'auto';
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
 }
