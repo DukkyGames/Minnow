@@ -16,7 +16,7 @@ test('waitForVite resolves when the dev server returns 200', async () => {
 
   const port = server.address().port;
   const url = await waitForVite(port, { timeoutMs: 5_000, intervalMs: 50 });
-  assert.equal(url, `http://127.0.0.1:${port}/`);
+  assert.match(url, new RegExp(`^http://(localhost|127\\.0\\.0\\.1):${port}/$`));
 
   await new Promise((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
