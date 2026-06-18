@@ -8,6 +8,7 @@ import {
   unregisterChromePopover,
   resetChromePopoverRegistryForTests,
   shouldShowElectronPreviewHost,
+  syncElectronPreviewHostLayout,
 } from '../../src/ui/preview-electron-visibility.ts';
 import {
   DEFAULT_FILE_PANEL_STATE,
@@ -19,9 +20,15 @@ describe('preview-electron-visibility', () => {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
   const elements = new Map<string, { classList: Set<string> }>();
+  let showCalls = 0;
+  let hideCalls = 0;
+  let lastBounds: { x: number; y: number; width: number; height: number } | null = null;
 
   beforeEach(() => {
     elements.clear();
+    showCalls = 0;
+    hideCalls = 0;
+    lastBounds = null;
     resetFilePanelStateForTests();
     resetChromePopoverRegistryForTests();
     Object.defineProperty(globalThis, 'document', {
@@ -36,8 +43,8 @@ describe('preview-electron-visibility', () => {
               remove: (cls: string) => entry.classList.delete(cls),
             },
             getBoundingClientRect: () => ({
-              left: 0,
-              top: 0,
+              left: 10,
+              top: 20,
               width: 400,
               height: 300,
             }),
@@ -48,7 +55,21 @@ describe('preview-electron-visibility', () => {
       writable: true,
     });
     Object.defineProperty(globalThis, 'window', {
-      value: {},
+      value: {
+        minnow: {
+          preview: {
+            show: async () => {
+              showCalls += 1;
+            },
+            hide: async () => {
+              hideCalls += 1;
+            },
+            setBounds: async (bounds: { x: number; y: number; width: number; height: number }) => {
+              lastBounds = bounds;
+            },
+          },
+        },
+      },
       configurable: true,
       writable: true,
     });
@@ -71,6 +92,11 @@ describe('preview-electron-visibility', () => {
   });
 
   test('shouldShowElectronPreviewHost is false without minnow bridge', () => {
+    Object.defineProperty(globalThis, 'window', {
+      value: {},
+      configurable: true,
+      writable: true,
+    });
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
       rightPaneMode: 'preview',
@@ -99,9 +125,6 @@ describe('preview-electron-visibility', () => {
   });
 
   test('shouldShowElectronPreviewHost is false when bugs overlay is open', () => {
-    Object.assign(globalThis.window, {
-      minnow: { preview: { show: async () => {}, hide: async () => {} } },
-    });
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
       rightPaneMode: 'preview',
@@ -135,5 +158,27 @@ describe('preview-electron-visibility', () => {
     assert.equal(shouldShowElectronPreviewHost(), false);
     unregisterChromePopover();
     assert.equal(shouldShowElectronPreviewHost(), true);
+  });
+
+  test('syncElectronPreviewHostLayout shows then sets bounds when preview pane is open', async () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+
+    await syncElectronPreviewHostLayout();
+
+    assert.equal(showCalls, 1);
+    assert.equal(hideCalls, 0);
+    assert.deepEqual(lastBounds, { x: 10, y: 20, width: 400, height: 300 });
+  });
+
+  test('syncElectronPreviewHostLayout hides when preview pane is closed', async () => {
+    await syncElectronPreviewHostLayout();
+    assert.equal(showCalls, 0);
+    assert.equal(hideCalls, 1);
+    assert.equal(lastBounds, null);
   });
 });

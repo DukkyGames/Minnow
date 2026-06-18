@@ -69,6 +69,14 @@ export const APPS: readonly AppDefinition[] = [
     presentationMode: 'window',
   },
   {
+    id: 'brain',
+    name: 'Brain',
+    icon: 'brain',
+    tag: 'Wiki, memory & knowledge graph',
+    description: 'Browse and maintain the CORTEX wiki',
+    presentationMode: 'window',
+  },
+  {
     id: 'scheduler',
     name: 'Scheduler',
     icon: 'scheduler',

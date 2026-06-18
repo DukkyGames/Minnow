@@ -11,7 +11,12 @@ import { detectRuntimes } from './runtime-detect.js';
 import { listServes, startServe, stopServe } from './serve.js';
 import { validateJobId, validateServeId } from './validate.js';
 import { detectHardware } from '../system/hardware.js';
-import { getLlamaRuntimeStatus, ensureLlamaServer, getInstalledLlamaVariant } from './llama-runtime.js';
+import {
+  getLlamaRuntimeStatus,
+  ensureLlamaServer,
+  getInstalledLlamaVariant,
+  subscribeLlamaInstallProgress,
+} from './llama-runtime.js';
 import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
 
 function setCorsHeaders(res) {
@@ -87,7 +92,12 @@ export async function handleModelsRequest(req, res, pathname) {
       Connection: 'keep-alive',
     });
     const send = (event) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        /* client disconnected — keep download running */
+        return;
+      }
       if (event.status === 'completed' || event.status === 'failed' || event.status === 'cancelled') {
         res.end();
       }
@@ -217,6 +227,25 @@ export async function handleModelsRequest(req, res, pathname) {
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }
+    return true;
+  }
+
+  if (pathname === '/api/models/llama-runtime/install/stream' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    const send = (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (event.phase === 'completed' || event.phase === 'failed') {
+        res.end();
+      }
+    };
+
+    const unsubscribe = subscribeLlamaInstallProgress(send);
+    req.on('close', () => unsubscribe());
     return true;
   }
 

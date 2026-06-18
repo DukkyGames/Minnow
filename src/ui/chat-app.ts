@@ -22,6 +22,7 @@ import {
   sessionState,
 } from '../state/sessions';
 import { refreshChatAppOutputsPanel } from './chat-app-outputs';
+import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import { refreshChatJumpChipVisibility } from './chat-scroll';
 import { closeContextUsageBreakdown } from './context-usage-breakdown';
 import { refreshContextUsageRing } from './context-usage-ring';
@@ -112,10 +113,11 @@ function activateAssistantChat(chatId: string): void {
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
-  chat.unread = false;
+  acknowledgeChatViewed(chatId);
   rememberActiveChatForApp(CHAT_APP_ID, chatId);
   scheduleSaveSessions();
   renderChatAppSurface();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
 }
 
 /** Public: switch session rail thread (also used by background-stream hint). */

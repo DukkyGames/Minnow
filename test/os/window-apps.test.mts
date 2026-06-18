@@ -25,11 +25,12 @@ import {
   windowManager,
 } from '../../src/os/window-manager.ts';
 
-const WINDOW_APPS = ['settings', 'models', 'bench', 'compare', 'calendar'] as const;
+const WINDOW_APPS = ['settings', 'models', 'brain', 'bench', 'compare', 'calendar'] as const;
 
 const CONTENT_BY_APP: Record<(typeof WINDOW_APPS)[number], string> = {
   settings: 'settingsView',
   models: 'modelsView',
+  brain: 'brainView',
   bench: 'benchmarkView',
   compare: 'compareView',
   calendar: 'calendarView',
@@ -45,6 +46,7 @@ function setupWindowAppsDom(win: import('happy-dom').Window): void {
     <div id="appBody"></div>
     <main id="settingsView" class="settings-page mn-os-app-layer" data-os-app="settings"></main>
     <main id="modelsView" class="models-page mn-os-app-layer" data-os-app="models"></main>
+    <main id="brainView" class="brain-page mn-os-app-layer" data-os-app="brain"></main>
     <main id="benchmarkView" class="benchmark-page mn-os-app-layer" data-os-app="bench"></main>
     <main id="compareView" class="compare-page mn-os-app-layer" data-os-app="compare"></main>
     <main id="calendarView" class="calendar-page mn-os-app-layer" data-os-app="calendar"></main>
@@ -131,6 +133,41 @@ describe('window-mounted apps', () => {
     assert.equal(snap.instances.some((i) => i.appId === 'models'), false);
     assert.equal(windowManager.getWindows().length, 0);
     assert.equal(document.getElementById('modelsView')?.classList.contains('is-open'), false);
+  });
+
+  test('minimize stays minimized after app-host sync', async () => {
+    markWindowAppOpen('settings');
+    const instanceId = launchInstance('settings');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const win = windowManager.findWindowByInstance(instanceId);
+    assert.ok(win);
+    windowManager.minimize(win.id, true);
+    syncAppHostForTests();
+
+    assert.equal(windowManager.getWindows()[0]?.minimized, true);
+    assert.equal(
+      windowManager.getFrame(win.id)?.root.classList.contains('is-minimized'),
+      true,
+    );
+  });
+
+  test('re-launch restores minimized window-mounted app', async () => {
+    markWindowAppOpen('settings');
+    const instanceId = launchInstance('settings');
+    syncAppHostForTests();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const win = windowManager.findWindowByInstance(instanceId);
+    assert.ok(win);
+    windowManager.minimize(win.id, true);
+    syncAppHostForTests();
+    assert.equal(windowManager.getWindows()[0]?.minimized, true);
+
+    launchInstance('settings');
+    syncAppHostForTests();
+    assert.equal(windowManager.getWindows()[0]?.minimized, false);
   });
 
   test('mini-previews show window-mounted apps only when minimized', () => {

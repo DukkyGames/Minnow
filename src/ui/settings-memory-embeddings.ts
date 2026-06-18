@@ -6,8 +6,10 @@ import {
   fetchMemoryEmbeddingsStatus,
   reindexMemoryEmbeddings,
   saveMemoryEmbeddingsConfig,
+  warmupMemoryEmbeddings,
 } from '../memory/client';
-import type { MemoryEmbeddingsStatus } from '../memory/types';
+import type { MemoryEmbeddingsConfig, MemoryEmbeddingsStatus } from '../memory/types';
+import { fillProviderSelect } from './settings-model-binding';
 
 type StatusFn = (kind: 'ok' | 'err', message: string) => void;
 
@@ -32,7 +34,7 @@ export function mountMemoryEmbeddingsPanel(
   void refreshMemoryEmbeddingsPanel(container);
 }
 
-function bindEmbeddingsControls(setStatus: StatusFn): void {
+function readEmbeddingsForm(): Partial<MemoryEmbeddingsConfig> {
   const enabledEl = document.getElementById(
     'settingsMemoryEmbeddingsEnabled',
   ) as HTMLInputElement | null;
@@ -44,19 +46,62 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
   ) as HTMLInputElement | null;
   const providerEl = document.getElementById(
     'settingsMemoryEmbeddingsProvider',
+  ) as HTMLSelectElement | null;
+  const blendEl = document.getElementById(
+    'settingsMemoryEmbeddingsBlend',
   ) as HTMLInputElement | null;
+
+  return {
+    enabled: enabledEl?.checked === true,
+    backend: (backendEl?.value === 'provider' ? 'provider' : 'local') as 'local' | 'provider',
+    modelId: modelEl?.value.trim() ?? '',
+    providerId: providerEl?.value.trim() ?? '',
+    blendWeight: Number(blendEl?.value ?? 0.5),
+  };
+}
+
+function validateEmbeddingsForm(partial: Partial<MemoryEmbeddingsConfig>): string | null {
+  if (!partial.enabled) return null;
+  if (!partial.modelId?.trim()) {
+    return 'Model id is required when semantic embeddings are enabled.';
+  }
+  if (partial.backend === 'provider' && !partial.providerId?.trim()) {
+    return 'Select a provider when using provider embeddings.';
+  }
+  return null;
+}
+
+function toggleDownloadButtonVisibility(): void {
+  const backendEl = document.getElementById(
+    'settingsMemoryEmbeddingsBackend',
+  ) as HTMLSelectElement | null;
+  const downloadBtn = document.getElementById('settingsMemoryEmbeddingsDownload');
+  if (!downloadBtn || !backendEl) return;
+  downloadBtn.classList.toggle('hidden', backendEl.value !== 'local');
+}
+
+function bindEmbeddingsControls(setStatus: StatusFn): void {
+  const enabledEl = document.getElementById(
+    'settingsMemoryEmbeddingsEnabled',
+  ) as HTMLInputElement | null;
+  const backendEl = document.getElementById(
+    'settingsMemoryEmbeddingsBackend',
+  ) as HTMLSelectElement | null;
   const blendEl = document.getElementById(
     'settingsMemoryEmbeddingsBlend',
   ) as HTMLInputElement | null;
   const saveBtn = document.getElementById('settingsMemoryEmbeddingsSave');
+  const downloadBtn = document.getElementById('settingsMemoryEmbeddingsDownload');
   const reindexBtn = document.getElementById('settingsMemoryEmbeddingsReindex');
 
   enabledEl?.addEventListener('change', () => {
     toggleProviderFieldVisibility();
+    toggleDownloadButtonVisibility();
   });
 
   backendEl?.addEventListener('change', () => {
     toggleProviderFieldVisibility();
+    toggleDownloadButtonVisibility();
   });
 
   blendEl?.addEventListener('input', () => {
@@ -68,18 +113,16 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
 
   saveBtn?.addEventListener('click', () => {
     void (async () => {
-      const partial = {
-        enabled: enabledEl?.checked === true,
-        backend: (backendEl?.value === 'provider' ? 'provider' : 'local') as
-          | 'local'
-          | 'provider',
-        modelId: modelEl?.value.trim() ?? '',
-        providerId: providerEl?.value.trim() ?? '',
-        blendWeight: Number(blendEl?.value ?? 0.5),
-      };
+      const partial = readEmbeddingsForm();
+      const validationError = validateEmbeddingsForm(partial);
+      if (validationError) {
+        setStatus('err', validationError);
+        return;
+      }
+
       const saved = await saveMemoryEmbeddingsConfig(partial);
-      if (!saved) {
-        setStatus('err', 'Could not save embeddings settings. Use npm start.');
+      if (saved.kind === 'err') {
+        setStatus('err', saved.error);
         return;
       }
       setStatus('ok', 'Embeddings settings saved');
@@ -88,18 +131,66 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
     })();
   });
 
-  reindexBtn?.addEventListener('click', () => {
+  downloadBtn?.addEventListener('click', () => {
     void (async () => {
-      reindexBtn.setAttribute('disabled', 'true');
+      downloadBtn.setAttribute('disabled', 'true');
       try {
-        const result = await reindexMemoryEmbeddings();
-        if (!result?.ok) {
-          setStatus('err', 'Reindex failed. Enable embeddings and use npm start.');
+        const partial = readEmbeddingsForm();
+        const validationError = validateEmbeddingsForm(partial);
+        if (validationError) {
+          setStatus('err', validationError);
+          return;
+        }
+
+        const saved = await saveMemoryEmbeddingsConfig(partial);
+        if (saved.kind === 'err') {
+          setStatus('err', saved.error);
+          return;
+        }
+
+        setStatus('ok', 'Downloading / loading embedding model…');
+        const result = await warmupMemoryEmbeddings();
+        if (result.kind === 'err') {
+          setStatus('err', result.error);
           return;
         }
         setStatus(
           'ok',
-          `Reindexed ${result.indexed} entries (${result.failed} failed, ${result.durationMs} ms)`,
+          `Model ready: ${result.value.model} (${result.value.dim} dims, ${result.value.durationMs} ms)`,
+        );
+        const panel = document.getElementById('settingsMemoryEmbeddingsPanel');
+        if (panel) await refreshMemoryEmbeddingsPanel(panel);
+      } finally {
+        downloadBtn.removeAttribute('disabled');
+      }
+    })();
+  });
+
+  reindexBtn?.addEventListener('click', () => {
+    void (async () => {
+      reindexBtn.setAttribute('disabled', 'true');
+      try {
+        const partial = readEmbeddingsForm();
+        const validationError = validateEmbeddingsForm(partial);
+        if (validationError) {
+          setStatus('err', validationError);
+          return;
+        }
+
+        const saved = await saveMemoryEmbeddingsConfig(partial);
+        if (saved.kind === 'err') {
+          setStatus('err', saved.error);
+          return;
+        }
+
+        const result = await reindexMemoryEmbeddings();
+        if (result.kind === 'err') {
+          setStatus('err', result.error);
+          return;
+        }
+        setStatus(
+          'ok',
+          `Reindexed ${result.value.indexed} entries (${result.value.failed} failed, ${result.value.durationMs} ms)`,
         );
         const panel = document.getElementById('settingsMemoryEmbeddingsPanel');
         if (panel) await refreshMemoryEmbeddingsPanel(panel);
@@ -133,7 +224,7 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
   ) as HTMLInputElement | null;
   const providerEl = document.getElementById(
     'settingsMemoryEmbeddingsProvider',
-  ) as HTMLInputElement | null;
+  ) as HTMLSelectElement | null;
   const blendEl = document.getElementById(
     'settingsMemoryEmbeddingsBlend',
   ) as HTMLInputElement | null;
@@ -154,7 +245,16 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
   if (enabledEl) enabledEl.checked = status.enabled;
   if (backendEl) backendEl.value = status.backend === 'provider' ? 'provider' : 'local';
   if (modelEl && !modelEl.matches(':focus')) modelEl.value = status.model;
-  if (providerEl && !providerEl.matches(':focus')) providerEl.value = status.providerId ?? '';
+  if (providerEl && !providerEl.matches(':focus')) {
+    await fillProviderSelect(providerEl, status.providerId ?? '');
+    if (status.providerId && providerEl.value !== status.providerId) {
+      const missing = document.createElement('option');
+      missing.value = status.providerId;
+      missing.textContent = `${status.providerId} (missing)`;
+      providerEl.appendChild(missing);
+      providerEl.value = status.providerId;
+    }
+  }
   if (blendEl && !blendEl.matches(':focus')) {
     blendEl.value = String(status.blendWeight ?? 0.5);
     blendEl.dataset.savedBlend = String(status.blendWeight ?? 0.5);
@@ -162,6 +262,7 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
   }
 
   toggleProviderFieldVisibility();
+  toggleDownloadButtonVisibility();
 
   if (statusEl) {
     statusEl.textContent = status.enabled

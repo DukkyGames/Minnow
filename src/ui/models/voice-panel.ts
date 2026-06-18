@@ -537,7 +537,7 @@ function renderSttSettingsSection(): void {
     hint.className = 'field-hint models-voice-streaming-hint';
     if (!status?.healthy) {
       hint.textContent =
-        'Start the voice worker above for live dictation. Without it, the composer mic falls back to batch transcription.';
+        'Start the voice worker above for live dictation. The composer mic will try to start it automatically when you press the mic button.';
     } else if (status.streamingSupported) {
       hint.textContent = 'Live dictation is available — words appear in the composer while the mic is open.';
     } else if (voiceConfig!.stt.local.streamingEnabled === false) {

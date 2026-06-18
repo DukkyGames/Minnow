@@ -21,7 +21,10 @@ import {
   type KeyBinding,
   type ViewUpdate,
 } from '@codemirror/view';
-import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import {
+  getEditorAiCompletionConfigSync,
+  type EditorAiCompletionConfig,
+} from '../config/editor-ai-completion';
 import {
   fetchEditorAiCompletion,
   resolveEditorAiBinding,
@@ -31,7 +34,10 @@ import { nextPartialGhostChunk } from './editor-ai-completion-prompt';
 
 export interface EditorAiExtensionOptions {
   filePath: string;
-  config: EditorAiCompletionConfig;
+  /** @deprecated Prefer getConfig — static config is not refreshed after Settings saves. */
+  config?: EditorAiCompletionConfig;
+  /** Live editor AI settings (refreshed on each completion request). */
+  getConfig?: () => EditorAiCompletionConfig;
   /** When false, no requests are made (npm start / provider offline). */
   canRequest: () => boolean;
   onStatus?: (message: string | null) => void;
@@ -215,6 +221,11 @@ class EditorAiCompletionPlugin {
     private readonly opts: EditorAiExtensionOptions,
   ) {}
 
+  /** Read current inline-completion settings (not snapshotted at file open). */
+  private resolveConfig(): EditorAiCompletionConfig {
+    return this.opts.getConfig?.() ?? this.opts.config ?? getEditorAiCompletionConfigSync();
+  }
+
   update(update: ViewUpdate): void {
     if (!update.docChanged && !update.selectionSet) return;
     const tr = update.transactions[0];
@@ -241,7 +252,7 @@ class EditorAiCompletionPlugin {
 
   private schedule(pos: number): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    const delay = this.opts.config.debounceMs;
+    const delay = this.resolveConfig().debounceMs;
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
       void this.requestCompletion(pos);
@@ -290,7 +301,8 @@ class EditorAiCompletionPlugin {
     this.requestPos = pos;
 
     try {
-      const binding = await resolveEditorAiBinding(this.opts.config);
+      const config = this.resolveConfig();
+      const binding = await resolveEditorAiBinding(config);
       const validation = validateEditorAiBinding(binding);
       if (validation.ok === false) {
         this.opts.onStatus?.(validation.message);
@@ -300,7 +312,7 @@ class EditorAiCompletionPlugin {
         state,
         cursorPos: pos,
         filePath: this.opts.filePath,
-        config: this.opts.config,
+        config,
         binding,
         signal: controller.signal,
         onPartial: (partial) => {

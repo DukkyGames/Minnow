@@ -8,10 +8,12 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  createVenv,
   downloadToFile,
+  ensureHealthyVenv,
   extractArchive,
+  isVenvHealthy,
   runProcess,
+  venvPythonExe,
   verifySha256,
 } from './provisioner.js';
 import {
@@ -34,6 +36,12 @@ const PYTHON_STANDALONE_VERSION = '3.12.9';
  */
 const SEARXNG_GIT_REF = 'e964708c0';
 export const SEARXNG_SOURCE_REF = SEARXNG_GIT_REF;
+
+/**
+ * Unix deployment templates in the upstream repo (symlinks + colon gitlink paths).
+ * Not needed for pip install; tar extraction fails on Windows without excludes (MIN-158).
+ */
+export const SEARXNG_ZIP_TAR_EXCLUDES = ['*utils/templates*'];
 
 /**
  * @typedef {object} SearxngInstallStatus
@@ -246,14 +254,9 @@ export async function ensureStandalonePython(onProgress) {
   }
 }
 
-/**
- * @param {string} venvDir
- * @returns {string}
- */
+/** @param {string} venvDir @returns {string} */
 function venvPythonPath(venvDir) {
-  return process.platform === 'win32'
-    ? path.join(venvDir, 'Scripts', 'python.exe')
-    : path.join(venvDir, 'bin', 'python3');
+  return venvPythonExe(venvDir);
 }
 
 /**
@@ -384,7 +387,7 @@ async function installSearxngFromSource(venvPython, onProgress) {
     try {
       await downloadToFile(zipUrl, archivePath);
       const extractDir = path.join(tmpRoot, 'extract');
-      await extractArchive(archivePath, extractDir);
+      await extractArchive(archivePath, extractDir, { exclude: SEARXNG_ZIP_TAR_EXCLUDES });
       const entries = await fsp.readdir(extractDir);
       const inner =
         entries.length === 1 && entries[0]
@@ -466,10 +469,7 @@ export async function provision(onProgress) {
   const pythonExe = await ensureStandalonePython(progress);
 
   const venvDir = getServerVenvDir(SERVER_ID);
-  if (!fs.existsSync(venvPythonPath(venvDir))) {
-    progress('Creating virtual environment');
-    await createVenv(pythonExe, venvDir);
-  }
+  await ensureHealthyVenv(pythonExe, venvDir, progress);
 
   const venvPython = venvPythonPath(venvDir);
   await installSearxngFromSource(venvPython, progress);
@@ -490,10 +490,10 @@ export async function provision(onProgress) {
 /** @returns {Promise<SearxngInstallStatus>} */
 export async function getInstallStatus() {
   const meta = await readMeta();
-  const venvPython = venvPythonPath(getServerVenvDir(SERVER_ID));
+  const venvDir = getServerVenvDir(SERVER_ID);
   const sourceDir = getSearxngSourceDir();
   const installed =
-    fs.existsSync(venvPython) &&
+    (await isVenvHealthy(venvDir)) &&
     fs.existsSync(path.join(sourceDir, 'searx', '__init__.py'));
   if (!installed) {
     return { installed: false, version: null, pythonVersion: null, sizeBytes: 0 };
@@ -513,10 +513,12 @@ export async function getInstallStatus() {
  */
 export async function getSpawnSpec(port) {
   const venvDir = getServerVenvDir(SERVER_ID);
-  const venvPython = venvPythonPath(venvDir);
-  if (!fs.existsSync(venvPython)) {
-    throw new Error('SearXNG is not installed');
+  if (!(await isVenvHealthy(venvDir))) {
+    throw new Error(
+      'SearXNG virtual environment is corrupted (missing pyvenv.cfg). Reinstall from Settings → Servers.',
+    );
   }
+  const venvPython = venvPythonPath(venvDir);
   await applyWindowsCompatibilityPatches({
     sourceDir: getSearxngSourceDir(),
     venvDir,

@@ -3,6 +3,7 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
+import { listActiveSubAgentRuns } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentCompletionPush } from '../agents/sub-agent-completion-push';
@@ -11,6 +12,7 @@ import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync'
 import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
+import { getActiveChatMountElement } from './chat-mount';
 import { scrollBottom } from './input';
 import { initSubAgentDrawerLiveUpdates, openSubAgentDrawer } from './sub-agent-drawer';
 
@@ -116,8 +118,7 @@ export function upsertSubAgentCardForRun(
     return null;
   }
 
-  const area = document.getElementById('chatArea');
-  if (!area) return null;
+  const area = getActiveChatMountElement();
 
   let el = cards.get(run.runId);
   if (!el) {
@@ -168,11 +169,15 @@ export function upsertSubAgentCardForRun(
   return el;
 }
 
-/** Re-mount persisted cards after `renderChatFromHistory` rebuilds `#chatArea`. */
+/** Re-mount persisted and in-flight cards after `renderChatFromHistory` rebuilds the transcript. */
 export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
-  if (!chat.subAgentRuns?.length) return;
-  for (const row of chat.subAgentRuns) {
+  for (const row of chat.subAgentRuns ?? []) {
     upsertSubAgentCardForRun(row, chat.id);
+  }
+  for (const run of listActiveSubAgentRuns()) {
+    if (run.parentChatId === chat.id) {
+      upsertSubAgentCardForRun(run, chat.id);
+    }
   }
 }
 

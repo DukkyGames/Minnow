@@ -9,6 +9,21 @@ html.theme-ready:not(.theme-no-transition) body * {
     stroke 160ms ease;
 }
 
+/*
+ * Do not animate `color` on text-entry controls. Chromium can stop painting the
+ * insertion caret when `color` transitions while caret-color is still `auto`
+ * (MIN-168 — caret missing until reload).
+ */
+html.theme-ready:not(.theme-no-transition) body input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+html.theme-ready:not(.theme-no-transition) body textarea,
+html.theme-ready:not(.theme-no-transition) body select,
+html.theme-ready:not(.theme-no-transition) body [contenteditable='true'],
+html.theme-ready:not(.theme-no-transition) body .cm-content {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html.theme-ready:not(.theme-no-transition) body,
   html.theme-ready:not(.theme-no-transition) body * {

@@ -638,6 +638,25 @@
   margin-top: 14px;
 }
 
+.models-llama-install-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.models-llama-install-progress {
+  margin-top: 12px;
+}
+
+.models-llama-install-progress.hidden {
+  display: none;
+}
+
+.models-llama-install-progress__label {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
 .settings-llama-serves-list {
   display: flex;
   flex-direction: column;

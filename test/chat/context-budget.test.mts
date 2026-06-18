@@ -232,6 +232,30 @@ describe('formatContextTrimStatus', () => {
   });
 });
 
+describe('applyContextBudget archive', () => {
+  test('archive policy uses slide behavior', () => {
+    const messages: ApiMessage[] = [
+      system('sys'),
+      user('a'.repeat(400)),
+      assistant('b'.repeat(400)),
+      user('c'.repeat(400)),
+      assistant('d'.repeat(400)),
+    ];
+    const resolved = resolveContextBudget({
+      agentConfig: { maxInputTokens: 400, enforcementPolicy: 'archive' },
+      modelLimit: null,
+    });
+    const out = applyContextBudget(messages, resolved, {
+      maxInputTokens: 400,
+      enforcementPolicy: 'archive',
+      minRecentTurns: 1,
+    });
+    assert.equal(out.applied, true);
+    assert.equal(out.policy, 'archive');
+    assert.ok(out.tokensAfter <= (resolved.effectiveLimit ?? 0));
+  });
+});
+
 function serializeRoleContent(m: ApiMessage): string {
   if (m.role === 'user' || m.role === 'assistant' || m.role === 'system') {
     return typeof m.content === 'string' ? m.content : '';

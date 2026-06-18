@@ -35,8 +35,12 @@ latency problem is real and measured.
 ## Acceptance criteria
 
 - [ ] Any item merged ships with a **before/after benchmark** justifying it.
-- [ ] No regression in existing `test/brain/**`, `test/memory/**`, or code-index tests.
-- [ ] Typecheck + lint clean.
+- [x] Repo-map rank-order rendering — benchmark in `test/brain/code/repo-map-benchmark.test.mjs`.
+- [x] Multi-workspace SQLite handle cache + startup/MRU warm — `test/brain/code/workspace-cache.test.mjs`.
+- [x] Code semantic search — **skipped** (no held-out win over grep + graph; toggle stays off).
+- [x] tree-sitter accelerator — **skipped** (no measured LSP bulk latency regression on large repos).
+- [x] No regression in existing `test/brain/**`, `test/memory/**`, or code-index tests.
+- [x] Typecheck + lint clean.
 
 ## Non-goals (reminder — do not build these)
 

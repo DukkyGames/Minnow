@@ -1,5 +1,5 @@
 /** MinnowOS app identifiers — one per launcher tile. */
-export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'scheduler' | 'calendar' | 'email' | 'settings';
+export type AppId = 'code' | 'chat' | 'research' | 'experts' | 'bench' | 'compare' | 'models' | 'brain' | 'scheduler' | 'calendar' | 'email' | 'settings';
 
 /** How an app is presented in the MinnowOS shell. */
 export type PresentationMode = 'fullscreen' | 'window' | 'desktop' | 'sidePanel';
@@ -49,6 +49,8 @@ export interface LaunchOptions {
   settingsSection?: string;
   /** Models app section slug when opening from `#/app/models/…` deep links. */
   modelsSection?: string;
+  /** Brain app section slug when opening from `#/app/brain/…` deep links. */
+  brainSection?: string;
   /** Code app: composer mode to activate. */
   modeId?: ModeId;
   /** Code app: absolute workspace path from the recent-workspace list. */
@@ -71,4 +73,5 @@ export interface OsRoute {
   appId?: AppId;
   settingsSection?: string;
   modelsSection?: string;
+  brainSection?: string;
 }

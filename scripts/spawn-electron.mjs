@@ -5,11 +5,13 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
 
 function run(command, args, env = process.env) {
   return new Promise((resolve, reject) => {
@@ -31,10 +33,13 @@ function electronPackageDir() {
   return path.join(repoRoot, 'node_modules', 'electron');
 }
 
+/** Resolve the platform Electron executable (not the .cmd shim). */
 function electronBinaryPath() {
-  return process.platform === 'win32'
-    ? path.join(repoRoot, 'node_modules', '.bin', 'electron.cmd')
-    : path.join(repoRoot, 'node_modules', '.bin', 'electron');
+  try {
+    return require('electron');
+  } catch {
+    return null;
+  }
 }
 
 function electronDistBinaryPath() {
@@ -65,11 +70,21 @@ function mainJsPath() {
   return path.join(repoRoot, 'electron', 'dist', 'main.js');
 }
 
+function preloadMjsPath() {
+  return path.join(repoRoot, 'electron', 'dist', 'preload.mjs');
+}
+
+function isElectronBuildReady() {
+  return fs.existsSync(mainJsPath()) && fs.existsSync(preloadMjsPath());
+}
+
 async function ensureElectronBuild() {
-  const mainJs = mainJsPath();
-  if (fs.existsSync(mainJs)) return;
-  console.log('[electron] Compiling main process…');
+  if (isElectronBuildReady()) return;
+  console.log('[electron] Compiling main process (first run)…');
   await run('npm', ['run', 'electron:build']);
+  if (!isElectronBuildReady()) {
+    throw new Error('Electron build incomplete. Run npm run electron:build.');
+  }
 }
 
 /**
@@ -83,7 +98,7 @@ export async function spawnElectronShell(options = {}) {
 
   const electronBin = electronBinaryPath();
   const electronDist = electronDistBinaryPath();
-  if (!fs.existsSync(electronBin) || !fs.existsSync(electronDist)) {
+  if (!electronBin || !fs.existsSync(electronBin) || !fs.existsSync(electronDist)) {
     throw electronInstallError();
   }
 
@@ -103,7 +118,7 @@ export async function spawnElectronShell(options = {}) {
     env,
     stdio: foreground ? 'inherit' : 'ignore',
     detached: !foreground,
-    shell: process.platform === 'win32',
+    windowsHide: false,
   });
 
   child.on('error', (err) => {

@@ -17,7 +17,7 @@ import {
 } from '../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../api/message-content';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
-import { encodeModelSelectKey } from '../lib/model-select-key';
+import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import { getActiveChat } from '../state/sessions';
 import { resolveProvider } from '../providers/store';
@@ -37,7 +37,7 @@ export interface EditorAiBinding {
 
 /** Shown in the file viewer status bar and Quick Edit panel when modelId is empty. */
 export const EDITOR_AI_NO_MODEL_MESSAGE =
-  'No model assigned for editor AI. Select a model in the chat bar or pin one in Settings → Editor.';
+  'No model assigned — pick a model in the top bar or pin one in Settings → Editor.';
 
 export type EditorAiBindingValidation =
   | { ok: true }
@@ -60,6 +60,19 @@ export function validateEditorAiBinding(
   return { ok: true };
 }
 
+/** Active top-bar model select value (same source as composer send / benchmark). */
+export function getActiveModelIdFromDom(): string {
+  if (typeof document === 'undefined') return '';
+  const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
+  return sel?.value?.trim() ?? '';
+}
+
+/** Return a user-facing error when binding has no model; null when ready. */
+export function preflightEditorAiBinding(binding: EditorAiBinding): string | null {
+  if (binding.modelId.trim()) return null;
+  return EDITOR_AI_NO_MODEL_MESSAGE;
+}
+
 /** Resolve provider/model from config + active chat (mirrors reef widget binding). */
 export async function resolveEditorAiBinding(
   config: EditorAiCompletionConfig,
@@ -68,20 +81,20 @@ export async function resolveEditorAiBinding(
   const overrideProvider = config.providerId.trim();
   const overrideModel = config.modelId.trim();
 
-  if (!config.useChatModel && overrideProvider) {
+  // Pinned provider + model (Settings → Editor → Pin).
+  if (!config.useChatModel) {
     return { providerId: overrideProvider, modelId: overrideModel };
   }
 
-  if (overrideProvider) {
-    return {
-      providerId: overrideProvider,
-      modelId: overrideModel || chat.modelId?.trim() || '',
-    };
-  }
-
+  // Follow active chat / top-bar model picker (live DOM read on each request).
+  const raw = getActiveModelIdFromDom();
+  const parsed = decodeModelSelectKey(raw);
+  const modelId =
+    (parsed?.modelId ?? raw).trim() || chat.modelId?.trim() || '';
   const providerId =
-    chat.providerId?.trim() || (await resolveProvider()).id;
-  const modelId = chat.modelId?.trim() || '';
+    parsed?.providerId?.trim() ||
+    chat.providerId?.trim() ||
+    (await resolveProvider()).id;
   return { providerId, modelId };
 }
 

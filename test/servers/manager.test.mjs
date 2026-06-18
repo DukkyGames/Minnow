@@ -30,23 +30,17 @@ import {
   getServerVenvDir,
 } from '../../server/servers/paths.js';
 import { writeSearxngSettings } from '../../server/servers/searxng.js';
+import { createVenv } from '../../server/servers/provisioner.js';
 
 const FIXED_PORT = 8899;
 const FIXED_HEALTH_PORT = 7788;
 
-/** @returns {string} */
-function venvPythonPath(serverId) {
-  const venvDir = getServerVenvDir(serverId);
-  return process.platform === 'win32'
-    ? path.join(venvDir, 'Scripts', 'python.exe')
-    : path.join(venvDir, 'bin', 'python3');
-}
-
 /** Mark SearXNG as installed without downloading bundles. */
 async function seedSearxngInstalled() {
-  const python = venvPythonPath('searxng');
-  await fsp.mkdir(path.dirname(python), { recursive: true });
-  await fsp.writeFile(python, '', 'utf8');
+  const venvDir = getServerVenvDir('searxng');
+  await fsp.rm(venvDir, { recursive: true, force: true });
+  const systemPython = process.env.SEARXNG_TEST_PYTHON ?? 'python';
+  await createVenv(systemPython, venvDir);
   const searxInit = path.join(getServerDir('searxng'), 'src', 'searx', '__init__.py');
   await fsp.mkdir(path.dirname(searxInit), { recursive: true });
   await fsp.writeFile(searxInit, '', 'utf8');

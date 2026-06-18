@@ -2,21 +2,22 @@
  * Live chat context window budget (MIN-13): estimate used tokens vs model limit.
  */
 
+import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { formatModelLabel } from '../lib/format-model-label';
-import { getModelRowForSelectOrCanonicalId } from '../api/models';
-import { getActiveChat } from '../state/sessions';
+import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
+import { modelCache } from '../app-state';
 import type { Attachment } from '../attachments/types';
-import type { Chat } from '../types';
+import type { Chat, LmModelRecord } from '../types';
 import {
   estimateInFlightOverlayTokens,
   type ContextInFlightOverlay,
 } from './context-in-flight';
 import {
+  ESTIMATE_IMAGE_URL_TOKENS,
   estimateTokensFromText,
   type OutboundPromptEstimate,
 } from './prompts/token-estimate-core';
-import { resolveOutboundPromptEstimate } from './prompts/token-estimate';
 
 export type ContextUsageSectionKey =
   | 'system'
@@ -72,7 +73,11 @@ export function estimateAttachmentTokens(attachments: Attachment[]): number {
       continue;
     }
     if (attachment.dataUrl) {
-      total += estimateTokensFromText(attachment.dataUrl);
+      // API sends image_url parts, not base64 in text — cap per image like context-budget.
+      total +=
+        attachment.kind === 'image'
+          ? ESTIMATE_IMAGE_URL_TOKENS
+          : estimateTokensFromText(attachment.dataUrl);
       continue;
     }
     if (attachment.workspacePath) {
@@ -125,8 +130,27 @@ function sumBreakdownTokens(sections: ContextUsageSection[]): number {
   return total;
 }
 
+function lookupCachedModelRow(modelId: string): LmModelRecord | undefined {
+  const trimmed = modelId.trim();
+  if (!trimmed) return undefined;
+  const direct = modelCache.get(trimmed);
+  if (direct) return direct;
+  const decoded = decodeModelSelectKey(trimmed);
+  if (decoded) {
+    return modelCache.get(encodeModelSelectKey(decoded.providerId, decoded.modelId));
+  }
+  for (const key of modelCache.keys()) {
+    const entry = decodeModelSelectKey(key);
+    if (entry?.modelId === trimmed) {
+      return modelCache.get(key);
+    }
+  }
+  const fallbackKey = findFirstSelectKeyForCanonicalModelId(modelCache.keys(), trimmed);
+  return fallbackKey ? modelCache.get(fallbackKey) : undefined;
+}
+
 function resolveModelDisplayName(modelId: string): string {
-  const cached = getModelRowForSelectOrCanonicalId(modelId);
+  const cached = lookupCachedModelRow(modelId);
   if (cached) {
     return formatModelLabel({
       id: cached.id,
@@ -206,6 +230,7 @@ export function assembleContextBudget(params: {
 export async function getContextBudget(
   options?: GetContextBudgetOptions,
 ): Promise<ContextBudget> {
+  const { getActiveChat } = await import('../state/sessions');
   const chat = options?.chat ?? getActiveChat();
   const modelId =
     options?.modelId?.trim() ||
@@ -215,7 +240,8 @@ export async function getContextBudget(
       : '') ||
     '';
 
-  const estimate = await resolveOutboundPromptEstimate({ chat });
+  const { resolveOutboundPromptEstimate } = await import('./prompts/token-estimate');
+  const estimate = await resolveOutboundPromptEstimate({ chat, modelId });
   const composerTokens = estimateTokensFromText(options?.pendingComposerText?.trim() ?? '');
   const attachmentTokens = options?.pendingAttachmentTokens ?? 0;
   const inFlightTokens = estimateInFlightOverlayTokens(options?.inFlight);

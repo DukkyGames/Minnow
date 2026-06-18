@@ -3,9 +3,24 @@ import { describe, test } from 'node:test';
 import {
   isEchoSeed,
   isNavigationOnlyCodeRequest,
+  isNavigationOnlyResearchRequest,
   sanitizeConciergeSeed,
   stripSeedFiller,
 } from '../../src/os/concierge-seed.ts';
+
+describe('isNavigationOnlyResearchRequest', () => {
+  test('detects concierge chip and generic open-research phrasing', () => {
+    assert.equal(isNavigationOnlyResearchRequest('Research a topic'), true);
+    assert.equal(isNavigationOnlyResearchRequest('research something'), true);
+    assert.equal(isNavigationOnlyResearchRequest('investigate a topic'), true);
+    assert.equal(isNavigationOnlyResearchRequest('research'), true);
+  });
+
+  test('does not flag concrete research topics', () => {
+    assert.equal(isNavigationOnlyResearchRequest('research apple stock'), false);
+    assert.equal(isNavigationOnlyResearchRequest("Let's research quantum computing"), false);
+  });
+});
 
 describe('isNavigationOnlyCodeRequest', () => {
   test('detects workspace open without a task', () => {
@@ -44,6 +59,17 @@ describe('sanitizeConciergeSeed', () => {
       userText: "Let's code in our finance app",
       seed: "Let's code in our finance app",
       appId: 'code',
+      autoRun: true,
+    });
+    assert.equal(result.seed, undefined);
+    assert.equal(result.autoRun, false);
+  });
+
+  test('clears seed and autoRun for navigation-only Research opens', () => {
+    const result = sanitizeConciergeSeed({
+      userText: 'Research a topic',
+      seed: 'Research a topic',
+      appId: 'research',
       autoRun: true,
     });
     assert.equal(result.seed, undefined);

@@ -16,6 +16,108 @@ function isFakeUri(uri) {
   return uri.includes('sample.fake') || uri.endsWith('.fake');
 }
 
+function fakeCallHierarchyItem(uri, name, line = 0) {
+  return {
+    name,
+    kind: 12,
+    uri,
+    range: {
+      start: { line, character: 0 },
+      end: { line, character: name.length },
+    },
+    selectionRange: {
+      start: { line, character: 0 },
+      end: { line, character: name.length },
+    },
+    data: { fixture: name },
+  };
+}
+
+function fakeDocumentSymbols(uri) {
+  return [
+    {
+      name: 'MY_EXPORT',
+      kind: 14,
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 24 },
+      },
+      selectionRange: {
+        start: { line: 0, character: 13 },
+        end: { line: 0, character: 22 },
+      },
+      children: [
+        {
+          name: 'callee',
+          kind: 12,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 20 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 16 },
+            end: { line: 0, character: 22 },
+          },
+        },
+      ],
+    },
+    {
+      name: 'caller',
+      kind: 12,
+      range: {
+        start: { line: 1, character: 0 },
+        end: { line: 3, character: 1 },
+      },
+      selectionRange: {
+        start: { line: 1, character: 16 },
+        end: { line: 1, character: 22 },
+      },
+    },
+  ];
+}
+
+function fakeWorkspaceSymbols(uri, query) {
+  const q = String(query ?? '').toLowerCase();
+  const all = [
+    {
+      name: 'MY_EXPORT',
+      kind: 14,
+      location: {
+        uri,
+        range: {
+          start: { line: 0, character: 13 },
+          end: { line: 0, character: 22 },
+        },
+      },
+      containerName: 'sample.fake',
+    },
+    {
+      name: 'callee',
+      kind: 12,
+      location: {
+        uri,
+        range: {
+          start: { line: 0, character: 16 },
+          end: { line: 0, character: 22 },
+        },
+      },
+    },
+    {
+      name: 'caller',
+      kind: 12,
+      location: {
+        uri,
+        range: {
+          start: { line: 1, character: 16 },
+          end: { line: 1, character: 22 },
+        },
+      },
+    },
+  ];
+  if (!q) return all;
+  return all.filter((sym) => sym.name.toLowerCase().includes(q));
+}
+
 function handleMessage(msg) {
   if (msg.method === 'initialize') {
     send({
@@ -28,6 +130,9 @@ function handleMessage(msg) {
           hoverProvider: true,
           definitionProvider: true,
           signatureHelpProvider: { triggerCharacters: ['(', ','] },
+          documentSymbolProvider: true,
+          workspaceSymbolProvider: true,
+          callHierarchyProvider: true,
         },
       },
     });
@@ -166,6 +271,73 @@ function handleMessage(msg) {
         ],
       },
     });
+    return;
+  }
+
+  if (msg.method === 'textDocument/documentSymbol') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const result = isFakeUri(uri) ? fakeDocumentSymbols(uri) : [];
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'workspace/symbol') {
+    const query = msg.params?.query ?? '';
+    const uri = 'file:///fake-workspace/test/fixtures/sample.fake';
+    const result = fakeWorkspaceSymbols(uri, query);
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'textDocument/prepareCallHierarchy') {
+    const uri = msg.params?.textDocument?.uri ?? '';
+    const pos = msg.params?.position ?? { line: 0, character: 0 };
+    const result = isFakeUri(uri)
+      ? [fakeCallHierarchyItem(uri, pos.line === 1 ? 'caller' : 'callee', pos.line)]
+      : null;
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'callHierarchy/incomingCalls') {
+    const item = msg.params?.item ?? {};
+    const uri = item.uri ?? '';
+    const result =
+      isFakeUri(uri) && item.name === 'callee'
+        ? [
+            {
+              from: fakeCallHierarchyItem(uri, 'caller', 1),
+              fromRanges: [
+                {
+                  start: { line: 2, character: 2 },
+                  end: { line: 2, character: 8 },
+                },
+              ],
+            },
+          ]
+        : [];
+    send({ jsonrpc: '2.0', id: msg.id, result });
+    return;
+  }
+
+  if (msg.method === 'callHierarchy/outgoingCalls') {
+    const item = msg.params?.item ?? {};
+    const uri = item.uri ?? '';
+    const result =
+      isFakeUri(uri) && item.name === 'caller'
+        ? [
+            {
+              to: fakeCallHierarchyItem(uri, 'callee', 0),
+              fromRanges: [
+                {
+                  start: { line: 2, character: 2 },
+                  end: { line: 2, character: 8 },
+                },
+              ],
+            },
+          ]
+        : [];
+    send({ jsonrpc: '2.0', id: msg.id, result });
     return;
   }
 

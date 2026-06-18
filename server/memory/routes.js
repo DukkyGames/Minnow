@@ -1,5 +1,7 @@
 /**
  * HTTP handlers for /api/memory/* (Vite configureServer middleware).
+ * Thin adapter delegating to the brain wiki store (MIN-B3).
+ * TRACKING: remove when UI and tools migrate to /api/brain (MIN-B4+).
  */
 
 import {
@@ -15,7 +17,7 @@ import {
   loadAllEntriesWithBodies,
   ensureMemoryStore,
 } from './store.js';
-import { retrieveMemoryBlock, retrieveMemoryBlockHybrid } from './retrieve.js';
+import { retrieveMemoryBlockHybrid } from './retrieve.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
@@ -27,7 +29,7 @@ import {
   reindexAllMemoryEntries,
 } from './vector-store.js';
 import { clearReindexNeeded } from './vector-sync.js';
-import { handleSynthesisRequest } from './synthesis-routes.js';
+import { handleSynthesisRequest } from '../brain/synthesis-routes.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -211,6 +213,32 @@ export async function handleMemoryRequest(req, res, pathname) {
       return true;
     }
 
+    if (pathname === '/api/memory/embeddings/warmup' && req.method === 'POST') {
+      const started = Date.now();
+      const memory = await loadMemoryConfig();
+      const emb = memory.embeddings ?? {};
+      if (!emb.enabled) {
+        sendJson(res, 400, { error: 'Embeddings are disabled' });
+        return true;
+      }
+
+      const embedder = await getEmbedder(memory);
+      const [vector] = await embedTexts(embedder, ['warmup'], emb.queryTimeoutMs);
+      if (!Array.isArray(vector) || vector.length === 0) {
+        sendJson(res, 500, { error: 'Warmup produced empty embedding' });
+        return true;
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        model: embedder.id,
+        backend: embedder.backend,
+        dim: vector.length,
+        durationMs: Date.now() - started,
+      });
+      return true;
+    }
+
     if (pathname === '/api/memory/embeddings/reindex' && req.method === 'POST') {
       const started = Date.now();
       const memory = await loadMemoryConfig();
@@ -298,7 +326,7 @@ export async function handleMemoryRequest(req, res, pathname) {
   }
 }
 
-/** Startup hook: ensure memory store layout exists. */
+/** Startup hook: ensure memory adapter + brain store layout exists. */
 export async function initMemoryApi() {
   await ensureMemoryStore();
 }

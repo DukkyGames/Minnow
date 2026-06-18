@@ -3,6 +3,7 @@
  */
 
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
+import type { ArchiveConfig } from '../chat/archive/types';
 import type { SamplerPreset } from './sampler-types';
 import type { ThinkingTriState } from './thinking-types';
 
@@ -39,6 +40,8 @@ export interface WorkAgentDefinition {
   minRecentTurns?: number;
   /** summarize: token budget for injected summary block (default 512). */
   summaryReserveTokens?: number;
+  /** archive policy tuning when contextEnforcementPolicy is `archive`. */
+  archive?: ArchiveConfig;
   /** Shipped role sampler defaults (from work-agent-samplers.json). */
   sampler?: SamplerPreset;
 }
@@ -54,6 +57,7 @@ export interface WorkAgentUserOverride {
   contextEnforcementPolicy?: ContextEnforcementPolicy;
   minRecentTurns?: number;
   summaryReserveTokens?: number;
+  archive?: ArchiveConfig;
   /** Partial sampler override (field-level merge at send time). */
   sampler?: SamplerPreset | null;
   /** Tri-state thinking override for this work agent. */

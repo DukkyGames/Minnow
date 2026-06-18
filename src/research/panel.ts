@@ -11,6 +11,7 @@ import { loadResearchConfig } from '../config/research-config';
 import { pushNotification } from '../notifications/push';
 import {
   cancelResearch,
+  fetchResearchDetail,
   fetchResearchResult,
   researchReportUrl,
   startResearch,
@@ -58,19 +59,39 @@ function getChatShell(): HTMLElement | null {
   return document.getElementById('appBody');
 }
 
+function resolveResearchReportUrl(researchId: string): string {
+  const path = researchReportUrl(researchId);
+  return path.startsWith('/') && !path.startsWith('//')
+    ? `${window.location.origin}${path}`
+    : path;
+}
+
+/**
+ * Open the visual report outside the hidden workspace preview pane.
+ * Electron uses the system browser so toolbar export (PDF/HTML) works reliably.
+ */
+function openResearchReportInNewSurface(url: string): void {
+  if (window.minnow?.app.openExternal) {
+    void window.minnow.app.openExternal(url);
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 /** Open visual report in Electron preview or a new browser tab. */
 export function openResearchReport(researchId: string): void {
-  const path = researchReportUrl(researchId);
-  const url =
-    path.startsWith('/') && !path.startsWith('//')
-      ? `${window.location.origin}${path}`
-      : path;
+  const url = resolveResearchReportUrl(researchId);
+  // Preview lives under #appBody, which research full-page / desktop overlay hides.
+  if (isResearchPageOpen()) {
+    openResearchReportInNewSurface(url);
+    return;
+  }
   void import('../ui/preview-panel').then((m) => {
     if (typeof window.minnow?.preview !== 'undefined') {
       void m.openUrlInPreviewPanel(url);
       return;
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openResearchReportInNewSurface(url);
   });
 }
 
@@ -229,10 +250,13 @@ async function showResultForId(researchId: string): Promise<void> {
   }
   mount.innerHTML = '<p class="dr-rep-stats research-mono">Loading result…</p>';
   try {
-    const data = await fetchResearchResult(researchId);
-    const query =
-      (document.getElementById('researchQuery') as HTMLTextAreaElement | null)?.value?.trim() ??
-      '';
+    const data = await fetchResearchDetail(researchId);
+    const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
+    const storedQuery = data.query?.trim() ?? '';
+    if (queryInput && storedQuery && !queryInput.value.trim()) {
+      queryInput.value = storedQuery;
+    }
+    const query = queryInput?.value?.trim() || storedQuery;
     renderResearchResultFromMarkdown(
       mount,
       data.result,
@@ -244,19 +268,21 @@ async function showResultForId(researchId: string): Promise<void> {
         onExport: () => openResearchReport(researchId),
         onRunAgain: () => {
           resetRunUi();
-          const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
-          if (queryInput) {
-            queryInput.focus();
+          if (queryInput && query) {
+            queryInput.value = query;
           }
+          queryInput?.focus();
         },
         onDiscuss: () => {
           void discussResearchReport(researchId);
         },
         onRefine: () => {
+          if (queryInput && query && !queryInput.value.trim()) {
+            queryInput.value = query;
+          }
           void startResearchRun({ continueFrom: researchId });
         },
         onFollowUp: (q) => {
-          const queryInput = document.getElementById('researchQuery') as HTMLTextAreaElement | null;
           if (queryInput) {
             queryInput.value = q;
           }
@@ -264,6 +290,7 @@ async function showResultForId(researchId: string): Promise<void> {
         },
         onViewLibrary: () => setPanelTab('library'),
       },
+      { savedToLibrary: true },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Could not load result';
@@ -288,9 +315,16 @@ export async function discussResearchReport(researchId: string): Promise<void> {
     chat.history.push({ role: 'user', content: spinoffBody });
     chat.name = 'Research discussion';
     scheduleSaveSessions();
-    closeResearch();
+
+    if (isOsShellEnabled()) {
+      const { activateDesktopChat } = await import('../os/desktop-state');
+      await activateDesktopChat({ chatId: chat.id });
+    } else {
+      closeResearch();
+      renderChatFromHistory(chat);
+    }
+
     renderSidebar();
-    renderChatFromHistory(chat);
     setStatus('ok', 'New chat started with research report');
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Discuss failed';

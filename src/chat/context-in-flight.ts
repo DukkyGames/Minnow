@@ -31,20 +31,14 @@ export function getContextInFlightOverlay(
   };
 }
 
-/** Heuristic token count for in-flight overlay fields (chars ÷ 4). */
+/**
+ * Heuristic token count for in-flight overlay fields (chars ÷ 4).
+ * Only unfinalized tool-call JSON counts toward the next prompt; streaming
+ * completion prose and live reasoning are output channels, not prompt input.
+ */
 export function estimateInFlightOverlayTokens(
   overlay: Omit<ContextInFlightOverlay, 'chatId'> | undefined,
 ): number {
-  if (!overlay) return 0;
-  let total = 0;
-  if (overlay.partialAssistantText) {
-    total += estimateTokensFromText(overlay.partialAssistantText);
-  }
-  if (overlay.thinkingText) {
-    total += estimateTokensFromText(overlay.thinkingText);
-  }
-  if (overlay.pendingToolCallsJson) {
-    total += estimateTokensFromText(overlay.pendingToolCallsJson);
-  }
-  return total;
+  if (!overlay?.pendingToolCallsJson) return 0;
+  return estimateTokensFromText(overlay.pendingToolCallsJson);
 }
