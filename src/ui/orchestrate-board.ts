@@ -2279,8 +2279,13 @@ export function renderBoardView(group: ChatGroup): void {
   void syncOrchestratePlanStripFromActiveChat();
 }
 
+/** Stop board listeners/timers when navigating away from board view. */
+export function disposeOrchestrateBoardSession(): void {
+  disposeBoardSession();
+}
+
 /** Tear down board listeners (test teardown). */
 export function disposeBoardViewForTests(): void {
-  disposeBoardSession();
+  disposeOrchestrateBoardSession();
   kanbanInteractionReleaseBound = false;
 }

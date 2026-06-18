@@ -1235,6 +1235,17 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   );
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
+
+  // Planner deletion: keep plan path on the board folder so hub/sidebar boards survive.
+  const boardGroup = (state.groups ?? []).find((g) => g.plannerChatId === chatId);
+  if (boardGroup) {
+    const planPath = normalizeOrchestratePlanPath(victim.orchestratePlanPath);
+    if (planPath) {
+      boardGroup.orchestratePlanPath = planPath;
+    }
+    delete boardGroup.plannerChatId;
+  }
+
   state.chats.splice(idx, 1);
 
   const victimWorkspace = normalizeWorkspacePath(victim.workspacePath ?? '');

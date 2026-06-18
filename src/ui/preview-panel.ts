@@ -490,7 +490,7 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
 
   const api = getPreviewApi();
   if (!api) {
-    openPreviewPanel({ kind: 'url', url: trimmed });
+    await openPreviewPanel({ kind: 'url', url: trimmed });
     return;
   }
 
@@ -517,11 +517,12 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
 }
 
 /** Open the preview panel with an optional initial source. */
-export function openPreviewPanel(source?: PreviewSource | null): void {
+export async function openPreviewPanel(source?: PreviewSource | null): Promise<void> {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
   if (usesElectronPreview()) {
-    void showPreviewHost();
+    await showPreviewHost();
+    scheduleElectronPreviewHostVisibilitySync();
   }
   const state = getFilePanelState();
   const resolved = source ?? state.previewSource;
