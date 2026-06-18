@@ -304,6 +304,8 @@ export interface BoardTask {
   buildSpec?: string;
   /** Test spec from plan parse (display + task-chat seed). */
   testSpec?: string;
+  /** Task ids that must reach 'complete' before this task is ready; omit when none. */
+  dependsOn?: string[];
   /** Linked Tester chat session id (per-task testing). */
   testChatId?: string;
   /** Build↔test retry count (incremented on each test failure). */
@@ -340,7 +342,7 @@ export interface OrchestrateBoardState {
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
   /** Manual board vs auto-pilot delegation (default manual). */
-  executionMode?: 'manual' | 'auto';
+  executionMode?: 'manual' | 'auto' | 'sequential';
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
   /** Full-board integration test after all tasks complete. */

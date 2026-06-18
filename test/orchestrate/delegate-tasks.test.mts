@@ -13,6 +13,7 @@ import {
 } from '../../src/agents/controller/report.ts';
 import {
   getBoardExecutionMode,
+  isBoardAutoMode,
 } from '../../src/state/orchestrate-board-store.ts';
 import { applyOrchestrateAutoToolFilter } from '../../src/chat/modes/orchestrate-tool-filter.ts';
 import { filterToolsByMode } from '../../src/chat/modes/tool-policy.ts';
@@ -223,5 +224,42 @@ describe('orchestrator auto reports', () => {
     await deliverOrchestratorTaskReport(group, planner, task, 'failed');
     assert.equal(deliveries.length, 1);
     setOrchestratorReportDeliverHook(null);
+  });
+});
+
+// ─── Sequential mode and setBoardExecutionMode widening ──────────────────
+
+describe('sequential execution mode', () => {
+  test('getBoardExecutionMode returns sequential when set', () => {
+    const { group } = seedBoard('manual');
+    group.orchestrateBoard!.executionMode = 'sequential';
+    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'sequential');
+  });
+
+  test('isBoardAutoMode true for both auto and sequential', () => {
+    const { group } = seedBoard('manual');
+    group.orchestrateBoard!.executionMode = 'auto';
+    assert.equal(isBoardAutoMode(group), true);
+    group.orchestrateBoard!.executionMode = 'sequential';
+    assert.equal(isBoardAutoMode(group), true);
+    group.orchestrateBoard!.executionMode = 'manual';
+    assert.equal(isBoardAutoMode(group), false);
+  });
+
+  test('delegate_tasks rejects sequential mode (not auto)', async () => {
+    const { planner, group } = seedBoard('manual');
+    group.orchestrateBoard!.executionMode = 'sequential';
+    setSessionStateForTests({ version: 5, activeId: PLANNER_ID, chats: [planner], groups: [group] });
+    const out = await executeBoardTool(
+      'delegate_tasks',
+      { taskIds: ['W1-A'] },
+      { chatId: planner.id },
+    );
+    assert.match(out, /executionMode auto/i);
+  });
+
+  test('getBoardExecutionMode falls back to manual for unknown values', () => {
+    const board = { executionMode: 'unknown' as any };
+    assert.equal(getBoardExecutionMode(board as any), 'manual');
   });
 });

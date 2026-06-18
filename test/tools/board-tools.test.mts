@@ -15,7 +15,12 @@ import {
   setSubAgentRunnerFactory,
 } from '../../src/agents/sub-agent-runner.ts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
-import { setBoardNowForTests } from '../../src/state/orchestrate-board-store.ts';
+import {
+  isDepsComplete,
+  initBoard,
+  isTaskReadyForAuto,
+  setBoardNowForTests,
+} from '../../src/state/orchestrate-board-store.ts';
 import {
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
@@ -25,6 +30,7 @@ import {
   validateBoardInitArgs,
   validateBoardUpdateTaskArgs,
 } from '../../src/tools/board-tools.ts';
+import type { Chat, ChatGroup } from '../../src/types.ts';
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const TASK_CHAT_ID = '22222222-2222-2222-2222-222222222222';
@@ -54,7 +60,8 @@ const EXPECTED_BOARD_INIT_RESULT = `{
   "startedAt": 1710000001000,
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
-  "maxConcurrentTasks": 3
+  "maxConcurrentTasks": 3,
+  "executionMode": "manual"
 }`;
 
 const EXPECTED_UPDATE_TASK_RESULT = `{
@@ -89,7 +96,8 @@ const EXPECTED_GET_STATE_RESULT = `{
   "startedAt": 1710000001000,
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
-  "maxConcurrentTasks": 3
+  "maxConcurrentTasks": 3,
+  "executionMode": "manual"
 }`;
 
 function seedOrchestrateChat(overrides: Record<string, unknown> = {}) {
@@ -439,5 +447,195 @@ describe('executeBoardTool', () => {
     resetSubAgentConfigCache();
     resetSubAgentRunnerFactory();
     resetSubAgentRunIdFactory();
+  });
+});
+
+// ─── dependsOn validation ─────────────────────────────────────────────────
+
+describe('validateBoardInitArgs — dependsOn', () => {
+  const base = {
+    plan_path: PLAN_PATH,
+    waves: [{ id: 'W1' }, { id: 'W2' }],
+  };
+
+  test('accepts valid dependsOn referencing earlier task', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
+    }
+  });
+
+  test('rejects self-dependency', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /depends on itself/);
+  });
+
+  test('rejects unknown dep id', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', dependsOn: ['W9-Z'] },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /unknown task "W9-Z"/);
+  });
+
+  test('accepts snake_case depends_on field', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', depends_on: ['W1-A'] } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
+  });
+
+  test('accepts stringified dependsOn array', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', dependsOn: '["W1-A"]' } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
+  });
+
+  test('detects 2-node cycle', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', dependsOn: ['W1-B'] },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /cycle/i);
+  });
+
+  test('detects 3-node cycle', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', dependsOn: ['W1-C'] },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+        { id: 'W1-C', title: 'C', wave: 'W1', category: 'build', dependsOn: ['W1-B'] },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /cycle/i);
+  });
+
+  test('omits dependsOn from output when empty', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.args.tasks[0]?.dependsOn, undefined);
+  });
+});
+
+// ─── isDepsComplete ───────────────────────────────────────────────────────
+
+describe('isDepsComplete', () => {
+  function makeBoard(tasks: Array<{ id: string; status: string; dependsOn?: string[] }>): any {
+    return {
+      tasks: tasks.map((t) => ({ ...t, title: t.id, wave: 'W1', category: 'build' })),
+      waves: [{ id: 'W1', status: 'planned', taskCount: tasks.length, completeCount: 0 }],
+    };
+  }
+
+  test('returns true when no dependsOn', () => {
+    const board = makeBoard([{ id: 'W1-A', status: 'planned' }]);
+    assert.equal(isDepsComplete(board, board.tasks[0]), true);
+  });
+
+  test('returns true when all deps are complete', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'complete' },
+      { id: 'W1-B', status: 'planned', dependsOn: ['W1-A'] },
+    ]);
+    assert.equal(isDepsComplete(board, board.tasks[1]), true);
+  });
+
+  test('returns false when dep is not complete', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'in_progress' },
+      { id: 'W1-B', status: 'planned', dependsOn: ['W1-A'] },
+    ]);
+    assert.equal(isDepsComplete(board, board.tasks[1]), false);
+  });
+
+  test('skips unknown dep ids (does not block)', () => {
+    const board = makeBoard([
+      { id: 'W1-A', status: 'planned', dependsOn: ['X-UNKNOWN'] },
+    ]);
+    assert.equal(isDepsComplete(board, board.tasks[0]), true);
+  });
+
+  test('skips self-edges', () => {
+    const board = makeBoard([{ id: 'W1-A', status: 'planned', dependsOn: ['W1-A'] }]);
+    assert.equal(isDepsComplete(board, board.tasks[0]), true);
+  });
+});
+
+// ─── isTaskReadyForAuto with deps ────────────────────────────────────────
+
+describe('isTaskReadyForAuto with dependsOn', () => {
+  test('blocks task until dep is complete', () => {
+    const PLAN_PATH_LOCAL = 'docs/plans/test.md';
+    const planner: Chat = {
+      id: CHAT_ID,
+      name: 'p',
+      workspacePath: '',
+      modelId: 'm',
+      history: [],
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 1,
+    };
+    const group: ChatGroup = {
+      id: BOARD_GROUP_ID,
+      name: 'g',
+      workspacePath: '',
+      collapsed: false,
+      order: 0,
+      createdAt: 1,
+    };
+    initBoard(group, planner, {
+      planPath: PLAN_PATH_LOCAL,
+      waves: [{ id: 'W1' }],
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+    });
+    const board = group.orchestrateBoard!;
+    const taskA = board.tasks.find((t) => t.id === 'W1-A')!;
+    const taskB = board.tasks.find((t) => t.id === 'W1-B')!;
+
+    assert.equal(isTaskReadyForAuto(board, taskA), true);
+    assert.equal(isTaskReadyForAuto(board, taskB), false);
+
+    taskA.status = 'complete';
+    assert.equal(isTaskReadyForAuto(board, taskB), true);
   });
 });

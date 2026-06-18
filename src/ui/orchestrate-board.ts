@@ -40,6 +40,7 @@ import {
   isTaskChatActive,
   moveTaskStatus,
   setBoardExecutionMode,
+  setBoardMaxConcurrent,
   startFinalIntegrationTestForPlannerChat,
   startTask,
   startTaskTestingForPlannerChat,
@@ -406,6 +407,7 @@ export function buildKanbanRefreshKey(
   const running = countRunningTaskChats(board);
   const parts: string[] = [
     `run:${running}/${cap}`,
+    `mode:${getBoardExecutionMode(board)}`,
     `stream:${isChatStreaming(plannerChat.id) ? 1 : 0}`,
   ];
   for (const wave of board.waves) {
@@ -449,6 +451,7 @@ export function buildKanbanRefreshKey(
         relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
         heartbeatKey,
         runLifecycle,
+        `d${(task.dependsOn ?? []).join('.')}`,
       ].join('|'),
     );
   }
@@ -724,26 +727,51 @@ function wireBoardHeaderControls(
 ): void {
   controls.replaceChildren();
 
-  const autoPilot = document.createElement('label');
-  autoPilot.className = 'board-header__auto-pilot';
-  autoPilot.title = 'Auto-pilot: start ready planned tasks and report lifecycle to planner chat';
-  const toggle = document.createElement('input');
-  toggle.type = 'checkbox';
-  toggle.className = 'board-header__auto-pilot-input';
-  toggle.dataset.boardAction = 'auto-pilot';
-  toggle.checked = getBoardExecutionMode(board) === 'auto';
-  toggle.setAttribute('aria-label', 'Auto-pilot');
-  toggle.addEventListener('change', () => {
-    const mode = toggle.checked ? 'auto' : 'manual';
+  // Execution mode select (Manual / Auto / Sequential)
+  const currentMode = getBoardExecutionMode(board);
+  const modeWrapper = document.createElement('label');
+  modeWrapper.className = 'board-header__exec-mode';
+  modeWrapper.title = 'Execution mode: Manual (user-driven), Auto (concurrent auto-start), Sequential (one at a time)';
+  const modeSelect = document.createElement('select');
+  modeSelect.className = 'board-header__exec-mode-select';
+  modeSelect.dataset.boardAction = 'auto-pilot';
+  modeSelect.setAttribute('aria-label', 'Execution mode');
+  for (const [value, label] of [['manual', 'Manual'], ['auto', 'Auto'], ['sequential', 'Sequential']] as const) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === currentMode) opt.selected = true;
+    modeSelect.appendChild(opt);
+  }
+  modeSelect.addEventListener('change', () => {
+    const mode = modeSelect.value as 'manual' | 'auto' | 'sequential';
     setBoardExecutionMode(group, mode, plannerChat);
     refreshActiveBoardIfMounted();
   });
-  const autoLabel = document.createElement('span');
-  autoLabel.className = 'board-header__auto-pilot-label';
-  autoLabel.textContent = 'Auto-pilot';
-  autoPilot.appendChild(toggle);
-  autoPilot.appendChild(autoLabel);
-  controls.appendChild(autoPilot);
+  modeWrapper.appendChild(modeSelect);
+  controls.appendChild(modeWrapper);
+
+  // Max concurrent stepper (only editable in Auto mode)
+  const concWrapper = document.createElement('label');
+  concWrapper.className = 'board-header__concurrency';
+  concWrapper.title = 'Max concurrent tasks (Auto mode only)';
+  const concInput = document.createElement('input');
+  concInput.type = 'number';
+  concInput.className = 'board-header__concurrency-input';
+  concInput.min = '1';
+  concInput.max = '20';
+  concInput.value = String(board.maxConcurrentTasks ?? 3);
+  concInput.disabled = currentMode !== 'auto';
+  concInput.setAttribute('aria-label', 'Max concurrent tasks');
+  concInput.addEventListener('change', () => {
+    const val = Number(concInput.value);
+    if (Number.isFinite(val)) {
+      setBoardMaxConcurrent(group, val, plannerChat);
+      refreshActiveBoardIfMounted();
+    }
+  });
+  concWrapper.appendChild(concInput);
+  controls.appendChild(concWrapper);
 
   const openPlan = createBoardHeaderIconButton(
     'open-plan',
@@ -1657,11 +1685,18 @@ function refreshBoardDom(
     openPlanBtn.title = planTitle;
   }
 
-  const autoPilotInput = root.querySelector(
+  const execModeSelect = root.querySelector(
     '[data-board-action="auto-pilot"]',
+  ) as HTMLSelectElement | null;
+  if (execModeSelect) {
+    execModeSelect.value = getBoardExecutionMode(board);
+  }
+  const concurrencyInput = root.querySelector(
+    '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
-  if (autoPilotInput) {
-    autoPilotInput.checked = getBoardExecutionMode(board) === 'auto';
+  if (concurrencyInput) {
+    concurrencyInput.value = String(board.maxConcurrentTasks ?? 3);
+    concurrencyInput.disabled = getBoardExecutionMode(board) !== 'auto';
   }
 
   const send = root.querySelector(

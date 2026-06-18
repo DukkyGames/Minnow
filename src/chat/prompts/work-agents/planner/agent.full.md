@@ -111,10 +111,12 @@ Tasks here run concurrently.
 #### Task W1-A: <Title>
 - **Build:** <specific steps; file paths; function signatures; expected diff scope>
 - **Test:** <specific assertions; commands to run; expected output that proves success>
+- **Depends on:** <comma-separated task ids, or omit>
 
 #### Task W1-B: <Title>
 - **Build:** ...
 - **Test:** ...
+- **Depends on:** <omit if no dependency>
 
 ### Wave 2 — <Name>
 ...
@@ -131,7 +133,7 @@ Tasks here run concurrently.
 ## Quality requirements (non-negotiable)
 
 - **Every task has Build + Test sub-tasks.** No exceptions.
-- **Tasks in a wave are independent** (no ordering dependency). Dependencies go across waves.
+- **Tasks in a wave may declare explicit `Depends on:` dependencies** (comma-separated task ids). Tasks without it are independent and can run concurrently. Cross-wave sequencing still goes between waves. No cycles; only reference earlier task ids in the plan.
 - **Build sub-tasks must be self-contained.** A fresh Builder agent with no chat history must be able to execute it. Include real file paths, function names, expected diff size.
 - **Test sub-tasks are objective.** Name the command, the assertion, the file to check. "Looks right" is not a test.
 - **Granularity must match the active setting** (`{{plan_granularity}}`) unless the user specified otherwise.
