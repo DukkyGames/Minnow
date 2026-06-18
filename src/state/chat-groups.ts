@@ -5,6 +5,7 @@
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
+import { getChatLastMessageAt } from './session-workspace-scope';
 import { newChatId, scheduleSaveSessions, sessionState, touchChat } from './sessions';
 
 function newGroupId(): string {
@@ -22,6 +23,54 @@ function ensureGroupsArray(): ChatGroup[] {
     state.groups = [];
   }
   return state.groups;
+}
+
+/** Newest member activity for sidebar ordering; empty groups use `createdAt`. */
+export function getGroupActivityAt(group: ChatGroup, chats: Chat[]): number {
+  let newest = 0;
+  for (const chat of chats) {
+    if (chat.groupId !== group.id) continue;
+    newest = Math.max(newest, getChatLastMessageAt(chat));
+  }
+  if (newest > 0) return newest;
+  return typeof group.createdAt === 'number' && Number.isFinite(group.createdAt)
+    ? group.createdAt
+    : 0;
+}
+
+export type WorkspaceSidebarEntry =
+  | { kind: 'group'; group: ChatGroup; members: Chat[] }
+  | { kind: 'chat'; chat: Chat };
+
+/** Merge groups and ungrouped chats by newest activity (sidebar main list). */
+export function buildSortedWorkspaceSidebarEntries(
+  groups: ChatGroup[],
+  workspaceChats: Chat[],
+): WorkspaceSidebarEntry[] {
+  const groupedIds = new Set<string>();
+  const entries: WorkspaceSidebarEntry[] = [];
+
+  for (const group of groups) {
+    const members = workspaceChats.filter((c) => c.groupId === group.id);
+    members.forEach((c) => groupedIds.add(c.id));
+    entries.push({ kind: 'group', group, members });
+  }
+
+  for (const chat of workspaceChats) {
+    if (!groupedIds.has(chat.id)) {
+      entries.push({ kind: 'chat', chat });
+    }
+  }
+
+  entries.sort((a, b) => {
+    const aActivity =
+      a.kind === 'group' ? getGroupActivityAt(a.group, a.members) : getChatLastMessageAt(a.chat);
+    const bActivity =
+      b.kind === 'group' ? getGroupActivityAt(b.group, b.members) : getChatLastMessageAt(b.chat);
+    return bActivity - aActivity;
+  });
+
+  return entries;
 }
 
 /** Groups for a workspace sorted by order then createdAt. */

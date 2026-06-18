@@ -233,6 +233,12 @@ function startBoardFromHub(planSelect: HTMLSelectElement): void {
   }
 }
 
+/** Re-render recent boards when session groups change (e.g. planner chat deleted). */
+export function refreshOrchestrateHubBoardList(): void {
+  const container = document.getElementById('orchestrateHubBoardsRow');
+  if (container) renderBoardList(container);
+}
+
 function renderBoardList(container: HTMLElement): void {
   container.replaceChildren();
   const workspacePath = getWorkspacePath();

@@ -30,6 +30,7 @@ import {
   loadEditorAiCompletionConfig,
   getEditorAiCompletionConfigSync,
 } from '../config/editor-ai-completion';
+import { loadEditorIntentModeConfig } from '../config/editor-intent-mode';
 import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
@@ -39,6 +40,12 @@ import { fileEditorKeymapExtensions } from './file-editor-keymap';
 import { lspEditorExtensions } from './file-editor-extensions';
 import { setLspDiagnosticsChromeListener } from './lsp-editor';
 import { editorAiCompletionExtensions } from './file-editor-ai-extensions';
+import {
+  editorIntentModeExtensions,
+  mountIntentModeEditor,
+  isIntentModeEnabled,
+  toggleIntentMode,
+} from './editor-intent-mode';
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
 import {
   buildFileViewerContextMenuItems,
@@ -89,6 +96,10 @@ let viewerContextMenuBound = false;
 let lspSyncedPath: string | null = null;
 let lspChangeTimer: ReturnType<typeof setTimeout> | null = null;
 let editorAiStatusEl: HTMLElement | null = null;
+let editorIntentStatusEl: HTMLElement | null = null;
+let editorIntentToggleEl: HTMLButtonElement | null = null;
+/** Per-document Intent mode enabled flag (session only). */
+const intentModeEnabledByPath = new Map<string, boolean>();
 let editorAiModelSelectListener: (() => void) | null = null;
 let diagnosticsBadgeEl: HTMLElement | null = null;
 
@@ -129,6 +140,62 @@ function buildLargeFileExcerptFooter(byteLength: number): string {
 
 function getViewerHost(): HTMLElement | null {
   return document.getElementById('fileViewerHost');
+}
+
+function getIntentToggleButton(): HTMLButtonElement | null {
+  return document.getElementById('btnFileViewerIntent') as HTMLButtonElement | null;
+}
+
+function getIntentStatusElement(): HTMLElement | null {
+  return document.getElementById('fileViewerIntentStatus');
+}
+
+function isIntentModeEnabledForPath(path: string, defaultEnabled: boolean): boolean {
+  if (intentModeEnabledByPath.has(path)) {
+    return intentModeEnabledByPath.get(path) === true;
+  }
+  return defaultEnabled;
+}
+
+function setIntentModeEnabledForPath(path: string, enabled: boolean): void {
+  intentModeEnabledByPath.set(path, enabled);
+  updateIntentToolbarChrome(enabled, 0);
+}
+
+function updateIntentToolbarChrome(enabled: boolean, staleCount: number): void {
+  const toggle = editorIntentToggleEl ?? getIntentToggleButton();
+  const status = editorIntentStatusEl ?? getIntentStatusElement();
+  if (toggle) {
+    toggle.classList.toggle('is-active', enabled);
+    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  }
+  if (!status) return;
+  if (!enabled) {
+    status.hidden = true;
+    status.textContent = '';
+    status.className = 'file-viewer-intent-status';
+    return;
+  }
+  status.hidden = false;
+  if (staleCount > 0) {
+    status.textContent = `${staleCount} stale`;
+    status.className = 'file-viewer-intent-status file-viewer-intent-status--stale';
+  } else {
+    status.textContent = 'in sync';
+    status.className = 'file-viewer-intent-status file-viewer-intent-status--ok';
+  }
+}
+
+function syncIntentToolbarAvailability(tab: ViewerTabState | null): void {
+  const toggle = editorIntentToggleEl ?? getIntentToggleButton();
+  if (!toggle) return;
+  const available =
+    Boolean(tab) &&
+    tab!.viewMode === 'editor' &&
+    !tab!.readOnlyExcerpt &&
+    getLocalServerAvailable() &&
+    Boolean(editorView);
+  toggle.disabled = !available;
 }
 
 function getSaveButton(): HTMLButtonElement | null {
@@ -276,6 +343,7 @@ function updateViewerChrome(): void {
     }
   }
   refreshFileViewerTabs();
+  syncIntentToolbarAvailability(tab);
 }
 
 function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
@@ -328,11 +396,12 @@ function mountEditor(tab: ViewerTabState, content: string): void {
   const path = tab.path;
 
   void (async () => {
-    const [langExts, useLsp, editorAiConfig, editorSettings] = await Promise.all([
+    const [langExts, useLsp, editorAiConfig, editorSettings, intentConfig] = await Promise.all([
       loadLanguageExtensionsForPath(path),
       isLspEnabledForViewer(),
       loadEditorAiCompletionConfig(),
       loadEditorSettings(),
+      loadEditorIntentModeConfig(),
     ]);
     const readOnlyExts: Extension[] = tab.readOnlyExcerpt
       ? [EditorView.editable.of(false), EditorState.readOnly.of(true)]
@@ -364,6 +433,32 @@ function mountEditor(tab: ViewerTabState, content: string): void {
             canRequest: () => getLocalServerAvailable(),
           })
         : [];
+    const intentInitialEnabled = isIntentModeEnabledForPath(path, intentConfig.enabledByDefault);
+    const intentExts =
+      !tab.readOnlyExcerpt && getLocalServerAvailable()
+        ? editorIntentModeExtensions({
+            filePath: path,
+            config: intentConfig,
+            canRequest: () => getLocalServerAvailable(),
+            initialEnabled: intentInitialEnabled,
+            onEnabledChange: (enabled) => {
+              setIntentModeEnabledForPath(path, enabled);
+            },
+            onStaleCount: (count) => {
+              if (!editorView) return;
+              updateIntentToolbarChrome(isIntentModeEnabled(editorView.state), count);
+            },
+            onStatus: (message) => {
+              if (!editorAiStatusEl) return;
+              if (message) {
+                editorAiStatusEl.textContent = message;
+                editorAiStatusEl.hidden = false;
+              } else if (!editorAiConfig.enabled) {
+                editorAiStatusEl.hidden = true;
+              }
+            },
+          })
+        : [];
 
     const state = EditorState.create({
       doc: content,
@@ -393,6 +488,7 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         ...fileEditorKeymapExtensions(),
         ...aiExts,
         ...quickEditExts,
+        ...intentExts,
         keymap.of([
           {
             key: 'Mod-s',
@@ -415,6 +511,11 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     if (getActiveViewerTabPath() !== path || !editorMount.isConnected) return;
     editorView = new EditorView({ state, parent: editorMount });
     editorViewPath = path;
+    if (intentExts.length > 0) {
+      mountIntentModeEditor(editorView, intentInitialEnabled);
+      updateIntentToolbarChrome(intentInitialEnabled, 0);
+    }
+    syncIntentToolbarAvailability(tab);
 
     if (tab.pendingInitialLineRange && editorView) {
       const { startLine, endLine } = tab.pendingInitialLineRange;
@@ -743,6 +844,15 @@ export function bindFileViewerControls(): void {
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       void saveCurrentFile();
+    });
+  }
+
+  editorIntentToggleEl = getIntentToggleButton();
+  editorIntentStatusEl = getIntentStatusElement();
+  if (editorIntentToggleEl) {
+    editorIntentToggleEl.addEventListener('click', () => {
+      if (!editorView || !getLocalServerAvailable()) return;
+      toggleIntentMode(editorView);
     });
   }
 

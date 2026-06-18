@@ -7,6 +7,10 @@ import {
   createWorkspaceSubfolder,
   type WorkspaceBrowseEntry,
 } from '../config/workspace-api';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 
 export interface WorkspaceFolderPickerResult {
   cancelled: boolean;
@@ -50,6 +54,7 @@ let resolvePicker: ((result: WorkspaceFolderPickerResult) => void) | null = null
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let previousFocus: HTMLElement | null = null;
 let shellListenersBound = false;
+let chromePopoverRegistered = false;
 
 /** True while the inline "New folder" name field is visible. */
 function isNewFolderPanelVisible(): boolean {
@@ -705,6 +710,8 @@ function showOverlay(): void {
   if (!overlayEl || !dialogEl) {
     return;
   }
+  registerChromePopover();
+  chromePopoverRegistered = true;
   overlayEl.hidden = false;
   overlayEl.classList.remove('hidden');
   if (!isNewFolderPanelVisible()) {
@@ -726,6 +733,10 @@ function finishPicker(result: WorkspaceFolderPickerResult): void {
   detachEscape();
   hideNewFolderPanel();
   hideOverlay();
+  if (chromePopoverRegistered) {
+    unregisterChromePopover();
+    chromePopoverRegistered = false;
+  }
   const resolve = resolvePicker;
   resolvePicker = null;
   previousFocus?.focus();

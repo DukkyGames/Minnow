@@ -5,8 +5,9 @@
  * - LM Studio often ignores `reasoning_effort` in favor of Inference UI custom fields
  *   (https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/988).
  * - OpenAI-compatible clients may accept `reasoning_effort` or nested `reasoning.effort`.
- * - We send best-effort keys for both lm-studio-v0 and openai-v1; parsing still works when
- *   the provider emits reasoning regardless.
+ * - `lm-studio-v0`: `reasoning_effort`, nested `reasoning.effort`, and `enable_thinking`.
+ * - `openai-v1`: nested `thinking.type` (`enabled` / `disabled`); Kimi/Moonshot reject
+ *   `enable_thinking` and non-standard `reasoning_effort` values.
  */
 
 import type { ApiKind } from '../providers/types';
@@ -71,21 +72,20 @@ export function thinkingToCompletionBody(
 
   // OpenAI-compatible APIs reject `reasoning_effort: "none"`. DeepSeek V3/V4 needs an
   // explicit thinking disable flag or it streams only to `reasoning_content`.
-  if (resolved === 'off' && apiKind === 'openai-v1') {
-    return { body: { thinking: { type: 'disabled' } } };
+  // Kimi/Moonshot reject `enable_thinking` — use nested `thinking.type` instead.
+  if (apiKind === 'openai-v1') {
+    if (resolved === 'off') {
+      return { body: { thinking: { type: 'disabled' } } };
+    }
+    return { body: { thinking: { type: 'enabled' } } };
   }
+
   const effort = effortForResolved(resolved);
   const body: Record<string, unknown> = {
     reasoning_effort: effort,
     reasoning: { effort },
+    enable_thinking: resolved === 'on',
   };
 
-  if (resolved === 'off') {
-    body.enable_thinking = false;
-  } else {
-    body.enable_thinking = true;
-  }
-
-  const hint = apiKind === 'lm-studio-v0' ? LM_STUDIO_BEST_EFFORT : undefined;
-  return { body, hint };
+  return { body, hint: LM_STUDIO_BEST_EFFORT };
 }

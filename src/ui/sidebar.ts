@@ -5,8 +5,8 @@ import { isChatStreaming } from '../chat/streaming-state';
 import {
   createGroup,
   deleteGroup,
-  dismissActiveBoardView,
   getActiveBoardGroup,
+  buildSortedWorkspaceSidebarEntries,
   getGroupsForWorkspace,
   openBoardGroup,
   renameGroup,
@@ -61,8 +61,13 @@ import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selec
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
 import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
-import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
+import {
+  isOrchestrateHubMounted,
+  refreshOrchestrateHubBoardList,
+  teardownOrchestrateHub,
+} from './orchestrate-hub';
 import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
+import { exitBoardViewForNavigation } from './exit-board-view';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
 import { syncReefWidgetSettingsFromActiveChat } from './reef-widget-settings';
 import { syncWorkAgentDevFromActiveChat, workAgentSidebarAbbrev } from './work-agent-dev';
@@ -529,33 +534,34 @@ export function renderSidebar(): void {
   const workspaceChats = getChatsForWorkspace(ws, sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
     .filter(excludeAssistantChats);
-  const groupedIds = new Set<string>();
   const highlightChatId = sidebarHighlightChatId();
+  const sidebarEntries = buildSortedWorkspaceSidebarEntries(
+    getGroupsForWorkspace(ws),
+    workspaceChats,
+  );
 
-  for (const group of getGroupsForWorkspace(ws)) {
-    const members = workspaceChats.filter((c) => c.groupId === group.id);
-    members.forEach((c) => groupedIds.add(c.id));
-    appendGroupHeader(
-      list,
-      group,
-      members.length,
-      groupHasStreamingChat(group.id, workspaceChats),
-    );
-    if (!group.collapsed && members.length > 0) {
-      const membersEl = document.createElement('div');
-      membersEl.className = 'chat-group-members';
-      membersEl.setAttribute('role', 'group');
-      membersEl.setAttribute('aria-label', `${group.name} chats`);
-      for (const chat of members) {
-        appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+  for (const entry of sidebarEntries) {
+    if (entry.kind === 'group') {
+      const { group, members } = entry;
+      appendGroupHeader(
+        list,
+        group,
+        members.length,
+        groupHasStreamingChat(group.id, workspaceChats),
+      );
+      if (!group.collapsed && members.length > 0) {
+        const membersEl = document.createElement('div');
+        membersEl.className = 'chat-group-members';
+        membersEl.setAttribute('role', 'group');
+        membersEl.setAttribute('aria-label', `${group.name} chats`);
+        for (const chat of members) {
+          appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+        }
+        list.appendChild(membersEl);
       }
-      list.appendChild(membersEl);
+      continue;
     }
-  }
-
-  const ungrouped = workspaceChats.filter((c) => !groupedIds.has(c.id));
-  for (const chat of ungrouped) {
-    appendChatRow(list, chat, highlightChatId);
+    appendChatRow(list, entry.chat, highlightChatId);
   }
 
   const unassigned = getUnassignedChats(sessionState)
@@ -627,6 +633,9 @@ function onChatRemoved(result: RemoveChatResult): void {
     void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
   renderSidebar();
+  if (isOrchestrateHubMounted()) {
+    refreshOrchestrateHubBoardList();
+  }
   closeMobileSidebar();
 }
 
@@ -659,7 +668,7 @@ export function switchChat(id: string): void {
     return;
   }
 
-  const boardWasOpen = dismissActiveBoardView();
+  const boardWasOpen = exitBoardViewForNavigation();
 
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);
@@ -766,7 +775,7 @@ export function createChatWithMode(
   if (sessionState?.activeId) {
     suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
   }
-  dismissActiveBoardView();
+  exitBoardViewForNavigation();
 
   const modeId = normalizeModeId(options.modeId);
   const { modelId, providerId } = readTopBarModelBinding();

@@ -24,13 +24,22 @@ describe('preview-electron-visibility', () => {
   let hideCalls = 0;
   let lastBounds: { x: number; y: number; width: number; height: number } | null = null;
 
+  let layoutSyncRaf = 0;
+  const originalRaf = globalThis.requestAnimationFrame;
+
   beforeEach(() => {
     elements.clear();
     showCalls = 0;
     hideCalls = 0;
     lastBounds = null;
+    layoutSyncRaf = 0;
     resetFilePanelStateForTests();
     resetChromePopoverRegistryForTests();
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      layoutSyncRaf += 1;
+      cb(0);
+      return layoutSyncRaf;
+    }) as typeof requestAnimationFrame;
     Object.defineProperty(globalThis, 'document', {
       value: {
         getElementById: (id: string) => {
@@ -79,6 +88,7 @@ describe('preview-electron-visibility', () => {
   });
 
   afterEach(() => {
+    globalThis.requestAnimationFrame = originalRaf;
     Object.defineProperty(globalThis, 'document', {
       value: originalDocument,
       configurable: true,
@@ -177,6 +187,22 @@ describe('preview-electron-visibility', () => {
 
   test('syncElectronPreviewHostLayout hides when preview pane is closed', async () => {
     await syncElectronPreviewHostLayout();
+    assert.equal(showCalls, 0);
+    assert.equal(hideCalls, 1);
+    assert.equal(lastBounds, null);
+  });
+
+  test('syncElectronPreviewHostLayout hides when chrome popover is open', async () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    registerChromePopover();
+
+    await syncElectronPreviewHostLayout();
+
     assert.equal(showCalls, 0);
     assert.equal(hideCalls, 1);
     assert.equal(lastBounds, null);
