@@ -212,6 +212,10 @@ function ensureStreamEndSubscription(): void {
         if (finalChatId && endedChatId === finalChatId) {
           finalizeFinalTestOnStreamEnd(group, planner);
           void drainTaskQueue(group, planner);
+          // Deferred drain: notifyChatStreamEnded fires before setStreaming(false)
+          // clears the ended chat. In sequential mode the concurrency check sees
+          // count=1 and enqueues instead of starting. Re-drain after the flag clears.
+          queueMicrotask(() => void drainTaskQueue(group, planner));
           continue;
         }
 
@@ -219,6 +223,8 @@ function ensureStreamEndSubscription(): void {
         if (taskByBuild) {
           finalizeBoardTaskOnStreamEnd(group, taskByBuild, planner);
           void drainTaskQueue(group, planner);
+          // Same deferred drain for the build→testing transition in sequential mode.
+          queueMicrotask(() => void drainTaskQueue(group, planner));
           continue;
         }
 
@@ -226,6 +232,7 @@ function ensureStreamEndSubscription(): void {
         if (taskByTest) {
           finalizeTaskTestingOnStreamEnd(group, taskByTest, planner);
           void drainTaskQueue(group, planner);
+          queueMicrotask(() => void drainTaskQueue(group, planner));
         }
       }
     });
