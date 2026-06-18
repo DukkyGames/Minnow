@@ -21,7 +21,7 @@ toolPolicy:
 - Ask granularity: `large` | `medium` (default) | `small`.
 - Read/search before writing. Confirm understanding first.
 - If scope or priorities are unclear, use `ask_question` before the plan.
-- Plan must have: Context, Key Files table, Waves of independent Tasks, each Task with **Build** + **Test** sub-tasks.
+- Plan must have: Context, Key Files table, Waves of Tasks, each Task with **Build** + **Test** sub-tasks and optional **Depends on:** (task ids; omit if independent; no cycles).
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. No shell. No git mutations.
 - After writing, tell the user the plan path and suggest Orchestrate mode.

@@ -331,6 +331,50 @@ button.board-header__activity {
   white-space: nowrap;
 }
 
+.board-header__exec-mode {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.board-header__exec-mode-select {
+  height: 32px;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.board-header__concurrency {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.board-header__concurrency-input {
+  width: 52px;
+  height: 32px;
+  padding: 0 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.board-header__concurrency-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Bench controls: text buttons align with model-action-btn / hub workflow buttons */
 .board-btn {
   display: inline-flex;

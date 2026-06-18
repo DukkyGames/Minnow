@@ -138,12 +138,28 @@ export function isPriorWavesComplete(
   return true;
 }
 
+/** True when all explicit dependsOn tasks are complete (or when the task has none). */
+export function isDepsComplete(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): boolean {
+  if (!task.dependsOn?.length) return true;
+  for (const depId of task.dependsOn) {
+    if (depId === task.id) continue; // skip self-edges
+    const dep = board.tasks.find((t) => t.id === depId);
+    if (!dep) continue; // unknown ids: don't hard-block
+    if (dep.status !== 'complete') return false;
+  }
+  return true;
+}
+
 /** Planned task whose prior waves are complete (simple wave ordering). */
 export function isTaskReadyForAuto(
   board: OrchestrateBoardState,
   task: BoardTask,
 ): boolean {
   if (task.status !== 'planned') return false;
+  if (!isDepsComplete(board, task)) return false;
   return isPriorWavesComplete(board, task.wave);
 }
 
@@ -191,13 +207,16 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
 /** Resolved execution mode (defaults to manual). */
 export function getBoardExecutionMode(
   board: OrchestrateBoardState | null | undefined,
-): 'manual' | 'auto' {
-  return board?.executionMode === 'auto' ? 'auto' : 'manual';
+): 'manual' | 'auto' | 'sequential' {
+  const m = board?.executionMode;
+  if (m === 'auto' || m === 'sequential') return m;
+  return 'manual';
 }
 
-/** True when the board is in auto-pilot delegation mode. */
+/** True when the board is in auto-pilot delegation mode (auto or sequential). */
 export function isBoardAutoMode(group: ChatGroup): boolean {
-  return getBoardExecutionMode(group.orchestrateBoard) === 'auto';
+  const mode = getBoardExecutionMode(group.orchestrateBoard);
+  return mode === 'auto' || mode === 'sequential';
 }
 
 /** Recompute wave rows (status, taskCount, completeCount). */
@@ -279,6 +298,7 @@ export type InitBoardInput = {
     category: BoardTask['category'];
     build?: string;
     test?: string;
+    dependsOn?: string[];
   }>;
   waves: Array<{ id: number | string }>;
 };
@@ -298,6 +318,7 @@ export function initBoard(
     status: 'planned' as BoardTaskStatus,
     ...(t.build?.trim() ? { buildSpec: t.build.trim() } : {}),
     ...(t.test?.trim() ? { testSpec: t.test.trim() } : {}),
+    ...(t.dependsOn && t.dependsOn.length ? { dependsOn: [...t.dependsOn] } : {}),
   }));
   const waves: BoardWave[] = input.waves.map((w) => ({
     id: w.id,

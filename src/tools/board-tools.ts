@@ -169,6 +169,7 @@ export type BoardInitArgs = {
     category: BoardCategory;
     build?: string;
     test?: string;
+    dependsOn?: string[];
   }>;
   waves: Array<{ id: number | string }>;
 };
@@ -264,6 +265,10 @@ export function validateBoardInitArgs(
     }
     const build = typeof r.build === 'string' ? r.build.trim() : '';
     const test = typeof r.test === 'string' ? r.test.trim() : '';
+    const rawDeps = coerceToolArrayField(r.dependsOn ?? r.depends_on);
+    const deps = rawDeps
+      ? rawDeps.map((d) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
+      : [];
     taskIds.add(id);
     parsedTasks.push({
       id,
@@ -272,7 +277,49 @@ export function validateBoardInitArgs(
       category,
       ...(build ? { build } : {}),
       ...(test ? { test } : {}),
+      ...(deps.length ? { dependsOn: deps } : {}),
     });
+  }
+
+  // Reference + self-dep validation
+  for (const task of parsedTasks) {
+    for (const dep of task.dependsOn ?? []) {
+      if (dep === task.id) {
+        return { ok: false, error: `Error: task "${task.id}" depends on itself` };
+      }
+      if (!taskIds.has(dep)) {
+        return {
+          ok: false,
+          error: `Error: task "${task.id}" depends on unknown task "${dep}"`,
+        };
+      }
+    }
+  }
+
+  // Cycle detection (iterative DFS)
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>(parsedTasks.map((t) => [t.id, WHITE]));
+  for (const start of parsedTasks) {
+    if (color.get(start.id) !== WHITE) continue;
+    const stack: Array<{ id: string; visited: boolean }> = [{ id: start.id, visited: false }];
+    while (stack.length) {
+      const top = stack[stack.length - 1]!;
+      if (!top.visited) {
+        top.visited = true;
+        color.set(top.id, GRAY);
+        const node = parsedTasks.find((t) => t.id === top.id);
+        for (const dep of node?.dependsOn ?? []) {
+          const c = color.get(dep) ?? WHITE;
+          if (c === GRAY) {
+            return { ok: false, error: `Error: dependency cycle detected involving task "${dep}"` };
+          }
+          if (c === WHITE) stack.push({ id: dep, visited: false });
+        }
+      } else {
+        stack.pop();
+        color.set(top.id, BLACK);
+      }
+    }
   }
 
   return {
@@ -462,6 +509,7 @@ async function executeBoardInit(
         category: t.category,
         build: t.build,
         test: t.test,
+        dependsOn: t.dependsOn,
       })),
       waves: validated.args.waves,
     },

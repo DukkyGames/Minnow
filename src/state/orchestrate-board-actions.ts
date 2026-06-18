@@ -242,6 +242,7 @@ function ensureStreamEndSubscription(): void {
 }
 
 function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): number {
+  if (board.executionMode === 'sequential') return 1;
   const n = board.maxConcurrentTasks;
   return typeof n === 'number' && n > 0 ? n : DEFAULT_MAX_CONCURRENT;
 }
@@ -1068,10 +1069,10 @@ export function moveTaskStatus(
   }
 }
 
-/** Persist auto/manual execution mode and kick off delegation when enabling auto. */
+/** Persist auto/manual/sequential execution mode and kick off delegation when enabling. */
 export function setBoardExecutionMode(
   group: ChatGroup,
-  mode: 'manual' | 'auto',
+  mode: 'manual' | 'auto' | 'sequential',
   plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;
@@ -1080,12 +1081,31 @@ export function setBoardExecutionMode(
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
-  if (mode === 'auto') {
+  if (mode === 'auto' || mode === 'sequential') {
     void autoDelegateNext(group, plannerChat);
   }
 }
 
-/** Start all ready planned tasks up to the concurrency cap (auto-pilot). */
+/** Set max concurrent tasks, clamped to [1,20]. Drains queue when in auto/sequential mode. */
+export function setBoardMaxConcurrent(
+  group: ChatGroup,
+  value: number,
+  plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const clamped = Math.max(1, Math.min(20, Math.floor(value)));
+  if (board.maxConcurrentTasks === clamped) return;
+  board.maxConcurrentTasks = clamped;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  if (isBoardAutoMode(group)) {
+    void drainTaskQueue(group, plannerChat);
+  }
+}
+
+/** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */
 export async function autoDelegateNext(
   group: ChatGroup,
   plannerChat: Chat,
@@ -1095,11 +1115,19 @@ export async function autoDelegateNext(
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
 
-  const ready = board.tasks.filter(
-    (t) =>
-      isTaskReadyForAuto(board, t) ||
-      isTaskStalledForRestart(board, t, isTaskChatActive),
-  );
+  const waveOrder = new Map(board.waves.map((w, i) => [String(w.id), i]));
+  const ready = board.tasks
+    .filter(
+      (t) =>
+        isTaskReadyForAuto(board, t) ||
+        isTaskStalledForRestart(board, t, isTaskChatActive),
+    )
+    .sort((a, b) => {
+      const wa = waveOrder.get(String(a.wave)) ?? 999;
+      const wb = waveOrder.get(String(b.wave)) ?? 999;
+      if (wa !== wb) return wa - wb;
+      return board.tasks.indexOf(a) - board.tasks.indexOf(b);
+    });
   for (const task of ready) {
     if (countRunningTaskChats(board) >= maxConcurrent(board)) {
       enqueueTask(group.id, task.id);
@@ -1107,6 +1135,7 @@ export async function autoDelegateNext(
     }
     await resumeBoardTask(group, task.id, plannerChat);
   }
+  await drainTaskQueue(group, plannerChat);
 }
 
 function ensureAutoDriveSubscription(): void {
