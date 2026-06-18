@@ -25,6 +25,7 @@ function setupDom() {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  globalThis.requestAnimationFrame = (cb) => window.requestAnimationFrame(cb);
   const area = document.createElement('div');
   area.id = 'chatArea';
   document.body.appendChild(area);
