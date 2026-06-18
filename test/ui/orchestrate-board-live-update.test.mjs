@@ -8,6 +8,7 @@ import { Window } from 'happy-dom';
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const FIXED_GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
+const FIXED_EXTERNAL_CHAT_ID = '44444444-4444-4444-4444-444444444444';
 const FIXED_RUN_ID = '22222222-2222-2222-2222-222222222222';
 const FIXED_TASK_CHAT_ID = '33333333-3333-3333-3333-333333333333';
 const PLAN_PATH = 'documentation/plans/fixture-plan.md';
@@ -31,9 +32,9 @@ const {
   buildKanbanRefreshKey,
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
-const { setViewModeToggleRenderHandlerForTests } = await import(
-  '../../src/ui/view-mode-toggle.ts'
-);
+const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
+const { switchChat, createChatWithMode, createChat } = await import('../../src/ui/sidebar.ts');
+const { openBoardGroup } = await import('../../src/state/chat-groups.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 const {
   emitMainTurnActivity,
@@ -57,6 +58,19 @@ function setupDom() {
   const main = document.createElement('div');
   main.id = 'mainColumn';
   document.body.appendChild(main);
+
+  const modelSelect = document.createElement('select');
+  modelSelect.id = 'modelSelect';
+  document.body.appendChild(modelSelect);
+
+  const sendBtn = document.createElement('button');
+  sendBtn.id = 'sendBtn';
+  sendBtn.type = 'button';
+  document.body.appendChild(sendBtn);
+
+  const msgInput = document.createElement('textarea');
+  msgInput.id = 'msgInput';
+  document.body.appendChild(msgInput);
   for (const id of [
     'stripTPS',
     'stripTTFT',
@@ -672,15 +686,12 @@ describe('orchestrate board live updates', () => {
     );
   });
 
-  test('header activity chip opens chat view on click', () => {
+  test('header activity chip is a button when assistant history exists', () => {
     setupDom();
     const chat = makeOrchestrateChat();
     chat.history = [
       { role: 'user', content: 'Run the plan' },
-      {
-        role: 'assistant',
-        content: 'Initialized the board and spawned builders.',
-      },
+      { role: 'assistant', content: 'Initialized the board and spawned builders.' },
     ];
     const group = initBoardForChat(chat, {
       planPath: PLAN_PATH,
@@ -689,20 +700,199 @@ describe('orchestrate board live updates', () => {
     });
     setSessionStateForTests(sessionStateForBoard(chat, group));
 
-    let renderCalls = 0;
-    setViewModeToggleRenderHandlerForTests(() => {
-      renderCalls += 1;
-    });
-
     renderBoardView(group);
     const chip = document.querySelector('.board-header__activity');
     assert.ok(chip);
     assert.equal(chip.tagName, 'BUTTON');
-    chip.click();
-    assert.equal(chat.viewMode, 'chat');
-    assert.equal(renderCalls, 1);
+    assert.equal(chip.dataset.boardActivityWired, 'true');
+  });
 
-    setViewModeToggleRenderHandlerForTests(null);
+  test('setOrchestrateViewMode chat dismisses board (activity chip / header toggle path)', async () => {
+    setupDom();
+    const chat = makeOrchestrateChat();
+    chat.history = [{ role: 'user', content: 'Run the plan' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    assert.ok(document.querySelector('.board-root'));
+
+    setOrchestrateViewMode('chat');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.querySelector('.msg.user'));
+  });
+
+  test('switchChat to same planner dismisses board DOM', () => {
+    setupDom();
+    const chat = makeOrchestrateChat();
+    chat.history = [{ role: 'user', content: 'Run the plan' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    assert.ok(document.querySelector('.board-root'));
+
+    switchChat(chat.id);
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.querySelector('.msg.user'));
+  });
+
+  test('switchChat to external chat dismisses board and renders target chat', () => {
+    setupDom();
+    const chat = makeOrchestrateChat();
+    const external = createEmptyChatObject('');
+    external.id = FIXED_EXTERNAL_CHAT_ID;
+    external.modeId = 'general';
+    external.history = [{ role: 'user', content: 'Outside folder chat' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, external] }),
+    );
+
+    renderBoardView(group);
+    assert.ok(document.querySelector('.board-root'));
+
+    switchChat(external.id);
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().id, external.id);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.querySelector('.msg.user'));
+    assert.match(
+      document.querySelector('.msg.user')?.textContent ?? '',
+      /Outside folder chat/,
+    );
+  });
+
+  test('openBoardGroup from external chat focuses planner before mounting board', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const external = createEmptyChatObject('');
+    external.id = FIXED_EXTERNAL_CHAT_ID;
+    external.modeId = 'general';
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests({
+      version: 2,
+      activeId: external.id,
+      sidebarCollapsed: false,
+      chats: [chat, external],
+      groups: [group],
+    });
+
+    openBoardGroup(group.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForKanban();
+
+    assert.equal(getActiveChat().id, chat.id);
+    assert.equal(group.viewMode, 'board');
+    assert.ok(document.querySelector('.board-root'));
+  });
+
+  test('switchChat to same external chat dismisses board opened from folder header', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const external = createEmptyChatObject('');
+    external.id = FIXED_EXTERNAL_CHAT_ID;
+    external.modeId = 'general';
+    external.history = [{ role: 'user', content: 'Outside folder chat' }];
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests({
+      version: 2,
+      activeId: external.id,
+      sidebarCollapsed: false,
+      chats: [chat, external],
+      groups: [group],
+    });
+
+    openBoardGroup(group.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    switchChat(external.id);
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().id, external.id);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.querySelector('.msg.user'));
+  });
+
+  test('createChatWithMode dismisses board and renders new chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    const created = createChatWithMode({ modeId: 'general' });
+    assert.equal(created.ok, true);
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().id, created.chatId);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.getElementById('vibeHub'));
+  });
+
+  test('createChat from orchestrate board starts general-mode chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    createChat();
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().modeId, 'general');
+    assert.notEqual(getActiveChat().id, chat.id);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.getElementById('vibeHub'));
   });
 
   test('header activity chip shows last assistant message', () => {

@@ -4,11 +4,16 @@
  */
 
 import { apiMessageContentToText, contentPartsToText } from '../api/message-content.ts';
-import { estimateTokensFromText } from './prompts/token-estimate-core';
+import {
+  ESTIMATE_IMAGE_URL_TOKENS,
+  estimateTokensFromText,
+} from './prompts/token-estimate-core';
 import type { ApiMessage, ContentPart } from '../types';
 
+import type { ArchiveConfig } from './archive/types';
+
 /** How to fit outbound messages under a token ceiling. */
-export type ContextEnforcementPolicy = 'summarize' | 'slide' | 'truncate';
+export type ContextEnforcementPolicy = 'summarize' | 'slide' | 'truncate' | 'archive';
 
 /** Shipped default when a row omits policy. */
 export const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy = 'slide';
@@ -23,6 +28,8 @@ export interface AgentContextBudgetConfig {
   enforcementPolicy: ContextEnforcementPolicy;
   minRecentTurns?: number;
   summaryReserveTokens?: number;
+  /** Tuning when enforcementPolicy is `archive` (MIN-139). */
+  archive?: ArchiveConfig;
 }
 
 export interface ResolvedContextBudget {
@@ -61,7 +68,7 @@ export function serializeApiMessageForEstimate(msg: ApiMessage): string {
     if (Array.isArray(msg.content)) {
       let extra = 0;
       for (const part of msg.content) {
-        if (part.type === 'image_url') extra += 256;
+        if (part.type === 'image_url') extra += ESTIMATE_IMAGE_URL_TOKENS;
       }
       return text + ' '.repeat(extra);
     }
@@ -91,6 +98,7 @@ export function agentContextBudgetFromWorkAgent(agent: {
   contextEnforcementPolicy?: ContextEnforcementPolicy | null;
   minRecentTurns?: number;
   summaryReserveTokens?: number;
+  archive?: ArchiveConfig;
 }): AgentContextBudgetConfig {
   return {
     maxInputTokens: normalizePositiveInt(agent.maxInputTokens ?? null),
@@ -98,6 +106,7 @@ export function agentContextBudgetFromWorkAgent(agent: {
       agent.contextEnforcementPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
     minRecentTurns: agent.minRecentTurns,
     summaryReserveTokens: agent.summaryReserveTokens,
+    archive: agent.archive,
   };
 }
 
@@ -423,7 +432,7 @@ export function applyContextBudget(
     const out = applyTruncatePolicy(messages, limit, systemEnd);
     nextMessages = out.messages;
     dropped = out.dropped;
-  } else if (policy === 'slide') {
+  } else if (policy === 'slide' || policy === 'archive') {
     const out = applySlidePolicy(messages, limit, systemEnd, minRecentTurns);
     nextMessages = out.messages;
     dropped = out.dropped;

@@ -213,23 +213,39 @@ async function refreshProposalBadge(): Promise<void> {
   badge.classList.toggle('hidden', count === 0);
 }
 
+export type ProposalsPanelSelectors = {
+  list: string;
+  offline: string;
+  count: string;
+};
+
+const DEFAULT_PROPOSAL_SELECTORS: ProposalsPanelSelectors = {
+  list: '#settingsMemoryProposalsList',
+  offline: '#settingsMemoryProposalsOffline',
+  count: '#settingsMemoryProposalsCount',
+};
+
 /** Mount and refresh the proposals review panel inside Memory settings. */
 export async function mountMemoryProposalsPanel(
   container: HTMLElement,
   setStatus: StatusFn,
-  hooks?: { onMemoryAccepted?: () => void | Promise<void> },
+  hooks?: {
+    onMemoryAccepted?: () => void | Promise<void>;
+    renderEmpty?: (mount: HTMLElement) => void;
+  },
+  selectors: ProposalsPanelSelectors = DEFAULT_PROPOSAL_SELECTORS,
 ): Promise<void> {
   if (!panelBound) {
     panelBound = true;
   }
 
-  const listEl = container.querySelector('#settingsMemoryProposalsList');
-  const offlineEl = container.querySelector('#settingsMemoryProposalsOffline');
-  const countEl = container.querySelector('#settingsMemoryProposalsCount');
+  const listEl = container.querySelector(selectors.list);
+  const offlineEl = container.querySelector(selectors.offline);
+  const countEl = container.querySelector(selectors.count);
   if (!(listEl instanceof HTMLElement)) return;
 
   const rerender = (): void => {
-    void mountMemoryProposalsPanel(container, setStatus, hooks);
+    void mountMemoryProposalsPanel(container, setStatus, hooks, selectors);
   };
 
   listEl.replaceChildren();
@@ -266,10 +282,14 @@ export async function mountMemoryProposalsPanel(
   }
 
   if (!total) {
-    const empty = document.createElement('p');
-    empty.className = 'settings-section-note';
-    empty.textContent = 'No pending proposals.';
-    listEl.append(empty);
+    if (hooks?.renderEmpty) {
+      hooks.renderEmpty(listEl);
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'settings-section-note';
+      empty.textContent = 'No pending proposals.';
+      listEl.append(empty);
+    }
     return;
   }
 

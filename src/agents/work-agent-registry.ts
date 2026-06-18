@@ -19,6 +19,7 @@ export const DEFAULT_REGISTRY_IDS = [
   'reviewer',
   'researcher',
   'ui-designer',
+  'tester',
 ] as const;
 
 export interface WorkAgentRegistryIndex {
@@ -133,6 +134,10 @@ export function mergeWorkAgentDefinition(
       override.summaryReserveTokens !== undefined
         ? override.summaryReserveTokens
         : builtin.summaryReserveTokens,
+    archive:
+      override.archive !== undefined
+        ? { ...(builtin.archive ?? {}), ...override.archive }
+        : builtin.archive,
   };
 }
 

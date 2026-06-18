@@ -55,21 +55,68 @@ export async function configFileExists(relativeKey) {
   }
 }
 
-/** Serialize config.json updates so parallel dev-server settings + run-state writes do not clobber each other. */
-let configJsonQueue = Promise.resolve();
+/**
+ * JSON blobs with many concurrent writers must be read/written under one queue per file.
+ * config.json: dev-server + workspace settings; sessions/state.json: SPA autosave + terminal history.
+ */
+const SERIALIZED_CONFIG_KEYS = new Set(['config.json', 'sessions/state.json']);
+
+/** @type {Map<string, Promise<void>>} */
+const configJsonQueues = new Map();
+
+/**
+ * @param {string} relativeKey
+ * @returns {Promise<void>}
+ */
+function getConfigJsonQueue(relativeKey) {
+  let queue = configJsonQueues.get(relativeKey);
+  if (!queue) {
+    queue = Promise.resolve();
+    configJsonQueues.set(relativeKey, queue);
+  }
+  return queue;
+}
 
 /**
  * @template T
+ * @param {string} relativeKey
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  */
-function withConfigJsonLock(fn) {
-  const run = configJsonQueue.then(fn, fn);
-  configJsonQueue = run.then(
-    () => undefined,
-    () => undefined,
+function withConfigJsonLock(relativeKey, fn) {
+  const run = getConfigJsonQueue(relativeKey).then(fn, fn);
+  configJsonQueues.set(
+    relativeKey,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
   );
   return run;
+}
+
+/**
+ * Windows (and occasionally Unix AV/indexers) can briefly lock the destination during rename.
+ * @param {string} src
+ * @param {string} dest
+ */
+async function renameConfigAtomic(src, dest) {
+  const maxAttempts = 6;
+  const baseDelayMs = 25;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fs.rename(src, dest);
+      return;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+      const retryable = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES';
+      if (retryable && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -95,10 +142,10 @@ async function readConfigJsonUnlocked(relativeKey) {
  * @returns {Promise<unknown>}
  */
 export async function readConfigJson(relativeKey) {
-  if (relativeKey !== 'config.json') {
+  if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
     return readConfigJsonUnlocked(relativeKey);
   }
-  return withConfigJsonLock(() => readConfigJsonUnlocked(relativeKey));
+  return withConfigJsonLock(relativeKey, () => readConfigJsonUnlocked(relativeKey));
 }
 
 /**
@@ -113,7 +160,7 @@ async function writeConfigJsonUnlocked(relativeKey, data) {
   const tmp = `${full}.tmp-${process.pid}-${Date.now()}`;
   const body = `${JSON.stringify(data, null, 2)}\n`;
   await fs.writeFile(tmp, body, 'utf8');
-  await fs.rename(tmp, full);
+  await renameConfigAtomic(tmp, full);
   if (relativeKey === 'tools.json' || relativeKey === 'search.json') {
     await chmodSecretFile(full);
   }
@@ -124,10 +171,32 @@ async function writeConfigJsonUnlocked(relativeKey, data) {
  * @param {unknown} data
  */
 export async function writeConfigJson(relativeKey, data) {
-  if (relativeKey !== 'config.json') {
+  if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
     return writeConfigJsonUnlocked(relativeKey, data);
   }
-  return withConfigJsonLock(() => writeConfigJsonUnlocked(relativeKey, data));
+  return withConfigJsonLock(relativeKey, () => writeConfigJsonUnlocked(relativeKey, data));
+}
+
+/**
+ * Read-modify-write under the per-file queue (required for sessions/state.json terminal history, etc.).
+ * @template T
+ * @param {string} relativeKey
+ * @param {(current: unknown) => T | Promise<T>} mutator
+ * @returns {Promise<T>}
+ */
+export async function updateConfigJson(relativeKey, mutator) {
+  if (!SERIALIZED_CONFIG_KEYS.has(relativeKey)) {
+    const current = await readConfigJsonUnlocked(relativeKey);
+    const next = await mutator(current);
+    await writeConfigJsonUnlocked(relativeKey, next);
+    return next;
+  }
+  return withConfigJsonLock(relativeKey, async () => {
+    const current = await readConfigJsonUnlocked(relativeKey);
+    const next = await mutator(current);
+    await writeConfigJsonUnlocked(relativeKey, next);
+    return next;
+  });
 }
 
 /**

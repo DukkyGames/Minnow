@@ -11,6 +11,9 @@ import { validateGgufFilename, validateRepoId } from './validate.js';
 /** Cached config token to avoid disk read on every HEAD. */
 let configTokenCache = { value: '', at: 0 };
 
+/** Abort fetch/read when no bytes arrive for this long (2 min). */
+const DOWNLOAD_STALL_MS = 120_000;
+
 /**
  * Resolve HF token from env vars (sync path for tests).
  */
@@ -85,7 +88,7 @@ export async function listRepoFilesRecursive(repoId) {
  * @param {string} [quant] e.g. Q4_K_M
  */
 export async function resolveGgufFilename(repoId, quant = 'Q4_K_M') {
-  const files = await listRepoFiles(repoId);
+  const files = await listRepoFilesRecursive(repoId);
   const ggufs = files
     .map((f) => f.path)
     .filter((p) => p.toLowerCase().endsWith('.gguf'));
@@ -110,9 +113,11 @@ export async function resolveGgufFilename(repoId, quant = 'Q4_K_M') {
  */
 export async function fetchRemoteSize(repoId, filename) {
   validateRepoId(repoId);
-  validateGgufFilename(filename);
+  const repoFilePath = filename.includes('/')
+    ? validateRepoFilePath(filename)
+    : validateGgufFilename(filename);
   const token = await resolveHfTokenAsync();
-  const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
+  const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(repoFilePath)}`;
   const res = await fetch(url, { method: 'HEAD', headers: hfHeaders(token), redirect: 'follow' });
   if (!res.ok) {
     throw new Error(`Hugging Face HEAD failed (${res.status})`);
@@ -122,14 +127,59 @@ export async function fetchRemoteSize(repoId, filename) {
 }
 
 /**
+ * Read one chunk from a stream body, failing when the download stalls.
+ * @param {ReadableStreamDefaultReader<Uint8Array>} reader
+ * @param {AbortSignal | undefined} signal
+ */
+async function readChunkWithStallTimeout(reader, signal) {
+  let timer;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('Download stalled (no data received)'));
+        }, DOWNLOAD_STALL_MS);
+      }),
+      new Promise((_, reject) => {
+        if (!signal) return;
+        if (signal.aborted) {
+          reject(new Error('Download cancelled'));
+          return;
+        }
+        signal.addEventListener(
+          'abort',
+          () => reject(new Error('Download cancelled')),
+          { once: true },
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Wait until a write stream has flushed all buffered bytes.
+ * @param {import('node:fs').WriteStream} file
+ */
+function finishWriteStream(file) {
+  return new Promise((resolve, reject) => {
+    file.on('finish', resolve);
+    file.on('error', reject);
+    file.end();
+  });
+}
+
+/**
  * Stream a HF file to disk with progress callbacks.
  * @param {{ repoId: string, filename: string, destPath: string, signal?: AbortSignal, onProgress?: (bytes: number, total: number | null) => void }} opts
  */
 export async function downloadHfFile({ repoId, filename, destPath, signal, onProgress }) {
   validateRepoId(repoId);
-  validateGgufFilename(filename);
+  const repoFilePath = validateRepoFilePath(filename);
   const token = await resolveHfTokenAsync();
-  const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
+  const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(repoFilePath)}`;
   const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
   if (!res.ok || !res.body) {
     throw new Error(`Hugging Face download failed (${res.status})`);
@@ -149,8 +199,9 @@ export async function downloadHfFile({ repoId, filename, destPath, signal, onPro
       if (signal?.aborted) {
         throw new Error('Download cancelled');
       }
-      const { done, value } = await reader.read();
+      const { done, value } = await readChunkWithStallTimeout(reader, signal);
       if (done) break;
+      if (!value?.byteLength) continue;
       bytesReceived += value.byteLength;
       if (!file.write(value)) {
         await new Promise((resolve) => file.once('drain', resolve));
@@ -163,10 +214,18 @@ export async function downloadHfFile({ repoId, filename, destPath, signal, onPro
     throw err;
   }
 
-  await new Promise((resolve, reject) => {
-    file.end(() => resolve());
-    file.on('error', reject);
-  });
+  await finishWriteStream(file);
+
+  if (totalBytes != null && bytesReceived < totalBytes) {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    throw new Error(`Incomplete download (${bytesReceived} of ${totalBytes} bytes)`);
+  }
+
+  const written = await fsp.stat(tmpPath);
+  if (written.size !== bytesReceived) {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    throw new Error(`Incomplete download (file size mismatch)`);
+  }
 
   await fsp.rename(tmpPath, destPath);
   return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };
@@ -194,7 +253,7 @@ export async function downloadHfRepoFile({ repoId, filename, destPath, signal, o
   validateRepoId(repoId);
   validateRepoFilePath(filename);
   const token = await resolveHfTokenAsync();
-  const url = `https://huggingface.co/${repoId}/resolve/main/${filename}`;
+  const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURI(filename)}`;
   const res = await fetch(url, { headers: hfHeaders(token), redirect: 'follow', signal });
   if (!res.ok || !res.body) {
     throw new Error(`Hugging Face download failed (${res.status}) for ${filename}`);
@@ -214,8 +273,9 @@ export async function downloadHfRepoFile({ repoId, filename, destPath, signal, o
       if (signal?.aborted) {
         throw new Error('Download cancelled');
       }
-      const { done, value } = await reader.read();
+      const { done, value } = await readChunkWithStallTimeout(reader, signal);
       if (done) break;
+      if (!value?.byteLength) continue;
       bytesReceived += value.byteLength;
       if (!file.write(value)) {
         await new Promise((resolve) => file.once('drain', resolve));
@@ -228,10 +288,18 @@ export async function downloadHfRepoFile({ repoId, filename, destPath, signal, o
     throw err;
   }
 
-  await new Promise((resolve, reject) => {
-    file.end(() => resolve());
-    file.on('error', reject);
-  });
+  await finishWriteStream(file);
+
+  if (totalBytes != null && bytesReceived < totalBytes) {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    throw new Error(`Incomplete download (${bytesReceived} of ${totalBytes} bytes)`);
+  }
+
+  const written = await fsp.stat(tmpPath);
+  if (written.size !== bytesReceived) {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+    throw new Error(`Incomplete download (file size mismatch)`);
+  }
 
   await fsp.rename(tmpPath, destPath);
   return { bytesReceived, totalBytes: totalBytes ?? bytesReceived };

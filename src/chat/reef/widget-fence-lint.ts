@@ -43,12 +43,6 @@ export function lintReefWidgetFence(html: string): ReefWidgetFenceLintResult {
     return { errors: ['Widget fence is empty.'], warnings: [] };
   }
 
-  if (TO_EXPONENTIAL_RE.test(body)) {
-    errors.push(
-      'Do not use toExponential on axis ticks (collapses Y-axis width); use toFixed instead.',
-    );
-  }
-
   if (UNQUOTED_VAR_IN_STYLE_RE.test(body)) {
     errors.push(
       'Quote CSS variables in React style objects (e.g. color: \'var(--mn-fg)\'), not bare var(--*).',
@@ -61,6 +55,12 @@ export function lintReefWidgetFence(html: string): ReefWidgetFenceLintResult {
 
   const usesRecharts = fenceUsesRecharts(body);
   if (usesRecharts) {
+    if (TO_EXPONENTIAL_RE.test(body)) {
+      errors.push(
+        'Do not use toExponential on axis ticks (collapses Y-axis width); use toFixed instead.',
+      );
+    }
+
     if (!CHART_WRAPPER_RE.test(body)) {
       errors.push('Recharts widgets must wrap the chart in an element with class rw-chart or mw-chart.');
     }

@@ -17,9 +17,9 @@ import type {
   ChatGroup,
   OrchestrateBoardState,
 } from '../types.ts';
-import { getBoardGroupForChat, linkPlannerChatToBoardFolder } from './chat-groups.ts';
+import { getBoardGroupForChat, getPlannerChatForGroup, linkPlannerChatToBoardFolder } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { scheduleSaveSessions, touchChat } from './sessions.ts';
+import { scheduleSaveSessions, sessionState, touchChat } from './sessions.ts';
 
 /** Injectable clock for deterministic tests. */
 let boardNowMs = (): number => Date.now();
@@ -120,6 +120,86 @@ export function rollupWaveStatus(
   return 'planned';
 }
 
+/** Whether all tasks in waves before `taskWave` are complete. */
+export function isPriorWavesComplete(
+  board: OrchestrateBoardState,
+  taskWave: number | string,
+): boolean {
+  const waveIndex = board.waves.findIndex((w) => String(w.id) === String(taskWave));
+  if (waveIndex <= 0) return true;
+  for (let i = 0; i < waveIndex; i += 1) {
+    const priorWaveId = board.waves[i]!.id;
+    const priorTasks = board.tasks.filter(
+      (t) => String(t.wave) === String(priorWaveId),
+    );
+    if (!priorTasks.length) continue;
+    if (!priorTasks.every((t) => t.status === 'complete')) return false;
+  }
+  return true;
+}
+
+/** Planned task whose prior waves are complete (simple wave ordering). */
+export function isTaskReadyForAuto(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+): boolean {
+  if (task.status !== 'planned') return false;
+  return isPriorWavesComplete(board, task.wave);
+}
+
+/**
+ * Task marked in_progress/testing but its chat is not starting or streaming (stuck slot).
+ * Used by auto-pilot to retry delegation.
+ */
+export function isTaskStalledForRestart(
+  board: OrchestrateBoardState,
+  task: BoardTask,
+  isChatActive: (chatId: string) => boolean,
+): boolean {
+  if (task.status !== 'in_progress' && task.status !== 'testing') return false;
+  const chatId =
+    task.status === 'testing'
+      ? task.testChatId?.trim() || task.chatId?.trim()
+      : task.chatId?.trim();
+  if (!chatId) return true;
+  return !isChatActive(chatId);
+}
+
+/** Move a board task to in_progress when its linked chat actually begins streaming. */
+export function markBoardTaskInProgressFromChat(chat: Chat): void {
+  const taskId = chat.boardTaskId?.trim();
+  if (!taskId) return;
+  // Tester / final-integration chats must not pull the card back to in_progress.
+  if (chat.workAgentId === 'tester') return;
+  const boardGroup =
+    getBoardGroupForChat(chat) ??
+    (chat.boardGroupId
+      ? sessionState?.groups?.find((g) => g.id === chat.boardGroupId)
+      : undefined);
+  if (!boardGroup?.orchestrateBoard) return;
+  const existing = boardGroup.orchestrateBoard.tasks.find((t) => t.id === taskId);
+  if (!existing || existing.status === 'complete' || existing.status === 'testing') return;
+  const planner = getPlannerChatForGroup(boardGroup);
+  const patch: Parameters<typeof updateTask>[2] = {
+    status: 'in_progress',
+    startedAt: existing.startedAt ?? boardNowMs(),
+  };
+  if (existing.error) patch.error = undefined;
+  updateTask(boardGroup, taskId, patch, planner ?? undefined);
+}
+
+/** Resolved execution mode (defaults to manual). */
+export function getBoardExecutionMode(
+  board: OrchestrateBoardState | null | undefined,
+): 'manual' | 'auto' {
+  return board?.executionMode === 'auto' ? 'auto' : 'manual';
+}
+
+/** True when the board is in auto-pilot delegation mode. */
+export function isBoardAutoMode(group: ChatGroup): boolean {
+  return getBoardExecutionMode(group.orchestrateBoard) === 'auto';
+}
+
 /** Recompute wave rows (status, taskCount, completeCount). */
 export function recomputeWaveRollup(board: OrchestrateBoardState): void {
   for (const wave of board.waves) {
@@ -155,6 +235,16 @@ export function getBoardProgressPercent(board: OrchestrateBoardState): number {
   if (!board.tasks.length) return 0;
   const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
   return Math.round((completeCount / board.tasks.length) * 100);
+}
+
+/** Tasks that left the planned column (in flight, testing, or settled). */
+export function countBoardTasksProgressed(board: OrchestrateBoardState): number {
+  return board.tasks.filter((t) => t.status !== 'planned').length;
+}
+
+/** Waves with rollup past planned (at least one started or finished task). */
+export function countBoardWavesProgressed(board: OrchestrateBoardState): number {
+  return board.waves.filter((w) => w.status !== 'planned').length;
 }
 
 export function getBoardState(group: ChatGroup): OrchestrateBoardState | null {
@@ -221,6 +311,7 @@ export function initBoard(
     lastUpdatedAt: now,
     timerAccumulatedMs: 0,
     maxConcurrentTasks: 3,
+    executionMode: 'manual',
   };
   recomputeWaveRollup(board);
   group.orchestrateBoard = board;
@@ -245,6 +336,10 @@ export type UpdateTaskPatch = Partial<
     | 'chatId'
     | 'buildSpec'
     | 'testSpec'
+    | 'testChatId'
+    | 'testAttempts'
+    | 'testVerdict'
+    | 'testSummary'
   >
 >;
 

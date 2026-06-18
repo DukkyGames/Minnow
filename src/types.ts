@@ -304,6 +304,14 @@ export interface BoardTask {
   buildSpec?: string;
   /** Test spec from plan parse (display + task-chat seed). */
   testSpec?: string;
+  /** Linked Tester chat session id (per-task testing). */
+  testChatId?: string;
+  /** Build↔test retry count (incremented on each test failure). */
+  testAttempts?: number;
+  /** Structured verdict from board_report_test_result (stream-end routing). */
+  testVerdict?: 'pass' | 'fail';
+  /** Human summary from the Tester (shown on fail / blocked). */
+  testSummary?: string;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -331,8 +339,19 @@ export interface OrchestrateBoardState {
   activeParentTurnId?: string;
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
+  /** Manual board vs auto-pilot delegation (default manual). */
+  executionMode?: 'manual' | 'auto';
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** Full-board integration test after all tasks complete. */
+  finalTest?: {
+    status: 'pending' | 'in_progress' | 'passed' | 'failed';
+    chatId?: string;
+    attempts?: number;
+    recordedVerdict?: 'pass' | 'fail';
+    failingTaskIds?: string[];
+    summary?: string;
+  };
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */
@@ -513,6 +532,8 @@ export interface Chat {
   currentGenerationId?: string;
   /** Queued steering correction for the in-flight turn (last write wins; cleared on consume or stop). */
   pendingSteerMessage?: string;
+  /** Queued mode switch from set_chat_mode during streaming (last write wins; flushed on stream end). */
+  pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
@@ -540,6 +561,12 @@ export interface Chat {
   codeChangeTotals?: ChatCodeChangeTotals;
   /** Epoch ms when history backfill last rebuilt codeChangeTotals. */
   codeChangeBackfillAt?: number;
+  /** Last archive policy trim stats (MIN-139). */
+  lastContextTrim?: {
+    archived?: number;
+    recalled?: number;
+    recallTokens?: number;
+  };
 }
 
 export type {

@@ -59,6 +59,9 @@ function formatWhen(iso?: string): string {
 function closeOpenMenu(): void {
   openMenuId = null;
   document.querySelectorAll('.dr-lib-menu').forEach((el) => el.remove());
+  document.querySelectorAll('.dr-lib-card.is-menu-open').forEach((el) => {
+    el.classList.remove('is-menu-open');
+  });
 }
 
 function renderLibraryCard(item: ResearchLibraryItem): string {
@@ -92,6 +95,7 @@ function showCardMenu(
 ): void {
   closeOpenMenu();
   openMenuId = item.id;
+  card.classList.add('is-menu-open');
   const menu = document.createElement('div');
   menu.className = 'dr-lib-menu';
   menu.innerHTML = `

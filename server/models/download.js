@@ -17,6 +17,9 @@ import { validateJobId, validateRepoId } from './validate.js';
 /** Minimum free bytes required before starting a download (500 MB). */
 const MIN_FREE_BYTES = 500 * 1024 * 1024;
 
+/** Error message for jobs left active when the tool server restarts. */
+const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
+
 /** @typedef {'queued' | 'running' | 'completed' | 'failed' | 'cancelled'} DownloadStatus */
 
 /**
@@ -24,6 +27,7 @@ const MIN_FREE_BYTES = 500 * 1024 * 1024;
  * @property {string} id
  * @property {string} repoId
  * @property {string} filename
+ * @property {string} repoFilePath
  * @property {string} quant
  * @property {DownloadStatus} status
  * @property {number} bytesReceived
@@ -67,6 +71,35 @@ async function loadJobs() {
   } catch {
     jobsCache = [];
   }
+  await reconcileInterruptedJobs();
+}
+
+/**
+ * Mark queued/running jobs from a previous server process as failed.
+ */
+async function reconcileInterruptedJobs() {
+  let changed = false;
+  for (const job of jobsCache) {
+    if (job.status !== 'queued' && job.status !== 'running') continue;
+    job.status = 'failed';
+    job.error = INTERRUPTED_DOWNLOAD_ERROR;
+    job.finishedAt = Date.now();
+    await fsp.rm(job.destPath, { force: true }).catch(() => {});
+    await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+    changed = true;
+  }
+  if (changed) await saveJobs();
+}
+
+/**
+ * @param {unknown} err
+ * @param {AbortSignal} signal
+ */
+function isCancelledError(err, signal) {
+  if (signal.aborted) return true;
+  if (!(err instanceof Error)) return false;
+  if (err.message === 'Download cancelled') return true;
+  return err.name === 'AbortError';
 }
 
 async function saveJobs() {
@@ -127,7 +160,7 @@ async function runDownloadJob(job) {
   try {
     const result = await downloadHfFile({
       repoId: job.repoId,
-      filename: job.filename,
+      filename: job.repoFilePath || job.filename,
       destPath: job.destPath,
       signal: controller.signal,
       onProgress: (bytes, total) => {
@@ -152,7 +185,7 @@ async function runDownloadJob(job) {
       totalBytes: job.totalBytes,
     });
   } catch (err) {
-    const cancelled = controller.signal.aborted || err?.message === 'Download cancelled';
+    const cancelled = isCancelledError(err, controller.signal);
     job.status = cancelled ? 'cancelled' : 'failed';
     job.error = err instanceof Error ? err.message : String(err);
     job.finishedAt = Date.now();
@@ -184,11 +217,13 @@ export async function startDownload(body) {
       : await resolveGgufFilename(repoId, quant);
 
   const destDir = repoDownloadDir(repoId);
-  const destPath = path.join(destDir, filename);
+  const repoFilePath = filename;
+  const localFilename = path.basename(filename);
+  const destPath = path.join(destDir, localFilename);
 
   let totalBytes = null;
   try {
-    totalBytes = await fetchRemoteSize(repoId, filename);
+    totalBytes = await fetchRemoteSize(repoId, repoFilePath);
   } catch {
     /* size unknown until stream starts */
   }
@@ -202,7 +237,8 @@ export async function startDownload(body) {
   const job = /** @type {DownloadJob} */ ({
     id: crypto.randomUUID(),
     repoId,
-    filename,
+    filename: localFilename,
+    repoFilePath,
     quant,
     status: 'queued',
     bytesReceived: 0,
@@ -257,7 +293,22 @@ export async function cancelDownload(jobId) {
     return publicJob(job);
   }
   const controller = abortByJob.get(jobId);
-  if (controller) controller.abort();
+  if (controller) {
+    controller.abort();
+    return publicJob(job);
+  }
+  job.status = 'cancelled';
+  job.finishedAt = Date.now();
+  await saveJobs();
+  await fsp.rm(job.destPath, { force: true }).catch(() => {});
+  await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
+  emit(jobId, {
+    jobId: job.id,
+    status: job.status,
+    bytesReceived: job.bytesReceived,
+    totalBytes: job.totalBytes,
+    error: job.error ?? null,
+  });
   return publicJob(job);
 }
 

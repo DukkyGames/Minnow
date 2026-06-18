@@ -7,6 +7,7 @@ import {
   countLineChangeStats,
   type DiffLine,
 } from '../../chat/prompts/text-diff';
+import { stripEditorModelOutput } from '../editor-model-output';
 
 /** Replace doc[from..to) with replacement text; returns updated full document. */
 export function applyReplacementInRange(
@@ -23,7 +24,8 @@ export function applyReplacementInRange(
 
 /** Strip markdown fences and chatter from a model edit response. */
 export function sanitizeQuickEditText(raw: string, originalText?: string): string {
-  let text = raw.replace(/^\s+/, '').replace(/\s+$/, '');
+  let text = stripEditorModelOutput(raw, { originalText });
+  text = text.replace(/^\s+/, '').replace(/\s+$/, '');
   if (!text) return '';
 
   if (text.startsWith('```')) {

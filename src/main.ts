@@ -78,7 +78,7 @@ import { startSchedulerNotificationPoll } from './scheduler/notifications-poll';
 import { initNotificationProducers } from './notifications/producers';
 import { refreshSkillCatalog } from './skills/client';
 import { loadSkillConfigFromStorage } from './skills/config';
-import { mountSlashPicker } from './ui/skill-picker';
+import { initAllComposerSlashPickers } from './ui/skill-picker';
 import { loadToolConfigFromStorage } from './tools/config';
 import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
@@ -207,6 +207,9 @@ function registerWindowHandlers(): void {
   window.openModelsFromTopbar = () => {
     void import('./ui/models-page').then((m) => m.openModelsFromTopbar());
   };
+  window.openBrainFromTopbar = () => {
+    void import('./ui/brain-page').then((m) => m.openBrainFromTopbar());
+  };
   window.openCompareFromTopbar = () => {
     void import('./ui/compare-page').then((m) => m.openCompareFromTopbar());
   };
@@ -304,8 +307,8 @@ export async function initApp(): Promise<void> {
   const msgInput = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   if (msgInput) {
     initComposerInput(msgInput);
-    mountSlashPicker(msgInput);
   }
+  initAllComposerSlashPickers();
   initComposerDrop();
   const filePanel = await import('./ui/init-file-panel');
   await filePanel.initFilePanel();
@@ -336,6 +339,8 @@ export async function initApp(): Promise<void> {
   benchmarkPage.initBenchmarkPage();
   const modelsPage = await import('./ui/models-page');
   modelsPage.initModelsPage();
+  const brainPage = await import('./ui/brain-page');
+  brainPage.initBrainPage();
   const comparePage = await import('./ui/compare-page');
   comparePage.initComparePage();
   const schedulerPage = await import('./ui/scheduler-page');

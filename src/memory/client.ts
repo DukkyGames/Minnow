@@ -3,13 +3,17 @@
  */
 
 import { detectLocalServer } from '../tools/client';
+import { brainWorkspaceKeyFromPath } from '../lib/brain-workspace-key';
+import { getWorkspacePath } from '../state/workspace';
 import type {
   MemoryEntryMeta,
   MemoryEntryWithBody,
   MemoryRetrieveResult,
   MemoryEmbeddingsStatus,
   MemoryEmbeddingsReindexResult,
+  MemoryEmbeddingsWarmupResult,
   MemoryEmbeddingsConfig,
+  MemoryEmbeddingsOpResult,
 } from './types';
 import type { PromptProfile } from '../chat/prompts/types';
 
@@ -33,6 +37,41 @@ async function memoryFetch<T>(
     return (await res.json()) as T;
   } catch {
     return null;
+  }
+}
+
+async function parseMemoryApiError(res: Response): Promise<string> {
+  const body = await res.json().catch(() => ({}));
+  if (body && typeof body === 'object' && 'error' in body) {
+    return String((body as { error: unknown }).error);
+  }
+  return res.statusText || `HTTP ${res.status}`;
+}
+
+/** Embeddings mutations return server error text instead of swallowing failures. */
+async function memoryEmbeddingsFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<MemoryEmbeddingsOpResult<T>> {
+  const ok = await detectLocalServer();
+  if (!ok) {
+    return { kind: 'err', error: 'Start with npm start to use memory embeddings.' };
+  }
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+    if (!res.ok) {
+      return { kind: 'err', error: await parseMemoryApiError(res) };
+    }
+    return { kind: 'ok', value: (await res.json()) as T };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: 'err', error: message };
   }
 }
 
@@ -92,7 +131,7 @@ export async function fetchMemoryEnabled(): Promise<boolean> {
   return status?.enabled !== false;
 }
 
-/** Retrieve formatted memory block for prompt injection. */
+/** Retrieve formatted memory block for prompt injection (via Brain wiki retrieve). */
 export async function retrieveMemoryBlock(options: {
   query?: string;
   profile?: PromptProfile;
@@ -101,12 +140,15 @@ export async function retrieveMemoryBlock(options: {
   const enabled = await fetchMemoryEnabled();
   if (!enabled) return '';
 
-  const data = await memoryFetch<MemoryRetrieveResult>('/api/memory/retrieve', {
+  const workspaceKey = brainWorkspaceKeyFromPath(getWorkspacePath());
+
+  const data = await memoryFetch<MemoryRetrieveResult>('/api/brain/retrieve', {
     method: 'POST',
     body: JSON.stringify({
       query: options.query ?? '',
       profile: options.profile ?? 'full',
       limit: options.limit ?? 8,
+      workspaceKey,
     }),
   });
   return data?.block?.trim() ?? '';
@@ -152,20 +194,36 @@ export async function fetchMemoryEmbeddingsStatus(): Promise<MemoryEmbeddingsSta
 /** Update memory embeddings settings on the server. */
 export async function saveMemoryEmbeddingsConfig(
   partial: Partial<MemoryEmbeddingsConfig>,
-): Promise<MemoryEmbeddingsConfig | null> {
-  const data = await memoryFetch<{ embeddings: MemoryEmbeddingsConfig }>(
+): Promise<MemoryEmbeddingsOpResult<MemoryEmbeddingsConfig>> {
+  const result = await memoryEmbeddingsFetch<{ embeddings: MemoryEmbeddingsConfig }>(
     '/api/memory/embeddings/config',
     {
       method: 'PUT',
       body: JSON.stringify(partial),
     },
   );
-  return data?.embeddings ?? null;
+  if (result.kind === 'err') return result;
+  if (!result.value.embeddings) {
+    return { kind: 'err', error: 'Server did not return embeddings config.' };
+  }
+  return { kind: 'ok', value: result.value.embeddings };
+}
+
+/** Download / load the active embedding model (local transformers.js or provider probe). */
+export async function warmupMemoryEmbeddings(): Promise<
+  MemoryEmbeddingsOpResult<MemoryEmbeddingsWarmupResult>
+> {
+  return memoryEmbeddingsFetch<MemoryEmbeddingsWarmupResult>('/api/memory/embeddings/warmup', {
+    method: 'POST',
+    body: '{}',
+  });
 }
 
 /** Reindex all memory entry vectors. */
-export async function reindexMemoryEmbeddings(): Promise<MemoryEmbeddingsReindexResult | null> {
-  return memoryFetch<MemoryEmbeddingsReindexResult>('/api/memory/embeddings/reindex', {
+export async function reindexMemoryEmbeddings(): Promise<
+  MemoryEmbeddingsOpResult<MemoryEmbeddingsReindexResult>
+> {
+  return memoryEmbeddingsFetch<MemoryEmbeddingsReindexResult>('/api/memory/embeddings/reindex', {
     method: 'POST',
     body: '{}',
   });

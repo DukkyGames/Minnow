@@ -233,6 +233,13 @@ export async function setWorkspaceRoot(userPath) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[lsp] shutdown on workspace change failed: ${message}`);
     }
+    try {
+      const { onWorkspaceSwitched } = await import('../brain/code/cascade.js');
+      void onWorkspaceSwitched(previous);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[brain] cascade on workspace switch failed: ${message}`);
+    }
   }
   const meta = (await readConfigJson('config.json')) ?? {};
   const merged = mergeConfigMeta(meta, { workspace: { path: resolved } });

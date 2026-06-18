@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { initMemoryApi } from '../../server/memory/routes.js';
 import { getEntry } from '../../server/memory/store.js';
 import { toolSaveMemory } from '../../server/tools/memory-tools.js';
@@ -23,6 +24,7 @@ describe('save_memory tool', () => {
   });
 
   after(async () => {
+    closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true });

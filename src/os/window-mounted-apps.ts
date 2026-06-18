@@ -6,6 +6,7 @@ import type { AppId } from './types';
 export const WINDOW_MOUNTED_APPS = new Set<AppId>([
   'settings',
   'models',
+  'brain',
   'bench',
   'compare',
   'calendar',

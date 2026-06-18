@@ -22,6 +22,7 @@ import {
   sessionState,
 } from '../state/sessions';
 import { refreshChatAppOutputsPanel } from './chat-app-outputs';
+import { acknowledgeChatViewed } from '../notifications/acknowledge';
 import { refreshChatJumpChipVisibility } from './chat-scroll';
 import { closeContextUsageBreakdown } from './context-usage-breakdown';
 import { refreshContextUsageRing } from './context-usage-ring';
@@ -33,6 +34,7 @@ import {
   initComposerSteerInputListener,
   syncComposerFromStreamingState,
 } from './composer-send';
+import { handleSkillPickerKeydown, initComposerSlashPicker, isSkillPickerOpen } from './skill-picker';
 import { closeGlobalBugs } from './global-bugs-page';
 import { renderChatFromHistory } from './messages';
 import { closeSettings } from './settings-page';
@@ -111,10 +113,11 @@ function activateAssistantChat(chatId: string): void {
   const chat = sessionState.chats.find((c) => c.id === chatId);
   if (!chat) return;
   sessionState.activeId = chatId;
-  chat.unread = false;
+  acknowledgeChatViewed(chatId);
   rememberActiveChatForApp(CHAT_APP_ID, chatId);
   scheduleSaveSessions();
   renderChatAppSurface();
+  void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chatId));
 }
 
 /** Public: switch session rail thread (also used by background-stream hint). */
@@ -414,12 +417,15 @@ function bindStaticControls(): void {
 
   const input = document.getElementById('chatAppInput') as HTMLTextAreaElement | null;
   initComposerSteerInputListener(input);
+  if (input) initComposerSlashPicker(input);
   input?.addEventListener('input', () => {
     autoResizeComposer(input);
     syncComposerSendState();
   });
   input?.addEventListener('keydown', (e) => {
+    if (handleSkillPickerKeydown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isSkillPickerOpen()) return;
       e.preventDefault();
       void handleChatAppSend();
     }

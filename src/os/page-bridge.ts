@@ -1,4 +1,5 @@
 import { getForegroundAppId, getOsView, subscribeInstances } from './instances';
+import { shouldSuppressDesktopChrome } from './shell-chrome';
 import {
   isDesktopChatActive,
   isDesktopExpertsActive,
@@ -88,14 +89,14 @@ export function syncLegacyChromeVisibility(): void {
 
   void import('./workspace-menubar').then((m) => m.syncWorkspaceMenubarPlacement());
 
-  syncDesktopLayerSuppression(codeForeground);
+  syncDesktopLayerSuppression();
 }
 
-/** Hide desktop chat/research/experts chrome while Code is the fullscreen foreground app. */
-function syncDesktopLayerSuppression(codeForeground: boolean): void {
+/** Hide desktop chat/research/experts chrome during immersive fullscreen apps. */
+function syncDesktopLayerSuppression(): void {
   document
     .getElementById('osDesktopLayer')
-    ?.classList.toggle('is-suppressed-by-fullscreen-app', codeForeground);
+    ?.classList.toggle('is-suppressed-by-fullscreen-app', shouldSuppressDesktopChrome());
 }
 
 /** Called when an app becomes foreground — sync DOM + dataset for page modules. */
@@ -125,6 +126,9 @@ export function initOsPageBridge(): void {
   });
   void import('./desktop-state').then(({ subscribeDesktopState }) => {
     subscribeDesktopState(() => syncLegacyChromeVisibility());
+  });
+  void import('./window-manager').then(({ windowManager }) => {
+    windowManager.subscribe(() => syncLegacyChromeVisibility());
   });
   syncLegacyChromeVisibility();
 }

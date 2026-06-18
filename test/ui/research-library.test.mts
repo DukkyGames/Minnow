@@ -75,4 +75,21 @@ describe('research library', () => {
     assert.ok(mount.querySelector('.dr-lib-field-sort .dr-flabel'));
     assert.ok(mount.querySelector('#researchLibraryArchived.dr-switch__input'));
   });
+
+  test('card overflow menu raises z-index on the active card', async () => {
+    const mount = document.getElementById('researchLibraryMount') as HTMLElement;
+    await renderResearchLibrary({
+      mount,
+      onOpenDetail: () => {},
+      onOpenReport: () => {},
+      onDiscuss: () => {},
+      onRefine: () => {},
+    });
+    const menuBtn = mount.querySelector('[data-action="menu"]') as HTMLButtonElement;
+    assert.ok(menuBtn);
+    menuBtn.click();
+    const card = menuBtn.closest('.dr-lib-card') as HTMLElement;
+    assert.ok(card?.classList.contains('is-menu-open'));
+    assert.ok(card?.querySelector('.dr-lib-menu'));
+  });
 });

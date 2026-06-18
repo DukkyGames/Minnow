@@ -2,7 +2,7 @@
  * Vibe Hub dev-server cell — startup.md lifecycle, agents, polling, console bridge.
  */
 
-import { spawnSubAgent } from '../agents/orchestrator';
+import { spawnSubAgent, cancelSubAgent } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import {
   DEFAULT_DEV_SERVER_PORT,
@@ -172,6 +172,33 @@ function applyViewToDom(view: HubDevServerViewModel): void {
     consoleBtn.classList.toggle('hidden', !view.showConsole);
     consoleBtn.toggleAttribute('disabled', view.uiState === 'offline');
   }
+
+  updateDevServerConsoleStopBtn(view);
+}
+
+/** Show Console tab Stop when the dev server can be cancelled. */
+function updateDevServerConsoleStopBtn(view: HubDevServerViewModel): void {
+  const stopBtn = document.getElementById('btnTerminalDevServerStop');
+  if (!stopBtn) return;
+  const stoppable =
+    view.uiState === 'starting' ||
+    view.uiState === 'running' ||
+    (view.uiState === 'error' && Boolean(managedRunId)) ||
+    Boolean(startAgentRunId);
+  stopBtn.dataset.stoppable = stoppable ? 'true' : 'false';
+  stopBtn.toggleAttribute('disabled', view.uiState === 'offline' || !stoppable);
+  syncDevServerConsoleStopVisibility();
+}
+
+/** Keep Console tab Stop visible only on the dev-server terminal tab. */
+export function syncDevServerConsoleStopVisibility(isDevServerTab?: boolean): void {
+  const stopBtn = document.getElementById('btnTerminalDevServerStop');
+  if (!stopBtn) return;
+  const onDevServerTab =
+    isDevServerTab ??
+    document.getElementById('terminalDevServerPane')?.classList.contains('hidden') === false;
+  const stoppable = stopBtn.dataset.stoppable === 'true';
+  stopBtn.classList.toggle('hidden', !onDevServerTab || !stoppable);
 }
 
 /** Keep the status line in sync while the port field is being edited. */
@@ -273,6 +300,41 @@ async function flushDevServerSettings(
   }
 }
 
+async function stopDevServerAndCancelAgent(): Promise<void> {
+  applyViewToDom(
+    deriveHubDevServerView(
+      true,
+      'stopping',
+      null,
+      managedRunId,
+      cachedSettings.port,
+      cachedSettings.network,
+    ),
+  );
+
+  if (startAgentRunId) {
+    cancelSubAgent(startAgentRunId, 'user_cancel');
+    startAgentRunId = null;
+  }
+
+  try {
+    await postDevServerStop();
+  } catch {
+    /* refresh will reconcile */
+  }
+
+  managedRunId = null;
+  stopDevServerStream();
+  streamRunId = null;
+  void refreshDevServerCell();
+}
+
+/** Stop the workspace dev server (hub primary, Console tab, etc.). */
+export async function stopHubDevServer(): Promise<void> {
+  if (!isLocalServerAvailable()) return;
+  await stopDevServerAndCancelAgent();
+}
+
 async function refreshDevServerCell(): Promise<void> {
   const online = isLocalServerAvailable();
   if (!online) {
@@ -362,31 +424,30 @@ async function handlePrimaryClick(chat: Chat): Promise<void> {
   }
 
   let status = startup.status;
+  let liveRunId: string | null = null;
   try {
     const live = await fetchDevServerStatus();
     status = live.status;
+    liveRunId = live.runId;
+    managedRunId = live.runId;
   } catch {
     /* use startup snapshot */
   }
 
-  if (status === 'running') {
-    applyViewToDom(
-      deriveHubDevServerView(
-        true,
-        'stopping',
-        null,
-        null,
-        cachedSettings.port,
-        cachedSettings.network,
-      ),
-    );
-    await postDevServerStop();
-    void refreshDevServerCell();
+  if (status === 'running' || status === 'starting') {
+    await stopDevServerAndCancelAgent();
     return;
   }
 
-  if (status === 'starting' || status === 'stopping') {
+  if (status === 'stopping') {
     return;
+  }
+
+  if (status === 'error') {
+    if (liveRunId || startAgentRunId) {
+      await stopDevServerAndCancelAgent();
+      return;
+    }
   }
 
   if (status === 'error' || status === 'stopped') {
@@ -510,6 +571,10 @@ export function initHubDevServer(cell: HTMLElement, chat: Chat): void {
   activeChatId = chat.id;
   wireAgentSubscription();
   wireDevServerSettings();
+
+  document.getElementById('btnTerminalDevServerStop')?.addEventListener('click', () => {
+    void stopHubDevServer();
+  });
 
   const consoleBtn = document.getElementById('hubDevServerConsole');
 

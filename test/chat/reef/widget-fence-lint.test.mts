@@ -31,10 +31,22 @@ describe('widget-fence-lint', () => {
     assert.equal(result.errors.length, 0);
   });
 
-  test('errors on toExponential', () => {
+  test('errors on toExponential in Recharts chart', () => {
     const body = `${VALID_CHART_SNIPPET}\n// tick: (v) => v.toExponential(2)`;
     const result = lintReefWidgetFence(body);
     assert.ok(result.errors.some((e) => /toExponential/i.test(e)));
+  });
+
+  test('allows toExponential in non-chart widget', () => {
+    const body = `<div id="root"></div>
+<script type="module">
+function formatValue(v) { return typeof v === 'number' ? v.toExponential(2) : ''; }
+createRoot(document.getElementById('root')).render(
+  React.createElement('span', null, formatValue(12345)),
+);
+</script>`;
+    const result = lintReefWidgetFence(body);
+    assert.equal(result.errors.length, 0);
   });
 
   test('errors when Recharts lacks rw-chart wrapper', () => {

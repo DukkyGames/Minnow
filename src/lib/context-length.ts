@@ -1,7 +1,9 @@
 import { isModelLoaded } from '../api/model-loaded-state';
+import { lookupKnownContextLength } from './known-context-windows';
 
 /** Context window from a models-list row: configured length when loaded, else catalog max. */
 export function contextLengthFromModelRow(row: {
+  id?: string;
   state?: string;
   loaded_context_length?: number;
   max_context_length?: number;
@@ -20,6 +22,9 @@ export function contextLengthFromModelRow(row: {
   const max = row.max_context_length;
   if (typeof max === 'number' && Number.isFinite(max) && max > 0) {
     return max;
+  }
+  if (typeof row.id === 'string' && row.id.trim()) {
+    return lookupKnownContextLength(row.id);
   }
   return undefined;
 }

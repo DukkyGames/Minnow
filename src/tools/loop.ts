@@ -15,7 +15,9 @@ import {
   isChatStreaming,
   isStreamDomVisible,
   notifyChatStreamEnded,
+  notifyChatStreamActivity,
 } from '../chat/streaming-state';
+import { flushPendingMode } from '../chat/pending-mode';
 import {
   clearPendingSteer,
   consumePendingSteer,
@@ -70,6 +72,7 @@ import {
   getActiveChat,
   isExpertChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
   recordChatMessage,
 } from '../state/sessions';
@@ -145,7 +148,8 @@ import {
   assistantProseHasVisibleContent,
   removeOrphanStreamingRow,
   revealAssistantProseBubble,
-  setAssistantErrorBubble,
+  renderChatFromHistory,
+  setAssistantErrorBubbleWithRecovery,
 } from '../ui/messages';
 import { setContextInFlightOverlay } from '../chat/context-in-flight';
 import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bubbles';
@@ -196,6 +200,12 @@ import {
   applyContextBudget,
   resolveContextBudget,
 } from '../chat/context-budget';
+import {
+  applyArchivePolicy,
+  applyMemoizedCollapse,
+  reportArchiveDisabled,
+  type ArchivePreResult,
+} from '../chat/archive';
 import { resolveContextLimit } from '../chat/context-usage';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
@@ -230,10 +240,11 @@ import { createSubAgentRunId } from '../agents/sub-agent-run-id';
 import {
   detectLocalServer,
   executeTool,
-  getEnabledToolDefinitionsForMode,
+  getEnabledToolDefinitionsForChat,
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
+import { copyHistoryForOutboundApi, clearPostToolTailBeforeSend, rollbackFailedTurnHistory } from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   augmentImpeccableSkillBody,
@@ -293,7 +304,7 @@ interface ChatCompletionBody extends CompletionBodyWithResponseFormat {
   presence_penalty?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
-  tools?: ReturnType<typeof getEnabledToolDefinitionsForMode>;
+  tools?: ReturnType<typeof getEnabledToolDefinitionsForChat>;
   tool_choice?: 'auto';
 }
 
@@ -483,12 +494,13 @@ export function buildApiMessages(
   });
 
   const pending = getPendingAttachments().filter((a) => a.kind !== 'error');
-  const multimodalUserIdx = indexOfMultimodalUserMessage(chat.history, pending);
+  const outboundHistory = copyHistoryForOutboundApi(chat.history);
+  const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
   const vlm = isVisionModel(modelId);
 
-  for (let i = 0; i < chat.history.length; i += 1) {
-    const m = chat.history[i];
+  for (let i = 0; i < outboundHistory.length; i += 1) {
+    const m = outboundHistory[i];
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
@@ -811,18 +823,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   try {
   const useActiveChatDom = chat.id === getActiveChat().id;
-  const domRaw = useActiveChatDom
-    ? (document.getElementById('modelSelect') as HTMLSelectElement).value
-    : '';
+  const domRaw =
+    (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
+    '';
   const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  if (parsedSelect && useActiveChatDom) {
+  // Background board task chats reuse the top-bar model when their stored binding is empty.
+  if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
   const modelId =
-    replaySnapshot?.modelId ??
-    (useActiveChatDom ? domModelId : chat.modelId?.trim() || domModelId);
+    replaySnapshot?.modelId ?? (chat.modelId?.trim() || domModelId);
   const globalSampler = readGlobalSamplerForSend(
     replaySnapshot
       ? {
@@ -861,6 +873,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   chat.modelId = modelId || chat.modelId;
 
   if (pushUser) {
+    if (clearPostToolTailBeforeSend(chat)) {
+      scheduleSaveSessions();
+    }
     const artifactAppendix = consumeReefArtifactEditsForPrompt(chat);
     const modelUserContent = artifactAppendix
       ? `${historyContent}${artifactAppendix}`
@@ -871,26 +886,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     syncTurnContextUsage(chat.id, '', null);
     if (!suppressUserEcho) {
       renderSidebar();
-      const userIdx = chat.history.length - 1;
-      const { wrap: userWrap } = appendBubble(
-        'user',
-        historyContent,
-        {
+      if (isStreamDomVisible(chat.id)) {
+        const userIdx = chat.history.length - 1;
+        const { wrap: userWrap } = appendBubble(
+          'user',
+          historyContent,
+          {
+            historyIndex: userIdx,
+            turnKind: 'user',
+            chatId: chat.id,
+          },
+          { liveAttachments: validAttachments },
+        );
+        const { attachMessageActions } = await import('../ui/message-actions');
+        attachMessageActions(userWrap, {
+          chatId: chat.id,
           historyIndex: userIdx,
           turnKind: 'user',
-          chatId: chat.id,
-        },
-        { liveAttachments: validAttachments },
-      );
-      const { attachMessageActions } = await import('../ui/message-actions');
-      attachMessageActions(userWrap, {
-        chatId: chat.id,
-        historyIndex: userIdx,
-        turnKind: 'user',
-      });
-      clearComposerInput(
-        resolveComposerSurface(options.composerSurface).inputEl,
-      );
+        });
+      }
+      if (useActiveChatDom) {
+        clearComposerInput(
+          resolveComposerSurface(options.composerSurface).inputEl,
+        );
+      }
     }
   }
 
@@ -949,6 +968,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (uiDesignerCtx.active) {
         chat.workAgentId = savedWorkAgentId;
       }
+      const boardTaskId = chat.boardTaskId?.trim();
+      const boardGroupId = chat.boardGroupId?.trim();
+      if (boardTaskId && boardGroupId && sessionState) {
+        const group = sessionState.groups?.find((g) => g.id === boardGroupId);
+        if (group?.orchestrateBoard) {
+          void import('../state/orchestrate-board-store.ts').then(({ updateTask }) => {
+            updateTask(group, boardTaskId, { error: err.message });
+          });
+        }
+      }
       return;
     }
     throw err;
@@ -985,6 +1014,12 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 
   if (ownsGlobalStreaming) {
+    if (pushUser && chat.boardTaskId) {
+      const { markBoardTaskInProgressFromChat } = await import(
+        '../state/orchestrate-board-store'
+      );
+      markBoardTaskInProgressFromChat(chat);
+    }
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     if (
@@ -1130,7 +1165,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     const userRow = chat.history[forkHistoryIndex] as UserMessage | undefined;
     const userContent = userRow?.content ?? historyContent;
     const activeModeId = normalizeModeId(chat.modeId);
-    let snapTools = getEnabledToolDefinitionsForMode(activeModeId);
+    let snapTools = getEnabledToolDefinitionsForChat(chat);
     if (activeWorkAgent?.allowedTools?.length) {
       const allow = new Set(activeWorkAgent.allowedTools);
       snapTools = snapTools.filter((t) => allow.has(t.function.name));
@@ -1198,6 +1233,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ? agentContextBudgetFromWorkAgent(activeWorkAgent)
       : { maxInputTokens: null, enforcementPolicy: 'slide' as const };
 
+    // Boot resume subscribes once; later tool-loop rounds must POST new generations (MIN-187).
+    let activeResumeGenerationId = resumeGenerationId;
+    let archiveMemo: ArchivePreResult | null = null;
+
     for (let turn = 0; turn < maxToolTurns; turn++) {
       if (chatSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
@@ -1208,7 +1247,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         syncSteerQueuedHint();
       }
 
-      let enabledTools = getEnabledToolDefinitionsForMode(activeModeId);
+      let enabledTools = getEnabledToolDefinitionsForChat(chat);
       if (activeWorkAgent?.allowedTools?.length) {
         const allow = new Set(activeWorkAgent.allowedTools);
         enabledTools = enabledTools.filter((t) => allow.has(t.function.name));
@@ -1221,12 +1260,40 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         userRulesContent: userRulesContent ?? undefined,
         ephemeralContinueInstruction: ephemeralPostToolInstruction,
       });
+
+      let preMessages = rawMessages;
+      if (workAgentBudget.enforcementPolicy === 'archive') {
+        try {
+          if (turn === 0) {
+            archiveMemo = await applyArchivePolicy(rawMessages, {
+              chat,
+              agentConfig: workAgentBudget,
+            });
+            preMessages = archiveMemo.messages;
+            chat.lastContextTrim = {
+              archived: archiveMemo.archived,
+              recalled: archiveMemo.recalled,
+              recallTokens: archiveMemo.recallTokens,
+            };
+          } else if (archiveMemo) {
+            preMessages = applyMemoizedCollapse(
+              rawMessages,
+              archiveMemo,
+              chat.history.length,
+            );
+          }
+        } catch (err) {
+          reportArchiveDisabled(err);
+          preMessages = rawMessages;
+        }
+      }
+
       const budgetResolved = resolveContextBudget({
         agentConfig: workAgentBudget,
         modelLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
       });
       const budgetApplied = applyContextBudget(
-        rawMessages,
+        preMessages,
         budgetResolved,
         workAgentBudget,
       );
@@ -1291,7 +1358,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           chat,
           provider,
           turnBody,
-          resumeGenerationId,
+          activeResumeGenerationId,
           bubble,
           cursor,
           chatSignal,
@@ -1306,6 +1373,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           undefined,
           () => {
             syncTurnContextUsage(chat.id, livePartialText, thoughtController);
+            notifyChatStreamActivity(chat.id);
           },
           turnRunId,
         );
@@ -1328,6 +1396,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         } else {
           throw streamErr;
         }
+      }
+
+      if (activeResumeGenerationId) {
+        activeResumeGenerationId = undefined;
       }
 
       cancelAssistantBubbleRenderDebounce();
@@ -1829,20 +1901,37 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
     }
+    const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
+    const failedForkIndex =
+      failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
+    const rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
+    if (rolledBack) {
+      recordChatMessage(chat);
+      scheduleSaveSessions();
+      renderSidebar();
+      if (isStreamDomVisible(chat.id)) {
+        renderChatFromHistory(chat);
+      }
+    }
     cancelAssistantBubbleRenderDebounce();
+    const lost =
+      e.message === GENERATION_LOST_ON_RESTART_MESSAGE
+        ? GENERATION_LOST_ON_RESTART_MESSAGE
+        : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
     if (isStreamDomVisible(chat.id)) {
-      if (cursor.parentElement) cursor.remove();
-      revealProse();
-      const lost =
-        e.message === GENERATION_LOST_ON_RESTART_MESSAGE
-          ? GENERATION_LOST_ON_RESTART_MESSAGE
-          : `Could not complete this reply: ${formatGenerationErrorMessage(e.message ?? 'Unknown error')}`;
-      setAssistantErrorBubble(bubble, lost);
+      if (!rolledBack) {
+        if (cursor.parentElement) cursor.remove();
+        revealProse();
+        setAssistantErrorBubbleWithRecovery(bubble, lost, {
+          chatId: chat.id,
+          forkHistoryIndex: failedForkIndex,
+        });
+      }
       const msg = e.message ?? '';
       const statusMsg = msg.length > 48 ? `${msg.slice(0, 45)}…` : msg;
       const attachHint =
         getPendingAttachments().length > 0 ? ' Attachments kept for retry.' : '';
-      setStatus('err', statusMsg + attachHint);
+      setStatus('err', (rolledBack ? lost : statusMsg) + attachHint);
     }
   } finally {
     setContextInFlightOverlay(null);
@@ -1897,6 +1986,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (ownsGlobalStreaming) {
       notifyChatStreamEnded(chat.id);
       setStreaming(false, chat.id);
+      flushPendingMode(chat);
       syncOrchestrateInitSplitChrome(chat);
       setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
@@ -1928,14 +2018,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const run = findRunById(chat, turnRunId);
       const start = run?.outputHistoryStart;
       const end = run?.outputHistoryEnd;
+      const persistOutput = turnRunStatus !== 'failed';
       const outputMessages =
-        start !== undefined && end !== undefined && end >= start
+        persistOutput &&
+        start !== undefined &&
+        end !== undefined &&
+        end >= start
           ? chat.history.slice(start, end + 1).map((m) => ({ ...m }))
           : undefined;
       finalizeRun(chat, turnRunId, {
         status: turnRunStatus,
-        outputHistoryStart: start,
-        outputHistoryEnd: end,
+        outputHistoryStart: persistOutput ? start : undefined,
+        outputHistoryEnd: persistOutput ? end : undefined,
         outputMessages,
       });
       scheduleSaveSessions();

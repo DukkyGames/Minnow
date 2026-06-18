@@ -49,6 +49,17 @@ let selectedEntryPath: string | null = null;
 let resolvePicker: ((result: WorkspaceFolderPickerResult) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let previousFocus: HTMLElement | null = null;
+let shellListenersBound = false;
+
+/** True while the inline "New folder" name field is visible. */
+function isNewFolderPanelVisible(): boolean {
+  return Boolean(newFolderPanel && !newFolderPanel.hidden);
+}
+
+/** Whether the workspace folder picker modal is open. */
+export function isWorkspaceFolderPickerOpen(): boolean {
+  return resolvePicker !== null;
+}
 
 /** Delay single-click selection so double-click can drill down first. */
 const PICKER_CLICK_DELAY_MS = 220;
@@ -296,30 +307,135 @@ function updateBreadcrumbs(): void {
   }
 }
 
+function bindShellRefs(root: HTMLDivElement): void {
+  overlayEl = root;
+  dialogEl = root.querySelector(`#${DIALOG_ID}`) as HTMLDivElement | null;
+  breadcrumbsEl = root.querySelector('[data-ws-picker-breadcrumbs]');
+  listEl = root.querySelector('[data-ws-picker-list]');
+  upBtn = root.querySelector('[data-ws-picker-up]');
+  newFolderBtn = root.querySelector('[data-ws-picker-new-folder]');
+  closeBtn = root.querySelector('[data-ws-picker-close]');
+  newFolderPanel = root.querySelector('[data-ws-picker-new-folder-panel]');
+  newFolderInput = root.querySelector('[data-ws-picker-new-folder-input]');
+  newFolderCreateBtn = root.querySelector('[data-ws-picker-new-folder-create]');
+  newFolderCancelBtn = root.querySelector('[data-ws-picker-new-folder-cancel]');
+  errorEl = root.querySelector('[data-ws-picker-error]');
+  openBtn = root.querySelector('[data-ws-picker-open]');
+  cancelBtn = root.querySelector('[data-ws-picker-cancel]');
+  emptyEl = root.querySelector('[data-ws-picker-empty]');
+  selectionPathEl = root.querySelector('[data-ws-picker-selection-path]');
+  selectionWrapEl = root.querySelector('[data-ws-picker-selection]');
+}
+
+/** Defer focus until after the activating click finishes (Electron-safe). */
+function focusNewFolderInput(): void {
+  if (!newFolderInput) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    if (!newFolderInput || !isNewFolderPanelVisible()) {
+      return;
+    }
+    newFolderInput.focus();
+    newFolderInput.select();
+  });
+}
+
+function wireShellListeners(): void {
+  if (shellListenersBound || !overlayEl) {
+    return;
+  }
+  shellListenersBound = true;
+
+  closeBtn?.appendChild(createIconSvg(ICON_CLOSE));
+  upBtn?.appendChild(createIconSvg(ICON_UP));
+  if (newFolderBtn && !newFolderBtn.querySelector('.icon-svg')) {
+    newFolderBtn.appendChild(createIconSvg(ICON_FOLDER_PLUS));
+  }
+
+  overlayEl.addEventListener('click', (event) => {
+    if (event.target === overlayEl) {
+      finishPicker({ cancelled: true, path: null });
+    }
+  });
+
+  const cancel = () => finishPicker({ cancelled: true, path: null });
+
+  cancelBtn?.addEventListener('click', cancel);
+  closeBtn?.addEventListener('click', cancel);
+
+  openBtn?.addEventListener('click', () => {
+    const chosen = selectedEntryPath ?? (currentPath.trim() || null);
+    if (!chosen) {
+      return;
+    }
+    finishPicker({ cancelled: false, path: chosen });
+  });
+
+  upBtn?.addEventListener('click', () => {
+    hideNewFolderPanel();
+    if (!currentParent) {
+      void loadListing('');
+      return;
+    }
+    void loadListing(currentParent);
+  });
+
+  newFolderBtn?.addEventListener('click', () => {
+    showNewFolderPanel();
+  });
+
+  newFolderCancelBtn?.addEventListener('click', () => {
+    hideNewFolderPanel();
+  });
+
+  newFolderCreateBtn?.addEventListener('click', () => {
+    void submitNewFolder();
+  });
+
+  newFolderInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void submitNewFolder();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      hideNewFolderPanel();
+    }
+  });
+
+  // Keep pointer/focus on the name field (matches file-tree-create inline inputs).
+  for (const eventName of ['mousedown', 'click', 'dblclick'] as const) {
+    newFolderInput?.addEventListener(eventName, (event) => {
+      event.stopPropagation();
+    });
+  }
+
+  dialogEl?.addEventListener('focusin', (event) => {
+    if (!isNewFolderPanelVisible() || !newFolderInput) {
+      return;
+    }
+    const target = event.target;
+    if (target === newFolderInput) {
+      return;
+    }
+    if (target instanceof HTMLElement && newFolderPanel?.contains(target)) {
+      return;
+    }
+    focusNewFolderInput();
+  });
+}
+
 function ensureShell(): void {
-  if (overlayEl && dialogEl) {
+  if (overlayEl && dialogEl && shellListenersBound) {
     return;
   }
 
   const existing = document.getElementById(OVERLAY_ID);
   if (existing instanceof HTMLDivElement) {
-    overlayEl = existing;
-    dialogEl = existing.querySelector(`#${DIALOG_ID}`) as HTMLDivElement | null;
-    breadcrumbsEl = existing.querySelector('[data-ws-picker-breadcrumbs]');
-    listEl = existing.querySelector('[data-ws-picker-list]');
-    upBtn = existing.querySelector('[data-ws-picker-up]');
-    newFolderBtn = existing.querySelector('[data-ws-picker-new-folder]');
-    closeBtn = existing.querySelector('[data-ws-picker-close]');
-    newFolderPanel = existing.querySelector('[data-ws-picker-new-folder-panel]');
-    newFolderInput = existing.querySelector('[data-ws-picker-new-folder-input]');
-    newFolderCreateBtn = existing.querySelector('[data-ws-picker-new-folder-create]');
-    newFolderCancelBtn = existing.querySelector('[data-ws-picker-new-folder-cancel]');
-    errorEl = existing.querySelector('[data-ws-picker-error]');
-    openBtn = existing.querySelector('[data-ws-picker-open]');
-    cancelBtn = existing.querySelector('[data-ws-picker-cancel]');
-    emptyEl = existing.querySelector('[data-ws-picker-empty]');
-    selectionPathEl = existing.querySelector('[data-ws-picker-selection-path]');
-    selectionWrapEl = existing.querySelector('[data-ws-picker-selection]');
+    bindShellRefs(existing);
+    wireShellListeners();
     return;
   }
 
@@ -424,77 +540,8 @@ function ensureShell(): void {
   `;
 
   document.body.appendChild(overlayEl);
-  dialogEl = overlayEl.querySelector(`#${DIALOG_ID}`) as HTMLDivElement;
-  breadcrumbsEl = overlayEl.querySelector('[data-ws-picker-breadcrumbs]');
-  listEl = overlayEl.querySelector('[data-ws-picker-list]');
-  upBtn = overlayEl.querySelector('[data-ws-picker-up]');
-  newFolderBtn = overlayEl.querySelector('[data-ws-picker-new-folder]');
-  closeBtn = overlayEl.querySelector('[data-ws-picker-close]');
-  newFolderPanel = overlayEl.querySelector('[data-ws-picker-new-folder-panel]');
-  newFolderInput = overlayEl.querySelector('[data-ws-picker-new-folder-input]');
-  newFolderCreateBtn = overlayEl.querySelector('[data-ws-picker-new-folder-create]');
-  newFolderCancelBtn = overlayEl.querySelector('[data-ws-picker-new-folder-cancel]');
-  errorEl = overlayEl.querySelector('[data-ws-picker-error]');
-  openBtn = overlayEl.querySelector('[data-ws-picker-open]');
-  cancelBtn = overlayEl.querySelector('[data-ws-picker-cancel]');
-  emptyEl = overlayEl.querySelector('[data-ws-picker-empty]');
-  selectionPathEl = overlayEl.querySelector('[data-ws-picker-selection-path]');
-  selectionWrapEl = overlayEl.querySelector('[data-ws-picker-selection]');
-
-  closeBtn?.appendChild(createIconSvg(ICON_CLOSE));
-  upBtn?.appendChild(createIconSvg(ICON_UP));
-  newFolderBtn?.appendChild(createIconSvg(ICON_FOLDER_PLUS));
-
-  overlayEl.addEventListener('click', (event) => {
-    if (event.target === overlayEl) {
-      finishPicker({ cancelled: true, path: null });
-    }
-  });
-
-  const cancel = () => finishPicker({ cancelled: true, path: null });
-
-  cancelBtn?.addEventListener('click', cancel);
-  closeBtn?.addEventListener('click', cancel);
-
-  openBtn?.addEventListener('click', () => {
-    const chosen = selectedEntryPath ?? (currentPath.trim() || null);
-    if (!chosen) {
-      return;
-    }
-    finishPicker({ cancelled: false, path: chosen });
-  });
-
-  upBtn?.addEventListener('click', () => {
-    hideNewFolderPanel();
-    if (!currentParent) {
-      void loadListing('');
-      return;
-    }
-    void loadListing(currentParent);
-  });
-
-  newFolderBtn?.addEventListener('click', () => {
-    showNewFolderPanel();
-  });
-
-  newFolderCancelBtn?.addEventListener('click', () => {
-    hideNewFolderPanel();
-  });
-
-  newFolderCreateBtn?.addEventListener('click', () => {
-    void submitNewFolder();
-  });
-
-  newFolderInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      void submitNewFolder();
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      hideNewFolderPanel();
-    }
-  });
+  bindShellRefs(overlayEl);
+  wireShellListeners();
 }
 
 function clearPickerError(): void {
@@ -523,8 +570,7 @@ function showNewFolderPanel(): void {
   newFolderPanel.hidden = false;
   newFolderPanel.classList.remove('hidden');
   newFolderInput.value = 'New folder';
-  newFolderInput.focus();
-  newFolderInput.select();
+  focusNewFolderInput();
 }
 
 function hideNewFolderPanel(): void {
@@ -661,7 +707,11 @@ function showOverlay(): void {
   }
   overlayEl.hidden = false;
   overlayEl.classList.remove('hidden');
-  dialogEl.focus();
+  if (!isNewFolderPanelVisible()) {
+    dialogEl.focus();
+  } else {
+    focusNewFolderInput();
+  }
 }
 
 function hideOverlay(): void {
@@ -710,6 +760,12 @@ export function openWorkspaceFolderPicker(options?: {
       if (event.key !== 'Escape') {
         return;
       }
+      if (isNewFolderPanelVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        hideNewFolderPanel();
+        return;
+      }
       event.preventDefault();
       finishPicker({ cancelled: true, path: null });
     };
@@ -720,6 +776,10 @@ export function openWorkspaceFolderPicker(options?: {
 /** Test helper — reset module singletons. */
 export function resetWorkspaceFolderPickerForTests(): void {
   finishPicker({ cancelled: true, path: null });
+  document.getElementById(OVERLAY_ID)?.remove();
   overlayEl = null;
   dialogEl = null;
+  breadcrumbsEl = null;
+  listEl = null;
+  shellListenersBound = false;
 }

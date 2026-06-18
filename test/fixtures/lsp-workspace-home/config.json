@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-06-16T05:37:47.417Z",
+  "createdAt": "2026-06-18T05:13:31.870Z",
   "migratedFromLocalStorage": false,
   "migratedAt": null,
   "localStorageKeysMigrated": [],
@@ -143,7 +143,7 @@
     }
   },
   "editorAiCompletion": {
-    "enabled": false,
+    "enabled": true,
     "debounceMs": 450,
     "maxPrefixLines": 80,
     "maxSuffixLines": 40,
@@ -187,9 +187,9 @@
     }
   },
   "workspace": {
-    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-nxcx3e",
+    "path": "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-kpeQeD",
     "recentPaths": [
-      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-nxcx3e"
+      "C:\\Users\\dukky\\AppData\\Local\\Temp\\minnow-lsp-ws-kpeQeD"
     ]
   }
 }

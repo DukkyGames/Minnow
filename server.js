@@ -32,7 +32,6 @@ import {
   resolveSafePath,
   runWithPathAccess,
 } from './server/runtime/path-access.js';
-import { spawnElectronShell } from './scripts/spawn-electron.mjs';
 
 const PORT = Number(process.env.PORT) || 5173;
 
@@ -54,6 +53,32 @@ function openBrowser(url) {
   }
 
   const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.unref();
+}
+
+/** Launch Electron in a child process (avoids Vite self-fetch deadlock). */
+function launchElectronShell(port, localUrl, appRoot) {
+  const launcher = path.join(appRoot, 'scripts', 'launch-electron-after-vite.mjs');
+  const child = spawn(process.execPath, [launcher, '--port', String(port)], {
+    cwd: appRoot,
+    env: process.env,
+    stdio: 'inherit',
+    detached: true,
+  });
+
+  child.on('error', (err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
+    openBrowser(localUrl);
+  });
+
+  child.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      console.warn(`[minnow] Electron launch failed (exit ${code}); opening system browser.`);
+      openBrowser(localUrl);
+    }
+  });
+
   child.unref();
 }
 
@@ -102,6 +127,7 @@ async function main() {
   console.log(`Agent packs API: ${localUrl.replace(/\/$/, '')}/api/agent-packs`);
   console.log(`Tools API: ${localUrl.replace(/\/$/, '')}/api/tools/ping`);
   console.log(`Memory API: ${localUrl.replace(/\/$/, '')}/api/memory/ping`);
+  console.log(`Brain API: ${localUrl.replace(/\/$/, '')}/api/brain/ping`);
   console.log(`Models API: ${localUrl.replace(/\/$/, '')}/api/models/ping`);
   console.log(`LSP API: ${localUrl.replace(/\/$/, '')}/api/lsp/status`);
   console.log(`MCP API: ${localUrl.replace(/\/$/, '')}/api/mcp/ping`);
@@ -148,16 +174,7 @@ async function main() {
     console.log('Opened in system browser (MINNOW_BROWSER=1). Built-in Chromium preview uses the Electron shell by default.');
   } else {
     const port = new URL(localUrl).port || String(PORT);
-    void spawnElectronShell({ port, dev: true, foreground: false })
-      .then(() => {
-        console.log('Minnow desktop: Electron shell launched (Chromium in-app browser).');
-        console.log('Use MINNOW_BROWSER=1 to open the system browser instead.');
-      })
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(`[minnow] Electron launch failed (${message}); opening system browser.`);
-        openBrowser(localUrl);
-      });
+    launchElectronShell(port, localUrl, appRoot);
   }
 }
 

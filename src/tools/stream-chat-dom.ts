@@ -3,6 +3,7 @@
  */
 
 import { isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';
+import { getSidebarStreamPhase } from '../ui/chat-item-dot';
 import type { StreamingAssistantRow } from '../ui/messages';
 import { appendStreamingAssistantRow } from '../ui/messages';
 import type { StreamingStatusHandle } from '../ui/stream-status';
@@ -44,4 +45,10 @@ export function remountStreamDomForChat(chatId: string): void {
     cursor: row.cursor,
     streamStatus: row.streamStatus,
   });
+
+  // Restore thinking/generating label after history re-render cleared the live row.
+  const phase = getSidebarStreamPhase(chatId);
+  if (phase === 'thinking') {
+    row.streamStatus.setPhase('thinking');
+  }
 }

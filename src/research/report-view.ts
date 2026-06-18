@@ -15,6 +15,11 @@ export interface ReportViewActions {
   onViewLibrary: () => void;
 }
 
+export interface ReportViewOptions {
+  /** Completed runs are auto-persisted — hide the redundant Save control when true. */
+  savedToLibrary?: boolean;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -42,7 +47,9 @@ export function renderResearchReportView(
   brief: ParsedBrief,
   statsLine: string,
   actions: ReportViewActions,
+  options: ReportViewOptions = {},
 ): void {
+  const savedToLibrary = options.savedToLibrary !== false;
   const findingsHtml = brief.findings.length
     ? brief.findings
         .map((f) => {
@@ -101,7 +108,11 @@ export function renderResearchReportView(
       <div class="dr-srclist">${sourcesHtml}</div>
       ${followHtml ? '<h3 class="dr-rep-sec">Suggested follow-ups</h3><div class="dr-follow">' + followHtml + '</div>' : ''}
       <div class="dr-rep-actions">
-        <button type="button" class="dr-save" id="btnResearchSaved">Save to Library</button>
+        ${
+          savedToLibrary
+            ? ''
+            : '<button type="button" class="dr-save" id="btnResearchSaved">Save to Library</button>'
+        }
         <button type="button" class="dr-ghost" id="btnResearchExport">Export</button>
         <button type="button" class="dr-ghost" id="btnResearchRunAgain">Run again</button>
         <button type="button" class="dr-ghost" id="btnResearchDiscuss">Discuss</button>
@@ -116,6 +127,7 @@ export function renderResearchReportView(
     btn.innerHTML = '<span aria-hidden="true">✓</span> Saved to Library';
     actions.onViewLibrary();
   });
+  // When savedToLibrary is true the Save button is omitted — completed runs are auto-persisted.
   mount.querySelector('#btnResearchExport')?.addEventListener('click', () => actions.onExport());
   mount.querySelector('#btnResearchRunAgain')?.addEventListener('click', () => actions.onRunAgain());
   mount.querySelector('#btnResearchDiscuss')?.addEventListener('click', () => actions.onDiscuss());
@@ -139,8 +151,9 @@ export function renderResearchResultFromMarkdown(
   stats: ResearchStats | undefined,
   round: number,
   actions: ReportViewActions,
+  options?: ReportViewOptions,
 ): void {
   const brief = parseResearchBrief(markdown, sources, query);
   const statsLine = formatStatsLine(stats, sources.length, round);
-  renderResearchReportView(mount, brief, statsLine, actions);
+  renderResearchReportView(mount, brief, statsLine, actions, options);
 }

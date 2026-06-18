@@ -100,6 +100,13 @@ export function syncChatItemDotsInDom(): void {
 /** Alias for call sites that already use this name from the plan. */
 export const refreshSidebarChatDots = syncChatItemDotsInDom;
 
+/** Read the last-known stream phase for sidebar dots / stream DOM remount. */
+export function getSidebarStreamPhase(
+  chatId: string,
+): 'generating' | 'thinking' | null {
+  return streamPhaseByChatId.get(chatId) ?? null;
+}
+
 /** Called when the model enters or leaves the reasoning SSE phase for a chat. */
 export function setSidebarStreamPhase(
   phase: 'generating' | 'thinking' | null,

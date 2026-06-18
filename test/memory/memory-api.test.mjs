@@ -10,6 +10,7 @@ import { createServer } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { closeCodeDbForTests } from '../../server/brain/code/schema.js';
 import { handleMemoryRequest, initMemoryApi } from '../../server/memory/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +83,7 @@ describe('memory API', () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeCodeDbForTests();
     delete process.env.MINNOW_HOME;
     resetMinnowHomeCache();
     await fs.rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
@@ -186,6 +188,12 @@ describe('memory API', () => {
 
   test('embeddings reindex rejects when disabled', async () => {
     const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/reindex');
+    assert.equal(res.status, 400);
+    assert.match(res.json.error, /disabled/i);
+  });
+
+  test('embeddings warmup rejects when disabled', async () => {
+    const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/warmup');
     assert.equal(res.status, 400);
     assert.match(res.json.error, /disabled/i);
   });

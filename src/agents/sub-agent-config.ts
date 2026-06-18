@@ -27,6 +27,27 @@ export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000):
   return Math.min(1_800_000, Math.max(10_000, rounded));
 }
 
+/** Coerce heartbeat interval H to [1s, 60s]. */
+export function clampHeartbeatIntervalMs(value: unknown, fallback = 7_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(60_000, Math.max(1_000, Math.round(n)));
+}
+
+/** Coerce progress stall threshold P to [10s, 30m]. */
+export function clampProgressStallMs(value: unknown, fallback = 90_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(1_800_000, Math.max(10_000, Math.round(n)));
+}
+
+/** Coerce heartbeat dead threshold D to [5s, 5m]. */
+export function clampHeartbeatDeadMs(value: unknown, fallback = 30_000): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(300_000, Math.max(5_000, Math.round(n)));
+}
+
 /** Coerce sub-agent max tool turns to [1, {@link MAX_CHAT_MAX_TOOL_TURNS}]. */
 export function clampSubAgentMaxToolTurns(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -76,6 +97,15 @@ export function mergeSubAgentConfig(
     checkInNudgeMs: clampSubAgentCheckInNudgeMs(
       user?.checkInNudgeMs ?? defaults.checkInNudgeMs,
       clampSubAgentCheckInNudgeMs(defaults.checkInNudgeMs),
+    ),
+    heartbeatIntervalMs: clampHeartbeatIntervalMs(
+      user?.heartbeatIntervalMs ?? defaults.heartbeatIntervalMs,
+    ),
+    progressStallMs: clampProgressStallMs(
+      user?.progressStallMs ?? defaults.progressStallMs,
+    ),
+    heartbeatDeadMs: clampHeartbeatDeadMs(
+      user?.heartbeatDeadMs ?? defaults.heartbeatDeadMs,
     ),
     maxToolTurns,
     defaultMaxInputTokens: user?.defaultMaxInputTokens ?? defaults.defaultMaxInputTokens,

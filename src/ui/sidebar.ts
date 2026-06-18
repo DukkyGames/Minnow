@@ -5,12 +5,14 @@ import { isChatStreaming } from '../chat/streaming-state';
 import {
   createGroup,
   deleteGroup,
+  dismissActiveBoardView,
   getActiveBoardGroup,
   getGroupsForWorkspace,
   openBoardGroup,
   renameGroup,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
+import { isChatAppForeground } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import {
   createEmptyChatObject,
@@ -19,10 +21,12 @@ import {
   getUnassignedChats,
   isHiddenFromMainSidebar,
   onWorkspaceChanged,
+  removeChatById,
   sessionState,
   touchChat,
   recordChatMessage,
   scheduleSaveSessions,
+  type RemoveChatResult,
 } from '../state/sessions';
 import {
   getExpertScopeId,
@@ -56,7 +60,7 @@ import { syncThinkingControlFromActiveChat } from './composer-thinking';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
-import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
@@ -76,6 +80,7 @@ import {
   resolveChatItemDotState,
   syncChatItemDotsInDom,
 } from './chat-item-dot';
+import { acknowledgeChatViewed } from '../notifications/acknowledge';
 
 /** Read canonical model id + optional provider from the top-bar composite select value. */
 function readTopBarModelBinding(): { modelId: string; providerId?: string } {
@@ -605,47 +610,11 @@ function beginRenameChat(
   inp.addEventListener('blur', finish, { once: true });
 }
 
-export function deleteChat(chatId: string, evt?: Event): void {
-  if (evt) evt.stopPropagation();
-  if (isChatStreaming(chatId)) {
-    setStatus('spin', 'Finish the current reply first');
-    return;
-  }
-  const idx = sessionState!.chats.findIndex((c) => c.id === chatId);
-  if (idx < 0) return;
-  const victim = sessionState!.chats[idx];
-  if (!confirm(`Delete "${victim.name}"? Messages in this chat cannot be recovered.`)) return;
-
-  const wasActive = sessionState!.activeId === chatId;
-  sessionState!.chats.splice(idx, 1);
-
-  const victimWorkspace = victim.workspacePath ?? '';
-  let mainNeedsRefresh = wasActive;
-  if (sessionState!.chats.length === 0) {
-    const { modelId, providerId } = readTopBarModelBinding();
-    const fresh = createEmptyChatObject(modelId, victimWorkspace);
-    if (providerId) fresh.providerId = providerId;
-    sessionState!.chats.push(fresh);
-    sessionState!.activeId = fresh.id;
-    touchChat(fresh);
-    mainNeedsRefresh = true;
-  } else if (wasActive) {
-    const inWorkspace = getChatsForWorkspace(victimWorkspace, sessionState!);
-    if (inWorkspace.length) {
-      sessionState!.activeId = inWorkspace[0].id;
-    } else {
-      const { modelId, providerId } = readTopBarModelBinding();
-      const fresh = createEmptyChatObject(modelId, victimWorkspace);
-      if (providerId) fresh.providerId = providerId;
-      sessionState!.chats.push(fresh);
-      sessionState!.activeId = fresh.id;
-      touchChat(fresh);
-    }
-    mainNeedsRefresh = true;
-  }
-
-  if (mainNeedsRefresh) {
-    const active = getActiveChat();
+/** Refresh sidebar and main chat UI after removeChatById. */
+function onChatRemoved(result: RemoveChatResult): void {
+  if (!result.ok) return;
+  if (result.activeChanged) {
+    const active = result.activeChat;
     recordChatOpened(active.id);
     syncModelSelectForActiveChat();
     renderStatsForChat(active);
@@ -658,8 +627,23 @@ export function deleteChat(chatId: string, evt?: Event): void {
     void import('../ui/desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   }
   renderSidebar();
-  scheduleSaveSessions();
   closeMobileSidebar();
+}
+
+export function deleteChat(chatId: string, evt?: Event): void {
+  if (evt) evt.stopPropagation();
+  if (isChatStreaming(chatId)) {
+    setStatus('spin', 'Finish the current reply first');
+    return;
+  }
+  const idx = sessionState!.chats.findIndex((c) => c.id === chatId);
+  if (idx < 0) return;
+  const victim = sessionState!.chats[idx];
+  if (!confirm(`Delete "${victim.name}"? Messages in this chat cannot be recovered.`)) return;
+
+  const { modelId } = readTopBarModelBinding();
+  const result = removeChatById(chatId, modelId);
+  onChatRemoved(result);
 }
 
 export function switchChat(id: string): void {
@@ -669,7 +653,25 @@ export function switchChat(id: string): void {
   if (sessionState?.activeId) {
     suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
   }
-  if (!sessionState || id === sessionState.activeId) {
+  if (!sessionState) {
+    closeMobileSidebar();
+    applySidebarVisuals();
+    return;
+  }
+
+  const boardWasOpen = dismissActiveBoardView();
+
+  if (id === sessionState.activeId) {
+    acknowledgeChatViewed(id);
+    if (boardWasOpen) {
+      const sameChat = sessionState.chats.find((c) => c.id === id);
+      if (sameChat) {
+        renderChatFromHistory(sameChat);
+        syncViewModeToggleFromActiveChat();
+        renderSidebar();
+        scheduleSaveSessions();
+      }
+    }
     closeMobileSidebar();
     applySidebarVisuals();
     return;
@@ -683,18 +685,16 @@ export function switchChat(id: string): void {
   }
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
-  if (sessionState.activeBoardGroupId) {
-    delete sessionState.activeBoardGroupId;
-    const boardGroup = sessionState.groups?.find(
-      (g) => g.id === chat.boardGroupId || g.id === chat.groupId,
-    );
-    if (boardGroup) boardGroup.viewMode = 'chat';
-  }
   sessionState.activeId = id;
-  chat.unread = false;
-  recordChatOpened(id);
+  acknowledgeChatViewed(id);
   syncModelSelectForActiveChat();
-  renderChatFromHistory(chat);
+  if (isDesktopChatActive()) {
+    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(id));
+  } else if (isChatAppForeground()) {
+    renderChatFromHistory(chat, '#chatAppMessageCol');
+  } else {
+    renderChatFromHistory(chat);
+  }
   void import('../usage/code-change-backfill').then((m) =>
     m.ensureChatCodeChangeBackfillOnSwitch(chat).then(() => {
       updateCodeChangeStrip(chat);
@@ -726,6 +726,28 @@ export interface CreateChatWithModeOptions {
   initialUserMessage?: string;
 }
 
+/** Start an LLM turn when the user message was already pushed into history. */
+async function kickoffSeededChatTurn(chat: Chat, message: string): Promise<void> {
+  const { detectLocalServer } = await import('../tools/client');
+  const { buildHistoryUserContent, runChatTurn } = await import('../tools/loop');
+  const { isFirstUserMessagePending } = await import('../chat/titles/schedule');
+
+  await detectLocalServer();
+  await runChatTurn({
+    chat,
+    pushUser: false,
+    rawText: message,
+    userText: message,
+    displayText: message,
+    historyContent: buildHistoryUserContent(message, []),
+    skillId: null,
+    validAttachments: [],
+    titleSeed: message,
+    shouldScheduleTitle: isFirstUserMessagePending(chat),
+    ownsGlobalStreaming: chat.id === getActiveChat().id,
+  });
+}
+
 export interface CreateChatWithModeResult {
   ok: boolean;
   chatId?: string;
@@ -738,6 +760,14 @@ export interface CreateChatWithModeResult {
 export function createChatWithMode(
   options: CreateChatWithModeOptions,
 ): CreateChatWithModeResult {
+  if (isOrchestrateHubMounted()) {
+    teardownOrchestrateHub();
+  }
+  if (sessionState?.activeId) {
+    suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
+  }
+  dismissActiveBoardView();
+
   const modeId = normalizeModeId(options.modeId);
   const { modelId, providerId } = readTopBarModelBinding();
   const chat = createEmptyChatObject(modelId);
@@ -787,6 +817,12 @@ export function createChatWithMode(
   closeMobileSidebar();
   applySidebarVisuals();
 
+  if (initial) {
+    void kickoffSeededChatTurn(chat, initial).catch(() => {
+      /* runChatTurn surfaces inline errors */
+    });
+  }
+
   return {
     ok: true,
     chatId: chat.id,
@@ -796,5 +832,10 @@ export function createChatWithMode(
 }
 
 export function createChat(): void {
-  createChatWithMode({ modeId: normalizeModeId(getActiveChat().modeId) });
+  const active = getActiveChat();
+  const leavingOrchestrate =
+    isBoardViewActive() || normalizeModeId(active.modeId) === 'orchestrate';
+  createChatWithMode({
+    modeId: leavingOrchestrate ? 'general' : normalizeModeId(active.modeId),
+  });
 }

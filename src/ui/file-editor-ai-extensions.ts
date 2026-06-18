@@ -21,16 +21,23 @@ import {
   type KeyBinding,
   type ViewUpdate,
 } from '@codemirror/view';
-import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import {
+  getEditorAiCompletionConfigSync,
+  type EditorAiCompletionConfig,
+} from '../config/editor-ai-completion';
 import {
   fetchEditorAiCompletion,
   resolveEditorAiBinding,
+  validateEditorAiBinding,
 } from './editor-ai-completion-client';
 import { nextPartialGhostChunk } from './editor-ai-completion-prompt';
 
 export interface EditorAiExtensionOptions {
   filePath: string;
-  config: EditorAiCompletionConfig;
+  /** @deprecated Prefer getConfig — static config is not refreshed after Settings saves. */
+  config?: EditorAiCompletionConfig;
+  /** Live editor AI settings (refreshed on each completion request). */
+  getConfig?: () => EditorAiCompletionConfig;
   /** When false, no requests are made (npm start / provider offline). */
   canRequest: () => boolean;
   onStatus?: (message: string | null) => void;
@@ -214,6 +221,11 @@ class EditorAiCompletionPlugin {
     private readonly opts: EditorAiExtensionOptions,
   ) {}
 
+  /** Read current inline-completion settings (not snapshotted at file open). */
+  private resolveConfig(): EditorAiCompletionConfig {
+    return this.opts.getConfig?.() ?? this.opts.config ?? getEditorAiCompletionConfigSync();
+  }
+
   update(update: ViewUpdate): void {
     if (!update.docChanged && !update.selectionSet) return;
     const tr = update.transactions[0];
@@ -240,7 +252,7 @@ class EditorAiCompletionPlugin {
 
   private schedule(pos: number): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    const delay = this.opts.config.debounceMs;
+    const delay = this.resolveConfig().debounceMs;
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
       void this.requestCompletion(pos);
@@ -289,12 +301,18 @@ class EditorAiCompletionPlugin {
     this.requestPos = pos;
 
     try {
-      const binding = await resolveEditorAiBinding(this.opts.config);
-      const text = await fetchEditorAiCompletion({
+      const config = this.resolveConfig();
+      const binding = await resolveEditorAiBinding(config);
+      const validation = validateEditorAiBinding(binding);
+      if (validation.ok === false) {
+        this.opts.onStatus?.(validation.message);
+        return;
+      }
+      const result = await fetchEditorAiCompletion({
         state,
         cursorPos: pos,
         filePath: this.opts.filePath,
-        config: this.opts.config,
+        config,
         binding,
         signal: controller.signal,
         onPartial: (partial) => {
@@ -308,12 +326,18 @@ class EditorAiCompletionPlugin {
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
-      this.showGhostAt(pos, text ?? '');
-      if (text) {
+      this.showGhostAt(pos, result.text ?? '');
+      if (result.text) {
         this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
+      } else if (!controller.signal.aborted && result.error) {
+        this.opts.onStatus?.(result.error);
       }
-    } catch {
-      this.opts.onStatus?.('AI completion failed — check provider and model in Settings');
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : 'AI completion failed — check provider and model in Settings';
+      this.opts.onStatus?.(message);
     } finally {
       if (this.abortController === controller) {
         this.abortController = null;

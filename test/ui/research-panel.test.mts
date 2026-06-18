@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   initResearchPage,
   isResearchStartDisabledForTests,
+  openResearchReport,
   setResearchRunningForTests,
 } from '../../src/research/panel.ts';
 
@@ -56,5 +57,20 @@ describe('research panel', () => {
     setResearchRunningForTests(false);
     assert.equal(isResearchStartDisabledForTests(), false);
     assert.equal(cancel.hidden, true);
+  });
+
+  test('openResearchReport uses external surface while research page is open', () => {
+    const researchView = document.getElementById('researchView')!;
+    researchView.classList.add('is-open');
+    let openedUrl = '';
+    window.open = ((url: string) => {
+      openedUrl = url;
+      return null;
+    }) as typeof window.open;
+
+    openResearchReport('rs-abc123456789');
+
+    assert.match(openedUrl, /\/api\/research\/report\/rs-abc123456789$/);
+    researchView.classList.remove('is-open');
   });
 });

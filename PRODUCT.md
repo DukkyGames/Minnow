@@ -6,17 +6,18 @@
 
 ## Users
 
-Developers and hobbyists running LM Studio (or compatible local providers) on their machine. They switch models, compare runs, orchestrate multi-step work across modes, spawn sub-agents, and care about tokens/sec, TTFT, and context limits while chatting at a desk or on a laptop.
+Developers and hobbyists running LM Studio (or compatible local providers) on their machine. They switch models, compare runs, orchestrate multi-step work across modes, spawn sub-agents, and care about tokens/sec, TTFT, and context limits while chatting at a desk or on a laptop. Increasingly they also use Minnow as a local AI *workspace* — researching, coding, managing calendar/email, and scheduling agent jobs around their models.
 
 ## Product purpose
 
-Fast, lightweight browser client for local OpenAI-compatible chat:
+A local-first AI workspace ("MinnowOS") for OpenAI-compatible chat and agents:
 
 - **Multi-session chat** with workspace-scoped history and streaming replies
-- **Model picker** with load/unload, friendly labels, and a **context usage** indicator beside Send
-- **Five operating modes** — Build, Plan, Orchestrate (board + plans), Research, Reef (inline widgets)
-- **Agent layer** — 57 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions, and programmatic system prompts (full / lite / custom profiles)
-- **Workspace tools** — file tree, terminal, LSP, MCP, memory, optional CDP browser automation
+- **Model picker** with load/unload, friendly labels, an **All / Local / Cloud** filter, and a **context usage** ring beside Send
+- **Six operating modes** — General, Build, Plan, Orchestrate (board + plans), Reef (inline widgets), Debug (bug tracker)
+- **Agent layer** — ~88 built-in tools, sub-agents, work agents, skills (`/commands`), tool permissions, and programmatic system prompts (full / lite / custom profiles)
+- **Apps** — Code, Models, Compare (blind A/B), Bench, Research, Experts, Brain (wiki/knowledge), Calendar, Email, Scheduler
+- **Workspace tools** — file tree + editor, terminal, LSP, MCP, memory + semantic recall, voice I/O, optional CDP browser automation
 - Persistent **inference metrics** strip (compact instrumentation, not a marketing dashboard)
 
 ## Brand and tone

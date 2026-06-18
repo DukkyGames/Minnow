@@ -30,6 +30,7 @@ let applyingRoute = false;
 let lastForegroundApp: AppId | null = null;
 let pendingSettingsSection: string | undefined;
 let pendingModelsSection: string | undefined;
+let pendingBrainSection: string | undefined;
 /** Preserves launch options (e.g. concierge seed) across hash-only navigation. */
 let pendingLaunchOptions: LaunchOptions | undefined;
 
@@ -43,11 +44,17 @@ const MODELS_SETTINGS_REDIRECTS: Record<string, string> = {
   voice: 'voice',
 };
 
+/** Legacy full-page overlays that keep their hash and must not trigger OS routing. */
+export function isLegacyOverlayHash(hash: string): boolean {
+  return hash === '#/bugs' || hash.startsWith('#/bugs/');
+}
+
 /** Map legacy hashes to MinnowOS routes before parsing. */
 export function resolveLegacyHash(hash: string): {
   hash: string;
   settingsSection?: string;
   modelsSection?: string;
+  brainSection?: string;
   desktopChat?: boolean;
   desktopResearch?: boolean;
   desktopExperts?: boolean;
@@ -88,6 +95,11 @@ export function resolveLegacyHash(hash: string): {
     const section = match?.[1] ?? 'recommend';
     return { hash: `#/app/models/${section}`, modelsSection: section };
   }
+  if (trimmed === '#/brain' || trimmed.startsWith('#/brain/')) {
+    const match = trimmed.replace(/^#\/?/, '').match(/^brain(?:\/([\w-]+))?/);
+    const section = match?.[1] ?? 'graph';
+    return { hash: `#/app/brain/${section}`, brainSection: section };
+  }
   if (trimmed === '#/research' || trimmed.startsWith('#/research/')) {
     return { hash: '#/desktop', desktopResearch: true };
   }
@@ -121,6 +133,9 @@ export function parseOsHash(hash: string): OsRoute {
     if (route.appId === 'models') {
       route.modelsSection = appMatch[2] ?? pendingModelsSection ?? 'recommend';
     }
+    if (route.appId === 'brain') {
+      route.brainSection = appMatch[2] ?? pendingBrainSection ?? 'graph';
+    }
     return route;
   }
   return { view: 'desktop' };
@@ -128,9 +143,10 @@ export function parseOsHash(hash: string): OsRoute {
 
 /** Current route derived from location hash + pending redirect state. */
 export function getCurrentRoute(): OsRoute {
-  const { hash, settingsSection, modelsSection } = resolveLegacyHash(window.location.hash);
+  const { hash, settingsSection, modelsSection, brainSection } = resolveLegacyHash(window.location.hash);
   if (settingsSection) pendingSettingsSection = settingsSection;
   if (modelsSection) pendingModelsSection = modelsSection;
+  if (brainSection) pendingBrainSection = brainSection;
   return parseOsHash(hash);
 }
 
@@ -138,6 +154,9 @@ function hashForRoute(route: OsRoute): string {
   if (route.view === 'desktop') return '#/desktop';
   if (route.appId === 'models' && route.modelsSection) {
     return `#/app/models/${route.modelsSection}`;
+  }
+  if (route.appId === 'brain' && route.brainSection) {
+    return `#/app/brain/${route.brainSection}`;
   }
   if (route.appId) return `#/app/${route.appId}`;
   return '#/desktop';
@@ -189,6 +208,10 @@ function applyRoute(route: OsRoute, options?: LaunchOptions): void {
     launchOpts.modelsSection = route.modelsSection;
     pendingModelsSection = route.modelsSection;
   }
+  if (route.brainSection) {
+    launchOpts.brainSection = route.brainSection;
+    pendingBrainSection = route.brainSection;
+  }
 
   launchInstance(route.appId, launchOpts);
   syncForegroundLifecycle(route.appId);
@@ -199,10 +222,15 @@ function applyRouteFromHash(): void {
   applyingRoute = true;
   try {
     const raw = window.location.hash;
+    // Global bugs (#/bugs) is a legacy overlay — global-bugs-page owns the route.
+    if (isLegacyOverlayHash(raw)) {
+      return;
+    }
     const legacy = resolveLegacyHash(raw);
     if (legacy.hash !== raw) {
       if (legacy.settingsSection) pendingSettingsSection = legacy.settingsSection;
       if (legacy.modelsSection) pendingModelsSection = legacy.modelsSection;
+      if (legacy.brainSection) pendingBrainSection = legacy.brainSection;
       if (legacy.desktopChat) {
         queueDesktopChatActivation(pendingLaunchOptions);
       }
@@ -217,6 +245,7 @@ function applyRouteFromHash(): void {
     }
     pendingSettingsSection = legacy.settingsSection ?? pendingSettingsSection;
     pendingModelsSection = legacy.modelsSection ?? pendingModelsSection;
+    pendingBrainSection = legacy.brainSection ?? pendingBrainSection;
     const opts = pendingLaunchOptions;
     pendingLaunchOptions = undefined;
     applyRoute(parseOsHash(raw), opts);
@@ -281,10 +310,15 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
   if (options?.modelsSection) {
     pendingModelsSection = options.modelsSection;
   }
+  if (options?.brainSection) {
+    pendingBrainSection = options.brainSection;
+  }
   const next =
     appId === 'models' && options?.modelsSection
       ? `#/app/models/${options.modelsSection}`
-      : `#/app/${appId}`;
+      : appId === 'brain' && options?.brainSection
+        ? `#/app/brain/${options.brainSection}`
+        : `#/app/${appId}`;
   if (window.location.hash !== next) {
     pendingLaunchOptions = options;
     window.location.hash = next;
@@ -296,6 +330,7 @@ export function launchApp(appId: AppId, options?: LaunchOptions): void {
       appId,
       settingsSection: options?.settingsSection,
       modelsSection: options?.modelsSection,
+      brainSection: options?.brainSection,
     },
     options,
   );
@@ -334,6 +369,7 @@ export function resetOsRouterForTests(): void {
   lastForegroundApp = null;
   pendingSettingsSection = undefined;
   pendingModelsSection = undefined;
+  pendingBrainSection = undefined;
   pendingLaunchOptions = undefined;
 }
 

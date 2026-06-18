@@ -21,7 +21,11 @@ import {
 
 import { mountEmailCompose, type ComposeMode } from "./email-compose";
 
-import { renderEmailBody } from "./email-body";
+import {
+  emailBodySupportsViewToggle,
+  renderEmailBody,
+  type EmailBodyViewMode,
+} from "./email-body";
 
 import { EMAIL_ICONS } from "./email-icons";
 
@@ -207,6 +211,8 @@ export async function renderEmailLayout(
   let selectedThread: EmailMessage[] = [];
 
   let composeMode: ComposeMode | null = null;
+
+  let bodyViewMode: EmailBodyViewMode = "html";
 
   const checked = new Set<string>();
 
@@ -976,6 +982,48 @@ export async function renderEmailLayout(
 
       readerPane.appendChild(header);
 
+      const threadHasBodyToggle = thread.some((msg) =>
+        emailBodySupportsViewToggle(msg),
+      );
+
+      if (threadHasBodyToggle) {
+        const bodyViewBar = el("div", "email-body-view-bar");
+
+        bodyViewBar.appendChild(
+          el("span", "email-body-view-label", "Message view"),
+        );
+
+        const bodyViewToggle = el("div", "email-body-view-toggle");
+
+        const mkBodyViewSegment = (
+          mode: EmailBodyViewMode,
+          label: string,
+        ) => {
+          const btn = el(
+            "button",
+            "email-body-view-segment",
+            label,
+          ) as HTMLButtonElement;
+
+          btn.type = "button";
+          btn.classList.toggle("is-active", bodyViewMode === mode);
+          btn.setAttribute("aria-pressed", bodyViewMode === mode ? "true" : "false");
+
+          btn.addEventListener("click", () => {
+            if (bodyViewMode === mode) return;
+            bodyViewMode = mode;
+            void renderReader();
+          });
+
+          return btn;
+        };
+
+        bodyViewToggle.appendChild(mkBodyViewSegment("html", "Formatted"));
+        bodyViewToggle.appendChild(mkBodyViewSegment("plain", "Plain text"));
+        bodyViewBar.appendChild(bodyViewToggle);
+        readerPane.appendChild(bodyViewBar);
+      }
+
       const bodyStack = el("div", "email-reader-body-stack");
 
       for (const msg of thread) {
@@ -1019,7 +1067,7 @@ export async function renderEmailLayout(
 
         const body = el("div", "email-thread-body");
 
-        renderEmailBody(body, msg);
+        renderEmailBody(body, msg, bodyViewMode);
 
         block.appendChild(body);
 
@@ -1198,6 +1246,8 @@ export async function renderEmailLayout(
 
       main.addEventListener("click", async () => {
         selectedId = message.id;
+
+        bodyViewMode = "html";
 
         composeMode = null;
 

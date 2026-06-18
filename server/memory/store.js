@@ -1,30 +1,28 @@
 /**
- * Memory entry CRUD and index maintenance under ~/.minnow/memory/.
+ * Memory back-compat adapter over the brain wiki store (MIN-B3).
+ * TRACKING: remove when /api/memory and save_memory migrate to brain tools (MIN-B4+).
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
+import { DEFAULT_EMBEDDINGS_CONFIG } from '../engine/embeddings.js';
 import {
-  getEntriesDir,
-  getIndexPath,
-  getMemoryDir,
-  entryFilePath,
-  isValidEntryId,
-} from './paths.js';
-
-import {
-  scheduleEntryVectorSync,
-  syncDeleteEntryVector,
-} from './vector-sync.js';
-import { clearVectorStore } from './vector-store.js';
-import { DEFAULT_EMBEDDINGS_CONFIG } from './embeddings.js';
+  createPage,
+  deletePage,
+  ensureBrainStore,
+  listPages,
+  loadBrainConfig,
+  readPage,
+  updatePage,
+} from '../brain/store.js';
+import { clearVectorStore } from '../brain/vector-store.js';
+import { slugifyFactTitle } from '../brain/synthesis.js';
+import { isValidEntryId } from './paths.js';
+import { backupBrain } from '../brain/backup.js';
 
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_ENTRIES = 500;
-
-const DEFAULT_INDEX = { version: 1, entries: [] };
+const FACTS_PREFIX = 'facts/';
 
 /** Default memory section in config.json when missing. */
 export const DEFAULT_MEMORY_CONFIG = {
@@ -37,18 +35,55 @@ export const DEFAULT_MEMORY_CONFIG = {
   embeddings: { ...DEFAULT_EMBEDDINGS_CONFIG },
 };
 
-async function ensureLayout() {
-  await fs.mkdir(getEntriesDir(), { recursive: true });
-  const indexPath = getIndexPath();
-  try {
-    await fs.access(indexPath);
-  } catch {
-    await fs.writeFile(
-      indexPath,
-      `${JSON.stringify(DEFAULT_INDEX, null, 2)}\n`,
-      'utf8',
-    );
+/** Map wiki page meta to legacy memory entry metadata. */
+export function pageMetaToEntryMeta(meta) {
+  let source = 'user';
+  if (meta.source === 'agent' || meta.source === 'synthesis') {
+    source = meta.source;
+  } else if (meta.source === 'ingest') {
+    source = 'agent';
   }
+  return {
+    id: meta.id,
+    title: String(meta.title ?? 'Untitled').slice(0, 200),
+    tags: Array.isArray(meta.tags)
+      ? meta.tags.map((t) => String(t).slice(0, 64))
+      : [],
+    source,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+    pinned: Boolean(meta.pinned),
+  };
+}
+
+function isFactsPage(page) {
+  return String(page.path ?? '').replace(/\\/g, '/').startsWith(FACTS_PREFIX);
+}
+
+async function findFactsPageById(id) {
+  if (!isValidEntryId(id)) return null;
+  const pages = await listPages();
+  const meta = pages.find((p) => p.id === id && isFactsPage(p));
+  if (!meta) return null;
+  const row = await readPage(meta.path);
+  return row;
+}
+
+async function allocateFactsPath(title, id) {
+  const baseSlug = slugifyFactTitle(title);
+  let slug = baseSlug;
+  let n = 2;
+  while (n < 100) {
+    const relPath = `${FACTS_PREFIX}${slug}.md`;
+    try {
+      await readPage(relPath);
+      slug = n === 2 && id ? `${baseSlug}-${id.slice(0, 8)}` : `${baseSlug}-${n}`;
+      n += 1;
+    } catch {
+      return relPath;
+    }
+  }
+  return `${FACTS_PREFIX}${baseSlug}-${randomUUID().slice(0, 8)}.md`;
 }
 
 /** Load merged memory config from config.json. */
@@ -58,10 +93,11 @@ export async function loadMemoryConfig() {
     config.memory && typeof config.memory === 'object'
       ? config.memory
       : {};
+  const brainEmb = (await loadBrainConfig()).embeddings ?? {};
   const embeddings =
     raw.embeddings && typeof raw.embeddings === 'object'
-      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...raw.embeddings }
-      : { ...DEFAULT_EMBEDDINGS_CONFIG };
+      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...brainEmb, ...raw.embeddings }
+      : { ...DEFAULT_EMBEDDINGS_CONFIG, ...brainEmb };
   return {
     ...DEFAULT_MEMORY_CONFIG,
     ...raw,
@@ -104,79 +140,35 @@ export async function saveMemoryConfig(partial) {
     ...partial,
     embeddings: nextEmb,
   };
+
+  const brain =
+    config.brain && typeof config.brain === 'object' ? config.brain : {};
+  config.brain = {
+    ...brain,
+    embeddings: { ...(brain.embeddings ?? {}), ...nextEmb },
+  };
+
   await writeConfigJson('config.json', config);
   return config.memory;
 }
 
-async function loadIndex() {
-  await ensureLayout();
-  const raw = await fs.readFile(getIndexPath(), 'utf8');
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_INDEX };
-  return {
-    version: parsed.version ?? 1,
-    entries: Array.isArray(parsed.entries) ? parsed.entries : [],
-  };
-}
-
-async function saveIndex(index) {
-  const tmp = `${getIndexPath()}.tmp`;
-  await fs.writeFile(tmp, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
-  await fs.rename(tmp, getIndexPath());
-}
-
-function parseEntryMarkdown(raw, id) {
-  const trimmed = String(raw ?? '');
-  if (!trimmed.startsWith('---')) {
-    return { front: {}, body: trimmed };
-  }
-  const end = trimmed.indexOf('---', 3);
-  if (end < 0) return { front: {}, body: trimmed };
-  const frontBlock = trimmed.slice(3, end).trim();
-  const body = trimmed.slice(end + 3).trim();
-  const front = {};
-  for (const line of frontBlock.split('\n')) {
-    const m = line.match(/^(\w+):\s*(.+)$/);
-    if (m) front[m[1]] = m[2].replace(/^["']|["']$/g, '');
-  }
-  if (!front.id) front.id = id;
-  return { front, body };
-}
-
-function serializeEntry(meta, body) {
-  const tags = Array.isArray(meta.tags) ? meta.tags : [];
-  return `---
-id: "${meta.id}"
-title: "${String(meta.title ?? '').replace(/"/g, '\\"')}"
-tags: [${tags.map((t) => t).join(', ')}]
-source: ${meta.source ?? 'user'}
----
-
-${body}`;
-}
-
-/** List entry metadata from index. */
+/** List memory entries (facts pages only). */
 export async function listEntries() {
-  const index = await loadIndex();
-  return index.entries;
+  const pages = await listPages();
+  return pages.filter(isFactsPage).map(pageMetaToEntryMeta);
 }
 
-/** Read one entry by id. */
+/** Read one memory entry by id. */
 export async function getEntry(id) {
-  if (!isValidEntryId(id)) return null;
-  const index = await loadIndex();
-  const meta = index.entries.find((e) => e.id === id);
-  if (!meta) return null;
-  const filePath = entryFilePath(id);
-  const raw = await fs.readFile(filePath, 'utf8');
-  const { body } = parseEntryMarkdown(raw, id);
-  return { entry: meta, body };
+  const row = await findFactsPageById(id);
+  if (!row) return null;
+  return { entry: pageMetaToEntryMeta(row.meta), body: row.body };
 }
 
-/** Create a new memory entry. */
+/** Create a memory entry as a facts wiki page. */
 export async function createEntry(input) {
-  const index = await loadIndex();
-  if (index.entries.length >= MAX_ENTRIES) {
+  const entries = await listEntries();
+  if (entries.length >= MAX_ENTRIES) {
     const err = new Error('Memory entry limit reached');
     err.statusCode = 507;
     throw err;
@@ -191,50 +183,38 @@ export async function createEntry(input) {
 
   const id =
     input.id && isValidEntryId(input.id) ? input.id : randomUUID();
-  if (index.entries.some((e) => e.id === id)) {
+  if (entries.some((e) => e.id === id)) {
     const err = new Error('Entry id already exists');
     err.statusCode = 409;
     throw err;
   }
 
-  const now = new Date().toISOString();
-  const meta = {
+  const title = String(input.title ?? 'Untitled').slice(0, 200);
+  const relPath = await allocateFactsPath(title, id);
+  const source =
+    input.source === 'agent' || input.source === 'self-heal' ? 'agent' : 'user';
+
+  const page = await createPage({
+    relPath,
     id,
-    title: String(input.title ?? 'Untitled').slice(0, 200),
+    title,
+    body,
     tags: Array.isArray(input.tags)
       ? input.tags.map((t) => String(t).slice(0, 64))
       : [],
-    source: input.source === 'agent' || input.source === 'self-heal' ? input.source : 'user',
-    createdAt: now,
-    updatedAt: now,
+    source,
     pinned: Boolean(input.pinned),
-  };
+  });
 
-  await fs.writeFile(
-    entryFilePath(id),
-    serializeEntry(meta, body),
-    'utf8',
-  );
-  index.entries.push(meta);
-  await saveIndex(index);
-
-  const memoryConfig = await loadMemoryConfig();
-  scheduleEntryVectorSync(meta, body, memoryConfig);
-
-  return meta;
+  return pageMetaToEntryMeta(page.meta);
 }
 
-/** Update an existing entry. */
+/** Update an existing memory entry. */
 export async function updateEntry(id, input) {
-  if (!isValidEntryId(id)) return null;
-  const index = await loadIndex();
-  const idx = index.entries.findIndex((e) => e.id === id);
-  if (idx < 0) return null;
+  const row = await findFactsPageById(id);
+  if (!row) return null;
 
-  const existing = await getEntry(id);
-  if (!existing) return null;
-
-  let body = existing.body;
+  let body = row.body;
   if (input.body !== undefined) {
     body = String(input.body);
     if (Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES) {
@@ -244,92 +224,76 @@ export async function updateEntry(id, input) {
     }
   }
 
-  const meta = { ...index.entries[idx] };
-  if (input.title !== undefined) meta.title = String(input.title).slice(0, 200);
-  if (input.tags !== undefined) {
-    meta.tags = Array.isArray(input.tags)
-      ? input.tags.map((t) => String(t).slice(0, 64))
-      : [];
-  }
-  if (input.pinned !== undefined) meta.pinned = Boolean(input.pinned);
-  meta.updatedAt = new Date().toISOString();
+  const updated = await updatePage(row.path, {
+    title: input.title !== undefined ? String(input.title).slice(0, 200) : undefined,
+    tags:
+      input.tags !== undefined
+        ? Array.isArray(input.tags)
+          ? input.tags.map((t) => String(t).slice(0, 64))
+          : []
+        : undefined,
+    pinned: input.pinned,
+    body: input.body !== undefined ? body : undefined,
+  });
 
-  await fs.writeFile(entryFilePath(id), serializeEntry(meta, body), 'utf8');
-  index.entries[idx] = meta;
-  await saveIndex(index);
-
-  const contentChanged =
-    input.body !== undefined || input.title !== undefined || input.tags !== undefined;
-  if (contentChanged) {
-    const memoryConfig = await loadMemoryConfig();
-    scheduleEntryVectorSync(meta, body, memoryConfig);
-  }
-
-  return meta;
+  return pageMetaToEntryMeta(updated.meta);
 }
 
-/** Delete an entry. */
+/** Delete a memory entry. */
 export async function deleteEntry(id) {
-  if (!isValidEntryId(id)) return false;
-  const index = await loadIndex();
-  const before = index.entries.length;
-  index.entries = index.entries.filter((e) => e.id !== id);
-  if (index.entries.length === before) return false;
-  await saveIndex(index);
-  try {
-    await fs.unlink(entryFilePath(id));
-  } catch {
-    /* file may already be gone */
-  }
-  void syncDeleteEntryVector(id);
+  const row = await findFactsPageById(id);
+  if (!row) return false;
+  await deletePage(row.path);
   return true;
 }
 
-/** Remove all entries; optionally archive first. */
+/** Remove all memory entries; optionally archive first. */
 export async function clearEntries(archive = false) {
-  const index = await loadIndex();
-  const count = index.entries.length;
+  const entries = await listEntries();
+  const count = entries.length;
   if (count === 0) return { removed: 0, archivePath: null };
 
   let archivePath = null;
   if (archive) {
-    const { backupMemory } = await import('./backup.js');
-    const backup = await backupMemory();
+    const backup = await backupBrain();
     archivePath = backup.path;
   }
 
-  for (const e of index.entries) {
-    try {
-      await fs.unlink(entryFilePath(e.id));
-    } catch {
-      /* ignore */
+  for (const entry of entries) {
+    const row = await findFactsPageById(entry.id);
+    if (row) {
+      try {
+        await deletePage(row.path);
+      } catch {
+        /* ignore */
+      }
     }
   }
-  await saveIndex({ version: 1, entries: [] });
+
   try {
     await clearVectorStore();
   } catch {
-    /* ignore vector clear errors */
+    /* ignore */
   }
+
   return { removed: count, archivePath };
 }
 
 /** Entry count for status. */
 export async function getEntryCount() {
-  const index = await loadIndex();
-  return index.entries.length;
+  const entries = await listEntries();
+  return entries.length;
 }
 
-/** Read all entries with bodies for retrieval. */
+/** Read all memory entries with bodies for retrieval. */
 export async function loadAllEntriesWithBodies() {
-  const metas = await listEntries();
+  const entries = await listEntries();
   const out = [];
-  for (const meta of metas) {
+  for (const meta of entries) {
     try {
-      const filePath = entryFilePath(meta.id);
-      const raw = await fs.readFile(filePath, 'utf8');
-      const { body } = parseEntryMarkdown(raw, meta.id);
-      out.push({ meta, body });
+      const row = await findFactsPageById(meta.id);
+      if (!row) continue;
+      out.push({ meta: pageMetaToEntryMeta(row.meta), body: row.body });
     } catch {
       /* skip corrupt */
     }
@@ -337,10 +301,9 @@ export async function loadAllEntriesWithBodies() {
   return out;
 }
 
-/** Ensure memory directory exists on server start. */
+/** Ensure brain wiki (memory adapter bootstrap). */
 export async function ensureMemoryStore() {
-  await fs.mkdir(getMemoryDir(), { recursive: true });
-  await ensureLayout();
+  await ensureBrainStore();
   const config = (await readConfigJson('config.json')) ?? {};
   if (!config.memory) {
     await saveMemoryConfig(DEFAULT_MEMORY_CONFIG);

@@ -13,7 +13,10 @@ import {
 import { getBuiltinLspIds, loadMergedLspConfig } from './config-loader.js';
 import { getBundledTsserverPath, resolveLspSpawnArgv } from './resolve-command.js';
 import { buildLspProcessEnv } from './paths.js';
-import { matchServersForPath } from '../../src/lsp/merge-config.mjs';
+import {
+  matchServersForPath,
+  serverSupportsWorkspaceSymbols,
+} from '../../src/lsp/merge-config.mjs';
 import { formatDiagnostics } from '../../src/lsp/format-diagnostics.mjs';
 import { getWorkspaceRoot } from '../workspace/root.js';
 
@@ -125,6 +128,122 @@ function normalizeLspRange(range) {
       character: Number(end.character ?? start.character ?? 0),
     },
   };
+}
+
+/** Project-relative path from an LSP file URI (falls back to the raw URI). */
+function fileUriToRelativePath(uri) {
+  if (!uri || typeof uri !== 'string') return '';
+  try {
+    const abs = fileURLToPath(uri);
+    const root = path.resolve(getWorkspaceRoot());
+    const rel = path.relative(root, abs);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return rel.replace(/\\/g, '/');
+    }
+  } catch {
+    /* ignore invalid URIs */
+  }
+  return uri;
+}
+
+/** Normalize one documentSymbol or legacy SymbolInformation node. */
+function normalizeDocumentSymbol(symbol) {
+  if (!symbol || typeof symbol !== 'object') return null;
+  const name = String(symbol.name ?? '');
+  if (!name) return null;
+
+  if (symbol.location && !symbol.selectionRange) {
+    const loc = symbol.location;
+    return {
+      name,
+      kind: typeof symbol.kind === 'number' ? symbol.kind : 0,
+      range: normalizeLspRange(loc.range),
+      selectionRange: normalizeLspRange(loc.range),
+      containerName:
+        symbol.containerName != null ? String(symbol.containerName) : undefined,
+      children: [],
+    };
+  }
+
+  const entry = {
+    name,
+    kind: typeof symbol.kind === 'number' ? symbol.kind : 0,
+    range: normalizeLspRange(symbol.range),
+    selectionRange: normalizeLspRange(symbol.selectionRange ?? symbol.range),
+  };
+  if (symbol.detail != null) entry.detail = String(symbol.detail);
+  if (Array.isArray(symbol.children) && symbol.children.length > 0) {
+    const children = symbol.children.map(normalizeDocumentSymbol).filter(Boolean);
+    if (children.length > 0) entry.children = children;
+  }
+  return entry;
+}
+
+/** Normalize workspace/symbol result for the code index. */
+function normalizeWorkspaceSymbol(symbol) {
+  if (!symbol || typeof symbol !== 'object') return null;
+  const name = String(symbol.name ?? '');
+  if (!name) return null;
+  const loc = symbol.location ?? {};
+  const uri = loc.uri ?? symbol.uri ?? '';
+  return {
+    name,
+    kind: typeof symbol.kind === 'number' ? symbol.kind : 0,
+    path: fileUriToRelativePath(String(uri)),
+    range: normalizeLspRange(loc.range ?? symbol.range),
+    containerName:
+      symbol.containerName != null ? String(symbol.containerName) : undefined,
+  };
+}
+
+/** Normalize call-hierarchy item (prepareCallHierarchy / incoming / outgoing). */
+function normalizeCallHierarchyItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const name = String(item.name ?? '');
+  if (!name) return null;
+  const normalized = {
+    name,
+    kind: typeof item.kind === 'number' ? item.kind : 0,
+    path: fileUriToRelativePath(String(item.uri ?? '')),
+    range: normalizeLspRange(item.range),
+    selectionRange: normalizeLspRange(item.selectionRange ?? item.range),
+  };
+  if (item.data !== undefined) normalized.data = item.data;
+  return normalized;
+}
+
+function normalizeIncomingCalls(calls) {
+  if (!Array.isArray(calls)) return [];
+  const out = [];
+  for (const call of calls) {
+    if (!call || typeof call !== 'object') continue;
+    const from = normalizeCallHierarchyItem(call.from);
+    if (!from) continue;
+    out.push({
+      from,
+      fromRanges: (call.fromRanges ?? [])
+        .map(normalizeLspRange)
+        .filter(Boolean),
+    });
+  }
+  return out;
+}
+
+function normalizeOutgoingCalls(calls) {
+  if (!Array.isArray(calls)) return [];
+  const out = [];
+  for (const call of calls) {
+    if (!call || typeof call !== 'object') continue;
+    const to = normalizeCallHierarchyItem(call.to);
+    if (!to) continue;
+    out.push({
+      to,
+      fromRanges: (call.fromRanges ?? [])
+        .map(normalizeLspRange)
+        .filter(Boolean),
+    });
+  }
+  return out;
 }
 
 /** Prefer textEdit / insert-replace ranges over bare insertText. */
@@ -257,7 +376,31 @@ function typescriptInitializationOptions() {
     tsserver: {
       fallbackPath: getBundledTsserverPath(),
     },
+    typescript: {
+      implicitProjectConfiguration: {
+        checkJs: true,
+        module: 'ESNext',
+        target: 'ES2022',
+      },
+    },
   };
+}
+
+/** Benign workspace/symbol failures — skip instead of surfacing to callers. */
+function isSkippableWorkspaceSymbolError(message) {
+  const text = String(message ?? '');
+  if (/Unhandled method workspace\/symbol/i.test(text)) return true;
+  if (/connection got disposed/i.test(text)) return true;
+  return false;
+}
+
+/** User-facing hint when TypeScript has no loaded project for workspace search. */
+function formatWorkspaceSymbolErrors(errors) {
+  const joined = errors.join('; ');
+  if (/No Project/i.test(joined)) {
+    return `${joined} — add tsconfig.json or jsconfig.json at the workspace root, then reindex.`;
+  }
+  return joined;
 }
 
 function discardLspState(serverId, state) {
@@ -323,6 +466,7 @@ async function connectLspServer(serverId, config) {
     child,
     diagnostics: new Map(),
     ready: false,
+    serverCapabilities: {},
   };
 
   connection.onNotification('textDocument/publishDiagnostics', (params) => {
@@ -335,7 +479,7 @@ async function connectLspServer(serverId, config) {
 
   try {
     connection.listen();
-    await connection.sendRequest('initialize', {
+    const initResult = await connection.sendRequest('initialize', {
       processId: process.pid,
       rootUri: workspaceRootUri(),
       ...(serverId === 'typescript'
@@ -363,9 +507,20 @@ async function connectLspServer(serverId, config) {
               },
             },
           },
+          documentSymbol: {
+            hierarchicalDocumentSymbolSupport: true,
+          },
+          callHierarchy: {},
+        },
+        workspace: {
+          symbol: {},
         },
       },
     });
+    state.serverCapabilities =
+      initResult && typeof initResult === 'object' && initResult.capabilities
+        ? initResult.capabilities
+        : {};
     connection.sendNotification('initialized', {});
     state.ready = true;
     return state;
@@ -519,6 +674,26 @@ async function withLspMatchers(relativePath, handler, options = {}) {
   }
   const fileUri = await ensureDocumentSynced(relativePath, options);
   return handler({ merged, matchers, fileUri });
+}
+
+/** All configured, non-disabled language servers (for workspace-wide queries). */
+async function withAllLspServers(handler) {
+  const merged = await loadMergedLspConfig();
+  if (merged.enabled === false) {
+    return { ok: false, error: 'LSP is disabled' };
+  }
+  const servers = Object.entries(merged.lsp ?? {})
+    .filter(
+      ([, cfg]) =>
+        cfg.disabled !== true &&
+        Array.isArray(cfg.command) &&
+        cfg.command.length > 0,
+    )
+    .map(([id, config]) => ({ id, config }));
+  if (servers.length === 0) {
+    return { ok: false, error: 'No LSP servers configured' };
+  }
+  return handler({ merged, servers });
 }
 
 /**
@@ -790,6 +965,138 @@ export async function getLspSignatureHelp(relativePath, line, character) {
 }
 
 /**
+ * Document symbol tree for a project-relative path (textDocument/documentSymbol).
+ */
+export async function getLspDocumentSymbols(relativePath) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return { symbols: [], error: ctx.error };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const result = await state.connection.sendRequest('textDocument/documentSymbol', {
+        textDocument: { uri: ctx.fileUri },
+      });
+      const raw = Array.isArray(result) ? result : [];
+      const symbols = raw.map(normalizeDocumentSymbol).filter(Boolean);
+      return { symbols };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { symbols: [], error: `[${id}] ${message}` };
+    }
+  }
+  return { symbols: [] };
+}
+
+/**
+ * Workspace-wide symbol search (workspace/symbol) across all configured servers.
+ */
+export async function getLspWorkspaceSymbols(query) {
+  const q = String(query ?? '');
+  const ctx = await withAllLspServers(async ({ servers }) => ({ ok: true, servers }));
+  if (!ctx.ok) {
+    return { symbols: [], error: ctx.error };
+  }
+
+  const seen = new Set();
+  const symbols = [];
+  const errors = [];
+  for (const { id, config } of ctx.servers) {
+    try {
+      const state = await getConnection(id, config);
+      if (!serverSupportsWorkspaceSymbols(id, config, state.serverCapabilities)) {
+        continue;
+      }
+      const result = await state.connection.sendRequest('workspace/symbol', {
+        query: q,
+      });
+      const raw = Array.isArray(result) ? result : [];
+      for (const sym of raw) {
+        const normalized = normalizeWorkspaceSymbol(sym);
+        if (!normalized) continue;
+        const key = `${normalized.path}:${normalized.name}:${normalized.range?.start?.line ?? 0}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        symbols.push(normalized);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isSkippableWorkspaceSymbolError(message)) continue;
+      errors.push(`[${id}] ${message}`);
+    }
+  }
+  if (symbols.length === 0 && errors.length > 0) {
+    return { symbols: [], error: formatWorkspaceSymbolErrors(errors) };
+  }
+  return { symbols, ...(errors.length > 0 ? { warnings: errors } : {}) };
+}
+
+/**
+ * Call hierarchy at a 0-based position — prepare + incoming + outgoing calls.
+ */
+export async function getLspCallHierarchy(relativePath, line, character) {
+  const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
+    ok: true,
+    matchers,
+    fileUri,
+  }));
+  if (!ctx.ok) {
+    return {
+      item: null,
+      incomingCalls: [],
+      outgoingCalls: [],
+      error: ctx.error,
+    };
+  }
+
+  for (const { id, config } of ctx.matchers) {
+    try {
+      const state = await getConnection(id, config);
+      const prepared = await state.connection.sendRequest(
+        'textDocument/prepareCallHierarchy',
+        {
+          textDocument: { uri: ctx.fileUri },
+          position: { line, character },
+        },
+      );
+      const items = Array.isArray(prepared) ? prepared : prepared ? [prepared] : [];
+      if (items.length === 0) {
+        return { item: null, incomingCalls: [], outgoingCalls: [] };
+      }
+      const rawItem = items[0];
+      const [incomingRaw, outgoingRaw] = await Promise.all([
+        state.connection.sendRequest('callHierarchy/incomingCalls', {
+          item: rawItem,
+        }),
+        state.connection.sendRequest('callHierarchy/outgoingCalls', {
+          item: rawItem,
+        }),
+      ]);
+      return {
+        item: normalizeCallHierarchyItem(rawItem),
+        incomingCalls: normalizeIncomingCalls(incomingRaw),
+        outgoingCalls: normalizeOutgoingCalls(outgoingRaw),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        item: null,
+        incomingCalls: [],
+        outgoingCalls: [],
+        error: `[${id}] ${message}`,
+      };
+    }
+  }
+  return { item: null, incomingCalls: [], outgoingCalls: [] };
+}
+
+/**
  * Resolve a completion item (documentation, additionalTextEdits).
  */
 export async function resolveLspCompletion(relativePath, item) {
@@ -886,6 +1193,16 @@ export function getLspDocumentSyncForTest(relativePath) {
   const entry = documentSync.get(fileUri);
   if (!entry) return null;
   return { version: entry.version, text: entry.text };
+}
+
+/** Stop specific language servers (e.g. after scaffolded tsconfig so tsserver reloads). */
+export function shutdownLspServers(serverIds) {
+  const ids = new Set(serverIds.map((id) => String(id)));
+  for (const id of ids) {
+    pendingConnections.delete(id);
+    const state = processes.get(id);
+    if (state) discardLspState(id, state);
+  }
 }
 
 export function shutdownAllLsp() {

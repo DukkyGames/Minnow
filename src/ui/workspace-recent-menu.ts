@@ -9,6 +9,10 @@ import {
   type WorkspaceInfo,
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
+import {
+  registerChromePopover,
+  unregisterChromePopover,
+} from './preview-electron-visibility';
 export type WorkspaceMenuStatusState = 'ok' | 'err' | 'spin';
 
 /** Injectable deps so tests avoid importing tools/config or status chains. */
@@ -92,6 +96,7 @@ function detachGlobalListeners(): void {
 export function closeWorkspaceMenu(): void {
   if (!menuOpen) return;
   menuOpen = false;
+  unregisterChromePopover();
   detachGlobalListeners();
   if (menuEl) menuEl.classList.add('hidden');
   setAnchorExpanded(false);
@@ -249,6 +254,7 @@ export async function toggleWorkspaceMenu(btn: HTMLButtonElement): Promise<void>
   menu.classList.remove('hidden');
   positionMenu(btn, menu);
   menuOpen = true;
+  registerChromePopover();
   setAnchorExpanded(true);
   attachGlobalListeners();
 }

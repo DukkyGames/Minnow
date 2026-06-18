@@ -3,6 +3,9 @@
 /** Public path for the Compare app raster glyph. */
 export const COMPARE_ICON_SRC = '/icons/compare.png';
 
+/** Public path for the Brain app raster glyph (brain-circuit). */
+export const BRAIN_ICON_SRC = '/icons/brain-circuit.png';
+
 export type OsIconName =
   | 'code'
   | 'chat'
@@ -14,6 +17,7 @@ export type OsIconName =
   | 'calendar'
   | 'email'
   | 'chip'
+  | 'brain'
   | 'gear'
   | 'arrowUp'
   | 'arrowDown'
@@ -25,7 +29,7 @@ export type OsIconName =
   | 'fish';
 
 /** Launcher icons rendered from a PNG mask instead of inline SVG paths. */
-export type RasterIconName = 'compare';
+export type RasterIconName = 'compare' | 'brain';
 
 /** Inline SVG icon ids (excludes raster-backed launcher icons). */
 export type SvgIconName = Exclude<OsIconName, RasterIconName>;
@@ -61,6 +65,7 @@ const PATHS: Record<SvgIconName, string> = {
 /** App launcher icons backed by a PNG mask instead of inline SVG paths. */
 const RASTER_ICON_SRC: Record<RasterIconName, string> = {
   compare: COMPARE_ICON_SRC,
+  brain: BRAIN_ICON_SRC,
 };
 
 export interface OsIconOptions {

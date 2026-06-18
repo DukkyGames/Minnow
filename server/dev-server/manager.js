@@ -43,6 +43,8 @@ import { readDevServerSettings } from './settings.js';
 const byWorkspaceKey = new Map();
 
 const HEALTH_TIMEOUT_MS = 4_000;
+/** Max time to wait in `starting` before promoting to error when health never passes. */
+const STARTING_TIMEOUT_MS = 120_000;
 
 /**
  * @param {string} workspaceRoot
@@ -281,6 +283,25 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
         row.status = 'running';
         await saveState(row);
       }
+    } else if (
+      row.status === 'starting' &&
+      healthOk === false &&
+      row.startedAt &&
+      Date.now() - row.startedAt > STARTING_TIMEOUT_MS
+    ) {
+      if (row.runId) {
+        const run = getRun(row.runId);
+        if (run?.child && !run.finished) {
+          killProcessTree(run.child);
+        } else {
+          cancelRun(row.runId);
+        }
+      }
+      row.status = 'error';
+      row.error = 'Health check timed out';
+      row.runId = undefined;
+      row.pid = null;
+      await saveState(row);
     }
   }
 

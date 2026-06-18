@@ -1,5 +1,5 @@
 /**
- * Orchestrate board tools: board_init, board_update_task, board_get_state.
+ * Orchestrate board tools: board_init, board_update_task, board_get_state, delegate_tasks.
  */
 
 import { getSubAgentRun } from '../agents/orchestrator.ts';
@@ -14,12 +14,16 @@ import {
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
 import {
+  isTaskReadyForAuto,
+} from '../state/orchestrate-board-store.ts';
+import {
   getBoardStateForPlanner,
   initBoard,
   updateTask,
 } from '../state/orchestrate-board-store.ts';
-import { findChatById } from '../state/sessions.ts';
-import type { BoardCategory, BoardTaskStatus, Chat } from '../types.ts';
+import { emitBoardChange } from '../state/orchestrate-board-events.ts';
+import { findChatById, scheduleSaveSessions } from '../state/sessions.ts';
+import type { BoardCategory, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
 
 export interface BoardExecutorContext {
   chatId: string;
@@ -86,6 +90,68 @@ function resolveBoardPlannerChat(overrideChatId?: string): Chat | null {
   if (!group?.orchestrateBoard) return null;
 
   return getPlannerChatForGroup(group) ?? null;
+}
+
+/** Board folder for any chat linked to an orchestrate board (planner, task, tester, final). */
+function resolveBoardGroupFromChat(overrideChatId?: string): {
+  group: NonNullable<ReturnType<typeof getBoardGroupForChat>>;
+  board: OrchestrateBoardState;
+} | null {
+  const chatId = resolveActiveChatId(overrideChatId);
+  if (!chatId) return null;
+  const chat = findChatById(chatId);
+  if (!chat) return null;
+  const group = getBoardGroupForChat(chat);
+  const board = group?.orchestrateBoard;
+  if (!group || !board) return null;
+  return { group, board };
+}
+
+function validateBoardTaskIds(
+  board: OrchestrateBoardState,
+  ids: string[],
+): { ok: true; ids: string[] } | { ok: false; error: string } {
+  const known = new Set(board.tasks.map((t) => t.id));
+  const validated: string[] = [];
+  const unknown: string[] = [];
+  for (const raw of ids) {
+    const id = raw.trim();
+    if (!id) continue;
+    if (!known.has(id)) {
+      unknown.push(id);
+      continue;
+    }
+    if (!validated.includes(id)) validated.push(id);
+  }
+  if (unknown.length) {
+    return {
+      ok: false,
+      error: `Error: unknown board task id(s): ${unknown.join(', ')}. Use board_get_state to list valid ids.`,
+    };
+  }
+  return { ok: true, ids: validated };
+}
+
+/**
+ * Resolve a loosely-specified task id against the board.
+ * Handles the common ways a model mangles the id: a trailing
+ * `— title` / `: title` suffix and casing. Returns the canonical id, or
+ * the trimmed input unchanged when no match is found (caller validates).
+ */
+function resolveLooseTaskId(board: OrchestrateBoardState, raw: string): string {
+  const input = raw.trim();
+  if (!input) return input;
+  const known = board.tasks.map((t) => t.id);
+  if (known.includes(input)) return input;
+  // Strip a "<id> — <title>" / "<id>: <title>" suffix the model may have appended.
+  const head = input.split(/\s*[—:-]\s+/)[0]?.trim() ?? input;
+  const lowerHead = head.toLowerCase();
+  const ci = known.find((id) => id.toLowerCase() === lowerHead);
+  if (ci) return ci;
+  const lowerInput = input.toLowerCase();
+  const ciFull = known.find((id) => id.toLowerCase() === lowerInput);
+  if (ciFull) return ciFull;
+  return input;
 }
 
 function parseWaveId(raw: unknown): number | string | null {
@@ -263,6 +329,80 @@ export function validateBoardUpdateTaskArgs(
   };
 }
 
+export type BoardReportTestResultArgs = {
+  task_id: string;
+  verdict: 'pass' | 'fail';
+  summary: string;
+  failing_tasks?: string[];
+};
+
+export type ValidateBoardReportTestResultResult =
+  | { ok: true; args: BoardReportTestResultArgs }
+  | { ok: false; error: string };
+
+/**
+ * Coerce a model-supplied verdict to the canonical 'pass' | 'fail'.
+ * Tolerant of casing, trailing punctuation, and common synonyms because
+ * smaller models rarely emit the exact literal. Returns null when unclear.
+ */
+export function normalizeVerdict(raw: unknown): 'pass' | 'fail' | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase().replace(/[.!]+$/, '');
+  if (!v) return null;
+  if (/^(pass|passed|passing|passes|success|succeeded|succeeds|ok|green)$/.test(v)) {
+    return 'pass';
+  }
+  if (/^(fail|failed|failing|fails|failure|error|errored|broken|red)$/.test(v)) {
+    return 'fail';
+  }
+  return null;
+}
+
+/** Validate board_report_test_result arguments (exported for tests). */
+export function validateBoardReportTestResultArgs(
+  args: Record<string, unknown>,
+): ValidateBoardReportTestResultResult {
+  const task_id = typeof args.task_id === 'string' ? args.task_id.trim() : '';
+  if (!task_id) {
+    return { ok: false, error: 'Error: board_report_test_result requires "task_id"' };
+  }
+  const verdictRaw = normalizeVerdict(args.verdict);
+  if (verdictRaw !== 'pass' && verdictRaw !== 'fail') {
+    return {
+      ok: false,
+      error: 'Error: board_report_test_result requires verdict "pass" or "fail"',
+    };
+  }
+  const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
+  if (!summary) {
+    return { ok: false, error: 'Error: board_report_test_result requires non-empty "summary"' };
+  }
+  const failingRaw = args.failing_tasks ?? args.failingTasks;
+  let failing_tasks: string[] | undefined;
+  if (failingRaw !== undefined) {
+    if (!Array.isArray(failingRaw)) {
+      return { ok: false, error: 'Error: failing_tasks must be an array of task ids' };
+    }
+    failing_tasks = [];
+    for (const item of failingRaw) {
+      if (typeof item !== 'string' || !item.trim()) {
+        return { ok: false, error: 'Error: each failing_tasks entry must be a non-empty string' };
+      }
+      const id = item.trim();
+      if (!failing_tasks.includes(id)) failing_tasks.push(id);
+    }
+  }
+  return {
+    ok: true,
+    args: {
+      task_id,
+      verdict: verdictRaw,
+      summary,
+      ...(failing_tasks?.length ? { failing_tasks } : {}),
+    },
+  };
+}
+
 /** Execute board_* tools; returns JSON string or Error: prefix. */
 export async function executeBoardTool(
   name: string,
@@ -290,6 +430,14 @@ export async function executeBoardTool(
     const board = getBoardStateForPlanner(chat);
     if (!board) return 'Error: orchestrate board is not initialized';
     return JSON.stringify(board, null, 2);
+  }
+
+  if (name === 'delegate_tasks') {
+    return executeDelegateTasks(chat, args);
+  }
+
+  if (name === 'board_report_test_result') {
+    return executeBoardReportTestResult(args, options?.chatId);
   }
 
   return `Error: unknown board tool "${name}"`;
@@ -368,4 +516,141 @@ async function executeBoardUpdateTask(
     const message = err instanceof Error ? err.message : String(err);
     return message.startsWith('Error:') ? message : `Error: ${message}`;
   }
+}
+
+export type DelegateTasksArgs = {
+  taskIds: string[];
+};
+
+export type ValidateDelegateTasksResult =
+  | { ok: true; args: DelegateTasksArgs }
+  | { ok: false; error: string };
+
+/** Validate delegate_tasks arguments (exported for tests). */
+export function validateDelegateTasksArgs(
+  args: Record<string, unknown>,
+): ValidateDelegateTasksResult {
+  const raw = args.taskIds ?? args.task_ids;
+  if (!Array.isArray(raw) || !raw.length) {
+    return { ok: false, error: 'Error: delegate_tasks requires non-empty "taskIds"' };
+  }
+  const taskIds: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' || !item.trim()) {
+      return { ok: false, error: 'Error: each taskIds entry must be a non-empty string' };
+    }
+    const id = item.trim();
+    if (!taskIds.includes(id)) taskIds.push(id);
+  }
+  return { ok: true, args: { taskIds } };
+}
+
+async function executeDelegateTasks(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
+    return 'Error: delegate_tasks requires an Orchestrate planner chat';
+  }
+  const validated = validateDelegateTasksArgs(args);
+  if (validated.ok === false) return validated.error;
+
+  const group = getOrCreateBoardGroup(chat);
+  const board = group.orchestrateBoard;
+  if (!board) {
+    return 'Error: orchestrate board is not initialized';
+  }
+  if (board.executionMode !== 'auto') {
+    return (
+      'Error: delegate_tasks requires Auto-pilot (executionMode auto). ' +
+      'Enable Auto-pilot on the board or call board_get_state to confirm mode.'
+    );
+  }
+
+  const started: string[] = [];
+  const skipped: Array<{ taskId: string; reason: string }> = [];
+
+  const { startTask: runBoardTask } = await import('../state/orchestrate-board-actions.ts');
+
+  for (const taskId of validated.args.taskIds) {
+    const task = board.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      skipped.push({ taskId, reason: 'unknown task id' });
+      continue;
+    }
+    if (task.status !== 'planned') {
+      skipped.push({ taskId, reason: `status is ${task.status}, not planned` });
+      continue;
+    }
+    if (!isTaskReadyForAuto(board, task)) {
+      skipped.push({ taskId, reason: 'prior wave not complete' });
+      continue;
+    }
+    await runBoardTask(group, taskId, chat);
+    started.push(taskId);
+  }
+
+  return JSON.stringify({ started, skipped }, null, 2);
+}
+
+async function executeBoardReportTestResult(
+  args: Record<string, unknown>,
+  overrideChatId?: string,
+): Promise<string> {
+  const validated = validateBoardReportTestResultArgs(args);
+  if (validated.ok === false) return validated.error;
+
+  const ctx = resolveBoardGroupFromChat(overrideChatId);
+  if (!ctx) {
+    return 'Error: board_report_test_result requires a chat linked to an orchestrate board';
+  }
+  const { group, board } = ctx;
+  const { task_id, verdict, summary, failing_tasks } = validated.args;
+
+  if (task_id === 'FULL_BOARD') {
+    let validatedFailing: string[] = [];
+    if (failing_tasks?.length) {
+      const check = validateBoardTaskIds(board, failing_tasks);
+      if (check.ok === false) return check.error;
+      validatedFailing = check.ids;
+    }
+    const priorFinal = board.finalTest;
+    board.finalTest = {
+      status: priorFinal?.status ?? 'in_progress',
+      chatId: priorFinal?.chatId,
+      attempts: priorFinal?.attempts,
+      recordedVerdict: verdict,
+      summary,
+      failingTaskIds: validatedFailing,
+    };
+    board.lastUpdatedAt = Date.now();
+    scheduleSaveSessions();
+    emitBoardChange(group.id);
+    return JSON.stringify(
+      {
+        task_id: 'FULL_BOARD',
+        verdict,
+        summary,
+        failingTaskIds: validatedFailing,
+      },
+      null,
+      2,
+    );
+  }
+
+  const taskCheck = validateBoardTaskIds(board, [resolveLooseTaskId(board, task_id)]);
+  if (taskCheck.ok === false) return taskCheck.error;
+  const taskId = taskCheck.ids[0]!;
+  const planner = getPlannerChatForGroup(group) ?? undefined;
+  const task = updateTask(
+    group,
+    taskId,
+    { testVerdict: verdict, testSummary: summary },
+    planner,
+  );
+  return JSON.stringify(
+    { task_id: taskId, verdict, summary, task },
+    null,
+    2,
+  );
 }

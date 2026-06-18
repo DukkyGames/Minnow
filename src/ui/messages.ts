@@ -41,7 +41,7 @@ import {
   resolveChatMount,
   runWithChatMount,
 } from './chat-mount';
-import { isOrchestrateBoardInitSplitActive } from './orchestrate-board-init-split';
+import { isOrchestrateBoardInitSplitActive, isOrchestrateInitSplitChromeActive } from './orchestrate-board-init-split';
 import { isBoardViewActive } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { setStatus } from './status';
@@ -171,6 +171,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       renderPersistedSubAgentCardsForChat(chat);
     } else {
       area.innerHTML = '';
+      renderPersistedSubAgentCardsForChat(chat);
     }
     scrollChatToBottom();
     refreshContextUsageRing();
@@ -337,10 +338,11 @@ export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
 
 /** True when board view should suppress chat bubbles (full board, no init split). */
 function shouldStubOrchestrateBoardStreamDom(chat: Chat): boolean {
-  if (!isBoardViewActive()) return false;
+  const splitChrome = isOrchestrateInitSplitChromeActive();
+  if (!isBoardViewActive() && !splitChrome) return false;
   if (
     normalizeModeId(chat.modeId) === 'orchestrate' &&
-    isOrchestrateBoardInitSplitActive(chat)
+    (isOrchestrateBoardInitSplitActive(chat) || splitChrome)
   ) {
     return false;
   }
@@ -362,16 +364,32 @@ function shouldStubOrchestrateStreamDom(chat: Chat): boolean {
   );
 }
 
+function resolveBubbleTargetChat(meta?: BubbleRenderMeta): Chat {
+  const active = getActiveChat();
+  const targetId = meta?.chatId?.trim();
+  if (!targetId || targetId === active.id) return active;
+  return sessionState?.chats.find((c) => c.id === targetId) ?? active;
+}
+
+function bubbleDomStub(): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
+  const stub = document.createElement('div');
+  return { wrap: stub, bubble: stub };
+}
+
 export function appendBubble(
   role: 'user' | 'assistant',
   content: string,
   meta?: BubbleRenderMeta,
   userOptions?: AppendUserBubbleOptions,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
-  const chat = getActiveChat();
+  const active = getActiveChat();
+  const targetId = meta?.chatId?.trim() || active.id;
+  if (targetId !== active.id && !isStreamDomVisible(targetId)) {
+    return bubbleDomStub();
+  }
+  const chat = resolveBubbleTargetChat(meta);
   if (shouldStubOrchestrateStreamDom(chat)) {
-    const stub = document.createElement('div');
-    return { wrap: stub, bubble: stub };
+    return bubbleDomStub();
   }
   if (document.getElementById('emptyState')) {
     document.getElementById('emptyState')!.remove();
@@ -421,7 +439,45 @@ export function appendBubble(
 export function setAssistantErrorBubble(bubble: HTMLDivElement, message: string): void {
   bubble.classList.remove('msg-bubble--md', 'msg-bubble--awaiting');
   bubble.classList.add('msg-bubble--error');
+  bubble.replaceChildren();
   bubble.textContent = message;
+}
+
+export interface AssistantErrorRecoveryOptions {
+  chatId: string;
+  forkHistoryIndex: number;
+  onRecover?: () => void;
+}
+
+/**
+ * Error bubble with a recovery action when history could not be auto-rolled back.
+ * Clears the failed tail and replays from the user message at `forkHistoryIndex`.
+ */
+export function setAssistantErrorBubbleWithRecovery(
+  bubble: HTMLDivElement,
+  message: string,
+  recovery: AssistantErrorRecoveryOptions,
+): void {
+  bubble.classList.remove('msg-bubble--md', 'msg-bubble--awaiting');
+  bubble.classList.add('msg-bubble--error');
+  bubble.replaceChildren();
+
+  const text = document.createElement('span');
+  text.textContent = message;
+  bubble.appendChild(text);
+
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'msg-error-recover-btn';
+  action.textContent = 'Clear last failed turn';
+  action.addEventListener('click', () => {
+    action.disabled = true;
+    void import('../chat/resend-from-index.ts').then((mod) =>
+      mod.resendFromIndex(recovery.chatId, recovery.forkHistoryIndex),
+    );
+    recovery.onRecover?.();
+  });
+  bubble.appendChild(action);
 }
 
 /** DOM row for an in-flight assistant reply (prose bubble hidden until first token). */
@@ -480,12 +536,16 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
 }
 
 export function appendStreamingAssistantRow(forChatId?: string): StreamingAssistantRow {
-  const chat = getActiveChat();
-  const targetId = forChatId ?? chat.id;
+  const active = getActiveChat();
+  const targetId = forChatId ?? active.id;
   if (!isStreamDomVisible(targetId)) {
     return streamingAssistantRowStub();
   }
-  if (shouldStubOrchestrateStreamDom(chat)) {
+  const targetChat =
+    targetId === active.id
+      ? active
+      : sessionState?.chats.find((c) => c.id === targetId) ?? active;
+  if (shouldStubOrchestrateStreamDom(targetChat)) {
     return streamingAssistantRowStub();
   }
   if (document.getElementById('emptyState')) {

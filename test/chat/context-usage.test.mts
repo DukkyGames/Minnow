@@ -47,16 +47,40 @@ describe('estimateAttachmentTokens', () => {
     ];
     assert.equal(estimateAttachmentTokens(attachments), 0);
   });
+
+  test('caps image dataUrl at fixed per-image budget (not full base64)', () => {
+    const attachments: Attachment[] = [
+      {
+        id: 'img1',
+        name: 'photo.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        size: 1_000_000,
+        dataUrl: `data:image/png;base64,${'A'.repeat(40_000)}`,
+      },
+    ];
+    assert.equal(estimateAttachmentTokens(attachments), 256);
+  });
 });
 
 describe('estimateInFlightOverlayTokens', () => {
-  test('sums partial prose, thinking, and pending tool JSON', () => {
+  test('counts only pending tool-call JSON (not streaming completion)', () => {
     const tokens = estimateInFlightOverlayTokens({
       partialAssistantText: 'abcd',
       thinkingText: 'efgh',
       pendingToolCallsJson: '{"name":"read_file"}',
     });
-    assert.equal(tokens, 7);
+    assert.equal(tokens, 5);
+  });
+
+  test('returns zero when only streaming prose or reasoning is present', () => {
+    assert.equal(
+      estimateInFlightOverlayTokens({
+        partialAssistantText: 'abcd',
+        thinkingText: 'efgh',
+      }),
+      0,
+    );
   });
 });
 
@@ -119,6 +143,16 @@ describe('contextLengthFromModelRow', () => {
       131_072,
     );
   });
+
+  test('falls back to known table when row has id but no context fields', () => {
+    assert.equal(
+      contextLengthFromModelRow({
+        id: 'gpt-4o-mini',
+        state: 'loaded',
+      }),
+      128_000,
+    );
+  });
 });
 
 describe('resolveContextLimit', () => {
@@ -135,7 +169,7 @@ describe('resolveContextLimit', () => {
     modelCache.delete('vendor/model');
   });
 
-  test('uses last-turn model_info context_length when present', async () => {
+  test('prefers live cache over persisted modelInfo when they differ (MIN-183)', async () => {
     const { modelCache } = await import('../../src/app-state.ts');
     modelCache.set('vendor/model', {
       id: 'vendor/model',
@@ -144,8 +178,23 @@ describe('resolveContextLimit', () => {
       loaded_context_length: 62_000,
     });
     const chat = { modelInfo: { context_length: 48_000 } } as Chat;
-    assert.equal(resolveContextLimit('vendor/model', chat), 48_000);
+    assert.equal(resolveContextLimit('vendor/model', chat), 62_000);
     modelCache.delete('vendor/model');
+  });
+
+  test('falls back to last-turn model_info when cache has no context length', async () => {
+    const { modelCache } = await import('../../src/app-state.ts');
+    const { setSessionStateForTests } = await import('../../src/state/sessions.ts');
+    modelCache.clear();
+    const chat = { id: 'c-min-183', modelInfo: { context_length: 48_000 } } as Chat;
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    assert.equal(resolveContextLimit('vendor/model', chat), 48_000);
+    setSessionStateForTests(null);
   });
 
   test('falls back to max when model is not loaded', async () => {
@@ -159,6 +208,17 @@ describe('resolveContextLimit', () => {
     const chat = { modelInfo: {} } as Chat;
     assert.equal(resolveContextLimit('vendor/model', chat), 131_072);
     modelCache.delete('vendor/model');
+  });
+
+  test('uses known table for openai-v1 model without row context fields', async () => {
+    const { modelCache } = await import('../../src/app-state.ts');
+    modelCache.set('gpt-4o', {
+      id: 'gpt-4o',
+      state: 'loaded',
+    });
+    const chat = { modelInfo: {} } as Chat;
+    assert.equal(resolveContextLimit('gpt-4o', chat), 128_000);
+    modelCache.delete('gpt-4o');
   });
 });
 

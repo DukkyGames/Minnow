@@ -57,6 +57,19 @@ export interface MemoryEmbeddingsReindexResult {
   durationMs: number;
 }
 
+export interface MemoryEmbeddingsWarmupResult {
+  ok: boolean;
+  model: string;
+  backend: string;
+  dim: number;
+  durationMs: number;
+}
+
+/** Result wrapper for embeddings mutations that surface server errors. */
+export type MemoryEmbeddingsOpResult<T> =
+  | { kind: 'ok'; value: T }
+  | { kind: 'err'; error: string };
+
 export interface MemoryRetrieveResult {
   block: string;
   ids: string[];

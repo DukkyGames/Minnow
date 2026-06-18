@@ -32,6 +32,8 @@ import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
 import { ensurePinnedSkill } from '../skills/pinned-skill';
+import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
+import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
@@ -503,12 +505,19 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       : undefined;
   const completionShownAt =
     typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
+  const executionModeRaw =
+    typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
+  const executionMode =
+    executionModeRaw === 'auto' || executionModeRaw === 'manual'
+      ? executionModeRaw
+      : 'manual';
   return {
     planPath,
     tasks,
     waves,
     startedAt,
     lastUpdatedAt,
+    executionMode,
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
     ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
@@ -1218,6 +1227,12 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   const victim = state.chats[idx];
+  const victimAgent = resolveActiveWorkAgent(victim);
+  cleanupChatArchiveOnDelete(
+    victim.id,
+    victim.workspacePath ?? '',
+    victimAgent?.contextEnforcementPolicy,
+  );
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
   state.chats.splice(idx, 1);

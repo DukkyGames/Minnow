@@ -139,11 +139,11 @@ function renderArtifactRow(
     llamaBtn.type = 'button';
     const llamaReady = Boolean(runtimes?.llamaCpp.path);
     const llamaInstallable = runtimes?.llamaCpp.installable ?? false;
-    llamaBtn.disabled = !runtimes?.llamaCpp.available;
+    llamaBtn.disabled = !llamaReady && !llamaInstallable;
     llamaBtn.title = llamaReady
       ? 'Start llama-server for this GGUF'
       : llamaInstallable
-        ? 'Download bundled llama-server on first serve (~20 MB)'
+        ? 'Install llama.cpp runtime (~20 MB), then configure serve options'
         : 'Install llama-server and add it to PATH';
     llamaBtn.addEventListener('click', () => {
       void openServeDialog({
@@ -216,7 +216,7 @@ function renderRuntimesCard(runtimes: RuntimeDetection): HTMLElement {
       runtimes.llamaCpp.path
         ? runtimes.llamaCpp.path
         : runtimes.llamaCpp.installable
-          ? 'bundled (downloads on first serve)'
+          ? 'not installed — Serve will prompt to install'
           : 'not found'
     }`,
     `Ollama: ${runtimes.ollama.serving ? 'serving' : runtimes.ollama.available ? 'installed' : 'not found'}`,
