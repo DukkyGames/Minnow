@@ -22,6 +22,7 @@ import {
   executeBoardTool,
   validateDelegateTasksArgs,
 } from '../../src/tools/board-tools.ts';
+import { setBoardMaxConcurrent } from '../../src/state/orchestrate-board-actions.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import {
   initBoard,
@@ -261,5 +262,33 @@ describe('sequential execution mode', () => {
   test('getBoardExecutionMode falls back to manual for unknown values', () => {
     const board = { executionMode: 'unknown' as any };
     assert.equal(getBoardExecutionMode(board as any), 'manual');
+  });
+});
+
+// ─── setBoardMaxConcurrent ────────────────────────────────────────────────
+
+describe('setBoardMaxConcurrent', () => {
+  test('clamps value to [1, 20]', () => {
+    const { planner, group } = seedBoard('auto');
+    setBoardMaxConcurrent(group, 0, planner);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 1);
+    setBoardMaxConcurrent(group, 99, planner);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 20);
+    setBoardMaxConcurrent(group, 5, planner);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 5);
+  });
+
+  test('floors fractional values', () => {
+    const { planner, group } = seedBoard('auto');
+    setBoardMaxConcurrent(group, 3.9, planner);
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 3);
+  });
+
+  test('no-op when value unchanged', () => {
+    const { planner, group } = seedBoard('auto');
+    group.orchestrateBoard!.maxConcurrentTasks = 5;
+    const before = group.orchestrateBoard!.lastUpdatedAt;
+    setBoardMaxConcurrent(group, 5, planner);
+    assert.equal(group.orchestrateBoard?.lastUpdatedAt, before);
   });
 });
