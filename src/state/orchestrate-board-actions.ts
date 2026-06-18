@@ -911,7 +911,7 @@ export function applyFinalTestFailureReopens(
   for (const taskId of failingIds) {
     const task = board.tasks.find((t) => t.id === taskId);
     if (!task) continue;
-    updateTask(group, taskId, { testAttempts: 0, testSummary: summary }, plannerChat);
+    updateTask(group, taskId, { testAttempts: 1, testSummary: summary }, plannerChat);
     moveTaskStatus(group, taskId, 'in_progress', plannerChat);
   }
 }

@@ -11,6 +11,7 @@ import {
   type TaskCardActivity,
   type TaskCardSubAgentHint,
 } from '../chat/orchestrate/task-activity';
+import { deriveTaskCategoryBadge } from '../chat/orchestrate/task-category-badge';
 import { listTaskRelatedChats } from '../chat/orchestrate/task-chats';
 import {
   getMainTurnActivity,
@@ -447,6 +448,8 @@ export function buildKanbanRefreshKey(
         task.error ?? '',
         task.title,
         task.category,
+        task.testAttempts ?? 0,
+        deriveTaskCategoryBadge(task).cssVariant,
         activity ? `${activity.kind}:${activity.text}` : '',
         relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
         heartbeatKey,
@@ -1269,9 +1272,10 @@ function buildTaskCard(
 
   const trail = document.createElement('div');
   trail.className = 'board-task-card__trail';
+  const categoryBadge = deriveTaskCategoryBadge(task);
   const chip = document.createElement('span');
-  chip.className = `board-task-card__cat bt--${task.category}`;
-  chip.textContent = task.category;
+  chip.className = `board-task-card__cat bt--${categoryBadge.cssVariant}`;
+  chip.textContent = categoryBadge.label;
   trail.appendChild(chip);
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));
