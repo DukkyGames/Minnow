@@ -16,8 +16,13 @@ import {
   writeRegistryRecord,
 } from '../../server/runs/store.js';
 import {
+  flushMirrorsForTests,
+  isRunPersistenceEnabled,
   loadRegistry,
+  mirrorRegistryEntry,
+  pendingMirrorCountForTests,
   reconcilePersistedRegistry,
+  resetMirrorCoalesceForTests,
   resultCommitKey,
   setRunsPersistenceApiBase,
   supersedeOlderAttempts,
@@ -88,6 +93,7 @@ describe('controller persistence', () => {
 
   afterEach(() => {
     setRunsPersistenceApiBase(baseUrl);
+    resetMirrorCoalesceForTests();
   });
 
   test('resultCommitKey matches server buildResultKey', () => {
@@ -201,5 +207,46 @@ describe('controller persistence', () => {
     assert.equal(old?.error, 'superseded');
     assert.equal(current?.lifecycle, 'running');
     assert.equal(current?.idempotencyKey, 'idem-new');
+  });
+
+  test('mirrorRegistryEntry coalesces multiple updates into one PUT', async () => {
+    if (!isRunPersistenceEnabled()) return;
+    const run = {
+      runId: RUN_ID,
+      type: 'explore',
+      task: 'Coalesce test',
+      status: 'running' as const,
+      lifecycle: 'running' as const,
+      parentChatId: PARENT_CHAT,
+      parentToolCallId: null,
+      parentTurnId: null,
+      summary: '',
+      error: null,
+      startedAt: '2026-06-16T12:00:00.000Z',
+      endedAt: null,
+      toolTurns: 0,
+      maxToolTurns: 10,
+      cancelled: false,
+      messages: [],
+    };
+
+    mirrorRegistryEntry(run);
+    mirrorRegistryEntry({ ...run, progressSeq: 1 });
+    mirrorRegistryEntry({ ...run, progressSeq: 2, summary: 'latest' });
+    assert.equal(pendingMirrorCountForTests(), 1);
+    flushMirrorsForTests();
+    assert.equal(pendingMirrorCountForTests(), 0);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/runs/registry');
+    assert.equal(get.status, 200);
+    const row = get.json.records.find((r: { runId: string }) => r.runId === RUN_ID);
+    assert.equal(row?.summary, 'latest');
+    assert.equal(row?.progressSeq, 2);
+  });
+
+  test('supersedeOlderAttempts no-ops for first attempt', async () => {
+    await supersedeOlderAttempts(BOARD_TASK, 1);
+    const records = await loadRegistry();
+    assert.equal(records.length, 0);
   });
 });

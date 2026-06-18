@@ -7,6 +7,7 @@ import {
   listRegistryRecords,
   readCommittedResult,
   readRegistryRecord,
+  supersedeOlderRegistryAttempts,
   writeCommittedResult,
   writeRegistryRecord,
 } from './store.js';
@@ -103,6 +104,19 @@ export async function handleRunsConfigRequest(req, res, pathname) {
         sendJson(res, 200, { ok: true, key });
         return true;
       }
+    }
+
+    if (pathname === '/api/config/runs/supersede' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const boardTaskId = body?.boardTaskId;
+      const attempt = Number(body?.attempt);
+      if (!boardTaskId || !Number.isFinite(attempt) || attempt < 1) {
+        sendJson(res, 400, { error: 'boardTaskId and attempt required' });
+        return true;
+      }
+      const updated = await supersedeOlderRegistryAttempts(boardTaskId, attempt);
+      sendJson(res, 200, { ok: true, updated });
+      return true;
     }
 
     if (pathname === '/api/config/runs/result-key' && req.method === 'POST') {

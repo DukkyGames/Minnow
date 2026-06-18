@@ -30,7 +30,7 @@ import {
 import { cloneSubAgentMessages, defaultSubAgentRunner, getSubAgentRunner } from '../sub-agent-runner';
 import { resolveSubAgentModelBinding } from '../resolve-sub-agent-binding';
 import { resolveSubAgentTools } from '../sub-agent-tools';
-import { clearSubAgentRunListeners, emitSubAgentRunUpdated } from '../sub-agent-events';
+import { clearSubAgentRunListeners, emitSubAgentRunUpdated, subscribeSubAgentRuns } from '../sub-agent-events';
 import type { ApiMessage } from '../../types';
 import type {
   AggregateResult,
@@ -43,6 +43,7 @@ import type {
 } from '../types';
 import { deriveLifecycleFromStatus } from '../types';
 import {
+  armRunTimers,
   associateParentChat,
   associateParentTurn,
   clearRegistry,
@@ -56,6 +57,8 @@ import {
   listSubAgentRunsForParentChat,
   listSubAgentRunsForParentTurn,
   registerRun,
+  scheduleRunEviction,
+  trimRunMessagesOnSettle,
 } from './registry';
 import {
   acquireConcurrencySlot,
@@ -88,9 +91,12 @@ import {
 import {
   commitRunResult,
   isNonMutatingPersistedRecord,
+  loadPersistedRunRecord,
   mirrorRegistryEntry,
   persistRegistryEntry,
+  readCommittedResult,
   reconcilePersistedRegistry,
+  resetMirrorCoalesceForTests,
   supersedeOlderAttempts,
   type PersistedRunRecord,
 } from './persistence';
@@ -106,6 +112,17 @@ setQueueDispatch((internals, modeId) => {
 setQueueFail((internals, message) => {
   settleRun(internals, 'failed', '', message);
 });
+
+const runTimerHandlers = {
+  onTimeout: (runId: string) => {
+    cancelSubAgent(runId, 'timeout');
+  },
+  onCheckInNudge: (runId: string) => {
+    void import('../sub-agent-completion-push.js').then((mod) => {
+      mod.fireSubAgentCheckInNudge(runId);
+    });
+  },
+};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -250,8 +267,9 @@ function settleRun(
   internals.queued = false;
   drainQueue();
   emitSubAgentRunUpdated(run);
+  trimRunMessagesOnSettle(run);
+  scheduleRunEviction(run.runId);
   syncBoardTaskOnSettle(run, status, error);
-  mirrorRegistryEntry(run);
 }
 
 /** Settle after write-ahead result commit for successful completions. */
@@ -395,6 +413,9 @@ async function executeRun(internals: RunInternals, modeId: string): Promise<void
     setStatus(run, 'running');
     run.lifecycle = 'dispatching';
     if (!run.startedAt) run.startedAt = nowIso();
+    const timeoutMs = typeConfig.timeoutMs || config.defaultTimeoutMs;
+    const checkInMs = config.checkInNudgeMs ?? 0;
+    armRunTimers(internals, timeoutMs, checkInMs, runTimerHandlers);
     setHeartbeatConfig({
       heartbeatIntervalMs: config.heartbeatIntervalMs,
       progressStallMs: config.progressStallMs,
@@ -610,26 +631,10 @@ async function spawnSubAgentInternal(
   associateParentTurn(input.parentTurnId, runId);
   associateParentChat(input.parentChatId, runId);
 
-  const timeoutMs = typeConfig.timeoutMs || config.defaultTimeoutMs;
-  internals.timeoutId = setTimeout(() => {
-    cancelSubAgent(runId, 'timeout');
-  }, timeoutMs);
-
-  const checkInMs = config.checkInNudgeMs ?? 0;
-  if (checkInMs > 0) {
-    internals.nudgeTimeoutId = setTimeout(() => {
-      void import('../sub-agent-completion-push.js').then((mod) => {
-        mod.fireSubAgentCheckInNudge(runId);
-      });
-    }, checkInMs);
-  }
-
   const typeMax = typeConfig.maxConcurrent ?? 1;
   if (canStart(input.type, config.globalMaxConcurrent, typeMax)) {
     internals.queued = false;
     acquireConcurrencySlot(internals, input.type);
-    setStatus(run, 'running');
-    run.startedAt = nowIso();
     launchExecuteRun(internals, modeId);
     emitSubAgentRunUpdated(run);
     return { runId, status: 'running' };
@@ -718,45 +723,108 @@ export async function waitForSubAgent(
   runId: string,
   signal?: AbortSignal,
 ): Promise<AggregateResult> {
-  const pollMs = 50;
+  const initial = getSubAgentRun(runId);
+  if (initial && isSubAgentRunTerminal(initial.status)) {
+    return buildAggregateResult(initial);
+  }
+
+  const WAIT_FALLBACK_MS = 3_000;
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const finish = (result: AggregateResult): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+
     const onAbort = (): void => {
       cancelSubAgent(runId, 'parent_abort');
-      reject(new DOMException('Aborted', 'AbortError'));
+      fail(new DOMException('Aborted', 'AbortError'));
+    };
+
+    let unsubscribe: (() => void) | null = null;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = (): void => {
+      signal?.removeEventListener('abort', onAbort);
+      unsubscribe?.();
+      unsubscribe = null;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
     };
 
     if (signal?.aborted) {
       onAbort();
       return;
     }
-
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    const tick = (): void => {
-      const internals = getRunInternals(runId);
-      if (!internals) {
-        signal?.removeEventListener('abort', onAbort);
-        reject(new Error(`Error: unknown sub-agent run ${runId}`));
-        return;
-      }
-
-      const { run } = internals;
-      if (
-        run.status === 'completed' ||
-        run.status === 'failed' ||
-        run.status === 'cancelled'
-      ) {
-        signal?.removeEventListener('abort', onAbort);
-        resolve(buildAggregateResult(run));
-        return;
-      }
-
-      setTimeout(tick, pollMs);
+    const tryResolveFromRun = (run: SubAgentRun): void => {
+      if (run.runId !== runId) return;
+      if (!isSubAgentRunTerminal(run.status)) return;
+      finish(buildAggregateResult(run));
     };
 
-    tick();
+    unsubscribe = subscribeSubAgentRuns(tryResolveFromRun);
+
+    const latest = getSubAgentRun(runId);
+    if (latest) {
+      tryResolveFromRun(latest);
+      if (settled) return;
+    }
+
+    fallbackTimer = setTimeout(() => {
+      const row = getSubAgentRun(runId);
+      if (row) {
+        tryResolveFromRun(row);
+        if (settled) return;
+        // Still in flight — subscription remains active until terminal or abort.
+        return;
+      }
+      void resolveWaitFromPersistence(runId).then((aggregate) => {
+        if (aggregate) finish(aggregate);
+        else fail(new Error(`Error: unknown sub-agent run ${runId}`));
+      });
+    }, WAIT_FALLBACK_MS);
   });
+}
+
+async function resolveWaitFromPersistence(
+  runId: string,
+): Promise<AggregateResult | null> {
+  const record = await loadPersistedRunRecord(runId);
+  if (!record || !isSubAgentRunTerminal(record.status)) return null;
+
+  const ref = record.committedResultRef?.trim();
+  if (ref) {
+    const committed = await readCommittedResult(ref);
+    if (committed) return committed;
+  }
+
+  return {
+    runId: record.runId,
+    type: record.type,
+    status: record.status,
+    summary: record.summary,
+    outcome: legacyOutcomeFromSummary(record.summary),
+    startedAt: record.startedAt,
+    endedAt: record.endedAt,
+    toolTurns: 0,
+    cancelled: record.status === 'cancelled',
+    ...(record.error ? { error: record.error } : {}),
+  };
 }
 
 /** Cancel all sub-agents tied to a parent send turn. */
@@ -941,6 +1009,7 @@ export function resetSubAgentOrchestrator(): void {
   });
   clearRegistry();
   clearScheduler();
+  resetMirrorCoalesceForTests();
   setQueueDispatch((internals, modeId) => {
     launchExecuteRun(internals, modeId);
   });

@@ -196,6 +196,52 @@ function syncTaskChatModelFromPlanner(taskChat: Chat, plannerChat: Chat): void {
   if (binding.modelId) taskChat.modelId = binding.modelId;
 }
 
+type BoardChatRole = 'build' | 'tester';
+
+function getOrCreateBoardChat(input: {
+  group: ChatGroup;
+  plannerChat: Chat;
+  existingId?: string;
+  role: BoardChatRole;
+  name: string;
+  taskId?: string;
+  taskChatField?: 'chatId' | 'testChatId';
+}): Chat {
+  const { providerId, modelId } = resolvePlannerModelBinding(input.plannerChat);
+  const folderId = input.group.id;
+  const existingId = input.existingId?.trim();
+
+  if (existingId) {
+    const existing = findChatById(existingId);
+    if (existing) {
+      if (input.taskId) existing.boardTaskId = input.taskId;
+      if (input.role === 'tester') existing.workAgentId = 'tester';
+      syncTaskChatModelFromPlanner(existing, input.plannerChat);
+      return existing;
+    }
+  }
+
+  const chat = createEmptyChatObject(modelId, input.plannerChat.workspacePath);
+  chat.providerId = providerId;
+  chat.modeId = 'build';
+  chat.workAgentId = input.role === 'tester' ? 'tester' : null;
+  chat.name = input.name;
+  chat.groupId = folderId;
+  chat.boardGroupId = folderId;
+  if (input.taskId) chat.boardTaskId = input.taskId;
+  requireSession().chats.unshift(chat);
+  if (input.taskId && input.taskChatField) {
+    updateTask(
+      input.group,
+      input.taskId,
+      { [input.taskChatField]: chat.id },
+      input.plannerChat,
+    );
+  }
+  assignChatToGroup(chat.id, folderId);
+  return chat;
+}
+
 function ensureStreamEndSubscription(): void {
   if (!streamEndSubscribed) {
     streamEndSubscribed = true;
@@ -477,8 +523,6 @@ export async function startTask(
     return;
   }
 
-  const folderId = group.id;
-
   // A retry/reopen seed (failed-test summary) is persisted on the task so it
   // survives being queued for a concurrency slot. When present, run a fresh
   // Builder chat (no history bloat) with the failure-aware prompt.
@@ -486,39 +530,15 @@ export async function startTask(
 
   let taskChat: Chat;
   const forceNewChat = Boolean(overrideSeed);
-  const existingId = forceNewChat ? '' : task.chatId?.trim();
-  if (existingId) {
-    const existing = findChatById(existingId);
-    if (existing) {
-      taskChat = existing;
-      taskChat.boardTaskId = task.id;
-      syncTaskChatModelFromPlanner(taskChat, plannerChat);
-    } else {
-      taskChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-      taskChat.providerId = providerId;
-      taskChat.modeId = 'build';
-      taskChat.workAgentId = null;
-      taskChat.name = `Task ${task.id}: ${task.title}`;
-      taskChat.groupId = folderId;
-      taskChat.boardGroupId = folderId;
-      taskChat.boardTaskId = task.id;
-      requireSession().chats.unshift(taskChat);
-      updateTask(group, taskId, { chatId: taskChat.id }, plannerChat);
-      assignChatToGroup(taskChat.id, folderId);
-    }
-  } else {
-    taskChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-    taskChat.providerId = providerId;
-    taskChat.modeId = 'build';
-    taskChat.workAgentId = null;
-    taskChat.name = `Task ${task.id}: ${task.title}`;
-    taskChat.groupId = folderId;
-    taskChat.boardGroupId = folderId;
-    taskChat.boardTaskId = task.id;
-    requireSession().chats.unshift(taskChat);
-    updateTask(group, taskId, { chatId: taskChat.id }, plannerChat);
-    assignChatToGroup(taskChat.id, folderId);
-  }
+  taskChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: forceNewChat ? '' : task.chatId?.trim(),
+    role: 'build',
+    name: `Task ${task.id}: ${task.title}`,
+    taskId: task.id,
+    taskChatField: 'chatId',
+  });
 
   const { renderSidebar } = await import('../ui/sidebar.ts');
   renderSidebar();
@@ -590,43 +610,15 @@ export async function startTaskTesting(
     return;
   }
 
-  const folderId = group.id;
-
-  let testChat: Chat;
-  const existingId = task.testChatId?.trim();
-  if (existingId) {
-    const existing = findChatById(existingId);
-    if (existing) {
-      testChat = existing;
-      testChat.boardTaskId = task.id;
-      testChat.workAgentId = 'tester';
-      syncTaskChatModelFromPlanner(testChat, plannerChat);
-    } else {
-      testChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-      testChat.providerId = providerId;
-      testChat.modeId = 'build';
-      testChat.workAgentId = 'tester';
-      testChat.name = `Test ${task.id}: ${task.title}`;
-      testChat.groupId = folderId;
-      testChat.boardGroupId = folderId;
-      testChat.boardTaskId = task.id;
-      requireSession().chats.unshift(testChat);
-      updateTask(group, taskId, { testChatId: testChat.id }, plannerChat);
-      assignChatToGroup(testChat.id, folderId);
-    }
-  } else {
-    testChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-    testChat.providerId = providerId;
-    testChat.modeId = 'build';
-    testChat.workAgentId = 'tester';
-    testChat.name = `Test ${task.id}: ${task.title}`;
-    testChat.groupId = folderId;
-    testChat.boardGroupId = folderId;
-    testChat.boardTaskId = task.id;
-    requireSession().chats.unshift(testChat);
-    updateTask(group, taskId, { testChatId: testChat.id }, plannerChat);
-    assignChatToGroup(testChat.id, folderId);
-  }
+  const testChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: task.testChatId?.trim(),
+    role: 'tester',
+    name: `Test ${task.id}: ${task.title}`,
+    taskId: task.id,
+    taskChatField: 'testChatId',
+  });
 
   updateTask(
     group,
@@ -815,37 +807,13 @@ export async function startFinalIntegrationTest(
     return;
   }
 
-  const folderId = group.id;
-
-  let finalChat: Chat;
-  if (existingFinalId) {
-    const existing = findChatById(existingFinalId);
-    if (existing) {
-      finalChat = existing;
-      finalChat.workAgentId = 'tester';
-      syncTaskChatModelFromPlanner(finalChat, plannerChat);
-    } else {
-      finalChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-      finalChat.providerId = providerId;
-      finalChat.modeId = 'build';
-      finalChat.workAgentId = 'tester';
-      finalChat.name = 'Final integration test';
-      finalChat.groupId = folderId;
-      finalChat.boardGroupId = folderId;
-      requireSession().chats.unshift(finalChat);
-      assignChatToGroup(finalChat.id, folderId);
-    }
-  } else {
-    finalChat = createEmptyChatObject(modelId, plannerChat.workspacePath);
-    finalChat.providerId = providerId;
-    finalChat.modeId = 'build';
-    finalChat.workAgentId = 'tester';
-    finalChat.name = 'Final integration test';
-    finalChat.groupId = folderId;
-    finalChat.boardGroupId = folderId;
-    requireSession().chats.unshift(finalChat);
-    assignChatToGroup(finalChat.id, folderId);
-  }
+  const finalChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: existingFinalId,
+    role: 'tester',
+    name: 'Final integration test',
+  });
 
   board.finalTest = {
     ...(board.finalTest ?? {}),

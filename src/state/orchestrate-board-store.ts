@@ -143,6 +143,7 @@ export function isDepsComplete(
   board: OrchestrateBoardState,
   task: BoardTask,
 ): boolean {
+  if (isTaskInDependencyCycle(board, task.id)) return false;
   if (!task.dependsOn?.length) return true;
   for (const depId of task.dependsOn) {
     if (depId === task.id) continue; // skip self-edges
@@ -153,12 +154,79 @@ export function isDepsComplete(
   return true;
 }
 
+/**
+ * Find dependency cycles via DFS over task.dependsOn edges.
+ * Returns one closed path per detected cycle (last node repeats the first).
+ */
+export function detectDependencyCycles(board: OrchestrateBoardState): string[][] {
+  const taskIds = new Set(board.tasks.map((t) => t.id));
+  const adj = new Map<string, string[]>();
+  for (const task of board.tasks) {
+    adj.set(
+      task.id,
+      (task.dependsOn ?? []).filter((depId) => depId !== task.id && taskIds.has(depId)),
+    );
+  }
+
+  const cycles: string[][] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const stack: string[] = [];
+
+  function dfs(node: string): void {
+    visiting.add(node);
+    stack.push(node);
+    for (const depId of adj.get(node) ?? []) {
+      if (visited.has(depId)) continue;
+      if (visiting.has(depId)) {
+        const start = stack.indexOf(depId);
+        if (start >= 0) {
+          cycles.push([...stack.slice(start), node]);
+        }
+        continue;
+      }
+      dfs(depId);
+    }
+    stack.pop();
+    visiting.delete(node);
+    visited.add(node);
+  }
+
+  for (const id of taskIds) {
+    if (!visited.has(id)) dfs(id);
+  }
+  return cycles;
+}
+
+/** Task ids that participate in at least one dependsOn cycle. */
+export function detectCycleTaskIds(board: OrchestrateBoardState): Set<string> {
+  const ids = new Set<string>();
+  for (const cycle of detectDependencyCycles(board)) {
+    for (const id of cycle) ids.add(id);
+  }
+  return ids;
+}
+
+function isTaskInDependencyCycle(
+  board: OrchestrateBoardState,
+  taskId: string,
+): boolean {
+  return detectCycleTaskIds(board).has(taskId);
+}
+
+function formatDependencyCycleError(cycle: string[]): string {
+  if (cycle.length < 2) return 'dependency cycle detected';
+  const path = cycle.join(' → ');
+  return `dependency cycle: ${path}`;
+}
+
 /** Planned task whose prior waves are complete (simple wave ordering). */
 export function isTaskReadyForAuto(
   board: OrchestrateBoardState,
   task: BoardTask,
 ): boolean {
   if (task.status !== 'planned') return false;
+  if (isTaskInDependencyCycle(board, task.id)) return false;
   if (!isDepsComplete(board, task)) return false;
   return isPriorWavesComplete(board, task.wave);
 }
@@ -334,6 +402,16 @@ export function initBoard(
     maxConcurrentTasks: 3,
     executionMode: 'manual',
   };
+  const cycles = detectDependencyCycles(board);
+  if (cycles.length > 0) {
+    const cycleTaskIds = detectCycleTaskIds(board);
+    for (const task of tasks) {
+      if (!cycleTaskIds.has(task.id)) continue;
+      const cycle = cycles.find((c) => c.includes(task.id));
+      task.status = 'blocked';
+      task.error = cycle ? formatDependencyCycleError(cycle) : 'dependency cycle detected';
+    }
+  }
   recomputeWaveRollup(board);
   group.orchestrateBoard = board;
   group.orchestratePlanPath = input.planPath;

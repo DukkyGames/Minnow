@@ -2,6 +2,7 @@
  * In-memory run registry: active runs map and parent-chat/turn indexes.
  */
 
+import { isSubAgentRunTerminal } from '../sub-agent-outcome';
 import type { SubAgentRun } from '../types';
 import type { RunInternals } from './types';
 import { loadRegistry, mirrorRegistryEntry } from './persistence';
@@ -11,6 +12,12 @@ export { loadRegistry };
 const runs = new Map<string, RunInternals>();
 const parentTurnRuns = new Map<string, Set<string>>();
 const parentChatRuns = new Map<string, Set<string>>();
+
+/** Retain a short transcript tail after settle; full evict after this delay. */
+export const TERMINAL_RUN_EVICT_MS = 60_000;
+const TERMINAL_MESSAGE_TAIL = 6;
+
+const evictTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Lookup mutable internals for a run id. */
 export function getRunInternals(runId: string): RunInternals | undefined {
@@ -75,6 +82,73 @@ export function clearTimeoutFor(internals: RunInternals): void {
   }
 }
 
+/** Callbacks invoked when run wall-clock timeout or check-in nudge fires. */
+export type RunTimerHandlers = {
+  onTimeout: (runId: string) => void;
+  onCheckInNudge: (runId: string) => void;
+};
+
+/**
+ * Arm wall-clock timeout and optional check-in nudge when a run actually starts
+ * (not while it waits in the global concurrency queue).
+ */
+export function armRunTimers(
+  internals: RunInternals,
+  timeoutMs: number,
+  checkInNudgeMs: number,
+  handlers: RunTimerHandlers,
+): void {
+  clearTimeoutFor(internals);
+  const runId = internals.run.runId;
+  if (timeoutMs > 0) {
+    internals.timeoutId = setTimeout(() => handlers.onTimeout(runId), timeoutMs);
+  }
+  if (checkInNudgeMs > 0) {
+    internals.nudgeTimeoutId = setTimeout(
+      () => handlers.onCheckInNudge(runId),
+      checkInNudgeMs,
+    );
+  }
+}
+
+/** Trim heavy transcript after settle; durability lives in persistence + session sync. */
+export function trimRunMessagesOnSettle(run: SubAgentRun): void {
+  if (run.messages.length <= TERMINAL_MESSAGE_TAIL) return;
+  run.messages = run.messages.slice(-TERMINAL_MESSAGE_TAIL);
+}
+
+/** Remove a settled run from live maps after a grace window. */
+export function evictRun(runId: string): void {
+  const timer = evictTimers.get(runId);
+  if (timer) {
+    clearTimeout(timer);
+    evictTimers.delete(runId);
+  }
+
+  const internals = runs.get(runId);
+  if (!internals) return;
+  if (!isSubAgentRunTerminal(internals.run.status)) return;
+
+  runs.delete(runId);
+  for (const set of parentTurnRuns.values()) {
+    set.delete(runId);
+  }
+  for (const set of parentChatRuns.values()) {
+    set.delete(runId);
+  }
+}
+
+/** Schedule eviction of a terminal run from the in-memory registry. */
+export function scheduleRunEviction(runId: string): void {
+  if (process.env.MINNOW_TEST === '1') return;
+  if (evictTimers.has(runId)) return;
+  const timer = setTimeout(() => {
+    evictTimers.delete(runId);
+    evictRun(runId);
+  }, TERMINAL_RUN_EVICT_MS);
+  evictTimers.set(runId, timer);
+}
+
 /** Active or settled runs registered for a parent user-send turn. */
 export function listSubAgentRunsForParentTurn(
   parentTurnId: string | null | undefined,
@@ -130,6 +204,10 @@ export function forEachRunInternals(
 
 /** Wipe registry state (test reset). */
 export function clearRegistry(): void {
+  for (const timer of evictTimers.values()) {
+    clearTimeout(timer);
+  }
+  evictTimers.clear();
   runs.clear();
   parentTurnRuns.clear();
   parentChatRuns.clear();

@@ -135,7 +135,7 @@ const LIVE_TRANSCRIPT_EMIT_MS = 80;
 
 /** Deep-clone messages for orchestrator state + UI subscribers. */
 export function cloneSubAgentMessages(messages: ApiMessage[]): ApiMessage[] {
-  return JSON.parse(JSON.stringify(messages)) as ApiMessage[];
+  return structuredClone(messages);
 }
 
 interface SubAgentCompletionBody extends CompletionBodyWithResponseFormat {
@@ -345,15 +345,37 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         ? input.modelContextLimit
         : resolveSubAgentModelContextLimit(input.modelId);
     let lastProgressEmit = 0;
+    let forcedEmitQueued = false;
+    let forcedPartialAssistant: string | undefined;
     const usageSegments: Usage[] = [];
     const statsSegments: Array<{ stats: Stats; usage: Usage }> = [];
     const budgetEvents: SubAgentBudgetEvent[] = [];
     const summarySchema = input.summarySchema;
 
+    const flushForcedEmit = (): void => {
+      forcedEmitQueued = false;
+      if (!input.onMessagesChange) return;
+      lastProgressEmit = Date.now();
+      const snapshot = cloneSubAgentMessages(messages);
+      const partial = forcedPartialAssistant;
+      forcedPartialAssistant = undefined;
+      if (partial) {
+        snapshot.push({ role: 'assistant', content: partial });
+      }
+      input.onMessagesChange(snapshot);
+    };
+
     const emitProgress = (partialAssistant?: string, force = false): void => {
       if (!input.onMessagesChange) return;
       const now = Date.now();
-      if (!force && now - lastProgressEmit < LIVE_TRANSCRIPT_EMIT_MS) return;
+      if (force) {
+        forcedPartialAssistant = partialAssistant ?? forcedPartialAssistant;
+        if (forcedEmitQueued) return;
+        forcedEmitQueued = true;
+        queueMicrotask(flushForcedEmit);
+        return;
+      }
+      if (now - lastProgressEmit < LIVE_TRANSCRIPT_EMIT_MS) return;
       lastProgressEmit = now;
       const snapshot = cloneSubAgentMessages(messages);
       if (partialAssistant) {

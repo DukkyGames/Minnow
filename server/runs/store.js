@@ -113,4 +113,38 @@ export async function writeCommittedResult(key, data) {
   return key;
 }
 
+const TERMINAL_LIFECYCLES = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+
+/**
+ * Mark non-terminal registry rows for the same board task with a lower attempt as superseded.
+ * @param {string} boardTaskId
+ * @param {number} attempt
+ * @returns {Promise<number>} count of updated records
+ */
+export async function supersedeOlderRegistryAttempts(boardTaskId, attempt) {
+  if (!boardTaskId || !Number.isFinite(attempt) || attempt <= 1) return 0;
+  const records = await listRegistryRecords();
+  const now = new Date().toISOString();
+  let updated = 0;
+  for (const record of records) {
+    if (record.boardTaskId !== boardTaskId) continue;
+    if ((record.attempt ?? 1) >= attempt) continue;
+    if (TERMINAL_LIFECYCLES.has(record.lifecycle)) continue;
+    await writeRegistryRecord({
+      ...record,
+      status: 'failed',
+      lifecycle: 'interrupted',
+      error: 'superseded',
+      endedAt: now,
+    });
+    updated += 1;
+  }
+  return updated;
+}
+
 export { buildResultKey };
