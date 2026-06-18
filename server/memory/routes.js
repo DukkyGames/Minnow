@@ -18,6 +18,8 @@ import {
   ensureMemoryStore,
 } from './store.js';
 import { retrieveMemoryBlockHybrid } from './retrieve.js';
+import { loadAllPagesWithBodies } from '../brain/retrieve.js';
+import { listPages } from '../brain/store.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
@@ -185,15 +187,17 @@ export async function handleMemoryRequest(req, res, pathname) {
       const emb = memory.embeddings ?? {};
       const vectorCount = await getVectorCount();
       const store = await loadVectorStore();
+      const pageCount = (await listPages()).length;
       let healthy = false;
       if (emb.enabled) {
         try {
           const embedder = await getEmbedder(memory);
-          healthy = isVectorStoreCompatible(store, {
+          const compatible = isVectorStoreCompatible(store, {
             modelId: embedder.id,
             backend: emb.backend,
             dim: embedder.dim,
           });
+          healthy = compatible && (pageCount === 0 || vectorCount > 0);
         } catch {
           healthy = false;
         }
@@ -207,6 +211,7 @@ export async function handleMemoryRequest(req, res, pathname) {
         queryTimeoutMs: typeof emb.queryTimeoutMs === 'number' ? emb.queryTimeoutMs : 3000,
         dim: store.dim ?? 0,
         vectorCount,
+        pageCount,
         reindexNeeded: emb.reindexNeeded === true,
         healthy,
       });
@@ -265,13 +270,17 @@ export async function handleMemoryRequest(req, res, pathname) {
       }
 
       const embedder = await getEmbedder(memory);
-      const entries = await loadAllEntriesWithBodies();
+      const pages = await loadAllPagesWithBodies();
+      const embedTimeoutMs = Math.max(
+        Number(emb.queryTimeoutMs) || 0,
+        EMBEDDINGS_WARMUP_TIMEOUT_MS,
+      );
       const result = await reindexAllMemoryEntries(
         async (text) => {
-          const [vector] = await embedTexts(embedder, [text], emb.queryTimeoutMs);
+          const [vector] = await embedTexts(embedder, [text], embedTimeoutMs);
           return vector;
         },
-        entries,
+        pages,
         {
           model: embedder.id,
           backend: emb.backend,

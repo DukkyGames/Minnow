@@ -24,7 +24,7 @@ Each page has YAML frontmatter (`id`, `title`, `tags`, `source`, `summary`, …)
 | Need | Tool |
 |------|------|
 | **Why**, **decision**, **domain model**, **gotchas**, conventions | `brain_write_page` / `brain_read_page` / `brain_search` |
-| Fuzzy prose lookup across the wiki | `brain_search` |
+| Fuzzy prose lookup across the wiki | `brain_search` (use the returned `path:` or `Matched page paths` with `brain_read_page`) |
 | Exact string or regex in repo files | `grep` |
 | Where is a symbol / what calls it / signature map | `repo_map` → `find_symbol` / `who_calls` / `read_symbol` |
 | What does this code mean / design intent for a symbol | `explain_symbol` → `read_symbol` |

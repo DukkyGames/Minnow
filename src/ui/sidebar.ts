@@ -297,7 +297,20 @@ export function appendChatRow(
   renameBtn.setAttribute('aria-label', `Rename chat: ${chat.name}`);
   renameBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    beginRenameChat(chat.id, nameSpan, renameBtn, deleteBtn, actions);
+    beginRenameChat(chat.id, nameSpan, renameBtn, brainBtn, deleteBtn, actions);
+  });
+
+  const brainBtn = document.createElement('button');
+  brainBtn.type = 'button';
+  brainBtn.className = 'chat-brain-btn';
+  brainBtn.textContent = '\u{1F9E0}';
+  brainBtn.setAttribute('aria-label', `Add chat to Brain: ${chat.name}`);
+  brainBtn.title = 'Add to Brain';
+  syncChatBrainBtnState(brainBtn, chat);
+  brainBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (brainBtn.disabled) return;
+    void import('./chat-brain-capture').then((m) => m.runChatBrainCapture(chat));
   });
 
   const deleteBtn = document.createElement('button');
@@ -315,6 +328,7 @@ export function appendChatRow(
   });
 
   actions.appendChild(renameBtn);
+  actions.appendChild(brainBtn);
   actions.appendChild(deleteBtn);
 
   head.appendChild(titleRow);
@@ -572,10 +586,24 @@ export function renderSidebar(): void {
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 
+function syncChatBrainBtnState(btn: HTMLButtonElement, chat: Chat): void {
+  const streaming = isChatStreaming(chat.id);
+  const empty = chat.history.length === 0;
+  btn.disabled = streaming || empty;
+  if (streaming) {
+    btn.title = 'Wait for reply to finish';
+  } else if (empty) {
+    btn.title = 'Chat has no messages';
+  } else {
+    btn.title = 'Add to Brain';
+  }
+}
+
 function beginRenameChat(
   chatId: string,
   nameSpan: HTMLSpanElement,
   renameBtn: HTMLButtonElement,
+  brainBtn: HTMLButtonElement,
   deleteBtn: HTMLButtonElement,
   actionsEl: HTMLDivElement
 ): void {

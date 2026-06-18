@@ -15,24 +15,30 @@ const DEFAULT_BRAIN_CONFIG = {
 
 const vectorStore = createVectorStore(getEnginePaths, { isValidEntryId: isValidPageId });
 
-/** Patch brain.embeddings fields in config.json. */
+/** Patch brain.embeddings and mirror the same fields into memory.embeddings. */
 async function patchEmbeddingsConfig(patch) {
   const config = (await readConfigJson('config.json')) ?? {};
   const brain =
     config.brain && typeof config.brain === 'object'
       ? { ...DEFAULT_BRAIN_CONFIG, ...config.brain }
       : { ...DEFAULT_BRAIN_CONFIG };
+  const memory =
+    config.memory && typeof config.memory === 'object' ? config.memory : {};
   const memoryEmb =
     config.memory?.embeddings && typeof config.memory.embeddings === 'object'
       ? config.memory.embeddings
       : {};
-  const embeddings =
-    brain.embeddings && typeof brain.embeddings === 'object'
-      ? { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb, ...brain.embeddings }
-      : { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb };
+  const brainEmb =
+    brain.embeddings && typeof brain.embeddings === 'object' ? brain.embeddings : {};
+  const merged = { ...DEFAULT_EMBEDDINGS_CONFIG, ...memoryEmb, ...brainEmb, ...patch };
+
   config.brain = {
     ...brain,
-    embeddings: { ...embeddings, ...patch },
+    embeddings: merged,
+  };
+  config.memory = {
+    ...memory,
+    embeddings: { ...memoryEmb, ...patch },
   };
   await writeConfigJson('config.json', config);
 }

@@ -183,6 +183,7 @@ describe('memory API', () => {
     assert.equal(res.json.enabled, false);
     assert.equal(res.json.backend, 'local');
     assert.equal(typeof res.json.vectorCount, 'number');
+    assert.equal(typeof res.json.pageCount, 'number');
     assert.equal(res.json.healthy, false);
   });
 

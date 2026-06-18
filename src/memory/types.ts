@@ -46,6 +46,8 @@ export interface MemoryEmbeddingsStatus {
   queryTimeoutMs: number;
   dim: number;
   vectorCount: number;
+  /** Total wiki pages in the brain store (reindex covers all, not only facts/). */
+  pageCount?: number;
   reindexNeeded: boolean;
   healthy: boolean;
 }

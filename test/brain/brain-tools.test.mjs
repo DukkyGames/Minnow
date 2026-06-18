@@ -58,7 +58,31 @@ describe('brain wiki tools', () => {
       limit: 5,
     });
     assert.match(searchOut.result, /MIN_B4_MARKER/);
+    assert.match(searchOut.result, /Matched page paths: facts\/tool-roundtrip\.md/);
     assert.ok(searchOut.result.includes(row.meta.id));
+  });
+
+  it('brain_read_page resolves basename to full path', async () => {
+    await executeServerTool('brain_write_page', {
+      path: 'minnow/nested-basename-test.md',
+      title: 'Nested basename test',
+      body: 'Basename resolution marker.',
+      tags: ['testing'],
+    });
+
+    const out = await executeServerTool('brain_read_page', {
+      path: 'nested-basename-test.md',
+    });
+    assert.match(out.result, /Nested basename test/);
+    assert.match(out.result, /path: minnow\/nested-basename-test\.md/);
+  });
+
+  it('brain_read_page accepts page id from brain_search', async () => {
+    const row = await readPage(PAGE_PATH);
+    const out = await executeServerTool('brain_read_page', {
+      path: row.meta.id,
+    });
+    assert.match(out.result, /Tool roundtrip note/);
   });
 
   it('brain_read_page returns page content by path', async () => {

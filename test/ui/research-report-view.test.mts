@@ -34,6 +34,7 @@ describe('research report view', () => {
         onRefine: () => {},
         onFollowUp: () => {},
         onViewLibrary: () => {},
+        onAddToBrain: () => {},
       },
       { savedToLibrary: true },
     );
@@ -41,6 +42,7 @@ describe('research report view', () => {
     assert.equal(mount.querySelector('#btnResearchSaved'), null);
     assert.ok(mount.querySelector('#btnResearchDiscuss'));
     assert.ok(mount.querySelector('#btnResearchRefine'));
+    assert.ok(mount.querySelector('#btnResearchAddToBrain'));
   });
 
   test('shows Save to Library for unsaved drafts', () => {
@@ -62,6 +64,7 @@ describe('research report view', () => {
         onRefine: () => {},
         onFollowUp: () => {},
         onViewLibrary: () => {},
+        onAddToBrain: () => {},
       },
       { savedToLibrary: false },
     );
