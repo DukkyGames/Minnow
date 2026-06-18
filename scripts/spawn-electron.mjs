@@ -29,6 +29,10 @@ function run(command, args, env = process.env) {
   });
 }
 
+function electronPackageDir() {
+  return path.join(repoRoot, 'node_modules', 'electron');
+}
+
 /** Resolve the platform Electron executable (not the .cmd shim). */
 function electronBinaryPath() {
   try {
@@ -36,6 +40,30 @@ function electronBinaryPath() {
   } catch {
     return null;
   }
+}
+
+function electronDistBinaryPath() {
+  const electronDir = electronPackageDir();
+  if (process.platform === 'win32') {
+    return path.join(electronDir, 'dist', 'electron.exe');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(electronDir, 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron');
+  }
+  return path.join(electronDir, 'dist', 'electron');
+}
+
+function electronInstallError() {
+  const electronDir = electronPackageDir();
+  if (!fs.existsSync(electronDir)) {
+    const productionHint =
+      process.env.NODE_ENV === 'production' ? ' or `npm install electron` if using `--omit=dev`' : '';
+    return new Error(`Electron is not installed. Run: npm install${productionHint}`);
+  }
+
+  return new Error(
+    'Electron binary not downloaded. Run: npm install (re-runs postinstall) or `node scripts/ensure-electron.mjs`',
+  );
 }
 
 function mainJsPath() {
@@ -69,8 +97,9 @@ export async function spawnElectronShell(options = {}) {
   const foreground = options.foreground === true;
 
   const electronBin = electronBinaryPath();
-  if (!electronBin || !fs.existsSync(electronBin)) {
-    throw new Error('Electron binary not found. Run npm install.');
+  const electronDist = electronDistBinaryPath();
+  if (!electronBin || !fs.existsSync(electronBin) || !fs.existsSync(electronDist)) {
+    throw electronInstallError();
   }
 
   await ensureElectronBuild();

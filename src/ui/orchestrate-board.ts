@@ -24,21 +24,33 @@ import {
   listActiveSubAgentRuns,
 } from '../agents/orchestrator';
 import {
+  chatTaskRunId,
+  formatHeartbeatBadge,
+  getHeartbeatConfig,
+  getRunSupervision,
+  type RunSupervision,
+} from '../agents/controller/wrapper';
+import {
   getActiveBoardGroup,
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
 import {
   countRunningTaskChats,
+  getBoardExecutionMode,
   moveTaskStatus,
+  setBoardExecutionMode,
   startTask,
   startWave,
   stopTask,
   toggleWaveCollapsed,
 } from '../state/orchestrate-board-actions.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
-import type { SubAgentStatus } from '../agents/types';
+import type { SubAgentStatus, RunLifecycle } from '../agents/types';
+import { deriveLifecycleFromStatus } from '../agents/types';
 import {
   applyOpenBoardWaveCollapse,
+  countBoardTasksProgressed,
+  countBoardWavesProgressed,
   getBoardProgressPercent,
   getOrchestrateBoardElapsedMs,
   syncOrchestrateBoardTimer,
@@ -151,18 +163,105 @@ export function deriveTaskAgentBadge(
   if (task.status === 'failed' || runStatus === 'failed') {
     return { variant: 'failed', label: 'Failed' };
   }
-  if (
-    task.status === 'in_progress' ||
-    task.status === 'testing' ||
-    runStatus === 'queued' ||
-    runStatus === 'running'
-  ) {
+  if (runStatus === 'queued' || runStatus === 'running') {
     return { variant: 'active', label: 'Active' };
+  }
+  if (task.status === 'in_progress') {
+    return { variant: 'active', label: 'Idle' };
+  }
+  if (task.status === 'testing') {
+    return { variant: 'active', label: 'Review' };
   }
   if (task.status === 'complete' || runStatus === 'completed') {
     return { variant: 'complete', label: 'Complete' };
   }
   return null;
+}
+
+/** Resolve live supervision for a running board task (sub-agent or chat-backed). */
+export function resolveTaskSupervision(
+  task: BoardTask,
+  plannerChat: Chat,
+  taskStreaming = false,
+): RunSupervision | null {
+  const primaryRunId = getBoardTaskPrimaryRunId(task);
+  if (primaryRunId) {
+    const live = getSubAgentRun(primaryRunId);
+    if (
+      live &&
+      live.parentChatId === plannerChat.id &&
+      (live.status === 'queued' || live.status === 'running')
+    ) {
+      return {
+        lastHeartbeatAt: live.lastHeartbeatAt ?? null,
+        lastProgressAt: live.lastProgressAt ?? null,
+        progressSeq: live.progressSeq ?? 0,
+        attempt: live.attempt ?? 1,
+        idempotencyKey: live.idempotencyKey ?? null,
+        committedResultRef: live.committedResultRef ?? null,
+      };
+    }
+  }
+  if (taskStreaming && task.chatId) {
+    return getRunSupervision(chatTaskRunId(task.chatId));
+  }
+  return null;
+}
+
+function appendTaskHeartbeatBadge(
+  trail: HTMLElement,
+  supervision: RunSupervision,
+): void {
+  const label = formatHeartbeatBadge(supervision, getHeartbeatConfig());
+  if (!label) return;
+  const badge = document.createElement('span');
+  badge.className = 'board-task-card__heartbeat';
+  badge.textContent = label;
+  badge.title = 'Run heartbeat age';
+  trail.appendChild(badge);
+}
+
+const LIFECYCLE_BADGE_LABELS: Partial<Record<RunLifecycle, string>> = {
+  suspect: 'Suspect',
+  recovering: 'Recovering',
+};
+
+function resolveTaskRunLifecycle(
+  task: BoardTask,
+  plannerChat: Chat,
+): RunLifecycle | null {
+  const runId = getBoardTaskPrimaryRunId(task);
+  if (!runId) return null;
+  const live = getSubAgentRun(runId);
+  if (!live || live.parentChatId !== plannerChat.id) return null;
+  if (live.status !== 'queued' && live.status !== 'running') return null;
+  return live.lifecycle ?? deriveLifecycleFromStatus(live.status);
+}
+
+function appendTaskLifecycleBadge(
+  trail: HTMLElement,
+  lifecycle: RunLifecycle,
+  taskStatus: BoardTask['status'],
+): void {
+  if (taskStatus === 'blocked') {
+    const badge = document.createElement('span');
+    badge.className = 'board-task-card__lifecycle board-task-card__lifecycle--blocked';
+    badge.textContent = 'Blocked';
+    badge.title = 'Watchdog tier-2 — needs human approval';
+    trail.appendChild(badge);
+    return;
+  }
+
+  const label = LIFECYCLE_BADGE_LABELS[lifecycle];
+  if (!label) return;
+  const badge = document.createElement('span');
+  badge.className = `board-task-card__lifecycle board-task-card__lifecycle--${lifecycle}`;
+  badge.textContent = label;
+  badge.title =
+    lifecycle === 'suspect'
+      ? 'Run appears stuck or repetitive'
+      : 'Watchdog tier-1 recovery in progress';
+  trail.appendChild(badge);
 }
 
 /** Resolve live or persisted sub-agent status for a board task run id. */
@@ -320,6 +419,15 @@ export function buildKanbanRefreshKey(
       subAgentHint: resolveTaskCardSubAgentHint(task, plannerChat),
     });
     const relatedChats = listTaskRelatedChats(task, folder, allChats);
+    const supervision = resolveTaskSupervision(
+      task,
+      plannerChat,
+      Boolean(task.chatId && isChatStreaming(task.chatId)),
+    );
+    const heartbeatKey = supervision
+      ? `${supervision.lastHeartbeatAt ?? ''}:${supervision.progressSeq}`
+      : '';
+    const runLifecycle = resolveTaskRunLifecycle(task, plannerChat) ?? '';
     parts.push(
       [
         task.id,
@@ -332,6 +440,8 @@ export function buildKanbanRefreshKey(
         task.category,
         activity ? `${activity.kind}:${activity.text}` : '',
         relatedChats.map((c) => `${c.chatId}:${c.streaming ? 1 : 0}`).join(','),
+        heartbeatKey,
+        runLifecycle,
       ].join('|'),
     );
   }
@@ -588,8 +698,35 @@ function createBoardHeaderIconButton(
 
 const BOARD_ICON_PLAN =
   'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
-function wireBoardHeaderControls(controls: HTMLElement, planPath: string): void {
+function wireBoardHeaderControls(
+  controls: HTMLElement,
+  planPath: string,
+  group: ChatGroup,
+  board: BoardState,
+  plannerChat: Chat,
+): void {
   controls.replaceChildren();
+
+  const autoPilot = document.createElement('label');
+  autoPilot.className = 'board-header__auto-pilot';
+  autoPilot.title = 'Auto-pilot: start ready planned tasks and report lifecycle to planner chat';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.className = 'board-header__auto-pilot-input';
+  toggle.dataset.boardAction = 'auto-pilot';
+  toggle.checked = getBoardExecutionMode(board) === 'auto';
+  toggle.setAttribute('aria-label', 'Auto-pilot');
+  toggle.addEventListener('change', () => {
+    const mode = toggle.checked ? 'auto' : 'manual';
+    setBoardExecutionMode(group, mode, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  const autoLabel = document.createElement('span');
+  autoLabel.className = 'board-header__auto-pilot-label';
+  autoLabel.textContent = 'Auto-pilot';
+  autoPilot.appendChild(toggle);
+  autoPilot.appendChild(autoLabel);
+  controls.appendChild(autoPilot);
 
   const openPlan = createBoardHeaderIconButton(
     'open-plan',
@@ -626,6 +763,8 @@ function buildBoardHeader(
   isStreaming: boolean,
   headerStatus: BoardHeaderStatus,
   activity: OrchestratorActivity | null,
+  group: ChatGroup,
+  plannerChat: Chat,
 ): HTMLElement {
   const header = document.createElement('header');
   header.className = 'board-header';
@@ -647,7 +786,7 @@ function buildBoardHeader(
 
   const controls = document.createElement('div');
   controls.className = 'board-header__controls';
-  wireBoardHeaderControls(controls, planPath);
+  wireBoardHeaderControls(controls, planPath, group, board, plannerChat);
 
   toolbar.appendChild(leading);
   toolbar.appendChild(controls);
@@ -758,8 +897,8 @@ function boardHeaderMetrics(
     boardTimerContextForChat(plannerChat, activeRunCount),
   );
   const progress = getBoardProgressPercent(board);
-  const wavesComplete = board.waves.filter((w) => w.status === 'complete').length;
-  const done = board.tasks.filter((t) => t.status === 'complete').length;
+  const wavesComplete = countBoardWavesProgressed(board);
+  const done = countBoardTasksProgressed(board);
   return {
     progress,
     done,
@@ -1023,6 +1162,16 @@ function buildTaskCard(
   trail.appendChild(chip);
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));
+  }
+  const supervision = resolveTaskSupervision(task, plannerChat, taskStreaming);
+  if (supervision) {
+    appendTaskHeartbeatBadge(trail, supervision);
+  }
+  const runLifecycle = resolveTaskRunLifecycle(task, plannerChat);
+  if (runLifecycle) {
+    appendTaskLifecycleBadge(trail, runLifecycle, task.status);
+  } else if (task.status === 'blocked') {
+    appendTaskLifecycleBadge(trail, 'failed', task.status);
   }
   top.appendChild(trail);
   card.appendChild(top);
@@ -1407,6 +1556,13 @@ function refreshBoardDom(
       : 'No plan path set';
     openPlanBtn.setAttribute('aria-label', 'Open plan');
     openPlanBtn.title = planTitle;
+  }
+
+  const autoPilotInput = root.querySelector(
+    '[data-board-action="auto-pilot"]',
+  ) as HTMLInputElement | null;
+  if (autoPilotInput) {
+    autoPilotInput.checked = getBoardExecutionMode(board) === 'auto';
   }
 
   const send = root.querySelector(
@@ -2007,6 +2163,8 @@ export function renderBoardView(group: ChatGroup): void {
     isStreaming,
     headerStatus,
     activity,
+    group,
+    plannerChat,
   );
 
   const main = document.createElement('div');

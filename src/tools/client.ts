@@ -20,7 +20,10 @@ import {
   filterToolsByMode,
   isToolAllowedForMode,
 } from '../chat/modes/tool-policy';
+import { applyOrchestrateAutoToolFilter } from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
+import type { Chat } from '../types';
+import { getBoardGroupForChat } from '../state/chat-groups';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
 import { findChatById } from '../state/sessions';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
@@ -308,7 +311,8 @@ async function executeToolInner(
   if (
     name === 'board_init' ||
     name === 'board_update_task' ||
-    name === 'board_get_state'
+    name === 'board_get_state' ||
+    name === 'delegate_tasks'
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
@@ -531,8 +535,22 @@ export function getEnabledToolDefinitionsForMode(
   return [...builtins, ...dynamic];
 }
 
+/**
+ * Enabled tools for a chat turn — applies orchestrate auto-pilot gating for delegate_tasks.
+ */
+export function getEnabledToolDefinitionsForChat(
+  chat: Chat,
+): OpenAIFunctionDefinition[] {
+  const normalized = normalizeModeId(chat.modeId);
+  let defs = getEnabledToolDefinitionsForMode(normalized);
+  if (normalized !== 'orchestrate') return defs;
+
+  const board = getBoardGroupForChat(chat)?.orchestrateBoard;
+  return applyOrchestrateAutoToolFilter(defs, board?.executionMode);
+}
+
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
-export const getEnabledToolDefinitionsForSend = getEnabledToolDefinitionsForMode;
+export const getEnabledToolDefinitionsForSend = getEnabledToolDefinitionsForChat;
 
 /** Pass chat/tool ids to the Node tool server for terminal registry and filters. */
 function mergeServerToolContextArgs(

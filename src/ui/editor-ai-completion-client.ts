@@ -35,9 +35,30 @@ export interface EditorAiBinding {
   modelId: string;
 }
 
-/** Shown in the file viewer when inline completion has no model to call. */
+/** Shown in the file viewer status bar and Quick Edit panel when modelId is empty. */
 export const EDITOR_AI_NO_MODEL_MESSAGE =
   'No model assigned — pick a model in the top bar or pin one in Settings → Editor.';
+
+export type EditorAiBindingValidation =
+  | { ok: true }
+  | { ok: false; message: string };
+
+/** Require a provider and model before editor AI requests (inline completion, Quick Edit). */
+export function validateEditorAiBinding(
+  binding: EditorAiBinding,
+): EditorAiBindingValidation {
+  if (!binding.providerId.trim()) {
+    return {
+      ok: false,
+      message:
+        'No provider configured for editor AI. Add one in Settings → Providers.',
+    };
+  }
+  if (!binding.modelId.trim()) {
+    return { ok: false, message: EDITOR_AI_NO_MODEL_MESSAGE };
+  }
+  return { ok: true };
+}
 
 /** Active top-bar model select value (same source as composer send / benchmark). */
 export function getActiveModelIdFromDom(): string {

@@ -531,7 +531,17 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
         head_limit: {
           type: 'number',
-          description: 'Max matching lines to return (default 200, max 500)',
+          description: 'Max lines to return (default 50, max 200)',
+        },
+        offset: {
+          type: 'number',
+          description: 'Skip this many result lines before applying head_limit (default 0)',
+        },
+        output_mode: {
+          type: 'string',
+          enum: ['content', 'count', 'files_with_matches'],
+          description:
+            'Output format: content (path:line:snippet), count (path:match_count), or files_with_matches (paths only). Default content.',
         },
       },
       ['pattern'],
@@ -1035,6 +1045,27 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     category: 'agents',
     serverRequired: false,
     definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
+  },
+  {
+    id: 'delegate_tasks',
+    label: 'Delegate tasks',
+    description:
+      'Start eligible planned board tasks (auto-pilot). Requires executionMode auto on the board.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'delegate_tasks',
+      'Start one or more planned board tasks up to maxConcurrentTasks. Only when Auto-pilot is on.',
+      {
+        taskIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Board task ids to start (e.g. W1-A, W1-B)',
+          minItems: 1,
+        },
+      },
+      ['taskIds'],
+    ),
   },
   {
     id: 'bug_add',

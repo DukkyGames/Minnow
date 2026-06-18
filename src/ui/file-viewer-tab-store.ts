@@ -156,6 +156,21 @@ export function snapshotActiveTabEditorContent(content: string, dirty: boolean):
   }
 }
 
+/** Snapshot editor buffer into a specific tab (by path key). */
+export function snapshotViewerTabEditorContent(
+  path: string,
+  content: string,
+  dirty: boolean,
+): void {
+  const tab = getViewerTab(path);
+  if (!tab || tab.viewMode === 'image') return;
+  tab.cachedEditorContent = content;
+  if (dirty !== tab.isDirty) {
+    tab.isDirty = dirty;
+    emitChange();
+  }
+}
+
 export function updateActiveTabFromEditor(content: string, dirty: boolean): void {
   const tab = getActiveViewerTab();
   if (!tab) return;
@@ -246,11 +261,16 @@ export function openViewerTab(
   path: string,
   options?: OpenViewerTabOptions & {
     confirmUnsaved?: () => boolean;
+    /** Snapshot outgoing editor before unsaved guard / tab switch. */
+    beforeActivate?: () => void;
   },
 ): OpenViewerTabResult | null {
   const key = tabKey(path);
   const existing = tabs.get(key);
   if (existing) {
+    if (activeTabPath && activeTabPath !== key) {
+      options?.beforeActivate?.();
+    }
     if (
       !options?.skipUnsavedGuard &&
       activeTabPath &&
@@ -275,6 +295,9 @@ export function openViewerTab(
     return { focusedExisting: true, tab: existing };
   }
 
+  if (activeTabPath) {
+    options?.beforeActivate?.();
+  }
   if (
     !options?.skipUnsavedGuard &&
     activeTabPath &&
@@ -299,10 +322,18 @@ export function openViewerTab(
 
 export function activateViewerTab(
   path: string,
-  options?: { skipUnsavedGuard?: boolean; confirmUnsaved?: () => boolean },
+  options?: {
+    skipUnsavedGuard?: boolean;
+    confirmUnsaved?: () => boolean;
+    /** Snapshot outgoing editor before unsaved guard / tab switch. */
+    beforeActivate?: () => void;
+  },
 ): boolean {
   const key = tabKey(path);
   if (!tabs.has(key)) return false;
+  if (activeTabPath && activeTabPath !== key) {
+    options?.beforeActivate?.();
+  }
   if (
     !options?.skipUnsavedGuard &&
     activeTabPath &&

@@ -28,6 +28,31 @@ export function isFullscreenOverlayObscuringWorkspace(): boolean {
   return false;
 }
 
+/** Open menubar/chrome popovers that overlap the preview pane (native layer wins). */
+let chromePopoverOpenCount = 0;
+
+/** Register an obstructing chrome popover (notifications, model chip, workspace, etc.). */
+export function registerChromePopover(): void {
+  chromePopoverOpenCount += 1;
+  scheduleElectronPreviewHostVisibilitySync();
+}
+
+/** Unregister when a chrome popover closes. */
+export function unregisterChromePopover(): void {
+  if (chromePopoverOpenCount > 0) chromePopoverOpenCount -= 1;
+  scheduleElectronPreviewHostVisibilitySync();
+}
+
+/** True while any registered chrome popover is open. */
+export function isChromePopoverOpen(): boolean {
+  return chromePopoverOpenCount > 0;
+}
+
+/** Test helper — reset popover registry between cases. */
+export function resetChromePopoverRegistryForTests(): void {
+  chromePopoverOpenCount = 0;
+}
+
 /** True when the preview split pane is the active right pane and not CSS-hidden. */
 export function isPreviewPaneDomVisible(): boolean {
   if (getFilePanelState().rightPaneMode !== 'preview') return false;
@@ -41,6 +66,7 @@ export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
   if (!isPreviewPaneDomVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
+  if (isChromePopoverOpen()) return false;
   const body = document.getElementById('previewBody');
   if (!body) return false;
   const rect = body.getBoundingClientRect();

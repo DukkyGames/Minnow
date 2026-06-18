@@ -2,6 +2,7 @@
  * Live chat context window budget (MIN-13): estimate used tokens vs model limit.
  */
 
+import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { formatModelLabel } from '../lib/format-model-label';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
@@ -162,18 +163,18 @@ function resolveModelDisplayName(modelId: string): string {
 
 /**
  * Effective context limit for usage UI: configured window when known, not catalog max.
- * Priority: last-turn model_info → loaded_context_length (loaded) → max_context_length.
+ * Priority: live model cache → last-turn model_info fallback when cache is unavailable.
  */
 export function resolveContextLimit(modelId: string, chat: Chat): number | null {
-  const fromChat = chat.modelInfo?.context_length;
-  if (typeof fromChat === 'number' && Number.isFinite(fromChat) && fromChat > 0) {
-    return fromChat;
-  }
-
-  const cached = lookupCachedModelRow(modelId);
+  const cached = getModelRowForSelectOrCanonicalId(modelId);
   if (cached) {
     const fromRow = contextLengthFromModelRow(cached);
     if (fromRow != null) return fromRow;
+  }
+
+  const fromChat = chat.modelInfo?.context_length;
+  if (typeof fromChat === 'number' && Number.isFinite(fromChat) && fromChat > 0) {
+    return fromChat;
   }
 
   return null;

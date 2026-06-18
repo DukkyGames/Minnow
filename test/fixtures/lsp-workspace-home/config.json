@@ -142,7 +142,7 @@
     }
   },
   "editorAiCompletion": {
-    "enabled": false,
+    "enabled": true,
     "debounceMs": 450,
     "maxPrefixLines": 80,
     "maxSuffixLines": 40,
@@ -186,6 +186,6 @@
     }
   },
   "workspace": {
-    ]
+    "recentPaths": []
   }
 }

@@ -6,6 +6,7 @@ import { EditorView } from '@codemirror/view';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 import {
   resolveEditorCompletionRawText,
+  validateEditorAiBinding,
   preflightEditorAiBinding,
   resolveEditorAiBinding,
   EDITOR_AI_NO_MODEL_MESSAGE,
@@ -24,6 +25,29 @@ import {
   setEditorAiGhostForTest,
 } from '../../src/ui/file-editor-ai-extensions.ts';
 import { fileEditorKeymapExtensions } from '../../src/ui/file-editor-keymap.ts';
+
+describe('validateEditorAiBinding', () => {
+  test('rejects empty provider', () => {
+    const result = validateEditorAiBinding({ providerId: '', modelId: 'm1' });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message, /provider/i);
+    }
+  });
+
+  test('rejects empty model', () => {
+    const result = validateEditorAiBinding({ providerId: 'p1', modelId: '' });
+    assert.equal(result.ok, false);
+    if (result.ok === false) {
+      assert.match(result.message, /No model assigned/i);
+    }
+  });
+
+  test('accepts provider and model', () => {
+    const result = validateEditorAiBinding({ providerId: 'p1', modelId: 'm1' });
+    assert.equal(result.ok, true);
+  });
+});
 
 describe('resolveEditorCompletionRawText', () => {
   test('accumulates delta content', () => {

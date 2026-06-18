@@ -251,6 +251,30 @@
   color: var(--mn-danger);
   border-color: color-mix(in srgb, var(--mn-danger) 35%, var(--mn-border));
   background: color-mix(in srgb, var(--mn-danger) 8%, var(--mn-bg));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.msg-error-recover-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--mn-danger);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--mn-danger) 40%, var(--mn-border));
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.msg-error-recover-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-danger) 12%, var(--mn-bg));
+}
+
+.msg-error-recover-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .msg.user .msg-bubble {

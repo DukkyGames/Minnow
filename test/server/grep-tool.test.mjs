@@ -1,5 +1,5 @@
 /**
- * grep server tool (POLISH-021 / MIN-103).
+ * grep server tool (POLISH-021 / MIN-103, MIN-196).
  */
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 import {
   GREP_DEFAULT_HEAD_LIMIT,
+  GREP_MAX_HEAD_LIMIT,
+  GREP_MAX_LINE_CHARS,
+  GREP_MAX_OUTPUT_CHARS,
+  capGrepOutput,
   isRipgrepMatchLine,
   runGrepSearch,
   truncateRipgrepOutput,
@@ -43,14 +47,64 @@ describe('grep helpers', () => {
     assert.equal(isRipgrepMatchLine('--'), false);
   });
 
-  it('truncateRipgrepOutput caps primary match lines', () => {
+  it('capGrepOutput caps all emitted lines including context', () => {
     const sample = ['1:alpha', '2-beta', '3:gamma', '4:delta'].join('\n');
-    const { text, truncated, matchCount } = truncateRipgrepOutput(sample, 2);
+    const { text, truncated, lineCount } = capGrepOutput(sample, { headLimit: 2 });
     assert.equal(truncated, true);
-    assert.equal(matchCount, 2);
+    assert.equal(lineCount, 2);
     assert.match(text, /1:alpha/);
     assert.match(text, /2-beta/);
-    assert.doesNotMatch(text, /4:delta/);
+    assert.doesNotMatch(text, /3:gamma/);
+    assert.match(text, /truncated at 2 lines/);
+  });
+
+  it('capGrepOutput supports offset pagination', () => {
+    const sample = ['line-a', 'line-b', 'line-c', 'line-d'].join('\n');
+    const { text, lineCount, nextOffset } = capGrepOutput(sample, {
+      offset: 2,
+      headLimit: 2,
+    });
+    assert.equal(lineCount, 2);
+    assert.equal(nextOffset, 4);
+    assert.match(text, /line-c/);
+    assert.match(text, /line-d/);
+    assert.doesNotMatch(text, /line-a/);
+  });
+
+  it('capGrepOutput caps per-line length', () => {
+    const longLine = 'x'.repeat(500);
+    const { text } = capGrepOutput(longLine, { headLimit: 1 });
+    const emitted = text.split('\n')[0];
+    assert.ok(emitted.length <= GREP_MAX_LINE_CHARS);
+    assert.match(emitted, /\.\.\.$/);
+  });
+
+  it('capGrepOutput enforces total output char budget', () => {
+    const lines = Array.from({ length: 100 }, (_, i) => `match-${i}:${'a'.repeat(400)}`);
+    const { text, truncated } = capGrepOutput(lines.join('\n'), {
+      headLimit: 100,
+      maxOutputChars: 2000,
+    });
+    assert.equal(truncated, true);
+    assert.ok(text.length <= GREP_MAX_OUTPUT_CHARS + 200);
+  });
+
+  it('truncateRipgrepOutput delegates to capGrepOutput', () => {
+    const sample = ['1:alpha', '2-beta', '3:gamma'].join('\n');
+    const { text, truncated, lineCount } = truncateRipgrepOutput(sample, 1);
+    assert.equal(truncated, true);
+    assert.equal(lineCount, 1);
+    assert.match(text, /1:alpha/);
+    assert.doesNotMatch(text, /2-beta/);
+  });
+});
+
+describe('grep constants (MIN-196)', () => {
+  it('uses conservative default and max head limits', () => {
+    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 50);
+    assert.equal(GREP_MAX_HEAD_LIMIT, 200);
+    assert.equal(GREP_MAX_OUTPUT_CHARS, 32000);
+    assert.equal(GREP_MAX_LINE_CHARS, 400);
   });
 });
 
@@ -118,11 +172,47 @@ describe('runGrepSearch fixture workspace', () => {
       path: 'src',
       head_limit: 1,
     });
-    assert.match(out, /\(truncated at 1 matching lines\)/);
+    assert.match(out, /truncated at 1 lines/);
   });
 
-  it('uses default head limit constant', () => {
-    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 200);
+  it('supports output_mode files_with_matches', async () => {
+    const out = await grepInFixture({
+      pattern: 'grep-fixture',
+      path: 'src',
+      output_mode: 'files_with_matches',
+    });
+    assert.match(out, /visible\.ts/);
+    assert.doesNotMatch(out, /grep-fixture-visible/);
+  });
+
+  it('supports output_mode count', async () => {
+    const out = await grepInFixture({
+      pattern: 'export',
+      path: 'src',
+      output_mode: 'count',
+    });
+    assert.match(out, /:\d+$/m);
+    assert.doesNotMatch(out, /export const/);
+  });
+
+  it('supports offset pagination', async () => {
+    const full = await grepInFixture({
+      pattern: 'export',
+      path: 'src',
+      head_limit: 10,
+    });
+    const lines = full.split('\n').filter((l) => l && !l.startsWith('(truncated'));
+    if (lines.length < 2) return;
+
+    const page = await grepInFixture({
+      pattern: 'export',
+      path: 'src',
+      head_limit: 1,
+      offset: 1,
+    });
+    const pageLines = page.split('\n').filter((l) => l && !l.startsWith('(truncated'));
+    assert.equal(pageLines.length, 1);
+    assert.notEqual(pageLines[0], lines[0]);
   });
 
   it('rejects paths outside workspace', async () => {

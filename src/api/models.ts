@@ -72,7 +72,12 @@ export function resolveModelInfo(modelIdOrKey: string, fromResponse?: ModelInfo 
         context_length: contextLengthFromModelRow(cached),
       }
     : {};
-  return { ...fromCache, ...(fromResponse || {}) };
+  const merged = { ...fromCache, ...(fromResponse || {}) };
+  // Live catalog context window wins over persisted per-chat snapshots (MIN-183).
+  if (fromCache.context_length != null) {
+    merged.context_length = fromCache.context_length;
+  }
+  return merged;
 }
 
 /** Refresh the stats strip from the model select + cache (no new inference). */

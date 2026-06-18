@@ -3,7 +3,8 @@
  */
 
 import assert from 'node:assert/strict';
-import { beforeEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
 import {
   clearBoardListenersForTests,
   emitBoardChange,
@@ -11,6 +12,8 @@ import {
 } from '../../src/state/orchestrate-board-events.ts';
 import {
   applyOpenBoardWaveCollapse,
+  countBoardTasksProgressed,
+  countBoardWavesProgressed,
   getBoardProgressPercent,
   getBoardState,
   initBoard,
@@ -19,7 +22,13 @@ import {
   setBoardNowForTests,
   updateTask,
 } from '../../src/state/orchestrate-board-store.ts';
+import { flushScheduledSessionSaveForTests } from '../../src/state/sessions.ts';
 import type { Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
+
+afterEach(() => {
+  flushScheduledSessionSaveForTests();
+  resetSubAgentOrchestrator();
+});
 
 const CHAT_ID = '11111111-1111-1111-1111-111111111111';
 const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
@@ -75,7 +84,8 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "startedAt": 1710000001000,
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
-  "maxConcurrentTasks": 3
+  "maxConcurrentTasks": 3,
+  "executionMode": "manual"
 }`;
 
 /** After W1-A moves to in_progress — wave rollup stays in_progress. */
@@ -158,6 +168,30 @@ describe('orchestrate board store init and progress', () => {
     assert.ok(board);
     assert.equal(JSON.stringify(board, null, 2), EXPECTED_INIT_BOARD_JSON);
     assert.equal(getBoardProgressPercent(board!), 0);
+    assert.equal(countBoardTasksProgressed(board!), 0);
+    assert.equal(countBoardWavesProgressed(board!), 0);
+  });
+
+  test('header progress counts include in_progress tasks and waves', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build' },
+        { id: 'W2-A', title: 'C', wave: 'W2', category: 'build' },
+      ],
+      waves: [{ id: 'W1' }, { id: 'W2' }],
+    });
+    const board = getBoardState(group)!;
+    updateTask(group, 'W1-A', { status: 'in_progress' }, chat);
+    updateTask(group, 'W1-B', { status: 'in_progress' }, chat);
+    assert.equal(countBoardTasksProgressed(board), 2);
+    assert.equal(countBoardWavesProgressed(board), 1);
+    updateTask(group, 'W1-A', { status: 'complete' }, chat);
+    assert.equal(countBoardTasksProgressed(board), 2);
+    assert.equal(countBoardWavesProgressed(board), 1);
   });
 
   test('updateTask clears error when patch sets error to undefined', () => {

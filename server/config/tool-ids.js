@@ -80,6 +80,7 @@ export const ALL_TOOL_IDS = [
   'board_init',
   'board_update_task',
   'board_get_state',
+  'delegate_tasks',
   'bug_add',
   'bug_update',
   'bug_get_state',

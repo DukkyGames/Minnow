@@ -1,5 +1,5 @@
 /**
- * Orchestrate board tools: board_init, board_update_task, board_get_state.
+ * Orchestrate board tools: board_init, board_update_task, board_get_state, delegate_tasks.
  */
 
 import { getSubAgentRun } from '../agents/orchestrator.ts';
@@ -13,6 +13,9 @@ import {
   getOrCreateBoardGroup,
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
+import {
+  isTaskReadyForAuto,
+} from '../state/orchestrate-board-store.ts';
 import {
   getBoardStateForPlanner,
   initBoard,
@@ -292,6 +295,10 @@ export async function executeBoardTool(
     return JSON.stringify(board, null, 2);
   }
 
+  if (name === 'delegate_tasks') {
+    return executeDelegateTasks(chat, args);
+  }
+
   return `Error: unknown board tool "${name}"`;
 }
 
@@ -368,4 +375,79 @@ async function executeBoardUpdateTask(
     const message = err instanceof Error ? err.message : String(err);
     return message.startsWith('Error:') ? message : `Error: ${message}`;
   }
+}
+
+export type DelegateTasksArgs = {
+  taskIds: string[];
+};
+
+export type ValidateDelegateTasksResult =
+  | { ok: true; args: DelegateTasksArgs }
+  | { ok: false; error: string };
+
+/** Validate delegate_tasks arguments (exported for tests). */
+export function validateDelegateTasksArgs(
+  args: Record<string, unknown>,
+): ValidateDelegateTasksResult {
+  const raw = args.taskIds ?? args.task_ids;
+  if (!Array.isArray(raw) || !raw.length) {
+    return { ok: false, error: 'Error: delegate_tasks requires non-empty "taskIds"' };
+  }
+  const taskIds: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' || !item.trim()) {
+      return { ok: false, error: 'Error: each taskIds entry must be a non-empty string' };
+    }
+    const id = item.trim();
+    if (!taskIds.includes(id)) taskIds.push(id);
+  }
+  return { ok: true, args: { taskIds } };
+}
+
+async function executeDelegateTasks(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
+    return 'Error: delegate_tasks requires an Orchestrate planner chat';
+  }
+  const validated = validateDelegateTasksArgs(args);
+  if (validated.ok === false) return validated.error;
+
+  const group = getOrCreateBoardGroup(chat);
+  const board = group.orchestrateBoard;
+  if (!board) {
+    return 'Error: orchestrate board is not initialized';
+  }
+  if (board.executionMode !== 'auto') {
+    return (
+      'Error: delegate_tasks requires Auto-pilot (executionMode auto). ' +
+      'Enable Auto-pilot on the board or call board_get_state to confirm mode.'
+    );
+  }
+
+  const started: string[] = [];
+  const skipped: Array<{ taskId: string; reason: string }> = [];
+
+  const { startTask: runBoardTask } = await import('../state/orchestrate-board-actions.ts');
+
+  for (const taskId of validated.args.taskIds) {
+    const task = board.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      skipped.push({ taskId, reason: 'unknown task id' });
+      continue;
+    }
+    if (task.status !== 'planned') {
+      skipped.push({ taskId, reason: `status is ${task.status}, not planned` });
+      continue;
+    }
+    if (!isTaskReadyForAuto(board, task)) {
+      skipped.push({ taskId, reason: 'prior wave not complete' });
+      continue;
+    }
+    await runBoardTask(group, taskId, chat);
+    started.push(taskId);
+  }
+
+  return JSON.stringify({ started, skipped }, null, 2);
 }
