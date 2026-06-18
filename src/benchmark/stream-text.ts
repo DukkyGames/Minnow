@@ -45,6 +45,11 @@ export function resolveBenchmarkCompletionText(
   return reasoningText.trim();
 }
 
+/** Editor autocomplete / Quick Edit: main `content` only (never reasoning). */
+export function resolveEditorCompletionText(contentText: string): string {
+  return contentText.trim();
+}
+
 /** Per-chunk assistant prose for legacy/tests (`extractStreamDelta` single-chunk view). */
 export function accumulateBenchmarkStreamDelta(chunk: ChatCompletionChunk): string {
   return extractStreamDelta(chunk);

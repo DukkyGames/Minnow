@@ -11,6 +11,7 @@ import {
   completionTextFromFallback,
   completionTextFromMessage,
   resolveBenchmarkCompletionText,
+  resolveEditorCompletionText,
 } from '../../src/benchmark/stream-text.ts';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 
@@ -103,6 +104,16 @@ describe('resolveBenchmarkCompletionText', () => {
 
   test('falls back to reasoning when content empty', () => {
     assert.equal(resolveBenchmarkCompletionText('', 'only reasoning'), 'only reasoning');
+  });
+});
+
+describe('resolveEditorCompletionText', () => {
+  test('returns trimmed content only', () => {
+    assert.equal(resolveEditorCompletionText('  code();  '), 'code();');
+  });
+
+  test('ignores reasoning channel (empty content)', () => {
+    assert.equal(resolveEditorCompletionText(''), '');
   });
 });
 

@@ -5,10 +5,12 @@
 import type { EditorState } from '@codemirror/state';
 import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
+import { stripEditorModelOutput } from './editor-model-output';
 
 export const EDITOR_AI_COMPLETION_SYSTEM =
   'You are a code completion engine. Output only the text that should appear at the cursor. ' +
-  'No explanations, markdown fences, or comments unless they belong at the insertion point.';
+  'No explanations, markdown fences, thinking tags, or comments unless they belong at the insertion point. ' +
+  'Never wrap output in reasoning or thinking markup.';
 
 /** Qwen Coder native fill-in-the-middle token markers. */
 export const QWEN_FIM_PREFIX = '<|fim_prefix|>';
@@ -252,7 +254,8 @@ export async function buildEditorAiCompletionMessagesAsync(
  * When `docPrefix` is set, drop a leading copy of text already before the cursor.
  */
 export function sanitizeCompletionText(raw: string, docPrefix?: string): string {
-  let text = raw.replace(/^\s+/, '');
+  let text = stripEditorModelOutput(raw);
+  text = text.replace(/^\s+/, '');
   if (!text) return '';
 
   if (text.startsWith('```')) {

@@ -308,7 +308,7 @@ class EditorAiCompletionPlugin {
         this.opts.onStatus?.(validation.message);
         return;
       }
-      const text = await fetchEditorAiCompletion({
+      const result = await fetchEditorAiCompletion({
         state,
         cursorPos: pos,
         filePath: this.opts.filePath,
@@ -326,14 +326,18 @@ class EditorAiCompletionPlugin {
       if (this.view.state.selection.main.head !== pos) return;
       if (this.requestPos !== pos) return;
 
-      this.showGhostAt(pos, text ?? '');
-      if (text) {
+      this.showGhostAt(pos, result.text ?? '');
+      if (result.text) {
         this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
-      } else if (!controller.signal.aborted) {
-        this.opts.onStatus?.('AI completion failed — check provider and model in Settings');
+      } else if (!controller.signal.aborted && result.error) {
+        this.opts.onStatus?.(result.error);
       }
-    } catch {
-      this.opts.onStatus?.('AI completion failed — check provider and model in Settings');
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : 'AI completion failed — check provider and model in Settings';
+      this.opts.onStatus?.(message);
     } finally {
       if (this.abortController === controller) {
         this.abortController = null;
