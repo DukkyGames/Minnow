@@ -361,6 +361,7 @@ export type UpdateTaskPatch = Partial<
     | 'testAttempts'
     | 'testVerdict'
     | 'testSummary'
+    | 'pendingBuildSeed'
   >
 >;
 

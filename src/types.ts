@@ -314,6 +314,13 @@ export interface BoardTask {
   testVerdict?: 'pass' | 'fail';
   /** Human summary from the Tester (shown on fail / blocked). */
   testSummary?: string;
+  /**
+   * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
+   * build start instead of the default task seed. Persisted on the task so it
+   * survives being queued for a concurrency slot; consumed and cleared by
+   * startTask when the build actually launches.
+   */
+  pendingBuildSeed?: string;
 }
 
 /** Wave rollup row (status derived from tasks). */

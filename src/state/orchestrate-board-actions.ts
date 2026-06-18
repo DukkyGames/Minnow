@@ -446,7 +446,6 @@ export async function startTask(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
-  options?: { seedOverride?: string },
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
@@ -480,8 +479,13 @@ export async function startTask(
 
   const folderId = group.id;
 
+  // A retry/reopen seed (failed-test summary) is persisted on the task so it
+  // survives being queued for a concurrency slot. When present, run a fresh
+  // Builder chat (no history bloat) with the failure-aware prompt.
+  const overrideSeed = task.pendingBuildSeed?.trim() || '';
+
   let taskChat: Chat;
-  const forceNewChat = Boolean(options?.seedOverride?.trim());
+  const forceNewChat = Boolean(overrideSeed);
   const existingId = forceNewChat ? '' : task.chatId?.trim();
   if (existingId) {
     const existing = findChatById(existingId);
@@ -519,7 +523,11 @@ export async function startTask(
   const { renderSidebar } = await import('../ui/sidebar.ts');
   renderSidebar();
 
-  const seed = options?.seedOverride?.trim() || buildTaskSeedMessage(group, plannerChat, task);
+  const seed = overrideSeed || buildTaskSeedMessage(group, plannerChat, task);
+  // Consume the one-shot retry seed now that the build is actually launching.
+  if (overrideSeed) {
+    updateTask(group, taskId, { pendingBuildSeed: undefined }, plannerChat);
+  }
 
   void refreshHeartbeatThresholds().then(() => {
     startTaskChatSupervision(taskChat.id);
@@ -768,7 +776,10 @@ export function finalizeTaskTestingOnStreamEnd(
       updated.testAttempts ?? 1,
       summary,
     );
-    void startTask(group, fresh.id, plannerChat, { seedOverride: seed });
+    // Persist the failure-aware seed so it survives a concurrency-slot queue
+    // (the just-ended Tester chat is still counted as running here).
+    updateTask(group, fresh.id, { pendingBuildSeed: seed }, plannerChat);
+    void startTask(group, fresh.id, plannerChat);
   }
 }
 
@@ -1003,7 +1014,8 @@ export function finalizeFinalTestOnStreamEnd(
     const task = board.tasks.find((t) => t.id === taskId);
     if (!task) continue;
     const seed = buildRetryBuilderSeedMessage(task, 1, `Final integration test: ${summary}`);
-    void startTask(group, taskId, plannerChat, { seedOverride: seed });
+    updateTask(group, taskId, { pendingBuildSeed: seed }, plannerChat);
+    void startTask(group, taskId, plannerChat);
   }
 
   postPlannerBoardMessage(

@@ -243,6 +243,26 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(updated.testAttempts, 1);
   });
 
+  test('retry persists the failure-aware builder seed on the task', () => {
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    updateTask(
+      group,
+      'W1-A',
+      { testVerdict: 'fail', testSummary: 'typecheck failed in foo.ts', testChatId: TEST_CHAT_ID },
+      planner,
+    );
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'in_progress');
+    // The next Builder start must seed from the failure summary, not the original
+    // build prompt — and it must survive on the task in case the build is queued.
+    assert.ok(updated.pendingBuildSeed, 'expected pendingBuildSeed to be set');
+    assert.match(updated.pendingBuildSeed!, /failed testing/i);
+    assert.match(updated.pendingBuildSeed!, /typecheck failed in foo\.ts/);
+  });
+
   test('third fail marks blocked', () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
