@@ -38,6 +38,13 @@ const TERMINAL_LIFECYCLES = new Set<RunLifecycle>([
 /** Test hook: override API origin (defaults to relative /api/config/runs). */
 let runsApiBase = '';
 
+/** Coalesced registry mirror queue (last-write-wins per runId). */
+const pendingMirrors = new Map<string, SubAgentRun>();
+let mirrorFlushScheduled = false;
+
+/** Throttled persistence failure warnings (once per kind per session). */
+const persistenceWarnedAt = new Set<string>();
+
 /** Whether persistence is enabled (server mode + optional test override). */
 export function isRunPersistenceEnabled(): boolean {
   return runsApiBase !== '' || isServerStorageMode();
@@ -48,8 +55,21 @@ export function setRunsPersistenceApiBase(base: string): void {
   runsApiBase = base.replace(/\/$/, '');
 }
 
+/** @internal Reset mirror coalesce state (tests). */
+export function resetMirrorCoalesceForTests(): void {
+  pendingMirrors.clear();
+  mirrorFlushScheduled = false;
+  persistenceWarnedAt.clear();
+}
+
 function runsUrl(path: string): string {
   return `${runsApiBase}${path}`;
+}
+
+function warnPersistenceOnce(kind: string, detail: string): void {
+  if (persistenceWarnedAt.has(kind)) return;
+  persistenceWarnedAt.add(kind);
+  console.warn(`[controller:persistence] ${kind}: ${detail}`);
 }
 
 /** Build stable result key for (boardTaskId, attempt). */
@@ -108,7 +128,9 @@ async function runsFetch(
       cache: 'no-store',
       ...init,
     });
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    warnPersistenceOnce('fetch_failed', message);
     return null;
   }
 }
@@ -116,9 +138,27 @@ async function runsFetch(
 /** Load all persisted registry entries. */
 export async function loadRegistry(): Promise<PersistedRunRecord[]> {
   const res = await runsFetch('/api/config/runs/registry');
-  if (!res?.ok) return [];
+  if (!res) return [];
+  if (!res.ok) {
+    warnPersistenceOnce('registry_list_failed', `HTTP ${res.status}`);
+    return [];
+  }
   const data = (await res.json()) as { records?: PersistedRunRecord[] };
   return Array.isArray(data.records) ? data.records : [];
+}
+
+/** Load a single persisted registry row (for wait/status fallback after eviction). */
+export async function loadPersistedRunRecord(
+  runId: string,
+): Promise<PersistedRunRecord | null> {
+  const res = await runsFetch(`/api/config/runs/registry/${encodeURIComponent(runId)}`);
+  if (!res) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    warnPersistenceOnce('registry_get_failed', `HTTP ${res.status} for ${runId}`);
+    return null;
+  }
+  return (await res.json()) as PersistedRunRecord;
 }
 
 /** Mirror a registry entry on lifecycle transitions. */
@@ -132,7 +172,39 @@ export async function persistRegistryEntry(run: SubAgentRun): Promise<void> {
       body: JSON.stringify(record),
     },
   );
-  if (!res?.ok) return;
+  if (!res) return;
+  if (!res.ok) {
+    warnPersistenceOnce('registry_put_failed', `HTTP ${res.status} for ${run.runId}`);
+  }
+}
+
+function flushMirrorCoalesce(): void {
+  mirrorFlushScheduled = false;
+  const batch = [...pendingMirrors.values()];
+  pendingMirrors.clear();
+  for (const run of batch) {
+    void persistRegistryEntry(run);
+  }
+}
+
+/** Coalesced fire-and-forget registry mirror (last-write-wins per runId). */
+export function mirrorRegistryEntry(run: SubAgentRun): void {
+  pendingMirrors.set(run.runId, run);
+  if (mirrorFlushScheduled) return;
+  mirrorFlushScheduled = true;
+  queueMicrotask(flushMirrorCoalesce);
+}
+
+/** @internal Count pending coalesced mirrors (tests). */
+export function pendingMirrorCountForTests(): number {
+  return pendingMirrors.size;
+}
+
+/** @internal Force flush coalesced mirrors (tests). */
+export function flushMirrorsForTests(): void {
+  if (mirrorFlushScheduled || pendingMirrors.size > 0) {
+    flushMirrorCoalesce();
+  }
 }
 
 /** Write-ahead commit of aggregate result before completion is signaled. */
@@ -147,7 +219,11 @@ export async function commitRunResult(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(result),
   });
-  if (!res?.ok) return null;
+  if (!res) return null;
+  if (!res.ok) {
+    warnPersistenceOnce('result_put_failed', `HTTP ${res.status} for ${key}`);
+    return null;
+  }
   return key;
 }
 
@@ -156,7 +232,12 @@ export async function readCommittedResult(
   ref: string,
 ): Promise<AggregateResult | null> {
   const res = await runsFetch(`/api/config/runs/results/${encodeURIComponent(ref)}`);
-  if (!res?.ok) return null;
+  if (!res) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    warnPersistenceOnce('result_get_failed', `HTTP ${res.status} for ${ref}`);
+    return null;
+  }
   return (await res.json()) as AggregateResult;
 }
 
@@ -165,6 +246,19 @@ export async function supersedeOlderAttempts(
   boardTaskId: string,
   attempt: number,
 ): Promise<void> {
+  if (attempt <= 1) return;
+
+  const res = await runsFetch('/api/config/runs/supersede', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ boardTaskId, attempt }),
+  });
+  if (res?.ok) return;
+
+  if (res && !res.ok) {
+    warnPersistenceOnce('supersede_failed', `HTTP ${res.status} for ${boardTaskId}`);
+  }
+
   const records = await loadRegistry();
   const now = new Date().toISOString();
   for (const record of records) {
@@ -224,9 +318,4 @@ export async function reconcilePersistedRegistry(
 
     await handlers.reconcileInterrupted(record);
   }
-}
-
-/** Fire-and-forget registry mirror (non-blocking UI path). */
-export function mirrorRegistryEntry(run: SubAgentRun): void {
-  void persistRegistryEntry(run);
 }

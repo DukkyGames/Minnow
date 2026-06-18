@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import {
+  cancelSubAgent,
   getSubAgentRun,
   resetSubAgentOrchestrator,
   spawnSubAgent,
@@ -22,6 +23,39 @@ import {
   nextFixedRunId,
   resetRunIdCounter,
 } from './test-helpers.mts';
+import type { SubAgentRunner } from '../../src/agents/types.ts';
+
+function slotHoldingRunner(): SubAgentRunner {
+  return {
+    async run(input) {
+      input.onMessagesChange?.([
+        { role: 'system', content: 'mock' },
+        { role: 'user', content: input.task },
+      ]);
+      await new Promise<void>((_resolve, reject) => {
+        const signal = input.signal;
+        if (!signal) {
+          reject(new Error('cancelled'));
+          return;
+        }
+        if (signal.aborted) {
+          reject(signal.reason ?? new Error('cancelled'));
+          return;
+        }
+        signal.addEventListener(
+          'abort',
+          () => reject(signal.reason ?? new Error('cancelled')),
+          { once: true },
+        );
+      });
+      return {
+        summary: 'never',
+        toolTurns: 0,
+        messages: [],
+      };
+    },
+  };
+}
 
 describe('orchestrator spawn', () => {
   beforeEach(() => {
@@ -89,7 +123,7 @@ describe('orchestrator spawn', () => {
     assert.equal(second.status, 'queued');
 
     await waitForSubAgent(first.runId);
-    await new Promise((r) => setTimeout(r, 120));
+    await waitForSubAgent(second.runId);
 
     const run2 = getSubAgentRun(second.runId);
     assert.equal(run2?.status, 'completed');
@@ -135,7 +169,11 @@ describe('orchestrator spawn', () => {
       wait: true,
     });
 
-    await new Promise((r) => setTimeout(r, 5));
+    for (let i = 0; i < 100; i += 1) {
+      const mid = getSubAgentRun(FIXED_RUN_ID);
+      if (mid && mid.messages.length >= 2) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
     const mid = getSubAgentRun(FIXED_RUN_ID);
     assert.ok(mid && mid.messages.length >= 2);
     assert.equal(mid?.messages[0]?.role, 'system');
@@ -147,5 +185,33 @@ describe('orchestrator spawn', () => {
     }
     const done = getSubAgentRun(FIXED_RUN_ID);
     assert.ok(done && done.messages.some((m) => m.role === 'assistant'));
+  });
+
+  test('queued run is not cancelled by timeout while waiting for a concurrency slot', async () => {
+    setRuntimeSubAgentOverrides({ globalMaxConcurrent: 1, defaultTimeoutMs: 60_000 });
+    setSubAgentRunnerFactory(() => slotHoldingRunner());
+
+    const first = await spawnSubAgent({
+      type: 'explore',
+      task: 'hold slot',
+      wait: false,
+    });
+    const second = await spawnSubAgent({
+      type: 'explore',
+      task: 'queued behind first',
+      wait: false,
+    });
+
+    assert.equal(first.status, 'running');
+    assert.equal(second.status, 'queued');
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    const queued = getSubAgentRun(second.runId);
+    assert.equal(queued?.status, 'queued');
+    assert.notEqual(queued?.error, 'timeout');
+
+    cancelSubAgent(first.runId, 'test cleanup');
+    cancelSubAgent(second.runId, 'test cleanup');
   });
 });

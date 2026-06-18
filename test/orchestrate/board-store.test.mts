@@ -17,6 +17,7 @@ import {
   getBoardProgressPercent,
   getBoardState,
   initBoard,
+  isTaskReadyForAuto,
   recomputeWaveRollup,
   rollupWaveStatus,
   setBoardNowForTests,
@@ -369,5 +370,47 @@ describe('orchestrate board store events', () => {
     subscribeBoardChanges(GROUP_ID, (id) => seen.push(id));
     emitBoardChange(GROUP_ID);
     assert.deepEqual(seen, [GROUP_ID]);
+  });
+});
+
+describe('orchestrate board dependency cycles', () => {
+  beforeEach(() => {
+    setBoardNowForTests(() => FIXED_NOW);
+    clearBoardListenersForTests();
+  });
+
+  test('initBoard marks cyclic dependsOn tasks blocked with cycle error', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Task A',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: ['W1-B'],
+        },
+        {
+          id: 'W1-B',
+          title: 'Task B',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: ['W1-A'],
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    const board = getBoardState(group)!;
+    const taskA = board.tasks.find((t) => t.id === 'W1-A')!;
+    const taskB = board.tasks.find((t) => t.id === 'W1-B')!;
+    assert.equal(taskA.status, 'blocked');
+    assert.equal(taskB.status, 'blocked');
+    assert.match(taskA.error ?? '', /dependency cycle:/);
+    assert.match(taskB.error ?? '', /dependency cycle:/);
+    assert.equal(board.waves[0]?.status, 'in_progress');
+    assert.equal(isTaskReadyForAuto(board, taskA), false);
+    assert.equal(isTaskReadyForAuto(board, taskB), false);
   });
 });
