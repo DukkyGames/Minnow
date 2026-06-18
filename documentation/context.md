@@ -1016,7 +1016,7 @@ Registered in [`server/config/middleware.js`](../server/config/middleware.js) be
 |--------|------|---------|
 | `GET` | `/api/config/ping` | `{ ok, home: ".minnow", homeResolved: true }` |
 | `GET` | `/api/config/status` | `{ ok, storage: "home", migrated, schemaVersion }` |
-| `GET/PUT` | `/api/config/sessions` | `SessionState` ← `sessions/state.json` |
+| `GET/PUT` | `/api/config/sessions` | `SessionState` ← `sessions/state.json` (serialized RMW via `updateConfigJson` in [`server/config/store.js`](../server/config/store.js); Windows rename retries on atomic write) |
 | `GET/PUT` | `/api/config/tools` | `ToolConfig` ← `tools.json` |
 | `GET/PUT` | `/api/config/system-prompt` | `SystemPromptSettings` ← `system-prompt.json` |
 | `GET/PUT` | `/api/config/rules` | `UserRulesSettings` ← `rules.json` (Feature 24) |

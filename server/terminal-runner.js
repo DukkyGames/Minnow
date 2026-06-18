@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from './config/home.js';
-import { readConfigJson, writeConfigJson } from './config/store.js';
+import { readConfigJson, updateConfigJson } from './config/store.js';
 import { validateSessionState } from './config/validators.js';
 import {
   COMMAND_TIMEOUT_MS,
@@ -115,26 +115,31 @@ async function appendLogFile(logPath, text) {
 async function persistTerminalHistory(chatId, record) {
   if (!chatId) return;
 
-  const raw = (await readConfigJson('sessions/state.json')) ?? { version: 3, chats: [] };
-  let state;
   try {
-    state = validateSessionState(raw);
-  } catch {
-    return;
+    await updateConfigJson('sessions/state.json', (raw) => {
+      const base = raw ?? { version: 3, chats: [] };
+      let state;
+      try {
+        state = validateSessionState(base);
+      } catch {
+        return base;
+      }
+
+      const chat = state.chats.find((c) => c.id === chatId);
+      if (!chat) return state;
+
+      const history = Array.isArray(chat.terminalHistory) ? [...chat.terminalHistory] : [];
+      history.push(record);
+      while (history.length > MAX_TERMINAL_HISTORY) {
+        history.shift();
+      }
+      chat.terminalHistory = history;
+      chat.updatedAt = Date.now();
+      return state;
+    });
+  } catch (err) {
+    console.warn('[terminal-runner] persistTerminalHistory failed:', err);
   }
-
-  const chat = state.chats.find((c) => c.id === chatId);
-  if (!chat) return;
-
-  const history = Array.isArray(chat.terminalHistory) ? [...chat.terminalHistory] : [];
-  history.push(record);
-  while (history.length > MAX_TERMINAL_HISTORY) {
-    history.shift();
-  }
-  chat.terminalHistory = history;
-  chat.updatedAt = Date.now();
-
-  await writeConfigJson('sessions/state.json', state);
 }
 
 /**
