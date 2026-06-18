@@ -39,6 +39,7 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
   const board = group?.orchestrateBoard;
   const planner = group ? getPlannerChatForGroup(group) : undefined;
   if (!group || !board || !planner || !isOrchestratePlanComplete(board)) return;
+  if (board.finalTest?.status !== 'passed') return;
 
   if (board.completionShownAt != null) return;
   board.completionShownAt = Date.now();

@@ -157,7 +157,10 @@ export function isTaskStalledForRestart(
   isChatActive: (chatId: string) => boolean,
 ): boolean {
   if (task.status !== 'in_progress' && task.status !== 'testing') return false;
-  const chatId = task.chatId?.trim();
+  const chatId =
+    task.status === 'testing'
+      ? task.testChatId?.trim() || task.chatId?.trim()
+      : task.chatId?.trim();
   if (!chatId) return true;
   return !isChatActive(chatId);
 }
@@ -166,6 +169,8 @@ export function isTaskStalledForRestart(
 export function markBoardTaskInProgressFromChat(chat: Chat): void {
   const taskId = chat.boardTaskId?.trim();
   if (!taskId) return;
+  // Tester / final-integration chats must not pull the card back to in_progress.
+  if (chat.workAgentId === 'tester') return;
   const boardGroup =
     getBoardGroupForChat(chat) ??
     (chat.boardGroupId
@@ -173,7 +178,7 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
       : undefined);
   if (!boardGroup?.orchestrateBoard) return;
   const existing = boardGroup.orchestrateBoard.tasks.find((t) => t.id === taskId);
-  if (!existing || existing.status === 'complete') return;
+  if (!existing || existing.status === 'complete' || existing.status === 'testing') return;
   const planner = getPlannerChatForGroup(boardGroup);
   const patch: Parameters<typeof updateTask>[2] = {
     status: 'in_progress',
@@ -331,6 +336,10 @@ export type UpdateTaskPatch = Partial<
     | 'chatId'
     | 'buildSpec'
     | 'testSpec'
+    | 'testChatId'
+    | 'testAttempts'
+    | 'testVerdict'
+    | 'testSummary'
   >
 >;
 

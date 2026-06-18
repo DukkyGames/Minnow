@@ -222,6 +222,24 @@ button.board-header__activity {
   margin-top: 10px;
 }
 
+.board-header__final-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-2);
+  font-size: 0.75rem;
+  color: var(--mn-fg-muted);
+}
+
+.board-header__final-test-label {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 /* Instrumentation bench (stats-strip family): mono values, uppercase labels. */
 .board-header__bench {
   display: grid;

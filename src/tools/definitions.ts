@@ -1047,6 +1047,39 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     definition: toolSchema('board_get_state', 'Read orchestrateBoard snapshot.', {}, []),
   },
   {
+    id: 'board_report_test_result',
+    label: 'Board report test result',
+    description:
+      'Structured Tester verdict for per-task or full-board integration test (does not move columns).',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_report_test_result',
+      'Record pass/fail verdict for stream-end routing. Use task_id from board or FULL_BOARD for final integration.',
+      {
+        task_id: {
+          type: 'string',
+          description: 'Board task id (e.g. W1-A) or FULL_BOARD for final integration test',
+        },
+        verdict: {
+          type: 'string',
+          enum: ['pass', 'fail'],
+          description: 'Test outcome',
+        },
+        summary: {
+          type: 'string',
+          description: 'Concise evidence summary',
+        },
+        failing_tasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'FULL_BOARD fail only: board task ids responsible for the failure',
+        },
+      },
+      ['task_id', 'verdict', 'summary'],
+    ),
+  },
+  {
     id: 'delegate_tasks',
     label: 'Delegate tasks',
     description:

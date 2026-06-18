@@ -304,6 +304,14 @@ export interface BoardTask {
   buildSpec?: string;
   /** Test spec from plan parse (display + task-chat seed). */
   testSpec?: string;
+  /** Linked Tester chat session id (per-task testing). */
+  testChatId?: string;
+  /** Build↔test retry count (incremented on each test failure). */
+  testAttempts?: number;
+  /** Structured verdict from board_report_test_result (stream-end routing). */
+  testVerdict?: 'pass' | 'fail';
+  /** Human summary from the Tester (shown on fail / blocked). */
+  testSummary?: string;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -335,6 +343,15 @@ export interface OrchestrateBoardState {
   executionMode?: 'manual' | 'auto';
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** Full-board integration test after all tasks complete. */
+  finalTest?: {
+    status: 'pending' | 'in_progress' | 'passed' | 'failed';
+    chatId?: string;
+    attempts?: number;
+    recordedVerdict?: 'pass' | 'fail';
+    failingTaskIds?: string[];
+    summary?: string;
+  };
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */

@@ -146,4 +146,48 @@ describe('orchestrate board streaming guards', () => {
     const chatPane = document.querySelector('[data-testid="boardInitSplitChat"]');
     assert.ok(chatPane?.querySelector('.msg.user'));
   });
+
+  test('appendBubble does not echo background task seed into a different active chat', () => {
+    setupDom();
+    const planner = createEmptyChatObject('');
+    planner.id = '22222222-2222-2222-2222-222222222222';
+    planner.modeId = 'orchestrate';
+    const userChat = createEmptyChatObject('');
+    userChat.id = '44444444-4444-4444-4444-444444444444';
+    userChat.modeId = 'general';
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = '33333333-3333-3333-3333-333333333333';
+    taskChat.modeId = 'build';
+    taskChat.boardTaskId = 'W1-A';
+    taskChat.boardGroupId = 'grp-ext';
+    taskChat.groupId = 'grp-ext';
+    const group = {
+      id: 'grp-ext',
+      name: 'Board',
+      workspacePath: planner.workspacePath || '',
+      collapsed: false,
+      order: 0,
+      createdAt: 1,
+      viewMode: 'chat',
+      plannerChatId: planner.id,
+      orchestratePlanPath: 'documentation/plans/x.md',
+      orchestrateBoard: { planPath: 'documentation/plans/x.md', tasks: [], waves: [] },
+    };
+    planner.boardGroupId = group.id;
+    setSessionStateForTests({
+      version: 5,
+      activeId: userChat.id,
+      sidebarCollapsed: false,
+      chats: [planner, userChat, taskChat],
+      groups: [group],
+    });
+    const before = document.getElementById('chatArea').childElementCount;
+    appendBubble('user', 'Execute this orchestrate task.', {
+      historyIndex: 0,
+      turnKind: 'user',
+      chatId: taskChat.id,
+    });
+    assert.equal(document.getElementById('chatArea').childElementCount, before);
+    assert.equal(document.querySelector('.msg.user'), null);
+  });
 });

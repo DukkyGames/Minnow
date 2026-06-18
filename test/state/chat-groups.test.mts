@@ -8,6 +8,7 @@ import {
   assignChatToGroup,
   createGroup,
   deleteGroup,
+  dismissActiveBoardView,
   findBoardGroupForPlanner,
   getBoardGroupForChat,
   getGroupsForWorkspace,
@@ -80,5 +81,26 @@ describe('chat groups', () => {
     sessionState.activeBoardGroupId = group.id;
     assert.equal(group.viewMode, 'board');
     assert.equal(sessionState.activeBoardGroupId, group.id);
+  });
+
+  test('dismissActiveBoardView clears focus and folder viewMode', () => {
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.modeId = 'orchestrate';
+    setSessionStateForTests({
+      version: 5,
+      activeId: planner.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [planner],
+    });
+    const group = createGroup('Board folder', WS);
+    group.viewMode = 'board';
+    if (!sessionState) throw new Error('Session not loaded');
+    sessionState.activeBoardGroupId = group.id;
+    assert.equal(dismissActiveBoardView(), true);
+    assert.equal(group.viewMode, 'chat');
+    assert.ok(!sessionState.activeBoardGroupId);
+    assert.equal(dismissActiveBoardView(), false);
   });
 });

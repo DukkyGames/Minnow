@@ -72,6 +72,7 @@ import {
   getActiveChat,
   isExpertChat,
   scheduleSaveSessions,
+  sessionState,
   touchChat,
   recordChatMessage,
 } from '../state/sessions';
@@ -822,18 +823,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
   try {
   const useActiveChatDom = chat.id === getActiveChat().id;
-  const domRaw = useActiveChatDom
-    ? (document.getElementById('modelSelect') as HTMLSelectElement).value
-    : '';
+  const domRaw =
+    (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value?.trim() ??
+    '';
   const parsedSelect = domRaw ? decodeModelSelectKey(domRaw) : null;
   const domModelId = parsedSelect?.modelId ?? domRaw;
-  if (parsedSelect && useActiveChatDom) {
+  // Background board task chats reuse the top-bar model when their stored binding is empty.
+  if (parsedSelect && (useActiveChatDom || !chat.modelId?.trim())) {
     chat.providerId = parsedSelect.providerId;
     chat.modelId = parsedSelect.modelId;
   }
   const modelId =
-    replaySnapshot?.modelId ??
-    (useActiveChatDom ? domModelId : chat.modelId?.trim() || domModelId);
+    replaySnapshot?.modelId ?? (chat.modelId?.trim() || domModelId);
   const globalSampler = readGlobalSamplerForSend(
     replaySnapshot
       ? {
@@ -885,26 +886,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     syncTurnContextUsage(chat.id, '', null);
     if (!suppressUserEcho) {
       renderSidebar();
-      const userIdx = chat.history.length - 1;
-      const { wrap: userWrap } = appendBubble(
-        'user',
-        historyContent,
-        {
+      if (isStreamDomVisible(chat.id)) {
+        const userIdx = chat.history.length - 1;
+        const { wrap: userWrap } = appendBubble(
+          'user',
+          historyContent,
+          {
+            historyIndex: userIdx,
+            turnKind: 'user',
+            chatId: chat.id,
+          },
+          { liveAttachments: validAttachments },
+        );
+        const { attachMessageActions } = await import('../ui/message-actions');
+        attachMessageActions(userWrap, {
+          chatId: chat.id,
           historyIndex: userIdx,
           turnKind: 'user',
-          chatId: chat.id,
-        },
-        { liveAttachments: validAttachments },
-      );
-      const { attachMessageActions } = await import('../ui/message-actions');
-      attachMessageActions(userWrap, {
-        chatId: chat.id,
-        historyIndex: userIdx,
-        turnKind: 'user',
-      });
-      clearComposerInput(
-        resolveComposerSurface(options.composerSurface).inputEl,
-      );
+        });
+      }
+      if (useActiveChatDom) {
+        clearComposerInput(
+          resolveComposerSurface(options.composerSurface).inputEl,
+        );
+      }
     }
   }
 
@@ -962,6 +967,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setStatus('err', err.message);
       if (uiDesignerCtx.active) {
         chat.workAgentId = savedWorkAgentId;
+      }
+      const boardTaskId = chat.boardTaskId?.trim();
+      const boardGroupId = chat.boardGroupId?.trim();
+      if (boardTaskId && boardGroupId && sessionState) {
+        const group = sessionState.groups?.find((g) => g.id === boardGroupId);
+        if (group?.orchestrateBoard) {
+          void import('../state/orchestrate-board-store.ts').then(({ updateTask }) => {
+            updateTask(group, boardTaskId, { error: err.message });
+          });
+        }
       }
       return;
     }
