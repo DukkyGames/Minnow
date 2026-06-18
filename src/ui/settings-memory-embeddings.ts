@@ -71,6 +71,31 @@ function validateEmbeddingsForm(partial: Partial<MemoryEmbeddingsConfig>): strin
   return null;
 }
 
+/** Download/warmup always needs a local model id; provider warmup also requires enable + provider. */
+function validateDownloadForm(partial: Partial<MemoryEmbeddingsConfig>): string | null {
+  if (partial.backend === 'provider') {
+    if (!partial.enabled) {
+      return 'Enable semantic embeddings before probing a provider backend.';
+    }
+    if (!partial.providerId?.trim()) {
+      return 'Select a provider when using provider embeddings.';
+    }
+    if (!partial.modelId?.trim()) {
+      return 'Model id is required when using provider embeddings.';
+    }
+    return null;
+  }
+  if (!partial.modelId?.trim()) {
+    return 'Model id is required to download a local embedding model.';
+  }
+  return null;
+}
+
+function setEmbeddingsPanelStatus(message: string): void {
+  const statusEl = document.getElementById('settingsMemoryEmbeddingsStatus');
+  if (statusEl) statusEl.textContent = message;
+}
+
 function toggleDownloadButtonVisibility(): void {
   const backendEl = document.getElementById(
     'settingsMemoryEmbeddingsBackend',
@@ -136,28 +161,34 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
       downloadBtn.setAttribute('disabled', 'true');
       try {
         const partial = readEmbeddingsForm();
-        const validationError = validateEmbeddingsForm(partial);
+        const validationError = validateDownloadForm(partial);
         if (validationError) {
+          setEmbeddingsPanelStatus(validationError);
           setStatus('err', validationError);
           return;
         }
 
+        setEmbeddingsPanelStatus('Saving settings…');
         const saved = await saveMemoryEmbeddingsConfig(partial);
         if (saved.kind === 'err') {
+          setEmbeddingsPanelStatus(saved.error);
           setStatus('err', saved.error);
           return;
         }
 
-        setStatus('ok', 'Downloading / loading embedding model…');
+        setEmbeddingsPanelStatus(
+          'Downloading embedding model — first run may take a few minutes. Files land in ~/.minnow/models/embeddings/',
+        );
+        setStatus('spin', 'Downloading embedding model…');
         const result = await warmupMemoryEmbeddings();
         if (result.kind === 'err') {
+          setEmbeddingsPanelStatus(result.error);
           setStatus('err', result.error);
           return;
         }
-        setStatus(
-          'ok',
-          `Model ready: ${result.value.model} (${result.value.dim} dims, ${result.value.durationMs} ms)`,
-        );
+        const readyMsg = `Model ready: ${result.value.model} (${result.value.dim} dims, ${result.value.durationMs} ms)`;
+        setEmbeddingsPanelStatus(readyMsg);
+        setStatus('ok', readyMsg);
         const panel = document.getElementById('settingsMemoryEmbeddingsPanel');
         if (panel) await refreshMemoryEmbeddingsPanel(panel);
       } finally {
@@ -236,6 +267,9 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
     container.classList.add('settings-memory-embeddings--offline');
     if (statusEl) {
       statusEl.textContent = 'Start npm start to configure semantic embeddings.';
+    }
+    if (modelEl && !modelEl.value.trim()) {
+      modelEl.value = 'Xenova/all-MiniLM-L6-v2';
     }
     return;
   }

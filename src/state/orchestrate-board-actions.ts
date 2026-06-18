@@ -472,6 +472,18 @@ async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void
   if (!board) return;
   const queue = taskQueueByGroupId.get(group.id);
   if (!queue?.length) return;
+  // In sequential mode, promote tasks already in testing ahead of queued builds
+  // so each task fully completes (build + test) before the next one starts.
+  // This is needed because notifyChatStreamEnded fires before setStreaming(false),
+  // causing startTaskTesting to enqueue at the back while the build chat still
+  // appears active. The deferred microtask drain then needs the correct order.
+  if (board.executionMode === 'sequential' && queue.length > 1) {
+    queue.sort((a, b) => {
+      const sa = board.tasks.find((t) => t.id === a)?.status;
+      const sb = board.tasks.find((t) => t.id === b)?.status;
+      return (sa === 'testing' ? 0 : 1) - (sb === 'testing' ? 0 : 1);
+    });
+  }
   while (queue.length > 0 && countRunningTaskChats(board) < maxConcurrent(board)) {
     const nextId = queue.shift()!;
     await resumeBoardTask(group, nextId, plannerChat);

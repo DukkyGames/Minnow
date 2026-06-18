@@ -257,6 +257,21 @@
   min-width: 0;
 }
 
+/* Operational status (Ready, loading models, errors) — mirrors legacy .status-pill */
+.mn-os-mb-status.status-pill {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--os-text-dim);
+  max-width: min(14rem, 30vw);
+}
+
+.mn-os-mb-status #osStatusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* OS menubar model picker popover */
 .mn-os-model-menu {
   position: fixed;

@@ -21,7 +21,7 @@ import { retrieveMemoryBlockHybrid } from './retrieve.js';
 import { backupMemory, restoreMemory } from './backup.js';
 import { isValidEntryId } from './paths.js';
 import { getMinnowHome } from '../config/home.js';
-import { getEmbedder, embedTexts } from './embeddings.js';
+import { getEmbedder, embedTexts, EMBEDDINGS_WARMUP_TIMEOUT_MS } from './embeddings.js';
 import {
   getVectorCount,
   loadVectorStore,
@@ -217,13 +217,29 @@ export async function handleMemoryRequest(req, res, pathname) {
       const started = Date.now();
       const memory = await loadMemoryConfig();
       const emb = memory.embeddings ?? {};
-      if (!emb.enabled) {
-        sendJson(res, 400, { error: 'Embeddings are disabled' });
+      const backend = emb.backend === 'provider' ? 'provider' : 'local';
+      const modelId = String(emb.modelId ?? '').trim();
+
+      if (backend === 'provider') {
+        if (!emb.enabled) {
+          sendJson(res, 400, { error: 'Enable semantic embeddings before probing a provider backend.' });
+          return true;
+        }
+        if (!String(emb.providerId ?? '').trim()) {
+          sendJson(res, 400, { error: 'Select a provider when using provider embeddings.' });
+          return true;
+        }
+      } else if (!modelId) {
+        sendJson(res, 400, { error: 'Model id is required to download a local embedding model.' });
         return true;
       }
 
       const embedder = await getEmbedder(memory);
-      const [vector] = await embedTexts(embedder, ['warmup'], emb.queryTimeoutMs);
+      const warmupTimeoutMs = Math.max(
+        Number(emb.queryTimeoutMs) || 0,
+        EMBEDDINGS_WARMUP_TIMEOUT_MS,
+      );
+      const [vector] = await embedTexts(embedder, ['warmup'], warmupTimeoutMs);
       if (!Array.isArray(vector) || vector.length === 0) {
         sendJson(res, 500, { error: 'Warmup produced empty embedding' });
         return true;
