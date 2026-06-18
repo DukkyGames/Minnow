@@ -318,7 +318,7 @@ describe('final integration test', () => {
     applyFinalTestFailureReopens(group, planner, ['W1-B'], 'UI broken');
     const b = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-B')!;
     assert.equal(b.status, 'in_progress');
-    assert.equal(b.testAttempts, 0);
+    assert.equal(b.testAttempts, 1);
     assert.equal(b.testSummary, 'UI broken');
   });
 

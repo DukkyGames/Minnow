@@ -2,6 +2,7 @@
  * Planned-task detail panel on the Orchestrate board (build/test specs from board_init).
  */
 
+import { deriveTaskCategoryBadge } from '../chat/orchestrate/task-category-badge';
 import { listTaskRelatedChats } from '../chat/orchestrate/task-chats';
 import { getChatsSortedByUpdatedDesc } from '../state/sessions';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../types';
@@ -131,9 +132,10 @@ function renderPanelContent(
   id.className = 'board-task-plan-panel__id';
   id.textContent = task.id;
 
+  const categoryBadge = deriveTaskCategoryBadge(task);
   const chip = document.createElement('span');
-  chip.className = `board-task-card__cat bt--${task.category}`;
-  chip.textContent = task.category;
+  chip.className = `board-task-card__cat bt--${categoryBadge.cssVariant}`;
+  chip.textContent = categoryBadge.label;
 
   titleRow.appendChild(id);
   titleRow.appendChild(chip);
