@@ -18,6 +18,20 @@ describe('thinkingToCompletionBody', () => {
     assert.equal(body.enable_thinking, true);
   });
 
+  test('openai-v1 off disables DeepSeek thinking without reasoning_effort none', () => {
+    const { body } = thinkingToCompletionBody('off', 'openai-v1', {
+      vision: false,
+      tools: null,
+      streaming: null,
+      grammar: null,
+      reasoning: true,
+      contextLength: null,
+      loadState: null,
+    });
+    assert.deepEqual(body, { thinking: { type: 'disabled' } });
+    assert.equal(body.reasoning_effort, undefined);
+  });
+
   test('lm-studio-v0 off includes none effort and best-effort hint', () => {
     const patch = thinkingToCompletionBody('off', 'lm-studio-v0', {
       vision: false,

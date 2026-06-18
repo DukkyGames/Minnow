@@ -69,6 +69,11 @@ export function thinkingToCompletionBody(
     return { body: {} };
   }
 
+  // OpenAI-compatible APIs reject `reasoning_effort: "none"`. DeepSeek V3/V4 needs an
+  // explicit thinking disable flag or it streams only to `reasoning_content`.
+  if (resolved === 'off' && apiKind === 'openai-v1') {
+    return { body: { thinking: { type: 'disabled' } } };
+  }
   const effort = effortForResolved(resolved);
   const body: Record<string, unknown> = {
     reasoning_effort: effort,

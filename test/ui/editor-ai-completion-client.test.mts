@@ -6,19 +6,19 @@ import { EditorView } from '@codemirror/view';
 import type { ChatCompletionChunk } from '../../src/types.ts';
 import {
   resolveEditorCompletionRawText,
+  mergeEditorStreamText,
+  resolveEditorCompletionDisplayText,
   validateEditorAiBinding,
   preflightEditorAiBinding,
   resolveEditorAiBinding,
   EDITOR_AI_NO_MODEL_MESSAGE,
 } from '../../src/ui/editor-ai-completion-client.ts';
+import { extractEditorCodeFromReasoning } from '../../src/ui/editor-model-output.ts';
 import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
 import { setSessionStateForTests, createEmptyChatObject } from '../../src/state/sessions.ts';
 import { setEditorAiCompletionConfigForTests } from '../../src/config/editor-ai-completion.ts';
 import { StreamingContentAccumulator } from '../../src/api/message-content.ts';
-import {
-  BenchmarkStreamReasoningAccumulator,
-  resolveBenchmarkCompletionText,
-} from '../../src/benchmark/stream-text.ts';
+import { BenchmarkStreamReasoningAccumulator } from '../../src/benchmark/stream-text.ts';
 import {
   editorAiCompletionExtensions,
   hasEditorAiGhost,
@@ -52,25 +52,49 @@ describe('validateEditorAiBinding', () => {
 describe('resolveEditorCompletionRawText', () => {
   test('accumulates delta content', () => {
     const content = new StreamingContentAccumulator();
-    const reasoning = new BenchmarkStreamReasoningAccumulator();
     const chunk: ChatCompletionChunk = {
       choices: [{ delta: { content: 'hello' } }],
     };
-    const text = resolveEditorCompletionRawText(content, reasoning, chunk);
+    const text = resolveEditorCompletionRawText(content, chunk);
     assert.equal(text, 'hello');
     assert.equal(content.getText(), 'hello');
   });
 
-  test('falls back to reasoning when content is empty', () => {
+  test('ignores reasoning channel deltas', () => {
     const content = new StreamingContentAccumulator();
-    const reasoning = new BenchmarkStreamReasoningAccumulator();
-    resolveEditorCompletionRawText(content, reasoning, {
-      choices: [{ delta: { reasoning: 'code();' } }],
+    const text = resolveEditorCompletionRawText(content, {
+      choices: [{ delta: { reasoning: 'I need to think about this...' } }],
     });
     assert.equal(content.getText(), '');
-    assert.equal(reasoning.getText(), 'code();');
+    assert.equal(text, '');
+  });
+});
+
+describe('extractEditorCodeFromReasoning', () => {
+  test('extracts fenced code from reasoning buffer', () => {
+    const reasoning = 'Let me think...\n```typescript\nconst x = 1;\n```';
+    assert.equal(extractEditorCodeFromReasoning(reasoning), 'const x = 1;');
+  });
+
+  test('returns empty for reasoning monologue only', () => {
     assert.equal(
-      resolveBenchmarkCompletionText(content.getText(), reasoning.getText()),
+      extractEditorCodeFromReasoning('The user wants me to complete this function.'),
+      '',
+    );
+  });
+});
+
+describe('resolveEditorCompletionDisplayText', () => {
+  test('does not use reasoning while streaming', () => {
+    assert.equal(
+      resolveEditorCompletionDisplayText('', 'const x = 1;', { reasoningFallback: false }),
+      '',
+    );
+  });
+
+  test('uses reasoning fallback after stream ends', () => {
+    assert.equal(
+      resolveEditorCompletionDisplayText('', '```\ncode();\n```', { reasoningFallback: true }),
       'code();',
     );
   });

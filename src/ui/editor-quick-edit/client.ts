@@ -2,19 +2,17 @@
  * Stream Quick Edit completions via /api/generations (Phase 4).
  */
 
-import { extractMessageText } from '../../api/chat';
+
 import {
   cancelGeneration,
   createGeneration,
+  formatGenerationErrorMessage,
   subscribeToGeneration,
   type GenerationEndEvent,
 } from '../../api/generations';
 import { modelCache } from '../../app-state';
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body';
-import {
-  BenchmarkStreamReasoningAccumulator,
-  resolveBenchmarkCompletionText,
-} from '../../benchmark/stream-text';
+import { BenchmarkStreamReasoningAccumulator } from '../../benchmark/stream-text';
 import { StreamingContentAccumulator } from '../../api/message-content';
 import { loadEditorAiCompletionConfig } from '../../config/editor-ai-completion';
 import { encodeModelSelectKey } from '../../lib/model-select-key';
@@ -22,6 +20,9 @@ import { catalogCapabilitiesFromRow } from '../../providers/model-capabilities';
 import { resolveProvider } from '../../providers/store';
 import type { ApiMessage, ChatCompletionChunk } from '../../types';
 import {
+  EDITOR_AI_EMPTY_COMPLETION_MESSAGE,
+  EDITOR_AI_REQUEST_FAILED_MESSAGE,
+  resolveEditorCompletionDisplayText,
   resolveEditorAiBinding,
   validateEditorAiBinding,
 } from '../editor-ai-completion-client';
@@ -39,7 +40,8 @@ export interface QuickEditRequestInput {
 
 const QUICK_EDIT_SYSTEM =
   'You are a precise code editor assistant. Return ONLY the replacement text for the ' +
-  'selected region — no markdown fences, explanations, or text outside the selection.';
+  'selected region — no markdown fences, explanations, thinking tags, or text outside the selection. ' +
+  'Never wrap output in reasoning or thinking markup.';
 
 function buildQuickEditMessages(input: QuickEditRequestInput): ApiMessage[] {
   const userBody = [
@@ -61,15 +63,22 @@ function ingestChunk(
   contentAcc: StreamingContentAccumulator,
   reasoningAcc: BenchmarkStreamReasoningAccumulator,
   chunk: ChatCompletionChunk,
-): string {
+): void {
   contentAcc.ingestChoice(chunk.choices?.[0]);
   reasoningAcc.ingestChunk(chunk);
-  const fromStream = resolveBenchmarkCompletionText(
-    contentAcc.getText(),
-    reasoningAcc.getText(),
-  );
-  if (fromStream) return fromStream;
-  return extractMessageText(chunk.choices?.[0]?.message).trim();
+}
+
+function generationEndErrorMessage(event?: GenerationEndEvent): string {
+  const raw = event?.errorMessage?.trim();
+  if (raw) return formatGenerationErrorMessage(raw);
+  return EDITOR_AI_REQUEST_FAILED_MESSAGE;
+}
+
+function createGenerationErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) {
+    return formatGenerationErrorMessage(err.message);
+  }
+  return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
 export interface QuickEditFetchResult {
@@ -115,19 +124,20 @@ export async function fetchQuickEditReplacement(
   let generationId: string;
   try {
     ({ generationId } = await createGeneration(provider.id, body, { persist: false }));
-  } catch {
-    return {
-      text: null,
-      error: 'Quick edit request failed — check provider and model in Settings.',
-    };
+  } catch (err) {
+    return { text: null, error: createGenerationErrorMessage(err) };
   }
 
   const contentAcc = new StreamingContentAccumulator();
   const reasoningAcc = new BenchmarkStreamReasoningAccumulator();
 
-  const emit = (): string =>
+  const emit = (reasoningFallback = false): string =>
     sanitizeQuickEditText(
-      resolveBenchmarkCompletionText(contentAcc.getText(), reasoningAcc.getText()),
+      resolveEditorCompletionDisplayText(
+        contentAcc.getText(),
+        reasoningAcc.getText(),
+        { reasoningFallback },
+      ),
       input.selectionText,
     );
 
@@ -143,24 +153,24 @@ export async function fetchQuickEditReplacement(
       signal: input.signal,
       onChunk: (chunk) => {
         ingestChunk(contentAcc, reasoningAcc, chunk);
-        const cleaned = emit();
+        const cleaned = emit(false);
         if (cleaned) input.onPartial?.(cleaned);
       },
       onEnd: (event?: GenerationEndEvent) => {
         unsubscribe();
         if (event?.status === 'error') {
-          finish(null);
+          finish(null, generationEndErrorMessage(event));
           return;
         }
-        const cleaned = emit();
-        finish(cleaned.length > 0 ? cleaned : null);
-      },
-      onTransportError: () => {
-        unsubscribe();
+        const cleaned = emit(true);
         finish(
-          null,
-          'Quick edit request failed — check provider and model in Settings.',
+          cleaned.length > 0 ? cleaned : null,
+          cleaned.length > 0 ? undefined : EDITOR_AI_EMPTY_COMPLETION_MESSAGE,
         );
+      },
+      onTransportError: (err) => {
+        unsubscribe();
+        finish(null, createGenerationErrorMessage(err));
       },
     });
 
