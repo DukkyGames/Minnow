@@ -363,16 +363,32 @@ function shouldStubOrchestrateStreamDom(chat: Chat): boolean {
   );
 }
 
+function resolveBubbleTargetChat(meta?: BubbleRenderMeta): Chat {
+  const active = getActiveChat();
+  const targetId = meta?.chatId?.trim();
+  if (!targetId || targetId === active.id) return active;
+  return sessionState?.chats.find((c) => c.id === targetId) ?? active;
+}
+
+function bubbleDomStub(): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
+  const stub = document.createElement('div');
+  return { wrap: stub, bubble: stub };
+}
+
 export function appendBubble(
   role: 'user' | 'assistant',
   content: string,
   meta?: BubbleRenderMeta,
   userOptions?: AppendUserBubbleOptions,
 ): { wrap: HTMLDivElement; bubble: HTMLDivElement } {
-  const chat = getActiveChat();
+  const active = getActiveChat();
+  const targetId = meta?.chatId?.trim() || active.id;
+  if (targetId !== active.id && !isStreamDomVisible(targetId)) {
+    return bubbleDomStub();
+  }
+  const chat = resolveBubbleTargetChat(meta);
   if (shouldStubOrchestrateStreamDom(chat)) {
-    const stub = document.createElement('div');
-    return { wrap: stub, bubble: stub };
+    return bubbleDomStub();
   }
   if (document.getElementById('emptyState')) {
     document.getElementById('emptyState')!.remove();
@@ -519,12 +535,16 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
 }
 
 export function appendStreamingAssistantRow(forChatId?: string): StreamingAssistantRow {
-  const chat = getActiveChat();
-  const targetId = forChatId ?? chat.id;
+  const active = getActiveChat();
+  const targetId = forChatId ?? active.id;
   if (!isStreamDomVisible(targetId)) {
     return streamingAssistantRowStub();
   }
-  if (shouldStubOrchestrateStreamDom(chat)) {
+  const targetChat =
+    targetId === active.id
+      ? active
+      : sessionState?.chats.find((c) => c.id === targetId) ?? active;
+  if (shouldStubOrchestrateStreamDom(targetChat)) {
     return streamingAssistantRowStub();
   }
   if (document.getElementById('emptyState')) {

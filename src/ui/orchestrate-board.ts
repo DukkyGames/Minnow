@@ -37,9 +37,12 @@ import {
 import {
   countRunningTaskChats,
   getBoardExecutionMode,
+  isTaskChatActive,
   moveTaskStatus,
   setBoardExecutionMode,
+  startFinalIntegrationTestForPlannerChat,
   startTask,
+  startTaskTestingForPlannerChat,
   startWave,
   stopTask,
   toggleWaveCollapsed,
@@ -151,9 +154,13 @@ export function deriveTaskAgentBadge(
   task: BoardTask,
   runStatus?: RunStatusHint,
   taskChatStreaming = false,
+  testChatStreaming = false,
 ): TaskAgentBadge | null {
   if (task.chatId && taskChatStreaming) {
     return { variant: 'active', label: 'Running' };
+  }
+  if (testChatStreaming) {
+    return { variant: 'active', label: 'Testing…' };
   }
   if (!getBoardTaskPrimaryRunId(task) && !task.chatId) return null;
 
@@ -170,7 +177,7 @@ export function deriveTaskAgentBadge(
     return { variant: 'active', label: 'Idle' };
   }
   if (task.status === 'testing') {
-    return { variant: 'active', label: 'Review' };
+    return { variant: 'active', label: 'Awaiting test' };
   }
   if (task.status === 'complete' || runStatus === 'completed') {
     return { variant: 'complete', label: 'Complete' };
@@ -558,6 +565,16 @@ export function deriveBoardHeaderStatus(
     return { variant: 'running', label: 'Running' };
   }
   if (total > 0 && completeCount === total) {
+    const finalTest = board.finalTest;
+    if (!finalTest || finalTest.status !== 'passed') {
+      if (finalTest?.status === 'in_progress') {
+        return { variant: 'active', label: 'Final test' };
+      }
+      if (finalTest?.status === 'failed') {
+        return { variant: 'failed', label: 'Final test failed' };
+      }
+      return { variant: 'paused', label: 'Awaiting final test' };
+    }
     return { variant: 'complete', label: 'Complete' };
   }
   if (userStopped && incomplete && !isStreaming && activeRunCount === 0) {
@@ -807,9 +824,73 @@ function buildBoardHeader(
   bar.appendChild(fill);
 
   meta.appendChild(bar);
+
+  const finalBanner = buildFinalTestBanner(board, group, plannerChat);
+  if (finalBanner) meta.appendChild(finalBanner);
+
   header.appendChild(toolbar);
   header.appendChild(meta);
   return header;
+}
+
+/** Final integration test status + manual run action when all tasks are complete. */
+function buildFinalTestBanner(
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement | null {
+  if (!isOrchestratePlanComplete(board)) return null;
+  const finalTest = board.finalTest;
+  if (finalTest?.status === 'passed') return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-header__final-test';
+  wrap.setAttribute('role', 'status');
+
+  const label = document.createElement('span');
+  label.className = 'board-header__final-test-label';
+
+  if (finalTest?.status === 'in_progress') {
+    label.textContent = 'Final integration test running…';
+    wrap.appendChild(label);
+    return wrap;
+  }
+
+  if (finalTest?.status === 'failed') {
+    const summary = finalTest.summary?.trim();
+    const reopened = finalTest.failingTaskIds?.length
+      ? ` Reopened: ${finalTest.failingTaskIds.join(', ')}.`
+      : '';
+    label.textContent = `Final integration test failed.${reopened}${summary ? ` ${summary}` : ''}`;
+    wrap.appendChild(label);
+    if ((finalTest.attempts ?? 0) < 3) {
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'board-btn board-btn--compact board-btn--primary';
+      retryBtn.textContent = 'Re-run final test';
+      retryBtn.addEventListener('click', () => {
+        void startFinalIntegrationTestForPlannerChat(plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      });
+      wrap.appendChild(retryBtn);
+    }
+    return wrap;
+  }
+
+  label.textContent = 'All tasks complete — run final integration test';
+  wrap.appendChild(label);
+  const runBtn = document.createElement('button');
+  runBtn.type = 'button';
+  runBtn.className = 'board-btn board-btn--compact board-btn--primary';
+  runBtn.textContent = 'Run final integration test';
+  runBtn.addEventListener('click', () => {
+    void startFinalIntegrationTestForPlannerChat(plannerChat).then(() =>
+      refreshActiveBoardIfMounted(),
+    );
+  });
+  wrap.appendChild(runBtn);
+  return wrap;
 }
 
 /** One instrumentation cell in the board header bench (mono value + label). */
@@ -1084,21 +1165,25 @@ function buildTaskCard(
   plannerChat: Chat,
 ): HTMLElement {
   const taskStreaming = Boolean(task.chatId && isChatStreaming(task.chatId));
+  const testStreaming = Boolean(task.testChatId && isChatStreaming(task.testChatId));
+  const taskActive = Boolean(task.chatId && isTaskChatActive(task.chatId));
+  const testActive = Boolean(task.testChatId && isTaskChatActive(task.testChatId));
   const primaryRunId = getBoardTaskPrimaryRunId(task);
   const runStatus = primaryRunId
     ? resolveRunStatusForTask(plannerChat, primaryRunId)
     : null;
-  const agentBadge = deriveTaskAgentBadge(task, runStatus, taskStreaming);
+  const agentBadge = deriveTaskAgentBadge(task, runStatus, taskStreaming, testStreaming);
   const board = group.orchestrateBoard!;
   const cap = board.maxConcurrentTasks ?? 3;
-  const atCap = countRunningTaskChats(board) >= cap && !taskStreaming;
+  const atCap =
+    countRunningTaskChats(board) >= cap && !taskActive && !testActive;
 
   const card = document.createElement('article');
   card.className = 'board-task-card';
   if (task.status === 'failed' || task.status === 'blocked') {
     card.classList.add('board-task-card--alert');
   }
-  if (taskStreaming) {
+  if (taskActive || testActive) {
     card.classList.add('board-task-card--running');
   }
 
@@ -1163,7 +1248,7 @@ function buildTaskCard(
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));
   }
-  const supervision = resolveTaskSupervision(task, plannerChat, taskStreaming);
+  const supervision = resolveTaskSupervision(task, plannerChat, taskActive || testActive);
   if (supervision) {
     appendTaskHeartbeatBadge(trail, supervision);
   }
@@ -1202,7 +1287,7 @@ function buildTaskCard(
 
   const toolbar = document.createElement('div');
   toolbar.className = 'board-task-card__toolbar';
-  if (taskStreaming) {
+  if (taskActive || testActive) {
     const stopBtn = document.createElement('button');
     stopBtn.type = 'button';
     stopBtn.className = 'board-btn board-btn--compact board-btn--mn-danger board-task-card__btn--stop';
@@ -1212,6 +1297,20 @@ function buildTaskCard(
       void stopTask(group, task.id, plannerChat).then(() => refreshActiveBoardIfMounted());
     });
     toolbar.appendChild(stopBtn);
+  } else if (task.status === 'testing') {
+    const runTestsBtn = document.createElement('button');
+    runTestsBtn.type = 'button';
+    runTestsBtn.className = 'board-btn board-btn--compact board-btn--primary board-task-card__btn--run-tests';
+    runTestsBtn.textContent = 'Run tests';
+    runTestsBtn.disabled = atCap;
+    runTestsBtn.title = atCap ? `Concurrency cap (${cap}) reached` : 'Start Tester for this task';
+    runTestsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void startTaskTestingForPlannerChat(plannerChat, task.id).then(() =>
+        refreshActiveBoardIfMounted(),
+      );
+    });
+    toolbar.appendChild(runTestsBtn);
   } else {
     const startBtn = document.createElement('button');
     startBtn.type = 'button';

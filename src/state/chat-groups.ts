@@ -115,6 +115,19 @@ export function getActiveBoardGroup(): ChatGroup | undefined {
   return findGroupById(state.activeBoardGroupId);
 }
 
+/** Clear board main-column focus (same as leaving board via switchChat). */
+export function dismissActiveBoardView(): boolean {
+  const state = sessionState;
+  if (!state?.activeBoardGroupId) return false;
+  const openGroup = getActiveBoardGroup();
+  if (openGroup) {
+    openGroup.viewMode = 'chat';
+  }
+  delete state.activeBoardGroupId;
+  scheduleSaveSessions();
+  return true;
+}
+
 /** Board folder linked from a planner or task chat. */
 export function getBoardGroupForChat(chat: Chat): ChatGroup | undefined {
   const boardGroupId = chat.boardGroupId?.trim();

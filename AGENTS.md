@@ -1,32 +1,51 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+Guidance for AI coding agents (Cursor, Claude Code, etc.) working in the Minnow repo.
 
-### Overview
+## Overview
 
-Minnow is a Vite + TypeScript SPA chat client for LM Studio and other OpenAI-compatible local providers. It includes six composer modes (General / Build / Plan / Orchestrate / Reef / Debug) plus a global bug tracker (sidebar **All bugs**, `#/bugs`), 60 built-in tools, sub-agents, `~/.minnow` persistence when `npm start` runs, and a full settings page. See `README.md` for setup/scripts and `documentation/context.md` for architecture details. Gap audit: `documentation/plans/feature-audit-roadmap.md`.
+Minnow is a **Vite + TypeScript SPA** plus a **Node tool server** (`server.js`) and an **Electron desktop shell** (the "MinnowOS" window). It is a local-first AI workspace for LM Studio and other OpenAI-compatible providers.
 
-### Running the app
+- **Six composer modes:** General, Build, Plan (no-destructive guard), Orchestrate, Reef, Debug. Modes are defined in [`src/chat/modes/registry.ts`](src/chat/modes/registry.ts); prompts in [`src/chat/prompts/modes/`](src/chat/prompts/modes/).
+- **~88 built-in tools** across web / utility / files / git / code / agents / browser / lsp ([`src/tools/definitions.ts`](src/tools/definitions.ts)).
+- **MinnowOS apps:** Chat (desktop), Code, Models, Compare, Bench, Research, Experts, Brain, Calendar, Email, Scheduler, Settings ([`src/os/`](src/os/)).
+- **Persistence** lives under `~/.minnow` when the tool server runs.
 
-- **`npm start`** is the recommended dev command — starts Vite + the Node tool server on port 5173 (or next free port) and **launches the Electron desktop shell by default** (Chromium in-app browser via `WebContentsView`). Set `MINNOW_BROWSER=1` to open the system browser instead; `BROWSER=none` or `MINNOW_HEADLESS=1` to suppress auto-open. **`npm run desktop`** / **`npm run electron:dev`** are equivalent HMR-friendly aliases.
-- **Headless CLI:** `minnow run --prompt "…"` (or `npm run minnow:run -- --prompt "…"`) drives the same generations + server tools without the SPA. Requires `npm start` (or `--start-server`). See `minnow run --help` and [`documentation/context.md`](documentation/context.md#headless-cli-feature-18).
-- **`npm run dev`** starts Vite only (no tool server) — useful for pure UI work but most tool-dependent features won't function.
-- The tool server exposes `/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, and other endpoints. Verify health with `curl http://localhost:5173/api/tools/ping`.
-- **LM Studio headless daemon** (`llmster`) can be installed via `curl -fsSL https://lmstudio.ai/install.sh | bash`. Start with `lms daemon up && lms server start`. Download a model with `lms get <model-name> -y` and load it with `lms load <model-name> -y`. The CLI is at `~/.lmstudio/bin/lms` (add to PATH: `export PATH="$HOME/.lmstudio/bin:$PATH"`).
-- **Streaming parse (BUG-016 fix)**: Chat SSE is parsed in `src/api/sse-parse.ts` (event boundaries + glued JSON). Non-streaming fallback uses `parseCompletionResponseBody` — do not call `Response.json()` on the generations shim. Residual provider quirks (e.g. `llmster` non–OpenAI SSE) may still yield empty text; check provider `chatCompletionsPath` is OpenAI-compatible (`/v1/chat/completions`).
+The **authoritative reference** is [`documentation/context.md`](documentation/context.md) — read it before touching unfamiliar subsystems. Setup/scripts: [`README.md`](README.md). Guides: [`documentation/guides/`](documentation/guides/).
 
-### Testing
+## Running the app
 
-- **`npm test`** runs the full suite (~500 tests via `node --test` and `tsx`). Expect 5 pre-existing failures in reef widget convention tests — these are known and unrelated to general functionality.
-- **`npx tsc --noEmit`** for type checking (no separate ESLint config exists).
-- Subset test commands: `npm run test:memory`, `npm run test:lsp`, `npm run test:mcp`, `npm run test:browser`, `npm run test:skills`, `npm run test:attachments`. See `package.json` scripts for the full list.
+- **`npm start`** is the recommended dev command — Vite + the Node tool server on port 5173 (or next free port) and **launches the Electron desktop shell by default**. `MINNOW_BROWSER=1` opens the system browser instead; `BROWSER=none` or `MINNOW_HEADLESS=1` suppresses auto-open. `npm run desktop` / `npm run electron:dev` are HMR-friendly Electron aliases.
+- **`npm run dev`** is Vite-only (no tool server) — fine for pure UI work, but most tool-dependent features won't function.
+- **Headless CLI:** `minnow run --prompt "…"` (or `npm run minnow:run -- --prompt "…"`) drives the same generations + server tools without the SPA. Requires `npm start` (or `--start-server`). See `minnow run --help`.
+- Health checks: `curl http://localhost:5173/api/tools/ping`, `/api/config/ping`, `/api/memory/ping`, `/api/brain/ping`.
+- **LM Studio headless daemon** (`llmster`): install with `curl -fsSL https://lmstudio.ai/install.sh | bash`; `lms daemon up && lms server start`; `lms get <model> -y`; `lms load <model> -y`. CLI at `~/.lmstudio/bin/lms`.
 
-### Building
+## Testing
 
-- **`npm run build`** runs `tsc && vite build` and outputs to `dist/`. The `prebuild` step generates `src/skills/builtin-manifest.json`.
+- **`npm test`** runs the full suite (`node --test` + `tsx`, several hundred tests).
+- **`npx tsc --noEmit`** for type checking (no separate ESLint config).
+- Scoped suites: `npm run test:memory|brain|engine|lsp|mcp|browser|skills|attachments|research|benchmark|evals|calendar|email|oauth|webhooks|notifications|voice|servers|plugins|terminal-pty|ui-designer|scheduler`. See `package.json` for exact globs.
+- Many TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (the loader stubs `.css` and xterm). Some use `--experimental-test-module-mocks`.
 
-### Key gotchas
+## Building & packaging
 
-- The `postinstall` script runs `node scripts/sync-impeccable-skill.mjs` to vendor the Impeccable UI skill into `src/skills/impeccable/`. This is expected and idempotent.
-- `get_datetime` and `calculate` are **browser-only** tools — calling them via the `/api/tools` POST endpoint returns "Not implemented" since they run client-side in the browser.
-- The `[providers] fetch failed` log on startup is normal in environments without LM Studio — it simply means the provider discovery couldn't reach `localhost:1234`.
+- **`npm run build`** → `tsc && vite build` → `dist/`. The `prebuild` step generates `src/skills/builtin-manifest.json`.
+- **`npm run package`** → build + `electron:build` + `electron-builder` (Windows NSIS → `release/`). `package:dir` produces an unpacked directory.
+
+## Key gotchas
+
+- `postinstall` runs `scripts/sync-impeccable-skill.mjs` (vendors the Impeccable skill) and `scripts/ensure-electron.mjs`. Both are expected and idempotent.
+- **Browser-only tools** (`get_datetime`, `calculate`, `ask_question`, sub-agent/board tools, mode handoff, `browser_*`) run client-side; calling them via `POST /api/tools` returns "Not implemented".
+- `browser_*` automation requires the Electron shell and an origin allowlist; hidden in a plain browser tab.
+- The `[providers] fetch failed` log on startup is normal without LM Studio (provider discovery can't reach `localhost:1234`).
+- **Streaming SSE** is parsed in [`src/api/sse-parse.ts`](src/api/sse-parse.ts) (event boundaries + glued JSON); non-streaming fallback uses `parseCompletionResponseBody` — do not call `Response.json()` on the generations shim. Some non–OpenAI providers (e.g. `llmster`) may still yield empty text; verify the provider's `chatCompletionsPath` is `/v1/chat/completions`.
+- **Secrets are encrypted** at rest with `~/.minnow/.key`. Deleting/rotating the key makes existing encrypted secrets unrecoverable.
+- **Path safety:** file/git tools resolve under the workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`.
+- **Plan mode** denies destructive tools (`execute_command`, write/delete/move file ops, git mutations) — see `PLAN_DENIED_TOOLS` in the mode registry.
+
+## Conventions
+
+- Match the surrounding code's style, naming, and comment density.
+- Application CSS uses `--mn-*` tokens; hex/rgba literals live only in [`src/styles/tokens.css`](src/styles/tokens.css). See [`DESIGN.md`](DESIGN.md).
+- Keep [`documentation/context.md`](documentation/context.md) updated when you ship a feature that changes architecture, APIs, or storage.

@@ -2,6 +2,8 @@
  * Node loader for tsx tests: stub .css and @xterm packages that break under node --test.
  */
 
+process.env.MINNOW_TEST = '1';
+
 import { register } from 'node:module';
 
 const LOADER_URL = new URL('./test-loader.mjs', import.meta.url).href;

@@ -109,13 +109,13 @@ describe('task stream end finalization', () => {
     assert.equal(resolveTaskChatStreamOutcome(makeTaskChat(true)), 'stopped');
   });
 
-  test('auto mode marks successful task complete', () => {
+  test('auto mode moves successful build to testing (Tester launched separately)', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
     const task = group.orchestrateBoard!.tasks[0]!;
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    assert.equal(updated.status, 'complete');
+    assert.equal(updated.status, 'testing');
     assert.ok(updated.endedAt);
   });
 
@@ -180,6 +180,46 @@ describe('task stream end finalization', () => {
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated.status, 'in_progress');
     assert.ok(updated.startedAt);
+  });
+
+  test('markBoardTaskInProgressFromChat leaves testing status for Tester chats', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(
+      group,
+      'W1-A',
+      { status: 'testing', chatId: TASK_CHAT_ID, testChatId: '44444444-4444-4444-4444-444444444444' },
+      planner,
+    );
+    const testChat: Chat = {
+      ...makeTaskChat(),
+      id: '44444444-4444-4444-4444-444444444444',
+      workAgentId: 'tester',
+      boardTaskId: 'W1-A',
+    };
+    markBoardTaskInProgressFromChat(testChat);
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated.status, 'testing');
+  });
+
+  test('isTaskStalledForRestart uses testChatId during testing', () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    updateTask(
+      group,
+      'W1-A',
+      { status: 'testing', chatId: TASK_CHAT_ID, testChatId: '44444444-4444-4444-4444-444444444444' },
+      planner,
+    );
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(
+      isTaskStalledForRestart(group.orchestrateBoard!, task, (id) => id === task.testChatId),
+      false,
+    );
+    assert.equal(
+      isTaskStalledForRestart(group.orchestrateBoard!, task, () => false),
+      true,
+    );
   });
 
   test('isTaskStalledForRestart detects idle in_progress task', () => {

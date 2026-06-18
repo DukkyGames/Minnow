@@ -6,6 +6,7 @@
     "orchestrator",
     "builder",
     "verifier",
+    "tester",
     "reviewer",
     "researcher",
     "ui-designer",

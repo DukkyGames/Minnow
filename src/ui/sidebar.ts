@@ -5,6 +5,7 @@ import { isChatStreaming } from '../chat/streaming-state';
 import {
   createGroup,
   deleteGroup,
+  dismissActiveBoardView,
   getActiveBoardGroup,
   getGroupsForWorkspace,
   openBoardGroup,
@@ -59,7 +60,7 @@ import { syncThinkingControlFromActiveChat } from './composer-thinking';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
 import { buildDefaultPinnedSkillForNewChat } from '../skills/config';
-import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode-toggle';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
 import { onModelRoutingActiveChatChanged } from './settings-model-routing';
@@ -658,15 +659,7 @@ export function switchChat(id: string): void {
     return;
   }
 
-  const boardWasOpen = Boolean(sessionState.activeBoardGroupId);
-  if (boardWasOpen) {
-    const openGroup = getActiveBoardGroup();
-    if (openGroup) {
-      openGroup.viewMode = 'chat';
-    }
-    delete sessionState.activeBoardGroupId;
-    scheduleSaveSessions();
-  }
+  const boardWasOpen = dismissActiveBoardView();
 
   if (id === sessionState.activeId) {
     acknowledgeChatViewed(id);
@@ -767,6 +760,14 @@ export interface CreateChatWithModeResult {
 export function createChatWithMode(
   options: CreateChatWithModeOptions,
 ): CreateChatWithModeResult {
+  if (isOrchestrateHubMounted()) {
+    teardownOrchestrateHub();
+  }
+  if (sessionState?.activeId) {
+    suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
+  }
+  dismissActiveBoardView();
+
   const modeId = normalizeModeId(options.modeId);
   const { modelId, providerId } = readTopBarModelBinding();
   const chat = createEmptyChatObject(modelId);
@@ -831,5 +832,10 @@ export function createChatWithMode(
 }
 
 export function createChat(): void {
-  createChatWithMode({ modeId: normalizeModeId(getActiveChat().modeId) });
+  const active = getActiveChat();
+  const leavingOrchestrate =
+    isBoardViewActive() || normalizeModeId(active.modeId) === 'orchestrate';
+  createChatWithMode({
+    modeId: leavingOrchestrate ? 'general' : normalizeModeId(active.modeId),
+  });
 }

@@ -33,7 +33,7 @@ const {
 } = await import('../../src/ui/orchestrate-board.ts');
 const { closeSubAgentDrawer } = await import('../../src/ui/sub-agent-drawer.ts');
 const { setOrchestrateViewMode } = await import('../../src/ui/view-mode-toggle.ts');
-const { switchChat } = await import('../../src/ui/sidebar.ts');
+const { switchChat, createChatWithMode, createChat } = await import('../../src/ui/sidebar.ts');
 const { openBoardGroup } = await import('../../src/state/chat-groups.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 const {
@@ -844,6 +844,55 @@ describe('orchestrate board live updates', () => {
     assert.equal(getActiveChat().id, external.id);
     assert.equal(document.querySelector('.board-root'), null);
     assert.ok(document.querySelector('.msg.user'));
+  });
+
+  test('createChatWithMode dismisses board and renders new chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    const created = createChatWithMode({ modeId: 'general' });
+    assert.equal(created.ok, true);
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().id, created.chatId);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.getElementById('vibeHub'));
+  });
+
+  test('createChat from orchestrate board starts general-mode chat', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    renderBoardView(group);
+    await waitForKanban();
+    assert.ok(document.querySelector('.board-root'));
+
+    createChat();
+
+    assert.equal(group.viewMode, 'chat');
+    assert.equal(getActiveChat().modeId, 'general');
+    assert.notEqual(getActiveChat().id, chat.id);
+    assert.equal(document.querySelector('.board-root'), null);
+    assert.ok(document.getElementById('vibeHub'));
   });
 
   test('header activity chip shows last assistant message', () => {
