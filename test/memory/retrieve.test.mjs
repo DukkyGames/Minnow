@@ -34,6 +34,22 @@ describe('memory retrieve', () => {
     assert.equal(block, expected);
   });
 
+  test('formatMemoryBlock includes path when meta.path is set', () => {
+    const block = formatMemoryBlock(
+      [
+        {
+          meta: { ...META_A, path: 'minnow/architecture.md' },
+          body: 'High-level architecture overview.',
+        },
+      ],
+      4000,
+    );
+    const expected = `## Retrieved memory
+- [npm workflow] path: minnow/architecture.md (tags: npm)
+  High-level architecture overview.`;
+    assert.equal(block, expected);
+  });
+
   test('retrieveMemoryBlock falls back when query has no token matches', () => {
     const all = [
       { meta: META_A, body: 'Use npm start for integration tests.' },

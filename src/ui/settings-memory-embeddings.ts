@@ -216,13 +216,13 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
 
         const result = await reindexMemoryEmbeddings();
         if (result.kind === 'err') {
+          setEmbeddingsPanelStatus(result.error);
           setStatus('err', result.error);
           return;
         }
-        setStatus(
-          'ok',
-          `Reindexed ${result.value.indexed} entries (${result.value.failed} failed, ${result.value.durationMs} ms)`,
-        );
+        const reindexMsg = `Reindexed ${result.value.indexed} wiki pages (${result.value.failed} failed, ${result.value.durationMs} ms)`;
+        setEmbeddingsPanelStatus(reindexMsg);
+        setStatus('ok', reindexMsg);
         const panel = document.getElementById('settingsMemoryEmbeddingsPanel');
         if (panel) await refreshMemoryEmbeddingsPanel(panel);
       } finally {
@@ -299,9 +299,15 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
   toggleDownloadButtonVisibility();
 
   if (statusEl) {
-    statusEl.textContent = status.enabled
-      ? `${status.vectorCount} vectors indexed · dim ${status.dim} · ${status.healthy ? 'healthy' : 'needs reindex'}`
-      : 'Semantic retrieval disabled — keyword-only matching on send.';
+    if (!status.enabled) {
+      statusEl.textContent = 'Semantic retrieval disabled — keyword-only matching on send.';
+    } else {
+      const pageHint =
+        typeof status.pageCount === 'number' && status.pageCount > 0
+          ? ` · ${status.pageCount} wiki pages`
+          : '';
+      statusEl.textContent = `${status.vectorCount} vectors indexed${pageHint} · dim ${status.dim} · model ${status.model} · ${status.healthy ? 'healthy' : 'needs reindex'}`;
+    }
   }
 
   if (badgeEl) {

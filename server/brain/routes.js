@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
-import { getEmbedder, embedTexts } from '../engine/embeddings.js';
+import { getEmbedder, embedTexts, EMBEDDINGS_WARMUP_TIMEOUT_MS } from '../engine/embeddings.js';
 import { BrainPathError, getBrainDir, getBrainLogPath, getBrainSchemaPath } from './paths.js';
 import { backupBrain, restoreBrain } from './backup.js';
 import { ingestSource } from './ingest.js';
@@ -23,6 +23,7 @@ import {
   getArchiveStatus,
   reconcileOrphanArchives,
 } from './archive.js';
+import { captureChatToBrain, captureResearchToBrain } from './capture.js';
 import { handleCodeIndexRequest } from './code/routes.js';
 import { handleSynthesisRequest } from './synthesis-routes.js';
 import { slugifyFactTitle } from './synthesis.js';
@@ -228,6 +229,20 @@ export async function handleBrainRequest(req, res, pathname) {
       return true;
     }
 
+    if (pathname === '/api/brain/capture/chat' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await captureChatToBrain(body);
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (pathname === '/api/brain/capture/research' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await captureResearchToBrain(body);
+      sendJson(res, 200, result);
+      return true;
+    }
+
     if (pathname === '/api/brain/archive/status' && req.method === 'GET') {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const chatId = url.searchParams.get('chatId') ?? '';
@@ -350,15 +365,17 @@ export async function handleBrainRequest(req, res, pathname) {
       const emb = brain.embeddings ?? {};
       const vectorCount = await getVectorCount();
       const store = await loadVectorStore();
+      const pageCount = (await listPages()).length;
       let healthy = false;
       if (emb.enabled) {
         try {
           const embedder = await getEmbedder(brain);
-          healthy = isVectorStoreCompatible(store, {
+          const compatible = isVectorStoreCompatible(store, {
             modelId: embedder.id,
             backend: emb.backend,
             dim: embedder.dim,
           });
+          healthy = compatible && (pageCount === 0 || vectorCount > 0);
         } catch {
           healthy = false;
         }
@@ -372,6 +389,7 @@ export async function handleBrainRequest(req, res, pathname) {
         queryTimeoutMs: typeof emb.queryTimeoutMs === 'number' ? emb.queryTimeoutMs : 3000,
         dim: store.dim ?? 0,
         vectorCount,
+        pageCount,
         reindexNeeded: emb.reindexNeeded === true,
         healthy,
       });
@@ -413,13 +431,17 @@ export async function handleBrainRequest(req, res, pathname) {
         return true;
       }
       const embedder = await getEmbedder(brain);
-      const entries = await loadAllPagesWithBodies();
+      const pages = await loadAllPagesWithBodies();
+      const embedTimeoutMs = Math.max(
+        Number(emb.queryTimeoutMs) || 0,
+        EMBEDDINGS_WARMUP_TIMEOUT_MS,
+      );
       const result = await reindexAllMemoryEntries(
         async (text) => {
-          const [vector] = await embedTexts(embedder, [text], emb.queryTimeoutMs);
+          const [vector] = await embedTexts(embedder, [text], embedTimeoutMs);
           return vector;
         },
-        entries,
+        pages,
         {
           model: embedder.id,
           backend: emb.backend,

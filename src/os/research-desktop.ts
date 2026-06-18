@@ -176,6 +176,11 @@ async function showResultForId(researchId: string): Promise<void> {
         onViewLibrary: () => {
           void showDesktopResearchLibrary();
         },
+        onAddToBrain: () => {
+          void import('../ui/chat-brain-capture').then((m) =>
+            m.runResearchBrainCapture(researchId),
+          );
+        },
       },
       { savedToLibrary: true },
     );

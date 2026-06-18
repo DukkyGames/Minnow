@@ -13,6 +13,7 @@ export interface ReportViewActions {
   onRefine: () => void;
   onFollowUp: (query: string) => void;
   onViewLibrary: () => void;
+  onAddToBrain: () => void;
 }
 
 export interface ReportViewOptions {
@@ -113,6 +114,7 @@ export function renderResearchReportView(
             ? ''
             : '<button type="button" class="dr-save" id="btnResearchSaved">Save to Library</button>'
         }
+        <button type="button" class="dr-ghost" id="btnResearchAddToBrain">Add to Brain</button>
         <button type="button" class="dr-ghost" id="btnResearchExport">Export</button>
         <button type="button" class="dr-ghost" id="btnResearchRunAgain">Run again</button>
         <button type="button" class="dr-ghost" id="btnResearchDiscuss">Discuss</button>
@@ -128,6 +130,7 @@ export function renderResearchReportView(
     actions.onViewLibrary();
   });
   // When savedToLibrary is true the Save button is omitted — completed runs are auto-persisted.
+  mount.querySelector('#btnResearchAddToBrain')?.addEventListener('click', () => actions.onAddToBrain());
   mount.querySelector('#btnResearchExport')?.addEventListener('click', () => actions.onExport());
   mount.querySelector('#btnResearchRunAgain')?.addEventListener('click', () => actions.onRunAgain());
   mount.querySelector('#btnResearchDiscuss')?.addEventListener('click', () => actions.onDiscuss());

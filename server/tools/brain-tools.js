@@ -9,8 +9,10 @@ import {
   appendLog,
   createPage,
   getPageTree,
+  listPages,
   loadBrainConfig,
   readPage,
+  resolvePageLookup,
   updatePage,
 } from '../brain/store.js';
 import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
@@ -56,8 +58,13 @@ export async function toolBrainSearch(args) {
     return 'No matching wiki pages found.';
   }
 
-  const idLine = ids.length ? `\n\nMatched page ids: ${ids.join(', ')}` : '';
-  return `${block.trim()}${idLine}`;
+  const pages = await listPages();
+  const paths = ids
+    .map((id) => pages.find((page) => page.id === id)?.path)
+    .filter(Boolean);
+  const pathLine = paths.length ? `\n\nMatched page paths: ${paths.join(', ')}` : '';
+  const idLine = ids.length ? `\nMatched page ids: ${ids.join(', ')}` : '';
+  return `${block.trim()}${pathLine}${idLine}`;
 }
 
 /**
@@ -71,11 +78,12 @@ export async function toolBrainReadPage(args) {
     return 'Error: Brain wiki is disabled in Settings → Memory.';
   }
 
-  const relPath = String(args?.path ?? '').trim().replace(/\\/g, '/');
-  if (!relPath) {
-    return 'Error: path is required (e.g. facts/preference.md).';
+  const lookup = String(args?.path ?? args?.id ?? '').trim();
+  if (!lookup) {
+    return 'Error: path is required (e.g. minnow/architecture.md or a page id from brain_search).';
   }
 
+  const relPath = await resolvePageLookup(lookup);
   const page = await readPage(relPath);
   const tags = (page.meta.tags ?? []).join(', ') || 'none';
   return [

@@ -71,13 +71,16 @@ export function formatMemoryBlock(items, maxChars) {
   const lines = ['## Retrieved memory'];
   for (const { meta, body } of items) {
     const tags = (meta.tags ?? []).join(', ') || 'none';
+    const pagePath =
+      typeof meta.path === 'string' && meta.path.trim() ? meta.path.trim() : '';
     const firstLine = String(body ?? '')
       .split('\n')
       .map((l) => l.trim())
       .find(Boolean) ?? '';
     const preview =
       firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
-    lines.push(`- [${meta.title}] (tags: ${tags})`);
+    const pathPart = pagePath ? ` path: ${pagePath}` : '';
+    lines.push(`- [${meta.title}]${pathPart} (tags: ${tags})`);
     lines.push(`  ${preview}`);
   }
 

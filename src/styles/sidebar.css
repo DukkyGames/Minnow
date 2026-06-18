@@ -489,12 +489,17 @@
   /* Dark hover fill (--mn-surface-elevated) needs light title + action icons; skip active row */
   .chat-item-row:hover:not(.active) .chat-item-title-row,
   .chat-item-row:hover:not(.active) .chat-rename-btn,
+  .chat-item-row:hover:not(.active) .chat-brain-btn,
   .chat-item-row:hover:not(.active) .chat-delete-btn {
     color: var(--mn-fg);
   }
 
   .chat-item-row:hover:not(.active) .chat-rename-btn:hover {
     color: var(--mn-success);
+  }
+
+  .chat-item-row:hover:not(.active) .chat-brain-btn:hover {
+    color: var(--mn-accent);
   }
 
   .chat-item-row:hover:not(.active) .chat-delete-btn:hover {
@@ -523,6 +528,7 @@
 }
 
 .chat-item-row.chat-item-row--in-group .chat-rename-btn,
+.chat-item-row.chat-item-row--in-group .chat-brain-btn,
 .chat-item-row.chat-item-row--in-group .chat-delete-btn {
   width: 24px;
   height: 24px;
@@ -536,6 +542,7 @@
   }
 
   .chat-item-row.chat-item-row--in-group .chat-rename-btn,
+  .chat-item-row.chat-item-row--in-group .chat-brain-btn,
   .chat-item-row.chat-item-row--in-group .chat-delete-btn {
     width: var(--touch-min);
     height: var(--touch-min);
@@ -577,6 +584,7 @@
 }
 
 .chat-rename-btn,
+.chat-brain-btn,
 .chat-delete-btn {
   flex-shrink: 0;
   /* Default: compact hit area on mouse/desktop so glyphs sit closer (was full --touch-min each) */
@@ -597,6 +605,7 @@
 
 @media (pointer: coarse) {
   .chat-rename-btn,
+  .chat-brain-btn,
   .chat-delete-btn {
     width: var(--touch-min);
     height: var(--touch-min);
@@ -607,13 +616,23 @@
   color: var(--mn-fg-muted);
 }
 
+.chat-brain-btn {
+  color: var(--mn-fg-muted);
+}
+
 .chat-delete-btn {
   color: var(--mn-fg);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .chat-rename-btn:hover { color: var(--mn-success); }
+  .chat-brain-btn:hover { color: var(--mn-accent); }
   .chat-delete-btn:hover { color: var(--mn-danger); }
+}
+
+.chat-brain-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .chat-item-model {

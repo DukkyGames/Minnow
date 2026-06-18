@@ -15,6 +15,8 @@ import {
   getBrainSchemaPath,
   getBrainStatePath,
   getCatalogPath,
+  assertSafeRelativePagePath,
+  BrainPathError,
   isValidPageId,
   resolvePagePath,
 } from './paths.js';
@@ -437,6 +439,60 @@ export async function getPageTree() {
     }
   }
   return tree;
+}
+
+/**
+ * Resolve a page lookup key (full path, basename, or page id) to a pages-relative path.
+ * @param {string} key
+ * @returns {Promise<string>}
+ */
+export async function resolvePageLookup(key) {
+  const input = String(key ?? '').trim().replace(/\\/g, '/');
+  if (!input) {
+    throw new Error('Page path is required');
+  }
+
+  if (isValidPageId(input)) {
+    const pages = await listPages();
+    const byId = pages.find((p) => p.id === input);
+    if (byId) return byId.path;
+    throw new Error(`No wiki page found with id ${input}`);
+  }
+
+  try {
+    assertSafeRelativePagePath(input);
+    const abs = await resolvePagePath(input);
+    await fs.access(abs);
+    return input;
+  } catch (err) {
+    if (err instanceof BrainPathError) throw err;
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    if (code !== 'ENOENT') throw err;
+  }
+
+  const pages = await listPages();
+  const basename = path.posix.basename(input);
+  const candidates = pages.filter((page) => {
+    const pagePath = page.path.replace(/\\/g, '/');
+    if (pagePath === input) return true;
+    if (path.posix.basename(pagePath) === basename) return true;
+    if (input.endsWith('.md') && pagePath.endsWith(`/${input}`)) return true;
+    if (!input.includes('/') && pagePath.endsWith(`/${input}.md`)) return true;
+    if (!input.includes('/') && path.posix.basename(pagePath, '.md') === input) return true;
+    return false;
+  });
+
+  if (candidates.length === 1) return candidates[0].path;
+  if (candidates.length > 1) {
+    const options = candidates.map((page) => page.path).join(', ');
+    throw new Error(
+      `Ambiguous page lookup "${input}". Use the full path from brain_search: ${options}`,
+    );
+  }
+
+  throw new Error(
+    `No wiki page found at "${input}". Use brain_search or brain_list to find the correct path.`,
+  );
 }
 
 /** Read one page by relative path. */

@@ -1450,11 +1450,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     serverRequired: true,
     definition: toolSchema(
       'brain_read_page',
-      'Read one wiki page from ~/.minnow/brain/pages by relative path (e.g. facts/preference.md, edgeflight/overview.md).',
+      'Read one wiki page from ~/.minnow/brain/pages. Use the full relative path from brain_search (e.g. minnow/architecture.md, facts/api-preference.md) or a matched page id.',
       {
         path: {
           type: 'string',
-          description: 'Relative path under pages/ (e.g. facts/api-preference.md)',
+          description:
+            'Relative path under pages/ from brain_search (e.g. minnow/architecture.md) or a page id',
         },
       },
       ['path'],

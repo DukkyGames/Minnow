@@ -289,6 +289,11 @@ async function showResultForId(researchId: string): Promise<void> {
           void startResearchRun({ continueFrom: researchId });
         },
         onViewLibrary: () => setPanelTab('library'),
+        onAddToBrain: () => {
+          void import('../ui/chat-brain-capture').then((m) =>
+            m.runResearchBrainCapture(researchId),
+          );
+        },
       },
       { savedToLibrary: true },
     );
