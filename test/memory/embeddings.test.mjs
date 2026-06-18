@@ -30,6 +30,16 @@ describe('embeddings', () => {
     assert.equal(value, 'ok');
   });
 
+  test('configureTransformersCache points env.cacheDir at ~/.minnow/models/embeddings', async () => {
+    const { configureTransformersCache, getEmbeddingsModelDir } = await import(
+      '../../server/engine/embeddings.js'
+    );
+    const cacheDir = await configureTransformersCache();
+    assert.equal(cacheDir, getEmbeddingsModelDir());
+    const { env } = await import('@xenova/transformers');
+    assert.equal(env.cacheDir, cacheDir);
+  });
+
   test('provider embedder uses OpenAI-compatible response shape', async () => {
     mock.method(globalThis, 'fetch', async (_url, init) => {
       const body = JSON.parse(String(init?.body ?? '{}'));

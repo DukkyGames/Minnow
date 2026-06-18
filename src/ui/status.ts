@@ -27,11 +27,18 @@ export function parseServerBaseUrl(raw: string): string | null {
 /** Topbar pill states — operational feedback only, not model inventory. */
 export type StatusState = 'idle' | 'ok' | 'err' | 'spin';
 
-/** Update the topbar status pill (connection, streaming, workspace — not model counts). */
-export function setStatus(state: StatusState | string, msg: string): void {
-  const dot = document.getElementById('sDot');
-  const text = document.getElementById('sText');
-  if (!dot || !text) return;
+/** Legacy topbar and MinnowOS menubar status targets (same pill semantics). */
+const STATUS_PILL_TARGETS: ReadonlyArray<{ dotId: string; textId: string }> = [
+  { dotId: 'sDot', textId: 'sText' },
+  { dotId: 'osStatusDot', textId: 'osStatusText' },
+];
+
+function applyStatusPill(
+  dot: HTMLElement,
+  text: HTMLElement,
+  state: StatusState | string,
+  msg: string,
+): void {
   dot.className = `s-dot ${state}`;
   text.textContent = msg;
   const trimmed = msg.trim();
@@ -39,6 +46,16 @@ export function setStatus(state: StatusState | string, msg: string): void {
     text.setAttribute('title', trimmed);
   } else {
     text.removeAttribute('title');
+  }
+}
+
+/** Update status pills in the legacy topbar and OS menubar (connection, streaming, workspace). */
+export function setStatus(state: StatusState | string, msg: string): void {
+  for (const { dotId, textId } of STATUS_PILL_TARGETS) {
+    const dot = document.getElementById(dotId);
+    const text = document.getElementById(textId);
+    if (!dot || !text) continue;
+    applyStatusPill(dot, text, state, msg);
   }
 }
 

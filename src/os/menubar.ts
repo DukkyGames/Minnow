@@ -144,6 +144,28 @@ export function renderMenubar(root: HTMLElement): () => void {
   modelChip.append(chipDot, chipText);
   const cleanupModelChip = initOsModelChipMenu(modelChip, chipDot, chipText);
 
+  const statusPill = document.createElement('div');
+  statusPill.className = 'mn-os-mb-status status-pill';
+  statusPill.setAttribute('role', 'status');
+  statusPill.setAttribute('aria-live', 'polite');
+  const statusDot = document.createElement('div');
+  statusDot.className = 's-dot';
+  statusDot.id = 'osStatusDot';
+  statusDot.setAttribute('aria-hidden', 'true');
+  const statusText = document.createElement('span');
+  statusText.id = 'osStatusText';
+  statusText.textContent = 'Loading models…';
+  statusPill.append(statusDot, statusText);
+  // Mirror legacy topbar pill when menubar mounts after early boot status updates.
+  const legacyDot = document.getElementById('sDot');
+  const legacyText = document.getElementById('sText');
+  if (legacyDot && legacyText) {
+    statusDot.className = legacyDot.className;
+    statusText.textContent = legacyText.textContent?.trim() || 'Loading models…';
+    const title = legacyText.getAttribute('title');
+    if (title) statusText.setAttribute('title', title);
+  }
+
   const schedulerBtn = document.createElement('button');
   schedulerBtn.type = 'button';
   schedulerBtn.className = 'mn-os-mb-icon mn-os-mb-scheduler';
@@ -174,7 +196,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChip, statusPill, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, center, right);
 
   function syncMenubar(): void {

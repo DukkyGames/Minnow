@@ -192,10 +192,27 @@ describe('memory API', () => {
     assert.match(res.json.error, /disabled/i);
   });
 
-  test('embeddings warmup rejects when disabled', async () => {
+  test('embeddings warmup rejects provider backend when disabled', async () => {
+    await httpRequest(baseUrl, 'PUT', '/api/memory/embeddings/config', {
+      enabled: false,
+      backend: 'provider',
+      modelId: 'text-embedding-3-small',
+      providerId: 'openai',
+    });
     const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/warmup');
     assert.equal(res.status, 400);
-    assert.match(res.json.error, /disabled/i);
+    assert.match(res.json.error, /enable semantic embeddings/i);
+  });
+
+  test('embeddings warmup rejects local backend without model id', async () => {
+    await httpRequest(baseUrl, 'PUT', '/api/memory/embeddings/config', {
+      enabled: false,
+      backend: 'local',
+      modelId: '',
+    });
+    const res = await httpRequest(baseUrl, 'POST', '/api/memory/embeddings/warmup');
+    assert.equal(res.status, 400);
+    assert.match(res.json.error, /model id is required/i);
   });
 
   test('embeddings config can be updated', async () => {

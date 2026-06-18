@@ -31,14 +31,32 @@ export function getEmbeddingsModelDir() {
   return path.join(getMinnowHome(), 'models', 'embeddings');
 }
 
+/** Minimum warmup timeout — first model download can take several minutes. */
+export const EMBEDDINGS_WARMUP_TIMEOUT_MS = 300_000;
+
 /**
  * Apply Windows-friendly Hugging Face cache settings before model download.
+ * transformers.js reads `env.cacheDir`; TRANSFORMERS_CACHE alone is not enough.
+ * @returns {string} Resolved cache directory under ~/.minnow/models/embeddings/
  */
 export function applyEmbeddingsEnv() {
-  process.env.TRANSFORMERS_CACHE = getEmbeddingsModelDir();
+  const cacheDir = getEmbeddingsModelDir();
+  process.env.TRANSFORMERS_CACHE = cacheDir;
   if (process.platform === 'win32') {
     process.env.HF_HUB_DISABLE_SYMLINKS = '1';
   }
+  return cacheDir;
+}
+
+/**
+ * Configure @xenova/transformers to cache models under ~/.minnow/models/embeddings/.
+ */
+export async function configureTransformersCache() {
+  const cacheDir = applyEmbeddingsEnv();
+  const { env } = await import('@xenova/transformers');
+  env.cacheDir = cacheDir;
+  env.useFSCache = true;
+  return cacheDir;
 }
 
 /**
@@ -83,11 +101,11 @@ export async function embedTexts(embedder, texts, timeoutMs) {
  */
 export async function createLocalEmbedder(config = {}) {
   const modelId = String(config.modelId ?? DEFAULT_EMBEDDING_MODEL).trim() || DEFAULT_EMBEDDING_MODEL;
-  applyEmbeddingsEnv();
 
   let pipelinePromise = localPipelineCache.get(modelId);
   if (!pipelinePromise) {
     pipelinePromise = (async () => {
+      await configureTransformersCache();
       const { pipeline } = await import('@xenova/transformers');
       return pipeline('feature-extraction', modelId);
     })();
