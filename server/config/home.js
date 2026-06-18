@@ -244,7 +244,7 @@ const DEFAULT_META = {
     },
   },
   editorAiCompletion: {
-    enabled: false,
+    enabled: true,
     debounceMs: 450,
     maxPrefixLines: 80,
     maxSuffixLines: 40,

@@ -652,8 +652,33 @@ export function switchChat(id: string): void {
   if (sessionState?.activeId) {
     suspendOrchestratePlanScreenOnLeave(sessionState.activeId);
   }
-  if (!sessionState || id === sessionState.activeId) {
-    if (sessionState) acknowledgeChatViewed(id);
+  if (!sessionState) {
+    closeMobileSidebar();
+    applySidebarVisuals();
+    return;
+  }
+
+  const boardWasOpen = Boolean(sessionState.activeBoardGroupId);
+  if (boardWasOpen) {
+    const openGroup = getActiveBoardGroup();
+    if (openGroup) {
+      openGroup.viewMode = 'chat';
+    }
+    delete sessionState.activeBoardGroupId;
+    scheduleSaveSessions();
+  }
+
+  if (id === sessionState.activeId) {
+    acknowledgeChatViewed(id);
+    if (boardWasOpen) {
+      const sameChat = sessionState.chats.find((c) => c.id === id);
+      if (sameChat) {
+        renderChatFromHistory(sameChat);
+        syncViewModeToggleFromActiveChat();
+        renderSidebar();
+        scheduleSaveSessions();
+      }
+    }
     closeMobileSidebar();
     applySidebarVisuals();
     return;
@@ -667,13 +692,6 @@ export function switchChat(id: string): void {
   }
   const chat = sessionState.chats.find((c) => c.id === id);
   if (!chat) return;
-  if (sessionState.activeBoardGroupId) {
-    delete sessionState.activeBoardGroupId;
-    const boardGroup = sessionState.groups?.find(
-      (g) => g.id === chat.boardGroupId || g.id === chat.groupId,
-    );
-    if (boardGroup) boardGroup.viewMode = 'chat';
-  }
   sessionState.activeId = id;
   acknowledgeChatViewed(id);
   syncModelSelectForActiveChat();
@@ -713,6 +731,28 @@ export interface CreateChatWithModeOptions {
   modeId: ModeId;
   orchestratePlanPath?: string;
   initialUserMessage?: string;
+}
+
+/** Start an LLM turn when the user message was already pushed into history. */
+async function kickoffSeededChatTurn(chat: Chat, message: string): Promise<void> {
+  const { detectLocalServer } = await import('../tools/client');
+  const { buildHistoryUserContent, runChatTurn } = await import('../tools/loop');
+  const { isFirstUserMessagePending } = await import('../chat/titles/schedule');
+
+  await detectLocalServer();
+  await runChatTurn({
+    chat,
+    pushUser: false,
+    rawText: message,
+    userText: message,
+    displayText: message,
+    historyContent: buildHistoryUserContent(message, []),
+    skillId: null,
+    validAttachments: [],
+    titleSeed: message,
+    shouldScheduleTitle: isFirstUserMessagePending(chat),
+    ownsGlobalStreaming: chat.id === getActiveChat().id,
+  });
 }
 
 export interface CreateChatWithModeResult {
@@ -775,6 +815,12 @@ export function createChatWithMode(
   scheduleSaveSessions();
   closeMobileSidebar();
   applySidebarVisuals();
+
+  if (initial) {
+    void kickoffSeededChatTurn(chat, initial).catch(() => {
+      /* runChatTurn surfaces inline errors */
+    });
+  }
 
   return {
     ok: true,

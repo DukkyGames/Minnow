@@ -65,7 +65,13 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     label: 'Orchestrate',
     description: 'Coordinate multi-step work; delegate and structure tasks.',
     promptId: 'orchestrate',
-    toolPolicy: { default: 'allow' },
+    toolPolicy: {
+      default: 'allow',
+      tools: {
+        spawn_sub_agent: 'deny',
+        cancel_sub_agent: 'deny',
+      },
+    },
   },
   {
     id: 'reef',

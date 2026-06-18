@@ -11,6 +11,7 @@ import {
   mergeConfigMeta,
 } from './validators.js';
 import { resolveConfigPath, ALLOWED_CONFIG_FILES } from './paths.js';
+import { handleRunsConfigRequest } from '../runs/middleware.js';
 
 const MAX_MIGRATE_BYTES = 10 * 1024 * 1024;
 
@@ -206,6 +207,10 @@ export async function handleConfigRequest(req, res, pathname) {
         sendJson(res, 200, { ok: true, data: saved });
         return true;
       }
+    }
+
+    if (pathname.startsWith('/api/config/runs')) {
+      return handleRunsConfigRequest(req, res, pathname);
     }
 
     /** Generic file API with whitelist (traversal tests). */

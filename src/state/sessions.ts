@@ -505,12 +505,19 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
       : undefined;
   const completionShownAt =
     typeof r.completionShownAt === 'number' ? r.completionShownAt : undefined;
+  const executionModeRaw =
+    typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
+  const executionMode =
+    executionModeRaw === 'auto' || executionModeRaw === 'manual'
+      ? executionModeRaw
+      : 'manual';
   return {
     planPath,
     tasks,
     waves,
     startedAt,
     lastUpdatedAt,
+    executionMode,
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
     ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),

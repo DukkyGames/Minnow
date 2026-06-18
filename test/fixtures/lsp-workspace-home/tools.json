@@ -46,6 +46,7 @@
     "board_init": false,
     "board_update_task": false,
     "board_get_state": false,
+    "delegate_tasks": false,
     "bug_add": false,
     "bug_update": false,
     "bug_get_state": false,
@@ -75,6 +76,7 @@
     "explain_symbol": true,
     "manage_calendar": false,
     "list_mail": false,
+    "draft_reply": false
   },
   "permissions": {
     "default": {
@@ -124,6 +126,7 @@
       "board_init": "off",
       "board_update_task": "off",
       "board_get_state": "off",
+      "delegate_tasks": "off",
       "bug_add": "off",
       "bug_update": "off",
       "bug_get_state": "off",
@@ -153,6 +156,7 @@
       "explain_symbol": "full",
       "manage_calendar": "off",
       "list_mail": "off",
+      "draft_reply": "off"
     }
   },
   "keys": {

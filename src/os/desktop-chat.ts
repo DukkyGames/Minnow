@@ -29,6 +29,7 @@ import {
   initComposerSteerInputListener,
   syncComposerFromStreamingState,
 } from '../ui/composer-send';
+import { initComposerSlashPicker } from '../ui/skill-picker';
 import { refreshContextUsageRing } from '../ui/context-usage-ring';
 import { renderChatFromHistory } from '../ui/messages';
 import { setStatus } from '../ui/status';
@@ -256,6 +257,7 @@ export function wireDesktopComposerControls(): void {
   input.dataset.desktopComposerBound = '1';
 
   initComposerSteerInputListener(input);
+  initComposerSlashPicker(input);
   input.addEventListener('input', () => {
     autoResizeDesktopComposer(input);
     syncDesktopComposerSendState();

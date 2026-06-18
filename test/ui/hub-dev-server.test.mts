@@ -57,13 +57,13 @@ describe('deriveHubDevServerView', () => {
   test('formatHubDevServerMeta for starting', () => {
     assert.equal(
       formatHubDevServerMeta('starting', null, 5173, 'local'),
-      'starting… :5173 · this PC',
+      'starting… :5173 · this PC · click to stop',
     );
   });
 
-  test('starting disables primary', () => {
-    const view = deriveHubDevServerView(true, 'starting');
-    assert.equal(view.primaryDisabled, true);
+  test('starting enables primary for stop/cancel', () => {
+    const view = deriveHubDevServerView(true, 'starting', null, 'run-1');
+    assert.equal(view.primaryDisabled, false);
     assert.equal(view.showConsole, true);
   });
 

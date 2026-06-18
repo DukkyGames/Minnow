@@ -222,9 +222,22 @@ async function runQuickEditStream(
 
   if (!activeSession) return;
   activeSession.streaming = false;
-  activeSession.proposedText = result ?? activeSession.proposedText;
+  activeSession.proposedText = result.text ?? activeSession.proposedText;
   renderPanel(activeSession, view);
   positionPanel(view, range);
+
+  const errorMessage =
+    result.error ??
+    (!activeSession.proposedText
+      ? 'Quick edit produced no changes — try a different instruction or check your model.'
+      : undefined);
+  if (errorMessage) {
+    const panel = ensurePanel();
+    const err = document.createElement('p');
+    err.className = 'editor-quick-edit-panel__error';
+    err.textContent = errorMessage;
+    panel.appendChild(err);
+  }
 }
 
 /** Open Quick Edit for the current editor selection (Mod-K or context menu). */

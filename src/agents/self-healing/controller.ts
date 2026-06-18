@@ -1,13 +1,9 @@
 /**
- * Self-healing controller — disabled while supervisor auto-recovery is removed.
+ * Self-healing controller — re-exports watchdog (moved to controller/ in MIN-140 Phase 0).
  */
 
-/** No-op: repetition auto-restart removed with supervisor. */
-export function observeSubAgentToolCall(..._args: unknown[]): void {
-  /* disabled */
-}
-
-/** No-op: clears nothing (tests may still call). */
-export function resetSelfHealingState(): void {
-  /* disabled */
-}
+export {
+  observeSubAgentToolCall,
+  resetSelfHealingState,
+  resetWatchdogState,
+} from '../controller/watchdog';

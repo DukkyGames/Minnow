@@ -33,6 +33,31 @@ export function notifyChatStreamEnded(chatId: string): void {
   }
 }
 
+type ChatStreamActivityListener = (chatId: string) => void;
+const streamActivityListeners = new Set<ChatStreamActivityListener>();
+
+/** Register for streaming deltas (prose, reasoning, tools) on any chat. */
+export function subscribeChatStreamActivity(
+  listener: ChatStreamActivityListener,
+): () => void {
+  streamActivityListeners.add(listener);
+  return () => {
+    streamActivityListeners.delete(listener);
+  };
+}
+
+/** Notify subscribers that a chat received stream/progress activity. */
+export function notifyChatStreamActivity(chatId: string): void {
+  if (!chatId) return;
+  for (const fn of streamActivityListeners) {
+    try {
+      fn(chatId);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /**
  * Active chat id when it is streaming; otherwise any single streaming id; else null.
  * Sidebar "foreground" stream hint uses this.

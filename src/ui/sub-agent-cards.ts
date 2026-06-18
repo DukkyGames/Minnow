@@ -7,6 +7,7 @@ import { listActiveSubAgentRuns } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentCompletionPush } from '../agents/sub-agent-completion-push';
+import { initOrchestratorAutoReports } from '../agents/controller/report';
 import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync';
 import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
@@ -186,6 +187,7 @@ export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
 export function initSubAgentUi(): void {
   initSubAgentSessionPersistence();
   initSubAgentCompletionPush();
+  initOrchestratorAutoReports();
   initSubAgentDrawerLiveUpdates();
   if (liveSubscriptionBound) return;
   liveSubscriptionBound = true;

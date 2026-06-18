@@ -6,6 +6,7 @@ import {
   isDesktopResearchActive,
 } from './desktop-state';
 import { handleDesktopSend, wireDesktopComposerControls } from './desktop-chat';
+import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
 import { handleDesktopResearchSubmit } from './research-desktop';
 import { getAppById } from './app-registry';
 import { CONCIERGE_LINES } from './intent-routing';
@@ -229,7 +230,9 @@ export function renderConcierge(
 
   field.addEventListener('input', () => syncUi());
   field.addEventListener('keydown', (e) => {
+    if (handleSkillPickerKeydown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isSkillPickerOpen()) return;
       e.preventDefault();
       void submit();
     }

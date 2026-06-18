@@ -25,7 +25,11 @@ import {
   refreshFileTreeViaBridge,
   renderFileTreeViaBridge,
 } from './file-tree-refresh-bridge';
-import { loadEditorAiCompletionConfig, getEditorAiCompletionConfigSync } from '../config/editor-ai-completion';
+import {
+  EDITOR_AI_CONFIG_CHANGED_EVENT,
+  loadEditorAiCompletionConfig,
+  getEditorAiCompletionConfigSync,
+} from '../config/editor-ai-completion';
 import { EDITOR_AI_NO_MODEL_MESSAGE } from './editor-ai-completion-client';
 import { loadEditorSettings } from '../config/editor-settings';
 import { minnowEditorExtensions } from './codemirror-theme';
@@ -48,6 +52,7 @@ import {
   getActiveViewerTab,
   getActiveViewerTabPath,
   getOpenViewerTabPaths,
+  getViewerTab,
   isAnyViewerTabDirty,
   isViewerTabDirty,
   listViewerTabs,
@@ -57,8 +62,7 @@ import {
   restoreWorkspaceViewerTabs,
   retargetViewerTab,
   setActiveTabLoadState,
-  snapshotActiveTabEditorContent,
-  updateActiveTabFromEditor,
+  snapshotViewerTabEditorContent,
   type OpenViewerTabOptions,
   type ViewerTabState,
 } from './file-viewer-tab-store';
@@ -74,6 +78,10 @@ export const LARGE_FILE_EXCERPT_FOOTER_RE =
   /\n\n\/\* Showing lines 1–\d+ only \(\d+ bytes total\)\. \*\/\s*$/;
 
 let editorView: EditorView | null = null;
+/** Path key for the tab currently bound to `editorView` (may differ from active tab during switches). */
+let editorViewPath: string | null = null;
+/** Monotonic token so stale async `mountEditor` completions are discarded. */
+let mountGeneration = 0;
 let markdownPreviewEl: HTMLElement | null = null;
 let isSaving = false;
 let viewerControlsBound = false;
@@ -172,13 +180,14 @@ async function isLspEnabledForViewer(): Promise<boolean> {
   return cfg?.enabled === true;
 }
 
-/** Persist editor buffer into the active tab before teardown or switch. */
-function snapshotActiveTabFromEditor(): void {
-  const tab = getActiveViewerTab();
-  if (!tab || !editorView || tab.viewMode === 'image') return;
+/** Persist the live editor buffer into the tab that owns `editorView`. */
+function snapshotOutgoingEditorTab(): void {
+  if (!editorView || !editorViewPath) return;
+  const tab = getViewerTab(editorViewPath);
+  if (!tab || tab.viewMode === 'image') return;
   const text = editorView.state.doc.toString();
   const dirty = !tab.readOnlyExcerpt && text !== tab.originalContent;
-  snapshotActiveTabEditorContent(text, dirty);
+  snapshotViewerTabEditorContent(editorViewPath, text, dirty);
 }
 
 function detachEditorAiModelSelectListener(): void {
@@ -204,13 +213,14 @@ function attachEditorAiModelSelectListener(): void {
 }
 
 function destroyEditor(): void {
-  snapshotActiveTabFromEditor();
+  snapshotOutgoingEditorTab();
   closeLspDocument();
   detachEditorAiModelSelectListener();
   if (editorView) {
     editorView.destroy();
     editorView = null;
   }
+  editorViewPath = null;
   markdownPreviewEl = null;
 }
 
@@ -293,6 +303,7 @@ function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
 function mountEditor(tab: ViewerTabState, content: string): void {
   const host = getViewerHost();
   if (!host) return;
+  const generation = ++mountGeneration;
   destroyEditor();
   host.innerHTML = '';
 
@@ -366,10 +377,11 @@ function mountEditor(tab: ViewerTabState, content: string): void {
           if (useLsp) {
             scheduleLspChangeNotify(path, text);
           }
-          if (tab.readOnlyExcerpt) return;
-          const nextDirty = text !== tab.originalContent;
-          if (nextDirty !== tab.isDirty) {
-            updateActiveTabFromEditor(text, nextDirty);
+          const liveTab = getViewerTab(path);
+          if (!liveTab || liveTab.readOnlyExcerpt) return;
+          const nextDirty = text !== liveTab.originalContent;
+          if (nextDirty !== liveTab.isDirty) {
+            snapshotViewerTabEditorContent(path, text, nextDirty);
             updateViewerChrome();
           }
         }),
@@ -393,12 +405,16 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         EditorView.theme({
           '&': { height: '100%', fontSize: `${editorSettings.fontSize}px` },
           '.cm-scroller': { fontFamily: 'var(--font-mono)' },
+          '.cm-content': { caretColor: 'var(--mn-fg)' },
         }),
         ...minnowEditorExtensions(),
         ...langExts,
       ],
     });
+    if (generation !== mountGeneration) return;
+    if (getActiveViewerTabPath() !== path || !editorMount.isConnected) return;
     editorView = new EditorView({ state, parent: editorMount });
+    editorViewPath = path;
 
     if (tab.pendingInitialLineRange && editorView) {
       const { startLine, endLine } = tab.pendingInitialLineRange;
@@ -425,6 +441,8 @@ function mountEditor(tab: ViewerTabState, content: string): void {
         selection: EditorSelection.cursor(anchor),
         scrollIntoView: true,
       });
+      editorView.focus();
+    } else if (getActiveViewerTabPath() === path) {
       editorView.focus();
     }
 
@@ -601,10 +619,10 @@ export function confirmLeaveDirtyActiveTab(): boolean {
 }
 
 async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?: boolean }): Promise<boolean> {
-  snapshotActiveTabFromEditor();
   const ok = activateViewerTab(path, {
     skipUnsavedGuard: options?.skipUnsavedGuard,
     confirmUnsaved: confirmLeaveDirtyActiveTab,
+    beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!ok) return false;
   renderActiveViewerTab();
@@ -733,6 +751,12 @@ export function bindFileViewerControls(): void {
     closeBtn.setAttribute('aria-label', 'Close tab');
     closeBtn.setAttribute('title', 'Close tab');
   }
+
+  window.addEventListener(EDITOR_AI_CONFIG_CHANGED_EVENT, () => {
+    const tab = getActiveViewerTab();
+    if (!tab || tab.viewMode !== 'editor' || tab.loadStatus !== 'ready') return;
+    renderActiveViewerTab();
+  });
 }
 
 /** Right-click on the viewer: selection → chat / quick edit; markdown preview toggles. */
@@ -831,6 +855,7 @@ export function openAttachmentSnapshotInViewer(displayName: string, content: str
     viewMode: shouldUseMarkdownPreview(path) ? 'markdown-preview' : 'editor',
     confirmUnsaved: confirmLeaveDirtyActiveTab,
     skipUnsavedGuard: false,
+    beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!result) return;
 
@@ -848,6 +873,7 @@ export function openWorkspaceImageInViewer(relativePath: string): void {
     readOnlyBannerText: 'Workspace image (read-only preview).',
     content: '',
     confirmUnsaved: confirmLeaveDirtyActiveTab,
+    beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!result) return;
   showViewerSplit();
@@ -868,6 +894,7 @@ export function openImageDataUrlInViewer(displayName: string, dataUrl: string): 
     readOnlyExcerpt: true,
     readOnlyBannerText: 'Chat image attachment (read-only preview).',
     confirmUnsaved: confirmLeaveDirtyActiveTab,
+    beforeActivate: snapshotOutgoingEditorTab,
   });
   if (!result) return;
   showViewerSplit();
@@ -894,6 +921,7 @@ export async function openFileInViewer(
     viewMode,
     confirmUnsaved: options?.skipUnsavedGuard ? undefined : confirmLeaveDirtyActiveTab,
     skipUnsavedGuard: options?.skipUnsavedGuard,
+    beforeActivate: snapshotOutgoingEditorTab,
   });
 
   if (!result) {

@@ -27,8 +27,8 @@ import {
 } from '../config/editor-ai-completion';
 import {
   fetchEditorAiCompletion,
-  preflightEditorAiBinding,
   resolveEditorAiBinding,
+  validateEditorAiBinding,
 } from './editor-ai-completion-client';
 import { nextPartialGhostChunk } from './editor-ai-completion-prompt';
 
@@ -303,9 +303,9 @@ class EditorAiCompletionPlugin {
     try {
       const config = this.resolveConfig();
       const binding = await resolveEditorAiBinding(config);
-      const preflightError = preflightEditorAiBinding(binding);
-      if (preflightError) {
-        this.opts.onStatus?.(preflightError);
+      const validation = validateEditorAiBinding(binding);
+      if (validation.ok === false) {
+        this.opts.onStatus?.(validation.message);
         return;
       }
       const text = await fetchEditorAiCompletion({
@@ -329,6 +329,8 @@ class EditorAiCompletionPlugin {
       this.showGhostAt(pos, text ?? '');
       if (text) {
         this.opts.onStatus?.('AI suggestion ready — Tab to accept, Esc to dismiss');
+      } else if (!controller.signal.aborted) {
+        this.opts.onStatus?.('AI completion failed — check provider and model in Settings');
       }
     } catch {
       this.opts.onStatus?.('AI completion failed — check provider and model in Settings');

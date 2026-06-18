@@ -103,6 +103,78 @@ function normalizeLmStudioModelRow(item) {
   };
 }
 
+/** @type {readonly string[]} */
+const OPENAI_CONTEXT_FIELD_ALIASES = [
+  'context_length',
+  'context_window',
+  'max_context_length',
+  'max_model_len',
+  'max_seq_len',
+];
+
+/** @type {readonly string[]} */
+const OPENAI_NESTED_CONTEXT_FIELD_ALIASES = [
+  'n_ctx',
+  'context_length',
+  'context_window',
+  'max_model_len',
+];
+
+/**
+ * Read the first positive numeric context field from a plain object.
+ * @param {Record<string, unknown> | null | undefined} obj
+ * @param {readonly string[]} fields
+ * @returns {number | undefined}
+ */
+function firstPositiveContextField(obj, fields) {
+  if (!obj || typeof obj !== 'object') {
+    return undefined;
+  }
+  for (const field of fields) {
+    const val = obj[field];
+    if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      return val;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Flatten OpenAI-compatible model rows and preserve upstream context metadata.
+ * @param {unknown} item
+ */
+function normalizeOpenAiModelRow(item) {
+  if (typeof item === 'string') {
+    return { id: item, type: 'llm', state: 'loaded' };
+  }
+  if (!item || typeof item !== 'object' || !('id' in item)) {
+    return { id: String(item), type: 'llm', state: 'loaded' };
+  }
+
+  const src = /** @type {Record<string, unknown>} */ (item);
+  const id = String(src.id);
+  const type = typeof src.type === 'string' ? src.type : 'llm';
+  const state = typeof src.state === 'string' ? src.state : 'loaded';
+
+  let maxContext = firstPositiveContextField(src, OPENAI_CONTEXT_FIELD_ALIASES);
+  if (maxContext === undefined) {
+    const meta =
+      src.meta && typeof src.meta === 'object'
+        ? /** @type {Record<string, unknown>} */ (src.meta)
+        : src.model_extra && typeof src.model_extra === 'object'
+          ? /** @type {Record<string, unknown>} */ (src.model_extra)
+          : null;
+    maxContext = firstPositiveContextField(meta, OPENAI_NESTED_CONTEXT_FIELD_ALIASES);
+  }
+
+  return {
+    id,
+    type,
+    state,
+    ...(maxContext !== undefined ? { max_context_length: maxContext } : {}),
+  };
+}
+
 /**
  * @param {'lm-studio-v0' | 'openai-v1'} apiKind
  * @param {unknown} json
@@ -126,20 +198,7 @@ export function normalizeModelsResponse(apiKind, json) {
     ? /** @type {{ data: unknown[] }} */ (json).data
     : [];
 
-  const data = raw.map((item) => {
-    if (typeof item === 'string') {
-      return { id: item, type: 'llm', state: 'loaded' };
-    }
-    if (item && typeof item === 'object' && 'id' in item) {
-      const row = /** @type {{ id: string, type?: string, state?: string }} */ (item);
-      return {
-        id: row.id,
-        type: row.type || 'llm',
-        state: row.state || 'loaded',
-      };
-    }
-    return { id: String(item), type: 'llm', state: 'loaded' };
-  });
+  const data = raw.map(normalizeOpenAiModelRow);
 
   return { data };
 }

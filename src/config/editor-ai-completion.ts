@@ -29,8 +29,11 @@ export interface EditorAiCompletionConfig {
 
 const STORAGE_KEY = 'minnow.editorAiCompletion';
 
+/** Dispatched on window after editor AI settings are saved (file viewer hot-reload). */
+export const EDITOR_AI_CONFIG_CHANGED_EVENT = 'minnow:editor-ai-config-changed';
+
 export const DEFAULT_EDITOR_AI_COMPLETION: EditorAiCompletionConfig = {
-  enabled: false,
+  enabled: true,
   debounceMs: 450,
   maxPrefixLines: 80,
   maxSuffixLines: 40,
@@ -217,4 +220,7 @@ export async function saveEditorAiCompletionConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ editorAiCompletion: next }),
   });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(EDITOR_AI_CONFIG_CHANGED_EVENT));
+  }
 }

@@ -22,6 +22,7 @@ export const EMIT_ONLY_TOOL_IDS = new Set([
   'board_init',
   'board_update_task',
   'board_get_state',
+  'delegate_tasks',
 ]);
 
 const OVERRIDES: Record<string, ToolFixture> = {
