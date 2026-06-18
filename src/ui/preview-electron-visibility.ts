@@ -103,12 +103,7 @@ export async function syncElectronPreviewHostLayout(): Promise<void> {
   const api = window.minnow?.preview;
   if (!api) return;
 
-  if (!usesElectronPreview() || !isPreviewPaneDomVisible() || isFullscreenOverlayObscuringWorkspace()) {
-    await api.hide();
-    return;
-  }
-
-  if (!previewBodyHasLayout()) {
+  if (!shouldShowElectronPreviewHost()) {
     await api.hide();
     return;
   }

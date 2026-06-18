@@ -260,6 +260,14 @@ const DEFAULT_META = {
     useNativeFim: true,
     enableCompletionCache: true,
   },
+  editorIntentMode: {
+    enabledByDefault: false,
+    autoRecheckDefault: false,
+    debounceMs: 450,
+    contextWindow: 5,
+    recheckDelayMs: 600,
+    maxRecheckPasses: 8,
+  },
   editorSettings: {
     fontSize: 13,
     tabSize: 2,

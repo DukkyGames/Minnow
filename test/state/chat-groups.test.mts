@@ -6,11 +6,13 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import {
   assignChatToGroup,
+  buildSortedWorkspaceSidebarEntries,
   createGroup,
   deleteGroup,
   dismissActiveBoardView,
   findBoardGroupForPlanner,
   getBoardGroupForChat,
+  getGroupActivityAt,
   getGroupsForWorkspace,
   getOrCreateBoardGroup,
   renameGroup,
@@ -19,6 +21,7 @@ import {
 import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   createEmptyChatObject,
+  removeChatById,
   sessionState,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
@@ -81,6 +84,93 @@ describe('chat groups', () => {
     sessionState.activeBoardGroupId = group.id;
     assert.equal(group.viewMode, 'board');
     assert.equal(sessionState.activeBoardGroupId, group.id);
+  });
+
+  test('removeChatById preserves board group when planner chat deleted', () => {
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.modeId = 'orchestrate';
+    planner.orchestratePlanPath = PLAN_PATH;
+    const other = createEmptyChatObject('', WS);
+    other.id = '22222222-2222-2222-2222-222222222222';
+    setSessionStateForTests({
+      version: 5,
+      activeId: planner.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [planner, other],
+    });
+    const group = getOrCreateBoardGroup(planner);
+    initBoard(group, planner, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    const result = removeChatById(planner.id, '');
+    assert.equal(result.ok, true);
+    assert.equal(result.activeChanged, true);
+    assert.equal(result.activeChat.id, other.id);
+    assert.equal(group.plannerChatId, undefined);
+    assert.equal(group.orchestratePlanPath, PLAN_PATH);
+    assert.equal(group.orchestrateBoard?.tasks.length, 1);
+    assert.equal(findBoardGroupForPlanner(planner.id), undefined);
+  });
+
+  test('getGroupActivityAt uses newest member message time', () => {
+    const oldGroup = {
+      id: 'grp_old',
+      name: 'Old board',
+      workspacePath: WS,
+      collapsed: false,
+      order: 0,
+      createdAt: 1000,
+    };
+    const staleMember = createEmptyChatObject('', WS);
+    staleMember.groupId = oldGroup.id;
+    staleMember.lastMessageAt = 2000;
+    staleMember.updatedAt = 2000;
+
+    assert.equal(getGroupActivityAt(oldGroup, [staleMember]), 2000);
+    assert.equal(getGroupActivityAt(oldGroup, []), 1000);
+  });
+
+  test('buildSortedWorkspaceSidebarEntries interleaves by activity', () => {
+    const staleGroup = {
+      id: 'grp_stale',
+      name: 'Stale board',
+      workspacePath: WS,
+      collapsed: false,
+      order: 0,
+      createdAt: 1000,
+    };
+    const midGroup = {
+      id: 'grp_mid',
+      name: 'Mid board',
+      workspacePath: WS,
+      collapsed: false,
+      order: 1,
+      createdAt: 3000,
+    };
+    const staleMember = createEmptyChatObject('', WS);
+    staleMember.groupId = staleGroup.id;
+    staleMember.lastMessageAt = 2000;
+    staleMember.updatedAt = 2000;
+    const midMember = createEmptyChatObject('', WS);
+    midMember.groupId = midGroup.id;
+    midMember.lastMessageAt = 5000;
+    midMember.updatedAt = 5000;
+    const freshChat = createEmptyChatObject('', WS);
+    freshChat.lastMessageAt = 9000;
+    freshChat.updatedAt = 9000;
+
+    const ordered = buildSortedWorkspaceSidebarEntries(
+      [staleGroup, midGroup],
+      [freshChat, midMember, staleMember],
+    );
+    assert.deepEqual(
+      ordered.map((entry) => (entry.kind === 'group' ? entry.group.id : entry.chat.id)),
+      [freshChat.id, midGroup.id, staleGroup.id],
+    );
   });
 
   test('dismissActiveBoardView clears focus and folder viewMode', () => {
