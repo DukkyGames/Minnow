@@ -1398,7 +1398,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 | Concern | Location |
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
-| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
+| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` — **Ctrl/Cmd+C** copies when text is selected; otherwise **Ctrl+C** still sends SIGINT to the PTY ([`terminal-copy-shortcut.ts`](../src/ui/terminal-copy-shortcut.ts)) |
 | Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions) |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
@@ -1412,7 +1412,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 
 **Windows:** Prefer `@lydell/node-pty` (prebuilt). Stock `node-pty` needs VS Build Tools + `node-gyp`.
 
-**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`). Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`); `test/ui/terminal-copy-shortcut.test.mts` (PTY copy vs SIGINT). Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 

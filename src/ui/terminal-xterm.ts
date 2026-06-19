@@ -15,6 +15,10 @@ import {
   type ShellProfile,
 } from '../api/terminal-pty';
 import { getLocalServerAvailable } from '../tools/client';
+import {
+  copyTextToClipboard,
+  shouldCopyTerminalSelectionOnKeydown,
+} from './terminal-copy-shortcut';
 
 const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
 const MAX_TAB_HISTORY = 500;
@@ -192,6 +196,19 @@ function ensureTerminal(): Terminal | null {
   term.loadAddon(new WebLinksAddon());
   applyXtermTheme();
   term.open(hostEl);
+
+  // Copy selected text on Ctrl/Cmd+C; otherwise Ctrl+C still sends SIGINT to the PTY.
+  term.attachCustomKeyEventHandler((event) => {
+    if (!shouldCopyTerminalSelectionOnKeydown(event, term.hasSelection())) {
+      return true;
+    }
+    const selection = term.getSelection();
+    if (selection) {
+      event.preventDefault();
+      void copyTextToClipboard(selection);
+    }
+    return false;
+  });
 
   term.onData((data) => {
     if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
