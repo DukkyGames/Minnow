@@ -11,11 +11,16 @@ import {
   type ToolCategory,
 } from '../tools/definitions';
 import {
+  SETTINGS_CATEGORY_AREAS,
+  SETTINGS_CATEGORY_LABELS,
+  SETTINGS_CATEGORIES,
   SETTINGS_NAV_GROUPS,
   SETTINGS_SECTION_LABELS,
   SETTINGS_SECTIONS,
+  type SettingsCategoryId,
   type SettingsSectionId,
 } from './settings-page-types';
+import { SETTINGS_FIELD_CATALOG } from './settings-catalog';
 import type { SettingsSearchEntry } from './settings-search-types';
 
 const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
@@ -193,13 +198,47 @@ function subAgentEntries(): SettingsSearchEntry[] {
   }));
 }
 
-/** Build the full searchable catalog from registries and section metadata. */
+function categoryEntries(): SettingsSearchEntry[] {
+  return SETTINGS_CATEGORIES.map((categoryId: SettingsCategoryId) => ({
+    id: `category:${categoryId}`,
+    label: SETTINGS_CATEGORY_LABELS[categoryId],
+    sectionId: SETTINGS_CATEGORY_AREAS[categoryId][0]!,
+    kind: 'category' as const,
+    keywords: [
+      categoryId,
+      SETTINGS_CATEGORY_LABELS[categoryId].toLowerCase(),
+      ...SETTINGS_CATEGORY_AREAS[categoryId],
+    ],
+    hint: 'Category',
+  }));
+}
+
+function catalogFieldEntries(): SettingsSearchEntry[] {
+  return SETTINGS_FIELD_CATALOG.map((field) => ({
+    id: `field:${field.key}`,
+    label: field.label,
+    sectionId: field.area,
+    kind: 'field' as const,
+    searchKey: field.key,
+    keywords: [
+      field.key,
+      field.category,
+      ...(field.keywords ?? []),
+      ...(field.description ? [field.description.toLowerCase()] : []),
+    ],
+    hint: SETTINGS_CATEGORY_LABELS[field.category],
+  }));
+}
+
+/** Build the full searchable catalog from registries and field catalog. */
 export function buildSettingsSearchIndex(): SettingsSearchEntry[] {
   const sections = SETTINGS_SECTIONS.map(sectionEntry);
   return [
     ...sections,
+    ...categoryEntries(),
     MODELS_VOICE_SEARCH,
     ...navGroupEntries(),
+    ...catalogFieldEntries(),
     ...toolCategoryEntries(),
     ...toolEntries(),
     ...modeEntries(),

@@ -1,6 +1,28 @@
 /**
- * Settings page section ids and sidebar groups (shared without loading settings-page bundle).
+ * Settings page section ids, categories, and sidebar groups.
  */
+
+import {
+  SETTINGS_CATEGORIES,
+  SETTINGS_CATEGORY_AREAS,
+  SETTINGS_CATEGORY_LABELS,
+  SETTINGS_FIELD_CATALOG,
+  categoryForArea,
+  fieldByKey,
+  fieldsForArea,
+  type SettingsCategoryId,
+} from './settings-catalog';
+
+export type { SettingsCategoryId } from './settings-catalog';
+export {
+  SETTINGS_CATEGORIES,
+  SETTINGS_CATEGORY_AREAS,
+  SETTINGS_CATEGORY_LABELS,
+  SETTINGS_FIELD_CATALOG,
+  categoryForArea,
+  fieldByKey,
+  fieldsForArea,
+};
 
 export type SettingsSectionId =
   | 'general'

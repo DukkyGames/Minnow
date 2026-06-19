@@ -9,7 +9,7 @@ import { resetOsRouterForTests } from '../../src/os/router.ts';
 import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import { executeBrowserTool } from '../../src/tools/browser-executor.ts';
 import { toolLaunchMinnowApp } from '../../src/tools/os-launch-tool.ts';
-import type { AppId } from '../../src/os/types.ts';
+import type { AppId, LaunchOptions } from '../../src/os/types.ts';
 
 describe('launch_minnow_app', () => {
   test('executor returns ok JSON and calls launchApp with app_id and seed', () => {
@@ -55,6 +55,28 @@ describe('launch_minnow_app', () => {
   test('requires app_id', () => {
     const result = toolLaunchMinnowApp({}, () => {});
     assert.equal(result, 'Error: "app_id" is required');
+  });
+
+  test('settings_query resolves memory field for settings app', () => {
+    const calls: Array<{ appId: AppId; options?: LaunchOptions }> = [];
+    const launchApp = (appId: AppId, options?: LaunchOptions) => {
+      calls.push({ appId, options });
+    };
+
+    const raw = toolLaunchMinnowApp(
+      { app_id: 'settings', settings_query: 'memory enabled' },
+      launchApp,
+    );
+    const parsed = JSON.parse(raw) as {
+      ok: boolean;
+      settingsSearchKey?: string;
+    };
+
+    assert.equal(parsed.ok, true);
+    assert.ok(parsed.settingsSearchKey);
+    assert.equal(calls[0]?.appId, 'settings');
+    assert.ok(calls[0]?.options?.settingsSearchKey);
+    assert.equal(calls[0]?.options?.settingsSection, 'memory');
   });
 });
 

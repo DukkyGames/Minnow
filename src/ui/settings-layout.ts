@@ -2,6 +2,39 @@
  * Shared settings page layout helpers (grouped panels, cross-links).
  */
 
+export type SettingsFieldOptions = {
+  key: string;
+  label: string;
+  description?: string;
+  control: HTMLElement;
+};
+
+/** Single labeled control row with a searchable anchor. */
+export function createSettingsField(opts: SettingsFieldOptions): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'settings-field';
+  row.dataset.settingsSearchKey = opts.key;
+
+  const label = document.createElement('label');
+  label.className = 'settings-field__label';
+  label.textContent = opts.label;
+
+  const controlWrap = document.createElement('div');
+  controlWrap.className = 'settings-field__control';
+  controlWrap.appendChild(opts.control);
+
+  row.append(label, controlWrap);
+
+  if (opts.description) {
+    const hint = document.createElement('p');
+    hint.className = 'settings-field__hint field-hint';
+    hint.textContent = opts.description;
+    row.appendChild(hint);
+  }
+
+  return row;
+}
+
 /** Wrap related controls in a titled panel for scanability. */
 export function appendSettingsGroup(
   mount: HTMLElement,

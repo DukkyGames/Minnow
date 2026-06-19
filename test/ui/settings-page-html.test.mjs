@@ -34,6 +34,7 @@ const SETTINGS_SECTION_IDS = [
   'editor',
   'skills',
   'webhooks',
+  'oauth',
   'features',
   'evals',
 ];
@@ -126,8 +127,16 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsPromptTokenEstimate"/);
   });
 
+  test('settings category nav buttons exist', () => {
+    assert.match(html, /data-settings-category="general"/);
+    assert.match(html, /data-settings-category="models"/);
+    assert.match(html, /data-settings-category="integrations"/);
+    assert.match(html, /class="settings-category-subnav"/);
+    assert.match(html, /data-category="knowledge"/);
+  });
+
   test('SETTINGS_SECTION_IDS matches canonical section count', () => {
-    assert.equal(SETTINGS_SECTION_IDS.length, 27);
+    assert.equal(SETTINGS_SECTION_IDS.length, 28);
   });
 
   test('prompts hub mount exists in index.html', () => {
@@ -140,7 +149,7 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsRulesEnabled"/);
     assert.match(html, /id="settingsRulesText"/);
     assert.match(html, /id="settingsRulesSave"/);
-    assert.match(html, /data-settings-nav="rules"/);
+    assert.match(html, /data-settings-search-key="knowledge\.rules\.enabled"/);
   });
 
   test('audio settings panel exists in index.html', () => {
@@ -148,7 +157,7 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsAudioPanel"/);
     assert.match(html, /id="settingsAudioInputDevice"/);
     assert.match(html, /id="settingsAudioOutputDevice"/);
-    assert.match(html, /data-settings-nav="audio"/);
+    assert.match(html, /data-area="audio"/);
   });
 
   test('voice settings redirect notice in index.html', () => {

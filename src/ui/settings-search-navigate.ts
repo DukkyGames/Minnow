@@ -2,9 +2,14 @@
  * Navigate to a settings search result and scroll to the best DOM target.
  */
 
+import {
+  categoryForArea,
+  SETTINGS_CATEGORY_AREAS,
+  type SettingsCategoryId,
+  type SettingsSectionId,
+} from './settings-page-types';
 import { refreshSettingsSection } from './settings-sections';
 import { openSettings } from './settings-page';
-import type { SettingsSectionId } from './settings-page-types';
 import type { SettingsSearchEntry } from './settings-search-types';
 
 const TARGET_FLASH_CLASS = 'settings-search-target-flash';
@@ -14,11 +19,55 @@ function getSectionRoot(sectionId: SettingsSectionId): HTMLElement | null {
   return document.getElementById(`settingsSection-${sectionId}`);
 }
 
+function getCategoryPanel(category: SettingsCategoryId): HTMLElement | null {
+  return document.querySelector(
+    `.settings-category[data-category="${category}"]`,
+  );
+}
+
+/** Ensure the area's category panel is visible and expand collapsed groups. */
+export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
+  const category = categoryForArea(sectionId);
+  const panel = getCategoryPanel(category);
+  if (!panel?.classList.contains('is-active')) {
+    document.querySelectorAll('.settings-category').forEach((node) => {
+      node.classList.toggle(
+        'is-active',
+        node === panel,
+      );
+    });
+    document.querySelectorAll('[data-settings-category]').forEach((btn) => {
+      btn.setAttribute(
+        'aria-current',
+        (btn as HTMLElement).dataset.settingsCategory === category
+          ? 'page'
+          : 'false',
+      );
+    });
+  }
+
+  const sectionRoot = getSectionRoot(sectionId);
+  if (!sectionRoot) return;
+
+  sectionRoot.querySelectorAll('details:not([open])').forEach((details) => {
+    const keyed = details.querySelector('[data-settings-search-key]');
+    if (keyed) details.setAttribute('open', '');
+  });
+}
+
+/** Scroll to an area anchor within the stacked category panel. */
+export function scrollToSettingsArea(sectionId: SettingsSectionId): void {
+  ensureSettingsAreaVisible(sectionId);
+  const root = getSectionRoot(sectionId);
+  root?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
 /** Resolve scroll target: search key, then first group, then section root. */
 export function resolveSettingsSearchDomTarget(
   sectionId: SettingsSectionId,
   searchKey?: string,
 ): HTMLElement | null {
+  ensureSettingsAreaVisible(sectionId);
   const sectionRoot = getSectionRoot(sectionId);
   if (!sectionRoot) return null;
 
@@ -54,8 +103,12 @@ export async function navigateToSettingsSearchEntry(
     return;
   }
 
-  openSettings(entry.sectionId);
-  await refreshSettingsSection(entry.sectionId);
+  const category = categoryForArea(entry.sectionId);
+  openSettings(entry.sectionId, { searchKey: entry.searchKey });
+
+  const areas = SETTINGS_CATEGORY_AREAS[category];
+  await Promise.all(areas.map((area) => refreshSettingsSection(area)));
+
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => resolve());

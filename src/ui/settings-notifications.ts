@@ -29,8 +29,10 @@ function appendToggleRow(
   hint: string,
   checked: boolean,
   onChange: (next: boolean) => void,
+  searchKey?: string,
 ): void {
   const row = el('label', 'settings-toggle-row');
+  if (searchKey) row.dataset.settingsSearchKey = searchKey;
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = checked;
@@ -54,6 +56,7 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     'Show background chat, task, and job alerts in the menubar bell.',
     prefs.enabled,
     (next) => saveNotificationPref('enabled', next),
+    'general.notifications.enabled',
   );
 
   appendToggleRow(
@@ -62,6 +65,7 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     'Turn complete, errors, and tool failures when another chat or app is open.',
     prefs.chatEnabled,
     (next) => saveNotificationPref('chatEnabled', next),
+    'general.notifications.chat',
   );
 
   appendToggleRow(
@@ -70,6 +74,7 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     'Orchestrate board tasks and sub-agent lifecycle events.',
     prefs.tasksEnabled,
     (next) => saveNotificationPref('tasksEnabled', next),
+    'general.notifications.tasks',
   );
 
   appendToggleRow(
@@ -78,9 +83,11 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     'Scheduler reminders, research completion, and auto-learning proposals.',
     prefs.backgroundEnabled,
     (next) => saveNotificationPref('backgroundEnabled', next),
+    'general.notifications.background',
   );
 
   const soundGroup = el('div', 'settings-field');
+  soundGroup.dataset.settingsSearchKey = 'general.notifications.sound';
   soundGroup.appendChild(el('span', 'settings-field__label', 'Notification sound'));
 
   appendToggleRow(

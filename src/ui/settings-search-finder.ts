@@ -10,6 +10,7 @@ import type { SettingsSearchEntry } from './settings-search-types';
 let cachedIndex: SettingsSearchEntry[] | null = null;
 let activeResults: SettingsSearchEntry[] = [];
 let highlightedIndex = -1;
+let finderOptions: { onQueryChange?: (query: string) => void } = {};
 
 function getIndex(): SettingsSearchEntry[] {
   cachedIndex = buildSettingsSearchIndex();
@@ -123,6 +124,7 @@ function onInputChange(): void {
   const input = getInput();
   if (!input) return;
   const query = input.value;
+  finderOptions.onQueryChange?.(query);
   if (!query.trim()) {
     closeResults();
     return;
@@ -152,7 +154,10 @@ function focusFinderInput(): void {
 }
 
 /** Wire finder input, results list, and settings-scoped keyboard shortcuts. */
-export function initSettingsSearchFinder(): void {
+export function initSettingsSearchFinder(options?: {
+  onQueryChange?: (query: string) => void;
+}): void {
+  finderOptions = options ?? {};
   const input = getInput();
   const list = getResultsList();
   if (!input || !list) return;

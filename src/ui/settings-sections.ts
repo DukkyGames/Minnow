@@ -204,6 +204,7 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
     {
       checked: getToolCallsMetaSync().useConstrainedDecoding,
       ariaLabel: 'Constrained tool calls global default',
+      searchKey: 'general.toolCalls.constrained',
     },
   );
   mount.appendChild(constrainedRow);
@@ -248,6 +249,7 @@ async function renderGeneralSection(): Promise<void> {
     mount,
     'Chat & terminal',
     'How the main thread and background shells behave.',
+    'general.chat.terminal',
   );
   await appendTerminalControls(chat);
 
@@ -255,6 +257,7 @@ async function renderGeneralSection(): Promise<void> {
     mount,
     'Notifications',
     'Menubar bell alerts for background chats, tasks, and scheduled jobs.',
+    'general.notifications',
   );
   renderNotificationsSettingsSection(notifications);
 
@@ -734,6 +737,7 @@ async function renderModesSection(): Promise<void> {
       id: mode.id,
       label: mode.label,
       hint: `${mode.description} · Tool policy: ${mode.toolPolicy.default}`,
+      searchKey: `modes.${mode.id}`,
     })),
     (id, body) => {
       if (id === 'plan') {
@@ -770,6 +774,7 @@ async function renderExpertsSection(): Promise<void> {
   const list = el('ul', 'settings-entity-list');
   for (const expert of listExperts()) {
     const item = el('li', 'settings-entity-list__item settings-entity-list__item--flat');
+    item.dataset.settingsSearchKey = `experts.${expert.meta.id}`;
     item.textContent = `${expert.meta.label}${expert.meta.description ? ` — ${expert.meta.description}` : ''}`;
     list.appendChild(item);
   }
@@ -859,6 +864,7 @@ async function renderWorkAgentsSection(): Promise<void> {
       hint: agent.defaultForModes?.length
         ? `Default for modes: ${agent.defaultForModes.join(', ')}`
         : agent.description,
+      searchKey: `work-agents.${agent.id}`,
     })),
     (id, body) => {
       const agent = agents.find((a) => a.id === id);
@@ -990,6 +996,7 @@ async function renderSubAgentsSection(): Promise<void> {
       id,
       label: type.label ?? id.replace(/([A-Z])/g, ' $1').trim(),
       hint: `Max concurrent ${type.maxConcurrent} · model ${type.modelId || '(chat default)'}`,
+      searchKey: `sub-agents.${id}`,
     })),
     (id, body) => {
       const type = config.types[id];
