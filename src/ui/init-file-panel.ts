@@ -139,7 +139,6 @@ export async function initFilePanel(): Promise<void> {
   if (getLocalServerAvailable()) {
     void initFileTreeIfNeeded();
   }
-  applyFileSidebarVisuals();
 
   const { initPreviewPanel } = await import('./preview-panel');
   initPreviewPanel();
@@ -149,8 +148,18 @@ export async function initFilePanel(): Promise<void> {
     // Restored by initPreviewPanel from persisted previewSource.
   } else if (state.openViewerTabs.length > 0) {
     await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-  } else if (state.viewerOpen && state.selectedPath) {
+  } else if (state.viewerOpen && state.selectedPath && state.rightPaneMode !== 'preview') {
     await openFileInViewer(state.selectedPath);
+  }
+
+  applyFileSidebarVisuals();
+
+  if (state.rightPaneMode === 'preview') {
+    const { getForegroundAppId, getOsView } = await import('../os/instances');
+    if (getOsView() === 'app' && getForegroundAppId() === 'code') {
+      const { resyncOpenPreviewPanelFromState } = await import('./preview-panel');
+      resyncOpenPreviewPanelFromState();
+    }
   }
 
   bindSplitResizer();

@@ -4,6 +4,7 @@
 
 import {
   MAX_OPEN_VIEWER_TABS,
+  getFilePanelState,
   patchFilePanelState,
 } from '../state/file-panel';
 import { basename, isAncestorPath, normalizeTreePath } from './file-tree-path';
@@ -124,12 +125,17 @@ function persistWorkspaceTabs(): void {
   const workspacePaths = tabOrder.filter((p) => !isAttachmentViewerPath(p));
   const active =
     activeTabPath && !isAttachmentViewerPath(activeTabPath) ? activeTabPath : null;
-  patchFilePanelState({
+  const panel = getFilePanelState();
+  const patch: Parameters<typeof patchFilePanelState>[0] = {
     openViewerTabs: workspacePaths,
     activeViewerTab: active,
     selectedPath: activeTabPath,
-    rightPaneMode: tabOrder.length > 0 ? 'viewer' : undefined,
-  });
+  };
+  // Never stomp browser preview mode when editor tabs persist asynchronously.
+  if (panel.rightPaneMode !== 'preview') {
+    patch.rightPaneMode = tabOrder.length > 0 ? 'viewer' : undefined;
+  }
+  patchFilePanelState(patch);
 }
 
 function setActiveInternal(path: string | null): void {

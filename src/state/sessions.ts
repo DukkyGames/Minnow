@@ -436,10 +436,32 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
       : undefined;
   const chatId =
     typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
+  const testChatId =
+    typeof r.testChatId === 'string' && r.testChatId.trim() ? r.testChatId.trim() : undefined;
   const buildSpec =
     typeof r.buildSpec === 'string' && r.buildSpec.trim() ? r.buildSpec.trim() : undefined;
   const testSpec =
     typeof r.testSpec === 'string' && r.testSpec.trim() ? r.testSpec.trim() : undefined;
+  const dependsOn: string[] = [];
+  if (Array.isArray(r.dependsOn)) {
+    for (const item of r.dependsOn) {
+      if (typeof item === 'string' && item.trim()) dependsOn.push(item.trim());
+    }
+  }
+  const testAttempts =
+    typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)
+      ? r.testAttempts
+      : undefined;
+  const testVerdict =
+    r.testVerdict === 'pass' || r.testVerdict === 'fail' ? r.testVerdict : undefined;
+  const testSummary =
+    typeof r.testSummary === 'string' && r.testSummary.trim()
+      ? r.testSummary.trim()
+      : undefined;
+  const pendingBuildSeed =
+    typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()
+      ? r.pendingBuildSeed.trim()
+      : undefined;
   return {
     id,
     title,
@@ -455,8 +477,14 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(typeof r.notes === 'string' ? { notes: r.notes } : {}),
     ...(typeof r.error === 'string' ? { error: r.error } : {}),
     ...(chatId ? { chatId } : {}),
+    ...(testChatId ? { testChatId } : {}),
     ...(buildSpec ? { buildSpec } : {}),
     ...(testSpec ? { testSpec } : {}),
+    ...(dependsOn.length ? { dependsOn } : {}),
+    ...(testAttempts !== undefined ? { testAttempts } : {}),
+    ...(testVerdict ? { testVerdict } : {}),
+    ...(testSummary ? { testSummary } : {}),
+    ...(pendingBuildSeed ? { pendingBuildSeed } : {}),
   };
 }
 

@@ -103,6 +103,15 @@ function syncDesktopLayerSuppression(): void {
 export function osOnAppOpen(appId: AppId): void {
   if (!isOsShellEnabled()) return;
   document.documentElement.dataset.osApp = appId;
+  if (appId === 'code') {
+    void import('../ui/file-layout').then((m) => {
+      m.reconcileRightSplitDomWithState();
+      m.applyFileSidebarVisuals();
+    });
+    void import('../ui/preview-panel').then((m) => {
+      m.resyncOpenPreviewPanelFromState();
+    });
+  }
   syncLegacyChromeVisibility();
 }
 
