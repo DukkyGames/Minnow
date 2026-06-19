@@ -809,8 +809,60 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
 
 /** Restore preview chrome without loading the guest until the app shell is idle. */
 function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
-  if (!dismissFileViewerForPreview()) return;
+  if (!dismissFileViewerForPreview()) {
+    patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
+    return;
+  }
   showPreviewSplit();
+  applyPersistedPreviewGuest(source, { deferLoad: true });
+}
+
+/**
+ * Re-attach the Electron guest (or iframe) after the preview pane is visible again.
+ * Call on Code foreground and when split DOM is reconciled without a full restore.
+ */
+export function resyncOpenPreviewPanelFromState(options?: { reload?: boolean }): void {
+  const state = getFilePanelState();
+  if (state.rightPaneMode !== 'preview') return;
+  if (!isPreviewPaneDomVisible()) return;
+
+  syncPreviewChromeFromState();
+
+  if (usesElectronPreview()) {
+    void showPreviewHost();
+  }
+
+  const source = state.previewSource;
+  if (!source) {
+    if (!usesElectronPreview()) {
+      clearPreviewFrame();
+    }
+    return;
+  }
+
+  if (options?.reload) {
+    loadPreviewSource(source);
+    if (usesElectronPreview()) {
+      scheduleElectronPreviewHostVisibilitySync();
+    }
+    return;
+  }
+
+  // Iframe fallback: restore src when the panel was shown without a guest load.
+  if (!usesElectronPreview()) {
+    const frame = getFrame();
+    const href = frame?.src?.trim() ?? '';
+    if (!href || href === 'about:blank') {
+      loadPreviewSource(source);
+    }
+  }
+}
+
+/** Show preview chrome and load persisted source (optional deferred guest fetch). */
+function applyPersistedPreviewGuest(
+  source: PreviewSource | null,
+  options?: { deferLoad?: boolean },
+): void {
   if (usesElectronPreview()) {
     void showPreviewHost();
   }
@@ -819,7 +871,17 @@ function restorePreviewPanelFromPrefs(source: PreviewSource | null): void {
   if (source && input) {
     input.value = sourceToAddressBar(source);
   }
-  scheduleDeferredPreviewLoad(source);
+  if (options?.deferLoad) {
+    scheduleDeferredPreviewLoad(source);
+    return;
+  }
+  if (source) {
+    loadPreviewSource(source);
+  } else if (!usesElectronPreview()) {
+    clearPreviewFrame();
+  } else {
+    void clearPreviewGuest();
+  }
 }
 
 /** Wire preview UI after file panel boot. */

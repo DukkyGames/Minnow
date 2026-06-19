@@ -3,6 +3,7 @@ import { beforeEach, describe, test } from 'node:test';
 import {
   DEFAULT_FILE_PANEL_STATE,
   getFilePanelState,
+  normalizeFilePanelBlockForTests,
   patchFilePanelState,
   resetFilePanelStateForTests,
   setFilePanelState,
@@ -71,5 +72,29 @@ describe('file panel preview state', () => {
     const state = getFilePanelState();
     assert.deepEqual(state.openViewerTabs, ['one.ts', 'two.ts']);
     assert.notEqual(state.openViewerTabs, before);
+  });
+
+  test('preview mode load ignores openViewerTabs and selectedPath migration', () => {
+    const state = normalizeFilePanelBlockForTests({
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'https://example.com' },
+      selectedPath: 'src/index.ts',
+      openViewerTabs: ['src/other.ts'],
+      activeViewerTab: 'src/other.ts',
+    });
+    assert.equal(state.rightPaneMode, 'preview');
+    assert.deepEqual(state.openViewerTabs, []);
+    assert.equal(state.activeViewerTab, null);
+    assert.equal(state.previewSource?.kind, 'url');
+  });
+
+  test('legacy viewerOpen with previewSource migrates to preview mode', () => {
+    const state = normalizeFilePanelBlockForTests({
+      viewerOpen: true,
+      previewSource: { kind: 'url', url: 'https://example.com' },
+    });
+    assert.equal(state.rightPaneMode, 'preview');
+    assert.equal(state.viewerOpen, true);
   });
 });

@@ -6,8 +6,10 @@ import { ICON_CHEVRON_RIGHT, ICON_FILE_TREE } from '../constants';
 import {
   getFilePanelState,
   patchFilePanelState,
+  type RightPaneMode,
 } from '../state/file-panel';
 import { syncStatsStripLayoutForViewer } from './stats';
+import { clearAllViewerTabs } from './file-viewer-tab-store';
 
 export function isMobileLayout(): boolean {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -36,9 +38,44 @@ export function openMobileFileSidebar(): void {
   }
 }
 
-function isRightSplitOpen(): boolean {
+function resolvedRightPaneMode(): RightPaneMode {
   const state = getFilePanelState();
-  return state.rightPaneMode !== null || state.viewerOpen;
+  if (state.rightPaneMode === 'preview' || state.rightPaneMode === 'viewer') {
+    return state.rightPaneMode;
+  }
+  return state.viewerOpen ? 'viewer' : null;
+}
+
+/** True when the preview or viewer pane is actually visible (not only persisted as open). */
+function isRightPaneDomVisible(mode: Exclude<RightPaneMode, null>): boolean {
+  const paneId = mode === 'preview' ? 'previewPane' : 'fileViewerPane';
+  const pane = document.getElementById(paneId);
+  return Boolean(pane && !pane.classList.contains('hidden'));
+}
+
+function isRightSplitOpen(): boolean {
+  const mode = resolvedRightPaneMode();
+  if (mode === null) return false;
+  return isRightPaneDomVisible(mode);
+}
+
+/**
+ * Unhide the pane matching persisted rightPaneMode when state and DOM diverge
+ * (e.g. reload applied viewer-open before preview restore, or Code foreground).
+ */
+export function reconcileRightSplitDomWithState(): void {
+  const mode = resolvedRightPaneMode();
+  if (mode === 'preview' && !isRightPaneDomVisible('preview')) {
+    showPreviewSplit();
+    schedulePreviewGuestResyncAfterReconcile();
+    return;
+  }
+  if (mode === 'viewer' && !isRightPaneDomVisible('viewer')) {
+    hidePreviewPaneDom();
+    void window.minnow?.preview.hide();
+    document.getElementById('fileViewerPane')?.classList.remove('hidden');
+    document.getElementById('splitResizer')?.classList.remove('hidden');
+  }
 }
 
 /** Sync Electron preview guest bounds after workspace split geometry changes. */
@@ -49,8 +86,18 @@ function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
   });
 }
 
+/** Re-show Chromium guest + reload source after reconcile unhides the preview pane. */
+function schedulePreviewGuestResyncAfterReconcile(): void {
+  if (getFilePanelState().rightPaneMode !== 'preview') return;
+  void import('./preview-panel').then((m) => {
+    m.resyncOpenPreviewPanelFromState({ reload: true });
+  });
+}
+
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
+  reconcileRightSplitDomWithState();
+
   const side = document.getElementById('fileSidebar');
   const btn = document.getElementById('btnFileSidebarCollapse');
   const state = getFilePanelState();
@@ -158,13 +205,18 @@ export function hideViewerSplit(): void {
 /** Show preview pane and resizer; closes file viewer if open. */
 export function showPreviewSplit(): void {
   hideViewerPaneDom();
-  // Apply split layout before unhiding the pane so the first bounds read matches the final flex row.
-  patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
-  applyFileSidebarVisuals();
+  clearAllViewerTabs();
+  patchFilePanelState({
+    rightPaneMode: 'preview',
+    viewerOpen: true,
+    openViewerTabs: [],
+    activeViewerTab: null,
+  });
   const previewPane = document.getElementById('previewPane');
   const resizer = document.getElementById('splitResizer');
   if (previewPane) previewPane.classList.remove('hidden');
   if (resizer) resizer.classList.remove('hidden');
+  applyFileSidebarVisuals();
   scheduleElectronPreviewHostLayoutAfterSplitChange();
 }
 

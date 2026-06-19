@@ -123,6 +123,82 @@ function ensureBoardTask(raw) {
   }
   if (typeof r.notes === 'string') out.notes = r.notes;
   if (typeof r.error === 'string') out.error = r.error;
+  if (typeof r.lastRunId === 'string' && r.lastRunId.trim()) {
+    out.lastRunId = r.lastRunId.trim();
+  }
+  if (Array.isArray(r.runHistory)) {
+    const runHistory = [];
+    for (const item of r.runHistory) {
+      if (typeof item === 'string' && item.trim() && !runHistory.includes(item.trim())) {
+        runHistory.push(item.trim());
+      }
+    }
+    if (runHistory.length) out.runHistory = runHistory;
+  }
+  if (typeof r.chatId === 'string' && r.chatId.trim()) {
+    out.chatId = r.chatId.trim();
+  }
+  if (typeof r.testChatId === 'string' && r.testChatId.trim()) {
+    out.testChatId = r.testChatId.trim();
+  }
+  if (typeof r.buildSpec === 'string' && r.buildSpec.trim()) {
+    out.buildSpec = r.buildSpec.trim();
+  }
+  if (typeof r.testSpec === 'string' && r.testSpec.trim()) {
+    out.testSpec = r.testSpec.trim();
+  }
+  if (Array.isArray(r.dependsOn)) {
+    const dependsOn = [];
+    for (const item of r.dependsOn) {
+      if (typeof item === 'string' && item.trim()) dependsOn.push(item.trim());
+    }
+    if (dependsOn.length) out.dependsOn = dependsOn;
+  }
+  if (typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)) {
+    out.testAttempts = r.testAttempts;
+  }
+  if (r.testVerdict === 'pass' || r.testVerdict === 'fail') {
+    out.testVerdict = r.testVerdict;
+  }
+  if (typeof r.testSummary === 'string' && r.testSummary.trim()) {
+    out.testSummary = r.testSummary.trim();
+  }
+  if (typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()) {
+    out.pendingBuildSeed = r.pendingBuildSeed.trim();
+  }
+  return out;
+}
+
+function ensureOrchestrateFinalTest(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const statusRaw = typeof r.status === 'string' ? r.status.trim() : '';
+  const status =
+    statusRaw === 'pending' ||
+    statusRaw === 'in_progress' ||
+    statusRaw === 'passed' ||
+    statusRaw === 'failed'
+      ? statusRaw
+      : undefined;
+  if (!status) return undefined;
+  const out = { status };
+  if (typeof r.chatId === 'string' && r.chatId.trim()) {
+    out.chatId = r.chatId.trim();
+  }
+  if (typeof r.attempts === 'number') out.attempts = r.attempts;
+  if (r.recordedVerdict === 'pass' || r.recordedVerdict === 'fail') {
+    out.recordedVerdict = r.recordedVerdict;
+  }
+  if (Array.isArray(r.failingTaskIds)) {
+    const failingTaskIds = [];
+    for (const item of r.failingTaskIds) {
+      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
+    }
+    if (failingTaskIds.length) out.failingTaskIds = failingTaskIds;
+  }
+  if (typeof r.summary === 'string' && r.summary.trim()) {
+    out.summary = r.summary.trim();
+  }
   return out;
 }
 
@@ -170,6 +246,18 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.completionShownAt === 'number') {
     out.completionShownAt = r.completionShownAt;
   }
+  const executionModeRaw =
+    typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
+  const executionMode =
+    executionModeRaw === 'auto' ||
+    executionModeRaw === 'manual' ||
+    executionModeRaw === 'sequential'
+      ? executionModeRaw
+      : 'manual';
+  out.executionMode = executionMode;
+  if (r.autoRunning === true) out.autoRunning = true;
+  const finalTest = ensureOrchestrateFinalTest(r.finalTest);
+  if (finalTest) out.finalTest = finalTest;
   return out;
 }
 
@@ -1211,6 +1299,44 @@ export function mergeConfigMeta(existing, patch) {
     }
     if (typeof fp.treeRoot === 'string' && fp.treeRoot.trim()) {
       existingPanel.treeRoot = fp.treeRoot;
+    }
+    if (fp.rightPaneMode === 'viewer' || fp.rightPaneMode === 'preview' || fp.rightPaneMode === null) {
+      existingPanel.rightPaneMode = fp.rightPaneMode;
+    }
+    if (typeof fp.previewAutoReload === 'boolean') {
+      existingPanel.previewAutoReload = fp.previewAutoReload;
+    }
+    if (fp.previewSource === null) {
+      existingPanel.previewSource = null;
+    } else if (fp.previewSource && typeof fp.previewSource === 'object') {
+      const src = /** @type {Record<string, unknown>} */ (fp.previewSource);
+      if (src.kind === 'workspace' && typeof src.path === 'string' && src.path.trim()) {
+        existingPanel.previewSource = { kind: 'workspace', path: src.path.trim() };
+      } else if (src.kind === 'url' && typeof src.url === 'string' && src.url.trim()) {
+        existingPanel.previewSource = { kind: 'url', url: src.url.trim() };
+      }
+    }
+    if (Array.isArray(fp.openViewerTabs)) {
+      const seen = new Set();
+      const tabs = [];
+      for (const entry of fp.openViewerTabs) {
+        if (typeof entry !== 'string') continue;
+        const trimmed = entry.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+        if (!trimmed || trimmed.startsWith('.minnow/attachments/') || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        tabs.push(trimmed);
+        if (tabs.length >= 20) break;
+      }
+      existingPanel.openViewerTabs = tabs;
+    }
+    if (fp.activeViewerTab === null) {
+      existingPanel.activeViewerTab = null;
+    } else if (typeof fp.activeViewerTab === 'string' && fp.activeViewerTab.trim()) {
+      existingPanel.activeViewerTab = fp.activeViewerTab
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/\/+/g, '/')
+        .replace(/^\.\//, '');
     }
     base.filePanel = existingPanel;
   }

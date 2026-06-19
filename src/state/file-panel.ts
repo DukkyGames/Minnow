@@ -71,8 +71,14 @@ function normalizePreviewSource(raw: unknown): PreviewSource | null {
   return null;
 }
 
-function normalizeRightPaneMode(raw: unknown, viewerOpen: boolean): RightPaneMode {
+function normalizeRightPaneMode(
+  raw: unknown,
+  viewerOpen: boolean,
+  previewSource: PreviewSource | null,
+): RightPaneMode {
   if (raw === 'viewer' || raw === 'preview') return raw;
+  // Older configs saved viewerOpen without rightPaneMode/previewSource after browser open.
+  if (previewSource && viewerOpen) return 'preview';
   if (viewerOpen) return 'viewer';
   return null;
 }
@@ -119,14 +125,20 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
     ? row.expandedDirs.filter((p): p is string => typeof p === 'string')
     : [];
   const viewerOpenLegacy = row.viewerOpen === true;
-  const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy);
+  const previewSource = normalizePreviewSource(row.previewSource);
+  const rightPaneMode = normalizeRightPaneMode(row.rightPaneMode, viewerOpenLegacy, previewSource);
   const viewerOpen = rightPaneMode !== null;
   const selectedPath = typeof row.selectedPath === 'string' ? row.selectedPath : null;
-  const openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
+  let openViewerTabs = normalizeViewerTabPaths(row.openViewerTabs);
+  // Browser preview and file viewer are mutually exclusive — do not restore editor tabs.
+  if (rightPaneMode === 'preview') {
+    openViewerTabs = [];
+  }
   const legacySelected =
     selectedPath &&
     !selectedPath.startsWith('.minnow/attachments/') &&
-    openViewerTabs.length === 0
+    openViewerTabs.length === 0 &&
+    rightPaneMode !== 'preview'
       ? [selectedPath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '')]
       : openViewerTabs;
   const tabs =
@@ -134,14 +146,14 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   const activeViewerTab = normalizeActiveViewerTab(
     row.activeViewerTab,
     tabs,
-    selectedPath,
+    rightPaneMode === 'preview' ? null : selectedPath,
   );
   const syncedSelected = activeViewerTab ?? selectedPath;
   return {
     fileSidebarCollapsed: row.fileSidebarCollapsed === true,
     viewerOpen,
     rightPaneMode,
-    previewSource: normalizePreviewSource(row.previewSource),
+    previewSource,
     previewAutoReload: row.previewAutoReload !== false,
     splitRatio: clampSplitRatio(
       typeof row.splitRatio === 'number' ? row.splitRatio : DEFAULT_FILE_PANEL_STATE.splitRatio,
@@ -256,4 +268,9 @@ export function resetFilePanelStateForTests(): void {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+}
+
+/** Test helper: parse a raw filePanel block like the meta API. */
+export function normalizeFilePanelBlockForTests(raw: unknown): FilePanelState {
+  return normalizeFilePanelBlock(raw);
 }
