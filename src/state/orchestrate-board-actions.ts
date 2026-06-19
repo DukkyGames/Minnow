@@ -23,6 +23,7 @@ import {
   stopHeartbeat,
 } from '../agents/controller/wrapper.ts';
 import { runChatTurn } from '../tools/loop.ts';
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
@@ -170,7 +171,9 @@ export function finalizeBoardTaskOnStreamEnd(
   }
 
   if (isBoardRunning(group)) {
-    void startTaskTesting(group, task.id, plannerChat);
+    void startTaskTesting(group, task.id, plannerChat).catch((err) =>
+      reportBackgroundError('start-task-testing', err),
+    );
   }
 }
 
@@ -272,6 +275,20 @@ function ensureStreamEndSubscription(): void {
     subscribeChatStreamEnd((endedChatId) => {
       stopTaskChatSupervision(endedChatId);
       if (!sessionState) return;
+      // Drain now, then again after a microtask: notifyChatStreamEnded fires
+      // before setStreaming(false) clears the ended chat, so in sequential mode
+      // the concurrency check sees count=1 and enqueues instead of starting.
+      // Re-drain after the flag clears. Rejections are logged, never swallowed.
+      const safeDrain = (g: ChatGroup, p: Chat): void => {
+        void drainTaskQueue(g, p).catch((err) =>
+          reportBackgroundError('drain-task-queue', err),
+        );
+        queueMicrotask(() =>
+          void drainTaskQueue(g, p).catch((err) =>
+            reportBackgroundError('drain-task-queue', err),
+          ),
+        );
+      };
       for (const group of sessionState.groups ?? []) {
         const board = group.orchestrateBoard;
         if (!board) continue;
@@ -281,28 +298,21 @@ function ensureStreamEndSubscription(): void {
         const finalChatId = board.finalTest?.chatId?.trim();
         if (finalChatId && endedChatId === finalChatId) {
           finalizeFinalTestOnStreamEnd(group, planner);
-          void drainTaskQueue(group, planner);
-          // Deferred drain: notifyChatStreamEnded fires before setStreaming(false)
-          // clears the ended chat. In sequential mode the concurrency check sees
-          // count=1 and enqueues instead of starting. Re-drain after the flag clears.
-          queueMicrotask(() => void drainTaskQueue(group, planner));
+          safeDrain(group, planner);
           continue;
         }
 
         const taskByBuild = board.tasks.find((t) => t.chatId === endedChatId);
         if (taskByBuild) {
           finalizeBoardTaskOnStreamEnd(group, taskByBuild, planner);
-          void drainTaskQueue(group, planner);
-          // Same deferred drain for the build→testing transition in sequential mode.
-          queueMicrotask(() => void drainTaskQueue(group, planner));
+          safeDrain(group, planner);
           continue;
         }
 
         const taskByTest = board.tasks.find((t) => t.testChatId === endedChatId);
         if (taskByTest) {
           finalizeTaskTestingOnStreamEnd(group, taskByTest, planner);
-          void drainTaskQueue(group, planner);
-          queueMicrotask(() => void drainTaskQueue(group, planner));
+          safeDrain(group, planner);
         }
       }
     });
@@ -828,7 +838,9 @@ export function finalizeTaskTestingOnStreamEnd(
     // Persist the failure-aware seed so it survives a concurrency-slot queue
     // (the just-ended Tester chat is still counted as running here).
     updateTask(group, fresh.id, { pendingBuildSeed: seed }, plannerChat);
-    void startTask(group, fresh.id, plannerChat);
+    void startTask(group, fresh.id, plannerChat).catch((err) =>
+      reportBackgroundError('start-task-retry', err),
+    );
   }
 }
 
@@ -1040,7 +1052,9 @@ export function finalizeFinalTestOnStreamEnd(
     if (!task) continue;
     const seed = buildRetryBuilderSeedMessage(task, 1, `Final integration test: ${summary}`);
     updateTask(group, taskId, { pendingBuildSeed: seed }, plannerChat);
-    void startTask(group, taskId, plannerChat);
+    void startTask(group, taskId, plannerChat).catch((err) =>
+      reportBackgroundError('start-task-final-reopen', err),
+    );
   }
 
   postPlannerBoardMessage(
@@ -1104,11 +1118,13 @@ export function moveTaskStatus(
     const reportable =
       status === 'complete' || status === 'failed' || status === 'blocked';
     if (reportable) {
-      void import('../agents/controller/report.ts').then((mod) => {
-        const task = board.tasks.find((t) => t.id === taskId);
-        if (!task) return;
-        void mod.deliverOrchestratorTaskReport(group, plannerChat, task, status);
-      });
+      void import('../agents/controller/report.ts')
+        .then((mod) => {
+          const task = board.tasks.find((t) => t.id === taskId);
+          if (!task) return;
+          return mod.deliverOrchestratorTaskReport(group, plannerChat, task, status);
+        })
+        .catch((err) => reportBackgroundError('deliver-task-report', err));
     }
   }
 }
@@ -1204,7 +1220,9 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
-  void autoDelegateNext(group, plannerChat);
+  void autoDelegateNext(group, plannerChat).catch((err) =>
+    reportBackgroundError('auto-delegate-next', err),
+  );
 }
 
 /** Stop all active task chats and clear the task queue. */
