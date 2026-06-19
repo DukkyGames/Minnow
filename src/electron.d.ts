@@ -63,9 +63,23 @@ export interface MinnowAppApi {
   openExternal(url: string): Promise<void>;
 }
 
+export interface MinnowLastCrashMarker {
+  kind: string;
+  reason?: string;
+  exitCode?: number;
+  message?: string;
+  ts: string;
+}
+
+export interface MinnowDiagnosticsApi {
+  reportError(payload: { kind: string; message: string; stack?: string }): void;
+  getLastCrash(): Promise<MinnowLastCrashMarker | null>;
+}
+
 export interface MinnowElectronBridge {
   preview: MinnowPreviewApi;
   app: MinnowAppApi;
+  diagnostics?: MinnowDiagnosticsApi;
 }
 
 declare global {

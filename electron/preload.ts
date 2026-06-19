@@ -109,6 +109,13 @@ const minnowBridge = {
     openExternal: (url: string): Promise<void> =>
       ipcRenderer.invoke(channels.APP_OPEN_EXTERNAL, url),
   },
+  diagnostics: {
+    reportError: (payload: { kind: string; message: string; stack?: string }): void => {
+      ipcRenderer.send(channels.DIAGNOSTICS_REPORT_ERROR, payload);
+    },
+    getLastCrash: (): Promise<unknown> =>
+      ipcRenderer.invoke(channels.DIAGNOSTICS_LAST_CRASH),
+  },
 };
 
 contextBridge.exposeInMainWorld('minnow', minnowBridge);

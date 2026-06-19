@@ -189,6 +189,7 @@ import {
   registerTerminalKeyboardShortcut,
 } from './ui/terminal-panel';
 import { scheduleMarkAppReady } from './boot/app-ready';
+import { installRendererDiagnostics } from './boot/diagnostics';
 import { initOsPageBridge, isOsShellEnabled } from './os/page-bridge';
 import { initOsRouter } from './os/router';
 import { initOsShell } from './os/shell';
@@ -417,6 +418,7 @@ function startApp(): void {
     initOsShell();
     initOsRouter();
   }
+  installRendererDiagnostics();
   void initApp();
 }
 
