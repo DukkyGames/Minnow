@@ -104,8 +104,8 @@ function wireAppearanceListeners(): void {
   for (const unsub of appearanceUnsubs) unsub();
   appearanceUnsubs = [
     subscribeCustomThemeChanges(() => {
-      if (isCustomThemeEnabled()) applyCustomTheme();
-      else applyResolvedTheme(getStoredTheme());
+      if (!isCustomThemeEnabled()) applyResolvedTheme(getStoredTheme());
+      // When enabled, applyCustomTheme() already applied tokens before emitting — no re-call needed.
     }),
     subscribeAppearanceFonts(() => {
       void applyAppearanceFonts();
