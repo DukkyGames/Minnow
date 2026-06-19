@@ -156,6 +156,7 @@ import { renderThoughtsToggle, ThoughtBubbleController } from '../ui/thought-bub
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import { renderToolCall, renderToolResult } from '../ui/tool-messages';
+import { attachShellKillUi } from '../ui/shell-run-ui';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
 import {
@@ -1508,6 +1509,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           });
           const toolWrap = renderToolCall(tc.function.name, args);
           toolWrap.dataset.toolCallId = tc.id;
+          const toolArgsRecord =
+            args && typeof args === 'object' && !Array.isArray(args)
+              ? (args as Record<string, unknown>)
+              : undefined;
+          attachShellKillUi(toolWrap, tc.function.name, tc.id, toolArgsRecord, undefined, chat.id);
           if (paintToolCallsInChat) {
             area.appendChild(toolWrap);
             scrollChatIfPinned();
@@ -1573,6 +1579,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             toolOut.attachments,
             args,
             toolOut.codeChange,
+          );
+          attachShellKillUi(
+            toolWrap,
+            toolName,
+            tc.id,
+            toolArgsRecord,
+            toolContent,
+            chat.id,
           );
 
           chat.history.push({

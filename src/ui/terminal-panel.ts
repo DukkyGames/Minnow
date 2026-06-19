@@ -17,6 +17,8 @@ import {
 import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
 import type { TerminalRunRecord } from '../types';
 import { getLocalServerAvailable } from '../tools/client';
+import { registerShellRun, unregisterShellRun } from './shell-run-registry';
+import { refreshShellKillUi } from './shell-run-ui';
 import {
   detachAllTerminalTabs,
   initTerminalTabs,
@@ -116,6 +118,7 @@ function applyActiveTabView(kind: TerminalTabKind): void {
 
   if (isAgent) {
     scrollOutputIfPinned();
+    refreshShellKillUi();
     return;
   }
 
@@ -647,6 +650,13 @@ export async function runCommandWithTerminalStream(
   });
 
   activeRunId = runId;
+  registerShellRun({
+    runId,
+    command: label,
+    toolCallId: options.toolCallId,
+    chatId: options.chatId,
+  });
+  refreshShellKillUi();
   setActiveHistoryRun(runId);
   options.hooks?.onRunStart?.(runId, label);
   externalHooks.onRunStart?.(runId, label);
@@ -694,6 +704,8 @@ export async function runCommandWithTerminalStream(
   }
 
   activeRunId = null;
+  unregisterShellRun(runId);
+  refreshShellKillUi();
   options.hooks?.onRunEnd?.(runId);
   externalHooks.onRunEnd?.(runId);
 
