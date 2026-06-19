@@ -181,9 +181,35 @@ function isValidPreviewBounds(bounds: PreviewBounds | undefined): bounds is Prev
   );
 }
 
+/**
+ * Host window page-zoom factor (Ctrl +/- on the Minnow UI). Defaults to 1.
+ * The renderer reports #previewBody bounds in CSS pixels, which live in the
+ * zoomed coordinate space; WebContentsView.setBounds wants DIPs. OS display
+ * scaling is already handled by Electron's DIP system, so we correct only for
+ * page zoom: DIP = cssPx * zoomFactor.
+ */
+function hostZoomFactor(win: BrowserWindow | null): number {
+  if (!win || win.isDestroyed()) return 1;
+  try {
+    const z = win.webContents.getZoomFactor();
+    return Number.isFinite(z) && z > 0 ? z : 1;
+  } catch {
+    return 1;
+  }
+}
+
 /** Apply bounds to the guest view (main process only). */
-function applyPreviewViewBounds(entry: PreviewHostEntry, bounds: PreviewBounds): void {
-  const rounded = roundBounds(bounds);
+function applyPreviewViewBounds(
+  entry: PreviewHostEntry,
+  bounds: PreviewBounds,
+  zoomFactor: number,
+): void {
+  const rounded = roundBounds({
+    x: bounds.x * zoomFactor,
+    y: bounds.y * zoomFactor,
+    width: bounds.width * zoomFactor,
+    height: bounds.height * zoomFactor,
+  });
   if (rounded.width <= 0 || rounded.height <= 0) {
     entry.view.setVisible(false);
     return;
@@ -238,7 +264,7 @@ export function registerPreviewHostIpc(): void {
     if (!entry || !win) return;
     // Position before showing so the guest never flashes at a stale rect from the prior session.
     if (isValidPreviewBounds(bounds)) {
-      applyPreviewViewBounds(entry, bounds);
+      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
     }
     try {
       win.contentView.removeChildView(entry.view);
@@ -320,25 +346,18 @@ export function registerPreviewHostIpc(): void {
   });
 
   ipcMain.handle(channels.PREVIEW_SET_BOUNDS, (event, bounds: PreviewBounds) => {
+    const win = windowFromInvoke(event);
     const entry = getHostFromInvoke(event);
     if (!entry || !bounds) return;
     if (!entry.visible) return;
-    const { x, y, width, height } = bounds;
-    if (
-      !Number.isFinite(x) ||
-      !Number.isFinite(y) ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    ) {
+    if (!isValidPreviewBounds(bounds)) {
+      const { width, height } = bounds;
+      if (Number.isFinite(width) && Number.isFinite(height) && (width <= 0 || height <= 0)) {
+        entry.view.setVisible(false);
+      }
       return;
     }
-    const w = Math.max(0, Math.round(width));
-    const h = Math.max(0, Math.round(height));
-    if (w <= 0 || h <= 0) {
-      entry.view.setVisible(false);
-      return;
-    }
-    applyPreviewViewBounds(entry, bounds);
+    applyPreviewViewBounds(entry, bounds, hostZoomFactor(win));
   });
 
   ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string) => {
