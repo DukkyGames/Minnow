@@ -5,6 +5,7 @@
 
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { attachPtyWebSocketServer } from './server/terminal/pty-ws.js';
 import { attachSttWebSocketServer } from './server/stt/stt-ws.js';
@@ -12,6 +13,7 @@ import { attachTtsWebSocketServer } from './server/tts/tts-ws.js';
 import { destroyAllPtySessions } from './server/terminal/pty-host.js';
 import { deleteGenerationsForProviderShutdown } from './server/generations/store.js';
 import { getAppRoot } from './server/workspace/root.js';
+import { getMinnowHome } from './server/config/home.js';
 import { applyMinnowMiddlewares } from './server/runtime/middlewares.js';
 import { bootstrapMinnowRuntime } from './server/runtime/bootstrap.js';
 import {
@@ -34,6 +36,46 @@ import {
 } from './server/runtime/path-access.js';
 
 const PORT = Number(process.env.PORT) || 5173;
+
+/**
+ * Append one crash record to ~/.minnow/logs/crash.jsonl. Never throws.
+ * @param {{ kind: string, message: string, stack?: string }} entry
+ */
+function logServerCrash(entry) {
+  try {
+    const dir = path.join(getMinnowHome(), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      pid: process.pid,
+      source: 'dev-server',
+      ...entry,
+    });
+    fs.appendFileSync(path.join(dir, 'crash.jsonl'), `${line}\n`, 'utf8');
+  } catch {
+    /* last resort — cannot recover if the disk/path is unavailable */
+  }
+}
+
+// The dev host previously had no global handlers, so a single stray async error
+// (e.g. a broken pipe when a managed dev server is force-killed) would exit the
+// whole `node server.js` process with code 1 and take the Electron shell down with
+// it. The packaged Electron host already logs-and-survives (electron/main.ts); mirror
+// that here so dev does not crash, and so the stack is captured for diagnosis.
+process.on('uncaughtException', (err) => {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  logServerCrash({ kind: 'uncaughtException', message, stack });
+  console.error('[minnow] uncaughtException (kept alive):', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const message =
+    reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  logServerCrash({ kind: 'unhandledRejection', message, stack });
+  console.error('[minnow] unhandledRejection (kept alive):', reason);
+});
 
 /** Open default browser for the dev URL (platform-specific). */
 function openBrowser(url) {
