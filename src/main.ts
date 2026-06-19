@@ -131,6 +131,7 @@ import {
 } from './ui/sidebar';
 import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
 import { initOrchestrateStatsLiveRefresh } from './chat/orchestrate/stats-live';
+import { initCodeChangeStrip } from './ui/code-change-strip';
 import { initStatsStrip, toggleStatsPanel, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { initReefBridge } from './chat/reef/index.ts';
@@ -325,6 +326,7 @@ export async function initApp(): Promise<void> {
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
   initStatsStrip();
+  initCodeChangeStrip();
   initOrchestrateStatsLiveRefresh();
   initChatScroll();
   registerTerminalKeyboardShortcut();
