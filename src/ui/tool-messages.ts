@@ -20,6 +20,80 @@ const FILE_MUTATION_TOOLS = new Set([
   'delete_path',
 ]);
 
+/** Shell tools that expose a user-facing Stop control while a run is active. */
+const KILLABLE_SHELL_TOOLS = new Set(['execute_command', 'start_background_command']);
+
+export function isKillableShellTool(name: string): boolean {
+  return KILLABLE_SHELL_TOOLS.has(name);
+}
+
+/** Parse runId from a successful background shell tool JSON result. */
+export function extractShellRunIdFromToolResult(
+  toolName: string,
+  result: string,
+): string | null {
+  if (!isKillableShellTool(toolName) || isToolResultFailure(result)) return null;
+  try {
+    const parsed = JSON.parse(result) as {
+      runId?: unknown;
+      background?: unknown;
+      ok?: unknown;
+    };
+    if (parsed.ok !== true) return null;
+    if (toolName === 'execute_command' && parsed.background !== true) return null;
+    return typeof parsed.runId === 'string' && parsed.runId.trim()
+      ? parsed.runId.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function appendKillButton(summary: HTMLElement, wrap: HTMLElement): void {
+  const killBtn = document.createElement('button');
+  killBtn.type = 'button';
+  killBtn.className = 'tool-call-kill hidden';
+  killBtn.textContent = 'Stop';
+  killBtn.setAttribute('aria-label', 'Stop shell command');
+  killBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  summary.appendChild(killBtn);
+  wrap.dataset.shellKillable = 'true';
+}
+
+/** Show or hide the Stop button for a tool-call bubble. */
+export function setToolCallShellRun(
+  wrap: HTMLElement,
+  runId: string | null,
+  running: boolean,
+): void {
+  if (!wrap.dataset.shellKillable) return;
+
+  if (runId && running) {
+    wrap.dataset.shellRunId = runId;
+  } else {
+    delete wrap.dataset.shellRunId;
+  }
+
+  const killBtn = wrap.querySelector<HTMLButtonElement>('.tool-call-kill');
+  if (!killBtn) return;
+  killBtn.classList.toggle('hidden', !(runId && running));
+  killBtn.toggleAttribute('disabled', !(runId && running));
+}
+
+/** Sync kill buttons: hide Stop when the run is no longer active. */
+export function syncToolCallKillButtons(activeRunIds: Set<string>): void {
+  for (const wrap of document.querySelectorAll<HTMLElement>(
+    '.tool-call-msg[data-shell-killable="true"]',
+  )) {
+    const runId = wrap.dataset.shellRunId?.trim();
+    const show = Boolean(runId && activeRunIds.has(runId));
+    setToolCallShellRun(wrap, runId ?? null, show);
+  }
+}
+
 function humanizeToolName(name: string): string {
   return TOOL_LABEL_MAP.get(name) ?? name.replace(/_/g, ' ');
 }
@@ -185,6 +259,10 @@ export function renderToolCall(
   summary.appendChild(statusGlyph);
   summary.appendChild(title);
   summary.appendChild(statusLabel);
+
+  if (KILLABLE_SHELL_TOOLS.has(name)) {
+    appendKillButton(summary, wrap);
+  }
 
   const body = document.createElement('div');
   body.className = 'tool-call-body';
