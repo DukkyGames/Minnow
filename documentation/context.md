@@ -1398,7 +1398,7 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 | Concern | Location |
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
-| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` |
+| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts`, `src/ui/terminal-history-nav.ts` |
 | Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions) |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
@@ -1412,7 +1412,9 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 
 **Windows:** Prefer `@lydell/node-pty` (prebuilt). Stock `node-pty` needs VS Build Tools + `node-gyp`.
 
-**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`). Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
+**PTY tab history (ArrowUp/ArrowDown):** Per-tab command history is stored in `sessionStorage` (`minnow.terminal.history.<tabId>`). Recall sends backspaces + the recalled line to the PTY WebSocket (shell redraws prompt/output) instead of writing local `\r\x1b[K` escape sequences into xterm — avoids corrupted lines like `[0[I[0[I` after the first shell row. Helpers: [`src/ui/terminal-history-nav.ts`](../src/ui/terminal-history-nav.ts); tests: `test/ui/terminal-history-nav.test.mts`.
+
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`); `test/ui/terminal-history-nav.test.mts`. Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 
