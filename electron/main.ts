@@ -7,12 +7,14 @@ import { fileURLToPath } from 'node:url';
 import {
   app,
   BrowserWindow,
+  crashReporter,
   ipcMain,
   session,
   shell,
 } from 'electron';
 import { configurePreviewSession } from './preview-session.js';
 import * as channels from './ipc-channels.js';
+import * as crashLog from './crash-log.js';
 import {
   destroyAllPreviewHosts,
   registerPreviewHostIpc,
@@ -30,6 +32,51 @@ const devUrl = `http://localhost:${devPort}/`;
 let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 
+/** Sliding window of renderer crash timestamps for anti-reload-loop. */
+const rendererCrashTimestamps: number[] = [];
+const RENDERER_CRASH_WINDOW_MS = 60_000;
+const RENDERER_CRASH_RELOAD_CAP = 3;
+
+/** Reload renderer after crash, or show recovery page if crashing too often. */
+function recoverRenderer(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+
+  const now = Date.now();
+  rendererCrashTimestamps.push(now);
+  while (
+    rendererCrashTimestamps.length > 0 &&
+    now - rendererCrashTimestamps[0]! > RENDERER_CRASH_WINDOW_MS
+  ) {
+    rendererCrashTimestamps.shift();
+  }
+
+  if (rendererCrashTimestamps.length > RENDERER_CRASH_RELOAD_CAP) {
+    const recoveryHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Minnow — recovery</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0e0e10; color: #e8e8ea; margin: 0; padding: 2rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #a0a0a8; line-height: 1.5; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
+    code { background: #1a1a1e; padding: 0.15rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Minnow keeps crashing</h1>
+  <p>The renderer restarted too many times. Check <code>~/.minnow/logs/crash.jsonl</code> for details.</p>
+  <button type="button" onclick="location.reload()">Reload</button>
+</body>
+</html>`;
+    void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(recoveryHtml)}`);
+    return;
+  }
+
+  win.webContents.reload();
+}
+
 /** Register app + preview IPC handlers. */
 function registerIpcHandlers(): void {
   registerPreviewHostIpc();
@@ -37,6 +84,21 @@ function registerIpcHandlers(): void {
     if (typeof url === 'string' && url.trim()) {
       await shell.openExternal(url);
     }
+  });
+
+  ipcMain.on(channels.DIAGNOSTICS_REPORT_ERROR, (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return;
+    const p = payload as Record<string, unknown>;
+    const kind = typeof p.kind === 'string' ? p.kind : 'renderer-error';
+    const message = typeof p.message === 'string' ? p.message : '';
+    const stack = typeof p.stack === 'string' ? p.stack : undefined;
+    crashLog.logCrash({ source: 'renderer', kind, message, stack });
+  });
+
+  ipcMain.handle(channels.DIAGNOSTICS_LAST_CRASH, () => {
+    const marker = crashLog.readLastCrashMarker();
+    crashLog.clearLastCrashMarker();
+    return marker;
   });
 }
 
@@ -123,6 +185,40 @@ async function createMainWindow(): Promise<BrowserWindow> {
     }
   });
 
+  win.webContents.on('render-process-gone', (_event, details) => {
+    crashLog.logCrash({
+      source: 'renderer',
+      kind: 'render-process-gone',
+      reason: details.reason,
+      exitCode: details.exitCode,
+      message: `Renderer process gone: ${details.reason}`,
+    });
+    crashLog.writeLastCrashMarker({
+      kind: 'render-process-gone',
+      reason: details.reason,
+      exitCode: details.exitCode,
+      message: `Renderer process gone: ${details.reason}`,
+    });
+    if (details.reason === 'clean-exit' || win.isDestroyed()) return;
+    recoverRenderer(win);
+  });
+
+  win.webContents.on('unresponsive', () => {
+    crashLog.logCrash({
+      source: 'renderer',
+      kind: 'unresponsive',
+      message: 'Renderer became unresponsive',
+    });
+  });
+
+  win.webContents.on('responsive', () => {
+    crashLog.logCrash({
+      source: 'renderer',
+      kind: 'responsive',
+      message: 'Renderer became responsive again',
+    });
+  });
+
   return win;
 }
 
@@ -175,6 +271,47 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
+  crashReporter.start({ uploadToServer: false, compress: true });
+
+  process.on('uncaughtException', (err) => {
+    crashLog.logCrash({
+      source: 'main',
+      kind: 'uncaughtException',
+      message: err?.message ?? String(err),
+      stack: err?.stack,
+    });
+    console.error('[electron] uncaughtException:', err);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    const message =
+      reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    crashLog.logCrash({
+      source: 'main',
+      kind: 'unhandledRejection',
+      message,
+      stack,
+    });
+    console.error('[electron] unhandledRejection:', reason);
+  });
+
+  app.on('child-process-gone', (_event, details) => {
+    crashLog.logCrash({
+      source: 'child',
+      kind: 'child-process-gone',
+      reason: details.reason,
+      exitCode: details.exitCode,
+      message: `Child process gone: ${details.type}`,
+      extra: {
+        type: details.type,
+        name: details.name,
+        serviceName: details.serviceName,
+      },
+    });
+    console.error('[electron] child-process-gone:', details);
+  });
+
   app.on('second-instance', () => {
     focusMainWindow();
   });
