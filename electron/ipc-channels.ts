@@ -29,3 +29,7 @@ export const PREVIEW_PAGE_TITLE = 'minnow:preview:page-title';
 /** Main → renderer: preview load failed. */
 export const PREVIEW_LOAD_FAILED = 'minnow:preview:load-failed';
 export const APP_OPEN_EXTERNAL = 'minnow:app:open-external';
+/** Renderer → main: forward renderer errors to crash.jsonl (fire-and-forget). */
+export const DIAGNOSTICS_REPORT_ERROR = 'minnow:diagnostics:report-error';
+/** Renderer → main: read and clear last renderer crash marker at boot. */
+export const DIAGNOSTICS_LAST_CRASH = 'minnow:diagnostics:last-crash';
