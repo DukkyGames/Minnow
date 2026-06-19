@@ -7,6 +7,7 @@ import {
   registerChromePopover,
   unregisterChromePopover,
   resetChromePopoverRegistryForTests,
+  resetPreviewGuestVisibilityForTests,
   shouldShowElectronPreviewHost,
   syncElectronPreviewHostLayout,
 } from '../../src/ui/preview-electron-visibility.ts';
@@ -23,6 +24,7 @@ describe('preview-electron-visibility', () => {
   let showCalls = 0;
   let hideCalls = 0;
   let lastBounds: { x: number; y: number; width: number; height: number } | null = null;
+  let lastShowBounds: { x: number; y: number; width: number; height: number } | null = null;
 
   let layoutSyncRaf = 0;
   const originalRaf = globalThis.requestAnimationFrame;
@@ -32,9 +34,11 @@ describe('preview-electron-visibility', () => {
     showCalls = 0;
     hideCalls = 0;
     lastBounds = null;
+    lastShowBounds = null;
     layoutSyncRaf = 0;
     resetFilePanelStateForTests();
     resetChromePopoverRegistryForTests();
+    resetPreviewGuestVisibilityForTests();
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       layoutSyncRaf += 1;
       cb(0);
@@ -67,8 +71,9 @@ describe('preview-electron-visibility', () => {
       value: {
         minnow: {
           preview: {
-            show: async () => {
+            show: async (bounds?: { x: number; y: number; width: number; height: number }) => {
               showCalls += 1;
+              lastShowBounds = bounds ?? null;
             },
             hide: async () => {
               hideCalls += 1;
@@ -170,7 +175,7 @@ describe('preview-electron-visibility', () => {
     assert.equal(shouldShowElectronPreviewHost(), true);
   });
 
-  test('syncElectronPreviewHostLayout shows then sets bounds when preview pane is open', async () => {
+  test('syncElectronPreviewHostLayout shows with bounds when preview pane is open', async () => {
     setFilePanelState({
       ...DEFAULT_FILE_PANEL_STATE,
       rightPaneMode: 'preview',
@@ -182,7 +187,8 @@ describe('preview-electron-visibility', () => {
 
     assert.equal(showCalls, 1);
     assert.equal(hideCalls, 0);
-    assert.deepEqual(lastBounds, { x: 10, y: 20, width: 400, height: 300 });
+    assert.deepEqual(lastShowBounds, { x: 10, y: 20, width: 400, height: 300 });
+    assert.equal(lastBounds, null);
   });
 
   test('syncElectronPreviewHostLayout hides when preview pane is closed', async () => {
@@ -206,5 +212,75 @@ describe('preview-electron-visibility', () => {
     assert.equal(showCalls, 0);
     assert.equal(hideCalls, 1);
     assert.equal(lastBounds, null);
+  });
+
+  test('syncElectronPreviewHostLayout serializes overlapping syncs and keeps latest bounds', async () => {
+    let rectLeft = 100;
+    let showInFlight = 0;
+    let maxShowInFlight = 0;
+    Object.defineProperty(globalThis, 'document', {
+      value: {
+        getElementById: (id: string) => {
+          const entry = elements.get(id);
+          if (!entry) return null;
+          return {
+            classList: {
+              contains: (cls: string) => entry.classList.has(cls),
+              add: (cls: string) => entry.classList.add(cls),
+              remove: (cls: string) => entry.classList.delete(cls),
+            },
+            getBoundingClientRect: () => ({
+              left: rectLeft,
+              top: 20,
+              width: 400,
+              height: 300,
+            }),
+          };
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        minnow: {
+          preview: {
+            show: async (bounds?: { x: number; y: number; width: number; height: number }) => {
+              showInFlight += 1;
+              maxShowInFlight = Math.max(maxShowInFlight, showInFlight);
+              lastShowBounds = bounds ?? null;
+              await new Promise((resolve) => setTimeout(resolve, 5));
+              showInFlight -= 1;
+            },
+            hide: async () => {
+              hideCalls += 1;
+            },
+            setBounds: async (bounds: { x: number; y: number; width: number; height: number }) => {
+              lastBounds = bounds;
+            },
+          },
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+
+    const first = syncElectronPreviewHostLayout();
+    await first;
+
+    assert.equal(maxShowInFlight, 1);
+    assert.deepEqual(lastShowBounds, { x: 100, y: 20, width: 400, height: 300 });
+
+    rectLeft = 40;
+    await syncElectronPreviewHostLayout();
+
+    assert.deepEqual(lastBounds, { x: 40, y: 20, width: 400, height: 300 });
   });
 });

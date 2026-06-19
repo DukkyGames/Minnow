@@ -348,6 +348,12 @@ export function appendChatRow(
   const titleRow = document.createElement('div');
   titleRow.className = 'chat-item-title-row';
 
+  // Collapsed-rail chat bubble glyph (hidden in expanded sidebar via CSS).
+  const icon = document.createElement('span');
+  icon.className = 'chat-item-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  titleRow.appendChild(icon);
+
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
   const dotState = resolveChatItemDotState(chat, dotCtx);
   if (!inGroup) {

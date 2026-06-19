@@ -41,6 +41,14 @@ function isRightSplitOpen(): boolean {
   return state.rightPaneMode !== null || state.viewerOpen;
 }
 
+/** Sync Electron preview guest bounds after workspace split geometry changes. */
+function scheduleElectronPreviewHostLayoutAfterSplitChange(): void {
+  if (getFilePanelState().rightPaneMode !== 'preview') return;
+  void import('./preview-electron-visibility').then((m) => {
+    m.scheduleElectronPreviewHostLayoutSync();
+  });
+}
+
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   const side = document.getElementById('fileSidebar');
@@ -54,6 +62,7 @@ export function applyFileSidebarVisuals(): void {
     split.style.setProperty('--split-ratio', String(state.splitRatio));
     syncStatsStripLayoutForViewer(splitOpen);
   }
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
 
   if (!side || !btn) return;
 
@@ -149,12 +158,14 @@ export function hideViewerSplit(): void {
 /** Show preview pane and resizer; closes file viewer if open. */
 export function showPreviewSplit(): void {
   hideViewerPaneDom();
+  // Apply split layout before unhiding the pane so the first bounds read matches the final flex row.
+  patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
+  applyFileSidebarVisuals();
   const previewPane = document.getElementById('previewPane');
   const resizer = document.getElementById('splitResizer');
   if (previewPane) previewPane.classList.remove('hidden');
   if (resizer) resizer.classList.remove('hidden');
-  patchFilePanelState({ rightPaneMode: 'preview', viewerOpen: true });
-  applyFileSidebarVisuals();
+  scheduleElectronPreviewHostLayoutAfterSplitChange();
 }
 
 /** Hide preview pane and resizer. */

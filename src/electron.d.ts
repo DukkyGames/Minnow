@@ -37,8 +37,9 @@ export interface MinnowPreviewGuestInfo {
 }
 
 export interface MinnowPreviewApi {
-  show(): Promise<void>;
+  show(bounds?: MinnowPreviewBounds): Promise<void>;
   hide(): Promise<void>;
+  clear(): Promise<void>;
   loadURL(url: string): Promise<void>;
   loadSource(payload: MinnowPreviewLoadSourcePayload): Promise<void>;
   reload(): Promise<void>;

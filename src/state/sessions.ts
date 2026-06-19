@@ -509,9 +509,12 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
   const executionModeRaw =
     typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
   const executionMode =
-    executionModeRaw === 'auto' || executionModeRaw === 'manual'
+    executionModeRaw === 'auto' ||
+    executionModeRaw === 'manual' ||
+    executionModeRaw === 'sequential'
       ? executionModeRaw
       : 'manual';
+  const finalTest = ensureOrchestrateFinalTest(r.finalTest);
   return {
     planPath,
     tasks,
@@ -519,11 +522,51 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     startedAt,
     lastUpdatedAt,
     executionMode,
+    ...(r.autoRunning === true ? { autoRunning: true } : {}),
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
     ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
+    ...(finalTest ? { finalTest } : {}),
+  };
+}
+
+function ensureOrchestrateFinalTest(
+  raw: unknown,
+): OrchestrateBoardState['finalTest'] | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const statusRaw = typeof r.status === 'string' ? r.status.trim() : '';
+  const status =
+    statusRaw === 'pending' ||
+    statusRaw === 'in_progress' ||
+    statusRaw === 'passed' ||
+    statusRaw === 'failed'
+      ? statusRaw
+      : undefined;
+  if (!status) return undefined;
+  const chatId =
+    typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
+  const attempts = typeof r.attempts === 'number' ? r.attempts : undefined;
+  const recordedVerdict =
+    r.recordedVerdict === 'pass' || r.recordedVerdict === 'fail'
+      ? r.recordedVerdict
+      : undefined;
+  const failingTaskIds: string[] = [];
+  if (Array.isArray(r.failingTaskIds)) {
+    for (const item of r.failingTaskIds) {
+      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
+    }
+  }
+  const summary = typeof r.summary === 'string' ? r.summary : undefined;
+  return {
+    status,
+    ...(chatId ? { chatId } : {}),
+    ...(attempts !== undefined ? { attempts } : {}),
+    ...(recordedVerdict ? { recordedVerdict } : {}),
+    ...(failingTaskIds.length ? { failingTaskIds } : {}),
+    ...(summary ? { summary } : {}),
   };
 }
 
@@ -566,6 +609,11 @@ function ensureGroupsFromRaw(raw: unknown): ChatGroup[] {
     if (group) out.push(group);
   }
   return out;
+}
+
+/** Test helper: hydrate sidebar groups from persisted session JSON. */
+export function hydrateSessionGroupsForTests(raw: unknown): ChatGroup[] {
+  return ensureGroupsFromRaw(raw);
 }
 
 /** Move legacy chat-owned boards onto sidebar folders (schema v4 → v5). */

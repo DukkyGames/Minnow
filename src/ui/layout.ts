@@ -49,6 +49,17 @@ export function applySidebarVisuals(): void {
       side.classList.contains('mobile-open') ? 'Close chat list' : 'Open chat list'
     );
   }
+  scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
+}
+
+/** Re-align the Electron preview guest when the chat rail width changes. */
+function scheduleElectronPreviewHostLayoutAfterChatSidebarChange(): void {
+  void import('../state/file-panel').then(({ getFilePanelState }) => {
+    if (getFilePanelState().rightPaneMode !== 'preview') return;
+    void import('./preview-electron-visibility').then((m) => {
+      m.scheduleElectronPreviewHostLayoutSync();
+    });
+  });
 }
 
 export function toggleSidebarLayout(): void {
