@@ -260,6 +260,7 @@ import {
   resolveTurnSkill,
 } from '../skills';
 import { syncComposerPinnedSkillFromActiveChat } from '../ui/composer-pinned-skill';
+import { getPickerAppliedSkillId } from '../ui/skill-picker';
 import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   hasPostToolTail,
@@ -2151,7 +2152,10 @@ export async function sendMessageWithTools(
     chat.orchestratePlanPath,
     rawText,
   );
-  const { skillId: slashSkillId, userText: slashUserText } = parseSlashCommand(slashInput);
+  const pickerSkillId = getPickerAppliedSkillId(input);
+  const { skillId: slashSkillId, userText: slashUserText } = pickerSkillId
+    ? parseSlashCommand(slashInput)
+    : { skillId: null, userText: slashInput.trim() };
   const turnSkill = resolveTurnSkill({
     slashSkillId,
     userText: slashUserText,

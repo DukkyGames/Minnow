@@ -15,6 +15,11 @@ let activeIndex = 0;
 let open = false;
 let slashStart = -1;
 
+/** Skills confirmed via picker selection (not manual typing), keyed by element. */
+const pickerApplied = new WeakMap<HTMLTextAreaElement, string>();
+/** True while applySkill() is dispatching its synthetic input event. */
+let applyingSkill = false;
+
 function ensurePicker(): void {
   if (pickerEl) return;
 
@@ -157,7 +162,10 @@ function applySkill(skillId: string): void {
   inputEl.value = `${before}${insertion}${after.trimStart()}`;
   const caret = before.length + insertion.length;
   inputEl.setSelectionRange(caret, caret);
+  pickerApplied.set(inputEl, skillId);
+  applyingSkill = true;
   inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  applyingSkill = false;
   closePicker();
   inputEl.focus();
 }
@@ -186,6 +194,11 @@ function detectSlashContext(): void {
 /** Whether picker is open (Enter should select, not send). */
 export function isSkillPickerOpen(): boolean {
   return open;
+}
+
+/** Returns the skill ID confirmed via picker for this element, or null if typed manually. */
+export function getPickerAppliedSkillId(el: HTMLTextAreaElement): string | null {
+  return pickerApplied.get(el) ?? null;
 }
 
 /** Handle keyboard while picker is open. Returns true if consumed. */
@@ -233,6 +246,12 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
   });
 
   composerInput.addEventListener('input', () => {
+    if (!applyingSkill) {
+      const storedSkill = pickerApplied.get(composerInput);
+      if (storedSkill && !new RegExp(`(?:^|\\s)/${storedSkill}(?:\\s|$)`).test(composerInput.value)) {
+        pickerApplied.delete(composerInput);
+      }
+    }
     bindActiveInput(composerInput);
     detectSlashContext();
   });

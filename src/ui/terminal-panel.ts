@@ -27,6 +27,7 @@ import {
   switchToDevServerTab,
   type TerminalTabKind,
 } from './terminal-tabs';
+import { stripAnsi } from '../lib/strip-ansi';
 import {
   focusTerminalXterm,
   initTerminalXterm,
@@ -157,7 +158,10 @@ function scrollOutputIfPinned(): void {
 function appendOutputText(text: string, stream: 'stdout' | 'stderr'): void {
   if (!outputEl || !text) return;
 
-  const addBytes = new TextEncoder().encode(text).length;
+  const plain = stripAnsi(text);
+  if (!plain) return;
+
+  const addBytes = new TextEncoder().encode(plain).length;
   if (displayBytes + addBytes > MAX_DISPLAY_BYTES) {
     if (!outputEl.dataset.truncated) {
       outputEl.appendChild(document.createTextNode('\n…[truncated]\n'));
@@ -170,10 +174,10 @@ function appendOutputText(text: string, stream: 'stdout' | 'stderr'): void {
   if (stream === 'stderr') {
     const span = document.createElement('span');
     span.className = 'stderr-line';
-    span.textContent = text;
+    span.textContent = plain;
     outputEl.appendChild(span);
   } else {
-    outputEl.appendChild(document.createTextNode(text));
+    outputEl.appendChild(document.createTextNode(plain));
   }
   scrollOutputIfPinned();
 }
@@ -307,7 +311,10 @@ function clearDevServerOutput(): void {
 function appendDevServerOutputText(text: string, stream: 'stdout' | 'stderr'): void {
   if (!devServerOutputEl || !text) return;
 
-  const addBytes = new TextEncoder().encode(text).length;
+  const plain = stripAnsi(text);
+  if (!plain) return;
+
+  const addBytes = new TextEncoder().encode(plain).length;
   if (devServerDisplayBytes + addBytes > MAX_DISPLAY_BYTES) {
     if (!devServerOutputEl.dataset.truncated) {
       devServerOutputEl.appendChild(document.createTextNode('\n…[truncated]\n'));
@@ -320,10 +327,10 @@ function appendDevServerOutputText(text: string, stream: 'stdout' | 'stderr'): v
   if (stream === 'stderr') {
     const span = document.createElement('span');
     span.className = 'stderr-line';
-    span.textContent = text;
+    span.textContent = plain;
     devServerOutputEl.appendChild(span);
   } else {
-    devServerOutputEl.appendChild(document.createTextNode(text));
+    devServerOutputEl.appendChild(document.createTextNode(plain));
   }
   scrollDevServerIfPinned();
 }
