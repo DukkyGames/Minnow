@@ -132,10 +132,14 @@ export async function ingestBrainSource(input: {
 /** Run wiki health lint (orphans, stale, broken links). */
 export async function lintBrainWiki(options?: {
   includeLlm?: boolean;
+  apply?: boolean;
 }): Promise<BrainLintReport | null> {
   return brainFetch<BrainLintReport>('/api/brain/lint', {
     method: 'POST',
-    body: JSON.stringify({ includeLlm: options?.includeLlm !== false }),
+    body: JSON.stringify({
+      includeLlm: options?.includeLlm !== false,
+      apply: options?.apply === true,
+    }),
   });
 }
 

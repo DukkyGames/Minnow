@@ -70,6 +70,7 @@ export interface BrainLintReport {
   missingLinks: Array<{ from: string; target: string; summary: string }>;
   contradictions: Array<{ pages: string[]; summary: string }>;
   embeddingsEnabled: boolean;
+  applied?: Array<{ path: string; action: string }>;
 }
 
 /** When to trigger background reindex (automation wired in MIN-B10). */

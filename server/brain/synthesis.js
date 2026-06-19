@@ -199,8 +199,9 @@ export function formatMessagesForExtraction(messages) {
 /**
  * Write a synthesized fact directly to pages/facts/.
  * @param {{ title: string, body: string, tags: string[] }} fact
+ * @param {string[]} [similarTo] related page paths to record as frontmatter links
  */
-export async function writeSynthesisFactPage(fact) {
+export async function writeSynthesisFactPage(fact, similarTo = []) {
   const baseSlug = slugifyFactTitle(fact.title);
   let slug = baseSlug;
   let n = 2;
@@ -213,6 +214,7 @@ export async function writeSynthesisFactPage(fact) {
         body: fact.body,
         tags: fact.tags,
         source: 'synthesis',
+        ...(similarTo.length > 0 ? { similarTo } : {}),
       });
       return { page: created, relPath };
     } catch (err) {
@@ -315,6 +317,68 @@ export async function retireSupersededPages(newFact, newRelPath, existing, brain
 }
 
 /**
+ * Find existing pages most related to a new fact, to record as `similarTo`.
+ *
+ * Reuses the same two signals as retirement (title-keyword overlap + vector
+ * similarity) but ranks and caps instead of applying the same-topic cutoff, so
+ * a freshly written page links out to its neighbors and doesn't read as a graph
+ * orphan. Title overlap works with embeddings off; vector similarity refines the
+ * ranking when they're on.
+ *
+ * @param {{ title: string, body: string }} fact
+ * @param {Array<{ meta: object, body: string }>} existing
+ * @param {object} brainConfig
+ * @param {number} [limit]
+ * @returns {Promise<string[]>} related page relPaths (excluding the new page)
+ */
+export async function findRelatedPagePaths(fact, existing, brainConfig, limit = 3) {
+  if (!fact.title && !fact.body) return [];
+
+  /** @type {Map<string, number>} score keyed by page relPath */
+  const scores = new Map();
+  /** @type {Map<string, string>} relPath keyed by page id */
+  const pathById = new Map();
+  for (const row of existing) {
+    if (row.meta?.path) pathById.set(row.meta.id, row.meta.path);
+  }
+
+  // Title keyword overlap — count shared keywords (works without embeddings).
+  const kNew = titleKeywords(fact.title);
+  for (const row of existing) {
+    const relPath = row.meta?.path;
+    if (!relPath) continue;
+    const kOld = titleKeywords(row.meta.title);
+    let shared = 0;
+    for (const k of kNew) if (kOld.has(k)) shared++;
+    if (shared > 0) scores.set(relPath, (scores.get(relPath) ?? 0) + shared);
+  }
+
+  // Vector similarity — rank-weighted boost when embeddings are enabled.
+  const emb = brainConfig.embeddings ?? {};
+  if (emb.enabled) {
+    const query = `${fact.title} ${fact.body}`.trim();
+    try {
+      const { ids } = await retrieveMemoryBlockHybrid(
+        existing,
+        { query, limit: limit + 2, maxChars: 8000 },
+        brainConfig,
+      );
+      ids.forEach((id, idx) => {
+        const relPath = pathById.get(id);
+        if (relPath) scores.set(relPath, (scores.get(relPath) ?? 0) + (ids.length - idx));
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([relPath]) => relPath);
+}
+
+/**
  * Run fact extraction and write pages or enqueue pending proposals.
  * @param {{
  *   messages: Array<{ role?: string, content?: string | unknown[] }>,
@@ -401,7 +465,8 @@ export async function runMemorySynthesis(input) {
       pendingTitles.add(fact.title.toLowerCase());
       created.push(proposal);
     } else {
-      const written = await writeSynthesisFactPage(fact);
+      const similarTo = await findRelatedPagePaths(fact, existing, brainConfig);
+      const written = await writeSynthesisFactPage(fact, similarTo);
       pendingTitles.add(fact.title.toLowerCase());
       pages.push(written.page);
       // Retire prior pages that covered the same topic before adding the new one to existing.

@@ -70,4 +70,29 @@ describe('brain lint', () => {
     assert.ok(Array.isArray(report.contradictions));
     assert.ok(['ok', 'active'].includes(report.extensions.anchorDrift));
   });
+
+  test('lintBrainWiki apply=true marks orphan stale on first pass', async () => {
+    await createPage({
+      relPath: 'facts/apply-orphan.md',
+      id: '33333333-3333-3333-3333-333333333333',
+      title: 'Apply Orphan',
+      body: 'No one links here.',
+      source: 'user',
+      skipVectorSync: true,
+    });
+
+    const report = await lintBrainWiki({ includeLlm: false, apply: true });
+    assert.ok(Array.isArray(report.applied), 'applied array present');
+    const entry = report.applied.find((a) => a.path.includes('apply-orphan'));
+    assert.ok(entry, 'apply-orphan present in applied');
+    assert.equal(entry.action, 'marked-stale');
+  });
+
+  test('lintBrainWiki apply=true deletes stale orphan on second pass', async () => {
+    const report = await lintBrainWiki({ includeLlm: false, apply: true });
+    assert.ok(Array.isArray(report.applied), 'applied array present');
+    const entry = report.applied.find((a) => a.path.includes('apply-orphan'));
+    assert.ok(entry, 'apply-orphan deleted on second pass');
+    assert.equal(entry.action, 'deleted');
+  });
 });
