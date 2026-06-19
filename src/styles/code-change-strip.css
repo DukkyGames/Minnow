@@ -205,3 +205,27 @@
 .tool-call-code-change__del {
   color: var(--mn-danger);
 }
+
+/* File-mutation tools render as open diff cards, not collapsible bubbles */
+.tool-call-details--file {
+  border-style: solid;
+}
+
+.tool-call-details--file > .tool-call-body {
+  display: flex;
+}
+
+.tool-call-details--file > summary {
+  cursor: default;
+  pointer-events: none;
+}
+
+.tool-call-details--file .tool-call-section-label:first-child,
+.tool-call-details--file .tool-call-pre--args {
+  display: none;
+}
+
+.tool-call-details--file .tool-call-pre--result,
+.tool-call-details--file .tool-call-section-label:last-of-type {
+  display: none;
+}
