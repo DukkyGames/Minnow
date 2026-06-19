@@ -288,6 +288,11 @@ export function isBoardAutoMode(group: ChatGroup): boolean {
   return mode === 'auto' || mode === 'sequential';
 }
 
+/** True when auto/sequential mode is active AND the user has pressed Start. */
+export function isBoardRunning(group: ChatGroup): boolean {
+  return isBoardAutoMode(group) && group.orchestrateBoard?.autoRunning === true;
+}
+
 /** Recompute wave rows (status, taskCount, completeCount). */
 export function recomputeWaveRollup(board: OrchestrateBoardState): void {
   for (const wave of board.waves) {

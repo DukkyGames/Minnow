@@ -350,6 +350,8 @@ export interface OrchestrateBoardState {
   maxConcurrentTasks?: number;
   /** Manual board vs auto-pilot delegation (default manual). */
   executionMode?: 'manual' | 'auto' | 'sequential';
+  /** True when the user has pressed Start in auto/sequential mode. */
+  autoRunning?: boolean;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
   /** Full-board integration test after all tasks complete. */
@@ -545,6 +547,8 @@ export interface Chat {
   pendingModeId?: ModeId;
   /** Sidebar: green dot on inactive rows until the user opens this chat again. */
   unread?: boolean;
+  /** Sidebar: red dot on inactive rows after a failed turn until the user opens this chat again. */
+  turnError?: boolean;
   /** Epoch ms of last assistant message committed while this chat was active (unread baseline). */
   lastAssistantAt?: number;
   history: Message[];

@@ -375,6 +375,35 @@ button.board-header__activity {
   cursor: not-allowed;
 }
 
+.board-header__run-btn {
+  height: 32px;
+  padding: 0 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-accent-fg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.12s;
+}
+
+.board-header__run-btn:hover {
+  opacity: 0.85;
+}
+
+.board-header__run-btn--stop {
+  border-color: var(--mn-danger-border);
+  background: transparent;
+  color: var(--mn-danger);
+}
+
+.board-header__run-btn--stop:hover {
+  opacity: 0.75;
+}
+
 /* Bench controls: text buttons align with model-action-btn / hub workflow buttons */
 .board-btn {
   display: inline-flex;
@@ -1040,7 +1069,8 @@ button.board-header__activity {
 }
 
 .board-task-card__toolbar .board-task-card__btn--start,
-.board-task-card__toolbar .board-task-card__btn--stop {
+.board-task-card__toolbar .board-task-card__btn--stop,
+.board-task-card__toolbar .board-task-card__btn--run-tests {
   flex: 1 1 5.5rem;
   min-width: 0;
 }

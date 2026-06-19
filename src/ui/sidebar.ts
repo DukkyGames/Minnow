@@ -79,13 +79,75 @@ import { formatSidebarStatsPreview } from './stats';
 import { refreshTerminalHistoryForActiveChat } from './terminal-panel';
 import {
   applyChatItemDotClasses,
+  applyGroupHeaderDotClasses,
   getChatItemDotContext,
+  isChatItemDotVisible,
   maybeMarkChatUnreadAfterLeave,
   recordChatOpened,
   resolveChatItemDotState,
+  resolveGroupHeaderDotState,
   syncChatItemDotsInDom,
 } from './chat-item-dot';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
+
+// ─── Multi-select state ───────────────────────────────────────────────────────
+
+const selectedChatIds = new Set<string>();
+let lastSelectedChatId: string | null = null;
+
+function clearChatSelection(): void {
+  if (selectedChatIds.size === 0) return;
+  selectedChatIds.clear();
+  lastSelectedChatId = null;
+  document.querySelectorAll<HTMLElement>('.chat-item-row--selected').forEach((el) => {
+    el.classList.remove('chat-item-row--selected');
+  });
+}
+
+function toggleChatSelected(chatId: string): void {
+  if (selectedChatIds.has(chatId)) {
+    selectedChatIds.delete(chatId);
+  } else {
+    selectedChatIds.add(chatId);
+    lastSelectedChatId = chatId;
+  }
+  updateSelectionVisuals();
+}
+
+function selectRangeTo(toId: string): void {
+  const list = document.getElementById('chatList');
+  if (!list || !lastSelectedChatId) {
+    selectedChatIds.add(toId);
+    lastSelectedChatId = toId;
+    updateSelectionVisuals();
+    return;
+  }
+  const rows = [...list.querySelectorAll<HTMLElement>('.chat-item-row[data-chat-id]')];
+  const fromIdx = rows.findIndex((r) => r.dataset.chatId === lastSelectedChatId);
+  const toIdx = rows.findIndex((r) => r.dataset.chatId === toId);
+  if (fromIdx < 0 || toIdx < 0) {
+    selectedChatIds.add(toId);
+    lastSelectedChatId = toId;
+    updateSelectionVisuals();
+    return;
+  }
+  const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+  for (let i = lo; i <= hi; i++) {
+    const id = rows[i].dataset.chatId;
+    if (id) selectedChatIds.add(id);
+  }
+  updateSelectionVisuals();
+}
+
+function updateSelectionVisuals(): void {
+  const list = document.getElementById('chatList');
+  if (!list) return;
+  list.querySelectorAll<HTMLElement>('.chat-item-row[data-chat-id]').forEach((row) => {
+    row.classList.toggle('chat-item-row--selected', selectedChatIds.has(row.dataset.chatId ?? ''));
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Read canonical model id + optional provider from the top-bar composite select value. */
 function readTopBarModelBinding(): { modelId: string; providerId?: string } {
@@ -140,6 +202,7 @@ export function onModelSelectChange(): void {
 
 /** Refresh main column after workspace folder changes. */
 export function applyWorkspaceScopedSession(newPath: string, previousPath?: string): void {
+  clearChatSelection();
   const { activeChat, activeChanged } = onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
     recordChatOpened(activeChat.id);
@@ -219,6 +282,7 @@ export function appendChatRow(
   options?: AppendChatRowOptions,
 ): void {
   const isActive = highlightChatId != null && chat.id === highlightChatId;
+  const isSelected = selectedChatIds.has(chat.id);
   const inGroup = options?.inGroup === true;
   const modelLabel = chat.modelId || 'No model selected';
   const statsPreview = formatSidebarStatsPreview(chat.lastStats);
@@ -229,7 +293,10 @@ export function appendChatRow(
   const row = document.createElement('div');
   row.dataset.chatId = chat.id;
   row.className =
-    'chat-item-row' + (isActive ? ' active' : '') + (inGroup ? ' chat-item-row--in-group' : '');
+    'chat-item-row' +
+    (isActive ? ' active' : '') +
+    (inGroup ? ' chat-item-row--in-group' : '') +
+    (isSelected ? ' chat-item-row--selected' : '');
   row.setAttribute('role', 'listitem');
   row.setAttribute('aria-label', rowLabel);
   row.title = [chat.name, modelLabel, statsPreview].filter(Boolean).join('\n');
@@ -240,6 +307,18 @@ export function appendChatRow(
   }
   row.addEventListener('click', (e) => {
     if ((e.target as Element).closest('.chat-rename-input')) return;
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectRangeTo(chat.id);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      toggleChatSelected(chat.id);
+      return;
+    }
+    clearChatSelection();
+    lastSelectedChatId = chat.id;
     if (options?.onActivate) {
       options.onActivate(chat);
       return;
@@ -250,11 +329,16 @@ export function appendChatRow(
     if ((e.target as Element).closest('.chat-rename-input')) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      clearChatSelection();
+      lastSelectedChatId = chat.id;
       if (options?.onActivate) {
         options.onActivate(chat);
         return;
       }
       switchChat(chat.id);
+    }
+    if (e.key === 'Escape') {
+      clearChatSelection();
     }
   });
 
@@ -264,12 +348,17 @@ export function appendChatRow(
   const titleRow = document.createElement('div');
   titleRow.className = 'chat-item-title-row';
 
-  const dot = document.createElement('div');
-  dot.className = 'chat-item-dot';
-  dot.setAttribute('aria-hidden', 'true');
   const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
-  applyChatItemDotClasses(dot, resolveChatItemDotState(chat, dotCtx), row);
-  titleRow.appendChild(dot);
+  const dotState = resolveChatItemDotState(chat, dotCtx);
+  if (!inGroup) {
+    const dot = document.createElement('div');
+    dot.className = 'chat-item-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    applyChatItemDotClasses(dot, dotState, row);
+    titleRow.appendChild(dot);
+  } else if (isChatItemDotVisible(dotState)) {
+    row.dataset.dotState = dotState;
+  }
 
   const nameSpan = document.createElement('span');
   nameSpan.className = 'chat-item-name';
@@ -292,7 +381,11 @@ export function appendChatRow(
   row.addEventListener('contextmenu', (e) => {
     if ((e.target as Element).closest('.chat-rename-input')) return;
     e.preventDefault();
-    showChatItemContextMenu(e.clientX, e.clientY, chat, nameSpan, options);
+    if (selectedChatIds.size > 1 && selectedChatIds.has(chat.id)) {
+      showMultiSelectContextMenu(e.clientX, e.clientY, [...selectedChatIds]);
+    } else {
+      showChatItemContextMenu(e.clientX, e.clientY, chat, nameSpan, options);
+    }
   });
 
   row.appendChild(head);
@@ -315,15 +408,12 @@ export function appendChatRow(
   list.appendChild(row);
 }
 
-function groupHasStreamingChat(groupId: string, chats: Chat[]): boolean {
-  return chats.some((c) => c.groupId === groupId && isChatStreaming(c.id));
-}
 
 function appendGroupHeader(
   list: HTMLElement,
   group: import('../types').ChatGroup,
+  members: Chat[],
   memberCount: number,
-  streaming: boolean,
 ): void {
   const head = document.createElement('div');
   head.className = 'chat-group-header';
@@ -369,12 +459,8 @@ function appendGroupHeader(
   count.className = 'chat-group-header__count';
   count.textContent = String(memberCount);
 
-  if (streaming) {
-    const runDot = document.createElement('span');
-    runDot.className = 'chat-group-header__running';
-    runDot.title = 'Task running';
-    head.appendChild(runDot);
-  }
+  const dotCtx = getChatItemDotContext(sessionState?.activeId ?? null);
+  applyGroupHeaderDotClasses(head, resolveGroupHeaderDotState(members, dotCtx));
 
   head.appendChild(icon);
   head.appendChild(caret);
@@ -477,6 +563,10 @@ export function wireSidebarNewGroupButton(): void {
   const btn = document.getElementById('btnNewChatGroup');
   if (!btn || btn.dataset.wired === '1') return;
   btn.dataset.wired = '1';
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && selectedChatIds.size > 0) clearChatSelection();
+  });
   btn.addEventListener('click', () => {
     const g = createGroup('New group', getWorkspacePath());
     renderSidebar();
@@ -521,8 +611,8 @@ export function renderSidebar(): void {
       appendGroupHeader(
         list,
         group,
+        members,
         members.length,
-        groupHasStreamingChat(group.id, workspaceChats),
       );
       if (!group.collapsed && members.length > 0) {
         const membersEl = document.createElement('div');
@@ -545,6 +635,93 @@ export function renderSidebar(): void {
   appendChatListSection(list, 'Unassigned', unassigned, highlightChatId);
   syncChatItemDotsInDom();
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
+}
+
+function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): void {
+  const existing = document.getElementById('chatItemContextMenu');
+  existing?.remove();
+
+  const chats = chatIds
+    .map((id) => sessionState?.chats.find((c) => c.id === id))
+    .filter((c): c is Chat => c != null);
+  if (!chats.length) return;
+
+  const menu = document.createElement('div');
+  menu.id = 'chatItemContextMenu';
+  menu.className = 'chat-group-context-menu';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  const label = document.createElement('div');
+  label.className = 'chat-context-menu__multi-label';
+  label.textContent = `${chats.length} chats selected`;
+  menu.appendChild(label);
+
+  const eligible = chats.filter((c) => !isChatStreaming(c.id) && c.history.length > 0);
+  const brainItem = document.createElement('button');
+  brainItem.type = 'button';
+  brainItem.textContent = `Add ${eligible.length} to Brain`;
+  brainItem.disabled = eligible.length === 0;
+  if (eligible.length === 0) {
+    brainItem.title = 'No eligible chats (must have messages and not be streaming)';
+  }
+  brainItem.addEventListener('click', () => {
+    menu.remove();
+    clearChatSelection();
+    void import('./chat-brain-capture').then(async (m) => {
+      for (const chat of eligible) {
+        await m.runChatBrainCapture(chat);
+      }
+    });
+  });
+
+  const sep = document.createElement('div');
+  sep.className = 'chat-context-menu__sep';
+
+  const deletable = chats.filter((c) => !isChatStreaming(c.id));
+  const deleteItem = document.createElement('button');
+  deleteItem.type = 'button';
+  deleteItem.textContent = `Delete ${deletable.length} chat${deletable.length === 1 ? '' : 's'}`;
+  deleteItem.className = 'chat-context-menu__item--danger';
+  deleteItem.disabled = deletable.length === 0;
+  deleteItem.addEventListener('click', () => {
+    menu.remove();
+    const n = deletable.length;
+    if (!n) return;
+    if (!confirm(`Delete ${n} chat${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    const prevActiveId = sessionState?.activeId;
+    clearChatSelection();
+    const { modelId } = readTopBarModelBinding();
+    let lastResult: ReturnType<typeof removeChatById> | null = null;
+    for (const chat of deletable) {
+      const r = removeChatById(chat.id, modelId);
+      if (r.ok) lastResult = r;
+    }
+    const activeChanged = prevActiveId !== sessionState?.activeId;
+    if (lastResult) {
+      onChatRemoved({ ...lastResult, activeChanged });
+    } else {
+      renderSidebar();
+    }
+  });
+
+  menu.appendChild(brainItem);
+  menu.appendChild(sep);
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const close = (): void => {
+    menu.remove();
+    document.removeEventListener('click', close);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') close();
+  };
+  window.setTimeout(() => {
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+  }, 0);
 }
 
 function chatBrainCaptureState(chat: Chat): { disabled: boolean; title: string } {

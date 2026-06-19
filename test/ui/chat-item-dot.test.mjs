@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-const { resolveChatItemDotState } = await import('../../src/ui/chat-item-dot.ts');
+const {
+  resolveChatItemDotState,
+  resolveGroupHeaderDotState,
+  isChatItemDotVisible,
+} = await import('../../src/ui/chat-item-dot.ts');
 
 function chat(overrides) {
   return {
@@ -43,7 +47,7 @@ describe('chat-item-dot resolveChatItemDotState', () => {
     );
   });
 
-  test('background chat in thinking stream shows thinking', () => {
+  test('background chat in thinking stream resolves thinking but dot stays hidden', () => {
     const c = ctx({
       streamingChatIds: new Set(['chat-b']),
       streamPhaseByChatId: new Map([['chat-b', 'thinking']]),
@@ -69,6 +73,38 @@ describe('chat-item-dot resolveChatItemDotState', () => {
     assert.equal(resolveChatItemDotState(chat({}), c), 'thinking');
   });
 
+  test('needs-input beats error and unread', () => {
+    const c = ctx({
+      activeChatId: 'other',
+      inputPendingChatId: 'chat-a',
+    });
+    assert.equal(
+      resolveChatItemDotState(chat({ unread: true, turnError: true }), c),
+      'needs-input',
+    );
+  });
+
+  test('error beats unread on inactive chat', () => {
+    assert.equal(
+      resolveChatItemDotState(chat({ unread: true, turnError: true }), ctx()),
+      'error',
+    );
+  });
+
+  test('inactive chat with turnError is error', () => {
+    assert.equal(
+      resolveChatItemDotState(chat({ turnError: true }), ctx()),
+      'error',
+    );
+  });
+
+  test('active chat with turnError is idle (dot hidden while viewing)', () => {
+    assert.equal(
+      resolveChatItemDotState(chat({ turnError: true }), ctx({ activeChatId: 'chat-a' })),
+      'idle',
+    );
+  });
+
   test('needs-input beats thinking', () => {
     const c = ctx({
       activeChatId: 'chat-a',
@@ -77,5 +113,30 @@ describe('chat-item-dot resolveChatItemDotState', () => {
       inputPendingChatId: 'chat-a',
     });
     assert.equal(resolveChatItemDotState(chat({}), c), 'needs-input');
+  });
+});
+
+describe('chat-item-dot visibility helpers', () => {
+  test('isChatItemDotVisible is true only for actionable states', () => {
+    assert.equal(isChatItemDotVisible('unread'), true);
+    assert.equal(isChatItemDotVisible('needs-input'), true);
+    assert.equal(isChatItemDotVisible('error'), true);
+    assert.equal(isChatItemDotVisible('idle'), false);
+    assert.equal(isChatItemDotVisible('thinking'), false);
+  });
+
+  test('resolveGroupHeaderDotState picks highest-priority member state', () => {
+    const c = ctx({ activeChatId: 'active' });
+    const members = [
+      chat({ id: 'a', unread: true }),
+      chat({ id: 'b', turnError: true }),
+      chat({ id: 'c' }),
+    ];
+    assert.equal(resolveGroupHeaderDotState(members, c), 'error');
+  });
+
+  test('resolveGroupHeaderDotState returns null when no member needs attention', () => {
+    const c = ctx({ activeChatId: 'active' });
+    assert.equal(resolveGroupHeaderDotState([chat({ id: 'a' })], c), null);
   });
 });

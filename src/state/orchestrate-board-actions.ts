@@ -34,9 +34,9 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, getBoardExecutionMode, updateTask } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, updateTask } from './orchestrate-board-store.ts';
 
-export { getBoardExecutionMode, isBoardAutoMode };
+export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 import {
   createEmptyChatObject,
   findChatById,
@@ -168,7 +168,7 @@ export function finalizeBoardTaskOnStreamEnd(
     });
   }
 
-  if (isBoardAutoMode(group)) {
+  if (isBoardRunning(group)) {
     void startTaskTesting(group, task.id, plannerChat);
   }
 }
@@ -1112,7 +1112,7 @@ export function moveTaskStatus(
   }
 }
 
-/** Persist auto/manual/sequential execution mode and kick off delegation when enabling. */
+/** Persist auto/manual/sequential execution mode. Does not start execution — use startBoardAutoRun. */
 export function setBoardExecutionMode(
   group: ChatGroup,
   mode: 'manual' | 'auto' | 'sequential',
@@ -1121,12 +1121,10 @@ export function setBoardExecutionMode(
   const board = group.orchestrateBoard;
   if (!board) return;
   board.executionMode = mode;
+  if (mode === 'manual') board.autoRunning = false;
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
-  if (mode === 'auto' || mode === 'sequential') {
-    void autoDelegateNext(group, plannerChat);
-  }
 }
 
 /** Set max concurrent tasks, clamped to [1,20]. Drains queue when in auto/sequential mode. */
@@ -1148,6 +1146,43 @@ export function setBoardMaxConcurrent(
   }
 }
 
+/** Begin auto/sequential execution — set running flag then kick off delegation. */
+export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board || !isBoardAutoMode(group)) return;
+  board.autoRunning = true;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  void autoDelegateNext(group, plannerChat);
+}
+
+/** Stop all active task chats and clear the task queue. */
+export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  board.autoRunning = false;
+  board.lastUpdatedAt = Date.now();
+  taskQueueByGroupId.delete(group.id);
+  for (const task of board.tasks) {
+    if (task.chatId) {
+      stopTaskChatSupervision(task.chatId);
+      stopGeneration(task.chatId);
+    }
+    if (task.testChatId) {
+      stopTaskChatSupervision(task.testChatId);
+      stopGeneration(task.testChatId);
+    }
+  }
+  if (board.finalTest?.chatId) {
+    stopTaskChatSupervision(board.finalTest.chatId);
+    stopGeneration(board.finalTest.chatId);
+  }
+  stopGeneration(plannerChat.id);
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
 /** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */
 export async function autoDelegateNext(
   group: ChatGroup,
@@ -1156,7 +1191,7 @@ export async function autoDelegateNext(
   ensureStreamEndSubscription();
   ensureAutoDriveSubscription();
   const board = group.orchestrateBoard;
-  if (!board || !isBoardAutoMode(group)) return;
+  if (!board || !isBoardRunning(group)) return;
 
   const waveOrder = new Map(board.waves.map((w, i) => [String(w.id), i]));
   const ready = board.tasks
