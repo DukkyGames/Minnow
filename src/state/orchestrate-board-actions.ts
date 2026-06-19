@@ -40,6 +40,7 @@ export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 import {
   createEmptyChatObject,
   findChatById,
+  saveSessionsNow,
   scheduleSaveSessions,
   sessionState,
   touchChat,
@@ -1123,7 +1124,12 @@ export function setBoardExecutionMode(
   board.executionMode = mode;
   if (mode === 'manual') board.autoRunning = false;
   board.lastUpdatedAt = Date.now();
-  scheduleSaveSessions();
+  // Flush stop state immediately so reload cannot resurrect auto execution.
+  if (mode === 'manual') {
+    saveSessionsNow();
+  } else {
+    scheduleSaveSessions();
+  }
   emitBoardChange(group.id);
 }
 
@@ -1223,7 +1229,8 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
     stopGeneration(board.finalTest.chatId);
   }
   stopGeneration(plannerChat.id);
-  scheduleSaveSessions();
+  // Flush stop state immediately so reload cannot resurrect auto execution.
+  saveSessionsNow();
   emitBoardChange(group.id);
 }
 
