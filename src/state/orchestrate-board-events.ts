@@ -3,6 +3,8 @@
  * Listeners are keyed by sidebar folder id ({@link ChatGroup.id}).
  */
 
+import { reportBackgroundError } from '../boot/report-background-error.ts';
+
 type BoardChangeListener = (groupId: string) => void;
 
 const listenersByGroupId = new Map<string, Set<BoardChangeListener>>();
@@ -38,8 +40,8 @@ export function emitBoardChange(groupId: string): void {
   for (const fn of globalListeners) {
     try {
       fn(groupId);
-    } catch {
-      /* ignore subscriber errors */
+    } catch (err) {
+      reportBackgroundError('board-change-listener', err);
     }
   }
   const set = listenersByGroupId.get(groupId);
@@ -47,8 +49,8 @@ export function emitBoardChange(groupId: string): void {
   for (const fn of set) {
     try {
       fn(groupId);
-    } catch {
-      /* ignore subscriber errors */
+    } catch (err) {
+      reportBackgroundError('board-change-listener', err);
     }
   }
 }

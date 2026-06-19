@@ -74,15 +74,61 @@ function preloadMjsPath() {
   return path.join(repoRoot, 'electron', 'dist', 'preload.mjs');
 }
 
-function isElectronBuildReady() {
+function electronOutputsExist() {
   return fs.existsSync(mainJsPath()) && fs.existsSync(preloadMjsPath());
 }
 
+/** Source .ts files + tsconfig whose changes must trigger a recompile. */
+function electronSourceFiles() {
+  const electronDir = path.join(repoRoot, 'electron');
+  try {
+    return fs
+      .readdirSync(electronDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && (e.name.endsWith('.ts') || e.name === 'tsconfig.json'))
+      .map((e) => path.join(electronDir, e.name));
+  } catch {
+    return [];
+  }
+}
+
+function newestMtimeMs(files) {
+  let newest = 0;
+  for (const file of files) {
+    try {
+      const { mtimeMs } = fs.statSync(file);
+      if (mtimeMs > newest) newest = mtimeMs;
+    } catch {
+      /* ignore unreadable file */
+    }
+  }
+  return newest;
+}
+
+/**
+ * Build is fresh only if the outputs exist AND no electron source file is newer
+ * than the compiled output. Mtime check catches edits and newly-added files —
+ * an existence-only check silently runs a stale main process (see MIN-262).
+ */
+export function isElectronBuildFresh() {
+  if (!electronOutputsExist()) return false;
+  let outMtime;
+  try {
+    outMtime = Math.min(
+      fs.statSync(mainJsPath()).mtimeMs,
+      fs.statSync(preloadMjsPath()).mtimeMs,
+    );
+  } catch {
+    return false;
+  }
+  return newestMtimeMs(electronSourceFiles()) <= outMtime;
+}
+
 async function ensureElectronBuild() {
-  if (isElectronBuildReady()) return;
-  console.log('[electron] Compiling main process (first run)…');
+  if (isElectronBuildFresh()) return;
+  const reason = electronOutputsExist() ? 'sources changed' : 'first run';
+  console.log(`[electron] Compiling main process (${reason})…`);
   await run('npm', ['run', 'electron:build']);
-  if (!isElectronBuildReady()) {
+  if (!electronOutputsExist()) {
     throw new Error('Electron build incomplete. Run npm run electron:build.');
   }
 }

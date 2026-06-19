@@ -178,7 +178,6 @@ export async function applyAppearanceFonts(fonts?: AppearanceFonts): Promise<voi
 
   root.style.setProperty('--font-ui', stackForRef(prefs.ui));
   root.style.setProperty('--font-mono', stackForRef(prefs.mono));
-  emitChange();
 }
 
 /** Set UI font preset or upload ref. */
