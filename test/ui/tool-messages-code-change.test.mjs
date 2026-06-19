@@ -78,3 +78,63 @@ describe('renderToolResult codeChange badge', () => {
     assert.ok(panel.querySelector('.prompt-diff__line--add'));
   });
 });
+
+describe('renderToolCall display labels', () => {
+  /** @type {import('happy-dom').Window | undefined} */
+  let window;
+
+  afterEach(() => {
+    window?.close();
+    window = undefined;
+  });
+
+  test('non-file tool uses human-readable label', () => {
+    window = setupDom();
+    const wrap = renderToolCall('web_search', {});
+    const title = wrap.querySelector('.tool-call-title');
+    assert.equal(title?.textContent, 'Web search');
+  });
+
+  test('unknown tool falls back to spaced snake_case', () => {
+    window = setupDom();
+    const wrap = renderToolCall('my_custom_tool', {});
+    const title = wrap.querySelector('.tool-call-title');
+    assert.equal(title?.textContent, 'my custom tool');
+  });
+
+  test('file card uses path basename as title', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
+    const title = wrap.querySelector('.tool-call-title');
+    assert.equal(title?.textContent, 'wait-for-vite.mjs');
+  });
+
+  test('file card is open by default with file-card classes', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
+    const details = wrap.querySelector('.tool-call-details');
+    assert.ok(wrap.classList.contains('tool-call-msg--file'));
+    assert.ok(details?.classList.contains('tool-call-details--file'));
+    assert.equal(details?.open, true);
+  });
+
+  test('file card shows diff on result', () => {
+    window = setupDom();
+    const wrap = renderToolCall('save_file', { path: 'src/wait-for-vite.mjs' });
+    renderToolResult(wrap, 'Saved', undefined, undefined, {
+      additions: 2,
+      deletions: 1,
+      path: 'src/wait-for-vite.mjs',
+      diffLines: [
+        { type: 'remove', text: 'old line' },
+        { type: 'add', text: 'new line' },
+      ],
+    });
+    const panel = wrap.querySelector('.tool-call-diff');
+    assert.ok(panel);
+    assert.equal(wrap.querySelector('.tool-call-title')?.textContent, 'wait-for-vite.mjs');
+    const badge = wrap.querySelector('.tool-call-code-change');
+    assert.equal(badge?.querySelector('.tool-call-code-change__add')?.textContent, '+2');
+    assert.equal(badge?.querySelector('.tool-call-code-change__del')?.textContent, '−1');
+  });
+});

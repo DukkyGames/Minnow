@@ -3,8 +3,31 @@
  */
 
 import type { CodeChangeDiffLine, CodeChangeStats, ToolImageAttachment } from '../types';
+import { BUILT_IN_TOOLS } from '../tools/definitions';
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 import { formatAskQuestionResultAsListItems } from './format-ask-question-result';
+
+/** Human-readable labels for built-in tools (fallback: snake_case → spaces). */
+const TOOL_LABEL_MAP = new Map(BUILT_IN_TOOLS.map((t) => [t.id, t.label]));
+
+/** File write/edit tools that render as open diff cards instead of collapsible bubbles. */
+const FILE_MUTATION_TOOLS = new Set([
+  'save_file',
+  'replace_text_in_file',
+  'append_file',
+  'insert_at_line',
+  'move_file',
+  'delete_path',
+]);
+
+function humanizeToolName(name: string): string {
+  return TOOL_LABEL_MAP.get(name) ?? name.replace(/_/g, ' ');
+}
+
+/** Last path segment for file-card summary titles. */
+function pathBasename(p: string): string {
+  return p.replace(/\\/g, '/').split('/').pop() ?? p;
+}
 
 /** Max characters shown in expanded result <pre> blocks. */
 const RESULT_DISPLAY_CAP = 2048;
@@ -125,7 +148,6 @@ export function renderToolCall(
 
   const summary = document.createElement('summary');
   summary.className = 'tool-call-summary';
-  summary.setAttribute('aria-label', toolSummaryAriaLabel(name, 'running'));
 
   const statusGlyph = document.createElement('span');
   statusGlyph.className = 'tool-call-status';
@@ -137,7 +159,24 @@ export function renderToolCall(
 
   const title = document.createElement('span');
   title.className = 'tool-call-title';
-  title.textContent = name;
+
+  const argsRecord =
+    argsObj && typeof argsObj === 'object' && !Array.isArray(argsObj)
+      ? (argsObj as Record<string, unknown>)
+      : {};
+  const pathArg = typeof argsRecord.path === 'string' ? argsRecord.path : undefined;
+  const isFileCard = FILE_MUTATION_TOOLS.has(name) && pathArg !== undefined;
+
+  if (isFileCard) {
+    wrap.classList.add('tool-call-msg--file');
+    details.classList.add('tool-call-details--file');
+    details.open = true;
+    title.textContent = pathBasename(pathArg);
+    summary.setAttribute('aria-label', toolSummaryAriaLabel(pathBasename(pathArg), 'running'));
+  } else {
+    title.textContent = humanizeToolName(name);
+    summary.setAttribute('aria-label', toolSummaryAriaLabel(humanizeToolName(name), 'running'));
+  }
 
   const statusLabel = document.createElement('span');
   statusLabel.className = 'tool-call-status-label tool-call-status-label--pending';
@@ -231,6 +270,28 @@ export function renderToolResult(
     appendCodeChangeBadge(summary, codeChange);
   } else {
     summary.querySelector('.tool-call-code-change')?.remove();
+  }
+
+  if (wrap.classList.contains('tool-call-msg--file')) {
+    const titleEl = wrap.querySelector('.tool-call-title');
+    const displayPath =
+      codeChange?.path ??
+      (() => {
+        const args = toolArgs ?? tryParseArgsFromToolWrap(wrap);
+        if (args && typeof args === 'object' && !Array.isArray(args)) {
+          const path = (args as Record<string, unknown>).path;
+          return typeof path === 'string' ? path : undefined;
+        }
+        return undefined;
+      })();
+    if (titleEl && displayPath) {
+      const basename = pathBasename(displayPath);
+      titleEl.textContent = basename;
+      summary.setAttribute(
+        'aria-label',
+        toolSummaryAriaLabel(basename, failed ? 'failed' : 'succeeded'),
+      );
+    }
   }
 
   if (body.querySelector('.tool-call-pre--result')) return;
