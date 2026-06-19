@@ -134,4 +134,20 @@ describe('wikilinks backlinks orphans', () => {
     assert.deepEqual(orphanPaths, ['facts/orphan.md']);
     assert.equal(backlinks['facts/a'].length, 1);
   });
+
+  test('similarTo edges keep both endpoints out of the orphan list', () => {
+    const catalog = {
+      pages: [
+        // No wikilinks anywhere; pages relate only via similarTo.
+        { path: 'facts/x.md', links: [], similarTo: ['facts/y'], status: 'current' },
+        { path: 'facts/y.md', links: [], status: 'current' },
+        // similarTo to a non-existent page must not rescue this page.
+        { path: 'facts/dangling.md', links: [], similarTo: ['facts/missing'], status: 'current' },
+        { path: 'facts/alone.md', links: [], status: 'current' },
+      ],
+    };
+    const orphanPaths = findOrphanPages(catalog).map((p) => p.path).sort();
+    // x has an outbound similar edge, y is the inbound target — both connected.
+    assert.deepEqual(orphanPaths, ['facts/alone.md', 'facts/dangling.md']);
+  });
 });

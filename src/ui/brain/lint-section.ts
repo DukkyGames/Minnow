@@ -80,8 +80,40 @@ function renderIssueList(
   mount.append(section);
 }
 
+function renderAppliedSummary(mount: HTMLElement, applied: Array<{ path: string; action: string }>): void {
+  const section = document.createElement('section');
+  section.className = 'brain-lint-group brain-lint-applied';
+  const heading = document.createElement('h4');
+  heading.className = 'brain-section-subtitle';
+  heading.textContent = 'Applied';
+  section.append(heading);
+
+  if (!applied.length) {
+    const empty = document.createElement('p');
+    empty.className = 'brain-muted';
+    empty.textContent = 'Nothing to clean up.';
+    section.append(empty);
+    mount.append(section);
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'brain-lint-list';
+  for (const item of applied) {
+    const li = document.createElement('li');
+    li.textContent = `${item.path} — ${item.action}`;
+    list.append(li);
+  }
+  section.append(list);
+  mount.append(section);
+}
+
 function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
   mount.replaceChildren();
+
+  if (report.applied) {
+    renderAppliedSummary(mount, report.applied);
+  }
 
   const meta = document.createElement('p');
   meta.className = 'brain-muted';
@@ -105,6 +137,22 @@ function renderLintReport(mount: HTMLElement, report: BrainLintReport): void {
     report.contradictions,
     'No contradictions flagged.',
   );
+
+  const hasActionable =
+    report.orphans.length > 0 || report.stale.length > 0 || report.contradictions.length > 0;
+  if (hasActionable) {
+    const cleanBtn = document.createElement('button');
+    cleanBtn.type = 'button';
+    cleanBtn.className = 'brain-action-btn';
+    cleanBtn.textContent = 'Clean up';
+    cleanBtn.addEventListener('click', () => {
+      const ok = confirm(
+        "Mark orphans stale and delete pages already marked stale. This deletes files and can't be undone.",
+      );
+      if (ok) void runCleanup();
+    });
+    mount.append(cleanBtn);
+  }
 }
 
 function bindLintSection(): void {
@@ -147,6 +195,29 @@ async function runLint(): Promise<void> {
 
   renderLintReport(mount, report);
   // Guard in renderLintSection() checks this flag to preserve the report on re-entry.
+  mount.dataset.lintRan = '1';
+}
+
+async function runCleanup(): Promise<void> {
+  const mount = document.getElementById('brainLintBody');
+  const offlineEl = document.getElementById('brainLintOffline');
+  if (!mount) return;
+
+  renderBrainLoading(mount, 'Cleaning up…');
+
+  const report = await lintBrainWiki({ includeLlm: true, apply: true });
+  offlineEl?.classList.toggle('hidden', report !== null);
+
+  if (!report) {
+    mount.replaceChildren();
+    const err = document.createElement('p');
+    err.className = 'brain-error';
+    err.textContent = 'Cleanup failed. Start npm start and try again.';
+    mount.append(err);
+    return;
+  }
+
+  renderLintReport(mount, report);
   mount.dataset.lintRan = '1';
 }
 

@@ -300,17 +300,46 @@ export function computeBacklinks(catalog) {
   return backlinks;
 }
 
-/** Pages with no inbound links (excluding explicit non-orphan roots). */
+/** Normalize a link/page reference for comparison (strip .md, normalize slashes). */
+function normalizePageRef(ref) {
+  return String(ref ?? '').replace(/\\/g, '/').replace(/\.md$/i, '');
+}
+
+/**
+ * Paths that participate in any `similarTo` edge, keyed without `.md`.
+ *
+ * Both endpoints count as connected: a page that lists similar pages is not
+ * isolated, and neither is a page that others point to. Only edges resolving to
+ * a real page count, so dangling references don't mask a true orphan. This
+ * mirrors how the graph view (buildPageGraph) treats `similar` edges.
+ */
+export function computeSimilarLinks(catalog) {
+  const pages = catalog?.pages ?? [];
+  const valid = new Set(pages.map((p) => normalizePageRef(p.path)));
+  const connected = new Set();
+  for (const page of pages) {
+    const refs = Array.isArray(page.similarTo) ? page.similarTo : [];
+    const resolved = refs.map(normalizePageRef).filter((r) => valid.has(r));
+    if (resolved.length === 0) continue;
+    connected.add(normalizePageRef(page.path));
+    for (const r of resolved) connected.add(r);
+  }
+  return connected;
+}
+
+/** Pages with no inbound links and no similarTo edges (excluding non-orphan roots). */
 export function findOrphanPages(catalog) {
   const pages = catalog?.pages ?? [];
   const backlinks = computeBacklinks(catalog);
+  const similarConnected = computeSimilarLinks(catalog);
   const rootPaths = new Set(['index.md']);
   return pages.filter((page) => {
     if (page.status === 'orphan') return true;
     if (rootPaths.has(page.path)) return false;
     const linkKey = page.path.replace(/\.md$/i, '');
     const inbound = backlinks[linkKey] ?? backlinks[page.path] ?? [];
-    return inbound.length === 0;
+    if (inbound.length > 0) return false;
+    return !similarConnected.has(linkKey);
   });
 }
 
@@ -548,6 +577,9 @@ export async function createPage(input) {
   if (input.chatId) meta.chatId = String(input.chatId);
   if (Array.isArray(input.sourceTurnIndices)) {
     meta.sourceTurnIndices = input.sourceTurnIndices.map((n) => Number(n));
+  }
+  if (Array.isArray(input.similarTo) && input.similarTo.length > 0) {
+    meta.similarTo = input.similarTo.map((s) => String(s));
   }
 
   await fs.mkdir(path.dirname(abs), { recursive: true });
