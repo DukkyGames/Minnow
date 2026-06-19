@@ -64,9 +64,9 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
-  min-width: 280px;
-  max-width: min(480px, calc(100vw - 32px));
-  max-height: min(60vh, 400px);
+  min-width: 320px;
+  max-width: min(720px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
   overflow-y: auto;
   background: var(--mn-surface-1);
   border: 1px solid var(--mn-border);
@@ -179,7 +179,7 @@
 
 .code-change-panel__file-diff .prompt-diff__body {
   font-size: 11px;
-  max-height: 200px;
+  max-height: 360px;
   overflow: auto;
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-xs, 4px);
