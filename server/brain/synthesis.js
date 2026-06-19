@@ -225,22 +225,70 @@ export async function writeSynthesisFactPage(fact) {
   throw new Error('Could not allocate a unique fact page path');
 }
 
+/** Stop-words stripped when comparing fact titles for topic overlap. */
+const TITLE_STOP = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'of', 'in', 'on', 'at', 'to',
+  'for', 'and', 'or', 'but', 'with', 'by', 'from', 'user', 'has', 'have',
+  'had', 'be', 'been', 'being', 'uses', 'use', 'used', 'my', 'me', 'our',
+  'your', 'his', 'her', 'their', 'its', 'this', 'that', 'they', 'it', 'who',
+  'what', 'when', 'where', 'will', 'would', 'could', 'should', 'may', 'not',
+  'no', 'so', 'as', 'if', 'he', 'she', 'we', 'you',
+]);
+
+function titleKeywords(title) {
+  return new Set(
+    String(title ?? '').toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !TITLE_STOP.has(w)),
+  );
+}
+
+/**
+ * True when two fact titles share enough keywords to be about the same topic.
+ * Jaccard over the smaller set — ≥1 shared word AND ≥40% overlap ratio.
+ */
+function titlesAreSameTopic(titleA, titleB) {
+  const kA = titleKeywords(titleA);
+  const kB = titleKeywords(titleB);
+  if (kA.size === 0 || kB.size === 0) return false;
+  let shared = 0;
+  for (const k of kA) if (kB.has(k)) shared++;
+  return shared >= 1 && shared / Math.min(kA.size, kB.size) >= 0.4;
+}
+
 /**
  * After writing a new fact page, mark existing pages that cover the same topic as stale.
- * Uses the same similarity signal as isDuplicateMemory but skips the new page itself.
- * @param {{ title: string, body: string }} newFact
+ *
+ * Primary signal: title keyword overlap — catches semantic updates like "dark mode" → "light mode"
+ * where the bodies differ but the topic (and most title keywords) are the same.
+ * The old body-similarity approach was symmetric with isDuplicateMemory, so it never found
+ * anything to retire (if old and new were different enough to write, they were different enough
+ * to skip retirement too).
+ *
+ * Secondary signal: vector similarity when embeddings are enabled.
+ *
+ * @param {{ title: string, body: string, category?: string }} newFact
  * @param {string} newRelPath
  * @param {Array<{ meta: object, body: string }>} existing
  * @param {object} brainConfig
  */
 export async function retireSupersededPages(newFact, newRelPath, existing, brainConfig) {
-  const query = `${newFact.title} ${newFact.body}`.trim();
-  if (!query) return;
+  if (!newFact.title || !newRelPath) return;
 
-  const emb = brainConfig.embeddings ?? {};
   const candidates = new Set();
 
+  // Title keyword overlap — primary retirement signal.
+  for (const row of existing) {
+    if (titlesAreSameTopic(newFact.title, row.meta.title)) {
+      if (row.meta.id) candidates.add(row.meta.id);
+    }
+  }
+
+  // Vector similarity — secondary signal when embeddings are on.
+  const emb = brainConfig.embeddings ?? {};
   if (emb.enabled) {
+    const query = `${newFact.title} ${newFact.body}`.trim();
     try {
       const { ids } = await retrieveMemoryBlockHybrid(
         existing,
@@ -250,14 +298,6 @@ export async function retireSupersededPages(newFact, newRelPath, existing, brain
       for (const id of ids) candidates.add(id);
     } catch {
       /* best-effort */
-    }
-  }
-
-  const needle = query.toLowerCase();
-  for (const row of existing) {
-    const hay = `${row.meta.title ?? ''} ${row.body ?? ''}`.toLowerCase();
-    if (hay.includes(needle) || needle.includes(hay.slice(0, 80))) {
-      if (row.meta.id) candidates.add(row.meta.id);
     }
   }
 
