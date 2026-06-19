@@ -9,6 +9,7 @@ import { isOrchestrateBoardInitSplitActive } from '../ui/orchestrate-board-init-
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
+import { reportBackgroundError } from '../boot/report-background-error';
 
 type ChatStreamEndListener = (chatId: string) => void;
 const streamEndListeners = new Set<ChatStreamEndListener>();
@@ -27,8 +28,8 @@ export function notifyChatStreamEnded(chatId: string): void {
   for (const fn of streamEndListeners) {
     try {
       fn(chatId);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      reportBackgroundError('stream-end-listener', err);
     }
   }
 }
@@ -52,8 +53,8 @@ export function notifyChatStreamActivity(chatId: string): void {
   for (const fn of streamActivityListeners) {
     try {
       fn(chatId);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      reportBackgroundError('stream-activity-listener', err);
     }
   }
 }

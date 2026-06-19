@@ -622,6 +622,37 @@
   background: var(--mn-danger-soft);
 }
 
+.tool-call-kill {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tool-call-kill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-danger-soft) 70%, var(--mn-danger) 30%);
+}
+
+.tool-call-kill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tool-call-kill.hidden {
+  display: none;
+}
+
+.tool-call-kill:focus-visible {
+  outline: 2px solid var(--mn-danger);
+  outline-offset: 2px;
+}
+
 .tool-call-spinner {
   display: block;
   width: 14px;

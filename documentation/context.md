@@ -1393,12 +1393,12 @@ Browser (same origin :5173)
 
 Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + WebSocket) for the user, plus two fixed virtual tabs — **Agent** (agent command SSE) and **Dev server** (hub dev-server logs) — then user PTY tabs and **+**. Tab order: Agent → Dev server → PTY tabs → **+**. Virtual tab ids `__minnow_agent__` and `__minnow_dev_server__` ([`isDevServerTabId`](../src/ui/terminal-tabs.ts)) disconnect PTY WebSocket when selected. Dev server pane: `#terminalDevServerPane` / `#terminalDevServerOutput`. Hub **start** attaches logs **stream-only** via [`ensureDevServerStream`](../src/ui/terminal-panel.ts) (panel stays closed; not the Agent tab). Hub **Console** opens the **Dev server** tab via [`openDevServerConsole`](../src/ui/terminal-panel.ts); teardown uses [`stopDevServerStream`](../src/ui/terminal-panel.ts). Agent tab keeps past-run dropdown in its toolbar. Toggle metrics via `#btnStats` or terminal via `#btnTerminal` (sidebar footer) or **Ctrl+`**. Requires **`npm start`** for PTY; `npm run dev` shows offline banner (no WS). **Chrome:** [`src/styles/terminal.css`](../src/styles/terminal.css) matches bench-instrument panels (stats strip / input bar): hairline borders, `--code-inline-bg` for `#terminalShellHint` and hovers, ink-accent active tabs, solid bordered controls (no dashed add tab). Tokens: `--code-bg`, `--code-inline-bg` in [`src/styles/tokens.css`](../src/styles/tokens.css).
 
-**Dual backend:** User shell → `@lydell/node-pty`. Agent blocking `execute_command` / `run_javascript` / `run_python` → `terminal-runner` + SSE (`runCommandWithTerminalStream`). Background `execute_command` → server `createBackgroundRun` only (no SSE). User **Stop** aborts the SSE stream and `POST /api/terminal/cancel/:runId`.
+**Dual backend:** User shell → `@lydell/node-pty`. Agent blocking `execute_command` / `run_javascript` / `run_python` → `terminal-runner` + SSE (`runCommandWithTerminalStream`). Background `execute_command` → server `createBackgroundRun` only (no SSE). User **Stop** aborts the SSE stream and `POST /api/terminal/cancel/:runId`. **MIN-241:** Agent console tab shows **Stop command** (`#btnTerminalAgentStop`) while a shell run is active; Dev server tab keeps **Stop dev server** (`#btnTerminalDevServerStop`). `execute_command` and `start_background_command` tool-call bubbles include a **Stop** control while their `runId` is tracked in [`src/ui/shell-run-registry.ts`](../src/ui/shell-run-registry.ts) (wired by [`src/ui/shell-run-ui.ts`](../src/ui/shell-run-ui.ts)).
 
 | Concern | Location |
 |---------|----------|
 | Panel orchestration | `src/ui/terminal-panel.ts` |
-| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts` — **Ctrl/Cmd+C** copies when text is selected; otherwise **Ctrl+C** still sends SIGINT to the PTY ([`terminal-copy-shortcut.ts`](../src/ui/terminal-copy-shortcut.ts)) |
+| xterm + WS | `src/ui/terminal-xterm.ts`, `src/api/terminal-pty.ts`, `src/ui/terminal-history-nav.ts` |
 | Tabs + shell select | `src/ui/terminal-tabs.ts`, `#terminalTabBar`, `#terminalShellSelect` (PTY tabs init when the panel opens; `pagehide` kills PTY sessions) |
 | PTY host | `server/terminal/pty-host.js`, `pty-ws.js`, `shell-profiles.js` |
 | Agent SSE | `src/api/terminal.ts`, `server/terminal-runner.js` |
@@ -1412,7 +1412,9 @@ Docked **bottom panel** in `.main-column`: **interactive PTY tabs** (xterm.js + 
 
 **Windows:** Prefer `@lydell/node-pty` (prebuilt). Stock `node-pty` needs VS Build Tools + `node-gyp`.
 
-**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`); `test/ui/terminal-copy-shortcut.test.mts` (PTY copy vs SIGINT). Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
+**PTY tab history (ArrowUp/ArrowDown):** Per-tab command history is stored in `sessionStorage` (`minnow.terminal.history.<tabId>`). Recall sends backspaces + the recalled line to the PTY WebSocket (shell redraws prompt/output) instead of writing local `\r\x1b[K` escape sequences into xterm — avoids corrupted lines like `[0[I[0[I` after the first shell row. Helpers: [`src/ui/terminal-history-nav.ts`](../src/ui/terminal-history-nav.ts); tests: `test/ui/terminal-history-nav.test.mts`.
+
+**Tests:** `node test/terminal-stream.test.mjs <baseUrl>`; `npm run test:terminal-pty`; unit `test/terminal/*.test.mjs`; `test/ui/terminal-tabs-dev-server.test.mts` (Agent → Dev server tab order, `isDevServerTabId`); `test/ui/terminal-history-nav.test.mts`. Verification: [`documentation/plans/verification/feature-06-09.md`](plans/verification/feature-06-09.md).
 
 **Executor extras (not in the 32-tool settings catalog):**
 

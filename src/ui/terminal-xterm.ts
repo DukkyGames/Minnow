@@ -19,6 +19,10 @@ import {
   copyTextToClipboard,
   shouldCopyTerminalSelectionOnKeydown,
 } from './terminal-copy-shortcut';
+  buildHistoryClearInput,
+  buildHistoryReplaceInput,
+  resolveHistoryNavigation,
+} from './terminal-history-nav';
 
 const HISTORY_STORAGE_PREFIX = 'minnow.terminal.history.';
 const MAX_TAB_HISTORY = 500;
@@ -127,29 +131,29 @@ function fitAndResize(sessionId: string | null): void {
   }
 }
 
+function sendPtyInput(data: string): void {
+  if (!activeWs || activeWs.readyState !== WebSocket.OPEN || !data) return;
+  activeWs.send(JSON.stringify({ type: 'input', data }));
+}
+
 function handleHistoryKeys(data: string): boolean {
   if (!term || data !== '\u001b[A' && data !== '\u001b[B') return false;
   if (tabHistory.length === 0) return false;
+  if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return false;
 
-  if (data === '\u001b[A') {
-    if (historyIndex <= 0) {
-      historyIndex = 0;
-    } else {
-      historyIndex -= 1;
-    }
-  } else {
-    if (historyIndex >= tabHistory.length - 1) {
-      historyIndex = tabHistory.length;
-      term.write('\x1b[K');
-      return true;
-    }
-    historyIndex += 1;
-  }
+  const arrow = data === '\u001b[A' ? 'up' : 'down';
+  const nav = resolveHistoryNavigation(
+    { historyIndex, tabHistory },
+    arrow,
+  );
+  historyIndex = nav.historyIndex;
 
-  const line =
-    historyIndex < tabHistory.length ? tabHistory[historyIndex] : '';
-  term.write('\r\x1b[K');
-  if (line) term.write(line);
+  const input =
+    nav.nextLine === ''
+      ? buildHistoryClearInput(lineBuffer)
+      : buildHistoryReplaceInput(lineBuffer, nav.nextLine);
+  sendPtyInput(input);
+  lineBuffer = nav.nextLine;
   return true;
 }
 

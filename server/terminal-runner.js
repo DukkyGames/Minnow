@@ -3,8 +3,9 @@
  */
 
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from './config/home.js';
 import { readConfigJson, updateConfigJson } from './config/store.js';
@@ -350,6 +351,12 @@ export async function createBackgroundRun({
     void appendLogFile(logPath, text);
   });
 
+  // Force-killing the process (taskkill /F) tears down these pipes abruptly and
+  // can emit a stream 'error' (EPIPE/ECONNRESET). Without a listener Node rethrows
+  // it as an uncaughtException, which crashes the host process running the API.
+  child.stdout?.on('error', () => {});
+  child.stderr?.on('error', () => {});
+
   child.on('error', (err) => {
     const message = err instanceof Error ? err.message : String(err);
     emit(state, { type: 'error', message });
@@ -594,26 +601,124 @@ export async function readCommandLogSnapshot(runId, maxBytes = 64 * 1024) {
   };
 }
 
+/** Append one line to ~/.minnow/logs/kill-debug.log synchronously. Never throws. */
+function logKillDebug(entry) {
+  try {
+    const dir = path.join(getMinnowHome(), 'logs');
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(
+      path.join(dir, 'kill-debug.log'),
+      `${JSON.stringify({ ts: new Date().toISOString(), pid: process.pid, ...entry })}\n`,
+      'utf8',
+    );
+  } catch {
+    /* diagnostics are best-effort */
+  }
+}
+
+/** @type {Set<number> | null} */
+let cachedAncestorPids = null;
+
+/**
+ * Build the ancestor PID chain of the current process (Windows only).
+ * Used to make sure we never taskkill /T a process that we are descended from —
+ * doing so would terminate the dev host (server.js) itself. The ancestor chain is
+ * fixed for the lifetime of the process, so it is computed once and cached.
+ * @returns {Set<number>}
+ */
+function selfAncestorPids() {
+  if (cachedAncestorPids) return cachedAncestorPids;
+  const ancestors = new Set([process.pid]);
+  cachedAncestorPids = ancestors;
+  if (process.platform !== 'win32') {
+    if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+    return ancestors;
+  }
+  try {
+    const out = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation',
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 4000 },
+    );
+    if (out.status !== 0 || !out.stdout) {
+      if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+      return ancestors;
+    }
+    /** @type {Map<number, number>} */
+    const parentOf = new Map();
+    for (const line of out.stdout.split(/\r?\n/).slice(1)) {
+      const m = line.match(/^"?(\d+)"?,"?(\d+)"?/);
+      if (m) parentOf.set(Number(m[1]), Number(m[2]));
+    }
+    let cur = process.pid;
+    for (let i = 0; i < 64; i++) {
+      const parent = parentOf.get(cur);
+      if (parent == null || parent === 0 || ancestors.has(parent)) break;
+      ancestors.add(parent);
+      cur = parent;
+    }
+  } catch {
+    if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+  }
+  return ancestors;
+}
+
 /**
  * SIGTERM / taskkill the process tree for a spawned child.
  * @param {import('node:child_process').ChildProcess} child
  */
 export function killProcessTree(child) {
   if (!child?.pid) return;
+  const targetPid = child.pid;
+
+  // Guard: a stale/reused pid that resolves to our own process or one of our
+  // ancestors would let `taskkill /T /F` tear down the dev host (server.js) — the
+  // process that exited with code 1 with no handlers running. Refuse those.
+  const ancestors = selfAncestorPids();
+  if (ancestors.has(targetPid)) {
+    logKillDebug({
+      kind: 'kill-refused-ancestor',
+      targetPid,
+      ancestors: [...ancestors],
+    });
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      /* already gone */
+    }
+    return;
+  }
+
+  logKillDebug({ kind: 'kill', targetPid, parentPid: process.ppid });
+
   if (process.platform === 'win32') {
     try {
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+      const killer = spawn('taskkill', ['/pid', String(targetPid), '/T', '/F'], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
-      }).unref();
+      });
+      // Without an 'error' listener a failed taskkill spawn (e.g. ENOENT) emits an
+      // unhandled 'error' that crashes the host process.
+      killer.on('error', () => {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          /* process already gone */
+        }
+      });
+      killer.unref();
     } catch {
       child.kill('SIGTERM');
     }
     return;
   }
   try {
-    process.kill(-child.pid, 'SIGTERM');
+    process.kill(-targetPid, 'SIGTERM');
   } catch {
     child.kill('SIGTERM');
   }

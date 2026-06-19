@@ -55,6 +55,7 @@ import { updateCodeChangeStrip } from './code-change-strip';
 import { renderSidebar } from './sidebar';
 import { renderThoughtsToggle } from './thought-bubbles';
 import { renderToolCall, renderToolResult } from './tool-messages';
+import { attachShellKillUi } from './shell-run-ui';
 import { markMessageStopped } from './stopped-affordance';
 import { markMessageSteered } from './steer-affordance';
 import {
@@ -261,6 +262,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
             stored.codeChange,
           );
         }
+        attachShellKillUi(toolWrap, tc.function.name, tc.id, argsObj, undefined, chat.id);
       }
       if (!prose && firstToolEl) {
         attachMessageActions(firstToolEl, {

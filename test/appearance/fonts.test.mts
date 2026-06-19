@@ -6,10 +6,12 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 
 import {
+  applyAppearanceFonts,
   getAppearanceFonts,
   MONO_FONT_STACKS,
   resetAppearanceFontsForTests,
   setAppearanceFonts,
+  subscribeAppearanceFonts,
   UI_FONT_STACKS,
 } from '../../src/appearance/fonts.ts';
 import { APPEARANCE_STORAGE_KEYS } from '../../src/appearance/types.ts';
@@ -28,6 +30,12 @@ function mockLocalStorage(): void {
     clear: () => storage.clear(),
     key: () => null,
     length: 0,
+  };
+}
+
+function mockDocument(): void {
+  (globalThis as typeof globalThis & { document?: unknown }).document = {
+    documentElement: { style: { setProperty: () => {} } },
   };
 }
 
@@ -60,5 +68,22 @@ describe('appearance fonts', () => {
   test('preset stacks include fallbacks', () => {
     assert.match(UI_FONT_STACKS.inter, /Inter/);
     assert.match(MONO_FONT_STACKS['jetbrains-mono'], /JetBrains Mono/);
+  });
+
+  // Regression: applying fonts must not notify font listeners. theme.ts
+  // subscribes a listener that re-applies fonts; if applyAppearanceFonts emits,
+  // that recurses infinitely (RangeError: Maximum call stack size exceeded) and
+  // aborts boot. See MIN-262 crash log.
+  test('applyAppearanceFonts does not re-emit to font listeners', async () => {
+    mockLocalStorage();
+    mockDocument();
+    let reapplies = 0;
+    const unsub = subscribeAppearanceFonts(() => {
+      reapplies += 1;
+      void applyAppearanceFonts();
+    });
+    await applyAppearanceFonts();
+    unsub();
+    assert.equal(reapplies, 0);
   });
 });
