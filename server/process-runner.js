@@ -63,6 +63,11 @@ export function runProcess(command, args, options = {}) {
       onStderr?.(text);
     });
 
+    // A SIGTERM/force-kill can break these pipes and emit a stream 'error'; without
+    // a listener Node rethrows it as an uncaughtException and crashes the host.
+    child.stdout?.on('error', () => {});
+    child.stderr?.on('error', () => {});
+
     child.on('error', (err) => {
       clearTimeout(timer);
       reject(err);
