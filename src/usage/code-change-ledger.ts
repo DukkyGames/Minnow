@@ -3,7 +3,22 @@
  */
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import type { Chat, ChatCodeChangeTotals, CodeChangeStats, SessionState } from '../types';
+import type {
+  Chat,
+  ChatCodeChangeTotals,
+  CodeChangeDiffLine,
+  CodeChangeStats,
+  SessionState,
+  ToolResultMessage,
+} from '../types';
+
+/** Per-file rollup for the code-change strip panel. */
+export interface FileChangeSummary {
+  path: string;
+  additions: number;
+  deletions: number;
+  diffChunks: Array<{ lines: CodeChangeDiffLine[]; truncated: boolean }>;
+}
 
 export const EMPTY_CODE_CHANGE_TOTALS: ChatCodeChangeTotals = {
   additions: 0,
@@ -115,4 +130,52 @@ export function formatCodeChangeTotalsText(totals: ChatCodeChangeTotals): string
 export function hasCodeChangeTotals(totals: ChatCodeChangeTotals | undefined): boolean {
   if (!totals) return false;
   return totals.additions > 0 || totals.deletions > 0;
+}
+
+/** Resolve file paths from a single codeChange payload. */
+function pathsFromCodeChange(stats: CodeChangeStats): string[] {
+  if (stats.path) return [stats.path];
+  if (stats.paths?.length) return stats.paths;
+  return [];
+}
+
+/**
+ * Aggregate per-file line stats and diff chunks from tool history.
+ * Sorted by total changes descending (most-changed first).
+ */
+export function getPerFileChangeSummary(chat: Chat): FileChangeSummary[] {
+  const byPath = new Map<string, FileChangeSummary>();
+
+  for (const msg of chat.history) {
+    if (msg.role !== 'tool') continue;
+    const toolMsg = msg as ToolResultMessage;
+    const codeChange = toolMsg.codeChange;
+    if (!codeChange) continue;
+
+    const paths = pathsFromCodeChange(codeChange);
+    if (paths.length === 0) continue;
+
+    for (const path of paths) {
+      let row = byPath.get(path);
+      if (!row) {
+        row = { path, additions: 0, deletions: 0, diffChunks: [] };
+        byPath.set(path, row);
+      }
+      row.additions += codeChange.additions;
+      row.deletions += codeChange.deletions;
+      if (codeChange.diffLines?.length) {
+        row.diffChunks.push({
+          lines: codeChange.diffLines,
+          truncated: Boolean(codeChange.diffTruncated),
+        });
+      }
+    }
+  }
+
+  return [...byPath.values()].sort((a, b) => {
+    const totalA = a.additions + a.deletions;
+    const totalB = b.additions + b.deletions;
+    if (totalB !== totalA) return totalB - totalA;
+    return a.path.localeCompare(b.path);
+  });
 }

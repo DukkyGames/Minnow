@@ -10,6 +10,7 @@ import {
   EMPTY_CODE_CHANGE_TOTALS,
   ensureCodeChangeTotals,
   formatCodeChangeTotalsText,
+  getPerFileChangeSummary,
   getWorkspaceCodeChangeTotals,
   hasCodeChangeTotals,
   recordCodeChange,
@@ -91,5 +92,82 @@ describe('code-change-ledger', () => {
       additions: 3,
       deletions: 2,
     });
+  });
+
+  test('getPerFileChangeSummary groups by path and sorts by total changes', () => {
+    const chat = makeChat();
+    chat.history = [
+      {
+        role: 'tool',
+        tool_call_id: 'tc1',
+        content: 'Saved a.ts',
+        codeChange: {
+          additions: 4,
+          deletions: 1,
+          path: 'src/a.ts',
+          diffLines: [{ type: 'add', text: 'line' }],
+        },
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'tc2',
+        content: 'Saved b.ts',
+        codeChange: {
+          additions: 2,
+          deletions: 8,
+          path: 'src/b.ts',
+        },
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'tc3',
+        content: 'Updated a.ts again',
+        codeChange: {
+          additions: 1,
+          deletions: 0,
+          path: 'src/a.ts',
+        },
+      },
+      {
+        role: 'assistant',
+        content: 'done',
+      },
+    ];
+
+    const summaries = getPerFileChangeSummary(chat);
+    assert.equal(summaries.length, 2);
+    assert.equal(summaries[0].path, 'src/b.ts');
+    assert.equal(summaries[0].additions, 2);
+    assert.equal(summaries[0].deletions, 8);
+    assert.equal(summaries[1].path, 'src/a.ts');
+    assert.equal(summaries[1].additions, 5);
+    assert.equal(summaries[1].deletions, 1);
+    assert.equal(summaries[1].diffChunks.length, 1);
+    assert.equal(summaries[1].diffChunks[0].lines[0].text, 'line');
+  });
+
+  test('getPerFileChangeSummary expands paths array entries', () => {
+    const chat = makeChat();
+    chat.history = [
+      {
+        role: 'tool',
+        tool_call_id: 'tc1',
+        content: 'Committed',
+        codeChange: {
+          additions: 3,
+          deletions: 2,
+          paths: ['src/x.ts', 'src/y.ts'],
+        },
+      },
+    ];
+
+    const summaries = getPerFileChangeSummary(chat);
+    assert.equal(summaries.length, 2);
+    assert.deepEqual(
+      summaries.map((s) => s.path).sort(),
+      ['src/x.ts', 'src/y.ts'],
+    );
+    assert.equal(summaries[0].additions, 3);
+    assert.equal(summaries[0].deletions, 2);
   });
 });
