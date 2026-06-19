@@ -295,6 +295,13 @@
   -webkit-mask-position: center;
 }
 
+/* Orchestrate board folders: checklist glyph (expanded + collapsed rail). */
+.chat-group-header--has-board .chat-group-header__icon {
+  display: block;
+  mask-image: url('/icons/board-group.png');
+  -webkit-mask-image: url('/icons/board-group.png');
+}
+
 .chat-group-header__caret {
   border: none;
   background: transparent;

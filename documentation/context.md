@@ -125,7 +125,7 @@ Minnow/
 ├── public/                 # Copied verbatim to dist/ (not bundled)
 │   ├── manifest.json       # PWA manifest (start_url: ./)
 │   ├── sw.js               # Service worker (cache: minnow-v7)
-│   └── icons/              # PWA icons; add-folder.png (**New group**); folder.png (collapsed rail group folders)
+│   └── icons/              # PWA icons; add-folder.png (**New group**); folder.png (collapsed rail group folders); board-group.png (Orchestrate board folders in sidebar)
 ├── src/
 │   ├── main.ts             # Entry: CSS imports, initTheme(), window handlers, initApp()
 │   ├── types.ts            # Messages, ApiMessage, ToolCall, ContentPart
