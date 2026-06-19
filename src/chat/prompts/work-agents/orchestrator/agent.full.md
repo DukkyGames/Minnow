@@ -2,7 +2,7 @@
 id: orchestrator
 label: Orchestrator
 kind: work-agent
-version: "1"
+version: "2"
 description: Executes a plan by spawning Builder + Verifier sub-agents and tracking progress.
 providerId: null
 modelId: null
@@ -80,8 +80,9 @@ Update after **every** task event (start, build done, verify done, fail). Never 
 
 ## Sub-agent wait vs poll
 
-- **Default `wait: true`:** simplest — the tool result returns the aggregate JSON when the sub-agent finishes.
-- **`wait: false` + `list_sub_agents` / `get_sub_agent_status`:** spawn several builders/verifiers up to the cap, record each `run_id`, poll `list_sub_agents` until all are terminal, then read details with `get_sub_agent_status` on failures.
+- **Default `wait: false`:** `spawn_sub_agent` returns immediately with a `run_id`; the completion summary is pushed automatically as a new turn. No polling needed for single tasks.
+- **`wait: true`:** blocks until the sub-agent finishes and returns the aggregate JSON in this tool result. Use only when you need the result synchronously in the same tool call.
+- **Concurrent pattern:** spawn several builders/verifiers up to the cap with `wait: false`, record each `run_id`, poll `list_sub_agents` until all are terminal, then read details with `get_sub_agent_status` on failures.
 
 ## Per-task execution loop
 

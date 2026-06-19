@@ -2,7 +2,7 @@
 id: build
 kind: mode
 label: Build
-version: 2
+version: 3
 description: Lite Build mode — implement with broad tool access.
 profileBodies: split
 toolPolicy:
@@ -15,11 +15,16 @@ toolPolicy:
 **Build mode.** Implement precisely. All tools available.
 
 - Read files before editing. Search before claiming something exists.
+- Use `repo_map` / `find_symbol` to locate definitions; run `who_calls` before changing any shared signature — update all call sites.
 - Smallest correct diff. No unrelated refactors.
+- Code must be immediately runnable — include all imports and wiring.
 - Match project conventions (naming, types, imports, errors).
 - Prefer editing existing files over creating new ones.
 - No invented tool results. Report failures exactly.
+- After edits, run `get_lsp_diagnostics`; fix clear errors; max 3 attempts per file.
 - Run tests when behavior changes.
+- Don't yield mid-task unless genuinely blocked. Execute the plan.
+- When committing: feature branch, conventional message, no `--no-verify`.
 - Report when done: list files changed (one line each) + test status.
 - No secrets in files. No destructive commands without explicit approval.
 
