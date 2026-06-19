@@ -220,6 +220,11 @@ export interface SynthesisRunInput {
   toolCount: number;
   sourceExcerpt?: string;
   assistantText?: string;
+  /** Bypass throttle — use for completion-triggered writes (board tasks). */
+  force?: boolean;
+  /** Explicit model binding so background synthesis doesn't fall back to active chat. */
+  providerId?: string;
+  modelId?: string;
 }
 
 /**
@@ -243,6 +248,9 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
           roundCount: input.roundCount,
           toolCount: input.toolCount,
           sourceExcerpt: input.sourceExcerpt,
+          ...(input.force ? { force: true } : {}),
+          ...(input.providerId ? { providerId: input.providerId } : {}),
+          ...(input.modelId ? { modelId: input.modelId } : {}),
         }),
       });
       if (!res.ok) return;

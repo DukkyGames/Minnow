@@ -301,7 +301,10 @@ export async function handleBrainRequest(req, res, pathname) {
 
     if (pathname === '/api/brain/lint' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const report = await lintBrainWiki({ includeLlm: body.includeLlm !== false });
+      const report = await lintBrainWiki({
+        includeLlm: body.includeLlm !== false,
+        apply: body.apply === true,
+      });
       sendJson(res, 200, report);
       return true;
     }

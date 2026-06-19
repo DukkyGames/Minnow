@@ -127,12 +127,13 @@ export async function handleSynthesisRequest(req, res, pathname) {
 
       const chatId =
         typeof body.chatId === 'string' ? body.chatId.trim() : '';
+      const force = body.force === true;
       const pairCount = chatId
         ? await incrementMessagePairs(chatId)
         : Number(body.messagePairCount) || 1;
       const throttle = Math.max(1, cfg.throttleMessagePairs ?? 4);
 
-      if (pairCount % throttle !== 0) {
+      if (!force && pairCount % throttle !== 0) {
         sendJson(res, 200, {
           ok: true,
           skipped: ['throttled'],
@@ -153,11 +154,17 @@ export async function handleSynthesisRequest(req, res, pathname) {
         typeof body.roundCount === 'number' ? body.roundCount : 1;
       const toolCount =
         typeof body.toolCount === 'number' ? body.toolCount : 0;
+      const explicitProviderId =
+        typeof body.providerId === 'string' ? body.providerId.trim() : undefined;
+      const explicitModelId =
+        typeof body.modelId === 'string' ? body.modelId.trim() : undefined;
 
       const memoryResult = await runMemorySynthesis({
         messages,
         sourceChatId: chatId || undefined,
         sourceExcerpt,
+        providerId: explicitProviderId,
+        modelId: explicitModelId,
       });
 
       const skillResult = await runSkillSynthesis({

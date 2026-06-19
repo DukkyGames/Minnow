@@ -24,6 +24,8 @@ import {
 } from '../agents/controller/wrapper.ts';
 import { runChatTurn } from '../tools/loop.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
+import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
+import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
 import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 import {
   assignChatToGroup,
@@ -145,6 +147,27 @@ export function finalizeBoardTaskOnStreamEnd(
     plannerChat,
   );
   moveTaskStatus(group, task.id, 'testing', plannerChat);
+
+  const builderChat = findChatById(chatId);
+  if (builderChat) {
+    const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+    const lastAssistant = [...builderChat.history].reverse().find((m) => m.role === 'assistant');
+    const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+      ? lastAssistant.content
+      : '';
+    schedulePostTurnSynthesis({
+      chatId: builderChat.id,
+      messages: buildSynthesisMessages(builderChat),
+      roundCount: builderChat.history.filter((m) => m.role === 'assistant').length,
+      toolCount: 0,
+      sourceExcerpt: buildSynthesisExcerpt(builderChat),
+      assistantText,
+      force: true,
+      providerId: providerId || undefined,
+      modelId: modelId || undefined,
+    });
+  }
+
   if (isBoardAutoMode(group)) {
     void startTaskTesting(group, task.id, plannerChat);
   }
@@ -769,6 +792,27 @@ export function finalizeTaskTestingOnStreamEnd(
   if (verdict === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
     moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+
+    const testChatId = fresh.testChatId?.trim();
+    const testChat = testChatId ? findChatById(testChatId) : null;
+    if (testChat) {
+      const { providerId, modelId } = resolvePlannerModelBinding(plannerChat);
+      const lastAssistant = [...testChat.history].reverse().find((m) => m.role === 'assistant');
+      const assistantText = lastAssistant && typeof lastAssistant.content === 'string'
+        ? lastAssistant.content
+        : '';
+      schedulePostTurnSynthesis({
+        chatId: testChat.id,
+        messages: buildSynthesisMessages(testChat),
+        roundCount: testChat.history.filter((m) => m.role === 'assistant').length,
+        toolCount: 0,
+        sourceExcerpt: buildSynthesisExcerpt(testChat),
+        assistantText,
+        force: true,
+        providerId: providerId || undefined,
+        modelId: modelId || undefined,
+      });
+    }
     return;
   }
 
