@@ -3,13 +3,88 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
-import { hydrateSessionGroupsForTests } from '../../src/state/sessions.ts';
-import { isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { STORAGE_KEY } from '../../src/constants.ts';
+import {
+  stopBoardAutoRun,
+  setBoardExecutionMode,
+} from '../../src/state/orchestrate-board-actions.ts';
+import { initBoard, isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
+import {
+  hydrateSessionGroupsForTests,
+  saveSessionsNow,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import type { Chat, ChatGroup } from '../../src/types.ts';
 
 const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const PLAN_PATH = 'documentation/plans/reload-persist.md';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
+
+function makePlanner(): Chat {
+  return {
+    id: PLANNER_ID,
+    name: 'Planner',
+    workspacePath: '/tmp/ws',
+    modeId: 'orchestrate',
+    modelId: 'm1',
+    history: [],
+    lastStats: null,
+    modelInfo: {},
+    updatedAt: 1,
+    orchestratePlanPath: PLAN_PATH,
+    boardGroupId: GROUP_ID,
+  };
+}
+
+function makeGroup(): ChatGroup {
+  return {
+    id: GROUP_ID,
+    name: 'Reload board',
+    workspacePath: '/tmp/ws',
+    collapsed: false,
+    order: 0,
+    createdAt: 1,
+    orchestratePlanPath: PLAN_PATH,
+    plannerChatId: PLANNER_ID,
+  };
+}
+
+function seedRunningBoard(executionMode: 'auto' | 'sequential' = 'auto') {
+  const planner = makePlanner();
+  const group = makeGroup();
+  initBoard(group, planner, {
+    planPath: PLAN_PATH,
+    waves: [{ id: 'W1' }],
+    tasks: [
+      {
+        id: 'W1-A',
+        title: 'First task',
+        wave: 'W1',
+        category: 'build',
+        build: 'Do work',
+      },
+    ],
+  });
+  const board = group.orchestrateBoard!;
+  board.executionMode = executionMode;
+  board.autoRunning = true;
+  setSessionStateForTests({
+    version: 5,
+    activeId: PLANNER_ID,
+    chats: [planner],
+    groups: [group],
+  });
+  return { planner, group };
+}
+
+/** Read persisted groups from localStorage without flushing debounced saves. */
+function readPersistedGroupsFromLocalStorage(): ChatGroup[] {
+  const raw = globalThis.localStorage.getItem(STORAGE_KEY);
+  assert.ok(raw, 'expected session snapshot in localStorage');
+  const parsed = JSON.parse(raw) as { groups?: unknown };
+  return hydrateSessionGroupsForTests(parsed.groups ?? []);
+}
 
 /** Minimal persisted group blob with a running sequential board. */
 const PERSISTED_GROUP = {
@@ -90,5 +165,55 @@ describe('orchestrate board hydration', () => {
       },
     ]);
     assert.equal(isBoardRunning(group), false);
+  });
+});
+
+describe('orchestrate board stop persistence', () => {
+  beforeEach(async () => {
+    const { Window } = await import('happy-dom');
+    const window = new Window();
+    const g = globalThis as typeof globalThis & { localStorage: Storage };
+    g.localStorage = window.localStorage;
+    g.document = window.document;
+    g.HTMLElement = window.HTMLElement;
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    setSessionStateForTests(null);
+    globalThis.localStorage?.clear?.();
+  });
+
+  test('stopBoardAutoRun persists stopped state without debounced flush', () => {
+    const { planner, group } = seedRunningBoard('auto');
+    saveSessionsNow();
+    assert.equal(
+      readPersistedGroupsFromLocalStorage()[0]?.orchestrateBoard?.autoRunning,
+      true,
+    );
+
+    stopBoardAutoRun(group, planner);
+
+    const [persisted] = readPersistedGroupsFromLocalStorage();
+    assert.ok(persisted);
+    assert.equal(persisted.orchestrateBoard?.autoRunning, undefined);
+    assert.equal(isBoardRunning(persisted), false);
+  });
+
+  test('setBoardExecutionMode manual persists stopped state without debounced flush', () => {
+    const { planner, group } = seedRunningBoard('sequential');
+    saveSessionsNow();
+    assert.equal(
+      readPersistedGroupsFromLocalStorage()[0]?.orchestrateBoard?.autoRunning,
+      true,
+    );
+
+    setBoardExecutionMode(group, 'manual', planner);
+
+    const [persisted] = readPersistedGroupsFromLocalStorage();
+    assert.ok(persisted);
+    assert.equal(persisted.orchestrateBoard?.executionMode, 'manual');
+    assert.equal(persisted.orchestrateBoard?.autoRunning, undefined);
+    assert.equal(isBoardRunning(persisted), false);
   });
 });
