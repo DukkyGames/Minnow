@@ -326,6 +326,8 @@ export async function initApp(): Promise<void> {
   await loadThinkingMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
+  const { initShellRunUi } = await import('./ui/shell-run-ui');
+  initShellRunUi();
   initStatsStrip();
   initCodeChangeStrip();
   initOrchestrateStatsLiveRefresh();

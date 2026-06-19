@@ -29,6 +29,8 @@ import {
   openDevServerConsole,
   stopDevServerStream,
 } from './terminal-panel';
+import { unregisterShellRun } from './shell-run-registry';
+import { refreshShellKillUi } from './shell-run-ui';
 
 export { deriveHubDevServerView } from './hub-dev-server-view';
 export type {
@@ -315,6 +317,11 @@ async function stopDevServerAndCancelAgent(): Promise<void> {
   if (startAgentRunId) {
     cancelSubAgent(startAgentRunId, 'user_cancel');
     startAgentRunId = null;
+  }
+
+  if (managedRunId) {
+    unregisterShellRun(managedRunId);
+    refreshShellKillUi();
   }
 
   try {
