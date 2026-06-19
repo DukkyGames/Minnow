@@ -99,7 +99,8 @@ export async function saveBrainConfig(partial) {
     partialEmb &&
     ((partialEmb.backend !== undefined && partialEmb.backend !== existingEmb.backend) ||
       (partialEmb.modelId !== undefined && partialEmb.modelId !== existingEmb.modelId) ||
-      (partialEmb.providerId !== undefined && partialEmb.providerId !== existingEmb.providerId))
+      (partialEmb.providerId !== undefined && partialEmb.providerId !== existingEmb.providerId) ||
+      (partialEmb.enabled === true && !existingEmb.enabled))
   ) {
     nextEmb.reindexNeeded = true;
   }

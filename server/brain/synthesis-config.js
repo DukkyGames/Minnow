@@ -113,11 +113,15 @@ export async function saveSynthesisConfig(partial) {
 
 /**
  * Resolve provider + model for synthesis / email utility LLM calls.
- * Priority: synthesis overrides → titles model → active chat menubar → active provider.
+ * Priority: explicit override → synthesis overrides → titles model → active chat menubar → active provider.
  * @param {typeof DEFAULT_SYNTHESIS_CONFIG} synthesisCfg
+ * @param {{ providerId?: string, modelId?: string }} [explicit]
  * @returns {Promise<{ providerId: string, model: string } | null>}
  */
-export async function resolveSynthesisModel(synthesisCfg) {
+export async function resolveSynthesisModel(synthesisCfg, explicit = {}) {
+  if (explicit?.providerId && explicit?.modelId) {
+    return { providerId: explicit.providerId, model: explicit.modelId };
+  }
   const synProvider =
     typeof synthesisCfg.utilityProviderId === 'string'
       ? synthesisCfg.utilityProviderId.trim()

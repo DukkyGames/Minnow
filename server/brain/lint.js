@@ -9,6 +9,8 @@ import {
   listPages,
   loadCatalog,
   loadBrainConfig,
+  updatePage,
+  deletePage,
 } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
 import { detectAndApplyAnchorDrift } from './code/anchors.js';
@@ -99,8 +101,9 @@ async function detectContradictionsWithLlm(pages) {
 }
 
 /**
- * Run a structured wiki lint report (read-only).
- * @param {{ includeLlm?: boolean }} [opts]
+ * Run a structured wiki lint report.
+ * When `apply: true`, marks orphan/stale pages and retires contradicted pages (conservative).
+ * @param {{ includeLlm?: boolean, apply?: boolean }} [opts]
  */
 export async function lintBrainWiki(opts = {}) {
   const anchorDrift = await detectAndApplyAnchorDrift();
@@ -116,6 +119,45 @@ export async function lintBrainWiki(opts = {}) {
       : [];
 
   const brainConfig = await loadBrainConfig();
+
+  /** @type {{ path: string, action: string }[]} */
+  const applied = [];
+
+  if (opts.apply) {
+    // Mark stale pages as orphan status if they have no inbound links (delete is too aggressive).
+    for (const page of orphans) {
+      if (page.status === 'stale') {
+        try {
+          await deletePage(page.path);
+          applied.push({ path: page.path, action: 'deleted' });
+        } catch {
+          /* best-effort */
+        }
+      } else if (page.status !== 'orphan') {
+        try {
+          await updatePage(page.path, { status: 'stale' });
+          applied.push({ path: page.path, action: 'marked-stale' });
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
+
+    // For detected contradictions, mark the page listed second (assumed older) as stale.
+    for (const contradiction of contradictions) {
+      const pagePaths = Array.isArray(contradiction.pages) ? contradiction.pages : [];
+      const target = pagePaths[1] ?? pagePaths[0];
+      if (!target) continue;
+      const page = pages.find((p) => p.path === target || p.path === `${target}.md`);
+      if (!page || page.status === 'stale') continue;
+      try {
+        await updatePage(page.path, { status: 'stale' });
+        applied.push({ path: page.path, action: 'marked-stale-contradiction' });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -142,5 +184,6 @@ export async function lintBrainWiki(opts = {}) {
       anchorDrift: anchorDrift.length > 0 ? 'active' : 'ok',
     },
     embeddingsEnabled: brainConfig.embeddings?.enabled === true,
+    ...(opts.apply ? { applied } : {}),
   };
 }

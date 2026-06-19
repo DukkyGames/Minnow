@@ -4,7 +4,7 @@
 
 import { llmCall } from '../research/llm.js';
 import { loadAllPagesWithBodies, retrieveMemoryBlockHybrid } from './retrieve.js';
-import { createPage, loadBrainConfig } from './store.js';
+import { createPage, loadBrainConfig, updatePage } from './store.js';
 import { loadSynthesisConfig, resolveSynthesisModel } from './synthesis-config.js';
 import { addMemoryProposal } from './proposals.js';
 
@@ -226,11 +226,62 @@ export async function writeSynthesisFactPage(fact) {
 }
 
 /**
+ * After writing a new fact page, mark existing pages that cover the same topic as stale.
+ * Uses the same similarity signal as isDuplicateMemory but skips the new page itself.
+ * @param {{ title: string, body: string }} newFact
+ * @param {string} newRelPath
+ * @param {Array<{ meta: object, body: string }>} existing
+ * @param {object} brainConfig
+ */
+export async function retireSupersededPages(newFact, newRelPath, existing, brainConfig) {
+  const query = `${newFact.title} ${newFact.body}`.trim();
+  if (!query) return;
+
+  const emb = brainConfig.embeddings ?? {};
+  const candidates = new Set();
+
+  if (emb.enabled) {
+    try {
+      const { ids } = await retrieveMemoryBlockHybrid(
+        existing,
+        { query, limit: 5, maxChars: 8000 },
+        brainConfig,
+      );
+      for (const id of ids) candidates.add(id);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  const needle = query.toLowerCase();
+  for (const row of existing) {
+    const hay = `${row.meta.title ?? ''} ${row.body ?? ''}`.toLowerCase();
+    if (hay.includes(needle) || needle.includes(hay.slice(0, 80))) {
+      if (row.meta.id) candidates.add(row.meta.id);
+    }
+  }
+
+  for (const row of existing) {
+    if (!candidates.has(row.meta.id)) continue;
+    const relPath = row.meta.path ?? '';
+    if (!relPath || relPath === newRelPath) continue;
+    if (row.meta.status === 'stale') continue;
+    try {
+      await updatePage(relPath, { status: 'stale', similarTo: [newRelPath] });
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
+/**
  * Run fact extraction and write pages or enqueue pending proposals.
  * @param {{
  *   messages: Array<{ role?: string, content?: string | unknown[] }>,
  *   sourceChatId?: string,
  *   sourceExcerpt?: string,
+ *   providerId?: string,
+ *   modelId?: string,
  * }} input
  * @returns {Promise<{ memoryProposals: object[], pages: object[], skipped: string[] }>}
  */
@@ -240,7 +291,10 @@ export async function runMemorySynthesis(input) {
     return { memoryProposals: [], pages: [], skipped: ['disabled'] };
   }
 
-  const modelBinding = await resolveSynthesisModel(cfg);
+  const modelBinding = await resolveSynthesisModel(cfg, {
+    providerId: input.providerId,
+    modelId: input.modelId,
+  });
   if (!modelBinding?.providerId || !modelBinding?.model) {
     return { memoryProposals: [], pages: [], skipped: ['no-model'] };
   }
@@ -310,6 +364,8 @@ export async function runMemorySynthesis(input) {
       const written = await writeSynthesisFactPage(fact);
       pendingTitles.add(fact.title.toLowerCase());
       pages.push(written.page);
+      // Retire prior pages that covered the same topic before adding the new one to existing.
+      void retireSupersededPages(fact, written.relPath, existing, brainConfig);
       existing.push({ meta: written.page.meta, body: written.page.body });
     }
   }
