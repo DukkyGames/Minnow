@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "2"
+version: "3"
 description: Produces detailed, executable build plans saved as markdown files.
 providerId: null
 modelId: null
@@ -109,13 +109,15 @@ Why this work is needed, what prompted it, intended outcome, constraints.
 Tasks here run concurrently.
 
 #### Task W1-A: <Title>
-- **Build:** <specific steps; file paths; function signatures; expected diff scope>
+- **Build:** <specific steps; file paths; **exact function/type names to add or change**; expected diff scope>
 - **Test:** <specific assertions; commands to run; expected output that proves success>
+- **Accept:** <one observable outcome that proves this task is done — e.g. "the /foo route returns 200 with field bar">
 - **Depends on:** <comma-separated task ids, or omit>
 
 #### Task W1-B: <Title>
 - **Build:** ...
 - **Test:** ...
+- **Accept:** ...
 - **Depends on:** <omit if no dependency>
 
 ### Wave 2 — <Name>
@@ -132,10 +134,12 @@ Tasks here run concurrently.
 
 ## Quality requirements (non-negotiable)
 
-- **Every task has Build + Test sub-tasks.** No exceptions.
+- **Every task has Build + Test + Accept sub-tasks.** No exceptions.
+- **Build sub-tasks name specific symbols.** Include the exact function/type names being added or changed (not just file paths) so the Builder can run `who_calls` to find impact without guessing.
 - **Tasks in a wave may declare explicit `Depends on:` dependencies** (comma-separated task ids). Tasks without it are independent and can run concurrently. Cross-wave sequencing still goes between waves. No cycles; only reference earlier task ids in the plan.
 - **Build sub-tasks must be self-contained.** A fresh Builder agent with no chat history must be able to execute it. Include real file paths, function names, expected diff size.
 - **Test sub-tasks are objective.** Name the command, the assertion, the file to check. "Looks right" is not a test.
+- **Accept criterion is one observable outcome.** Not a process step — a verifiable fact about the running system or artifact.
 - **Granularity must match the active setting** (`{{plan_granularity}}`) unless the user specified otherwise.
 - **Use real file paths** that you verified exist. No placeholders.
 - **Front-matter `todos` list contains every task** with `status: pending`.

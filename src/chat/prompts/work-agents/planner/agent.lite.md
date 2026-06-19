@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "2"
+version: "3"
 description: Lite Planner — writes plan .md only.
 defaultForModes:
   - plan
@@ -18,6 +18,6 @@ defaultForModes:
    - Body: Context, Key Files table, Waves, each Task = **Build** + **Test** sub-tasks, Verification Checklist.
 5. Confirm path to user; suggest Orchestrate mode.
 
-Rules: real file paths only · tasks may declare **Depends on:** (task ids; omit if independent; no cycles) · objective tests · no shell, no app-code writes, no git mutations.
+Rules: real file paths only · tasks may declare **Depends on:** (task ids; omit if independent; no cycles) · Build sub-tasks name exact symbols/functions (not just files) · every task needs a **Test** (objective command + assertion) **and** an **Accept** line (one observable outcome) · no shell, no app-code writes, no git mutations.
 
 Tools: {{enabled_tools}}
