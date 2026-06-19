@@ -1,0 +1,76 @@
+/**
+ * OpenAI-safe completion body sanitization for sub-agents.
+ */
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { sanitizeCompletionBodyForProvider } from '../../src/providers/sanitize-completion-body.ts';
+import type { ProviderPublic } from '../../src/providers/types.ts';
+
+const OPENAI: ProviderPublic = {
+  id: 'openai-v1',
+  label: 'OpenAI',
+  baseUrl: 'https://api.openai.com',
+  apiKind: 'openai-v1',
+  enabled: true,
+  hasApiKey: true,
+  hasBearer: false,
+};
+
+const LM_STUDIO: ProviderPublic = {
+  id: 'lm-studio-local',
+  label: 'LM Studio',
+  baseUrl: 'http://127.0.0.1:1234',
+  apiKind: 'lm-studio-v0',
+  enabled: true,
+  hasApiKey: false,
+  hasBearer: false,
+};
+
+describe('sanitizeCompletionBodyForProvider', () => {
+  test('strips LM Studio sampler fields for openai-v1', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'gpt-4o-mini',
+        messages: [],
+        temperature: 0.7,
+        top_k: 20,
+        min_p: 0.05,
+        repetition_penalty: 1.1,
+        enable_thinking: false,
+      },
+      OPENAI,
+    );
+    assert.equal(out.top_k, undefined);
+    assert.equal(out.min_p, undefined);
+    assert.equal(out.repetition_penalty, undefined);
+    assert.equal(out.enable_thinking, undefined);
+    assert.equal(out.temperature, 0.7);
+  });
+
+  test('removes thinking when model has no reasoning capability', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'gpt-4o-mini',
+        thinking: { type: 'disabled' },
+      },
+      OPENAI,
+      { reasoning: false },
+    );
+    assert.equal(out.thinking, undefined);
+  });
+
+  test('maps max_tokens to max_completion_tokens for o-series models', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      { model: 'o3-mini', max_tokens: 1024 },
+      OPENAI,
+    );
+    assert.equal(out.max_completion_tokens, 1024);
+    assert.equal(out.max_tokens, undefined);
+  });
+
+  test('leaves body unchanged for lm-studio-v0', () => {
+    const body = { model: 'local', top_k: 20, max_tokens: 512 };
+    const out = sanitizeCompletionBodyForProvider(body, LM_STUDIO);
+    assert.deepEqual(out, body);
+  });
+});

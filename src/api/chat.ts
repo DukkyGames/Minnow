@@ -200,6 +200,38 @@ export function extractMessageText(
   return streamDeltaContentToText(message.content);
 }
 
+/**
+ * Assistant text from a completion message: prose content, structured parsed JSON, or refusal.
+ */
+export function extractAssistantCompletionText(
+  message:
+    | {
+        content?: string | unknown;
+        parsed?: unknown;
+        refusal?: string;
+      }
+    | null
+    | undefined,
+): string {
+  const fromContent = extractMessageText(message).trim();
+  if (fromContent) return fromContent;
+
+  const parsed = message?.parsed;
+  if (parsed != null && typeof parsed === 'object') {
+    return JSON.stringify(parsed);
+  }
+  if (typeof parsed === 'string' && parsed.trim()) {
+    return parsed.trim();
+  }
+
+  const refusal = message?.refusal;
+  if (typeof refusal === 'string' && refusal.trim()) {
+    return refusal.trim();
+  }
+
+  return '';
+}
+
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */
 export function mergeStreamMeta(
   acc: StreamMetaAccumulator | null | undefined,

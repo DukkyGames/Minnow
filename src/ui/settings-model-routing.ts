@@ -249,7 +249,7 @@ async function saveRow(controls: RowControls): Promise<void> {
         types: {
           [row.id]: {
             ...existing,
-            providerId: providerId || existing.providerId,
+            providerId,
             modelId,
           },
         },
@@ -693,7 +693,9 @@ function renderGroup(
       controls,
       row.persistKind === 'reef-chat' ||
         row.persistKind === 'titles' ||
-        row.persistKind === 'main-chat',
+        row.persistKind === 'main-chat' ||
+        row.persistKind === 'work-agent' ||
+        row.persistKind === 'sub-agent',
     );
   }
 

@@ -12,6 +12,22 @@ import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
+/** Shipped default provider before inherit fix — migrate to empty when model is also unset. */
+export const LEGACY_SUB_AGENT_DEFAULT_PROVIDER = 'lm-studio-local';
+
+/** Coerce legacy lm-studio-local + empty model rows to inherit parent/global provider. */
+export function migrateLegacySubAgentProviderId(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): string {
+  const pid = providerId?.trim() ?? '';
+  const mid = modelId?.trim() ?? '';
+  if (pid === LEGACY_SUB_AGENT_DEFAULT_PROVIDER && !mid) {
+    return '';
+  }
+  return pid;
+}
+
 /** Fallback when sub-agents config omits `maxToolTurns`. */
 export const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 
@@ -122,7 +138,7 @@ export function mergeSubAgentConfig(
     for (const [id, patch] of Object.entries(user.types)) {
       const existing = merged.types[id] ?? {
         enabled: true,
-        providerId: 'lm-studio-local',
+        providerId: '',
         modelId: '',
         maxConcurrent: 1,
         timeoutMs: merged.defaultTimeoutMs,
@@ -163,6 +179,7 @@ export function mergeSubAgentConfig(
   }
 
   for (const cfg of Object.values(merged.types)) {
+    cfg.providerId = migrateLegacySubAgentProviderId(cfg.providerId, cfg.modelId);
     cfg.maxToolTurns = maxToolTurns;
     if (!cfg.summarySchema?.trim()) {
       cfg.summarySchema = merged.defaultSummarySchema ?? DEFAULT_SUB_AGENT_SUMMARY_SCHEMA;

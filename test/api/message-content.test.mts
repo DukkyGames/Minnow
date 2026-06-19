@@ -11,7 +11,7 @@ import {
   StreamingContentAccumulator,
   streamDeltaContentToText,
 } from '../../src/api/message-content.ts';
-import { extractMessageText, extractStreamDelta } from '../../src/api/chat.ts';
+import { extractMessageText, extractStreamDelta, extractAssistantCompletionText } from '../../src/api/chat.ts';
 
 describe('apiMessageContentToText', () => {
   test('joins multimodal text parts', () => {
@@ -63,6 +63,44 @@ describe('extractMessageText with structured message content', () => {
         content: [{ type: 'text', text: 'Full assistant reply here.' }],
       }),
       'Full assistant reply here.',
+    );
+  });
+});
+
+describe('extractAssistantCompletionText', () => {
+  test('reads message.parsed when content is empty', () => {
+    const text = extractAssistantCompletionText({
+      content: '',
+      parsed: {
+        summary: 'Done.',
+        findings: [],
+        artifacts: [],
+      },
+    });
+    assert.equal(
+      text,
+      JSON.stringify({ summary: 'Done.', findings: [], artifacts: [] }),
+    );
+  });
+
+  test('prefers content over parsed', () => {
+    assert.equal(
+      extractAssistantCompletionText({
+        content: 'visible prose',
+        parsed: { summary: 'hidden' },
+      }),
+      'visible prose',
+    );
+  });
+
+  test('falls back to refusal', () => {
+    assert.equal(
+      extractAssistantCompletionText({
+        content: '',
+        parsed: null,
+        refusal: 'Policy blocked this response.',
+      }),
+      'Policy blocked this response.',
     );
   });
 });

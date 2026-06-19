@@ -8,6 +8,7 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeThinkingTriState } from '../agents/thinking-types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
+import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { notifySessionCreated } from '../webhooks/client';
 import { decodeModelSelectKey } from '../lib/model-select-key';
@@ -887,6 +888,7 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
 
 /** Planners linked via boardGroupId appear under their board folder in the sidebar. */
 function repairPlannerChatFolderMembership(state: SessionState): void {
+  let titleChanged = false;
   for (const group of state.groups ?? []) {
     const plannerId = group.plannerChatId?.trim();
     if (!plannerId) continue;
@@ -895,6 +897,18 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
     if (planner.boardGroupId === group.id && planner.groupId !== group.id) {
       planner.groupId = group.id;
     }
+    if (
+      syncOrchestratorPlannerChatTitle(
+        planner,
+        planner.orchestratePlanPath ?? group.orchestratePlanPath,
+      )
+    ) {
+      touchChat(planner);
+      titleChanged = true;
+    }
+  }
+  if (titleChanged) {
+    scheduleSaveSessions();
   }
 }
 

@@ -2476,6 +2476,14 @@ export function normalizeSubAgentsConfig(body) {
     checkToolList('allowedTools');
     checkToolList('deniedTools');
 
+    if (typeof row.providerId === 'string') {
+      const pid = row.providerId.trim();
+      const mid = typeof row.modelId === 'string' ? row.modelId.trim() : '';
+      if (pid === 'lm-studio-local' && !mid) {
+        row.providerId = '';
+      }
+    }
+
     if (row.maxInputTokens !== undefined && row.maxInputTokens !== null) {
       const cap = Number(row.maxInputTokens);
       if (!Number.isFinite(cap) || cap < 1) {

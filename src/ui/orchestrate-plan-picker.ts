@@ -7,6 +7,7 @@ import {
   type DiscoverOrchestratePlansResult,
 } from '../chat/orchestrate/list-plans';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
+import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeModeId } from '../chat/modes/types';
 import { getActiveBoardGroup, getBoardGroupForChat } from '../state/chat-groups';
 import { scheduleSaveSessions, touchChat } from '../state/sessions';
@@ -123,6 +124,7 @@ export function persistOrchestratePlanPathFromSelectValue(
       delete chat.orchestratePlanPath;
     }
   }
+  syncOrchestratorPlannerChatTitle(chat, chat.orchestratePlanPath);
   touchChat(chat);
   scheduleSaveSessions();
 }

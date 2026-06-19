@@ -89,7 +89,7 @@ describe('sub-agent config', () => {
       },
     });
     assert.equal(merged.types.explore.sampler?.temperature, 0.6);
-    assert.equal(merged.types.explore.sampler?.topP, 0.92);
+    assert.equal(merged.types.explore.sampler?.topP, 0.8);
   });
 
   test('user override can set maxInputTokens and context policy', () => {
@@ -117,5 +117,30 @@ describe('sub-agent config', () => {
       types: { shell: { summarySchema: 'minnow.sub-agent.lite' } },
     });
     assert.equal(merged.types.shell.summarySchema, 'minnow.sub-agent.lite');
+  });
+
+  test('migrates legacy lm-studio-local provider to inherit when model is empty', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { providerId: 'lm-studio-local', modelId: '' },
+      },
+    });
+    assert.equal(merged.types.explore.providerId, '');
+  });
+
+  test('keeps explicit lm-studio-local when model is set', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, {
+      types: {
+        explore: { providerId: 'lm-studio-local', modelId: 'local-model' },
+      },
+    });
+    assert.equal(merged.types.explore.providerId, 'lm-studio-local');
+    assert.equal(merged.types.explore.modelId, 'local-model');
+  });
+
+  test('shipped defaults use empty provider for inheritance', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    assert.equal(merged.types.explore.providerId, '');
+    assert.equal(merged.types.generalPurpose.providerId, '');
   });
 });

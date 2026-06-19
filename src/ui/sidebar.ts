@@ -239,7 +239,7 @@ export function appendChatRow(
     row.classList.add('chat-item-row--draggable');
   }
   row.addEventListener('click', (e) => {
-    if ((e.target as Element).closest('.chat-item-actions')) return;
+    if ((e.target as Element).closest('.chat-rename-input')) return;
     if (options?.onActivate) {
       options.onActivate(chat);
       return;
@@ -247,7 +247,7 @@ export function appendChatRow(
     switchChat(chat.id);
   });
   row.addEventListener('keydown', (e) => {
-    if ((e.target as Element).closest('.chat-item-actions')) return;
+    if ((e.target as Element).closest('.chat-rename-input')) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (options?.onActivate) {
@@ -287,52 +287,13 @@ export function appendChatRow(
     }
   }
 
-  const actions = document.createElement('div');
-  actions.className = 'chat-item-actions';
-
-  const renameBtn = document.createElement('button');
-  renameBtn.type = 'button';
-  renameBtn.className = 'chat-rename-btn';
-  renameBtn.textContent = '\u270E';
-  renameBtn.setAttribute('aria-label', `Rename chat: ${chat.name}`);
-  renameBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    beginRenameChat(chat.id, nameSpan, renameBtn, brainBtn, deleteBtn, actions);
-  });
-
-  const brainBtn = document.createElement('button');
-  brainBtn.type = 'button';
-  brainBtn.className = 'chat-brain-btn';
-  brainBtn.textContent = '\u{1F9E0}';
-  brainBtn.setAttribute('aria-label', `Add chat to Brain: ${chat.name}`);
-  brainBtn.title = 'Add to Brain';
-  syncChatBrainBtnState(brainBtn, chat);
-  brainBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (brainBtn.disabled) return;
-    void import('./chat-brain-capture').then((m) => m.runChatBrainCapture(chat));
-  });
-
-  const deleteBtn = document.createElement('button');
-  deleteBtn.type = 'button';
-  deleteBtn.className = 'chat-delete-btn';
-  deleteBtn.textContent = '\u{1F5D1}';
-  deleteBtn.setAttribute('aria-label', `Delete chat: ${chat.name}`);
-  deleteBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (options?.onDelete) {
-      options.onDelete(chat);
-      return;
-    }
-    deleteChat(chat.id, e);
-  });
-
-  actions.appendChild(renameBtn);
-  actions.appendChild(brainBtn);
-  actions.appendChild(deleteBtn);
-
   head.appendChild(titleRow);
-  head.appendChild(actions);
+
+  row.addEventListener('contextmenu', (e) => {
+    if ((e.target as Element).closest('.chat-rename-input')) return;
+    e.preventDefault();
+    showChatItemContextMenu(e.clientX, e.clientY, chat, nameSpan, options);
+  });
 
   row.appendChild(head);
   if (!inGroup) {
@@ -586,27 +547,87 @@ export function renderSidebar(): void {
   void import('./global-bugs-page').then((m) => m.refreshGlobalBugsSidebarBadge());
 }
 
-function syncChatBrainBtnState(btn: HTMLButtonElement, chat: Chat): void {
+function chatBrainCaptureState(chat: Chat): { disabled: boolean; title: string } {
   const streaming = isChatStreaming(chat.id);
   const empty = chat.history.length === 0;
-  btn.disabled = streaming || empty;
   if (streaming) {
-    btn.title = 'Wait for reply to finish';
-  } else if (empty) {
-    btn.title = 'Chat has no messages';
-  } else {
-    btn.title = 'Add to Brain';
+    return { disabled: true, title: 'Wait for reply to finish' };
   }
+  if (empty) {
+    return { disabled: true, title: 'Chat has no messages' };
+  }
+  return { disabled: false, title: 'Add to Brain' };
 }
 
-function beginRenameChat(
-  chatId: string,
+function showChatItemContextMenu(
+  x: number,
+  y: number,
+  chat: Chat,
   nameSpan: HTMLSpanElement,
-  renameBtn: HTMLButtonElement,
-  brainBtn: HTMLButtonElement,
-  deleteBtn: HTMLButtonElement,
-  actionsEl: HTMLDivElement
+  options?: Pick<AppendChatRowOptions, 'onDelete'>,
 ): void {
+  const existing = document.getElementById('chatItemContextMenu');
+  existing?.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'chatItemContextMenu';
+  menu.className = 'chat-group-context-menu';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  const renameItem = document.createElement('button');
+  renameItem.type = 'button';
+  renameItem.textContent = 'Rename';
+  renameItem.addEventListener('click', () => {
+    menu.remove();
+    beginRenameChat(chat.id, nameSpan);
+  });
+
+  const brainState = chatBrainCaptureState(chat);
+  const brainItem = document.createElement('button');
+  brainItem.type = 'button';
+  brainItem.textContent = 'Add to Brain';
+  brainItem.title = brainState.title;
+  brainItem.disabled = brainState.disabled;
+  brainItem.addEventListener('click', () => {
+    menu.remove();
+    if (brainState.disabled) return;
+    void import('./chat-brain-capture').then((m) => m.runChatBrainCapture(chat));
+  });
+
+  const deleteItem = document.createElement('button');
+  deleteItem.type = 'button';
+  deleteItem.textContent = 'Delete';
+  deleteItem.className = 'chat-context-menu__item--danger';
+  deleteItem.addEventListener('click', () => {
+    menu.remove();
+    if (options?.onDelete) {
+      options.onDelete(chat);
+      return;
+    }
+    deleteChat(chat.id);
+  });
+
+  menu.appendChild(renameItem);
+  menu.appendChild(brainItem);
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const close = (): void => {
+    menu.remove();
+    document.removeEventListener('click', close);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') close();
+  };
+  window.setTimeout(() => {
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+  }, 0);
+}
+
+function beginRenameChat(chatId: string, nameSpan: HTMLSpanElement): void {
   const chat = sessionState!.chats.find((c) => c.id === chatId);
   if (!chat) return;
   const inp = document.createElement('input');
@@ -616,7 +637,6 @@ function beginRenameChat(
   inp.maxLength = 120;
   inp.setAttribute('aria-label', 'Chat title');
   nameSpan.replaceWith(inp);
-  actionsEl.style.visibility = 'hidden';
   inp.focus();
   inp.select();
 
@@ -625,7 +645,6 @@ function beginRenameChat(
     if (v) chat.name = v;
     inp.replaceWith(nameSpan);
     nameSpan.textContent = chat.name;
-    actionsEl.style.visibility = '';
     touchChat(chat);
     renderSidebar();
     scheduleSaveSessions();

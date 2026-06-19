@@ -179,7 +179,7 @@ export async function loadModelRoutingCatalog(
         : undefined,
       providerId: typeCfg.providerId,
       modelId: typeCfg.modelId,
-      usesChatDefault: !typeCfg.modelId?.trim(),
+      usesChatDefault: !typeCfg.modelId?.trim() && !typeCfg.providerId?.trim(),
       disabled: typeCfg.enabled === false,
       persistKind: 'sub-agent',
       advancedSettingsHash: '#/settings/sub-agents',
