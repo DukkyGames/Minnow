@@ -9,6 +9,7 @@
  * Progress %: complete tasks / total tasks (failed/blocked are not complete).
  */
 
+import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import type {
   BoardTask,
   BoardTaskStatus,
@@ -416,6 +417,9 @@ export function initBoard(
   group.orchestrateBoard = board;
   group.orchestratePlanPath = input.planPath;
   linkPlannerChatToBoardFolder(plannerChat, group);
+  syncOrchestratorPlannerChatTitle(plannerChat, input.planPath);
+  touchChat(plannerChat);
+  scheduleSaveSessions();
   emitBoardChange(group.id);
   return board;
 }

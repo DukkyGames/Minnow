@@ -89,8 +89,7 @@
 
 .chat-sidebar.collapsed .chat-sidebar-title,
 .chat-sidebar.collapsed .chat-new-wide,
-.chat-sidebar.collapsed .chat-item-meta,
-.chat-sidebar.collapsed .chat-item-actions {
+.chat-sidebar.collapsed .chat-item-meta {
   display: none;
 }
 
@@ -366,8 +365,21 @@
   font-size: 0.8rem;
 }
 
-.chat-group-context-menu button:hover {
+.chat-group-context-menu button:hover:not(:disabled) {
   background: var(--mn-surface-2);
+}
+
+.chat-group-context-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chat-group-context-menu .chat-context-menu__item--danger {
+  color: var(--mn-danger);
+}
+
+.chat-group-context-menu .chat-context-menu__item--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mn-danger) 12%, transparent);
 }
 
 .chat-list {
@@ -486,24 +498,9 @@
     border-color: var(--mn-border);
   }
 
-  /* Dark hover fill (--mn-surface-elevated) needs light title + action icons; skip active row */
-  .chat-item-row:hover:not(.active) .chat-item-title-row,
-  .chat-item-row:hover:not(.active) .chat-rename-btn,
-  .chat-item-row:hover:not(.active) .chat-brain-btn,
-  .chat-item-row:hover:not(.active) .chat-delete-btn {
+  /* Dark hover fill (--mn-surface-elevated) needs light title; skip active row */
+  .chat-item-row:hover:not(.active) .chat-item-title-row {
     color: var(--mn-fg);
-  }
-
-  .chat-item-row:hover:not(.active) .chat-rename-btn:hover {
-    color: var(--mn-success);
-  }
-
-  .chat-item-row:hover:not(.active) .chat-brain-btn:hover {
-    color: var(--mn-accent);
-  }
-
-  .chat-item-row:hover:not(.active) .chat-delete-btn:hover {
-    color: var(--mn-danger);
   }
 }
 
@@ -527,25 +524,10 @@
   font-weight: 500;
 }
 
-.chat-item-row.chat-item-row--in-group .chat-rename-btn,
-.chat-item-row.chat-item-row--in-group .chat-brain-btn,
-.chat-item-row.chat-item-row--in-group .chat-delete-btn {
-  width: 24px;
-  height: 24px;
-  font-size: 15px;
-}
-
 @media (pointer: coarse) {
   .chat-item-row.chat-item-row--in-group {
     padding-top: 6px;
     padding-bottom: 6px;
-  }
-
-  .chat-item-row.chat-item-row--in-group .chat-rename-btn,
-  .chat-item-row.chat-item-row--in-group .chat-brain-btn,
-  .chat-item-row.chat-item-row--in-group .chat-delete-btn {
-    width: var(--touch-min);
-    height: var(--touch-min);
   }
 }
 
@@ -565,14 +547,6 @@
   transition: color 0.2s var(--ease-out);
 }
 
-/* Rename/delete: no flex gap so icons read as a pair; size follows pointer type below */
-.chat-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex-shrink: 0;
-}
-
 .chat-item-name {
   font-size: 11px;
   font-weight: 500;
@@ -581,58 +555,6 @@
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
-}
-
-.chat-rename-btn,
-.chat-brain-btn,
-.chat-delete-btn {
-  flex-shrink: 0;
-  /* Default: compact hit area on mouse/desktop so glyphs sit closer (was full --touch-min each) */
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  font-size: 18px;
-  line-height: 1;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s var(--ease-out);
-}
-
-@media (pointer: coarse) {
-  .chat-rename-btn,
-  .chat-brain-btn,
-  .chat-delete-btn {
-    width: var(--touch-min);
-    height: var(--touch-min);
-  }
-}
-
-.chat-rename-btn {
-  color: var(--mn-fg-muted);
-}
-
-.chat-brain-btn {
-  color: var(--mn-fg-muted);
-}
-
-.chat-delete-btn {
-  color: var(--mn-fg);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .chat-rename-btn:hover { color: var(--mn-success); }
-  .chat-brain-btn:hover { color: var(--mn-accent); }
-  .chat-delete-btn:hover { color: var(--mn-danger); }
-}
-
-.chat-brain-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 
 .chat-item-model {
@@ -904,8 +826,7 @@
 
   .chat-sidebar.collapsed.mobile-open .chat-sidebar-title,
   .chat-sidebar.collapsed.mobile-open .chat-new-wide,
-  .chat-sidebar.collapsed.mobile-open .chat-item-meta,
-  .chat-sidebar.collapsed.mobile-open .chat-item-actions {
+  .chat-sidebar.collapsed.mobile-open .chat-item-meta {
     display: flex;
   }
 

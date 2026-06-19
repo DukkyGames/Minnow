@@ -3,7 +3,7 @@
  */
 
 import {
-  extractMessageText,
+  extractAssistantCompletionText,
   extractStreamDelta,
   finalizeToolCalls,
   mergeStreamMeta,
@@ -36,6 +36,7 @@ import {
 import type { CompletionBodyWithResponseFormat } from '../providers/completion-types';
 import { mergeContentJsonToolCalls } from '../providers/constrained-tool-content';
 import { postChatCompletions } from '../providers/fetch-chat';
+import { sanitizeCompletionBodyForProvider } from '../providers/sanitize-completion-body';
 import {
   getToolCallsMetaSync,
   isConstrainedDecodingEnabledForProvider,
@@ -62,10 +63,13 @@ import type { SubAgentBudgetEvent, SubAgentStructuredOutcome } from './sub-agent
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { averageStatsSegments, sumUsageSegments } from '../chat/orchestrate/stats-math';
 import { recordSubAgentTurnUsage } from '../usage/record-chat-usage';
-import type { ApiMessage, ChatCompletionChunk, Stats, ToolCallAccumulator, Usage } from '../types';
+import type { ApiMessage, ChatCompletionChunk, Message, ModelCapabilities, Stats, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import { looksLikeProseStructuredQuestion } from '../tools/prose-question-detect';
 import {
+  EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
+  hasPostToolTail,
+  MAX_EMPTY_POST_TOOL_RETRIES,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
@@ -80,6 +84,7 @@ import { modelCache } from '../app-state';
 import { encodeModelSelectKey } from '../lib/model-select-key';
 import { catalogCapabilitiesFromRow } from '../providers/model-capabilities';
 import type { SubAgentRunner, SubAgentRunnerOutput } from './types';
+import type { ProviderPublic } from '../providers/types';
 
 /** Legacy export: prefer per-type `maxToolTurns` from sub-agents config. */
 export const MAX_SUB_AGENT_TOOL_TURNS = 100;
@@ -95,20 +100,65 @@ function resolveStreamedCompletionText(content: string, reasoning: string): stri
 async function completionTextForTurn(
   turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>,
   body: SubAgentCompletionBody,
-  providerId: string,
+  provider: ProviderPublic,
+  sendCaps: ModelCapabilities | undefined,
   signal: AbortSignal,
 ): Promise<string> {
   let text = resolveStreamedCompletionText(turnResult.fullText, turnResult.reasoningText);
   if (text.trim()) return text.trim();
 
-  const { stream: _stream, ...fallbackBody } = body;
-  const fallback = await tryNonStreamingFallback(fallbackBody, signal, providerId);
+  const { stream: _stream, ...fallbackBody } = sanitizeSubAgentBody(body, provider, sendCaps);
+  const fallback = await tryNonStreamingFallback(fallbackBody, signal, provider.id);
   const message = fallback.choices?.[0]?.message;
   text = resolveStreamedCompletionText(
-    extractMessageText(message).trim(),
+    extractAssistantCompletionText(message).trim(),
     extractReasoningMessage(message).trim(),
   );
   return text.trim();
+}
+
+function sanitizeSubAgentBody(
+  body: SubAgentCompletionBody,
+  provider: ProviderPublic,
+  sendCaps?: ModelCapabilities | null,
+): SubAgentCompletionBody {
+  return sanitizeCompletionBodyForProvider(
+    body as unknown as Record<string, unknown>,
+    provider,
+    sendCaps,
+  ) as unknown as SubAgentCompletionBody;
+}
+
+/** Non-streaming sub-agent turn (structured finalization when streaming is unsupported). */
+async function runSubAgentNonStreamTurn(
+  providerId: string,
+  body: SubAgentCompletionBody,
+  signal: AbortSignal,
+  provider: ProviderPublic,
+  sendCaps: ModelCapabilities | undefined,
+): Promise<Awaited<ReturnType<typeof streamSubAgentTurn>>> {
+  const t0 = performance.now();
+  const sanitized = sanitizeSubAgentBody(body, provider, sendCaps);
+  const { stream: _stream, ...fallbackBody } = sanitized;
+  const chunk = await tryNonStreamingFallback(fallbackBody, signal, providerId);
+  const message = chunk.choices?.[0]?.message;
+  const fullText = extractAssistantCompletionText(message);
+  const reasoningText = extractReasoningMessage(message).trim();
+  const finishReason = chunk.choices?.[0]?.finish_reason;
+  return {
+    fullText,
+    reasoningText,
+    finishReason,
+    toolCalls: [],
+    streamMeta: {
+      usage: chunk.usage,
+      stats: chunk.stats,
+      finish_reason: finishReason,
+    },
+    t0,
+    tFirst: t0,
+    tEnd: performance.now(),
+  };
 }
 
 /** Dev-only logging when `localStorage.minnowDebugSubAgent === '1'`. */
@@ -160,6 +210,7 @@ async function streamSubAgentTurn(
   signal: AbortSignal,
   fallbackRole: string,
   onDelta?: (delta: string) => void,
+  sanitizeOptions?: { provider?: ProviderPublic; modelCapabilities?: ModelCapabilities | null },
 ): Promise<{
   fullText: string;
   reasoningText: string;
@@ -170,8 +221,13 @@ async function streamSubAgentTurn(
   tFirst: number | null;
   tEnd: number;
 }> {
-  const provider = await resolveProvider(providerId);
-  const res = await postChatCompletions(provider, body, signal, { fallbackRole });
+  const provider = sanitizeOptions?.provider ?? (await resolveProvider(providerId));
+  const sanitized = sanitizeSubAgentBody(
+    body,
+    provider,
+    sanitizeOptions?.modelCapabilities,
+  );
+  const res = await postChatCompletions(provider, sanitized, signal, { fallbackRole });
 
   if (!res.ok) {
     const err = await res.text();
@@ -313,6 +369,7 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
     let toolTurns = 0;
     let proseQuestionRetries = 0;
+    let emptyPostToolRetries = 0;
     const hasAskQuestionTool = input.tools.some((t) => t.function.name === 'ask_question');
     const typeConfig = await getSubAgentTypeConfig(input.type);
     const resolvedSampler = resolveSamplerPreset({
@@ -464,11 +521,34 @@ export const defaultSubAgentRunner: SubAgentRunner = {
         usedOutcomeResponseFormat = true;
       }
 
-      const runFinalizationStream = async (
+      const preferNonStreamFinalization =
+        usedOutcomeResponseFormat &&
+        providerCapabilities?.structuredOutputStreaming !== true;
+      if (preferNonStreamFinalization) {
+        body.stream = false;
+      }
+
+      const runFinalizationTurn = async (
         attemptBody: SubAgentCompletionBody,
       ): Promise<Awaited<ReturnType<typeof streamSubAgentTurn>>> => {
+        if (attemptBody.stream === false) {
+          return runSubAgentNonStreamTurn(
+            input.providerId,
+            attemptBody,
+            input.signal,
+            provider,
+            sendCaps,
+          );
+        }
         try {
-          return await streamSubAgentTurn(input.providerId, attemptBody, input.signal, input.type);
+          return await streamSubAgentTurn(
+            input.providerId,
+            attemptBody,
+            input.signal,
+            input.type,
+            undefined,
+            { provider, modelCapabilities: sendCaps },
+          );
         } catch (streamErr) {
           if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
             usedOutcomeResponseFormat = false;
@@ -477,13 +557,15 @@ export const defaultSubAgentRunner: SubAgentRunner = {
               stripResponseFormatFromBody(attemptBody),
               input.signal,
               input.type,
+              undefined,
+              { provider, modelCapabilities: sendCaps },
             );
           }
           throw streamErr;
         }
       };
 
-      let turnResult = await runFinalizationStream(body);
+      let turnResult = await runFinalizationTurn(body);
       await ledgerSubAgentTurn(input, turnResult);
 
       const turnUsage = turnResult.streamMeta.usage ?? {};
@@ -496,19 +578,21 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       let rawText = await completionTextForTurn(
         turnResult,
         body,
-        input.providerId,
+        provider,
+        sendCaps,
         input.signal,
       );
 
       if (!rawText && usedOutcomeResponseFormat) {
         usedOutcomeResponseFormat = false;
         body = stripResponseFormatFromBody(body);
-        turnResult = await runFinalizationStream(body);
+        turnResult = await runFinalizationTurn(body);
         await ledgerSubAgentTurn(input, turnResult);
         rawText = await completionTextForTurn(
           turnResult,
           body,
-          input.providerId,
+          provider,
+          sendCaps,
           input.signal,
         );
       }
@@ -600,10 +684,17 @@ export const defaultSubAgentRunner: SubAgentRunner = {
 
       let streamingAssistant = '';
       const runSubTurn = (turnBody: SubAgentCompletionBody) =>
-        streamSubAgentTurn(input.providerId, turnBody, input.signal, input.type, (fullSoFar) => {
-          streamingAssistant = fullSoFar;
-          emitProgress(streamingAssistant);
-        });
+        streamSubAgentTurn(
+          input.providerId,
+          turnBody,
+          input.signal,
+          input.type,
+          (fullSoFar) => {
+            streamingAssistant = fullSoFar;
+            emitProgress(streamingAssistant);
+          },
+          { provider, modelCapabilities: sendCaps },
+        );
 
       let turnResult: Awaited<ReturnType<typeof streamSubAgentTurn>>;
       try {
@@ -683,9 +774,22 @@ export const defaultSubAgentRunner: SubAgentRunner = {
       let prose = await completionTextForTurn(
         turnResult,
         body,
-        input.providerId,
+        provider,
+        sendCaps,
         input.signal,
       );
+
+      if (
+        !prose &&
+        toolTurns > 0 &&
+        hasPostToolTail(messages as Message[]) &&
+        emptyPostToolRetries < MAX_EMPTY_POST_TOOL_RETRIES
+      ) {
+        emptyPostToolRetries += 1;
+        messages.push({ role: 'user', content: EMPTY_POST_TOOL_CONTINUE_INSTRUCTION });
+        emitProgress(undefined, true);
+        continue;
+      }
 
       if (
         hasAskQuestionTool &&

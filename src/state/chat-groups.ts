@@ -3,6 +3,7 @@
  * Orchestrate boards are owned by folders ({@link ChatGroup.orchestrateBoard}).
  */
 
+import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
@@ -42,6 +43,17 @@ export type WorkspaceSidebarEntry =
   | { kind: 'group'; group: ChatGroup; members: Chat[] }
   | { kind: 'chat'; chat: Chat };
 
+/** Board folders pin the planner chat first; other members stay activity-sorted. */
+function sortBoardGroupMembers(group: ChatGroup, members: Chat[]): Chat[] {
+  const plannerId = group.plannerChatId?.trim();
+  if (!plannerId) return members;
+  const planner = members.find((c) => c.id === plannerId);
+  const rest = members
+    .filter((c) => c.id !== plannerId)
+    .sort((a, b) => getChatLastMessageAt(b) - getChatLastMessageAt(a));
+  return planner ? [planner, ...rest] : rest;
+}
+
 /** Merge groups and ungrouped chats by newest activity (sidebar main list). */
 export function buildSortedWorkspaceSidebarEntries(
   groups: ChatGroup[],
@@ -51,7 +63,10 @@ export function buildSortedWorkspaceSidebarEntries(
   const entries: WorkspaceSidebarEntry[] = [];
 
   for (const group of groups) {
-    const members = workspaceChats.filter((c) => c.groupId === group.id);
+    const members = sortBoardGroupMembers(
+      group,
+      workspaceChats.filter((c) => c.groupId === group.id),
+    );
     members.forEach((c) => groupedIds.add(c.id));
     entries.push({ kind: 'group', group, members });
   }
@@ -207,6 +222,10 @@ export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup
   if (plannerChat.orchestratePlanPath && !group.orchestratePlanPath) {
     group.orchestratePlanPath = plannerChat.orchestratePlanPath;
   }
+  syncOrchestratorPlannerChatTitle(
+    plannerChat,
+    plannerChat.orchestratePlanPath ?? group.orchestratePlanPath,
+  );
   touchChat(plannerChat);
   scheduleSaveSessions();
 }

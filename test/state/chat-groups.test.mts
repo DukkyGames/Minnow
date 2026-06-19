@@ -70,6 +70,7 @@ describe('chat groups', () => {
       chats: [planner],
     });
     const group = getOrCreateBoardGroup(planner);
+    assert.equal(planner.name, 'Orchestrator - demo-plan');
     initBoard(group, planner, {
       planPath: PLAN_PATH,
       tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
@@ -170,6 +171,49 @@ describe('chat groups', () => {
     assert.deepEqual(
       ordered.map((entry) => (entry.kind === 'group' ? entry.group.id : entry.chat.id)),
       [freshChat.id, midGroup.id, staleGroup.id],
+    );
+  });
+
+  test('buildSortedWorkspaceSidebarEntries pins planner chat first in board folder', () => {
+    const boardGroup = {
+      id: 'grp_board',
+      name: 'demo-plan',
+      workspacePath: WS,
+      collapsed: false,
+      order: 0,
+      createdAt: 1000,
+      plannerChatId: PLANNER_ID,
+      orchestrateBoard: {
+        planPath: PLAN_PATH,
+        tasks: [],
+        waves: [],
+        startedAt: 1,
+        lastUpdatedAt: 1,
+        timerAccumulatedMs: 0,
+        maxConcurrentTasks: 3,
+        executionMode: 'manual' as const,
+      },
+    };
+    const planner = createEmptyChatObject('', WS);
+    planner.id = PLANNER_ID;
+    planner.groupId = boardGroup.id;
+    planner.lastMessageAt = 1000;
+    planner.updatedAt = 1000;
+    const taskChat = createEmptyChatObject('', WS);
+    taskChat.id = '22222222-2222-2222-2222-222222222222';
+    taskChat.groupId = boardGroup.id;
+    taskChat.lastMessageAt = 9000;
+    taskChat.updatedAt = 9000;
+
+    const ordered = buildSortedWorkspaceSidebarEntries(
+      [boardGroup],
+      [taskChat, planner],
+    );
+    const groupEntry = ordered.find((e) => e.kind === 'group');
+    assert.ok(groupEntry && groupEntry.kind === 'group');
+    assert.deepEqual(
+      groupEntry.members.map((c) => c.id),
+      [PLANNER_ID, taskChat.id],
     );
   });
 

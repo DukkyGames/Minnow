@@ -158,8 +158,7 @@
 }
 
 .chat-app-rail-list .chat-item-model,
-.chat-app-rail-list .chat-item-stats,
-.chat-app-rail-list .chat-item-actions {
+.chat-app-rail-list .chat-item-stats {
   display: none;
 }
 
@@ -190,10 +189,6 @@
 .chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-model,
 .chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-stats {
   display: block;
-}
-
-.chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-actions {
-  display: flex;
 }
 
 .chat-app-page.is-rail-expanded .chat-app-rail-list .chat-item-title-row {

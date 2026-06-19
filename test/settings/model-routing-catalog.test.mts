@@ -66,6 +66,32 @@ describe('resolveSubAgentModelBinding', () => {
     assert.equal(out.modelId, 'parent-model');
     assert.equal(out.providerId, 'type-prov');
   });
+
+  test('empty type provider falls back to parent chat', () => {
+    const out = resolveSubAgentModelBinding(
+      { providerId: '', modelId: '' },
+      {
+        id: 'c1',
+        name: 'Test',
+        workspacePath: '',
+        history: [],
+        modelId: 'parent-model',
+        providerId: 'parent-prov',
+      },
+    );
+    assert.equal(out.modelId, 'parent-model');
+    assert.equal(out.providerId, 'parent-prov');
+  });
+
+  test('empty type provider and model use global defaults when parent missing', () => {
+    const out = resolveSubAgentModelBinding(
+      { providerId: '', modelId: '' },
+      undefined,
+      { providerId: 'global-prov', modelId: 'global-model' },
+    );
+    assert.equal(out.providerId, 'global-prov');
+    assert.equal(out.modelId, 'global-model');
+  });
 });
 
 describe('resolveUiDesignerModel + titles', () => {

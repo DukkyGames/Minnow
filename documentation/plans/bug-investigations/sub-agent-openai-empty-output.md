@@ -1,5 +1,7 @@
 # Sub-agent empty output on OpenAI API providers
 
+**Status (2026-06-18):** Fixed in tree — provider inheritance (`resolveSubAgentModelBinding`), legacy `lm-studio-local` migration, `extractAssistantCompletionText` + non-stream finalization when `structuredOutputStreaming` is false, empty post-tool retry, and `sanitizeCompletionBodyForProvider` for `openai-v1`. See `test/sub-agents/sub-agent-runner-openai.test.mts`.
+
 ## Symptom
 
 Sub-agents work on LM Studio (`apiKind: lm-studio-v0`) but on any **OpenAI v1** provider (`apiKind: openai-v1` — OpenAI, OpenRouter, Groq, etc.) runs **finish with no usable output**: empty transcript, empty or placeholder summary (`Sub-agent completed with no text output.`), or terminal error `Empty response from provider on final turn`.
@@ -207,13 +209,13 @@ Update `documentation/context.md` § Sub-agent orchestration with OpenAI provide
 
 ## Todos
 
-- [ ] Add `sanitizeCompletionBodyForProvider` and wire into `sub-agent-runner.ts`
-- [ ] Fix `thinkingToCompletionBody` for `openai-v1` + `off` (omit fields, do not send `none`)
-- [ ] Extract `message.parsed` / `refusal` in completion text helpers
-- [ ] Add empty post-tool continuation to sub-agent runner
-- [ ] Gate finalization streaming on `structuredOutputStreaming` probe
-- [ ] Default sub-agent `providerId` to inherit parent chat
-- [ ] Unit tests + `context.md` update
+- [x] Add `sanitizeCompletionBodyForProvider` and wire into `sub-agent-runner.ts`
+- [ ] Fix `thinkingToCompletionBody` for `openai-v1` + `off` (omit fields, do not send `none`) — partially addressed via sanitizer stripping `thinking` when no reasoning capability
+- [x] Extract `message.parsed` / `refusal` in completion text helpers
+- [x] Add empty post-tool continuation to sub-agent runner
+- [x] Gate finalization streaming on `structuredOutputStreaming` probe
+- [x] Default sub-agent `providerId` to inherit parent chat
+- [x] Unit tests + `context.md` update
 
 ---
 

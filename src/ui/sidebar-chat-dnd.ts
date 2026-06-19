@@ -58,7 +58,7 @@ function bindChatList(host: HTMLElement): void {
     'dragstart',
     (event) => {
       if (!(event.target instanceof HTMLElement)) return;
-      if (event.target.closest('.chat-item-actions, .chat-rename-input')) {
+      if (event.target.closest('.chat-rename-input')) {
         event.preventDefault();
         return;
       }
