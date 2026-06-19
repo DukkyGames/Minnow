@@ -1,6 +1,6 @@
 /**
- * Sidebar per-chat status dot: idle, unread (green), user input required (yellow),
- * or reasoning phase (ring spinner). See resolveChatItemDotState for priority.
+ * Sidebar per-chat status dot: hidden when idle; green unread, yellow needs-input,
+ * red turn error. See resolveChatItemDotState for priority.
  */
 
 import { streamingChatIds } from '../app-state';
@@ -16,7 +16,7 @@ const streamPhaseByChatId = new Map<string, 'generating' | 'thinking'>();
 /** Active chat id while tool approval or ask_question UI is open. */
 let inputPendingChatId: string | null = null;
 
-export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'thinking';
+export type ChatItemDotState = 'idle' | 'unread' | 'needs-input' | 'error' | 'thinking';
 
 export interface ChatItemDotContext {
   activeChatId: string | null;
@@ -36,11 +36,15 @@ export function getChatItemDotContext(activeChatId: string | null): ChatItemDotC
 }
 
 /**
- * One resolved visual state per chat. Priority: needs-input > thinking > unread > idle.
+ * One resolved visual state per chat. Priority: needs-input > error > unread > idle.
+ * Thinking is resolved internally but hidden in the sidebar (no dot).
  */
 export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): ChatItemDotState {
   if (ctx.inputPendingChatId != null && chat.id === ctx.inputPendingChatId) {
     return 'needs-input';
+  }
+  if (chat.id !== ctx.activeChatId && chat.turnError === true) {
+    return 'error';
   }
   const streamingThisChat = ctx.streamingChatIds.has(chat.id);
   const phase = ctx.streamPhaseByChatId.get(chat.id);
@@ -58,6 +62,32 @@ export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): Ch
   return 'idle';
 }
 
+/** True when the sidebar should render a colored status dot (not idle/thinking). */
+export function isChatItemDotVisible(state: ChatItemDotState): boolean {
+  return state === 'unread' || state === 'needs-input' || state === 'error';
+}
+
+const GROUP_DOT_PRIORITY: readonly ChatItemDotState[] = ['needs-input', 'error', 'unread'];
+
+/** Highest-priority actionable dot among group member chats (for board folder headers). */
+export function resolveGroupHeaderDotState(
+  members: readonly Chat[],
+  ctx: ChatItemDotContext,
+): ChatItemDotState | null {
+  let best: ChatItemDotState | null = null;
+  let bestRank = GROUP_DOT_PRIORITY.length;
+  for (const chat of members) {
+    const state = resolveChatItemDotState(chat, ctx);
+    if (!isChatItemDotVisible(state)) continue;
+    const rank = GROUP_DOT_PRIORITY.indexOf(state);
+    if (rank >= 0 && rank < bestRank) {
+      best = state;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
 /** Updates data-dot-state on the dot and optional row (for collapsed rail badge styling). */
 export function applyChatItemDotClasses(
   dotEl: HTMLElement,
@@ -65,6 +95,7 @@ export function applyChatItemDotClasses(
   rowEl?: HTMLElement | null,
 ): void {
   dotEl.dataset.dotState = state;
+  dotEl.hidden = !isChatItemDotVisible(state);
   if (rowEl) rowEl.dataset.dotState = state;
   const existing = dotEl.querySelector('.chat-item-dot__spinner');
   if (state === 'thinking') {
@@ -79,6 +110,31 @@ export function applyChatItemDotClasses(
   }
 }
 
+/** Apply or remove the aggregated status dot on a board group header. */
+export function applyGroupHeaderDotClasses(
+  headEl: HTMLElement,
+  state: ChatItemDotState | null,
+): void {
+  const existing = headEl.querySelector('.chat-group-header__dot');
+  if (!state) {
+    existing?.remove();
+    delete headEl.dataset.dotState;
+    return;
+  }
+  const dotEl =
+    existing instanceof HTMLElement
+      ? existing
+      : (() => {
+          const dot = document.createElement('span');
+          dot.className = 'chat-group-header__dot';
+          dot.setAttribute('aria-hidden', 'true');
+          headEl.insertBefore(dot, headEl.firstChild);
+          return dot;
+        })();
+  dotEl.dataset.dotState = state;
+  headEl.dataset.dotState = state;
+}
+
 /** Refreshes every chat row dot without rebuilding the sidebar list. */
 export function syncChatItemDotsInDom(): void {
   const state = sessionState;
@@ -91,9 +147,26 @@ export function syncChatItemDotsInDom(): void {
     if (!id) continue;
     const chat = state.chats.find((c) => c.id === id);
     if (!chat) continue;
+    const dotState = resolveChatItemDotState(chat, ctx);
+    const inGroup = row.classList.contains('chat-item-row--in-group');
     const dot = row.querySelector('.chat-item-dot');
+    if (inGroup) {
+      dot?.remove();
+      if (isChatItemDotVisible(dotState)) {
+        row.dataset.dotState = dotState;
+      } else {
+        delete row.dataset.dotState;
+      }
+      continue;
+    }
     if (!(dot instanceof HTMLElement)) continue;
-    applyChatItemDotClasses(dot, resolveChatItemDotState(chat, ctx), row);
+    applyChatItemDotClasses(dot, dotState, row);
+  }
+  for (const head of list.querySelectorAll<HTMLElement>('.chat-group-header[data-group-id]')) {
+    const groupId = head.dataset.groupId;
+    if (!groupId) continue;
+    const members = state.chats.filter((c) => c.groupId === groupId);
+    applyGroupHeaderDotClasses(head, resolveGroupHeaderDotState(members, ctx));
   }
 }
 
@@ -138,6 +211,11 @@ export function setSidebarInputPendingForActiveChat(active: boolean): void {
     return;
   }
   setSidebarInputPendingChatId(getActiveChat().id);
+}
+
+/** Mark a failed turn so inactive chats show a red sidebar dot until opened again. */
+export function markChatTurnError(chat: Chat): void {
+  chat.turnError = true;
 }
 
 /** Records that the user opened this chat (baseline for unread vs new assistant activity). */

@@ -291,7 +291,10 @@ export function openBoardGroup(groupId: string): void {
     }
     state.activeId = plannerId;
     const planner = state.chats.find((c) => c.id === plannerId);
-    if (planner) planner.unread = false;
+    if (planner) {
+      planner.unread = false;
+      planner.turnError = false;
+    }
   }
 
   activateBoardGroupView(groupId, group);

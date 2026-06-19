@@ -159,6 +159,7 @@ import { renderToolCall, renderToolResult } from '../ui/tool-messages';
 import { consumeReefArtifactEditsForPrompt } from '../chat/reef/artifact-context.ts';
 import { maybePromoteToolResultToArtifact } from '../chat/reef/artifact-promotion.ts';
 import {
+  markChatTurnError,
   recordAssistantReplyOnChat,
   setSidebarStreamPhase,
   syncChatItemDotsInDom,
@@ -1897,6 +1898,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return;
     }
     turnRunStatus = 'failed';
+    markChatTurnError(chat);
     if (resumeGenerationId) {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();

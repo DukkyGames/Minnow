@@ -38,14 +38,17 @@ import {
 import {
   countRunningTaskChats,
   getBoardExecutionMode,
+  isBoardRunning,
   isTaskChatActive,
   moveTaskStatus,
   setBoardExecutionMode,
   setBoardMaxConcurrent,
+  startBoardAutoRun,
   startFinalIntegrationTestForPlannerChat,
   startTask,
   startTaskTestingForPlannerChat,
   startWave,
+  stopBoardAutoRun,
   stopTask,
   toggleWaveCollapsed,
 } from '../state/orchestrate-board-actions.ts';
@@ -775,6 +778,26 @@ function wireBoardHeaderControls(
   });
   concWrapper.appendChild(concInput);
   controls.appendChild(concWrapper);
+
+  // Start / Stop button (only shown in auto or sequential mode)
+  if (currentMode === 'auto' || currentMode === 'sequential') {
+    const running = isBoardRunning(group);
+    const runBtn = document.createElement('button');
+    runBtn.type = 'button';
+    runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
+    runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
+    runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
+    runBtn.textContent = running ? 'Stop' : 'Start';
+    runBtn.addEventListener('click', () => {
+      if (isBoardRunning(group)) {
+        stopBoardAutoRun(group, plannerChat);
+      } else {
+        startBoardAutoRun(group, plannerChat);
+      }
+      refreshActiveBoardIfMounted();
+    });
+    controls.appendChild(runBtn);
+  }
 
   const openPlan = createBoardHeaderIconButton(
     'open-plan',
@@ -1689,18 +1712,52 @@ function refreshBoardDom(
     openPlanBtn.title = planTitle;
   }
 
+  const currentMode = getBoardExecutionMode(board);
   const execModeSelect = root.querySelector(
     '[data-board-action="auto-pilot"]',
   ) as HTMLSelectElement | null;
   if (execModeSelect) {
-    execModeSelect.value = getBoardExecutionMode(board);
+    execModeSelect.value = currentMode;
   }
   const concurrencyInput = root.querySelector(
     '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
   if (concurrencyInput) {
     concurrencyInput.value = String(board.maxConcurrentTasks ?? 3);
-    concurrencyInput.disabled = getBoardExecutionMode(board) !== 'auto';
+    concurrencyInput.disabled = currentMode !== 'auto';
+  }
+
+  // Sync Start/Stop button: add if needed, remove when mode switches to manual
+  const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
+  if (controls) {
+    let runBtn = controls.querySelector('.board-header__run-btn') as HTMLButtonElement | null;
+    if (currentMode === 'auto' || currentMode === 'sequential') {
+      const running = isBoardRunning(group);
+      if (!runBtn) {
+        runBtn = document.createElement('button');
+        runBtn.type = 'button';
+        const openPlanAnchor = controls.querySelector('[data-board-action="open-plan"]');
+        if (openPlanAnchor) {
+          controls.insertBefore(runBtn, openPlanAnchor);
+        } else {
+          controls.appendChild(runBtn);
+        }
+        runBtn.addEventListener('click', () => {
+          if (isBoardRunning(group)) {
+            stopBoardAutoRun(group, plannerChat);
+          } else {
+            startBoardAutoRun(group, plannerChat);
+          }
+          refreshActiveBoardIfMounted();
+        });
+      }
+      runBtn.className = `board-header__run-btn${running ? ' board-header__run-btn--stop' : ''}`;
+      runBtn.setAttribute('aria-label', running ? 'Stop orchestrator' : 'Start orchestrator');
+      runBtn.title = running ? 'Stop all tasks and chats' : 'Start auto execution';
+      runBtn.textContent = running ? 'Stop' : 'Start';
+    } else if (runBtn) {
+      runBtn.remove();
+    }
   }
 
   const send = root.querySelector(

@@ -747,6 +747,7 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
     ...(raw.unread === true ? { unread: true } : {}),
+    ...(raw.turnError === true ? { turnError: true } : {}),
     ...(typeof raw.lastAssistantAt === 'number' &&
     Number.isFinite(raw.lastAssistantAt) &&
     raw.lastAssistantAt > 0
