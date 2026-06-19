@@ -1918,9 +1918,22 @@
     <!-- Ask question: structured Q&A strip (below tool approval, above composer) -->
     <div id="questionHost" class="question-host" aria-live="polite" hidden></div>
 
-    <div id="codeChangeStrip" class="code-change-strip hidden" role="status" aria-live="polite" aria-label="Code changes in this chat">
-      <span class="code-change-strip__label">Code changes</span>
-      <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+    <div class="code-change-strip-wrap">
+      <div id="codeChangePanel" class="code-change-panel" hidden aria-label="Files changed in this chat">
+        <div id="codeChangePanelList" class="code-change-panel__list"></div>
+      </div>
+      <button
+        type="button"
+        id="codeChangeStrip"
+        class="code-change-strip hidden"
+        aria-live="polite"
+        aria-expanded="false"
+        aria-haspopup="listbox"
+        aria-label="Code changes in this chat"
+      >
+        <span class="code-change-strip__label">Code changes</span>
+        <span id="codeChangeStripStats" class="code-change-strip__stats"></span>
+      </button>
     </div>
 
     <!-- Input bar -->
