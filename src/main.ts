@@ -93,6 +93,7 @@ import { initChatScroll } from './ui/chat-scroll';
 import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
+import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
 import {
   autoResize,
   handleComposerPrimaryAction,
@@ -363,7 +364,8 @@ export async function initApp(): Promise<void> {
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
   if (sessionState) {
-    void bootGenerationResumeForChats(sessionState.chats);
+    await bootGenerationResumeForChats(sessionState.chats);
+    await bootOrchestrateBoardResume(sessionState);
   }
   renderStatsForChat(getActiveChat());
   refreshContextUsageRing();

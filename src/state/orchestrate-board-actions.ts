@@ -1146,6 +1146,50 @@ export function setBoardMaxConcurrent(
   }
 }
 
+/** True when a linked task chat still has an in-flight turn after reload. */
+function shouldSuperviseBoardChatOnReload(chatId?: string): boolean {
+  const id = chatId?.trim();
+  if (!id) return false;
+  const chat = findChatById(id);
+  if (!chat) return false;
+  return isTaskChatStreaming(id) || Boolean(chat.currentGenerationId?.trim());
+}
+
+/**
+ * Re-subscribe stream handlers, re-attach heartbeat supervision, and resume
+ * auto delegation after page reload (when autoRunning was persisted).
+ */
+export async function resumeBoardExecutionAfterReload(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  ensureStreamEndSubscription();
+  ensureAutoDriveSubscription();
+  const board = group.orchestrateBoard;
+  if (!board || !isBoardRunning(group)) return;
+
+  const attachSupervision = (chatId?: string): void => {
+    if (!shouldSuperviseBoardChatOnReload(chatId)) return;
+    startTaskChatSupervision(chatId!.trim());
+  };
+
+  for (const task of board.tasks) {
+    if (task.status === 'in_progress') {
+      attachSupervision(task.chatId);
+    } else if (task.status === 'testing') {
+      attachSupervision(task.testChatId);
+      attachSupervision(task.chatId);
+    }
+  }
+
+  if (board.finalTest?.status === 'in_progress') {
+    attachSupervision(board.finalTest.chatId);
+  }
+
+  await autoDelegateNext(group, plannerChat);
+  emitBoardChange(group.id);
+}
+
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;

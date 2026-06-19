@@ -263,13 +263,17 @@ function onPreviewLoadFailed(detail: {
 function startBoundsObserver(): void {
   const body = getPreviewBody();
   if (!body || boundsObserver || !usesElectronPreview()) return;
-  boundsObserver = new ResizeObserver(() => {
+  const onLayoutChange = (): void => {
     scheduleElectronPreviewHostLayoutSync();
-  });
+  };
+  boundsObserver = new ResizeObserver(onLayoutChange);
   boundsObserver.observe(body);
-  window.addEventListener('resize', () => {
-    scheduleElectronPreviewHostLayoutSync();
-  });
+  const pane = document.getElementById('previewPane');
+  const split = document.getElementById('workspaceSplit');
+  if (pane) boundsObserver.observe(pane);
+  if (split) boundsObserver.observe(split);
+  window.addEventListener('resize', onLayoutChange);
+  window.addEventListener('scroll', onLayoutChange, true);
   scheduleElectronPreviewHostLayoutSync();
 }
 
@@ -283,12 +287,25 @@ async function showPreviewHost(): Promise<void> {
   await syncElectronPreviewHostLayout();
   scheduleElectronPreviewHostLayoutSync();
   requestAnimationFrame(() => {
-    scheduleElectronPreviewHostLayoutSync();
+    requestAnimationFrame(() => {
+      scheduleElectronPreviewHostLayoutSync();
+    });
   });
 }
 
 async function hidePreviewHost(): Promise<void> {
   await syncElectronPreviewHostLayout();
+}
+
+/** Drop the guest document so a closed/empty preview does not resurrect the last page. */
+async function clearPreviewGuest(): Promise<void> {
+  const api = getPreviewApi();
+  if (!api) return;
+  if (api.clear) {
+    await api.clear();
+    return;
+  }
+  await api.loadURL('about:blank');
 }
 
 async function loadSourceInPreview(source: PreviewSource, cacheBust?: number): Promise<void> {
@@ -520,21 +537,25 @@ export async function openUrlInPreviewPanel(url: string): Promise<void> {
 export async function openPreviewPanel(source?: PreviewSource | null): Promise<void> {
   if (!dismissFileViewerForPreview()) return;
   showPreviewSplit();
+  const state = getFilePanelState();
+  const resolved = source ?? state.previewSource;
+
   if (usesElectronPreview()) {
+    if (!resolved) {
+      patchFilePanelState({ previewSource: null });
+      await clearPreviewGuest();
+    }
     await showPreviewHost();
     scheduleElectronPreviewHostVisibilitySync();
   }
-  const state = getFilePanelState();
-  const resolved = source ?? state.previewSource;
+
   if (resolved) {
     loadPreviewSource(resolved);
   } else {
     const input = getUrlInput();
     if (input) input.value = '';
     hidePreviewStatus();
-    if (usesElectronPreview()) {
-      void getPreviewApi()?.stop();
-    } else {
+    if (!usesElectronPreview()) {
       clearPreviewFrame();
     }
   }
@@ -545,7 +566,7 @@ export async function openPreviewPanel(source?: PreviewSource | null): Promise<v
 export function closePreviewPanel(): void {
   cancelDeferredPreviewLoad();
   if (usesElectronPreview()) {
-    void hidePreviewHost();
+    void clearPreviewGuest().then(() => hidePreviewHost());
   } else {
     clearFrameBlockedTimer();
     clearPreviewFrame();
@@ -762,6 +783,8 @@ function scheduleDeferredPreviewLoad(source: PreviewSource | null): void {
       loadPreviewSource(source);
     } else if (!usesElectronPreview()) {
       clearPreviewFrame();
+    } else {
+      void clearPreviewGuest();
     }
     if (usesElectronPreview()) {
       scheduleElectronPreviewHostLayoutSync();

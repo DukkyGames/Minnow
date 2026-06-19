@@ -41,8 +41,10 @@ export interface PreviewGuestInfo {
 }
 
 const preview = {
-  show: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_SHOW),
+  show: (bounds?: PreviewBounds): Promise<void> =>
+    ipcRenderer.invoke(channels.PREVIEW_SHOW, bounds),
   hide: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_HIDE),
+  clear: (): Promise<void> => ipcRenderer.invoke(channels.PREVIEW_CLEAR),
   loadURL: (url: string): Promise<void> =>
     ipcRenderer.invoke(channels.PREVIEW_LOAD_URL, url),
   loadSource: (payload: PreviewLoadSourcePayload): Promise<void> =>

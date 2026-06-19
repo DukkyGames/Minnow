@@ -4,6 +4,7 @@
 
 export const PREVIEW_SHOW = 'minnow:preview:show';
 export const PREVIEW_HIDE = 'minnow:preview:hide';
+export const PREVIEW_CLEAR = 'minnow:preview:clear';
 export const PREVIEW_LOAD_URL = 'minnow:preview:load-url';
 export const PREVIEW_LOAD_SOURCE = 'minnow:preview:load-source';
 export const PREVIEW_RELOAD = 'minnow:preview:reload';

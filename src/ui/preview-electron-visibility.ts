@@ -4,6 +4,7 @@
  * Show + setBounds must run in one pass so PREVIEW_SET_BOUNDS is not dropped while visible=false.
  */
 
+import type { MinnowPreviewBounds } from '../electron';
 import { getFilePanelState } from '../state/file-panel';
 
 const FULLSCREEN_OVERLAY_IDS = [
@@ -14,6 +15,8 @@ const FULLSCREEN_OVERLAY_IDS = [
   'researchView',
   'chatView',
 ] as const;
+
+const MAX_LAYOUT_STABLE_FRAMES = 6;
 
 function usesElectronPreview(): boolean {
   return Boolean(window.minnow?.preview);
@@ -80,36 +83,104 @@ function previewBodyHasLayout(): boolean {
   return rect.width > 0 && rect.height > 0;
 }
 
-/** Position the native guest over #previewBody (no-op when the bridge is absent). */
-async function applyElectronPreviewBounds(): Promise<void> {
-  const api = window.minnow?.preview;
+function readPreviewBodyBounds(): MinnowPreviewBounds | null {
   const body = document.getElementById('previewBody');
-  if (!api || !body) return;
+  if (!body) return null;
   const rect = body.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return;
-  await api.setBounds({
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  return {
     x: rect.left,
     y: rect.top,
     width: rect.width,
     height: rect.height,
+  };
+}
+
+function rectsStable(a: DOMRect, b: DOMRect): boolean {
+  return (
+    Math.abs(a.left - b.left) < 0.5 &&
+    Math.abs(a.top - b.top) < 0.5 &&
+    Math.abs(a.width - b.width) < 0.5 &&
+    Math.abs(a.height - b.height) < 0.5
+  );
+}
+
+/** Wait until #previewBody has non-zero size and its rect stops moving between frames. */
+function waitForStablePreviewBodyBounds(): Promise<MinnowPreviewBounds | null> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    let previous: DOMRect | null = null;
+
+    const tick = (): void => {
+      const body = document.getElementById('previewBody');
+      if (!body) {
+        resolve(null);
+        return;
+      }
+
+      const rect = body.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        frames += 1;
+        if (frames >= MAX_LAYOUT_STABLE_FRAMES) {
+          resolve(null);
+          return;
+        }
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      if (previous && rectsStable(previous, rect)) {
+        resolve(readPreviewBodyBounds());
+        return;
+      }
+
+      previous = rect;
+      frames += 1;
+      if (frames >= MAX_LAYOUT_STABLE_FRAMES) {
+        resolve(readPreviewBodyBounds());
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
   });
+}
+
+/** Serialize layout sync so overlapping async IPC cannot apply stale bounds. */
+let layoutSyncChain: Promise<void> = Promise.resolve();
+let previewGuestVisible = false;
+
+async function runElectronPreviewHostLayoutSync(): Promise<void> {
+  const api = window.minnow?.preview;
+  if (!api) return;
+
+  if (!shouldShowElectronPreviewHost()) {
+    await api.hide();
+    previewGuestVisible = false;
+    return;
+  }
+
+  const bounds = await waitForStablePreviewBodyBounds();
+  if (!bounds) return;
+
+  if (!previewGuestVisible) {
+    await api.show(bounds);
+    previewGuestVisible = true;
+    return;
+  }
+
+  await api.setBounds(bounds);
 }
 
 /**
  * Show or hide the native preview host and sync bounds when visible.
  * Call after layout changes (Code foreground, split restore, resize).
  */
-export async function syncElectronPreviewHostLayout(): Promise<void> {
-  const api = window.minnow?.preview;
-  if (!api) return;
-
-  if (!shouldShowElectronPreviewHost()) {
-    await api.hide();
-    return;
-  }
-
-  await api.show();
-  await applyElectronPreviewBounds();
+export function syncElectronPreviewHostLayout(): Promise<void> {
+  const next = layoutSyncChain.then(() => runElectronPreviewHostLayoutSync());
+  layoutSyncChain = next.catch(() => {});
+  return next;
 }
 
 /** @deprecated Use syncElectronPreviewHostLayout — kept for existing dynamic imports. */
@@ -146,3 +217,9 @@ export function scheduleElectronPreviewHostVisibilitySync(): void {
 
 /** Alias for callers that distinguish visibility from bounds — same combined sync. */
 export const scheduleElectronPreviewHostLayoutSync = scheduleElectronPreviewHostVisibilitySync;
+
+/** Test helper — reset guest visibility tracking between cases. */
+export function resetPreviewGuestVisibilityForTests(): void {
+  previewGuestVisible = false;
+  layoutSyncChain = Promise.resolve();
+}

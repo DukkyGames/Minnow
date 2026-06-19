@@ -157,7 +157,39 @@ async function loadSourceInGuest(
   await wc.loadURL(url);
 }
 
-/** Create (or return) the preview WebContentsView for a window. */
+function roundBounds(bounds: PreviewBounds): { x: number; y: number; width: number; height: number } {
+  const w = Math.max(0, Math.round(bounds.width));
+  const h = Math.max(0, Math.round(bounds.height));
+  return {
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    width: w,
+    height: h,
+  };
+}
+
+function isValidPreviewBounds(bounds: PreviewBounds | undefined): bounds is PreviewBounds {
+  if (!bounds) return false;
+  const { x, y, width, height } = bounds;
+  return (
+    Number.isFinite(x) &&
+    Number.isFinite(y) &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  );
+}
+
+/** Apply bounds to the guest view (main process only). */
+function applyPreviewViewBounds(entry: PreviewHostEntry, bounds: PreviewBounds): void {
+  const rounded = roundBounds(bounds);
+  if (rounded.width <= 0 || rounded.height <= 0) {
+    entry.view.setVisible(false);
+    return;
+  }
+  entry.view.setBounds(rounded);
+}
 function getOrCreateHost(win: BrowserWindow): PreviewHostEntry {
   const existing = hostsByWindowId.get(win.id);
   if (existing) return existing;
@@ -200,10 +232,14 @@ function getHostFromInvoke(event: IpcMainInvokeEvent): PreviewHostEntry | null {
 
 /** Register preview IPC handlers (replaces main.ts stubs). */
 export function registerPreviewHostIpc(): void {
-  ipcMain.handle(channels.PREVIEW_SHOW, (event) => {
+  ipcMain.handle(channels.PREVIEW_SHOW, (event, bounds?: PreviewBounds) => {
     const win = windowFromInvoke(event);
     const entry = getHostFromInvoke(event);
     if (!entry || !win) return;
+    // Position before showing so the guest never flashes at a stale rect from the prior session.
+    if (isValidPreviewBounds(bounds)) {
+      applyPreviewViewBounds(entry, bounds);
+    }
     try {
       win.contentView.removeChildView(entry.view);
     } catch {
@@ -219,6 +255,17 @@ export function registerPreviewHostIpc(): void {
     if (!entry) return;
     entry.visible = false;
     entry.view.setVisible(false);
+    entry.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  });
+
+  ipcMain.handle(channels.PREVIEW_CLEAR, async (event) => {
+    const entry = getHostFromInvoke(event);
+    if (!entry) return;
+    const wc = entry.view.webContents;
+    if (wc.isLoading()) {
+      wc.stop();
+    }
+    await wc.loadURL('about:blank');
   });
 
   ipcMain.handle(channels.PREVIEW_LOAD_SOURCE, (event, payload: PreviewLoadSourcePayload) => {
@@ -291,12 +338,7 @@ export function registerPreviewHostIpc(): void {
       entry.view.setVisible(false);
       return;
     }
-    entry.view.setBounds({
-      x: Math.round(x),
-      y: Math.round(y),
-      width: w,
-      height: h,
-    });
+    applyPreviewViewBounds(entry, bounds);
   });
 
   ipcMain.handle(channels.PREVIEW_EXEC_JS, async (event, code: string) => {
