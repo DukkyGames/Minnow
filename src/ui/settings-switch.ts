@@ -10,6 +10,8 @@ export type SettingsSwitchOptions = {
   ariaLabel?: string;
   /** Scroll target for the settings global finder. */
   searchKey?: string;
+  /** Optional muted helper under the row title. */
+  description?: string;
   onChange?: (checked: boolean) => void;
 };
 
@@ -59,8 +61,17 @@ export function createSettingsToggleRow(
 
   const label = document.createElement('span');
   label.className = 'settings-toggle-row__label';
-  label.textContent = labelText;
-  if (options.id) label.id = `${options.id}-label`;
+  const title = document.createElement('span');
+  title.className = 'settings-toggle-row__title';
+  title.textContent = labelText;
+  label.appendChild(title);
+  if (options.description) {
+    const desc = document.createElement('span');
+    desc.className = 'settings-toggle-row__desc';
+    desc.textContent = options.description;
+    label.appendChild(desc);
+  }
+  if (options.id) title.id = `${options.id}-label`;
 
   const { root, input } = createSettingsSwitch(options);
   row.append(label, root);

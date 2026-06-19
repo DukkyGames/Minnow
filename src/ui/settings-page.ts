@@ -22,6 +22,8 @@ import type { PromptProfile } from '../chat/prompts/types';
 import {
   SETTINGS_CATEGORY_AREAS,
   SETTINGS_CATEGORIES,
+  SETTINGS_CATEGORY_DESCRIPTIONS,
+  SETTINGS_CATEGORY_LABELS,
   categoryForArea,
   type SettingsCategoryId,
   type SettingsSectionId,
@@ -99,11 +101,41 @@ async function refreshCategoryAreas(category: SettingsCategoryId): Promise<void>
   await Promise.all(areas.map((area) => refreshSettingsSection(area)));
 }
 
+/** Sync the large content header with the active sidebar category. */
+function updateSettingsContentHeader(category: SettingsCategoryId): void {
+  const titleEl = document.getElementById('settingsContentTitle');
+  const leadEl = document.getElementById('settingsContentLead');
+  if (titleEl) {
+    titleEl.textContent = SETTINGS_CATEGORY_LABELS[category];
+  }
+  if (leadEl) {
+    leadEl.textContent = SETTINGS_CATEGORY_DESCRIPTIONS[category];
+  }
+}
+
+/** Highlight the subnav tab that matches a section slug (when present). */
+function updateSettingsSubnavActive(area?: SettingsSectionId): void {
+  const activePanel = document.querySelector('.settings-category.is-active');
+  if (!activePanel) return;
+  const links = activePanel.querySelectorAll<HTMLAnchorElement>(
+    '.settings-category-subnav__link',
+  );
+  if (links.length === 0) return;
+  const target = area ?? links[0]?.dataset.areaJump;
+  links.forEach((link) => {
+    const isActive = link.dataset.areaJump === target;
+    link.classList.toggle('is-active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'true');
+    else link.removeAttribute('aria-current');
+  });
+}
+
 function setActiveCategory(
   category: SettingsCategoryId,
   options?: { scrollArea?: SettingsSectionId; searchKey?: string },
 ): void {
   activeCategory = category;
+  updateSettingsContentHeader(category);
 
   for (const cat of CATEGORIES) {
     const panel = document.querySelector(
@@ -131,6 +163,7 @@ function setActiveCategory(
     const searchKey = options?.searchKey ?? pendingSearchKey;
     pendingScrollArea = null;
     pendingSearchKey = null;
+    updateSettingsSubnavActive(scrollArea ?? SETTINGS_CATEGORY_AREAS[category][0]);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -263,7 +296,10 @@ function bindStaticSections(): void {
       const area = (link as HTMLElement).dataset.areaJump as
         | SettingsSectionId
         | undefined;
-      if (area) scrollToSettingsArea(area);
+      if (area) {
+        updateSettingsSubnavActive(area);
+        scrollToSettingsArea(area);
+      }
     });
   });
 }

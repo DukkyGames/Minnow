@@ -37,6 +37,17 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
   advanced: 'Advanced',
 };
 
+/** Short lead copy for the settings content header per category. */
+export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
+  general: 'Chat behavior, audio devices, and where settings are stored.',
+  appearance: 'Theme families, wallpapers, fonts, and custom colors.',
+  models: 'Providers, routing, sampler defaults, thinking, and usage.',
+  agents: 'Modes, experts, work agents, packs, and sub-agent policies.',
+  knowledge: 'Prompt profiles, user rules, and long-term memory.',
+  integrations: 'Search, servers, tools, MCP, LSP, editor, and webhooks.',
+  advanced: 'Orchestration supervisor tuning and local eval harness.',
+};
+
 /** Category → ordered areas (render units). */
 export const SETTINGS_CATEGORY_AREAS: Record<
   SettingsCategoryId,

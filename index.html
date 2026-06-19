@@ -395,7 +395,6 @@
     <button type="button" class="icon-btn" id="btnSettingsPageBack" aria-label="Back to chat">
       <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </button>
-    <h1 class="settings-page-header__title">Settings</h1>
     <div id="settingsSearchFinderSlot" class="settings-search-finder-slot">
     <div
       id="settingsSearchFinder"
@@ -434,37 +433,48 @@
   </header>
   <div class="settings-page-body">
     <nav class="settings-nav" aria-label="Settings categories">
-      <button type="button" data-settings-category="general" aria-current="page">
-        General
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="appearance">
-        Appearance
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="models">
-        Models
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="agents">
-        Agents
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="knowledge">
-        Knowledge
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="integrations">
-        Integrations
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
-      <button type="button" data-settings-category="advanced">
-        Advanced
-        <span class="settings-nav__count" hidden aria-hidden="true"></span>
-      </button>
+      <div class="settings-nav-group">
+        <p class="settings-nav-group__label">Menu</p>
+        <button type="button" data-settings-category="general" aria-current="page">
+          General
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="appearance">
+          Appearance
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="models">
+          Models
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="agents">
+          Agents
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="knowledge">
+          Knowledge
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="integrations">
+          Integrations
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+        <button type="button" data-settings-category="advanced">
+          Advanced
+          <span class="settings-nav__count" hidden aria-hidden="true"></span>
+        </button>
+      </div>
     </nav>
     <div class="settings-content">
+      <header class="settings-content-header">
+        <h1 id="settingsContentTitle" class="settings-content-header__title">Settings</h1>
+        <p id="settingsContentLead" class="settings-content-header__lead">Manage workspace preferences, models, and integrations.</p>
+      </header>
       <div class="settings-category is-active" data-category="general">
+      <nav class="settings-category-subnav" aria-label="General sections">
+        <a href="#settingsSection-general" class="settings-category-subnav__link" data-area-jump="general">General</a>
+        <a href="#settingsSection-audio" class="settings-category-subnav__link" data-area-jump="audio">Audio</a>
+      </nav>
       <section id="settingsSection-general" class="settings-section settings-area" data-area="general">
         <h2>General</h2>
         <p class="settings-lead">Chat behavior and where settings are stored. Themes and wallpapers live under <strong>Appearance</strong>.</p>
@@ -612,6 +622,11 @@
       </section>
       </div>
       <div class="settings-category" data-category="knowledge">
+      <nav class="settings-category-subnav" aria-label="Knowledge sections">
+        <a href="#settingsSection-prompting" class="settings-category-subnav__link" data-area-jump="prompting">Prompts</a>
+        <a href="#settingsSection-rules" class="settings-category-subnav__link" data-area-jump="rules">Rules</a>
+        <a href="#settingsSection-memory" class="settings-category-subnav__link" data-area-jump="memory">Memory</a>
+      </nav>
       <section id="settingsSection-prompting" class="settings-section settings-area" data-area="prompting">
         <h2>Prompts</h2>
         <p class="settings-lead">Profiles, setup bundles, base prompt parts, and every role prompt in one searchable list.</p>
@@ -795,6 +810,13 @@
       </section>
       </div>
       <div class="settings-category" data-category="agents">
+      <nav class="settings-category-subnav" aria-label="Agents sections">
+        <a href="#settingsSection-modes" class="settings-category-subnav__link" data-area-jump="modes">Modes</a>
+        <a href="#settingsSection-experts" class="settings-category-subnav__link" data-area-jump="experts">Experts</a>
+        <a href="#settingsSection-work-agents" class="settings-category-subnav__link" data-area-jump="work-agents">Work agents</a>
+        <a href="#settingsSection-agent-packs" class="settings-category-subnav__link" data-area-jump="agent-packs">Agent packs</a>
+        <a href="#settingsSection-sub-agents" class="settings-category-subnav__link" data-area-jump="sub-agents">Sub-agents</a>
+      </nav>
       <section id="settingsSection-modes" class="settings-section settings-area" data-area="modes">
         <h2>Modes</h2>
         <p class="settings-lead">General, Build, Plan, Orchestrate, Reef, and Debug — tool policy and mode-specific options. Edit prompts in <strong>Prompts</strong>.</p>
@@ -937,6 +959,10 @@
       </section>
       </div>
       <div class="settings-category" data-category="advanced">
+      <nav class="settings-category-subnav" aria-label="Advanced sections">
+        <a href="#settingsSection-features" class="settings-category-subnav__link" data-area-jump="features">Orchestration</a>
+        <a href="#settingsSection-evals" class="settings-category-subnav__link" data-area-jump="evals">Evals</a>
+      </nav>
       <section id="settingsSection-features" class="settings-section settings-area" data-area="features">
         <h2>Orchestration</h2>
         <p class="settings-lead">Orchestrate supervisor: heartbeat, stall resumes, repetition detection, and optional LLM escalation. Replaces legacy <code>selfHealing.*</code> toggles.</p>

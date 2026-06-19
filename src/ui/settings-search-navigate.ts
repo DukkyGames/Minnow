@@ -5,6 +5,8 @@
 import {
   categoryForArea,
   SETTINGS_CATEGORY_AREAS,
+  SETTINGS_CATEGORY_DESCRIPTIONS,
+  SETTINGS_CATEGORY_LABELS,
   type SettingsCategoryId,
   type SettingsSectionId,
 } from './settings-page-types';
@@ -44,6 +46,10 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
           : 'false',
       );
     });
+    const titleEl = document.getElementById('settingsContentTitle');
+    const leadEl = document.getElementById('settingsContentLead');
+    if (titleEl) titleEl.textContent = SETTINGS_CATEGORY_LABELS[category];
+    if (leadEl) leadEl.textContent = SETTINGS_CATEGORY_DESCRIPTIONS[category];
   }
 
   const sectionRoot = getSectionRoot(sectionId);
