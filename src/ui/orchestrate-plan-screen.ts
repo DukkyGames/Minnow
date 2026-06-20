@@ -448,7 +448,7 @@ function openBoardWithPlan(planPath: string): void {
   const needsKickoff = !group.orchestrateBoard;
   setOrchestrateViewMode('board');
   if (needsKickoff) {
-    void import('./orchestrate-board').then((m) => m.kickoffOrchestrateBoardBuild());
+    void import('./orchestrate-board-kickoff').then((m) => m.kickoffOrchestrateBoardBuild());
   }
 }
 

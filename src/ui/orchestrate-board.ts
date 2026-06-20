@@ -108,7 +108,11 @@ import {
 } from './orchestrate-board-init-split';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownHub } from './hub';
-import { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
+import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
+import {
+  isBoardKickoffInProgress,
+  isBoardOnboardingGitSetupActive,
+} from './orchestrate-board-onboarding-state';
 
 /** Agent status chip on a kanban task card. */
 export type TaskAgentBadgeVariant = 'active' | 'failed' | 'complete';
@@ -1851,27 +1855,15 @@ function refreshBoardDom(
 
 }
 
-function sendBoardMessage(text: string): void {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
-  input.value = text;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  void import('../chat/messaging').then((m) => m.sendMessage());
-}
+export { kickoffOrchestrateBoardBuild, BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
 
-/** Parse the active plan and call board_init (hub / plan screen entry). */
-export function kickoffOrchestrateBoardBuild(): void {
-  sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
-}
-
-export { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
-
-/** Busy phases shown in the onboarding status strip (plan fetch vs board_init stream). */
-export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'init';
+/** Busy phases shown in the onboarding status strip (plan fetch vs git setup vs board_init stream). */
+export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'git-setup' | 'init';
 
 const BOARD_ONBOARDING_BUSY_LABEL: Record<Exclude<BoardOnboardingBusyPhase, 'idle'>, string> =
   {
     plans: 'Loading plans',
+    'git-setup': 'Setting up git',
     init: 'Initializing board',
   };
 
@@ -1899,6 +1891,7 @@ export function resolveBoardOnboardingBusyPhase(
   plansLoading: boolean,
 ): BoardOnboardingBusyPhase {
   if (plansLoading) return 'plans';
+  if (isBoardOnboardingGitSetupActive()) return 'git-setup';
   if (isActiveChatStreaming()) return 'init';
   return 'idle';
 }
@@ -1983,22 +1976,25 @@ export function syncBoardOnboardingBusyUI(
   const preview = wrap.querySelector('[data-board-onboarding-preview]');
   const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
+  const busySetup = phase === 'init' || phase === 'git-setup';
+  const boardInit = phase === 'init';
+
   wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
   if (panel instanceof HTMLElement) {
-    panel.classList.toggle('board-onboarding__panel--busy', phase === 'init');
+    panel.classList.toggle('board-onboarding__panel--busy', busySetup);
   }
   if (setup instanceof HTMLElement) {
-    setup.classList.toggle('hidden', phase === 'init');
-    setup.hidden = phase === 'init';
+    setup.classList.toggle('hidden', busySetup);
+    setup.hidden = busySetup;
   }
   if (initLead instanceof HTMLElement) {
-    initLead.classList.toggle('hidden', phase !== 'init');
-    initLead.hidden = phase !== 'init';
+    initLead.classList.toggle('hidden', !boardInit);
+    initLead.hidden = !boardInit;
   }
   if (initProgress instanceof HTMLElement) {
-    initProgress.classList.toggle('hidden', phase !== 'init');
-    initProgress.hidden = phase !== 'init';
-    initProgress.setAttribute('aria-hidden', phase === 'init' ? 'false' : 'true');
+    initProgress.classList.toggle('hidden', !boardInit);
+    initProgress.hidden = !boardInit;
+    initProgress.setAttribute('aria-hidden', boardInit ? 'false' : 'true');
   }
   if (initPlan && planSelect) {
     initPlan.textContent = formatBoardOnboardingPlanDisplay(planSelect.value);
@@ -2023,7 +2019,7 @@ export function syncBoardOnboardingBusyUI(
   }
 
   if (preview) {
-    preview.classList.toggle('hidden', phase !== 'init');
+    preview.classList.toggle('hidden', !boardInit);
   }
 }
 
@@ -2043,9 +2039,10 @@ function syncBoardOnboardingControls(
   plansLoading: boolean,
 ): void {
   const streaming = isActiveChatStreaming();
+  const kickoffBusy = isBoardKickoffInProgress();
   const path = sel.value.trim();
   const executable = isExecutableOrchestratePlan(path);
-  const busy = plansLoading || streaming;
+  const busy = streaming || kickoffBusy || plansLoading;
   sel.disabled = busy;
   sel.setAttribute('aria-busy', plansLoading ? 'true' : 'false');
   refreshBtn.disabled = busy;
@@ -2295,7 +2292,7 @@ export async function mountBoardOnboardingPanel(
   startBtn.addEventListener('click', () => {
     if (startBtn.disabled) return;
     persistOrchestratePlanPathFromSelectValue(chat, sel.value);
-    sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+    void kickoffOrchestrateBoardBuild();
   });
 
   openPlanBtn.addEventListener('click', () => {

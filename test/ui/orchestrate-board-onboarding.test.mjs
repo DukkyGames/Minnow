@@ -18,6 +18,10 @@ const {
   resolveBoardOnboardingBusyPhase,
   syncBoardOnboardingBusyUI,
 } = await import('../../src/ui/orchestrate-board.ts');
+const {
+  setBoardOnboardingGitSetupActive,
+  setBoardKickoffInProgress,
+} = await import('../../src/ui/orchestrate-board-onboarding-state.ts');
 const { setStreaming } = await import('../../src/app-state.ts');
 
 describe('orchestrate board onboarding (MIN-5)', () => {
@@ -25,6 +29,8 @@ describe('orchestrate board onboarding (MIN-5)', () => {
     disposeBoardViewForTests();
     setSessionStateForTests(null);
     setStreaming(false);
+    setBoardOnboardingGitSetupActive(false);
+    setBoardKickoffInProgress(false);
   });
 
   test('shouldHideComposerPlanStripForOrchestrateBoardOnboarding is true only for board shell without store', () => {
@@ -79,8 +85,51 @@ describe('orchestrate board onboarding (MIN-5)', () => {
   });
 
   test('resolveBoardOnboardingBusyPhase prefers plan load over stream', () => {
+    const chat = createEmptyChatObject('');
+    chat.id = '77777777-7777-7777-7777-777777777777';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    setStreaming(false);
     assert.equal(resolveBoardOnboardingBusyPhase(true), 'plans');
     assert.equal(resolveBoardOnboardingBusyPhase(false), 'idle');
+  });
+
+  test('resolveBoardOnboardingBusyPhase shows git-setup during preflight skill turn', () => {
+    setBoardOnboardingGitSetupActive(true);
+    assert.equal(resolveBoardOnboardingBusyPhase(false), 'git-setup');
+    setBoardOnboardingGitSetupActive(false);
+  });
+
+  test('syncBoardOnboardingBusyUI shows git-setup status without kanban preview', () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'board-onboarding';
+    wrap.innerHTML = `
+      <div class="board-onboarding__panel">
+        <div class="board-onboarding__status hidden" data-board-onboarding-status role="status">
+          <span class="board-onboarding__status-dots"><span class="board-onboarding__status-dot"></span></span>
+          <span class="board-onboarding__status-label" data-board-onboarding-status-label"></span>
+        </div>
+        <div class="board-onboarding__preview hidden" data-board-onboarding-preview aria-hidden="true"></div>
+        <div data-board-onboarding-setup></div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    syncBoardOnboardingBusyUI(wrap, 'git-setup');
+    assert.equal(wrap.dataset.boardOnboardingBusy, 'git-setup');
+    const preview = wrap.querySelector('[data-board-onboarding-preview]');
+    assert.ok(preview && preview.classList.contains('hidden'));
+    assert.match(
+      wrap.querySelector('[data-board-onboarding-status-label]')?.textContent ?? '',
+      /Setting up git/i,
+    );
   });
 
   test('mountBoardOnboardingPanel shows plan-loading status during slow discovery', async () => {

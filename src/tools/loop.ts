@@ -1554,6 +1554,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 toolCallId: tc.id,
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
+                // Isolated board task chats (MIN-275) scope tools to their worktree.
+                ...(chat.worktreeRoot?.trim()
+                  ? { workspaceRoot: chat.worktreeRoot.trim() }
+                  : {}),
               });
           let toolContent = toolOut.content;
           try {

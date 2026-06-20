@@ -321,6 +321,15 @@ export interface BoardTask {
    * startTask when the build actually launches.
    */
   pendingBuildSeed?: string;
+  /**
+   * Absolute path to this task's git worktree when board isolation is active
+   * (MIN-275). Unset when isolation is `off` or the worktree has been cleaned up.
+   */
+  worktreePath?: string;
+  /** Git branch backing {@link worktreePath} (per-task, or the shared per-wave branch). */
+  worktreeBranch?: string;
+  /** Dev-server port allocated to this task's isolated worktree (avoids port collisions). */
+  devPort?: number;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -358,6 +367,15 @@ export interface OrchestrateBoardState {
    * statuses. Cleared when the user starts execution again.
    */
   userStopped?: boolean;
+  /**
+   * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
+   * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
+   */
+  isolationMode?: 'off' | 'per-task' | 'per-wave';
+  /** Board integration branch that task/wave branches merge into; minted at first isolated start. */
+  integrationBranch?: string;
+  /** Base branch/commit the integration branch was created from (cleanup/reset reference). */
+  isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
   /** Full-board integration test after all tasks complete. */
@@ -539,6 +557,12 @@ export interface Chat {
   boardGroupId?: string;
   /** Orchestrate board task id when this chat is a per-task worker thread. */
   boardTaskId?: string;
+  /**
+   * Per-request tool workspace root override (MIN-275). When set, this chat's tool
+   * calls run scoped to this absolute path (its git worktree) instead of the global
+   * Code workspace, isolating concurrent board task chats. Unset = shared workspace.
+   */
+  worktreeRoot?: string;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
   /**

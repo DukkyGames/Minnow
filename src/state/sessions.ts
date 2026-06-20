@@ -462,6 +462,16 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()
       ? r.pendingBuildSeed.trim()
       : undefined;
+  const worktreePath =
+    typeof r.worktreePath === 'string' && r.worktreePath.trim()
+      ? r.worktreePath.trim()
+      : undefined;
+  const worktreeBranch =
+    typeof r.worktreeBranch === 'string' && r.worktreeBranch.trim()
+      ? r.worktreeBranch.trim()
+      : undefined;
+  const devPort =
+    typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
   return {
     id,
     title,
@@ -485,6 +495,9 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(testVerdict ? { testVerdict } : {}),
     ...(testSummary ? { testSummary } : {}),
     ...(pendingBuildSeed ? { pendingBuildSeed } : {}),
+    ...(worktreePath ? { worktreePath } : {}),
+    ...(worktreeBranch ? { worktreeBranch } : {}),
+    ...(devPort !== undefined ? { devPort } : {}),
   };
 }
 
@@ -814,6 +827,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
       : {}),
     ...(typeof raw.boardTaskId === 'string' && raw.boardTaskId.trim()
       ? { boardTaskId: raw.boardTaskId.trim() }
+      : {}),
+    ...(typeof raw.worktreeRoot === 'string' && raw.worktreeRoot.trim()
+      ? { worktreeRoot: raw.worktreeRoot.trim() }
       : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),

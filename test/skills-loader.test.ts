@@ -140,3 +140,13 @@ describe('resolveSkillDetail', () => {
     assert.equal(r?.body, 'USER_OVERRIDE_BODY');
   });
 });
+
+describe('builtin manifest', () => {
+  it('includes git-setup skill', async () => {
+    const manifest = await import('../src/skills/builtin-manifest.json', {
+      with: { type: 'json' },
+    });
+    const ids = manifest.default.skills.map((s: { id: string }) => s.id);
+    assert.ok(ids.includes('git-setup'));
+  });
+});

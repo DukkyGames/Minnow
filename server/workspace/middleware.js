@@ -5,6 +5,7 @@
 import {
   buildRecentWorkspaceList,
   getWorkspaceInfo,
+  getWorkspaceRoot,
   removeRecentWorkspacePath,
   setWorkspaceRoot,
   validateWorkspacePath,
@@ -23,7 +24,7 @@ import {
   stopDevServer,
 } from '../dev-server/manager.js';
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
-import { getWorkspaceRoot } from './root.js';
+import { getWorkspaceGitStatus } from './git-status.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -91,6 +92,13 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       }
       const created = await createWorkspaceSubfolder(parentPath, name);
       sendJson(res, 201, { ok: true, ...created });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/git-status' && req.method === 'GET') {
+      const workspaceRoot = searchParams.get('workspaceRoot')?.trim() || undefined;
+      const status = await getWorkspaceGitStatus(workspaceRoot);
+      sendJson(res, 200, { ok: true, ...status });
       return true;
     }
 

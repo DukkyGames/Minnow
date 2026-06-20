@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-18T05:19:20.781Z",
+  "generatedAt": "2026-06-20T10:34:36.397Z",
   "skills": [
     {
       "id": "ask-user",
@@ -41,6 +41,12 @@
       "id": "explain-code",
       "label": "Explain Code",
       "description": "Teach and walk through code clearly. Use when the user wants understanding, not changes.",
+      "source": "builtin"
+    },
+    {
+      "id": "git-setup",
+      "label": "Git & GitHub Setup",
+      "description": "Initialize git in the workspace and connect a GitHub remote. Use for /git-setup when starting orchestration or when the user asks to set up version control.",
       "source": "builtin"
     },
     {

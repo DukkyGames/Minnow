@@ -13,6 +13,7 @@ import {
   normalizeWorkspacePathKey,
 } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
+import { isPathUnderWorktreesRoot } from '../worktree/paths.js';
 
 const CHATS_DIR_NAME = 'chats';
 
@@ -57,6 +58,11 @@ export function isAllowedWorkspaceRoot(rootPath) {
     return false;
   }
   const resolved = path.resolve(rootPath.trim());
+  // Board task worktrees (MIN-275) live under ~/.minnow/worktrees and are valid
+  // per-request tool roots so isolated task chats run inside their worktree.
+  if (isPathUnderWorktreesRoot(resolved)) {
+    return true;
+  }
   const key = normalizeWorkspacePathKey(resolved);
   const codeKey = normalizeWorkspacePathKey(getWorkspaceRoot());
   const chatsKey = normalizeWorkspacePathKey(getChatsWorkspacePath());

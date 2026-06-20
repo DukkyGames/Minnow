@@ -449,6 +449,9 @@ export type UpdateTaskPatch = Partial<
     | 'testVerdict'
     | 'testSummary'
     | 'pendingBuildSeed'
+    | 'worktreePath'
+    | 'worktreeBranch'
+    | 'devPort'
   >
 >;
 

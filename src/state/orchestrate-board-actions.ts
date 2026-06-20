@@ -36,6 +36,21 @@ import {
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask } from './orchestrate-board-store.ts';
+import {
+  resolveIsolationMode,
+  worktreeBranchFor,
+  worktreeSlotId,
+  boardIntegrationBranch,
+  allocateDevPort,
+  usedDevPorts,
+  DEFAULT_BOARD_PORT_BASE,
+} from './worktree-isolation.ts';
+import {
+  ensureIntegration as ensureIntegrationWorktree,
+  createWorktree as createTaskWorktreeOp,
+  mergeIntoIntegration as mergeTaskIntoIntegration,
+  cleanupBoardWorktrees as cleanupBoardWorktreesOp,
+} from './worktree-service.ts';
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 import {
@@ -311,8 +326,9 @@ function ensureStreamEndSubscription(): void {
 
         const taskByTest = board.tasks.find((t) => t.testChatId === endedChatId);
         if (taskByTest) {
-          finalizeTaskTestingOnStreamEnd(group, taskByTest, planner);
-          safeDrain(group, planner);
+          void finalizeTaskTestingOnStreamEnd(group, taskByTest, planner)
+            .then(() => safeDrain(group, planner))
+            .catch((err) => reportBackgroundError('finalize-task-testing', err));
         }
       }
     });
@@ -533,6 +549,130 @@ function enqueueTask(groupId: string, taskId: string): void {
   taskQueueByGroupId.set(groupId, q);
 }
 
+/**
+ * Ensure an isolated git worktree for a task when board isolation is active, and
+ * return its absolute path (also persisted on the task). Best-effort: returns null
+ * when isolation is off or any git/server step fails, so the task falls back to the
+ * shared workspace and execution is never blocked (MIN-275).
+ */
+async function ensureTaskWorktree(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<string | null> {
+  const board = group.orchestrateBoard;
+  if (!board) return null;
+  const mode = resolveIsolationMode(board);
+  if (mode === 'off') return null;
+
+  const boardId = group.id;
+  const branch = worktreeBranchFor(mode, boardId, task);
+  const slotId = worktreeSlotId(mode, task);
+  if (!branch || !slotId) return null;
+
+  // Mint the integration branch + its worktree once per board (lazy).
+  const integrationBranch = board.integrationBranch ?? boardIntegrationBranch(boardId);
+  if (!board.integrationBranch) {
+    const ensured = await ensureIntegrationWorktree({ boardId, branch: integrationBranch });
+    if (!ensured.ok) return null;
+    board.integrationBranch = integrationBranch;
+    scheduleSaveSessions();
+  }
+
+  // Per-wave mode: reuse a sibling task's already-created worktree for this wave.
+  const shared = board.tasks.find(
+    (t) => t.id !== task.id && t.worktreeBranch === branch && Boolean(t.worktreePath),
+  );
+  if (shared?.worktreePath) {
+    const synced = await createTaskWorktreeOp({
+      boardId,
+      slotId,
+      branch,
+      baseRef: integrationBranch,
+    });
+    const path = synced.ok && synced.path ? synced.path : shared.worktreePath;
+    updateTask(
+      group,
+      task.id,
+      { worktreePath: path, worktreeBranch: branch, devPort: shared.devPort },
+      plannerChat,
+    );
+    return path;
+  }
+
+  const created = await createTaskWorktreeOp({
+    boardId,
+    slotId,
+    branch,
+    baseRef: integrationBranch,
+  });
+  if (!created.ok || !created.path) return null;
+
+  const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  const devPort =
+    freshTask.devPort ??
+    allocateDevPort(DEFAULT_BOARD_PORT_BASE, usedDevPorts(board.tasks));
+  if (
+    freshTask.worktreePath !== created.path ||
+    freshTask.worktreeBranch !== branch ||
+    freshTask.devPort !== devPort
+  ) {
+    updateTask(
+      group,
+      task.id,
+      { worktreePath: created.path, worktreeBranch: branch, devPort },
+      plannerChat,
+    );
+  }
+  return created.path;
+}
+
+/**
+ * Fold a passed task's branch into integration. Awaited before marking the task
+ * complete so the next task's worktree branches from an up-to-date integration tip.
+ * On conflict the failure is surfaced on the task for orchestrator/fixer self-heal
+ * (no user prompt, per MIN-265); never throws into the caller.
+ */
+async function mergeCompletedTaskWorktree(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board?.integrationBranch) return;
+  const branch = task.worktreeBranch;
+  if (!branch || branch === board.integrationBranch) return;
+  try {
+    const res = await mergeTaskIntoIntegration({
+      boardId: group.id,
+      fromBranch: branch,
+      message: `Merge ${task.id} (${task.title}) into integration`,
+    });
+    if (!res.ok && res.conflict) {
+      updateTask(
+        group,
+        task.id,
+        { error: `Integration merge conflict on ${branch}; orchestrator will resolve` },
+        plannerChat,
+      );
+    }
+  } catch (err) {
+    reportBackgroundError('worktree-merge', err);
+  }
+}
+
+/**
+ * Remove all per-task/wave worktrees for a board (keeps the integration branch +
+ * worktree so MIN-208 can commit/push from it). Call on board teardown/delete.
+ */
+export function cleanupBoardIsolation(group: ChatGroup): void {
+  const board = group.orchestrateBoard;
+  if (!board?.integrationBranch) return;
+  void cleanupBoardWorktreesOp({ boardId: group.id }).catch((err) =>
+    reportBackgroundError('worktree-cleanup', err),
+  );
+}
+
 /** Start a linked task chat (background stream; does not switch active chat). */
 export async function startTask(
   group: ChatGroup,
@@ -588,6 +728,11 @@ export async function startTask(
 
   const { renderSidebar } = await import('../ui/sidebar.ts');
   renderSidebar();
+
+  // Scope this task chat's tools to an isolated worktree when board isolation is on
+  // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
+  const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
+  if (worktreeRoot) taskChat.worktreeRoot = worktreeRoot;
 
   const seed = overrideSeed || buildTaskSeedMessage(group, plannerChat, task);
   // Consume the one-shot retry seed now that the build is actually launching.
@@ -675,6 +820,16 @@ export async function startTaskTesting(
 
   const { renderSidebar } = await import('../ui/sidebar.ts');
   renderSidebar();
+
+  // Tester runs against the same isolated worktree as the Builder (MIN-275).
+  const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? task;
+  const buildChat = freshTask.chatId ? findChatById(freshTask.chatId) : undefined;
+  const worktreeRoot =
+    freshTask.worktreePath?.trim() ||
+    buildChat?.worktreeRoot?.trim() ||
+    (await ensureTaskWorktree(group, freshTask, plannerChat)) ||
+    undefined;
+  if (worktreeRoot) testChat.worktreeRoot = worktreeRoot;
 
   const seed = buildTaskTestSeedMessage(group, plannerChat, task);
 
@@ -774,11 +929,11 @@ function parseTesterVerdictMarker(chatId: string | undefined): {
 }
 
 /** Route per-task Tester verdict after its chat stream ends. */
-export function finalizeTaskTestingOnStreamEnd(
+export async function finalizeTaskTestingOnStreamEnd(
   group: ChatGroup,
   task: BoardTask,
   plannerChat: Chat,
-): void {
+): Promise<void> {
   if (task.status !== 'testing') return;
   const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
   let verdict = fresh.testVerdict;
@@ -802,6 +957,8 @@ export function finalizeTaskTestingOnStreamEnd(
 
   if (verdict === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
+    // Merge before complete so dependent / later-wave tasks branch from updated integration.
+    await mergeCompletedTaskWorktree(group, fresh, plannerChat);
     moveTaskStatus(group, fresh.id, 'complete', plannerChat);
 
     const testChatId = fresh.testChatId?.trim();

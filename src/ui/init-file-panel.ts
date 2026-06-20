@@ -148,7 +148,7 @@ export async function initFilePanel(): Promise<void> {
     // Restored by initPreviewPanel from persisted previewSource.
   } else if (state.openViewerTabs.length > 0) {
     await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-  } else if (state.viewerOpen && state.selectedPath && state.rightPaneMode !== 'preview') {
+  } else if (state.viewerOpen && state.selectedPath) {
     await openFileInViewer(state.selectedPath);
   }
 
