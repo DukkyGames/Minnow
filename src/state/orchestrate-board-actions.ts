@@ -75,6 +75,21 @@ const FULL_BOARD_TEST_ID = 'FULL_BOARD';
 /** Per-board folder id → queued task ids waiting for a concurrency slot. */
 const taskQueueByGroupId = new Map<string, string[]>();
 
+/** Chat ids holding a launch slot until runChatTurn registers streaming/setup. */
+const reservedLaunchChatIds = new Set<string>();
+
+function reserveLaunchSlot(chatId: string): void {
+  reservedLaunchChatIds.add(chatId);
+}
+
+function releaseLaunchSlot(chatId: string): void {
+  reservedLaunchChatIds.delete(chatId);
+}
+
+function isLaunchReserved(chatId: string): boolean {
+  return reservedLaunchChatIds.has(chatId);
+}
+
 let streamEndSubscribed = false;
 let streamActivitySubscribed = false;
 let autoDriveSubscribed = false;
@@ -204,7 +219,11 @@ function startTaskChatSupervision(chatId: string): void {
 }
 
 function isTaskChatStreaming(chatId: string): boolean {
-  return isChatStreaming(chatId) || isChatTurnSetupPending(chatId);
+  return (
+    isChatStreaming(chatId) ||
+    isChatTurnSetupPending(chatId) ||
+    isLaunchReserved(chatId)
+  );
 }
 
 /** Provider/model for a board task chat — planner binding, then top-bar model select. */
@@ -522,12 +541,12 @@ async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void
   if (!board) return;
   const queue = taskQueueByGroupId.get(group.id);
   if (!queue?.length) return;
-  // In sequential mode, promote tasks already in testing ahead of queued builds
-  // so each task fully completes (build + test) before the next one starts.
-  // This is needed because notifyChatStreamEnded fires before setStreaming(false),
-  // causing startTaskTesting to enqueue at the back while the build chat still
-  // appears active. The deferred microtask drain then needs the correct order.
-  if (board.executionMode === 'sequential' && queue.length > 1) {
+  // Promote tasks already in testing ahead of queued builds so each task keeps
+  // its single slot across build→test→complete. Needed because
+  // notifyChatStreamEnded fires before setStreaming(false), causing
+  // startTaskTesting to enqueue at the back while the build chat still appears
+  // active; the deferred microtask drain then needs the correct order.
+  if (queue.length > 1) {
     queue.sort((a, b) => {
       const sa = board.tasks.find((t) => t.id === a)?.status;
       const sb = board.tasks.find((t) => t.id === b)?.status;
@@ -726,48 +745,54 @@ export async function startTask(
     taskChatField: 'chatId',
   });
 
-  const { renderSidebar } = await import('../ui/sidebar.ts');
-  renderSidebar();
+  reserveLaunchSlot(taskChat.id);
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
 
-  // Scope this task chat's tools to an isolated worktree when board isolation is on
-  // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
-  const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
-  if (worktreeRoot) {
-    taskChat.worktreeRoot = worktreeRoot;
-    scheduleSaveSessions();
+    // Scope this task chat's tools to an isolated worktree when board isolation is on
+    // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
+    const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
+    if (worktreeRoot) {
+      taskChat.worktreeRoot = worktreeRoot;
+      scheduleSaveSessions();
+    }
+
+    const seed = overrideSeed || buildTaskSeedMessage(group, plannerChat, task);
+    // Consume the one-shot retry seed now that the build is actually launching.
+    if (overrideSeed) {
+      updateTask(group, taskId, { pendingBuildSeed: undefined }, plannerChat);
+    }
+
+    void refreshHeartbeatThresholds().then(() => {
+      startTaskChatSupervision(taskChat.id);
+    });
+
+    void runChatTurn({
+      chat: taskChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: task.title,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message =
+        err instanceof Error ? err.message : 'Task chat failed to start';
+      updateTask(
+        group,
+        taskId,
+        { error: message || 'Task chat failed to start' },
+        plannerChat,
+      );
+    }).finally(() => releaseLaunchSlot(taskChat.id));
+  } catch (err) {
+    releaseLaunchSlot(taskChat.id);
+    throw err;
   }
-
-  const seed = overrideSeed || buildTaskSeedMessage(group, plannerChat, task);
-  // Consume the one-shot retry seed now that the build is actually launching.
-  if (overrideSeed) {
-    updateTask(group, taskId, { pendingBuildSeed: undefined }, plannerChat);
-  }
-
-  void refreshHeartbeatThresholds().then(() => {
-    startTaskChatSupervision(taskChat.id);
-  });
-
-  void runChatTurn({
-    chat: taskChat,
-    pushUser: true,
-    rawText: seed,
-    userText: seed,
-    displayText: seed,
-    historyContent: seed,
-    skillId: null,
-    validAttachments: [],
-    titleSeed: task.title,
-    ownsGlobalStreaming: true,
-  }).catch((err) => {
-    const message =
-      err instanceof Error ? err.message : 'Task chat failed to start';
-    updateTask(
-      group,
-      taskId,
-      { error: message || 'Task chat failed to start' },
-      plannerChat,
-    );
-  });
 }
 
 /** Start Tester chat for a task in the testing column. */
@@ -821,49 +846,55 @@ export async function startTaskTesting(
     plannerChat,
   );
 
-  const { renderSidebar } = await import('../ui/sidebar.ts');
-  renderSidebar();
+  reserveLaunchSlot(testChat.id);
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
 
-  // Tester runs against the same isolated worktree as the Builder (MIN-275).
-  const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? task;
-  const buildChat = freshTask.chatId ? findChatById(freshTask.chatId) : undefined;
-  const worktreeRoot =
-    freshTask.worktreePath?.trim() ||
-    buildChat?.worktreeRoot?.trim() ||
-    (await ensureTaskWorktree(group, freshTask, plannerChat)) ||
-    undefined;
-  if (worktreeRoot) {
-    testChat.worktreeRoot = worktreeRoot;
-    scheduleSaveSessions();
+    // Tester runs against the same isolated worktree as the Builder (MIN-275).
+    const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === taskId) ?? task;
+    const buildChat = freshTask.chatId ? findChatById(freshTask.chatId) : undefined;
+    const worktreeRoot =
+      freshTask.worktreePath?.trim() ||
+      buildChat?.worktreeRoot?.trim() ||
+      (await ensureTaskWorktree(group, freshTask, plannerChat)) ||
+      undefined;
+    if (worktreeRoot) {
+      testChat.worktreeRoot = worktreeRoot;
+      scheduleSaveSessions();
+    }
+
+    const seed = buildTaskTestSeedMessage(group, plannerChat, task);
+
+    void refreshHeartbeatThresholds().then(() => {
+      startTaskChatSupervision(testChat.id);
+    });
+
+    void runChatTurn({
+      chat: testChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: `Test ${task.id}`,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message =
+        err instanceof Error ? err.message : 'Tester chat failed to start';
+      updateTask(
+        group,
+        taskId,
+        { error: message || 'Tester chat failed to start' },
+        plannerChat,
+      );
+    }).finally(() => releaseLaunchSlot(testChat.id));
+  } catch (err) {
+    releaseLaunchSlot(testChat.id);
+    throw err;
   }
-
-  const seed = buildTaskTestSeedMessage(group, plannerChat, task);
-
-  void refreshHeartbeatThresholds().then(() => {
-    startTaskChatSupervision(testChat.id);
-  });
-
-  void runChatTurn({
-    chat: testChat,
-    pushUser: true,
-    rawText: seed,
-    userText: seed,
-    displayText: seed,
-    historyContent: seed,
-    skillId: null,
-    validAttachments: [],
-    titleSeed: `Test ${task.id}`,
-    ownsGlobalStreaming: true,
-  }).catch((err) => {
-    const message =
-      err instanceof Error ? err.message : 'Tester chat failed to start';
-    updateTask(
-      group,
-      taskId,
-      { error: message || 'Tester chat failed to start' },
-      plannerChat,
-    );
-  });
 }
 
 /** Manual entry: Run tests on a task in the testing column. */
@@ -1059,29 +1090,35 @@ export async function startFinalIntegrationTest(
   scheduleSaveSessions();
   emitBoardChange(group.id);
 
-  const { renderSidebar } = await import('../ui/sidebar.ts');
-  renderSidebar();
+  reserveLaunchSlot(finalChat.id);
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
 
-  const seed = buildFinalIntegrationTestSeedMessage(group, plannerChat);
+    const seed = buildFinalIntegrationTestSeedMessage(group, plannerChat);
 
-  void refreshHeartbeatThresholds().then(() => {
-    startTaskChatSupervision(finalChat.id);
-  });
+    void refreshHeartbeatThresholds().then(() => {
+      startTaskChatSupervision(finalChat.id);
+    });
 
-  void runChatTurn({
-    chat: finalChat,
-    pushUser: true,
-    rawText: seed,
-    userText: seed,
-    displayText: seed,
-    historyContent: seed,
-    skillId: null,
-    validAttachments: [],
-    titleSeed: 'Final integration test',
-    ownsGlobalStreaming: true,
-  }).catch(() => {
-    /* surfaced in chat history */
-  });
+    void runChatTurn({
+      chat: finalChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: 'Final integration test',
+      ownsGlobalStreaming: true,
+    }).catch(() => {
+      /* surfaced in chat history */
+    }).finally(() => releaseLaunchSlot(finalChat.id));
+  } catch (err) {
+    releaseLaunchSlot(finalChat.id);
+    throw err;
+  }
 }
 
 /** Manual entry: run final integration test from board header. */
@@ -1510,4 +1547,32 @@ export async function startWave(
 /** Ensure folder exists for a planner chat (legacy ensureBoardGroup). */
 export function ensureBoardGroup(plannerChat: Chat): string {
   return getOrCreateBoardGroup(plannerChat).id;
+}
+
+/** Test hooks for launch-slot reservation and task-queue draining. */
+export function reserveLaunchSlotForTests(chatId: string): void {
+  reserveLaunchSlot(chatId);
+}
+
+export function releaseLaunchSlotForTests(chatId: string): void {
+  releaseLaunchSlot(chatId);
+}
+
+export function enqueueTaskForTests(groupId: string, taskId: string): void {
+  enqueueTask(groupId, taskId);
+}
+
+export function getTaskQueueForTests(groupId: string): string[] {
+  return [...(taskQueueByGroupId.get(groupId) ?? [])];
+}
+
+export function clearTaskQueuesForTests(): void {
+  taskQueueByGroupId.clear();
+}
+
+export async function drainTaskQueueForTests(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  return drainTaskQueue(group, plannerChat);
 }
