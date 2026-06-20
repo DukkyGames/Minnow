@@ -491,6 +491,48 @@ function ensureKanbanInteractionReleaseListener(): void {
   });
 }
 
+/** Capture scrollTop/scrollLeft of keyed scroll containers so a rebuild doesn't reset them. */
+function captureBoardScrollPositions(
+  root: ParentNode,
+): Map<string, { top: number; left: number }> {
+  const positions = new Map<string, { top: number; left: number }>();
+  const nodes = root.querySelectorAll<HTMLElement>('[data-board-scroll-key]');
+  // The root itself can be a keyed scroll container (e.g. the .board-kanban-waves
+  // wave stack), which querySelectorAll on descendants would miss.
+  const all =
+    root instanceof HTMLElement && root.dataset.boardScrollKey
+      ? [root, ...nodes]
+      : [...nodes];
+  for (const node of all) {
+    const key = node.dataset.boardScrollKey;
+    if (!key) continue;
+    if (node.scrollTop === 0 && node.scrollLeft === 0) continue;
+    positions.set(key, { top: node.scrollTop, left: node.scrollLeft });
+  }
+  return positions;
+}
+
+/** Restore previously-captured scroll positions onto the rebuilt scroll containers. */
+function restoreBoardScrollPositions(
+  root: ParentNode,
+  positions: Map<string, { top: number; left: number }>,
+): void {
+  if (positions.size === 0) return;
+  const nodes = root.querySelectorAll<HTMLElement>('[data-board-scroll-key]');
+  const all =
+    root instanceof HTMLElement && root.dataset.boardScrollKey
+      ? [root, ...nodes]
+      : [...nodes];
+  for (const node of all) {
+    const key = node.dataset.boardScrollKey;
+    if (!key) continue;
+    const saved = positions.get(key);
+    if (!saved) continue;
+    if (saved.top) node.scrollTop = saved.top;
+    if (saved.left) node.scrollLeft = saved.left;
+  }
+}
+
 function mountKanbanInMain(
   main: HTMLElement,
   board: BoardState,
@@ -498,8 +540,10 @@ function mountKanbanInMain(
   plannerChat: Chat,
 ): void {
   const planPanel = main.querySelector('.board-plan-panel');
-  const newKanban = renderKanban(board, group, plannerChat);
   const oldKanban = main.querySelector('.board-kanban-waves');
+  // Preserve the user's manual scroll across the live-tick rebuild (MIN-259).
+  const savedScroll = oldKanban ? captureBoardScrollPositions(oldKanban) : null;
+  const newKanban = renderKanban(board, group, plannerChat);
   if (oldKanban) {
     oldKanban.replaceWith(newKanban);
   } else if (planPanel) {
@@ -507,6 +551,7 @@ function mountKanbanInMain(
   } else {
     main.prepend(newKanban);
   }
+  if (savedScroll) restoreBoardScrollPositions(newKanban, savedScroll);
   syncBoardTaskPlanPanel(main, board, group);
 }
 
@@ -1527,9 +1572,12 @@ function renderKanbanColumns(
   tasks: BoardTask[],
   group: ChatGroup,
   plannerChat: Chat,
+  scrollKeyPrefix = '',
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'kanban-grid';
+  // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
+  if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
   const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
     { label: 'Planned', statuses: ['planned', 'blocked'] },
     { label: 'In Progress', statuses: ['in_progress'] },
@@ -1553,6 +1601,8 @@ function renderKanbanColumns(
     column.appendChild(h);
     const list = document.createElement('div');
     list.className = 'kanban-column__list';
+    // Stable key (wave + lane) so manual scrollTop survives live-tick rebuilds.
+    if (scrollKeyPrefix) list.dataset.boardScrollKey = `list:${scrollKeyPrefix}:${col.label}`;
     let entranceIndex = 0;
     const staggerEntrance =
       isOrchestrateInitSplitChromeActive() && isChatStreaming(plannerChat.id);
@@ -1646,7 +1696,7 @@ async function populateKanbanWaves(
     const body = document.createElement('div');
     body.className = 'board-wave-block__body';
     body.hidden = collapsed;
-    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat));
+    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat, `w${wave.id}`));
     block.appendChild(body);
     wrap.appendChild(block);
   }
@@ -1659,6 +1709,8 @@ function renderKanban(
 ): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'board-kanban-waves';
+  // Stable key so the wave stack's vertical scroll survives live-tick rebuilds (MIN-259).
+  wrap.dataset.boardScrollKey = 'kanban-waves';
   void populateKanbanWaves(wrap, board, group, plannerChat);
   return wrap;
 }

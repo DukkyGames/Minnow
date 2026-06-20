@@ -253,6 +253,43 @@ describe('orchestrate board live updates', () => {
     assert.equal(inProgress, 1);
   });
 
+  test('live refresh preserves manual scroll position of kanban lanes (MIN-259)', async () => {
+    setupDom();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'Task B', wave: 'W1', category: 'build' },
+        { id: 'W1-C', title: 'Task C', wave: 'W1', category: 'build' },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    setSessionStateForTests(sessionStateForBoard(chat, group));
+
+    await primeSubAgentConfig();
+    renderBoardView(group);
+    await waitForKanban();
+
+    const plannedList = () =>
+      document.querySelector('.kanban-column:first-child .kanban-column__list');
+    assert.ok(plannedList(), 'planned lane renders');
+    // Simulate the user scrolling the lane down.
+    plannedList().scrollTop = 120;
+
+    // A live tick re-renders the kanban (status change forces a rebuild).
+    updateTask(group, 'W1-A', { error: 'still working' });
+    refreshActiveBoardIfMounted();
+    await waitForKanban();
+
+    assert.equal(
+      plannedList().scrollTop,
+      120,
+      'manual scroll position is retained across live-tick rebuild',
+    );
+  });
+
   test('wave caret collapses kanban and persists on board state', async () => {
     setupDom();
     await primeSubAgentConfig();

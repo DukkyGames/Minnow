@@ -239,6 +239,34 @@ export function refreshOrchestrateHubBoardList(): void {
   if (container) renderBoardList(container);
 }
 
+/**
+ * Re-populate the hub plan dropdown from the workspace. Called when session chats
+ * change (e.g. a planner chat is deleted) so the plan list updates without the user
+ * having to press Refresh (MIN-215). No-op when the hub is not mounted.
+ */
+export async function refreshOrchestrateHubPlanList(): Promise<void> {
+  if (!isOrchestrateHubMounted()) return;
+  const sel = document.getElementById('orchestrateHubPlanSelect');
+  const hint = document.getElementById('orchestrateHubPlanHint');
+  if (!(sel instanceof HTMLSelectElement) || !(hint instanceof HTMLElement)) return;
+  await loadHubPlans(sel, hint, getActiveChat());
+  const startBtn = document.getElementById('orchestrateHubStartBoard');
+  if (startBtn instanceof HTMLButtonElement) {
+    const path = sel.value.trim();
+    startBtn.disabled = !path || !isExecutableOrchestratePlan(path);
+  }
+  const section = document.getElementById('orchestrateHubPlanPreview');
+  const pathChip = document.getElementById('orchestrateHubPlanPreviewPath');
+  const previewMount = document.getElementById('orchestrateHubPlanPreviewMount');
+  if (
+    section instanceof HTMLElement &&
+    pathChip instanceof HTMLElement &&
+    previewMount instanceof HTMLElement
+  ) {
+    await refreshOrchestrateHubPlanPreview(sel.value, { section, pathChip, previewMount });
+  }
+}
+
 function renderBoardList(container: HTMLElement): void {
   container.replaceChildren();
   const workspacePath = getWorkspacePath();

@@ -64,6 +64,7 @@ import { isBoardViewActive, syncViewModeToggleFromActiveChat } from './view-mode
 import {
   isOrchestrateHubMounted,
   refreshOrchestrateHubBoardList,
+  refreshOrchestrateHubPlanList,
   teardownOrchestrateHub,
 } from './orchestrate-hub';
 import { suspendOrchestratePlanScreenOnLeave } from './orchestrate-plan-screen';
@@ -865,6 +866,8 @@ function onChatRemoved(result: RemoveChatResult): void {
   renderSidebar();
   if (isOrchestrateHubMounted()) {
     refreshOrchestrateHubBoardList();
+    // Deleting a planner chat can free its plan; refresh the dropdown too (MIN-215).
+    void refreshOrchestrateHubPlanList();
   }
   closeMobileSidebar();
 }

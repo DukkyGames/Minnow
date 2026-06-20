@@ -1466,20 +1466,18 @@ button.board-header__activity {
   min-width: 0;
 }
 
-.main-column.main-column--board-view .chat-area > .board-root .kanban-grid {
+/* MIN-259: the wave stack is the board's vertical scroll container. Without this
+   .board-kanban-waves grows past the bounded .board-main (multiple waves / many
+   tasks) with no scrollable ancestor, so content below the fold is unreachable —
+   and the live-tick rebuild during a run makes it look like scrolling is blocked. */
+.main-column.main-column--board-view .chat-area > .board-root .board-kanban-waves {
   flex: 1 1 auto;
   min-height: 0;
-  grid-template-rows: minmax(0, 1fr);
+  overflow-y: auto;
 }
 
 .main-column.main-column--board-view .chat-area > .board-root .kanban-column {
   min-height: 0;
-}
-
-.main-column.main-column--board-view .chat-area > .board-root .kanban-column__list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 /* Tablet: two-lane kanban before desktop four-up */
