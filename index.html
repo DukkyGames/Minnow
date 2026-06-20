@@ -846,42 +846,43 @@
         <a href="#settingsHub-dev-stack" class="settings-category-subnav__link" data-hub-jump="dev-stack">Dev stack</a>
         <a href="#settingsHub-external" class="settings-category-subnav__link" data-hub-jump="external">External</a>
       </nav>
-      <div class="settings-hub" id="settingsHub-web-research" data-hub="web-research">
-        <h2 class="settings-hub__title">Web &amp; research</h2>
+      <div class="settings-hub is-active" id="settingsHub-web-research" data-hub="web-research">
+        <p class="settings-hub__lead">Web search providers, Deep Research limits, and managed SearXNG.</p>
       <section id="settingsSection-search" class="settings-section settings-area settings-area--title-suppressed" data-area="search">
         <h2>Search</h2>
-        <p class="settings-lead">Web search provider, API keys, and SearXNG URL. Powers the <code>web_search</code> tool and Deep Research fallback order.</p>
+        <p class="settings-lead">Provider, API keys, and SearXNG URL for <code>web_search</code>.</p>
         <div id="settingsSearchBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-deep-research" class="settings-section settings-area settings-area--title-suppressed" data-area="deep-research">
         <h2>Deep Research</h2>
-        <p class="settings-lead">Model and loop limits for the Deep Research app (<code>research.json</code>). Leave model empty to use the active chat model.</p>
+        <p class="settings-lead">Model and loop limits for the Research app (<code>research.json</code>).</p>
         <div id="settingsDeepResearchBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-servers" class="settings-section settings-area settings-area--title-suppressed" data-area="servers">
         <h2>Servers</h2>
-        <p class="settings-lead">Managed local services (SearXNG) in <code>~/.minnow/servers/</code>. When running, Search and Deep Research prefer this instance over the URL in <code>search.json</code>.</p>
+        <p class="settings-lead">Install and run local SearXNG from <code>~/.minnow/servers/</code>.</p>
         <div id="settingsServersBody" class="settings-section-body"></div>
       </section>
       </div>
       <div class="settings-hub" id="settingsHub-tools-skills" data-hub="tools-skills">
-        <h2 class="settings-hub__title">Tools &amp; skills</h2>
+        <p class="settings-hub__lead">Built-in tool policy, cache, and slash-command skills.</p>
       <section id="settingsSection-tools" class="settings-section settings-area settings-area--title-suppressed" data-area="tools">
         <h2>Tools</h2>
-        <p class="settings-lead">Built-in tool permissions, filesystem policy, and browser allowlist. Search keys are under <strong>Search</strong>. Server tools need <code>npm start</code>.</p>
+        <p class="settings-lead">Permissions, filesystem policy, and browser allowlist. Server tools need <code>npm start</code>.</p>
         <div id="settingsToolsBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-skills" class="settings-section settings-area settings-area--title-suppressed" data-area="skills">
         <h2>Skills</h2>
-        <p class="settings-lead">Slash commands and SKILL packs (built-in and custom). Choose which skills the agent can load.</p>
+        <p class="settings-lead">Slash commands and SKILL packs the agent can load.</p>
         <div id="settingsSkillsBody" class="settings-section-body"></div>
       </section>
       </div>
       <div class="settings-hub" id="settingsHub-dev-stack" data-hub="dev-stack">
-        <h2 class="settings-hub__title">Dev stack</h2>
+        <p class="settings-hub__lead">MCP servers, language servers, and editor ghost text.</p>
       <section id="settingsSection-mcp" class="settings-section settings-area settings-area--title-suppressed" data-area="mcp">
         <h2>MCP servers</h2>
         <p class="settings-lead">Model Context Protocol servers in <code>~/.minnow/mcp/</code>. Tools appear as <code>mcp__…</code> when <code>npm start</code> is running.</p>
+        <div class="settings-section-body">
         <p id="settingsMcpOffline" class="field-hint settings-mcp-offline hidden">Start with <code>npm start</code> to load and toggle MCP servers.</p>
         <div id="settingsMcpServerList" class="settings-mcp-list" role="list" aria-label="Configured MCP servers"></div>
         <details id="settingsMcpAddPanel" class="settings-mcp-add-panel hidden">
@@ -930,23 +931,24 @@
             </div>
           </form>
         </details>
+        </div>
       </section>
       <section id="settingsSection-lsp" class="settings-section settings-section--wide settings-section--lsp settings-area settings-area--title-suppressed" data-area="lsp">
         <h2>Language servers</h2>
-        <p class="settings-lead">Diagnostics and completions in the file viewer; agent tools <code>get_lsp_diagnostics</code> and <code>list_lsp_servers</code>. Requires <code>npm start</code>; config at <code>~/.minnow/lsp.json</code>.</p>
+        <p class="settings-lead">Diagnostics and completions in the file viewer. Config at <code>~/.minnow/lsp.json</code>.</p>
         <div id="settingsLspBody" class="settings-section-body" aria-live="polite"></div>
       </section>
       <section id="settingsSection-editor" class="settings-section settings-area settings-area--title-suppressed" data-area="editor">
         <h2>Editor</h2>
-        <p class="settings-lead">Ghost-text completions in the file viewer. <kbd class="settings-editor-kbd">Tab</kbd> accepts, <kbd class="settings-editor-kbd">Esc</kbd> dismisses. Requires <code>npm start</code> and a configured provider.</p>
+        <p class="settings-lead">Ghost-text completions: <kbd class="settings-editor-kbd">Tab</kbd> accepts, <kbd class="settings-editor-kbd">Esc</kbd> dismisses.</p>
         <div id="settingsEditorBody" class="settings-section-body" aria-live="polite"></div>
       </section>
       </div>
       <div class="settings-hub" id="settingsHub-external" data-hub="external">
-        <h2 class="settings-hub__title">External</h2>
+        <p class="settings-hub__lead">Outgoing webhooks and OAuth for Email and Calendar.</p>
       <section id="settingsSection-webhooks" class="settings-section settings-area settings-area--title-suppressed" data-area="webhooks">
         <h2>Webhooks</h2>
-        <p class="settings-lead">Outgoing signed webhooks for chat completion, new sessions, and scheduler events.</p>
+        <p class="settings-lead">Signed hooks for chat completion, new sessions, and scheduler events.</p>
         <div id="settingsWebhooksBody" class="settings-section-body"></div>
       </section>
       <section id="settingsSection-oauth" class="settings-section settings-area settings-area--title-suppressed" data-area="oauth">

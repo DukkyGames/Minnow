@@ -99,6 +99,19 @@ function filterActiveCategory(keys: Set<string>): void {
     });
     area.classList.toggle(DIM_CLASS, keys.size > 0 && !anyVisible && areaKeys.length > 0);
   });
+
+  if (activePanel.getAttribute('data-category') === 'integrations') {
+    const filtering = keys.size > 0;
+    activePanel.classList.toggle('is-integrations-filtering', filtering);
+    activePanel.querySelectorAll<HTMLElement>('.settings-hub').forEach((hub) => {
+      const hubAreas = hub.querySelectorAll('.settings-area');
+      let hubVisible = false;
+      hubAreas.forEach((area) => {
+        if (!area.classList.contains(DIM_CLASS)) hubVisible = true;
+      });
+      hub.classList.toggle('is-filter-empty', filtering && !hubVisible);
+    });
+  }
 }
 
 /** Apply query: dim/hide non-matches in the active category; badge other categories. */
@@ -115,6 +128,12 @@ export function clearSettingsPageFilter(): void {
   document
     .querySelectorAll(`.${HIDDEN_CLASS}, .${DIM_CLASS}`)
     .forEach((el) => el.classList.remove(HIDDEN_CLASS, DIM_CLASS));
+  document
+    .querySelectorAll('.settings-category.is-integrations-filtering')
+    .forEach((panel) => panel.classList.remove('is-integrations-filtering'));
+  document
+    .querySelectorAll('.settings-hub.is-filter-empty')
+    .forEach((hub) => hub.classList.remove('is-filter-empty'));
   for (const cat of SETTINGS_CATEGORIES) {
     const badge = document.querySelector(
       `[data-settings-category="${cat}"] .settings-nav__count`,

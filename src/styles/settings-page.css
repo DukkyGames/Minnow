@@ -324,23 +324,48 @@
 
 .settings-hub {
   margin-bottom: 32px;
+  scroll-margin-top: calc(var(--settings-content-pad-top) + 48px);
+}
+
+.settings-category[data-category='integrations']:not(.is-integrations-filtering) .settings-hub {
+  display: none;
+}
+
+.settings-category[data-category='integrations']:not(.is-integrations-filtering) .settings-hub.is-active {
+  display: block;
+}
+
+.settings-category[data-category='integrations'].is-integrations-filtering .settings-hub.is-filter-empty {
+  display: none;
 }
 
 .settings-hub:last-child {
   margin-bottom: 0;
 }
 
-.settings-hub__title {
-  margin: 0 0 16px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.settings-hub__lead {
+  margin: 0 0 24px;
+  font-size: 14px;
   color: var(--mn-fg-muted);
+  line-height: 1.5;
+  max-width: 72ch;
 }
 
 .settings-area--title-suppressed > h2 {
   display: none;
+}
+
+.settings-hub .settings-area.settings-area--title-suppressed > h2 {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.settings-hub .settings-area .settings-lead {
+  margin-bottom: 20px;
+  font-size: 13px;
 }
 
 .settings-area {
@@ -349,6 +374,7 @@
   border: none;
   border-radius: 0;
   background: transparent;
+  scroll-margin-top: calc(var(--settings-content-pad-top) + 48px);
 }
 
 .settings-area + .settings-area {

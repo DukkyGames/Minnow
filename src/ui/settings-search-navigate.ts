@@ -55,14 +55,26 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
   });
 }
 
+/** Show one integrations hub panel; other hubs stay in the DOM for deep links and search. */
+export function activateIntegrationsHub(hubId: string): void {
+  const panel = document.querySelector(
+    '.settings-category[data-category="integrations"]',
+  );
+  if (!panel) return;
+  panel.querySelectorAll<HTMLElement>('.settings-hub').forEach((hub) => {
+    hub.classList.toggle('is-active', hub.dataset.hub === hubId);
+  });
+}
+
 /** Scroll to an integrations hub container and sync hub subnav. */
 export function scrollToSettingsHub(hubId: string): void {
   const hubDef = SETTINGS_INTEGRATIONS_HUBS.find((hub) => hub.id === hubId);
   const firstArea = hubDef?.areas[0];
   if (firstArea) ensureSettingsAreaVisible(firstArea);
+  activateIntegrationsHub(hubId);
+  updateSettingsSubnavActive(undefined, hubId);
   const hub = document.getElementById(`settingsHub-${hubId}`);
   hub?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  updateSettingsSubnavActive(undefined, hubId);
 }
 
 /** Highlight the subnav tab (or integrations hub) that matches the target area. */
@@ -80,6 +92,7 @@ export function updateSettingsSubnavActive(
       hubId ??
       (area ? hubForArea(area) : undefined) ??
       SETTINGS_INTEGRATIONS_HUBS[0]?.id;
+    if (targetHub) activateIntegrationsHub(targetHub);
     const links = activePanel.querySelectorAll<HTMLAnchorElement>(
       '.settings-category-subnav__link[data-hub-jump]',
     );

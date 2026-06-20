@@ -182,6 +182,9 @@ describe('settings page HTML', () => {
     assert.match(html, /id="settingsHub-dev-stack"/);
     assert.match(html, /id="settingsHub-external"/);
     assert.match(html, /data-hub-jump="web-research"/);
+    assert.match(html, /settings-hub is-active[^"]*" id="settingsHub-web-research"/);
+    assert.match(html, /class="settings-hub__lead"/);
+    assert.doesNotMatch(html, /settings-hub__title/);
     assert.doesNotMatch(html, /data-area-jump="mcp"/);
   });
 

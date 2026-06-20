@@ -51,14 +51,6 @@ const FALLBACK_OPTIONS: { value: SearchFallbackProvider; label: string }[] = [
 export async function renderSearchSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      'Primary web search provider and API keys for web_search and Deep Research. Saved to ~/.minnow/search.json when npm start is running.',
-    ),
-  );
-
   const providerGroup = appendSettingsGroup(
     mount,
     'Provider',

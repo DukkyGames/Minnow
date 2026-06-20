@@ -64,14 +64,6 @@ const SEARCH_OVERRIDE_OPTIONS: { value: SearchProvider | ''; label: string }[] =
 export async function renderDeepResearchSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      'Limits and model for the Deep Research app. Saved to ~/.minnow/research.json. Leave model empty to use the active chat model.',
-    ),
-  );
-
   const modelGroup = appendSettingsGroup(
     mount,
     'Research model',

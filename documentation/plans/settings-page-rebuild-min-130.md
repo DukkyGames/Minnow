@@ -10,6 +10,7 @@ Implementation plan for the settings IA rebuild, field catalog, search/filter, a
 - [x] Phase 3: Catalog in search index, live in-page filter, CSS
 - [x] Phase 4: `launch_minnow_app` `settings_query` + `settingsSearchKey` deep-link
 - [x] Critique remediation: switch `aria-labelledby`, `aria-current="page"` nav, flat nested groups, heading dedup, Integrations 4-hub IA
+- [x] Integrations hub tab panels: one active hub at a time, visible area headings, deduped section copy
 - [ ] Phase 2 (remaining): Wrap remaining render-module controls with `createSettingsField` + catalog keys
 
 ## Architecture

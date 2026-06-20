@@ -540,14 +540,6 @@ function createServerRow(
 export async function renderServersSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      'Install and run local services under ~/.minnow/servers/. Requires npm start. When SearXNG is enabled and running, Search and Deep Research use the managed instance instead of the URL in search.json.',
-    ),
-  );
-
   const offlineBanner = el(
     'p',
     'settings-server-banner',
