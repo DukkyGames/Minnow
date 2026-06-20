@@ -33,9 +33,9 @@ const SECTIONS: ModelsSectionId[] = [
 ];
 
 const SECTION_LABELS: Record<ModelsSectionId, string> = {
-  recommend: 'What fits',
+  recommend: 'Recommendations',
   installed: 'Installed',
-  settings: 'Settings',
+  settings: 'Library',
   voice: 'Voice',
   providers: 'Providers',
   routing: 'Routing',

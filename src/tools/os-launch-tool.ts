@@ -2,16 +2,59 @@
  * Browser tool: foreground a MinnowOS app via the OS hash router.
  */
 
+import { fieldByKey } from '../ui/settings-catalog';
+import { categoryForArea, type SettingsSectionId } from '../ui/settings-page-types';
+import { buildSettingsSearchIndex } from '../ui/settings-search-index';
+import { rankSettingsSearch } from '../ui/settings-search-rank';
 import { isAppId } from '../os/app-registry';
 import { launchApp as defaultLaunchApp } from '../os/router';
-import type { AppId } from '../os/types';
+import type { AppId, LaunchOptions } from '../os/types';
 
 const APP_ID_ARG = 'app_id';
+
+function resolveSettingsDeepLink(args: Record<string, unknown>): Pick<
+  LaunchOptions,
+  'settingsSection' | 'settingsSearchKey'
+> {
+  const out: Pick<LaunchOptions, 'settingsSection' | 'settingsSearchKey'> = {};
+
+  if (typeof args.settings_query === 'string' && args.settings_query.trim()) {
+    const ranked = rankSettingsSearch(args.settings_query.trim(), buildSettingsSearchIndex(), {
+      maxResults: 1,
+    });
+    const best = ranked[0];
+    if (best?.searchKey) {
+      out.settingsSearchKey = best.searchKey;
+      out.settingsSection = best.sectionId;
+      return out;
+    }
+    const byKey = fieldByKey(args.settings_query.trim());
+    if (byKey) {
+      out.settingsSearchKey = byKey.key;
+      out.settingsSection = byKey.area;
+      return out;
+    }
+  }
+
+  if (typeof args.settings_section === 'string' && args.settings_section.trim()) {
+    const slug = args.settings_section.trim();
+    out.settingsSection = slug;
+    const area = slug as SettingsSectionId;
+    if (categoryForArea(area)) {
+      out.settingsSection = area;
+    }
+  }
+
+  return out;
+}
 
 /** Launch a MinnowOS app and return JSON { ok, appId, hash }. */
 export function toolLaunchMinnowApp(
   args: Record<string, unknown>,
-  launchApp: (appId: AppId, options?: { seed?: string }) => void = defaultLaunchApp,
+  launchApp: (
+    appId: AppId,
+    options?: LaunchOptions,
+  ) => void = defaultLaunchApp,
 ): string {
   const rawAppId = args[APP_ID_ARG];
   if (typeof rawAppId !== 'string' || !rawAppId.trim()) {
@@ -23,13 +66,27 @@ export function toolLaunchMinnowApp(
     return `Error: invalid app_id "${appId}" (expected code, chat, research, experts, bench, or settings)`;
   }
 
-  const options: { seed?: string } = {};
+  const options: LaunchOptions = {};
   if (typeof args.seed === 'string' && args.seed.trim()) {
     options.seed = args.seed.trim();
   }
 
+  if (appId === 'settings') {
+    Object.assign(options, resolveSettingsDeepLink(args));
+  }
+
   launchApp(appId, Object.keys(options).length > 0 ? options : undefined);
 
-  const hash = `#/app/${appId}`;
-  return JSON.stringify({ ok: true, appId, hash });
+  const hash =
+    appId === 'settings' && options.settingsSection
+      ? `#/settings/${options.settingsSection}`
+      : `#/app/${appId}`;
+  return JSON.stringify({
+    ok: true,
+    appId,
+    hash,
+    ...(options.settingsSearchKey
+      ? { settingsSearchKey: options.settingsSearchKey }
+      : {}),
+  });
 }

@@ -253,7 +253,7 @@ export async function refreshInstalledSection(): Promise<void> {
     mount.appendChild(el('h3', 'models-section-subtitle', 'On disk'));
     if (!artifacts.length) {
       mount.appendChild(
-        el('p', 'models-muted', 'No GGUF files yet — download a model from What fits.'),
+        el('p', 'models-muted', 'No GGUF files yet. Download one from Recommendations.'),
       );
       return;
     }

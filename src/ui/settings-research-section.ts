@@ -64,14 +64,6 @@ const SEARCH_OVERRIDE_OPTIONS: { value: SearchProvider | ''; label: string }[] =
 export async function renderDeepResearchSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      'Engine parameters for the Deep Research panel (IterResearch port). Stored in ~/.minnow/research.json. Empty model uses the active chat model.',
-    ),
-  );
-
   const modelGroup = appendSettingsGroup(
     mount,
     'Research model',

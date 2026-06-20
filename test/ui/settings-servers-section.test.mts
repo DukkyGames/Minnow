@@ -67,7 +67,8 @@ describe('settings servers section', () => {
     const row = list.querySelector<HTMLElement>('[data-server-id="searxng"]');
     assert.ok(row);
     assert.match(row.textContent ?? '', /SearXNG/);
-    assert.match(row.textContent ?? '', /Running on http:\/\/127\.0\.0\.1:8899/);
+    assert.match(row.textContent ?? '', /Running/);
+    assert.match(row.textContent ?? '', /http:\/\/127\.0\.0\.1:8899/);
 
     const stopBtn = row.querySelector<HTMLButtonElement>('[data-server-stop="searxng"]');
     assert.ok(stopBtn);

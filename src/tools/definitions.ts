@@ -327,6 +327,16 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
           description:
             'Optional seed text (workspace path or task for code; query for research; message for chat)',
         },
+        settings_section: {
+          type: 'string',
+          description:
+            'When app_id is settings: legacy area slug (e.g. memory, tools) or category slug (e.g. knowledge)',
+        },
+        settings_query: {
+          type: 'string',
+          description:
+            'When app_id is settings: free-text setting name to resolve via search (e.g. "turn off memory", "temperature") — opens and highlights the control without changing its value',
+        },
       },
       ['app_id'],
     ),

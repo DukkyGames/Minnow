@@ -190,7 +190,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Agent and sub-agent shell commands run in the background. The terminal panel stays closed unless you open it; the Terminal button pulses while a command is running.',
+      'Agent and sub-agent shell commands run in the background. Open the terminal panel yourself; the Terminal button pulses while a command is running.',
     ),
   );
 }
@@ -204,6 +204,7 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
     {
       checked: getToolCallsMetaSync().useConstrainedDecoding,
       ariaLabel: 'Constrained tool calls global default',
+      searchKey: 'general.toolCalls.constrained',
     },
   );
   mount.appendChild(constrainedRow);
@@ -211,7 +212,7 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'When enabled and the provider supports structured output, Minnow attaches a JSON Schema so local models emit valid tool arguments. Use Probe structured output (and optionally Probe models) under Settings → Providers.',
+      'When your provider supports structured output, Minnow validates tool arguments with JSON Schema. If local models return malformed tool calls, enable structured-output probing under Providers.',
     ),
   );
   const probeLink = linkToSettingsSection('Open Providers →', 'providers');
@@ -248,13 +249,15 @@ async function renderGeneralSection(): Promise<void> {
     mount,
     'Chat & terminal',
     'How the main thread and background shells behave.',
+    'general.chat.terminal',
   );
   await appendTerminalControls(chat);
 
   const notifications = appendSettingsGroup(
     mount,
     'Notifications',
-    'Menubar bell alerts for background chats, tasks, and scheduled jobs.',
+    'Menubar bell alerts when something finishes or fails in the background.',
+    'general.notifications',
   );
   renderNotificationsSettingsSection(notifications);
 
@@ -272,7 +275,7 @@ async function renderGeneralSection(): Promise<void> {
   const connection = appendSettingsGroup(
     mount,
     'Connection summary',
-    'Registered LLM backends. Choose a model and provider in the top bar; edit profiles under Providers.',
+    'Registered LLM backends. Pick provider and model in the top bar; edit profiles under Providers.',
   );
 
   const summary = el('dl', 'settings-kv');
@@ -303,13 +306,13 @@ async function renderGeneralSection(): Promise<void> {
   const drawerHint = appendSettingsGroup(
     mount,
     'Quick drawer',
-    'Temperature and max tokens remain in the gear drawer on the chat screen for now.',
+    'Temperature and max tokens are still in the chat gear drawer for now.',
   );
   drawerHint.appendChild(
     el(
       'p',
       'settings-field-hint',
-      'Open the drawer from the top bar while chatting to adjust sampling without leaving the thread.',
+      'Open the gear icon in the top bar while chatting to adjust sampling without leaving the thread.',
     ),
   );
 }
@@ -685,9 +688,9 @@ async function mountPlanGranularityField(container: HTMLElement): Promise<void> 
   select.className = 'settings-select';
 
   const options: { value: string; label: string }[] = [
-    { value: 'large', label: 'Large — one task per feature or module' },
-    { value: 'medium', label: 'Medium — one task per component or function group (default)' },
-    { value: 'small', label: 'Small — every function and config key as its own task' },
+    { value: 'large', label: 'Large: one task per feature or module' },
+    { value: 'medium', label: 'Medium: one task per component or function group (default)' },
+    { value: 'small', label: 'Small: separate task for every function and config key' },
   ];
   for (const opt of options) {
     const option = document.createElement('option');
@@ -734,6 +737,7 @@ async function renderModesSection(): Promise<void> {
       id: mode.id,
       label: mode.label,
       hint: `${mode.description} · Tool policy: ${mode.toolPolicy.default}`,
+      searchKey: `modes.${mode.id}`,
     })),
     (id, body) => {
       if (id === 'plan') {
@@ -770,7 +774,8 @@ async function renderExpertsSection(): Promise<void> {
   const list = el('ul', 'settings-entity-list');
   for (const expert of listExperts()) {
     const item = el('li', 'settings-entity-list__item settings-entity-list__item--flat');
-    item.textContent = `${expert.meta.label}${expert.meta.description ? ` — ${expert.meta.description}` : ''}`;
+    item.dataset.settingsSearchKey = `experts.${expert.meta.id}`;
+    item.textContent = `${expert.meta.label}${expert.meta.description ? `: ${expert.meta.description}` : ''}`;
     list.appendChild(item);
   }
   rosterBody.appendChild(list);
@@ -859,6 +864,7 @@ async function renderWorkAgentsSection(): Promise<void> {
       hint: agent.defaultForModes?.length
         ? `Default for modes: ${agent.defaultForModes.join(', ')}`
         : agent.description,
+      searchKey: `work-agents.${agent.id}`,
     })),
     (id, body) => {
       const agent = agents.find((a) => a.id === id);
@@ -959,7 +965,7 @@ async function renderSubAgentsSection(): Promise<void> {
   const globalBody = appendSettingsGroup(
     mount,
     'Global limits',
-    'Check-in nudge: while a sub-agent runs, the parent gets one reminder after this interval (Build/General/Research; not Orchestrate). Set 0 to disable.',
+    'While a sub-agent runs, remind the parent agent once after this interval (Build, General, and Research only; not Orchestrate). Set 0 to turn off.',
   );
   globalBody.appendChild(summary);
 
@@ -990,6 +996,7 @@ async function renderSubAgentsSection(): Promise<void> {
       id,
       label: type.label ?? id.replace(/([A-Z])/g, ' $1').trim(),
       hint: `Max concurrent ${type.maxConcurrent} · model ${type.modelId || '(chat default)'}`,
+      searchKey: `sub-agents.${id}`,
     })),
     (id, body) => {
       const type = config.types[id];
@@ -1043,7 +1050,7 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
   const section = appendSettingsGroup(
     mount,
     'Tool turn limits',
-    'Maximum assistant → tool → assistant rounds per run. Applies to the main composer and all sub-agents (including eval runs).',
+    'Cap how many times the agent can call tools in one run (main composer and all sub-agents, including eval runs).',
   );
 
   const mainRow = el('label', 'settings-toggle-row');
@@ -1098,7 +1105,7 @@ async function appendToolTurnLimitsSection(mount: HTMLElement): Promise<void> {
   const timeoutSection = appendSettingsGroup(
     mount,
     'Generation timeouts',
-    'Server-side limits while streaming from the model (main chat and sub-agents). Idle timeout resets when new tokens arrive. Restart is not required — applies to the next generation.',
+    'Server-side limits while streaming from the model. Idle timeout resets when new tokens arrive. Applies to the next generation; no restart needed.',
   );
 
   const idleRow = el('label', 'settings-toggle-row');
@@ -1729,9 +1736,8 @@ async function renderEvalsSection(): Promise<void> {
   const mount = clearMount('settingsEvalsBody');
   if (!mount) return;
   mount.innerHTML =
-    '<p class="settings-field-hint">Eval harness and custom task packs moved to the Benchmark app.</p>' +
+    '<p class="settings-field-hint">Eval runs and custom task packs moved to the Benchmark app.</p>' +
     '<p><a href="#/app/bench/tests" class="settings-link">Open Benchmark → Tests</a></p>';
-  window.location.hash = '#/app/bench/tests';
 }
 
 let memoryListBindingsDone = false;

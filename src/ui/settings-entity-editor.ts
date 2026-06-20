@@ -208,6 +208,8 @@ export interface EntityEditorRow {
   hint?: string;
   /** Optional type chip in expandable list headers (Prompts hub). */
   badge?: string;
+  /** Scroll target for settings search / chat deep-link. */
+  searchKey?: string;
 }
 
 interface ModelBindingState {
@@ -869,6 +871,9 @@ export function renderEntityEditorList(
   const list = el('ul', 'settings-entity-list');
   for (const row of rows) {
     const item = el('li', 'settings-entity-list__item');
+    if (row.searchKey) {
+      item.dataset.settingsSearchKey = row.searchKey;
+    }
     const details = document.createElement('details');
     details.className = 'settings-entity-details';
 

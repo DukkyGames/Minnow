@@ -28,7 +28,7 @@ async function mountGlobalSamplerBlock(mount: HTMLElement): Promise<void> {
     el(
       'p',
       'settings-field-hint',
-      'Baseline for main chat completions. Temperature and max tokens also sync to the composer drawer. Per-role overrides are in Models.',
+      'Baseline temperature, penalties, and token limits for main chat. Override per role in Routing.',
     ),
   );
 
@@ -62,5 +62,5 @@ async function mountGlobalSamplerBlock(mount: HTMLElement): Promise<void> {
 export async function renderSamplerSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
   await mountGlobalSamplerBlock(mount);
-  appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Models', sectionId: 'model-routing' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Routing', sectionId: 'model-routing' }]);
 }

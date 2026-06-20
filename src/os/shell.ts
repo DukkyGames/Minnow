@@ -132,13 +132,7 @@ export function initOsShell(): void {
   initAppHost();
   void import('./scheduler-side-panel').then((m) => m.initSchedulerSidePanel());
   // Re-apply route now that app layers are mounted (router may have queued an app open).
-  void import('./router').then(async (m) => {
-    m.syncOsRouteFromHash();
-    if (document.getElementById('settingsView')?.classList.contains('is-open')) {
-      const { mountSettingsSearchToMenubar } = await import('./settings-search-menubar');
-      mountSettingsSearchToMenubar();
-    }
-  });
+  void import('./router').then((m) => m.syncOsRouteFromHash());
 
   window.addEventListener(
     'beforeunload',

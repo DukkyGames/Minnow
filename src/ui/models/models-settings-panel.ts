@@ -1,5 +1,5 @@
 /**
- * Models → Settings — HF token and custom model directories.
+ * Models → Library — HF token and custom model directories.
  */
 
 import { fetchModelsConfig, saveModelsConfig } from '../../models/api-client';
@@ -16,23 +16,23 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Render Models settings panel (HF token + model dirs). */
+/** Render Models library panel (HF token + scan directories). */
 export async function mountModelsSettingsSection(): Promise<void> {
   const mount = document.getElementById('modelsSettingsBody');
   if (!mount) return;
-  mount.replaceChildren(el('p', 'models-muted', 'Loading settings…'));
+  mount.replaceChildren(el('p', 'models-muted', 'Loading…'));
 
   try {
     const config = await fetchModelsConfig();
     mount.replaceChildren();
 
-    const hfCard = el('div', 'models-hardware-card');
-    hfCard.appendChild(el('h3', 'models-hardware-card__title', 'Hugging Face token'));
-    hfCard.appendChild(
+    const hfZone = el('section', 'models-library-zone');
+    hfZone.appendChild(el('h3', 'models-section-subtitle', 'Hugging Face token'));
+    hfZone.appendChild(
       el(
         'p',
         'models-muted',
-        'Optional. Required for gated models and higher rate limits. Stored in config.json (plaintext until encrypted secrets land).',
+        'Optional. Needed for gated models and higher download limits.',
       ),
     );
 
@@ -45,7 +45,7 @@ export async function mountModelsSettingsSection(): Promise<void> {
       ? `Stored (${config.hfTokenMasked}) — enter to replace`
       : 'hf_…';
     hfRow.append(hfInput);
-    hfCard.appendChild(hfRow);
+    hfZone.appendChild(hfRow);
 
     const hfActions = el('div', 'models-installed-actions');
     const saveHf = el('button', 'models-inline-btn is-primary', 'Save token');
@@ -54,20 +54,24 @@ export async function mountModelsSettingsSection(): Promise<void> {
     clearHf.type = 'button';
     clearHf.hidden = !config.hfTokenConfigured;
     hfActions.append(saveHf, clearHf);
-    hfCard.appendChild(hfActions);
-    mount.appendChild(hfCard);
+    hfZone.appendChild(hfActions);
+    mount.appendChild(hfZone);
 
-    const dirsCard = el('div', 'models-hardware-card');
-    dirsCard.appendChild(el('h3', 'models-hardware-card__title', 'Extra model directories'));
-    dirsCard.appendChild(
-      el('p', 'models-muted', 'Additional folders scanned by What fits and Installed (besides HF cache and ~/.minnow/models).'),
+    const dirsZone = el('section', 'models-library-zone models-library-zone--split');
+    dirsZone.appendChild(el('h3', 'models-section-subtitle', 'Extra scan folders'));
+    dirsZone.appendChild(
+      el(
+        'p',
+        'models-muted',
+        'Also scanned by Recommendations and Installed, besides the HF cache and ~/.minnow/models.',
+      ),
     );
 
     const dirsList = el('div', 'models-model-dirs');
     const renderDirs = (dirs: string[]) => {
       dirsList.replaceChildren();
       if (!dirs.length) {
-        dirsList.appendChild(el('p', 'models-muted', 'No extra directories configured.'));
+        dirsList.appendChild(el('p', 'models-muted', 'No extra folders yet.'));
         return;
       }
       for (const dir of dirs) {
@@ -81,11 +85,11 @@ export async function mountModelsSettingsSection(): Promise<void> {
     dirInput.type = 'text';
     dirInput.className = 'models-settings-input';
     dirInput.placeholder = '~/models or C:\\models';
-    const addDirBtn = el('button', 'models-inline-btn', 'Add directory');
+    const addDirBtn = el('button', 'models-inline-btn', 'Add folder');
     addDirBtn.type = 'button';
     const dirRow = el('div', 'models-settings-row');
     dirRow.append(dirInput, addDirBtn);
-    dirsCard.append(dirsList, dirRow);
+    dirsZone.append(dirsList, dirRow);
 
     let currentDirs = [...config.modelDirs];
     addDirBtn.addEventListener('click', () => {
@@ -96,21 +100,21 @@ export async function mountModelsSettingsSection(): Promise<void> {
       renderDirs(currentDirs);
     });
 
-    const saveDirs = el('button', 'models-inline-btn is-primary', 'Save directories');
+    const saveDirs = el('button', 'models-inline-btn is-primary', 'Save folders');
     saveDirs.type = 'button';
     saveDirs.addEventListener('click', () => {
       void saveModelsConfig({ modelDirs: currentDirs })
         .then((next) => {
           currentDirs = [...next.modelDirs];
           renderDirs(currentDirs);
-          setStatus('ok', 'Model directories saved.');
+          setStatus('ok', 'Scan folders saved.');
         })
         .catch((err) => {
           setStatus('err', err instanceof Error ? err.message : 'Save failed');
         });
     });
-    dirsCard.appendChild(saveDirs);
-    mount.appendChild(dirsCard);
+    dirsZone.appendChild(saveDirs);
+    mount.appendChild(dirsZone);
 
     saveHf.addEventListener('click', () => {
       const token = hfInput.value.trim();
@@ -145,7 +149,7 @@ export async function mountModelsSettingsSection(): Promise<void> {
   } catch (err) {
     mount.replaceChildren();
     mount.appendChild(
-      el('p', 'models-error', err instanceof Error ? err.message : 'Failed to load settings.'),
+      el('p', 'models-error', err instanceof Error ? err.message : 'Failed to load library settings.'),
     );
   }
 }

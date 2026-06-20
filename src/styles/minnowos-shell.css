@@ -48,29 +48,10 @@
 }
 
 .mn-os-mb-left,
-.mn-os-mb-center,
 .mn-os-mb-right {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.mn-os-mb-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(28rem, 44vw);
-  min-width: 12rem;
-  z-index: 1;
-}
-
-.mn-os-mb-center[hidden] {
-  display: none !important;
-}
-
-.mn-os-mb-settings-slot {
-  width: 100%;
-  min-width: 0;
 }
 
 .mn-os-mb-workspace-slot {
@@ -123,29 +104,6 @@
 .mn-os-mb-workspace-slot .workspace-btn .icon-svg {
   width: 16px;
   height: 16px;
-}
-
-.mn-os-mb-center .settings-search-finder {
-  flex: none;
-  width: 100%;
-  max-width: none;
-}
-
-.mn-os-mb-center .settings-search-finder__input {
-  padding: 5px 10px;
-  border-radius: 8px;
-  border-color: var(--os-border-strong);
-  background: var(--os-surface-2);
-  font-size: 13px;
-}
-
-.mn-os-mb-center .settings-search-finder__input:focus {
-  outline: 2px solid var(--os-accent);
-  outline-offset: 1px;
-}
-
-.mn-os-mb-center .settings-search-finder__results {
-  z-index: 60;
 }
 
 .mn-os-mb-logo {
