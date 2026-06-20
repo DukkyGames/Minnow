@@ -1312,7 +1312,7 @@ export async function renderLspSection(): Promise<void> {
 
 
 
-  const statusGroup = appendSettingsGroup(mount, 'Status');
+  const statusGroup = appendSettingsGroup(mount, 'Status', undefined, 'integrations.lsp');
 
   appendLspToolbar(statusGroup, {
 
@@ -1410,6 +1410,8 @@ export async function renderLspSection(): Promise<void> {
 
     'Installed toggles download optional binaries to ~/.minnow/lsp-servers. Enabled toggles start analyzers when npm start is running.',
 
+    'integrations.lsp',
+
   );
 
 
@@ -1441,6 +1443,8 @@ export async function renderLspSection(): Promise<void> {
     'Custom server',
 
     'Register a stdio language server and the file extensions it owns.',
+
+    'integrations.lsp.custom',
 
   );
 

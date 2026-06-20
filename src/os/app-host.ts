@@ -124,8 +124,13 @@ async function openAppPage(appId: AppId, options?: LaunchOptions): Promise<void>
 
   switch (appId) {
     case 'settings': {
-      const { openSettings } = await import('../ui/settings-page');
-      openSettings(settingsSection as SettingsSectionId);
+      const { openSettings, navigateToSettingsField } = await import('../ui/settings-page');
+      const section = (options?.settingsSection ?? route.settingsSection ?? 'general') as SettingsSectionId;
+      if (options?.settingsSearchKey) {
+        navigateToSettingsField(options.settingsSearchKey, section);
+      } else {
+        openSettings(section);
+      }
       break;
     }
     case 'research': {

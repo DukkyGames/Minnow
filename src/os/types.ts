@@ -47,6 +47,8 @@ export interface LaunchOptions {
   seed?: string;
   /** Settings section slug when opening from legacy `#/settings/…` redirects. */
   settingsSection?: string;
+  /** Catalog field key to scroll to and highlight in Settings. */
+  settingsSearchKey?: string;
   /** Models app section slug when opening from `#/app/models/…` deep links. */
   modelsSection?: string;
   /** Brain app section slug when opening from `#/app/brain/…` deep links. */

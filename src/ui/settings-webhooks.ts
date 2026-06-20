@@ -92,7 +92,7 @@ export async function renderWebhooksSettingsSection(mount: HTMLElement): Promise
   mount.appendChild(
     el(
       'p',
-      'settings-lead',
+      'settings-section-note',
       'Fire HMAC-signed JSON POSTs when chats complete or new sessions are created. Secrets are encrypted at rest; payloads never include prompt text.',
     ),
   );
@@ -258,19 +258,30 @@ function renderAddForm(mount: HTMLElement, onSaved: () => Promise<void>): void {
   secretInput.autocomplete = 'new-password';
   secretField.appendChild(secretInput);
 
-  const eventsField = el('div', 'field settings-webhooks-events');
-  eventsField.append(el('label', undefined, 'Events'));
+  const eventsField = el('div', 'settings-field-stack');
+  eventsField.dataset.settingsSearchKey = 'integrations.webhooks.events';
+  const eventsLabel = el('span', 'settings-field-stack__label', 'Events');
+  eventsLabel.id = 'settingsWebhooksEventsLabel';
+  eventsField.appendChild(eventsLabel);
+
+  const eventsList = el('div', 'settings-checklist');
+  eventsList.setAttribute('role', 'group');
+  eventsList.setAttribute('aria-labelledby', 'settingsWebhooksEventsLabel');
+
   const eventChecks: HTMLInputElement[] = [];
   for (const eventName of SUBSCRIBABLE_EVENTS) {
-    const row = el('label', 'settings-checkbox-row');
+    const row = el('label', 'settings-checklist__option');
     const cb = el('input') as HTMLInputElement;
     cb.type = 'checkbox';
     cb.value = eventName;
+    cb.name = 'webhook-events';
     if (eventName === 'chat.completed') cb.checked = true;
     eventChecks.push(cb);
-    row.append(cb, document.createTextNode(` ${eventName}`));
-    eventsField.append(row);
+    const name = el('code', 'settings-checklist__mono', eventName);
+    row.append(cb, name);
+    eventsList.append(row);
   }
+  eventsField.appendChild(eventsList);
 
   const errorEl = el('p', 'settings-mcp-form-error hidden');
   errorEl.setAttribute('role', 'alert');

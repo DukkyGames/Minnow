@@ -57,10 +57,19 @@ describe('settings-search-index', () => {
     assert.equal(webSearch.searchKey, 'tools.item.web_search');
   });
 
-  test('includes tool category entries', () => {
+  test('includes catalog field entries', () => {
     const index = buildSettingsSearchIndex();
-    const webCat = index.find((e) => e.id === 'tool-category:web');
-    assert.ok(webCat);
-    assert.equal(webCat.searchKey, 'tools.category.web');
+    const memory = index.find((e) => e.id === 'field:knowledge.memory.enabled');
+    assert.ok(memory);
+    assert.equal(memory.kind, 'field');
+    assert.equal(memory.searchKey, 'knowledge.memory.enabled');
+    assert.equal(memory.sectionId, 'memory');
+  });
+
+  test('includes category entries', () => {
+    const index = buildSettingsSearchIndex();
+    const models = index.find((e) => e.id === 'category:models');
+    assert.ok(models);
+    assert.equal(models.kind, 'category');
   });
 });

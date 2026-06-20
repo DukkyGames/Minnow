@@ -13,7 +13,9 @@ export type SettingsSearchEntryKind =
   | 'expert'
   | 'work-agent'
   | 'sub-agent'
-  | 'models-section';
+  | 'models-section'
+  | 'field'
+  | 'category';
 
 /** One searchable destination in the settings page. */
 export type SettingsSearchEntry = {

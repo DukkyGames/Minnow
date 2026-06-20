@@ -106,7 +106,11 @@ export async function renderOAuthSettingsSection(mount: HTMLElement): Promise<vo
   msGroup.appendChild(msSecret);
 
   const actions = el('div', 'settings-form-actions');
-  const saveBtn = el('button', 'settings-btn settings-btn-primary', 'Save OAuth credentials') as HTMLButtonElement;
+  const saveBtn = el(
+    'button',
+    'settings-action-btn settings-action-btn--primary',
+    'Save OAuth credentials',
+  ) as HTMLButtonElement;
   saveBtn.type = 'submit';
   actions.appendChild(saveBtn);
   form.appendChild(actions);

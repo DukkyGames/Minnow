@@ -177,7 +177,7 @@ function bindEmbeddingsControls(setStatus: StatusFn): void {
         }
 
         setEmbeddingsPanelStatus(
-          'Downloading embedding model — first run may take a few minutes. Files land in ~/.minnow/models/embeddings/',
+          'Downloading embedding model. First run may take a few minutes. Files save to ~/.minnow/models/embeddings/',
         );
         setStatus('spin', 'Downloading embedding model…');
         const result = await warmupMemoryEmbeddings();
@@ -300,7 +300,7 @@ async function refreshMemoryEmbeddingsPanel(container: HTMLElement): Promise<voi
 
   if (statusEl) {
     if (!status.enabled) {
-      statusEl.textContent = 'Semantic retrieval disabled — keyword-only matching on send.';
+      statusEl.textContent = 'Semantic retrieval off. Matching uses keywords only on send.';
     } else {
       const pageHint =
         typeof status.pageCount === 'number' && status.pageCount > 0

@@ -96,6 +96,15 @@
   width: 100%;
 }
 
+.field input[type='checkbox'],
+.field input[type='radio'] {
+  width: auto;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  accent-color: var(--mn-accent);
+}
+
 .field input:focus, .field textarea:focus, .field select:focus {
   border-color: var(--mn-accent);
   box-shadow: 0 0 0 3px var(--mn-accent-soft);

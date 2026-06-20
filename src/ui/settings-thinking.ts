@@ -3,7 +3,6 @@
  */
 
 import {
-  DEFAULT_THINKING_GLOBAL,
   loadThinkingMeta,
   saveThinkingMeta,
 } from '../config/thinking-meta';
@@ -31,7 +30,7 @@ function mountGlobalThinkingBlock(mount: HTMLElement): void {
     el(
       'p',
       'settings-field-hint',
-      'Default for new chats and inherited paths. Per-role overrides are in Models.',
+      'Default for new chats and roles that inherit global settings. Override per role in Routing.',
     ),
   );
 
@@ -74,13 +73,6 @@ function mountGlobalThinkingBlock(mount: HTMLElement): void {
 /** Render Settings → Thinking section. */
 export async function renderThinkingSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      `Global default is ${DEFAULT_THINKING_GLOBAL.defaultMode}. Chat composer can override per chat; per-role overrides are in Models.`,
-    ),
-  );
   mountGlobalThinkingBlock(mount);
-  appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Models', sectionId: 'model-routing' }]);
+  appendSettingsCrosslinks(mount, [{ label: 'Per-role overrides in Routing', sectionId: 'model-routing' }]);
 }

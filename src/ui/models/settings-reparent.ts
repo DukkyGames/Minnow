@@ -3,6 +3,7 @@
  */
 
 import { refreshSettingsSection } from '../settings-sections';
+import { categoryForArea } from '../settings-page-types';
 import type { SettingsSectionId } from '../settings-page-types';
 import type { ModelsSectionId } from '../models-page';
 
@@ -32,10 +33,14 @@ export async function reparentSettingsSectionIntoModels(
 
 /** Restore reparented settings sections when Models app closes (optional cleanup). */
 export function restoreReparentedSettingsSections(): void {
-  const settingsContent = document.querySelector(SETTINGS_CONTENT_SELECTOR);
-  if (!settingsContent) return;
   for (const [, el] of reparented) {
-    settingsContent.appendChild(el);
+    const area = el.dataset.area as SettingsSectionId | undefined;
+    const categoryPanel = area
+      ? document.querySelector(
+          `.settings-category[data-category="${categoryForArea(area)}"]`,
+        )
+      : document.querySelector(SETTINGS_CONTENT_SELECTOR);
+    (categoryPanel ?? document.querySelector(SETTINGS_CONTENT_SELECTOR))?.appendChild(el);
     el.classList.remove('is-active');
   }
   reparented.clear();

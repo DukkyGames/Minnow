@@ -56,7 +56,9 @@ function scoreEntry(query: string, entry: SettingsSearchEntry): number {
 export function rankSettingsSearch(
   query: string,
   entries: SettingsSearchEntry[],
+  options?: { maxResults?: number },
 ): SettingsSearchEntry[] {
+  const maxResults = options?.maxResults ?? MAX_RESULTS;
   const trimmed = normalizeQuery(query);
   if (!trimmed) return [];
 
@@ -71,5 +73,5 @@ export function rankSettingsSearch(
       return a.entry.label.localeCompare(b.entry.label);
     })
     .map((row) => row.entry)
-    .slice(0, MAX_RESULTS);
+    .slice(0, maxResults);
 }

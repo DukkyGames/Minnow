@@ -51,14 +51,6 @@ const FALLBACK_OPTIONS: { value: SearchFallbackProvider; label: string }[] = [
 export async function renderSearchSettingsSection(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();
 
-  mount.appendChild(
-    el(
-      'p',
-      'settings-section-note',
-      'Primary web search provider and API keys for web_search and Deep Research. Stored in ~/.minnow/search.json when npm start is running.',
-    ),
-  );
-
   const providerGroup = appendSettingsGroup(
     mount,
     'Provider',
@@ -152,18 +144,21 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   const chainGroup = appendSettingsGroup(
     mount,
     'Research fallback chain',
-    'Order used when Deep Research tries providers after the primary (Phase 1+). Toggle providers to include in the chain.',
+    'If the primary search provider fails, Deep Research tries these providers in order. Check each provider to include it.',
   );
-  const chainList = el('div', 'settings-search-fallback-list');
+  const chainList = el('div', 'settings-checklist');
+  chainList.setAttribute('role', 'group');
+  chainList.setAttribute('aria-label', 'Research fallback providers');
+  chainList.dataset.settingsSearchKey = 'integrations.search.fallback';
   const chainCheckboxes = new Map<SearchFallbackProvider, HTMLInputElement>();
   for (const opt of FALLBACK_OPTIONS) {
-    const row = el('label', 'settings-inline-checkbox');
+    const row = el('label', 'settings-checklist__option');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.value = opt.value;
     cb.dataset.fallbackProvider = opt.value;
     chainCheckboxes.set(opt.value, cb);
-    row.append(cb, document.createTextNode(` ${opt.label}`));
+    row.append(cb, el('span', 'settings-checklist__label-text', opt.label));
     chainList.appendChild(row);
   }
   chainGroup.appendChild(chainList);
@@ -185,9 +180,13 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   countField.append(countLabel, countInput);
   limitsGroup.appendChild(countField);
 
-  const saveBtn = el('button', 'settings-action-btn', 'Save search settings');
+  const saveBtn = el('button', 'settings-action-btn settings-action-btn--primary', 'Save search settings');
   saveBtn.type = 'button';
-  mount.appendChild(saveBtn);
+  const footer = el('div', 'settings-section-footer');
+  const actions = el('div', 'settings-actions');
+  actions.appendChild(saveBtn);
+  footer.appendChild(actions);
+  mount.appendChild(footer);
 
   let current: SearchConfig = { ...DEFAULT_SEARCH_CONFIG };
   /** search.json URL (unchanged when managed SearXNG overrides display). */

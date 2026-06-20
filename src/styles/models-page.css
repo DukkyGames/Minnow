@@ -45,8 +45,23 @@
   border-right: 1px solid var(--mn-border);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
   overflow-y: auto;
+}
+
+.models-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.models-nav__group-label {
+  padding: 0 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
 }
 
 .models-nav button {
@@ -99,6 +114,20 @@
 
 .models-error {
   color: var(--mn-danger, #ef4444);
+}
+
+.models-library-zone {
+  margin-bottom: 8px;
+}
+
+.models-library-zone--split {
+  padding-top: 20px;
+  margin-top: 4px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.models-library-zone .models-section-subtitle {
+  margin-top: 0;
 }
 
 .models-section-subtitle {
