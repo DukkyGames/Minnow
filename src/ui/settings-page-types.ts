@@ -63,7 +63,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   audio: 'Audio',
   providers: 'Providers',
   usage: 'Usage & cost',
-  'model-routing': 'Models',
+  'model-routing': 'Routing',
   sampler: 'Sampler',
   thinking: 'Thinking',
   prompting: 'Prompts',
@@ -135,3 +135,40 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
 /** Flat nav order for hash routing and panel wiring. */
 export const SETTINGS_SECTIONS: SettingsSectionId[] =
   SETTINGS_NAV_GROUPS.flatMap((group) => group.sections);
+
+/** Integrations hub groupings (4 subnav tabs instead of 10 area tabs). */
+export const SETTINGS_INTEGRATIONS_HUBS = [
+  {
+    id: 'web-research',
+    label: 'Web & research',
+    areas: ['search', 'deep-research', 'servers'],
+  },
+  {
+    id: 'tools-skills',
+    label: 'Tools & skills',
+    areas: ['tools', 'skills'],
+  },
+  {
+    id: 'dev-stack',
+    label: 'Dev stack',
+    areas: ['mcp', 'lsp', 'editor'],
+  },
+  {
+    id: 'external',
+    label: 'External',
+    areas: ['webhooks', 'oauth'],
+  },
+] as const;
+
+export type SettingsIntegrationsHubId =
+  (typeof SETTINGS_INTEGRATIONS_HUBS)[number]['id'];
+
+/** Map a legacy integration area slug to its hub id. */
+export function hubForArea(area: SettingsSectionId): SettingsIntegrationsHubId | undefined {
+  for (const hub of SETTINGS_INTEGRATIONS_HUBS) {
+    if ((hub.areas as readonly SettingsSectionId[]).includes(area)) {
+      return hub.id;
+    }
+  }
+  return undefined;
+}

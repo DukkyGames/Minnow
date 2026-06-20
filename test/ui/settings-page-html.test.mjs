@@ -175,4 +175,32 @@ describe('settings page HTML', () => {
     assert.match(html, /id="composerToolsOpenSettings"/);
     assert.match(html, /class="tools-list tools-list--composer"/);
   });
+
+  test('integrations category uses four hub containers', () => {
+    assert.match(html, /id="settingsHub-web-research"/);
+    assert.match(html, /id="settingsHub-tools-skills"/);
+    assert.match(html, /id="settingsHub-dev-stack"/);
+    assert.match(html, /id="settingsHub-external"/);
+    assert.match(html, /data-hub-jump="web-research"/);
+    assert.doesNotMatch(html, /data-area-jump="mcp"/);
+  });
+
+  test('general section suppresses duplicate section title', () => {
+    assert.match(
+      html,
+      /id="settingsSection-general"[^>]*settings-area--title-suppressed/,
+    );
+  });
+
+  test('settings nav markup avoids aria-current=false', () => {
+    const settingsBlock = html.slice(
+      html.indexOf('id="settingsView"'),
+      html.indexOf('id="welcomeView"'),
+    );
+    assert.doesNotMatch(settingsBlock, /aria-current="false"/);
+  });
+
+  test('prompt token estimate has accessible label', () => {
+    assert.match(html, /id="settingsPromptTokenEstimate"[^>]*aria-label="Approximate prompt token estimate"/);
+  });
 });

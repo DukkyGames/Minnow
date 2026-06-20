@@ -5,8 +5,8 @@
 import {
   categoryForArea,
   SETTINGS_CATEGORY_AREAS,
-  SETTINGS_CATEGORY_DESCRIPTIONS,
-  SETTINGS_CATEGORY_LABELS,
+  SETTINGS_INTEGRATIONS_HUBS,
+  hubForArea,
   type SettingsCategoryId,
   type SettingsSectionId,
 } from './settings-page-types';
@@ -39,17 +39,11 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
       );
     });
     document.querySelectorAll('[data-settings-category]').forEach((btn) => {
-      btn.setAttribute(
-        'aria-current',
-        (btn as HTMLElement).dataset.settingsCategory === category
-          ? 'page'
-          : 'false',
-      );
+      const isActive =
+        (btn as HTMLElement).dataset.settingsCategory === category;
+      if (isActive) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
-    const titleEl = document.getElementById('settingsContentTitle');
-    const leadEl = document.getElementById('settingsContentLead');
-    if (titleEl) titleEl.textContent = SETTINGS_CATEGORY_LABELS[category];
-    if (leadEl) leadEl.textContent = SETTINGS_CATEGORY_DESCRIPTIONS[category];
   }
 
   const sectionRoot = getSectionRoot(sectionId);
@@ -61,9 +55,60 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
   });
 }
 
+/** Scroll to an integrations hub container and sync hub subnav. */
+export function scrollToSettingsHub(hubId: string): void {
+  const hubDef = SETTINGS_INTEGRATIONS_HUBS.find((hub) => hub.id === hubId);
+  const firstArea = hubDef?.areas[0];
+  if (firstArea) ensureSettingsAreaVisible(firstArea);
+  const hub = document.getElementById(`settingsHub-${hubId}`);
+  hub?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  updateSettingsSubnavActive(undefined, hubId);
+}
+
+/** Highlight the subnav tab (or integrations hub) that matches the target area. */
+export function updateSettingsSubnavActive(
+  area?: SettingsSectionId,
+  hubId?: string,
+): void {
+  const activePanel = document.querySelector('.settings-category.is-active');
+  if (!activePanel) return;
+
+  const category = activePanel.getAttribute('data-category') as SettingsCategoryId;
+
+  if (category === 'integrations') {
+    const targetHub =
+      hubId ??
+      (area ? hubForArea(area) : undefined) ??
+      SETTINGS_INTEGRATIONS_HUBS[0]?.id;
+    const links = activePanel.querySelectorAll<HTMLAnchorElement>(
+      '.settings-category-subnav__link[data-hub-jump]',
+    );
+    links.forEach((link) => {
+      const isActive = link.dataset.hubJump === targetHub;
+      link.classList.toggle('is-active', isActive);
+      if (isActive) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    return;
+  }
+
+  const links = activePanel.querySelectorAll<HTMLAnchorElement>(
+    '.settings-category-subnav__link[data-area-jump]',
+  );
+  if (links.length === 0) return;
+  const target = area ?? links[0]?.dataset.areaJump;
+  links.forEach((link) => {
+    const isActive = link.dataset.areaJump === target;
+    link.classList.toggle('is-active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+}
+
 /** Scroll to an area anchor within the stacked category panel. */
 export function scrollToSettingsArea(sectionId: SettingsSectionId): void {
   ensureSettingsAreaVisible(sectionId);
+  updateSettingsSubnavActive(sectionId);
   const root = getSectionRoot(sectionId);
   root?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }

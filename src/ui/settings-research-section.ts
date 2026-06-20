@@ -68,7 +68,7 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     el(
       'p',
       'settings-section-note',
-      'Engine parameters for the Deep Research panel (IterResearch port). Stored in ~/.minnow/research.json. Empty model uses the active chat model.',
+      'Limits and model for the Deep Research app. Saved to ~/.minnow/research.json. Leave model empty to use the active chat model.',
     ),
   );
 

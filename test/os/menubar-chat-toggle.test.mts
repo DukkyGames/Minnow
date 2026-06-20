@@ -7,7 +7,6 @@ import { describe, test } from 'node:test';
 import {
   chatToggleAriaLabel,
   isChatToggleVisible,
-  isMenubarCenterVisible,
 } from '../../src/os/menubar-visibility.ts';
 
 describe('menubar chat toggle visibility', () => {
@@ -16,12 +15,6 @@ describe('menubar chat toggle visibility', () => {
     assert.equal(isChatToggleVisible('research'), false);
     assert.equal(isChatToggleVisible('code'), true);
     assert.equal(isChatToggleVisible('chat'), true);
-  });
-
-  test('center slot visible only for settings search', () => {
-    assert.equal(isMenubarCenterVisible('chat'), false);
-    assert.equal(isMenubarCenterVisible('code'), false);
-    assert.equal(isMenubarCenterVisible('settings'), true);
   });
 
   test('aria labels distinguish code sidebar vs chat session rail', () => {

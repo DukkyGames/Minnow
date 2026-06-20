@@ -45,9 +45,9 @@ import { setStatus } from './status';
 const GROUP_LABELS: Record<ModelRoutingGroup, string> = {
   'main-chat': 'Main chat',
   'work-agents': 'Work agents',
-  'sub-agents': 'Sub-agent types',
+  'sub-agents': 'Sub-agents',
   background: 'Background jobs',
-  reef: 'Reef (active chat)',
+  reef: 'Reef widgets',
 };
 
 const GROUP_ORDER: ModelRoutingGroup[] = [
@@ -313,6 +313,7 @@ function appendRoutingRow(
   const { row } = controls;
   const tr = el('tr', 'settings-routing-row');
   tr.dataset.routingId = row.id;
+  tr.dataset.settingsSearchKey = `models.routing.${row.id}`;
 
   const labelCell = el('td', 'settings-routing-row__label');
   const title = el('div', 'settings-routing-row__title', row.label);
@@ -339,7 +340,7 @@ function appendRoutingRow(
   const extras = el('div', 'settings-routing-row__extras');
   if (row.persistKind === 'ui-designer') {
     const { row: fallbackRow, input: fallbackInput } = createSettingsToggleRow(
-      'Fallback to chat model when unset',
+      'Use chat model when unset',
       { checked: row.fallbackToChatModel !== false },
     );
     fallbackRow.classList.add('settings-toggle-row--compact');
@@ -370,7 +371,7 @@ function appendRoutingRow(
     advanced.className = 'settings-routing-advanced';
     const summary = document.createElement('summary');
     summary.className = 'settings-routing-advanced__summary';
-    summary.textContent = 'Advanced (sampler · thinking)';
+    summary.textContent = 'Sampler and thinking';
     advanced.appendChild(summary);
 
     const panel = el('div', 'settings-routing-advanced__body');
@@ -437,7 +438,7 @@ function appendRowFallbackEditor(
     el(
       'p',
       'settings-routing-fallback__hint',
-      'When fallback chains are enabled, Minnow tries the next provider/model only before the first token arrives. Leave model blank to reuse the request model.',
+      'When fallback is on, Minnow tries the next provider/model only before the first token. Leave model blank to keep the request model.',
     ),
   );
 
@@ -470,17 +471,18 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   globalFallbackEditor = null;
 
   const section = el('section', 'settings-routing-group settings-fallback-global');
-  section.appendChild(el('h3', 'settings-routing-group__title', 'Model fallback'));
+  section.dataset.settingsSearchKey = 'models.routing.fallback';
+  section.appendChild(el('h3', 'settings-routing-group__title', 'Fallback'));
   section.appendChild(
     el(
       'p',
       'settings-routing-group__lead',
-      'Global switch, dead-host cooldown, and last-resort fallback chain. Per-role chains below run first; global candidates are tried when a role has no fallbacks or its hosts fail.',
+      'Try alternate models when a host fails. Role chains run first; the global chain is the last resort.',
     ),
   );
 
   const { row: enabledRow, input: enabledInput } = createSettingsToggleRow(
-    'Enable model fallback chains',
+    'Enable fallback chains',
     { checked: config.enabled },
   );
   enabledRow.classList.add('settings-toggle-row--compact');
@@ -488,7 +490,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   section.appendChild(enabledRow);
 
   const cooldownRow = el('div', 'settings-field-row');
-  cooldownRow.appendChild(el('label', 'settings-field-label', 'Dead-host cooldown (seconds)'));
+  cooldownRow.appendChild(el('label', 'settings-field-label', 'Cooldown after failure (seconds)'));
   const cooldownInput = el('input', 'settings-input settings-input--narrow') as HTMLInputElement;
   cooldownInput.type = 'number';
   cooldownInput.min = '10';
@@ -507,7 +509,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
     el(
       'p',
       'settings-fallback-global-chain__hint',
-      'Last resort for every role after its own chain is exhausted or unset. Leave model blank to reuse the request model.',
+      'Used when a role has no chain or every candidate failed. Leave model blank to keep the request model.',
     ),
   );
   const globalList = el('div', 'settings-routing-fallback__list');
@@ -535,7 +537,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
   const saveBtn = el(
     'button',
     'settings-action-btn settings-action-btn--primary',
-    'Save global fallback settings',
+    'Save fallback settings',
   );
   saveBtn.type = 'button';
   saveBtn.addEventListener('click', () => {
@@ -554,7 +556,7 @@ async function renderGlobalFallbackBar(mount: HTMLElement): Promise<void> {
         cooldownSeconds: Number(globalFallbackCooldownInput?.value ?? config.cooldownSeconds),
         roles: rolesPatch,
       });
-      setStatus('ok', 'Global fallback settings saved');
+      setStatus('ok', 'Fallback settings saved');
       void refreshHostHealthPanel(healthHost);
     })();
   });
@@ -607,11 +609,11 @@ function renderFallbackCandidateRows(editor: FallbackRowEditor): void {
 
 async function refreshHostHealthPanel(host: HTMLElement): Promise<void> {
   host.replaceChildren();
-  host.appendChild(el('h4', 'settings-fallback-health__title', 'Dead hosts (diagnostics)'));
+  host.appendChild(el('h4', 'settings-fallback-health__title', 'Hosts in cooldown'));
   try {
     const res = await fetch('/api/system/host-health', { cache: 'no-store' });
     if (!res.ok) {
-      host.appendChild(el('p', 'settings-fallback-health__empty', 'Host health unavailable.'));
+      host.appendChild(el('p', 'settings-fallback-health__empty', 'Cooldown list unavailable.'));
       return;
     }
     const payload = (await res.json()) as { hosts?: { origin: string; expiresAt: string }[] };
@@ -644,7 +646,7 @@ function renderGroup(
       el(
         'p',
         'settings-routing-group__lead',
-        'Matches the top-bar model picker for the active chat. Sampler fields set global defaults used on send.',
+        'Matches the top-bar picker for the active chat. Sampler fields here also update global defaults on save.',
       ),
     );
   }
@@ -654,7 +656,7 @@ function renderGroup(
       el(
         'p',
         'settings-routing-group__lead',
-        'Reef widget LLM is stored per chat. Values below apply to the sidebar active chat only.',
+        'Widget model for Reef mode in the active sidebar chat.',
       ),
     );
   }
@@ -731,6 +733,7 @@ export function syncModelRoutingReefFromActiveChat(): void {
 export async function renderModelRoutingSection(mount: HTMLElement): Promise<void> {
   mountedRows = [];
   mount.replaceChildren();
+  mount.dataset.settingsSearchKey = 'models.routing';
 
   const storageMode = await detectConfigServer();
   refreshConfigStorageBanner();
@@ -740,7 +743,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
       el(
         'p',
         'settings-server-banner',
-        'Model routing saves require npm start (config server). Values below are read-only until the server is up.',
+        'Model routing needs npm start. Values below are read-only until the server is running.',
       ),
     );
   }
@@ -762,7 +765,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
         el(
           'p',
           'settings-server-banner',
-          'Start with npm start to load bindings from ~/.minnow.',
+          'Run npm start to load bindings from ~/.minnow.',
         ),
       );
       return;
@@ -781,7 +784,7 @@ export async function renderModelRoutingSection(mount: HTMLElement): Promise<voi
       el(
         'p',
         'settings-server-banner',
-        'Could not load model bindings yet. Switch to another Models tab and back, or refresh the page.',
+        'Could not load bindings. Switch tabs and back, or refresh the page.',
       ),
     );
   }

@@ -37,15 +37,15 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
   advanced: 'Advanced',
 };
 
-/** Short lead copy for the settings content header per category. */
+/** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
-  general: 'Chat behavior, audio devices, and where settings are stored.',
-  appearance: 'Theme families, wallpapers, fonts, and custom colors.',
-  models: 'Providers, routing, sampler defaults, thinking, and usage.',
-  agents: 'Modes, experts, work agents, packs, and sub-agent policies.',
-  knowledge: 'Prompt profiles, user rules, and long-term memory.',
-  integrations: 'Search, servers, tools, MCP, LSP, editor, and webhooks.',
-  advanced: 'Orchestration supervisor tuning and local eval harness.',
+  general: 'Notifications, terminal behavior, audio devices, and where settings are saved.',
+  appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
+  models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
+  agents: 'Composer modes, personas, workers, and tool policies.',
+  knowledge: 'System prompts, standing rules, and persistent memory.',
+  integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
+  advanced: 'Orchestrate supervisor tuning and local eval runs.',
 };
 
 /** Category → ordered areas (render units). */
@@ -105,8 +105,14 @@ export function fieldByKey(key: string): SettingsFieldEntry | undefined {
 }
 
 /** Categories that show a sticky in-panel area sub-nav. */
-export const SETTINGS_CATEGORY_SUBNAV: ReadonlySet<SettingsCategoryId> =
-  new Set(['models', 'integrations']);
+export const SETTINGS_CATEGORY_SUBNAV: ReadonlySet<SettingsCategoryId> = new Set([
+  'general',
+  'models',
+  'agents',
+  'knowledge',
+  'integrations',
+  'advanced',
+]);
 
 function field(
   key: string,
@@ -123,7 +129,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   // —— General ——
   field('general.notifications', 'Notifications', 'general', 'general', {
     keywords: ['bell', 'alert', 'sound', 'menubar'],
-    description: 'Menubar bell alerts for background chats, tasks, and jobs.',
+    description: 'Menubar bell when background chats, tasks, or jobs need attention.',
   }),
   field('general.notifications.enabled', 'Enable notifications', 'general', 'general', {
     keywords: ['master toggle', 'bell'],
@@ -141,6 +147,7 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('general.toolCalls.constrained', 'Constrained tool calls', 'general', 'general', {
     keywords: ['json schema', 'structured output'],
+    description: 'Validate tool arguments with JSON Schema when the provider supports structured output.',
   }),
   field('general.generation.timeout', 'Generation timeout', 'general', 'general'),
   field('general.generation.maxTurns', 'Max tool turns', 'general', 'general'),
@@ -239,11 +246,12 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('knowledge.memory.synthesis', 'Auto-learning cadence', 'knowledge', 'memory', {
     keywords: ['synthesis', 'proposals', 'skill learning'],
+    description: 'How often Minnow proposes new memories and skills after chat turns.',
   }),
 
   // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {
-    keywords: ['brave', 'tavily', 'duckduckgo', 'searxng'],
+    keywords: ['brave', 'tavily', 'duckduckgo', 'searxng', 'web research'],
   }),
   field('integrations.search.provider', 'Search provider', 'integrations', 'search'),
   field('integrations.search.apiKeys', 'Search API keys', 'integrations', 'search'),
@@ -258,13 +266,13 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
   }),
   field('integrations.tools.cache', 'Tool result cache', 'integrations', 'tools'),
   field('integrations.mcp', 'MCP servers', 'integrations', 'mcp', {
-    keywords: ['model context protocol'],
+    keywords: ['model context protocol', 'dev stack'],
   }),
   field('integrations.lsp', 'Language servers', 'integrations', 'lsp', {
-    keywords: ['diagnostics', 'typescript'],
+    keywords: ['diagnostics', 'typescript', 'dev stack'],
   }),
   field('integrations.editor', 'Editor copilot', 'integrations', 'editor', {
-    keywords: ['ghost text', 'inline completion'],
+    keywords: ['ghost text', 'inline completion', 'dev stack'],
   }),
   field('integrations.skills', 'Skills', 'integrations', 'skills', {
     keywords: ['slash command', 'skill pack'],

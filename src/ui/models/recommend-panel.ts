@@ -1,5 +1,5 @@
 /**
- * Models → What fits — hardware card, cached scan, ranked catalog, download/serve.
+ * Models → Recommendations — hardware card, cached scan, ranked catalog, download/serve.
  */
 
 import { selectProviderModel } from '../../api/models';

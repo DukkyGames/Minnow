@@ -22,8 +22,6 @@ import type { PromptProfile } from '../chat/prompts/types';
 import {
   SETTINGS_CATEGORY_AREAS,
   SETTINGS_CATEGORIES,
-  SETTINGS_CATEGORY_DESCRIPTIONS,
-  SETTINGS_CATEGORY_LABELS,
   categoryForArea,
   type SettingsCategoryId,
   type SettingsSectionId,
@@ -34,14 +32,12 @@ import {
   flashSettingsSearchTarget,
   resolveSettingsSearchDomTarget,
   scrollToSettingsArea,
+  scrollToSettingsHub,
+  updateSettingsSubnavActive,
 } from './settings-search-navigate';
 import { upgradeSettingsCheckboxes } from './settings-switch';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
-import {
-  mountSettingsSearchToMenubar,
-  unmountSettingsSearchFromMenubar,
-} from '../os/settings-search-menubar';
 import { fieldByKey } from './settings-catalog';
 import { navigateToDesktop } from '../os/router';
 
@@ -101,33 +97,9 @@ async function refreshCategoryAreas(category: SettingsCategoryId): Promise<void>
   await Promise.all(areas.map((area) => refreshSettingsSection(area)));
 }
 
-/** Sync the large content header with the active sidebar category. */
-function updateSettingsContentHeader(category: SettingsCategoryId): void {
-  const titleEl = document.getElementById('settingsContentTitle');
-  const leadEl = document.getElementById('settingsContentLead');
-  if (titleEl) {
-    titleEl.textContent = SETTINGS_CATEGORY_LABELS[category];
-  }
-  if (leadEl) {
-    leadEl.textContent = SETTINGS_CATEGORY_DESCRIPTIONS[category];
-  }
-}
-
 /** Highlight the subnav tab that matches a section slug (when present). */
-function updateSettingsSubnavActive(area?: SettingsSectionId): void {
-  const activePanel = document.querySelector('.settings-category.is-active');
-  if (!activePanel) return;
-  const links = activePanel.querySelectorAll<HTMLAnchorElement>(
-    '.settings-category-subnav__link',
-  );
-  if (links.length === 0) return;
-  const target = area ?? links[0]?.dataset.areaJump;
-  links.forEach((link) => {
-    const isActive = link.dataset.areaJump === target;
-    link.classList.toggle('is-active', isActive);
-    if (isActive) link.setAttribute('aria-current', 'true');
-    else link.removeAttribute('aria-current');
-  });
+function syncSettingsSubnavActive(area?: SettingsSectionId): void {
+  updateSettingsSubnavActive(area);
 }
 
 function setActiveCategory(
@@ -135,7 +107,6 @@ function setActiveCategory(
   options?: { scrollArea?: SettingsSectionId; searchKey?: string },
 ): void {
   activeCategory = category;
-  updateSettingsContentHeader(category);
 
   for (const cat of CATEGORIES) {
     const panel = document.querySelector(
@@ -146,7 +117,8 @@ function setActiveCategory(
     ) as HTMLButtonElement | null;
     panel?.classList.toggle('is-active', cat === category);
     if (nav) {
-      nav.setAttribute('aria-current', cat === category ? 'page' : 'false');
+      if (cat === category) nav.setAttribute('aria-current', 'page');
+      else nav.removeAttribute('aria-current');
     }
   }
 
@@ -297,9 +269,17 @@ function bindStaticSections(): void {
         | SettingsSectionId
         | undefined;
       if (area) {
-        updateSettingsSubnavActive(area);
+        syncSettingsSubnavActive(area);
         scrollToSettingsArea(area);
       }
+    });
+  });
+
+  document.querySelectorAll('[data-hub-jump]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const hub = (link as HTMLElement).dataset.hubJump;
+      if (hub) scrollToSettingsHub(hub);
     });
   });
 }
@@ -344,7 +324,6 @@ export function openSettings(
   const wasAlreadyOpen = root.classList.contains('is-open');
 
   root.classList.add('is-open');
-  mountSettingsSearchToMenubar();
   if (!isOsEmbedded()) {
     shell.classList.add('hidden');
     document.querySelector('header.topbar')?.classList.add('hidden');
@@ -384,7 +363,6 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const shell = getChatShell();
   if (!root || !shell) return;
   root.classList.remove('is-open');
-  unmountSettingsSearchFromMenubar();
   clearSettingsPageFilter();
   if (!isOsEmbedded()) {
     shell.classList.remove('hidden');

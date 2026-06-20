@@ -876,6 +876,10 @@ export async function renderProvidersSettingsSection(): Promise<void> {
   const addPanel = document.getElementById('settingsProvidersAddPanel');
   if (!listEl) return;
 
+  listEl.dataset.settingsSearchKey = 'models.providers';
+  const addForm = document.getElementById('settingsProvidersAddForm');
+  if (addForm) addForm.dataset.settingsSearchKey = 'models.providers.add';
+
   bindProvidersAddForm();
   bindProvidersListActions(listEl);
   listEl.replaceChildren();
@@ -889,7 +893,7 @@ export async function renderProvidersSettingsSection(): Promise<void> {
       el(
         'p',
         'settings-section-note',
-        'Start with npm start to register OpenAI-compatible and LM Studio backends.',
+        'Run npm start to add OpenAI-compatible and LM Studio backends.',
       ),
     );
     return;
@@ -905,7 +909,7 @@ export async function renderProvidersSettingsSection(): Promise<void> {
   const canRemove = providers.length > 1;
 
   if (providers.length === 0) {
-    listEl.appendChild(el('p', 'settings-section-note', 'No providers in ~/.minnow/providers/.'));
+    listEl.appendChild(el('p', 'settings-section-note', 'No providers yet. Add one below.'));
     return;
   }
 

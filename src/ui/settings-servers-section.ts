@@ -50,27 +50,45 @@ const PHASE_LABELS: Record<ServerRuntimePhase, string> = {
   error: 'Error',
 };
 
-/** Human-readable status for the server row dot line. */
+/** Compact status pill label + optional mono endpoint for managed server rows. */
 function describeServerStatus(server: ManagedServerSummary): {
   ok: boolean;
-  text: string;
+  pill: string;
+  endpoint: string | null;
 } {
   if (server.job?.phase === 'installing') {
     return {
       ok: false,
-      text: server.job.message || `Installing (${server.job.percent}%)`,
+      pill: 'Installing',
+      endpoint: server.job.message || `${server.job.percent}%`,
     };
   }
   if (server.running) {
-    return { ok: true, text: `Running on http://127.0.0.1:${server.port}` };
+    return {
+      ok: true,
+      pill: 'Running',
+      endpoint: `http://127.0.0.1:${server.port}`,
+    };
   }
   if (server.installed) {
     return {
       ok: false,
-      text: PHASE_LABELS[server.phase] ?? server.phase,
+      pill: PHASE_LABELS[server.phase] ?? server.phase,
+      endpoint: null,
     };
   }
-  return { ok: false, text: PHASE_LABELS.pending };
+  return { ok: false, pill: PHASE_LABELS.pending, endpoint: null };
+}
+
+/** Status pill matching LSP row instrumentation (semantic green only when running). */
+function createServerStatusPill(label: string, ok: boolean): HTMLElement {
+  const pill = el(
+    'span',
+    `settings-lsp-pill ${ok ? 'settings-lsp-pill--running' : 'settings-lsp-pill--off'}`,
+    label,
+  );
+  pill.setAttribute('aria-label', label);
+  return pill;
 }
 
 /** Poll install job until done, error, or timeout. */
@@ -101,49 +119,63 @@ function createLlamaCppServerRow(
   row.dataset.serverId = server.id;
 
   const head = el('div', 'settings-mcp-row-head');
-  head.append(el('span', 'settings-mcp-name', server.label));
-  head.append(el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Runtime'));
+  const identity = el('div', 'settings-mcp-row-identity');
+  identity.append(el('span', 'settings-mcp-name', server.label));
+  if (server.description) {
+    const desc = el('span', 'settings-mcp-row-desc');
+    desc.textContent = server.description;
+    desc.title = server.description;
+    identity.append(desc);
+  }
+  const headMeta = el('div', 'settings-mcp-row-head-meta');
+  const installPill = createServerStatusPill(
+    server.installed ? 'Installed' : 'Not installed',
+    server.installed,
+  );
+  installPill.dataset.llamaInstallPill = server.id;
+  headMeta.append(
+    installPill,
+    el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Runtime'),
+  );
+  head.append(identity, headMeta);
   row.append(head);
 
-  const detail = el('div', 'settings-mcp-detail');
-  if (server.description) {
-    detail.append(el('p', 'settings-mcp-desc', server.description));
-  }
-
+  const body = el('div', 'settings-mcp-row-body');
   const runtimeInfo = el('p', 'settings-mcp-hint', 'Loading runtime…');
   runtimeInfo.dataset.llamaRuntimeInfo = server.id;
-  detail.append(runtimeInfo);
+  body.append(runtimeInfo);
 
-  const variantField = el('div', 'settings-field');
-  variantField.append(el('label', 'settings-field-label', 'Variant'));
-  const variantSelect = el('select', 'settings-input') as HTMLSelectElement;
+  const toolbar = el('div', 'settings-server-toolbar');
+  const variantLabel = el('span', 'settings-server-toolbar__label', 'Variant');
+  const variantSelect = el('select', 'settings-select settings-server-variant-select') as HTMLSelectElement;
   variantSelect.dataset.llamaVariant = server.id;
-  variantField.appendChild(variantSelect);
-  detail.append(variantField);
-
-  const actions = el('div', 'settings-server-actions');
   const installBtn = el('button', 'settings-action-btn', server.installed ? 'Reinstall' : 'Install');
   installBtn.type = 'button';
   installBtn.dataset.llamaInstall = server.id;
-  actions.append(installBtn);
-  detail.append(actions);
+  toolbar.append(variantLabel, variantSelect, installBtn);
+  body.append(toolbar);
 
   const servesPanel = el('details', 'settings-server-logs');
-  servesPanel.open = true;
   const servesSummary = el('summary', undefined, 'Active model serves');
   const servesList = el('div', 'settings-llama-serves-list');
   servesList.dataset.llamaServesList = server.id;
   servesPanel.append(servesSummary, servesList);
-  detail.append(servesPanel);
+  body.append(servesPanel);
 
-  row.append(detail);
+  row.append(body);
 
   const refreshRuntime = async (): Promise<void> => {
     try {
       const runtime = await fetchLlamaRuntime();
+      const installed = Boolean(runtime.path);
+      installPill.textContent = installed ? 'Installed' : 'Not installed';
+      installPill.classList.toggle('settings-lsp-pill--running', installed);
+      installPill.classList.toggle('settings-lsp-pill--off', !installed);
+      installBtn.textContent = installed ? 'Reinstall' : 'Install';
+
       runtimeInfo.textContent = runtime.path
         ? `${runtime.variant ?? 'cpu'} · ${runtime.version} · ${runtime.path}`
-        : `Not installed — recommended: ${runtime.preferredVariant}`;
+        : `Recommended variant: ${runtime.preferredVariant}`;
 
       variantSelect.replaceChildren();
       for (const v of runtime.installableVariants) {
@@ -230,45 +262,47 @@ function createServerRow(
     ariaLabel: `${server.enabled ? 'Disable' : 'Enable'} ${server.label}`,
   });
   enableInput.dataset.serverEnable = server.id;
-  const title = el('span', 'settings-mcp-name', server.label);
-  toggleWrap.append(enableSwitch, title);
-  head.append(toggleWrap);
-
-  const badge = el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Managed');
-  head.append(badge);
-  row.append(head);
-
-  const detail = el('div', 'settings-mcp-detail');
+  const identity = el('div', 'settings-mcp-row-identity');
+  identity.append(el('span', 'settings-mcp-name', server.label));
   if (server.description) {
-    detail.append(el('p', 'settings-mcp-desc', server.description));
+    const desc = el('span', 'settings-mcp-row-desc');
+    desc.textContent = server.description;
+    desc.title = server.description;
+    identity.append(desc);
   }
+  toggleWrap.append(enableSwitch);
+  head.append(toggleWrap, identity);
 
   const statusInfo = describeServerStatus(server);
-  const status = el(
-    'span',
-    `settings-mcp-status ${statusInfo.ok ? 'settings-mcp-status--ok' : 'settings-mcp-status--idle'}`,
+  const headMeta = el('div', 'settings-mcp-row-head-meta');
+  headMeta.append(
+    createServerStatusPill(statusInfo.pill, statusInfo.ok),
+    el('span', 'settings-mcp-badge settings-mcp-badge--builtin', 'Managed'),
   );
-  status.append(
-    el('span', 'settings-mcp-status-dot'),
-    el('span', 'settings-mcp-status-text', statusInfo.text),
-  );
-  detail.append(status);
+  head.append(headMeta);
+  row.append(head);
+
+  const body = el('div', 'settings-mcp-row-body');
+  if (statusInfo.endpoint) {
+    const endpoint = el('p', 'settings-mcp-hint settings-server-endpoint');
+    endpoint.textContent = statusInfo.endpoint;
+    body.append(endpoint);
+  }
 
   const installProgress = el('p', 'settings-mcp-hint settings-server-install-progress hidden');
   installProgress.dataset.serverInstallProgress = server.id;
-  detail.append(installProgress);
+  body.append(installProgress);
 
-  const controls = el('div', 'settings-server-controls');
-
-  const autoRow = el('label', 'settings-inline-checkbox');
+  const toolbar = el('div', 'settings-server-toolbar');
+  const autoRow = el('label', 'settings-inline-checkbox settings-server-auto-start');
   const autoCb = document.createElement('input');
   autoCb.type = 'checkbox';
   autoCb.checked = server.autoStart;
   autoCb.dataset.serverAutoStart = server.id;
-  autoRow.append(autoCb, document.createTextNode(' Auto-start on npm start'));
-  controls.append(autoRow);
+  autoRow.append(autoCb, document.createTextNode('Auto-start on npm start'));
+  toolbar.append(autoRow);
 
-  const portField = el('div', 'settings-field settings-server-port-field');
+  const portInline = el('div', 'settings-server-port-inline');
   const portLabel = el('label', 'settings-field-label', 'Port');
   portLabel.htmlFor = `settingsServerPort-${server.id}`;
   const portInput = document.createElement('input');
@@ -279,11 +313,11 @@ function createServerRow(
   portInput.max = '65535';
   portInput.value = String(server.port);
   portInput.dataset.serverPort = server.id;
-  const portApply = el('button', 'settings-inline-btn', 'Apply port');
+  const portApply = el('button', 'settings-inline-btn', 'Apply');
   portApply.type = 'button';
   portApply.dataset.serverPortApply = server.id;
-  portField.append(portLabel, portInput, portApply);
-  controls.append(portField);
+  portInline.append(portLabel, portInput, portApply);
+  toolbar.append(portInline);
 
   const actions = el('div', 'settings-server-actions');
   if (!server.installed) {
@@ -312,8 +346,8 @@ function createServerRow(
     uninstallBtn.dataset.serverUninstall = server.id;
     actions.append(uninstallBtn);
   }
-  controls.append(actions);
-  detail.append(controls);
+  toolbar.append(actions);
+  body.append(toolbar);
 
   const logsPanel = document.createElement('details');
   logsPanel.className = 'settings-server-logs';
@@ -327,9 +361,9 @@ function createServerRow(
   logsRefresh.type = 'button';
   logsRefresh.dataset.serverLogsRefresh = server.id;
   logsPanel.append(logsSummary, logsRefresh, logsPre);
-  detail.append(logsPanel);
+  body.append(logsPanel);
 
-  row.append(detail);
+  row.append(body);
 
   enableInput.addEventListener('change', () => {
     void (async () => {

@@ -84,6 +84,15 @@ export function appendSettingsCrosslinks(
   mount.appendChild(cross);
 }
 
+/** Settings areas that live in the Models app when it is open. */
+const MODELS_APP_SECTION_BY_SETTINGS: Partial<Record<string, string>> = {
+  providers: 'providers',
+  'model-routing': 'routing',
+  sampler: 'sampler',
+  thinking: 'thinking',
+  usage: 'usage',
+};
+
 /** Jump to another settings section via hash (works before page is open). */
 export function linkToSettingsSection(
   label: string,
@@ -94,6 +103,12 @@ export function linkToSettingsSection(
   btn.className = 'settings-inline-link';
   btn.textContent = label;
   btn.addEventListener('click', () => {
+    const modelsSection = MODELS_APP_SECTION_BY_SETTINGS[sectionId];
+    const modelsOpen = document.getElementById('modelsView')?.classList.contains('is-open');
+    if (modelsSection && modelsOpen) {
+      void import('./models-page').then((m) => m.openModels(modelsSection as import('./models-page').ModelsSectionId));
+      return;
+    }
     window.location.hash = `#/settings/${sectionId}`;
   });
   return btn;

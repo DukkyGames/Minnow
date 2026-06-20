@@ -176,7 +176,7 @@ export function renderAppearanceSettingsSection(mount: HTMLElement): void {
 
       'settings-section-lead',
 
-      'Palette, typography, and the MinnowOS desktop background. Wallpapers stay visible behind open apps on the blurred desktop layer.',
+      'Palette, typography, and the MinnowOS desktop background. Wallpapers show behind open apps on the blurred desktop.',
 
     ),
 

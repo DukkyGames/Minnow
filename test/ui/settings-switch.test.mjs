@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-const { wrapCheckboxAsSwitch } = await import('../../src/ui/settings-switch.ts');
+const { createSettingsToggleRow, wrapCheckboxAsSwitch } = await import(
+  '../../src/ui/settings-switch.ts'
+);
 
 function setupDom() {
   const window = new Window();
@@ -44,5 +46,35 @@ describe('settings switch upgrade', () => {
     assert.equal(upgraded.id, 'settingsAudioEchoCancellation');
     assert.equal(upgraded.checked, true);
     assert.ok(upgraded.classList.contains('settings-switch__input'));
+  });
+
+  test('createSettingsToggleRow wires aria-labelledby to title text', () => {
+    setupDom();
+    const { row, input } = createSettingsToggleRow('Enable notifications', {
+      id: 'settingsNotifEnabled',
+    });
+
+    const labelledBy = input.getAttribute('aria-labelledby');
+    assert.ok(labelledBy);
+    const title = row.querySelector(`#${labelledBy}`);
+    assert.equal(title?.textContent, 'Enable notifications');
+    assert.equal(title?.className, 'settings-toggle-row__title');
+  });
+
+  test('wrapCheckboxAsSwitch wires aria-labelledby for legacy label rows', () => {
+    setupDom();
+    const legacy = document.createElement('label');
+    legacy.className = 'settings-toggle-row';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.id = 'settingsAudioEchoCancellation';
+    legacy.append(input, document.createTextNode('Echo cancellation'));
+    document.body.appendChild(legacy);
+
+    const upgraded = wrapCheckboxAsSwitch(input);
+    const labelledBy = upgraded.getAttribute('aria-labelledby');
+    assert.ok(labelledBy);
+    const title = document.getElementById(labelledBy);
+    assert.equal(title?.textContent, 'Echo cancellation');
   });
 });

@@ -11,11 +11,7 @@ import { launchApp, navigateToDesktop } from './router';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
 import { createAppIcon, createOsIcon } from './icons';
 import { initOsModelChipMenu } from './model-chip-menu';
-import {
-  chatToggleAriaLabel,
-  isChatToggleVisible,
-  isMenubarCenterVisible,
-} from './menubar-visibility';
+import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { openSchedulerFromMenubar } from '../ui/scheduler-page';
 
@@ -116,17 +112,6 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   left.append(brand, desktopBtn, sep, appName, chatToggle);
 
-  const center = document.createElement('div');
-  center.id = 'osMenubarCenter';
-  center.className = 'mn-os-mb-center';
-  center.hidden = true;
-
-  const settingsSlot = document.createElement('div');
-  settingsSlot.id = 'osMenubarSettingsSearchSlot';
-  settingsSlot.className = 'mn-os-mb-settings-slot';
-
-  center.append(settingsSlot);
-
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
 
@@ -197,7 +182,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.textContent = formatClock(new Date());
 
   right.append(workspaceSlot, modelChip, statusPill, schedulerBtn, bell, settingsBtn, timeEl);
-  root.append(left, center, right);
+  root.append(left, right);
 
   function syncMenubar(): void {
     const view = getOsView();
@@ -219,7 +204,6 @@ export function renderMenubar(root: HTMLElement): () => void {
       }
     }
 
-    center.hidden = !isMenubarCenterVisible(fgApp);
     chatToggle.hidden = !isChatToggleVisible(fgApp);
     const toggleLabel = chatToggleAriaLabel(fgApp);
     if (toggleLabel) {

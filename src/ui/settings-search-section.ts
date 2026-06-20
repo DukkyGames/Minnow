@@ -55,7 +55,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
     el(
       'p',
       'settings-section-note',
-      'Primary web search provider and API keys for web_search and Deep Research. Stored in ~/.minnow/search.json when npm start is running.',
+      'Primary web search provider and API keys for web_search and Deep Research. Saved to ~/.minnow/search.json when npm start is running.',
     ),
   );
 
@@ -152,7 +152,7 @@ export async function renderSearchSettingsSection(mount: HTMLElement): Promise<v
   const chainGroup = appendSettingsGroup(
     mount,
     'Research fallback chain',
-    'Order used when Deep Research tries providers after the primary (Phase 1+). Toggle providers to include in the chain.',
+    'If the primary search provider fails, Deep Research tries these providers in order. Check each provider to include it.',
   );
   const chainList = el('div', 'settings-search-fallback-list');
   const chainCheckboxes = new Map<SearchFallbackProvider, HTMLInputElement>();

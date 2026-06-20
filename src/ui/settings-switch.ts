@@ -2,6 +2,8 @@
  * Settings toggle switches (replaces native checkboxes in settings UI).
  */
 
+let switchLabelCounter = 0;
+
 export type SettingsSwitchOptions = {
   id?: string;
   name?: string;
@@ -30,7 +32,9 @@ export function createSettingsSwitch(
   if (options.name) input.name = options.name;
   if (options.checked) input.checked = true;
   if (options.disabled) input.disabled = true;
-  if (options.ariaLabel) input.setAttribute('aria-label', options.ariaLabel);
+  if (options.ariaLabel) {
+    input.setAttribute('aria-label', options.ariaLabel);
+  }
 
   const track = document.createElement('span');
   track.className = 'settings-switch__track';
@@ -71,16 +75,33 @@ export function createSettingsToggleRow(
     desc.textContent = options.description;
     label.appendChild(desc);
   }
-  if (options.id) title.id = `${options.id}-label`;
+
+  const titleId = options.id
+    ? `${options.id}-label`
+    : `settings-switch-label-${++switchLabelCounter}`;
+  title.id = titleId;
 
   const { root, input } = createSettingsSwitch(options);
+  if (!options.ariaLabel) {
+    input.setAttribute('aria-labelledby', titleId);
+  }
   row.append(label, root);
   return { row, input };
 }
 
 /** Label text from a legacy `<label class="settings-toggle-row">` (span child or bare text). */
 function readLegacyToggleRowLabel(parent: HTMLElement, input: HTMLInputElement): string {
-  const spanLabel = parent.querySelector(':scope > span');
+  const bodyLabel = parent.querySelector(
+    ':scope > .settings-toggle-row__body .settings-toggle-row__label',
+  );
+  if (bodyLabel?.textContent?.trim()) {
+    return bodyLabel.textContent.trim();
+  }
+  const titleSpan = parent.querySelector(':scope > .settings-toggle-row__title');
+  if (titleSpan?.textContent?.trim()) {
+    return titleSpan.textContent.trim();
+  }
+  const spanLabel = parent.querySelector(':scope > span:not(.settings-switch__track)');
   if (spanLabel?.textContent?.trim()) {
     return spanLabel.textContent.trim();
   }
@@ -92,6 +113,14 @@ function readLegacyToggleRowLabel(parent: HTMLElement, input: HTMLInputElement):
   }
   if (textParts.length > 0) return textParts.join(' ');
   return input.getAttribute('aria-label')?.trim() ?? '';
+}
+
+function readLegacyToggleRowDescription(parent: HTMLElement): string | undefined {
+  const hint = parent.querySelector(
+    ':scope > .settings-toggle-row__body .settings-field-hint',
+  );
+  const text = hint?.textContent?.trim();
+  return text || undefined;
 }
 
 function copyInputState(from: HTMLInputElement, to: HTMLInputElement): void {
@@ -124,11 +153,14 @@ export function wrapCheckboxAsSwitch(input: HTMLInputElement): HTMLInputElement 
   if (parent.tagName === 'LABEL' && parent.classList.contains('settings-toggle-row')) {
     const text = readLegacyToggleRowLabel(parent, switchInput);
     const row = createSettingsToggleRow(text, {
+      id: input.id || undefined,
       searchKey: parent.dataset.settingsSearchKey,
+      description: readLegacyToggleRowDescription(parent),
     });
     copyInputState(input, row.input);
     if (switchInput.getAttribute('aria-label')) {
       row.input.setAttribute('aria-label', switchInput.getAttribute('aria-label')!);
+      row.input.removeAttribute('aria-labelledby');
     }
     parent.replaceWith(row.row);
     input.remove();

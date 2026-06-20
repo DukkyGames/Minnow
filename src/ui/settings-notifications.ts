@@ -11,6 +11,7 @@ import {
   NOTIFICATION_SOUNDS,
   previewNotificationSound,
 } from '../notifications/sound';
+import { createSettingsToggleRow } from './settings-switch';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -23,80 +24,53 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function appendToggleRow(
-  parent: HTMLElement,
-  label: string,
-  hint: string,
-  checked: boolean,
-  onChange: (next: boolean) => void,
-  searchKey?: string,
-): void {
-  const row = el('label', 'settings-toggle-row');
-  if (searchKey) row.dataset.settingsSearchKey = searchKey;
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.checked = checked;
-  input.addEventListener('change', () => onChange(input.checked));
-
-  const body = el('span', 'settings-toggle-row__body');
-  body.appendChild(el('span', 'settings-toggle-row__label', label));
-  if (hint) body.appendChild(el('span', 'settings-field-hint', hint));
-
-  row.append(input, body);
-  parent.appendChild(row);
-}
-
 /** Render notification controls into a settings group mount. */
 export function renderNotificationsSettingsSection(mount: HTMLElement): void {
   const prefs = loadNotificationPrefs();
 
-  appendToggleRow(
-    mount,
-    'Enable notifications',
-    'Show background chat, task, and job alerts in the menubar bell.',
-    prefs.enabled,
-    (next) => saveNotificationPref('enabled', next),
-    'general.notifications.enabled',
-  );
+  const { row: enabledRow } = createSettingsToggleRow('Enable notifications', {
+    checked: prefs.enabled,
+    description: 'Show alerts in the menubar bell for background chats, tasks, and jobs.',
+    searchKey: 'general.notifications.enabled',
+    onChange: (next) => saveNotificationPref('enabled', next),
+  });
+  mount.appendChild(enabledRow);
 
-  appendToggleRow(
-    mount,
-    'Chat notifications',
-    'Turn complete, errors, and tool failures when another chat or app is open.',
-    prefs.chatEnabled,
-    (next) => saveNotificationPref('chatEnabled', next),
-    'general.notifications.chat',
-  );
+  const { row: chatRow } = createSettingsToggleRow('Chat notifications', {
+    checked: prefs.chatEnabled,
+    description:
+      'Alert when a background chat finishes, errors, or a tool fails while you are in another app.',
+    searchKey: 'general.notifications.chat',
+    onChange: (next) => saveNotificationPref('chatEnabled', next),
+  });
+  mount.appendChild(chatRow);
 
-  appendToggleRow(
-    mount,
-    'Task & sub-agent notifications',
-    'Orchestrate board tasks and sub-agent lifecycle events.',
-    prefs.tasksEnabled,
-    (next) => saveNotificationPref('tasksEnabled', next),
-    'general.notifications.tasks',
-  );
+  const { row: tasksRow } = createSettingsToggleRow('Task & sub-agent notifications', {
+    checked: prefs.tasksEnabled,
+    description: 'Orchestrate board updates and sub-agent start, finish, or failure.',
+    searchKey: 'general.notifications.tasks',
+    onChange: (next) => saveNotificationPref('tasksEnabled', next),
+  });
+  mount.appendChild(tasksRow);
 
-  appendToggleRow(
-    mount,
-    'Background job notifications',
-    'Scheduler reminders, research completion, and auto-learning proposals.',
-    prefs.backgroundEnabled,
-    (next) => saveNotificationPref('backgroundEnabled', next),
-    'general.notifications.background',
-  );
+  const { row: backgroundRow } = createSettingsToggleRow('Background job notifications', {
+    checked: prefs.backgroundEnabled,
+    description: 'Scheduler reminders, research completion, and memory or skill proposals.',
+    searchKey: 'general.notifications.background',
+    onChange: (next) => saveNotificationPref('backgroundEnabled', next),
+  });
+  mount.appendChild(backgroundRow);
 
   const soundGroup = el('div', 'settings-field');
   soundGroup.dataset.settingsSearchKey = 'general.notifications.sound';
   soundGroup.appendChild(el('span', 'settings-field__label', 'Notification sound'));
 
-  appendToggleRow(
-    soundGroup,
-    'Play sound',
-    'Plays when the window is visible but not focused (avoids surprise in background tabs).',
-    prefs.soundEnabled,
-    (next) => saveNotificationPref('soundEnabled', next),
-  );
+  const { row: soundRow } = createSettingsToggleRow('Play sound', {
+    checked: prefs.soundEnabled,
+    description: 'Play a sound when Minnow is open but another window has focus.',
+    onChange: (next) => saveNotificationPref('soundEnabled', next),
+  });
+  soundGroup.appendChild(soundRow);
 
   const pickerRow = el('div', 'settings-inline-row');
   const select = document.createElement('select');
@@ -112,7 +86,7 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     saveNotificationPref('soundId', select.value);
   });
 
-  const previewBtn = el('button', 'settings-btn settings-btn--secondary', 'Preview') as HTMLButtonElement;
+  const previewBtn = el('button', 'settings-action-btn', 'Preview') as HTMLButtonElement;
   previewBtn.type = 'button';
   previewBtn.addEventListener('click', () => {
     previewNotificationSound(select.value);
@@ -122,7 +96,8 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
   soundGroup.appendChild(pickerRow);
   mount.appendChild(soundGroup);
 
-  const resetBtn = el('button', 'settings-btn settings-btn--ghost', 'Reset to defaults') as HTMLButtonElement;
+  const resetActions = el('div', 'settings-actions');
+  const resetBtn = el('button', 'settings-action-btn', 'Reset to defaults') as HTMLButtonElement;
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => {
     saveNotificationPrefs({
@@ -136,5 +111,6 @@ export function renderNotificationsSettingsSection(mount: HTMLElement): void {
     mount.replaceChildren();
     renderNotificationsSettingsSection(mount);
   });
-  mount.appendChild(resetBtn);
+  resetActions.appendChild(resetBtn);
+  mount.appendChild(resetActions);
 }
