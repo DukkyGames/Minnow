@@ -518,8 +518,87 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  margin: 4px 0 0;
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
   font-size: 13px;
+}
+
+.settings-section-footer {
+  margin-top: 4px;
+}
+
+.settings-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-field-stack__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mn-fg-muted);
+}
+
+.settings-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+}
+
+.settings-checklist__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 4px 2px;
+  font-size: 14px;
+  color: var(--mn-fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-checklist__option input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--mn-accent);
+}
+
+.settings-checklist__label-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.settings-checklist__mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.settings-inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--mn-fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-inline-checkbox input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--mn-accent);
 }
 
 .settings-crosslinks__label {
@@ -2341,6 +2420,36 @@ label.settings-action-btn {
   margin: 0;
   font-size: 13px;
   color: var(--mn-danger);
+}
+
+.settings-webhooks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-webhooks-table th,
+.settings-webhooks-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--mn-border);
+  vertical-align: top;
+}
+
+.settings-webhooks-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.settings-webhooks-table td:last-child {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+  max-width: 28ch;
+  overflow-wrap: anywhere;
 }
 
 /* Providers page: list rows + add form */
