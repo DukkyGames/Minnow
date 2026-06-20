@@ -4,6 +4,7 @@ import {
   allocateDevPort,
   boardIntegrationBranch,
   isIsolationActive,
+  resolveChatWorktreeRoot,
   resolveIsolationMode,
   sanitizeRefFragment,
   tasksSharingSlot,
@@ -97,6 +98,81 @@ describe('tasksSharingSlot', () => {
   });
   test('off shares with nothing', () => {
     assert.deepEqual(tasksSharingSlot('off', a, all), []);
+  });
+});
+
+describe('resolveChatWorktreeRoot', () => {
+  test('prefers chat.worktreeRoot over board task path', () => {
+    const direct = 'C:/wt/direct';
+    const fromTask = 'C:/wt/task';
+    assert.equal(
+      resolveChatWorktreeRoot(
+        { worktreeRoot: direct, boardGroupId: 'g', boardTaskId: 'T1' },
+        [
+          {
+            id: 'g',
+            name: 'B',
+            workspacePath: '',
+            collapsed: false,
+            order: 0,
+            createdAt: 0,
+            orchestrateBoard: {
+              planPath: 'p.md',
+              tasks: [
+                {
+                  id: 'T1',
+                  title: 't',
+                  wave: 1,
+                  category: 'code',
+                  status: 'in_progress',
+                  worktreePath: fromTask,
+                },
+              ],
+              waves: [{ id: 1, status: 'in_progress' }],
+              startedAt: 0,
+              lastUpdatedAt: 0,
+            },
+          },
+        ],
+      ),
+      direct,
+    );
+  });
+
+  test('falls back to board task worktreePath', () => {
+    const fromTask = 'C:/wt/task';
+    assert.equal(
+      resolveChatWorktreeRoot(
+        { boardGroupId: 'g', boardTaskId: 'T1' },
+        [
+          {
+            id: 'g',
+            name: 'B',
+            workspacePath: '',
+            collapsed: false,
+            order: 0,
+            createdAt: 0,
+            orchestrateBoard: {
+              planPath: 'p.md',
+              tasks: [
+                {
+                  id: 'T1',
+                  title: 't',
+                  wave: 1,
+                  category: 'code',
+                  status: 'testing',
+                  worktreePath: fromTask,
+                },
+              ],
+              waves: [{ id: 1, status: 'in_progress' }],
+              startedAt: 0,
+              lastUpdatedAt: 0,
+            },
+          },
+        ],
+      ),
+      fromTask,
+    );
   });
 });
 

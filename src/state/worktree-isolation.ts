@@ -5,7 +5,7 @@
  * actual git/path work. Kept pure so it is unit-testable and reusable by MIN-276.
  */
 
-import type { BoardTask, OrchestrateBoardState } from '../types.ts';
+import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 
 export type IsolationMode = 'off' | 'per-task' | 'per-wave';
 
@@ -126,4 +126,24 @@ export function usedDevPorts(tasks: BoardTask[]): number[] {
   return tasks
     .map((t) => t.devPort)
     .filter((p): p is number => typeof p === 'number' && Number.isFinite(p));
+}
+
+/**
+ * Resolve the tool workspace root for a board task chat: prefer the chat's
+ * `worktreeRoot`, then fall back to the linked board task's `worktreePath`.
+ */
+export function resolveChatWorktreeRoot(
+  chat: Pick<Chat, 'worktreeRoot' | 'boardTaskId' | 'boardGroupId'>,
+  groups: ChatGroup[] | undefined,
+): string | undefined {
+  const direct = chat.worktreeRoot?.trim();
+  if (direct) return direct;
+
+  const taskId = chat.boardTaskId?.trim();
+  const groupId = chat.boardGroupId?.trim();
+  if (!taskId || !groupId || !groups?.length) return undefined;
+
+  const group = groups.find((g) => g.id === groupId);
+  const task = group?.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  return task?.worktreePath?.trim() || undefined;
 }

@@ -732,7 +732,10 @@ export async function startTask(
   // Scope this task chat's tools to an isolated worktree when board isolation is on
   // (MIN-275). Best-effort: a null result leaves the chat on the shared workspace.
   const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
-  if (worktreeRoot) taskChat.worktreeRoot = worktreeRoot;
+  if (worktreeRoot) {
+    taskChat.worktreeRoot = worktreeRoot;
+    scheduleSaveSessions();
+  }
 
   const seed = overrideSeed || buildTaskSeedMessage(group, plannerChat, task);
   // Consume the one-shot retry seed now that the build is actually launching.
@@ -829,7 +832,10 @@ export async function startTaskTesting(
     buildChat?.worktreeRoot?.trim() ||
     (await ensureTaskWorktree(group, freshTask, plannerChat)) ||
     undefined;
-  if (worktreeRoot) testChat.worktreeRoot = worktreeRoot;
+  if (worktreeRoot) {
+    testChat.worktreeRoot = worktreeRoot;
+    scheduleSaveSessions();
+  }
 
   const seed = buildTaskTestSeedMessage(group, plannerChat, task);
 

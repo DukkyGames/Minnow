@@ -65,6 +65,71 @@ describe('validateSessionState workspace schema', () => {
     assert.equal(out.chats[0].boardGroupId, 'grp-1');
   });
 
+  it('preserves MIN-275 worktree isolation fields on chats and board tasks', () => {
+    const worktreeRoot =
+      'C:/Users/test/.minnow/worktrees/repo-abc/grp-1/task-W5-A';
+    const out = validateSessionState({
+      version: 5,
+      activeId: 'test-chat',
+      sidebarCollapsed: false,
+      groups: [
+        {
+          id: 'grp-1',
+          name: 'Board',
+          workspacePath: 'C:/demo/Water Tracker',
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          orchestrateBoard: {
+            planPath: 'documentation/plans/p.md',
+            startedAt: 1,
+            lastUpdatedAt: 1,
+            executionMode: 'auto',
+            isolationMode: 'per-task',
+            integrationBranch: 'minnow/board/grp-1/integration',
+            waves: [{ id: 'W5', status: 'in_progress' }],
+            tasks: [
+              {
+                id: 'W5-A',
+                title: 'Notifications',
+                wave: 'W5',
+                category: 'test',
+                status: 'testing',
+                worktreePath: worktreeRoot,
+                worktreeBranch: 'minnow/board/grp-1/task/W5-A',
+                devPort: 5200,
+              },
+            ],
+          },
+        },
+      ],
+      chats: [
+        {
+          id: 'test-chat',
+          name: 'Test W5-A',
+          workspacePath: 'C:/demo/Water Tracker',
+          modelId: '',
+          boardGroupId: 'grp-1',
+          boardTaskId: 'W5-A',
+          worktreeRoot,
+          workAgentId: 'tester',
+          history: [],
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    assert.equal(out.chats[0].worktreeRoot, worktreeRoot);
+    assert.equal(out.chats[0].boardTaskId, 'W5-A');
+    assert.equal(out.chats[0].workAgentId, 'tester');
+    const board = out.groups[0].orchestrateBoard;
+    assert.equal(board.isolationMode, 'per-task');
+    assert.equal(board.integrationBranch, 'minnow/board/grp-1/integration');
+    assert.equal(board.tasks[0].worktreePath, worktreeRoot);
+    assert.equal(board.tasks[0].worktreeBranch, 'minnow/board/grp-1/task/W5-A');
+    assert.equal(board.tasks[0].devPort, 5200);
+  });
+
   it('rejects unknown session versions', () => {
     assert.throws(
       () =>

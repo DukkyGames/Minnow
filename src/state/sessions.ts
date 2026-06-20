@@ -36,6 +36,7 @@ import { ensurePinnedSkill } from '../skills/pinned-skill';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
+import { resolveChatWorktreeRoot } from './worktree-isolation';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
   runSessionCodeChangeBackfill,
@@ -570,6 +571,15 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
     ...(finalTest ? { finalTest } : {}),
+    ...(typeof r.isolationMode === 'string' &&
+    (r.isolationMode === 'off' ||
+      r.isolationMode === 'per-task' ||
+      r.isolationMode === 'per-wave')
+      ? { isolationMode: r.isolationMode }
+      : {}),
+    ...(typeof r.integrationBranch === 'string' && r.integrationBranch.trim()
+      ? { integrationBranch: r.integrationBranch.trim() }
+      : {}),
   };
 }
 
@@ -967,6 +977,7 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     state.version = 5;
   }
   repairPlannerChatFolderMembership(state);
+  repairBoardChatWorktreeRoots(state);
   if (
     rawSession.codeChangeTotalsByWorkspace &&
     typeof rawSession.codeChangeTotalsByWorkspace === 'object'
@@ -977,6 +988,15 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     state.lastActiveChatIdByApp = {};
   }
   return state;
+}
+
+/** Backfill chat.worktreeRoot from the linked board task after session load. */
+function repairBoardChatWorktreeRoots(state: SessionState): void {
+  for (const chat of state.chats) {
+    if (chat.worktreeRoot?.trim()) continue;
+    const root = resolveChatWorktreeRoot(chat, state.groups);
+    if (root) chat.worktreeRoot = root;
+  }
 }
 
 /** Planners linked via boardGroupId appear under their board folder in the sidebar. */

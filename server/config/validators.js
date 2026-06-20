@@ -166,6 +166,15 @@ function ensureBoardTask(raw) {
   if (typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()) {
     out.pendingBuildSeed = r.pendingBuildSeed.trim();
   }
+  if (typeof r.worktreePath === 'string' && r.worktreePath.trim()) {
+    out.worktreePath = r.worktreePath.trim();
+  }
+  if (typeof r.worktreeBranch === 'string' && r.worktreeBranch.trim()) {
+    out.worktreeBranch = r.worktreeBranch.trim();
+  }
+  if (typeof r.devPort === 'number' && Number.isFinite(r.devPort)) {
+    out.devPort = r.devPort;
+  }
   return out;
 }
 
@@ -256,6 +265,18 @@ function ensureOrchestrateBoard(raw) {
       : 'manual';
   out.executionMode = executionMode;
   if (r.autoRunning === true) out.autoRunning = true;
+  const isolationModeRaw =
+    typeof r.isolationMode === 'string' ? r.isolationMode.trim() : '';
+  if (
+    isolationModeRaw === 'off' ||
+    isolationModeRaw === 'per-task' ||
+    isolationModeRaw === 'per-wave'
+  ) {
+    out.isolationMode = isolationModeRaw;
+  }
+  if (typeof r.integrationBranch === 'string' && r.integrationBranch.trim()) {
+    out.integrationBranch = r.integrationBranch.trim();
+  }
   const finalTest = ensureOrchestrateFinalTest(r.finalTest);
   if (finalTest) out.finalTest = finalTest;
   return out;
@@ -467,6 +488,16 @@ function ensureChatShape(raw) {
     ...(typeof row.boardGroupId === 'string' && row.boardGroupId.trim()
       ? { boardGroupId: row.boardGroupId.trim() }
       : {}),
+    ...(typeof row.boardTaskId === 'string' && row.boardTaskId.trim()
+      ? { boardTaskId: row.boardTaskId.trim() }
+      : {}),
+    ...(typeof row.worktreeRoot === 'string' && row.worktreeRoot.trim()
+      ? { worktreeRoot: row.worktreeRoot.trim() }
+      : {}),
+    ...(typeof row.workAgentId === 'string' && row.workAgentId.trim()
+      ? { workAgentId: row.workAgentId.trim() }
+      : {}),
+    ...(row.workAgentAuto === false ? { workAgentAuto: false } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(runs?.length ? { runs } : {}),

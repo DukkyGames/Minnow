@@ -68,6 +68,7 @@ import {
   patchMainTurnActivity,
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
+import { resolveChatWorktreeRoot } from '../state/worktree-isolation';
 import {
   getActiveChat,
   isExpertChat,
@@ -1547,6 +1548,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
           const toolName = tc.function.name;
+          const scopedWorkspaceRoot = resolveChatWorktreeRoot(chat, sessionState?.groups);
           const toolOut = planBlock
             ? { content: planBlock }
             : await executeTool(toolName, args, {
@@ -1555,9 +1557,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
                 // Isolated board task chats (MIN-275) scope tools to their worktree.
-                ...(chat.worktreeRoot?.trim()
-                  ? { workspaceRoot: chat.worktreeRoot.trim() }
-                  : {}),
+                ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
               });
           let toolContent = toolOut.content;
           try {
