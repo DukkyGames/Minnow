@@ -154,6 +154,15 @@ export function getBoardTaskRunIds(task: BoardTask): string[] {
 
 export { isUserStoppedChat };
 
+/**
+ * True when the user stopped this board. Prefers the persisted board flag
+ * (set the moment Stop is pressed, survives reloads and the live tick) and
+ * falls back to the planner transcript for boards saved before the flag.
+ */
+function isBoardUserStopped(board: BoardState, plannerChat: Chat): boolean {
+  return board.userStopped === true || isUserStoppedChat(plannerChat);
+}
+
 /** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete / Cancelled). */
 export function deriveTaskAgentBadge(
   task: BoardTask,
@@ -319,11 +328,12 @@ function stopBoardLiveTick(): void {
 function boardTimerContextForChat(
   chat: Chat,
   activeRunCount: number,
+  board: BoardState,
 ): OrchestrateBoardTimerContext {
   return {
     isStreaming: isChatStreaming(chat.id),
     activeRunCount,
-    userStopped: isUserStoppedChat(chat),
+    userStopped: isBoardUserStopped(board, chat),
   };
 }
 
@@ -347,7 +357,7 @@ function tickOrchestrateBoardSession(): void {
   syncOrchestrateBoardTimer(
     group,
     planner,
-    boardTimerContextForChat(planner, activeRuns.length),
+    boardTimerContextForChat(planner, activeRuns.length, group.orchestrateBoard),
   );
   if (!isOrchestrateHubMounted() && (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive())) {
     refreshActiveBoardIfMounted();
@@ -1029,7 +1039,7 @@ function boardHeaderMetrics(
   syncOrchestrateBoardTimer(
     group,
     plannerChat,
-    boardTimerContextForChat(plannerChat, activeRunCount),
+    boardTimerContextForChat(plannerChat, activeRunCount, board),
   );
   const progress = getBoardProgressPercent(board);
   const wavesComplete = countBoardWavesProgressed(board);
@@ -1669,7 +1679,7 @@ function refreshBoardDom(
   );
   const isStreaming = isChatStreaming(plannerChat.id);
   const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
-  const userStopped = isUserStoppedChat(plannerChat);
+  const userStopped = isBoardUserStopped(board, plannerChat);
   const headerStatus = deriveBoardHeaderStatus(
     board,
     isStreaming,
@@ -2346,7 +2356,7 @@ export function renderBoardView(group: ChatGroup): void {
     board,
     isStreaming,
     activeRuns.length,
-    isUserStoppedChat(plannerChat),
+    isBoardUserStopped(board, plannerChat),
   );
   const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
   const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);

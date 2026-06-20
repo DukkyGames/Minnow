@@ -352,6 +352,12 @@ export interface OrchestrateBoardState {
   executionMode?: 'manual' | 'auto' | 'sequential';
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
+  /**
+   * True when the user pressed Stop on the board. Freezes the header timer
+   * immediately and surfaces the Stopped status regardless of lagging task
+   * statuses. Cleared when the user starts execution again.
+   */
+  userStopped?: boolean;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
   /** Full-board integration test after all tasks complete. */

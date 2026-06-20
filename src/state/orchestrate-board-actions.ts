@@ -35,7 +35,7 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, updateTask } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask } from './orchestrate-board-store.ts';
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 import {
@@ -1217,6 +1217,8 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board || !isBoardAutoMode(group)) return;
   board.autoRunning = true;
+  // Clear any prior Stop so the timer resumes and the Stopped badge clears.
+  board.userStopped = false;
   board.lastUpdatedAt = Date.now();
   scheduleSaveSessions();
   emitBoardChange(group.id);
@@ -1230,6 +1232,9 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
   if (!board) return;
   board.autoRunning = false;
+  // Freeze the header timer and surface the Stopped badge immediately, even if
+  // task statuses lag behind the aborted streams (MIN-248).
+  board.userStopped = true;
   board.lastUpdatedAt = Date.now();
   taskQueueByGroupId.delete(group.id);
   for (const task of board.tasks) {
@@ -1247,6 +1252,20 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
     stopGeneration(board.finalTest.chatId);
   }
   stopGeneration(plannerChat.id);
+  // Freeze the header timer now (close the open segment) instead of waiting for
+  // the next live tick, so the elapsed value stops the instant Stop is pressed.
+  syncOrchestrateBoardTimer(group, plannerChat, {
+    isStreaming: false,
+    activeRunCount: 0,
+    userStopped: true,
+  });
+  // Cancel any sub-agent runs still attributed to the planner's active parent
+  // turn so background runs/heartbeats do not linger after Stop (MIN-246).
+  if (board.activeParentTurnId) {
+    void import('../agents/controller/controller.ts')
+      .then((mod) => mod.cancelAllForParentTurn(board.activeParentTurnId!))
+      .catch((err) => reportBackgroundError('stop-board-cancel-runs', err));
+  }
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow();
   emitBoardChange(group.id);
