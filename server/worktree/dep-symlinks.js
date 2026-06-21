@@ -7,13 +7,70 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 /** Manifest files → dependency dirs to link when the manifest exists in sourceRoot. */
-const ECOSYSTEM_ENTRIES = [
-  { manifests: ['package.json'], dirs: ['node_modules'] },
-  { manifests: ['go.mod'], dirs: ['vendor'] },
-  { manifests: ['Cargo.toml'], dirs: ['target'] },
-  { manifests: ['pyproject.toml', 'setup.py', 'requirements.txt'], dirs: ['.venv', 'venv'] },
-  { manifests: ['Gemfile'], dirs: ['vendor', '.bundle'] },
-  { manifests: ['composer.json'], dirs: ['vendor'] },
+export const ECOSYSTEM_ENTRIES = [
+  {
+    manifests: ['package.json'],
+    lockfiles: ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb'],
+    dirs: ['node_modules'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'package.json')))) return null;
+      if (await pathExists(path.join(root, 'pnpm-lock.yaml'))) {
+        return { command: 'pnpm', args: ['install'] };
+      }
+      if (await pathExists(path.join(root, 'yarn.lock'))) {
+        return { command: 'yarn', args: ['install'] };
+      }
+      if (await pathExists(path.join(root, 'bun.lockb'))) {
+        return { command: 'bun', args: ['install'] };
+      }
+      return { command: 'npm', args: ['install'] };
+    },
+  },
+  {
+    manifests: ['go.mod'],
+    lockfiles: ['go.sum'],
+    dirs: ['vendor'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'go.mod')))) return null;
+      return { command: 'go', args: ['mod', 'download'] };
+    },
+  },
+  {
+    manifests: ['Cargo.toml'],
+    lockfiles: ['Cargo.lock'],
+    dirs: ['target'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'Cargo.toml')))) return null;
+      return { command: 'cargo', args: ['fetch'] };
+    },
+  },
+  {
+    manifests: ['pyproject.toml', 'setup.py', 'requirements.txt'],
+    lockfiles: ['poetry.lock', 'uv.lock', 'Pipfile.lock', 'requirements.txt'],
+    dirs: ['.venv', 'venv'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'requirements.txt')))) return null;
+      return { command: 'python', args: ['-m', 'pip', 'install', '-r', 'requirements.txt'] };
+    },
+  },
+  {
+    manifests: ['Gemfile'],
+    lockfiles: ['Gemfile.lock'],
+    dirs: ['vendor', '.bundle'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'Gemfile')))) return null;
+      return { command: 'bundle', args: ['install'] };
+    },
+  },
+  {
+    manifests: ['composer.json'],
+    lockfiles: ['composer.lock'],
+    dirs: ['vendor'],
+    async resolveInstall(root) {
+      if (!(await pathExists(path.join(root, 'composer.json')))) return null;
+      return { command: 'composer', args: ['install'] };
+    },
+  },
 ];
 
 async function pathExists(targetPath) {

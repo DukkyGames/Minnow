@@ -15,6 +15,7 @@ import {
   createWorktree,
   ensureIntegration,
   mergeIntoIntegration,
+  refreshIntegrationDeps,
   restoreIntegration,
   verifyIntegrationMerge,
 } from '../../server/worktree/worktree-ops.js';
@@ -108,6 +109,58 @@ describe('worktree commit and merge checks', () => {
     const after = await checkMerged({ boardId: BOARD_ID, fromBranch: taskBranch });
     assert.equal(after.ok, true);
     assert.equal(after.merged, true);
+  });
+
+  test('refreshIntegrationDeps attempts node install after package.json merge', async () => {
+    const taskWt = getWorktreeSlotPath(BOARD_ID, 'task-W1-A', repoDir);
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+
+    await fs.writeFile(
+      path.join(taskWt, 'package.json'),
+      JSON.stringify({ name: 'wt-ops-test', version: '1.0.0', dependencies: {} }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(taskWt, 'package-lock.json'),
+      JSON.stringify({
+        name: 'wt-ops-test',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: { '': { name: 'wt-ops-test', version: '1.0.0' } },
+      }),
+      'utf8',
+    );
+
+    const commit = await commitWorktree({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+      message: 'add package manifest',
+    });
+    assert.equal(commit.ok, true);
+    assert.equal(commit.committed, true);
+
+    const preMergeSha = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: intPath, windowsHide: true })
+    ).stdout.trim();
+
+    const merged = await mergeIntoIntegration({
+      boardId: BOARD_ID,
+      fromBranch: taskBranch,
+      message: 'merge package manifest',
+    });
+    assert.equal(merged.ok, true);
+
+    const refreshed = await refreshIntegrationDeps({
+      boardId: BOARD_ID,
+      sinceSha: preMergeSha,
+    });
+    assert.equal(refreshed.ok, true);
+    const attempted = [...(refreshed.ran ?? []), ...(refreshed.failed ?? [])];
+    assert.ok(
+      attempted.some((cmd) => /^npm install/.test(cmd)),
+      `expected npm install attempt, got ${attempted}`,
+    );
   });
 });
 

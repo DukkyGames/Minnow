@@ -54,6 +54,7 @@ import {
   checkMerged as checkTaskBranchMerged,
   restoreIntegration as restoreIntegrationWorktree,
   verifyIntegrationMerge as verifyIntegrationMergeOp,
+  refreshIntegrationDeps as refreshIntegrationDepsOp,
   cleanupBoardWorktrees as cleanupBoardWorktreesOp,
 } from './worktree-service.ts';
 
@@ -799,7 +800,14 @@ async function mergeCompletedTaskWorktree(
     });
     if (res.ok) {
       const verified = await verifyIntegrationMergeOp({ boardId, fromBranch: branch });
-      if (verified.ok && verified.verified) return { outcome: 'merged' };
+      if (verified.ok && verified.verified) {
+        try {
+          await refreshIntegrationDepsOp({ boardId, sinceSha: res.integrationSha });
+        } catch (err) {
+          reportBackgroundError('worktree-refresh-deps', err);
+        }
+        return { outcome: 'merged' };
+      }
       const reasons = verified.reasons?.join('; ') || 'Integration merge verification failed';
       if (res.integrationSha) {
         await restoreIntegrationWorktree({ boardId, sha: res.integrationSha }).catch((err) =>
@@ -968,6 +976,12 @@ async function finalizeMergeFixerOnStreamEnd(
         : null;
 
     if (merged.ok && merged.merged && verified?.ok && verified.verified) {
+      const mergePreSha = fresh.mergePreSha?.trim();
+      try {
+        await refreshIntegrationDepsOp({ boardId, sinceSha: mergePreSha });
+      } catch (err) {
+        reportBackgroundError('worktree-refresh-deps', err);
+      }
       updateTask(
         group,
         fresh.id,

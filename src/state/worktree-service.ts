@@ -23,6 +23,9 @@ export interface WorktreeOpResult {
   sha?: string;
   output?: string;
   error?: string;
+  ran?: string[];
+  failed?: string[];
+  skipped?: string;
 }
 
 async function postWorktree(
@@ -112,6 +115,14 @@ export function verifyIntegrationMerge(input: {
   fromBranch: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('verify_integration', input);
+}
+
+/** Install deps in integration when a merge changed manifests or lockfiles. */
+export function refreshIntegrationDeps(input: {
+  boardId: string;
+  sinceSha?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('refresh_integration_deps', input);
 }
 
 /** Remove a single worktree slot. */

@@ -11,6 +11,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
+import { refreshDependencies } from './dep-install.js';
 import { symlinkDependencyDirs } from './dep-symlinks.js';
 import {
   getBoardWorktreesDir,
@@ -359,4 +360,27 @@ export async function cleanupBoardWorktrees({ boardId }) {
 export async function listWorktrees() {
   const r = await git(['worktree', 'list', '--porcelain']);
   return { ok: ok(r), output: out(r) };
+}
+
+/**
+ * After a merge into integration, install deps when the merge diff touched manifests/lockfiles.
+ * @param {{ boardId: string, sinceSha?: string }} input
+ */
+export async function refreshIntegrationDeps({ boardId, sinceSha }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const since = (sinceSha && sinceSha.trim()) || '';
+  if (!since) return { ok: true, ran: [], skipped: 'no sinceSha' };
+  const diff = await git(['diff', '--name-only', since, 'HEAD'], intPath);
+  if (!ok(diff)) return { ok: false, output: out(diff) };
+  const changedFiles = `${diff.stdout ?? ''}`
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const { ran, failed } = await refreshDependencies(intPath, changedFiles);
+  return { ok: true, ran, failed };
 }
