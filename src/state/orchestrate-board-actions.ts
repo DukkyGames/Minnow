@@ -1488,6 +1488,29 @@ export async function startFinalIntegrationTest(
     name: 'Final integration test',
   });
 
+  // Run the final test in the integration worktree (where all task branches were
+  // merged), not the main checkout. Only applies when board isolation is active.
+  if (board.integrationBranch) {
+    const ensured = await ensureIntegrationWorktree({
+      boardId: group.id,
+      branch: board.integrationBranch,
+    });
+    const integrationPath = ensured.path?.trim();
+    if (!integrationPath) {
+      // Fail fast — never silently fall back to the un-integrated main checkout.
+      board.finalTest = {
+        ...(board.finalTest ?? {}),
+        status: 'failed',
+        summary: 'Integration worktree missing; cannot run final integration test',
+      };
+      board.lastUpdatedAt = Date.now();
+      scheduleSaveSessions();
+      emitBoardChange(group.id);
+      return;
+    }
+    finalChat.worktreeRoot = integrationPath;
+  }
+
   board.finalTest = {
     ...(board.finalTest ?? {}),
     status: 'in_progress',
