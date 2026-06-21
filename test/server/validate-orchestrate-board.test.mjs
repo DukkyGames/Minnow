@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { validateSessionState } from '../../server/config/validators.js';
+import { mergeConfigMeta, validateSessionState } from '../../server/config/validators.js';
 
 const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
@@ -223,5 +223,76 @@ describe('validateSessionState orchestrate board', () => {
     const board = out.groups[0].orchestrateBoard;
     assert.equal(board.executionMode, 'manual');
     assert.equal(board.pendingAfk, true);
+  });
+});
+
+describe('mergeConfigMeta autopilot', () => {
+  it('defaults autopilot block when patch provides empty object', () => {
+    const merged = mergeConfigMeta({}, { autopilot: {} });
+    assert.equal(merged.autopilot.defaultExecutionMode, 'manual');
+    assert.equal(merged.autopilot.maxConcurrentTasks, 3);
+    assert.equal(merged.autopilot.isolationMode, 'auto');
+    assert.equal(merged.autopilot.maxTestAttempts, 3);
+    assert.equal(merged.autopilot.maxFinalTestAttempts, 3);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, 7000);
+    assert.equal(merged.autopilot.progressStallMs, 90000);
+    assert.equal(merged.autopilot.heartbeatDeadMs, 30000);
+  });
+
+  it('clamps autopilot numeric fields', () => {
+    const merged = mergeConfigMeta({}, {
+      autopilot: {
+        maxConcurrentTasks: 99,
+        maxTestAttempts: 0,
+        maxFinalTestAttempts: 20,
+        heartbeatIntervalMs: 500,
+        progressStallMs: 5_000,
+        heartbeatDeadMs: 600_000,
+      },
+    });
+    assert.equal(merged.autopilot.maxConcurrentTasks, 20);
+    assert.equal(merged.autopilot.maxTestAttempts, 1);
+    assert.equal(merged.autopilot.maxFinalTestAttempts, 10);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, 1000);
+    assert.equal(merged.autopilot.progressStallMs, 10000);
+    assert.equal(merged.autopilot.heartbeatDeadMs, 300000);
+  });
+
+  it('validates execution and isolation mode enums', () => {
+    const merged = mergeConfigMeta(
+      { autopilot: { defaultExecutionMode: 'auto', isolationMode: 'per-task' } },
+      {
+        autopilot: {
+          defaultExecutionMode: 'not-a-mode',
+          isolationMode: 'invalid',
+        },
+      },
+    );
+    assert.equal(merged.autopilot.defaultExecutionMode, 'auto');
+    assert.equal(merged.autopilot.isolationMode, 'per-task');
+  });
+
+  it('partial patch updates only provided autopilot fields', () => {
+    const merged = mergeConfigMeta(
+      {
+        autopilot: {
+          defaultExecutionMode: 'manual',
+          maxConcurrentTasks: 3,
+          isolationMode: 'auto',
+          maxTestAttempts: 3,
+          maxFinalTestAttempts: 3,
+          heartbeatIntervalMs: 7000,
+          progressStallMs: 90000,
+          heartbeatDeadMs: 30000,
+          plannerProviderId: 'p1',
+          plannerModelId: 'm1',
+        },
+      },
+      { autopilot: { maxConcurrentTasks: 7, plannerModelId: 'm2' } },
+    );
+    assert.equal(merged.autopilot.maxConcurrentTasks, 7);
+    assert.equal(merged.autopilot.plannerProviderId, 'p1');
+    assert.equal(merged.autopilot.plannerModelId, 'm2');
+    assert.equal(merged.autopilot.defaultExecutionMode, 'manual');
   });
 });

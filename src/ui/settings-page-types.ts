@@ -43,6 +43,7 @@ export type SettingsSectionId =
   | 'work-agents'
   | 'agent-packs'
   | 'sub-agents'
+  | 'autopilot'
   | 'search'
   | 'deep-research'
   | 'servers'
@@ -74,6 +75,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   'work-agents': 'Work agents',
   'agent-packs': 'Agent packs',
   'sub-agents': 'Sub-agents',
+  autopilot: 'Autopilot',
   search: 'Search',
   'deep-research': 'Deep Research',
   servers: 'Servers',
@@ -118,6 +120,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       'work-agents',
       'agent-packs',
       'sub-agents',
+      'autopilot',
     ],
   },
   {

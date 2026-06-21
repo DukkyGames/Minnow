@@ -5,6 +5,7 @@
  * actual git/path work. Kept pure so it is unit-testable and reusable by MIN-276.
  */
 
+import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 
@@ -14,9 +15,9 @@ export type IsolationMode = 'off' | 'per-task' | 'per-wave';
 export const DEFAULT_BOARD_PORT_BASE = 5200;
 
 /**
- * Effective isolation mode for a board: explicit `board.isolationMode` override wins,
- * otherwise derived from the autonomy/execution mode.
- * - `auto` (and future `afk`) → `per-task`
+ * Effective isolation mode: per-board override, then global default (when not `auto`),
+ * then derive from execution mode.
+ * - `auto` / `afk` execution → `per-task`
  * - `sequential` / `manual` / unset → `off`
  */
 export function resolveIsolationMode(
@@ -26,6 +27,10 @@ export function resolveIsolationMode(
   const explicit = board.isolationMode;
   if (explicit === 'off' || explicit === 'per-task' || explicit === 'per-wave') {
     return explicit;
+  }
+  const globalIso = getAutopilotMetaSync().isolationMode;
+  if (globalIso === 'off' || globalIso === 'per-task' || globalIso === 'per-wave') {
+    return globalIso;
   }
   switch (board.executionMode) {
     case 'auto':

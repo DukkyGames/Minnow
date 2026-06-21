@@ -702,6 +702,24 @@ button.board-header__activity {
   cursor: not-allowed;
 }
 
+.board-header__isolation {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.board-header__isolation-select {
+  height: 32px;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
 .board-header__run-btn {
   height: 32px;
   padding: 0 14px;

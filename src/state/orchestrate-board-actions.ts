@@ -12,7 +12,11 @@ import {
   subscribeChatStreamEnd,
 } from '../chat/streaming-state.ts';
 import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
-import { loadSubAgentConfig } from '../agents/sub-agent-config.ts';
+import {
+  getAutopilotMetaSync,
+  resolveMaxFinalTestAttempts,
+  resolveMaxTaskTestAttempts,
+} from '../config/autopilot-meta.ts';
 import {
   bindRunSupervision,
   bumpProgress,
@@ -76,8 +80,6 @@ function requireSession(): NonNullable<typeof sessionState> {
 }
 
 const DEFAULT_MAX_CONCURRENT = 3;
-const MAX_TASK_TEST_ATTEMPTS = 3;
-const MAX_FINAL_TEST_ATTEMPTS = 3;
 const FULL_BOARD_TEST_ID = 'FULL_BOARD';
 
 /** Task columns that may still have linked chats or worktrees after reload. */
@@ -193,12 +195,12 @@ let streamEndSubscribed = false;
 let streamActivitySubscribed = false;
 let autoDriveSubscribed = false;
 
-async function refreshHeartbeatThresholds(): Promise<void> {
-  const config = await loadSubAgentConfig();
+function refreshHeartbeatThresholds(): void {
+  const meta = getAutopilotMetaSync();
   setHeartbeatConfig({
-    heartbeatIntervalMs: config.heartbeatIntervalMs,
-    progressStallMs: config.progressStallMs,
-    heartbeatDeadMs: config.heartbeatDeadMs,
+    heartbeatIntervalMs: meta.heartbeatIntervalMs,
+    progressStallMs: meta.progressStallMs,
+    heartbeatDeadMs: meta.heartbeatDeadMs,
   });
 }
 
@@ -346,6 +348,11 @@ function resolvePlannerModelBinding(plannerChat: Chat): {
       }
     }
   }
+  if (!modelId) {
+    const meta = getAutopilotMetaSync();
+    providerId = providerId || meta.plannerProviderId?.trim() || '';
+    modelId = meta.plannerModelId?.trim() || '';
+  }
   return { providerId, modelId };
 }
 
@@ -471,10 +478,18 @@ function ensureStreamEndSubscription(): void {
   }
 }
 
-function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): number {
+/** Resolved max concurrent tasks: sequential → 1; else board ?? global ?? fallback. */
+export function resolveBoardMaxConcurrent(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): number {
   if (board.executionMode === 'sequential') return 1;
-  const n = board.maxConcurrentTasks;
-  return typeof n === 'number' && n > 0 ? n : DEFAULT_MAX_CONCURRENT;
+  const boardVal = board.maxConcurrentTasks;
+  if (typeof boardVal === 'number' && boardVal > 0) return boardVal;
+  return getAutopilotMetaSync().maxConcurrentTasks ?? DEFAULT_MAX_CONCURRENT;
+}
+
+function maxConcurrent(board: NonNullable<ChatGroup['orchestrateBoard']>): number {
+  return resolveBoardMaxConcurrent(board);
 }
 
 /** Skip launching background chat turns under node:test (avoids open handles). */
@@ -628,7 +643,7 @@ export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, t
     'Build:',
     build,
     '',
-    `Previous attempt failed testing (${attempt}/${MAX_TASK_TEST_ATTEMPTS}): ${testSummary}`,
+    `Previous attempt failed testing (${attempt}/${resolveMaxTaskTestAttempts()}): ${testSummary}`,
     '',
     'Fix the issues and report what you changed.',
   ].join('\n');
@@ -1247,9 +1262,8 @@ export async function startTask(
       updateTask(group, taskId, { pendingBuildSeed: undefined }, plannerChat);
     }
 
-    void refreshHeartbeatThresholds().then(() => {
-      startTaskChatSupervision(taskChat.id);
-    });
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(taskChat.id);
 
     void runChatTurn({
       chat: taskChat,
@@ -1349,9 +1363,8 @@ export async function startTaskTesting(
 
     const seed = buildTaskTestSeedMessage(group, plannerChat, task);
 
-    void refreshHeartbeatThresholds().then(() => {
-      startTaskChatSupervision(testChat.id);
-    });
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(testChat.id);
 
     void runChatTurn({
       chat: testChat,
@@ -1405,7 +1418,7 @@ export function applyTaskTestFailureState(
     plannerChat,
   );
 
-  if (attempts >= MAX_TASK_TEST_ATTEMPTS) {
+  if (attempts >= resolveMaxTaskTestAttempts()) {
     moveTaskStatus(group, task.id, 'blocked', plannerChat);
     updateTask(group, task.id, { error: summary }, plannerChat);
     return 'blocked';
@@ -1628,9 +1641,8 @@ export async function startFinalIntegrationTest(
 
     const seed = buildFinalIntegrationTestSeedMessage(group, plannerChat);
 
-    void refreshHeartbeatThresholds().then(() => {
-      startTaskChatSupervision(finalChat.id);
-    });
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(finalChat.id);
 
     void runChatTurn({
       chat: finalChat,
@@ -1681,7 +1693,7 @@ export function tryTriggerFinalIntegrationTest(
   if (board.finalTest?.status === 'in_progress') return;
 
   const attempts = board.finalTest?.attempts ?? 0;
-  if (board.finalTest?.status === 'failed' && attempts >= MAX_FINAL_TEST_ATTEMPTS) {
+  if (board.finalTest?.status === 'failed' && attempts >= resolveMaxFinalTestAttempts()) {
     return;
   }
 
@@ -1748,7 +1760,7 @@ export function finalizeFinalTestOnStreamEnd(
   scheduleSaveSessions();
   emitBoardChange(group.id);
 
-  if (attempts >= MAX_FINAL_TEST_ATTEMPTS) {
+  if (attempts >= resolveMaxFinalTestAttempts()) {
     postPlannerBoardMessage(
       plannerChat,
       [
@@ -1756,7 +1768,7 @@ export function finalizeFinalTestOnStreamEnd(
         '',
         summary,
         '',
-        `${attempts}/${MAX_FINAL_TEST_ATTEMPTS} rounds completed. Review failing areas manually.`,
+        `${attempts}/${resolveMaxFinalTestAttempts()} rounds completed. Review failing areas manually.`,
       ].join('\n'),
     );
     return;
@@ -1909,6 +1921,27 @@ export function cancelPendingAfk(group: ChatGroup): void {
   emitBoardChange(group.id);
 }
 
+/** Set per-board isolation override; `auto` clears the field (global / derived). */
+export function setBoardIsolationMode(
+  group: ChatGroup,
+  mode: 'auto' | 'off' | 'per-task' | 'per-wave',
+  _plannerChat: Chat,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  if (mode === 'auto') {
+    if (board.isolationMode === undefined) return;
+    delete board.isolationMode;
+  } else if (board.isolationMode === mode) {
+    return;
+  } else {
+    board.isolationMode = mode;
+  }
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
 /** Set max concurrent tasks, clamped to [1,20]. Drains queue when in auto/sequential mode. */
 export function setBoardMaxConcurrent(
   group: ChatGroup,
@@ -1951,6 +1984,7 @@ export async function resumeBoardExecutionAfterReload(
   if (!board || !isBoardRunning(group)) return;
 
   await rehydrateBoardWorktreeRoots(group, plannerChat);
+  refreshHeartbeatThresholds();
 
   const attachSupervision = (chatId?: string): void => {
     if (!shouldSuperviseBoardChatOnReload(chatId)) return;

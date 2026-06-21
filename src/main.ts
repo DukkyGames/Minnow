@@ -84,6 +84,7 @@ import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
 import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
+import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
   getActiveChat,
   loadSessionsFromStorage,
@@ -326,6 +327,7 @@ export async function initApp(): Promise<void> {
   await loadSamplerMeta()
     .then(applySamplerMetaToDrawer)
     .catch(() => undefined);
+  await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();

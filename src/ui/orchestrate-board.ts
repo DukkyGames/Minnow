@@ -36,6 +36,7 @@ import {
   getRunSupervision,
   type RunSupervision,
 } from '../agents/controller/wrapper';
+import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import {
   getActiveBoardGroup,
   getPlannerChatForGroup,
@@ -52,6 +53,7 @@ import {
   moveTaskStatus,
   restartBoardTask,
   setBoardExecutionMode,
+  setBoardIsolationMode,
   setBoardMaxConcurrent,
   startBoardAutoRun,
   startFinalIntegrationTestForPlannerChat,
@@ -1061,7 +1063,9 @@ function wireBoardHeaderControls(
   concInput.className = 'board-header__concurrency-input';
   concInput.min = '1';
   concInput.max = '20';
-  concInput.value = String(board.maxConcurrentTasks ?? 3);
+  concInput.value = String(
+    board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
+  );
   concInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
   concInput.setAttribute('aria-label', 'Max concurrent tasks');
   concInput.addEventListener('change', () => {
@@ -1073,6 +1077,33 @@ function wireBoardHeaderControls(
   });
   concWrapper.appendChild(concInput);
   controls.appendChild(concWrapper);
+
+  // Isolation mode override (Auto = global default or derive from execution mode)
+  const isoWrapper = document.createElement('label');
+  isoWrapper.className = 'board-header__isolation';
+  isoWrapper.title = 'Worktree isolation (Auto uses Settings default or execution mode)';
+  const isoSelect = document.createElement('select');
+  isoSelect.className = 'board-header__isolation-select';
+  isoSelect.setAttribute('aria-label', 'Isolation mode');
+  for (const opt of [
+    { value: 'auto', label: 'Auto' },
+    { value: 'off', label: 'Off' },
+    { value: 'per-task', label: 'Per-task' },
+    { value: 'per-wave', label: 'Per-wave' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    isoSelect.appendChild(option);
+  }
+  isoSelect.value = board.isolationMode ?? 'auto';
+  isoSelect.addEventListener('change', () => {
+    const val = isoSelect.value as 'auto' | 'off' | 'per-task' | 'per-wave';
+    setBoardIsolationMode(group, val, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  isoWrapper.appendChild(isoSelect);
+  controls.appendChild(isoWrapper);
 
   // Start / Stop button (shown in sequential, auto, and afk modes)
   if (currentMode !== 'manual') {
@@ -2377,8 +2408,17 @@ function refreshBoardDom(
     '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
   if (concurrencyInput) {
-    concurrencyInput.value = String(board.maxConcurrentTasks ?? 3);
+    concurrencyInput.value = String(
+      board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
+    );
     concurrencyInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
+  }
+
+  const isolationSelect = root.querySelector(
+    '.board-header__isolation-select',
+  ) as HTMLSelectElement | null;
+  if (isolationSelect) {
+    isolationSelect.value = board.isolationMode ?? 'auto';
   }
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual

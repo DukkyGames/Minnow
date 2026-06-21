@@ -1189,6 +1189,123 @@ export function mergeConfigMeta(existing, patch) {
     }
   }
 
+  if (p.autopilot !== undefined) {
+    const AUTOPILOT_EXECUTION_MODES = new Set(['manual', 'sequential', 'auto', 'afk']);
+    const AUTOPILOT_ISOLATION_MODES = new Set(['auto', 'off', 'per-task', 'per-wave']);
+    const clampAutopilotConcurrency = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(20, Math.max(1, Math.round(n)));
+    };
+    const clampAutopilotAttempts = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(10, Math.max(1, Math.round(n)));
+    };
+    const clampHeartbeatIntervalMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(60_000, Math.max(1_000, Math.round(n)));
+    };
+    const clampProgressStallMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(1_800_000, Math.max(10_000, Math.round(n)));
+    };
+    const clampHeartbeatDeadMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(300_000, Math.max(5_000, Math.round(n)));
+    };
+
+    if (p.autopilot === null) {
+      base.autopilot = {
+        defaultExecutionMode: 'manual',
+        maxConcurrentTasks: 3,
+        isolationMode: 'auto',
+        maxTestAttempts: 3,
+        maxFinalTestAttempts: 3,
+        heartbeatIntervalMs: 7000,
+        progressStallMs: 90000,
+        heartbeatDeadMs: 30000,
+        plannerProviderId: '',
+        plannerModelId: '',
+      };
+    } else if (typeof p.autopilot === 'object') {
+      const existingAutopilot =
+        base.autopilot && typeof base.autopilot === 'object'
+          ? { .../** @type {Record<string, unknown>} */ (base.autopilot) }
+          : {
+              defaultExecutionMode: 'manual',
+              maxConcurrentTasks: 3,
+              isolationMode: 'auto',
+              maxTestAttempts: 3,
+              maxFinalTestAttempts: 3,
+              heartbeatIntervalMs: 7000,
+              progressStallMs: 90000,
+              heartbeatDeadMs: 30000,
+              plannerProviderId: '',
+              plannerModelId: '',
+            };
+      const a = /** @type {Record<string, unknown>} */ (p.autopilot);
+      if (typeof a.defaultExecutionMode === 'string') {
+        const mode = a.defaultExecutionMode.trim();
+        if (AUTOPILOT_EXECUTION_MODES.has(mode)) {
+          existingAutopilot.defaultExecutionMode = mode;
+        }
+      }
+      if (a.maxConcurrentTasks !== undefined) {
+        existingAutopilot.maxConcurrentTasks = clampAutopilotConcurrency(
+          a.maxConcurrentTasks,
+          existingAutopilot.maxConcurrentTasks ?? 3,
+        );
+      }
+      if (typeof a.isolationMode === 'string') {
+        const iso = a.isolationMode.trim();
+        if (AUTOPILOT_ISOLATION_MODES.has(iso)) {
+          existingAutopilot.isolationMode = iso;
+        }
+      }
+      if (a.maxTestAttempts !== undefined) {
+        existingAutopilot.maxTestAttempts = clampAutopilotAttempts(
+          a.maxTestAttempts,
+          existingAutopilot.maxTestAttempts ?? 3,
+        );
+      }
+      if (a.maxFinalTestAttempts !== undefined) {
+        existingAutopilot.maxFinalTestAttempts = clampAutopilotAttempts(
+          a.maxFinalTestAttempts,
+          existingAutopilot.maxFinalTestAttempts ?? 3,
+        );
+      }
+      if (a.heartbeatIntervalMs !== undefined) {
+        existingAutopilot.heartbeatIntervalMs = clampHeartbeatIntervalMs(
+          a.heartbeatIntervalMs,
+          existingAutopilot.heartbeatIntervalMs ?? 7000,
+        );
+      }
+      if (a.progressStallMs !== undefined) {
+        existingAutopilot.progressStallMs = clampProgressStallMs(
+          a.progressStallMs,
+          existingAutopilot.progressStallMs ?? 90000,
+        );
+      }
+      if (a.heartbeatDeadMs !== undefined) {
+        existingAutopilot.heartbeatDeadMs = clampHeartbeatDeadMs(
+          a.heartbeatDeadMs,
+          existingAutopilot.heartbeatDeadMs ?? 30000,
+        );
+      }
+      if (typeof a.plannerProviderId === 'string') {
+        existingAutopilot.plannerProviderId = a.plannerProviderId.trim();
+      }
+      if (typeof a.plannerModelId === 'string') {
+        existingAutopilot.plannerModelId = a.plannerModelId.trim();
+      }
+      base.autopilot = existingAutopilot;
+    }
+  }
+
   if (p.terminal && typeof p.terminal === 'object') {
     const existingTerminal =
       base.terminal && typeof base.terminal === 'object'

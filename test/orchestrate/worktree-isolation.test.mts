@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
+import {
+  resetAutopilotMetaCache,
+  setAutopilotMetaForTests,
+} from '../../src/config/autopilot-meta.ts';
 import {
   allocateDevPort,
   boardIntegrationBranch,
@@ -32,6 +36,10 @@ function task(patch: Partial<BoardTask> & { id: string; wave: number | string })
   return { title: patch.id, category: 'code', status: 'planned', ...patch };
 }
 
+afterEach(() => {
+  resetAutopilotMetaCache();
+});
+
 describe('resolveIsolationMode', () => {
   test('explicit override wins over execution mode', () => {
     assert.equal(
@@ -50,6 +58,19 @@ describe('resolveIsolationMode', () => {
     assert.equal(resolveIsolationMode(board({ executionMode: 'sequential' })), 'off');
     assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'off');
     assert.equal(resolveIsolationMode(board({})), 'off');
+  });
+
+  test('global isolation default applies when board has no override', () => {
+    setAutopilotMetaForTests({ isolationMode: 'per-wave' });
+    assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'per-wave');
+    setAutopilotMetaForTests({ isolationMode: 'off' });
+    assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'off');
+  });
+
+  test('global auto preserves derive-from-execution-mode behavior', () => {
+    setAutopilotMetaForTests({ isolationMode: 'auto' });
+    assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'per-task');
+    assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'off');
   });
 
   test('null board is off; isIsolationActive mirrors resolution', () => {

@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { beforeEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { spawnSubAgent, resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
 import {
@@ -21,6 +21,15 @@ import {
   isTaskReadyForAuto,
   setBoardNowForTests,
 } from '../../src/state/orchestrate-board-store.ts';
+import {
+  resolveBoardMaxConcurrent,
+} from '../../src/state/orchestrate-board-actions.ts';
+import {
+  resetAutopilotMetaCache,
+  resolveMaxFinalTestAttempts,
+  resolveMaxTaskTestAttempts,
+  setAutopilotMetaForTests,
+} from '../../src/config/autopilot-meta.ts';
 import {
   setSessionStateForTests,
   findChatById,
@@ -226,6 +235,7 @@ describe('executeBoardTool', () => {
     setBoardNowForTests(() => FIXED_NOW);
     setSessionStateForTests(null);
     setBoardExecutorContext(null);
+    resetAutopilotMetaCache();
   });
 
   test('rejects when chat is not linked to an orchestrate board', async () => {
@@ -876,5 +886,51 @@ describe('executeBoardSetAutonomy', () => {
     withBoardContext();
     const out = await executeBoardTool('board_set_autonomy', { level: 'auto' });
     assert.equal(out, 'Error: board tools require an active Orchestrate chat');
+  });
+});
+
+describe('autopilot resolution', () => {
+  afterEach(() => {
+    resetAutopilotMetaCache();
+  });
+
+  test('resolveBoardMaxConcurrent: board ?? global ?? fallback', () => {
+    setAutopilotMetaForTests({ maxConcurrentTasks: 8 });
+    const board = {
+      planPath: PLAN_PATH,
+      tasks: [],
+      waves: [],
+      startedAt: 1,
+      lastUpdatedAt: 1,
+      executionMode: 'auto' as const,
+    };
+    assert.equal(resolveBoardMaxConcurrent(board), 8);
+    assert.equal(resolveBoardMaxConcurrent({ ...board, maxConcurrentTasks: 5 }), 5);
+    resetAutopilotMetaCache();
+    assert.equal(resolveBoardMaxConcurrent(board), 3);
+    assert.equal(resolveBoardMaxConcurrent({ ...board, executionMode: 'sequential' }), 1);
+  });
+
+  test('test thresholds read global meta only', () => {
+    setAutopilotMetaForTests({ maxTestAttempts: 5, maxFinalTestAttempts: 4 });
+    assert.equal(resolveMaxTaskTestAttempts(), 5);
+    assert.equal(resolveMaxFinalTestAttempts(), 4);
+    resetAutopilotMetaCache();
+    assert.equal(resolveMaxTaskTestAttempts(), 3);
+    assert.equal(resolveMaxFinalTestAttempts(), 3);
+  });
+
+  test('initBoard inherits global default execution mode', () => {
+    setAutopilotMetaForTests({ defaultExecutionMode: 'auto', maxConcurrentTasks: 6 });
+    seedOrchestrateChat();
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'T', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 6);
   });
 });

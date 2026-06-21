@@ -10,6 +10,7 @@
  */
 
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
+import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import type {
   BoardTask,
   BoardTaskStatus,
@@ -410,8 +411,8 @@ export function initBoard(
     startedAt: now,
     lastUpdatedAt: now,
     timerAccumulatedMs: 0,
-    maxConcurrentTasks: 3,
-    executionMode: 'manual',
+    maxConcurrentTasks: getAutopilotMetaSync().maxConcurrentTasks ?? 3,
+    executionMode: getAutopilotMetaSync().defaultExecutionMode ?? 'manual',
   };
   const cycles = detectDependencyCycles(board);
   if (cycles.length > 0) {
