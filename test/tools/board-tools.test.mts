@@ -589,6 +589,61 @@ describe('validateBoardInitArgs — dependsOn', () => {
     if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
   });
 
+  test('accepts dependsOn wrapped as { item: string }', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-B',
+          title: 'B',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { item: 'W1-A' },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
+  });
+
+  test('accepts dependsOn wrapped as { item: string[] }', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-C',
+          title: 'C',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { item: ['W1-A', 'W1-B'] },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[2]?.dependsOn, ['W1-A', 'W1-B']);
+  });
+
+  test('rejects malformed dependsOn object', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-B',
+          title: 'B',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { notItem: 'W1-A' },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /invalid dependsOn/);
+  });
+
   test('detects 2-node cycle', () => {
     const r = validateBoardInitArgs({
       ...base,

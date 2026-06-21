@@ -179,7 +179,7 @@ export type ValidateBoardInitResult =
   | { ok: true; args: BoardInitArgs }
   | { ok: false; error: string };
 
-/** Coerce JSON array fields some models stringify in tool arguments. */
+/** Coerce JSON array fields some models stringify or wrap in tool arguments. */
 function coerceToolArrayField(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
@@ -187,10 +187,19 @@ function coerceToolArrayField(value: unknown): unknown[] | null {
     if (!trimmed) return null;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      return Array.isArray(parsed) ? parsed : null;
-    } catch {
+      if (Array.isArray(parsed)) return parsed;
+      if (typeof parsed === 'string' && parsed.trim()) return [parsed.trim()];
       return null;
+    } catch {
+      // Bare task id string (not a JSON array literal).
+      return [trimmed];
     }
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    // Some providers emit { item: "W1-A" } or { item: ["W1-A", "W1-B"] } instead of a JSON array.
+    if ('item' in obj) return coerceToolArrayField(obj.item);
+    if ('items' in obj) return coerceToolArrayField(obj.items);
   }
   return null;
 }
@@ -266,7 +275,18 @@ export function validateBoardInitArgs(
     }
     const build = typeof r.build === 'string' ? r.build.trim() : '';
     const test = typeof r.test === 'string' ? r.test.trim() : '';
-    const rawDeps = coerceToolArrayField(r.dependsOn ?? r.depends_on);
+    const rawDepsInput = r.dependsOn ?? r.depends_on;
+    const rawDeps = coerceToolArrayField(rawDepsInput);
+    if (
+      rawDepsInput != null &&
+      rawDepsInput !== '' &&
+      (!rawDeps || rawDeps.length === 0)
+    ) {
+      return {
+        ok: false,
+        error: `Error: task "${id}" has invalid dependsOn (expected array of task ids)`,
+      };
+    }
     const deps = rawDeps
       ? rawDeps.map((d) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
       : [];

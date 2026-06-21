@@ -627,6 +627,13 @@ async function executeStreamingCodeTool(
     return `Error: ${name} requires valid arguments`;
   }
 
+  const workspaceRoot =
+    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+  const relativeCwd =
+    name === 'execute_command' && typeof args.cwd === 'string'
+      ? args.cwd.trim()
+      : undefined;
+
   try {
     const { getChatAbort } = await import('../app-state');
     return await runCommandWithTerminalStream(mapped.command, {
@@ -636,6 +643,8 @@ async function executeStreamingCodeTool(
       displayLabel: mapped.label,
       args: mapped.argv,
       shell: mapped.shell,
+      workspaceRoot,
+      cwd: relativeCwd || undefined,
       abortSignal: context.chatId
         ? getChatAbort(context.chatId)?.signal
         : undefined,

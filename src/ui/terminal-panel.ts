@@ -627,6 +627,10 @@ export async function runCommandWithTerminalStream(
     hooks?: TerminalStreamHooks;
     /** When aborted (e.g. user Stop), cancel the server run. */
     abortSignal?: AbortSignal;
+    /** Allow-listed workspace root for agent runs (user runs stay global). */
+    workspaceRoot?: string;
+    /** Working directory relative to workspaceRoot. */
+    cwd?: string;
   },
 ): Promise<string> {
   const panelWasClosed = !isTerminalPanelOpen();
@@ -647,6 +651,8 @@ export async function runCommandWithTerminalStream(
     chatId: options.chatId,
     source: options.source,
     toolCallId: options.toolCallId,
+    workspaceRoot: options.workspaceRoot,
+    cwd: options.cwd,
   });
 
   activeRunId = runId;
