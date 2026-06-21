@@ -19,7 +19,7 @@ const CHAT_META_STORAGE_KEY = 'minnow.chatMeta';
 export const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
 
 /** Upper bound for `chat.maxToolTurns` (main agent and sub-agents share this range). */
-export const MAX_CHAT_MAX_TOOL_TURNS = 128;
+export const MAX_CHAT_MAX_TOOL_TURNS = 500;
 
 export const DEFAULT_GENERATION_IDLE_TIMEOUT_MS = 25 * 60_000;
 export const DEFAULT_GENERATION_MAX_DURATION_MS = 60 * 60_000;

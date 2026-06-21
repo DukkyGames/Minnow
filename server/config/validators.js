@@ -17,7 +17,7 @@ import {
 } from '../generations/timeouts.js';
 
 const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
-const MAX_CHAT_MAX_TOOL_TURNS = 128;
+const MAX_CHAT_MAX_TOOL_TURNS = 500;
 const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
