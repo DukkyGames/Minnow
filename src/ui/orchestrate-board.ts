@@ -783,6 +783,179 @@ function createBoardHeaderIconButton(
 
 const BOARD_ICON_PLAN =
   'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
+
+/** Autonomy stops (least → most autonomous). */
+const BOARD_EXECUTION_MODES = ['manual', 'sequential', 'auto', 'afk'] as const;
+
+const BOARD_EXECUTION_MODE_META: ReadonlyArray<{
+  id: (typeof BOARD_EXECUTION_MODES)[number];
+  label: string;
+  title: string;
+}> = [
+  {
+    id: 'manual',
+    label: 'Manual',
+    title: 'You start each task from the board',
+  },
+  {
+    id: 'sequential',
+    label: 'Sequential',
+    title: 'Orchestrator runs one task at a time',
+  },
+  {
+    id: 'auto',
+    label: 'Auto',
+    title: 'Orchestrator runs tasks concurrently',
+  },
+  {
+    id: 'afk',
+    label: 'AFK',
+    title: 'Fully autonomous until Stop or the board finishes',
+  },
+] as const;
+
+function boardExecutionModeToIndex(mode: string): number {
+  const idx = BOARD_EXECUTION_MODES.indexOf(mode as (typeof BOARD_EXECUTION_MODES)[number]);
+  return idx >= 0 ? idx : 0;
+}
+
+const BOARD_AFK_HINT_VISIBLE_MS = 2500;
+/** Must match `.board-header__exec-mode-hint` opacity transition duration. */
+const BOARD_AFK_HINT_FADE_MS = 400;
+
+let boardAfkHintDismissTimer: ReturnType<typeof setTimeout> | null = null;
+let boardAfkHintFadeTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncedExecMode: string | null = null;
+let boardAfkHintShownForSession = false;
+
+function clearBoardAfkHintTimers(): void {
+  if (boardAfkHintDismissTimer !== null) {
+    clearTimeout(boardAfkHintDismissTimer);
+    boardAfkHintDismissTimer = null;
+  }
+  if (boardAfkHintFadeTimer !== null) {
+    clearTimeout(boardAfkHintFadeTimer);
+    boardAfkHintFadeTimer = null;
+  }
+}
+
+function hideBoardAfkHint(hint: HTMLElement, instant = true): void {
+  clearBoardAfkHintTimers();
+  hint.classList.remove('is-visible');
+  if (instant) {
+    hint.hidden = true;
+    hint.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function finishBoardAfkHintFade(hint: HTMLElement): void {
+  boardAfkHintFadeTimer = null;
+  hint.hidden = true;
+  hint.setAttribute('aria-hidden', 'true');
+}
+
+/** Fade out, then remove from layout once the opacity transition completes. */
+function dismissBoardAfkHint(hint: HTMLElement): void {
+  if (boardAfkHintFadeTimer !== null) return;
+  hint.classList.remove('is-visible');
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) {
+    finishBoardAfkHintFade(hint);
+    return;
+  }
+
+  const onTransitionEnd = (event: TransitionEvent): void => {
+    if (event.target !== hint || event.propertyName !== 'opacity') return;
+    hint.removeEventListener('transitionend', onTransitionEnd);
+    finishBoardAfkHintFade(hint);
+  };
+  hint.addEventListener('transitionend', onTransitionEnd);
+  boardAfkHintFadeTimer = setTimeout(() => {
+    hint.removeEventListener('transitionend', onTransitionEnd);
+    finishBoardAfkHintFade(hint);
+  }, BOARD_AFK_HINT_FADE_MS + 80);
+}
+
+/** Brief AFK callout: visible ~2.5s, then fades out without shifting toolbar layout. */
+function showBoardAfkHint(hint: HTMLElement): void {
+  clearBoardAfkHintTimers();
+  hint.hidden = false;
+  hint.setAttribute('aria-hidden', 'false');
+  hint.classList.remove('is-visible');
+  // Two frames so the browser paints opacity 0 before transitioning to 1.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      hint.classList.add('is-visible');
+    });
+  });
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const visibleMs = reducedMotion ? 1200 : BOARD_AFK_HINT_VISIBLE_MS;
+
+  boardAfkHintDismissTimer = setTimeout(() => {
+    boardAfkHintDismissTimer = null;
+    dismissBoardAfkHint(hint);
+  }, visibleMs);
+}
+
+function syncBoardExecModeUi(root: ParentNode, currentMode: string): void {
+  const idx = boardExecutionModeToIndex(currentMode);
+  const segments = root.querySelectorAll<HTMLButtonElement>(
+    '.board-header__exec-mode-segment',
+  );
+  segments.forEach((btn, i) => {
+    btn.setAttribute('aria-checked', i === idx ? 'true' : 'false');
+  });
+  const hint = root.querySelector('.board-header__exec-mode-hint') as HTMLElement | null;
+  if (!hint) return;
+
+  if (currentMode !== 'afk') {
+    hideBoardAfkHint(hint);
+    lastSyncedExecMode = currentMode;
+    boardAfkHintShownForSession = false;
+    return;
+  }
+
+  const enteredAfk = lastSyncedExecMode !== 'afk';
+  lastSyncedExecMode = 'afk';
+  if (enteredAfk || !boardAfkHintShownForSession) {
+    boardAfkHintShownForSession = true;
+    showBoardAfkHint(hint);
+  }
+}
+
+function onBoardExecModeSegmentKeydown(
+  event: KeyboardEvent,
+  modeId: string,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const segments = BOARD_EXECUTION_MODES;
+  const currentIndex = segments.indexOf(modeId as (typeof BOARD_EXECUTION_MODES)[number]);
+  if (currentIndex < 0) return;
+
+  let nextIndex = currentIndex;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = Math.min(currentIndex + 1, segments.length - 1);
+    event.preventDefault();
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = Math.max(currentIndex - 1, 0);
+    event.preventDefault();
+  } else {
+    return;
+  }
+
+  const nextMode = segments[nextIndex] ?? 'manual';
+  setBoardExecutionMode(group, nextMode, plannerChat);
+  refreshActiveBoardIfMounted();
+  const root = document.querySelector('.board-root');
+  const nextBtn = root?.querySelector<HTMLButtonElement>(
+    `.board-header__exec-mode-segment[data-exec-mode="${nextMode}"]`,
+  );
+  nextBtn?.focus();
+}
+
 function wireBoardHeaderControls(
   controls: HTMLElement,
   planPath: string,
@@ -791,42 +964,68 @@ function wireBoardHeaderControls(
   plannerChat: Chat,
 ): void {
   controls.replaceChildren();
+  clearBoardAfkHintTimers();
+  lastSyncedExecMode = null;
+  boardAfkHintShownForSession = false;
 
-  // Execution mode select (Manual / Auto / Sequential)
+  // Execution mode segments (Manual → Sequential → Auto → AFK)
   const currentMode = getBoardExecutionMode(board);
-  const modeWrapper = document.createElement('label');
+  const modeWrapper = document.createElement('div');
   modeWrapper.className = 'board-header__exec-mode';
-  modeWrapper.title = 'Execution mode: Manual (user-driven), Auto (concurrent auto-start), Sequential (one at a time)';
-  const modeSelect = document.createElement('select');
-  modeSelect.className = 'board-header__exec-mode-select';
-  modeSelect.dataset.boardAction = 'auto-pilot';
-  modeSelect.setAttribute('aria-label', 'Execution mode');
-  for (const [value, label] of [['manual', 'Manual'], ['auto', 'Auto'], ['sequential', 'Sequential']] as const) {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = label;
-    if (value === currentMode) opt.selected = true;
-    modeSelect.appendChild(opt);
+
+  const modeGroup = document.createElement('div');
+  modeGroup.className = 'board-header__exec-mode-segments';
+  modeGroup.dataset.boardAction = 'auto-pilot';
+  modeGroup.setAttribute('role', 'radiogroup');
+  modeGroup.setAttribute('aria-label', 'Execution autonomy');
+
+  for (const meta of BOARD_EXECUTION_MODE_META) {
+    const segment = document.createElement('button');
+    segment.type = 'button';
+    segment.className = 'board-header__exec-mode-segment';
+    segment.dataset.execMode = meta.id;
+    segment.setAttribute('role', 'radio');
+    segment.setAttribute(
+      'aria-checked',
+      meta.id === currentMode ? 'true' : 'false',
+    );
+    segment.textContent = meta.label;
+    segment.title = meta.title;
+
+    segment.addEventListener('click', () => {
+      setBoardExecutionMode(group, meta.id, plannerChat);
+      refreshActiveBoardIfMounted();
+    });
+    segment.addEventListener('keydown', (event) => {
+      onBoardExecModeSegmentKeydown(event, meta.id, group, plannerChat);
+    });
+
+    modeGroup.appendChild(segment);
   }
-  modeSelect.addEventListener('change', () => {
-    const mode = modeSelect.value as 'manual' | 'auto' | 'sequential';
-    setBoardExecutionMode(group, mode, plannerChat);
-    refreshActiveBoardIfMounted();
-  });
-  modeWrapper.appendChild(modeSelect);
+
+  const afkHint = document.createElement('p');
+  afkHint.className = 'board-header__exec-mode-hint';
+  afkHint.setAttribute('role', 'status');
+  afkHint.textContent =
+    'Hands-off. Press Start; the orchestrator will not prompt you until Stop or the board finishes.';
+  afkHint.hidden = true;
+  afkHint.setAttribute('aria-hidden', 'true');
+
+  modeWrapper.appendChild(modeGroup);
+  modeWrapper.appendChild(afkHint);
   controls.appendChild(modeWrapper);
 
-  // Max concurrent stepper (only editable in Auto mode)
+  // Max concurrent stepper (editable in Auto and AFK modes)
   const concWrapper = document.createElement('label');
   concWrapper.className = 'board-header__concurrency';
-  concWrapper.title = 'Max concurrent tasks (Auto mode only)';
+  concWrapper.title = 'Max concurrent tasks (Auto and AFK modes)';
   const concInput = document.createElement('input');
   concInput.type = 'number';
   concInput.className = 'board-header__concurrency-input';
   concInput.min = '1';
   concInput.max = '20';
   concInput.value = String(board.maxConcurrentTasks ?? 3);
-  concInput.disabled = currentMode !== 'auto';
+  concInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
   concInput.setAttribute('aria-label', 'Max concurrent tasks');
   concInput.addEventListener('change', () => {
     const val = Number(concInput.value);
@@ -838,8 +1037,8 @@ function wireBoardHeaderControls(
   concWrapper.appendChild(concInput);
   controls.appendChild(concWrapper);
 
-  // Start / Stop button (only shown in auto or sequential mode)
-  if (currentMode === 'auto' || currentMode === 'sequential') {
+  // Start / Stop button (shown in sequential, auto, and afk modes)
+  if (currentMode !== 'manual') {
     const running = isBoardRunning(group);
     const runBtn = document.createElement('button');
     runBtn.type = 'button';
@@ -1782,25 +1981,20 @@ function refreshBoardDom(
   }
 
   const currentMode = getBoardExecutionMode(board);
-  const execModeSelect = root.querySelector(
-    '[data-board-action="auto-pilot"]',
-  ) as HTMLSelectElement | null;
-  if (execModeSelect) {
-    execModeSelect.value = currentMode;
-  }
+  syncBoardExecModeUi(root, currentMode);
   const concurrencyInput = root.querySelector(
     '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
   if (concurrencyInput) {
     concurrencyInput.value = String(board.maxConcurrentTasks ?? 3);
-    concurrencyInput.disabled = currentMode !== 'auto';
+    concurrencyInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
   }
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
   if (controls) {
     let runBtn = controls.querySelector('.board-header__run-btn') as HTMLButtonElement | null;
-    if (currentMode === 'auto' || currentMode === 'sequential') {
+    if (currentMode !== 'manual') {
       const running = isBoardRunning(group);
       if (!runBtn) {
         runBtn = document.createElement('button');

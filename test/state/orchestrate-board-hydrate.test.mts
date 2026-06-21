@@ -137,6 +137,22 @@ describe('orchestrate board hydration', () => {
     assert.equal(isBoardRunning(group), true);
   });
 
+  test('restores afk executionMode and autoRunning', () => {
+    const [group] = hydrateSessionGroupsForTests([
+      {
+        ...PERSISTED_GROUP,
+        orchestrateBoard: {
+          ...PERSISTED_GROUP.orchestrateBoard,
+          executionMode: 'afk',
+          autoRunning: true,
+        },
+      },
+    ]);
+    assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+    assert.equal(group.orchestrateBoard?.autoRunning, true);
+    assert.equal(isBoardRunning(group), true);
+  });
+
   test('drops autoRunning when false and coerces unknown executionMode to manual', () => {
     const [group] = hydrateSessionGroupsForTests([
       {

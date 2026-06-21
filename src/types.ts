@@ -365,7 +365,7 @@ export interface OrchestrateBoardState {
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
   /** Manual board vs auto-pilot delegation (default manual). */
-  executionMode?: 'manual' | 'auto' | 'sequential';
+  executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
   /**

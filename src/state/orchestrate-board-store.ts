@@ -281,16 +281,16 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
 /** Resolved execution mode (defaults to manual). */
 export function getBoardExecutionMode(
   board: OrchestrateBoardState | null | undefined,
-): 'manual' | 'auto' | 'sequential' {
+): 'manual' | 'auto' | 'sequential' | 'afk' {
   const m = board?.executionMode;
-  if (m === 'auto' || m === 'sequential') return m;
+  if (m === 'auto' || m === 'sequential' || m === 'afk') return m;
   return 'manual';
 }
 
-/** True when the board is in auto-pilot delegation mode (auto or sequential). */
+/** True when the board is in auto-pilot delegation mode (auto, sequential, or afk). */
 export function isBoardAutoMode(group: ChatGroup): boolean {
   const mode = getBoardExecutionMode(group.orchestrateBoard);
-  return mode === 'auto' || mode === 'sequential';
+  return mode === 'auto' || mode === 'sequential' || mode === 'afk';
 }
 
 /** True when auto/sequential mode is active AND the user has pressed Start. */

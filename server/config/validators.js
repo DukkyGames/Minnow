@@ -264,7 +264,8 @@ function ensureOrchestrateBoard(raw) {
   const executionMode =
     executionModeRaw === 'auto' ||
     executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential'
+    executionModeRaw === 'sequential' ||
+    executionModeRaw === 'afk'
       ? executionModeRaw
       : 'manual';
   out.executionMode = executionMode;

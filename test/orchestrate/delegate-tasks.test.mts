@@ -237,11 +237,13 @@ describe('sequential execution mode', () => {
     assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'sequential');
   });
 
-  test('isBoardAutoMode true for both auto and sequential', () => {
+  test('isBoardAutoMode true for auto, sequential, and afk', () => {
     const { group } = seedBoard('manual');
     group.orchestrateBoard!.executionMode = 'auto';
     assert.equal(isBoardAutoMode(group), true);
     group.orchestrateBoard!.executionMode = 'sequential';
+    assert.equal(isBoardAutoMode(group), true);
+    group.orchestrateBoard!.executionMode = 'afk';
     assert.equal(isBoardAutoMode(group), true);
     group.orchestrateBoard!.executionMode = 'manual';
     assert.equal(isBoardAutoMode(group), false);

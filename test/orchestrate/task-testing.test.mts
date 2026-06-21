@@ -278,6 +278,41 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(updated!.status, 'blocked');
     assert.match(updated!.error ?? '', /still broken/);
   });
+
+  test('afk mode third fail blocks and delivers stalled report', async () => {
+    const { setOrchestratorReportDeliverHook } = await import(
+      '../../src/agents/controller/report.ts'
+    );
+    const deliveries: string[] = [];
+    setOrchestratorReportDeliverHook(async (_chatId, message) => {
+      deliveries.push(message);
+    });
+
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.autoRunning = true;
+
+    updateTask(
+      group,
+      'W1-A',
+      { testAttempts: 2, testVerdict: 'fail', testSummary: 'still broken' },
+      planner,
+    );
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    const route = applyTaskTestFailureState(group, task, planner, 'still broken');
+    assert.equal(route, 'blocked');
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated!.status, 'blocked');
+    assert.equal(deliveries.length, 1);
+    assert.match(deliveries[0]!, /stalled/i);
+    assert.match(deliveries[0]!, /self-heal/i);
+
+    setOrchestratorReportDeliverHook(null);
+  });
 });
 
 describe('final integration test', () => {

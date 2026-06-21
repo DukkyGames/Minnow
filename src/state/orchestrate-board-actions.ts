@@ -1765,7 +1765,7 @@ export function moveTaskStatus(
 /** Persist auto/manual/sequential execution mode. Does not start execution — use startBoardAutoRun. */
 export function setBoardExecutionMode(
   group: ChatGroup,
-  mode: 'manual' | 'auto' | 'sequential',
+  mode: 'manual' | 'auto' | 'sequential' | 'afk',
   plannerChat: Chat,
 ): void {
   const board = group.orchestrateBoard;

@@ -565,7 +565,8 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
   const executionMode =
     executionModeRaw === 'auto' ||
     executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential'
+    executionModeRaw === 'sequential' ||
+    executionModeRaw === 'afk'
       ? executionModeRaw
       : 'manual';
   const finalTest = ensureOrchestrateFinalTest(r.finalTest);

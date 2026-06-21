@@ -29,6 +29,7 @@ export function resolveIsolationMode(
   }
   switch (board.executionMode) {
     case 'auto':
+    case 'afk':
       return 'per-task';
     case 'sequential':
     case 'manual':

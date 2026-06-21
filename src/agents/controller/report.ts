@@ -75,10 +75,19 @@ export function buildOrchestratorTaskReportMessage(
   if (task.error?.trim()) {
     lines.push('', 'Error:', task.error.trim());
   }
-  lines.push(
-    '',
-    'Use `board_get_state` for the full board. Auto-pilot starts the next ready planned tasks automatically.',
-  );
+  if (kind === 'stalled') {
+    lines.push(
+      '',
+      'Use `board_get_state` for the full board. This task is blocked after repeated test failures.',
+      'Investigate and self-heal autonomously — spawn a fixer sub-agent or retry the build with a refined seed. Do not ask the user.',
+      'Auto-pilot continues starting other ready tasks where possible.',
+    );
+  } else {
+    lines.push(
+      '',
+      'Use `board_get_state` for the full board. Auto-pilot starts the next ready planned tasks automatically.',
+    );
+  }
   return lines.join('\n');
 }
 

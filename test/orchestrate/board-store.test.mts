@@ -14,9 +14,12 @@ import {
   applyOpenBoardWaveCollapse,
   countBoardTasksProgressed,
   countBoardWavesProgressed,
+  getBoardExecutionMode,
   getBoardProgressPercent,
   getBoardState,
   initBoard,
+  isBoardAutoMode,
+  isBoardRunning,
   isTaskReadyForAuto,
   recomputeWaveRollup,
   rollupWaveStatus,
@@ -456,5 +459,34 @@ describe('isTaskReadyForAuto DAG-first scheduling', () => {
     assert.equal(isTaskReadyForAuto(board, w2), false);
     board.tasks.find((t) => t.id === 'W1-A')!.status = 'complete';
     assert.equal(isTaskReadyForAuto(board, w2), true);
+  });
+});
+
+describe('execution mode afk', () => {
+  test('getBoardExecutionMode returns afk when set', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    group.orchestrateBoard!.executionMode = 'afk';
+    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'afk');
+  });
+
+  test('isBoardAutoMode and isBoardRunning recognise afk', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    group.orchestrateBoard!.executionMode = 'afk';
+    assert.equal(isBoardAutoMode(group), true);
+    assert.equal(isBoardRunning(group), false);
+    group.orchestrateBoard!.autoRunning = true;
+    assert.equal(isBoardRunning(group), true);
   });
 });

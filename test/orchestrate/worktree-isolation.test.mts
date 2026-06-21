@@ -46,6 +46,7 @@ describe('resolveIsolationMode', () => {
 
   test('auto defaults to per-task; sequential/manual/unset default to off', () => {
     assert.equal(resolveIsolationMode(board({ executionMode: 'auto' })), 'per-task');
+    assert.equal(resolveIsolationMode(board({ executionMode: 'afk' })), 'per-task');
     assert.equal(resolveIsolationMode(board({ executionMode: 'sequential' })), 'off');
     assert.equal(resolveIsolationMode(board({ executionMode: 'manual' })), 'off');
     assert.equal(resolveIsolationMode(board({})), 'off');
