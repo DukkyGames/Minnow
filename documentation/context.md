@@ -1604,7 +1604,8 @@ Server buffers upstream chat/completions streams so clients can attach, detach, 
 | Module | Role |
 |--------|------|
 | [`server/generations/store.js`](../server/generations/store.js) | In-memory `Map`; 16 MiB cap; eviction 30s (default) or 5 min (`persist: true`) |
-| [`server/generations/upstream.js`](../server/generations/upstream.js) | Fire-and-forget `fetch` POST to provider chat path; idle + max duration from `config.json` → `chat` (Settings → Tools → **Generation timeouts**; defaults 25 min idle / 60 min max) via [`server/generations/timeouts.js`](../server/generations/timeouts.js) |
+| [`server/generations/upstream.js`](../server/generations/upstream.js) | Fire-and-forget POST to provider chat path via [`upstream-fetch.js`](../server/generations/upstream-fetch.js) (undici `bodyTimeout`/`headersTimeout` disabled so LM Studio slow-token gaps do not hit the default 300s limit); idle + max duration from `config.json` → `chat` (Settings → Tools → **Generation timeouts**; defaults 25 min idle / 60 min max) via [`server/generations/timeouts.js`](../server/generations/timeouts.js) |
+| [`server/generations/upstream-fetch.js`](../server/generations/upstream-fetch.js) | Shared undici `Agent` for provider streams — defers timeout policy to `upstream.js` |
 | [`server/generations/routes.js`](../server/generations/routes.js) | Vite middleware |
 | [`server/research/search.js`](../server/research/search.js) | Deep Research: `searchStructured()` provider chain + disk cache; `loadSearchSettings()` (`search.json` + `tools.json` fallback) |
 | [`server/research/cache.js`](../server/research/cache.js) | Deep Research: `getSearch` / `setSearch` / `getPage` / `setPage` under `~/.minnow/research/cache/` (2h TTL) |
