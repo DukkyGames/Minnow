@@ -316,6 +316,225 @@ button.board-header__activity {
   transition: transform var(--duration-normal) var(--ease-out);
 }
 
+/* Running task strip: compact instrumentation chips below the progress bar. */
+.board-running-tasks {
+  width: 100%;
+  min-width: 0;
+}
+
+.board-running-tasks__strip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.board-running-tasks__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: min(22rem, 72vw);
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+}
+
+.board-running-tasks__chip--streaming {
+  border-color: color-mix(in srgb, var(--mn-warning) 35%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-warning-soft) 55%, var(--mn-bg));
+}
+
+.board-running-tasks__chip--test.board-running-tasks__chip--streaming {
+  border-color: color-mix(in srgb, var(--mn-fg-subtle) 30%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-surface-2) 70%, var(--mn-bg));
+}
+
+.board-running-tasks__chip--fix.board-running-tasks__chip--streaming {
+  border-color: var(--mn-danger-border);
+  background: color-mix(in srgb, var(--mn-danger-soft) 45%, var(--mn-bg));
+}
+
+.board-running-tasks__chip--final.board-running-tasks__chip--streaming {
+  border-color: color-mix(in srgb, var(--mn-accent) 28%, var(--mn-border));
+  background: color-mix(in srgb, var(--mn-accent-soft, var(--mn-surface-2)) 35%, var(--mn-bg));
+}
+
+.board-running-tasks__phase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+  background: transparent;
+}
+
+.board-running-tasks__phase--build {
+  border-color: color-mix(in srgb, var(--mn-accent) 30%, var(--mn-border));
+  color: var(--mn-fg);
+}
+
+.board-running-tasks__phase--test {
+  border-color: color-mix(in srgb, var(--mn-fg-subtle) 35%, var(--mn-border));
+}
+
+.board-running-tasks__phase--fix {
+  border-color: var(--mn-danger-border);
+  color: var(--mn-danger);
+}
+
+.board-running-tasks__phase--final {
+  border-color: color-mix(in srgb, var(--mn-accent) 25%, var(--mn-border));
+}
+
+.board-running-tasks__phase-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.board-running-tasks__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--mn-warning);
+}
+
+.board-running-tasks__chip--streaming .board-running-tasks__dot {
+  animation: board-badge-pulse 1.4s var(--ease-out) infinite;
+}
+
+.board-running-tasks__chip:not(.board-running-tasks__chip--streaming) .board-running-tasks__dot {
+  background: var(--mn-fg-subtle);
+  opacity: 0.65;
+}
+
+.board-running-tasks__id {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-muted);
+}
+
+.board-running-tasks__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--mn-fg);
+}
+
+.board-running-tasks__stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
+}
+
+.board-running-tasks__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 2px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    max-width var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.board-running-tasks__chip:hover .board-running-tasks__controls,
+.board-running-tasks__chip:focus-within .board-running-tasks__controls {
+  max-width: 7.5rem;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.board-running-tasks__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.board-running-tasks__control-icon {
+  width: 13px;
+  height: 13px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-running-tasks__control:hover {
+    border-color: var(--mn-border);
+    background: var(--mn-surface-elevated, var(--mn-surface-2));
+    color: var(--mn-fg);
+  }
+
+  .board-running-tasks__control--stop:hover {
+    border-color: var(--mn-danger-border);
+    color: var(--mn-danger);
+  }
+}
+
+.board-running-tasks__control:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-running-tasks__chip--streaming .board-running-tasks__dot {
+    animation: none;
+  }
+
+  .board-running-tasks__controls {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .board-running-tasks__chip {
+    max-width: min(18rem, 88vw);
+  }
+
+  .board-running-tasks__controls {
+    max-width: 7.5rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .board-header__controls {
   display: flex;
   flex-shrink: 0;

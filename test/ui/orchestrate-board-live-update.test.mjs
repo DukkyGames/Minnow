@@ -1012,4 +1012,59 @@ describe('orchestrate board live updates', () => {
     assert.notEqual(keyAfter, keyBefore);
   });
 
+  test('running tasks strip appears under progress bar while a task chat streams', async () => {
+    setupDom();
+    await primeSubAgentConfig();
+    setBoardNowForTests(() => 1_700_000_000_000);
+    const chat = makeOrchestrateChat();
+    const taskChat = createEmptyChatObject('');
+    taskChat.id = FIXED_TASK_CHAT_ID;
+    taskChat.name = 'Task W1-A: Task A';
+    taskChat.boardGroupId = FIXED_GROUP_ID;
+    taskChat.groupId = FIXED_GROUP_ID;
+    taskChat.lastStats = {
+      tokens_per_second: 12,
+      time_to_first_token: 0.4,
+      generation_time: 2.1,
+      stop_reason: null,
+      total_tokens: 420,
+      prompt_tokens: 300,
+      completion_tokens: 120,
+    };
+    const group = initBoardForChat(chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Implement streaming strip',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    updateTask(group, 'W1-A', { chatId: FIXED_TASK_CHAT_ID, status: 'in_progress' });
+    setSessionStateForTests(
+      sessionStateForBoard(chat, group, { chats: [chat, taskChat] }),
+    );
+    setStreaming(true, FIXED_TASK_CHAT_ID);
+
+    renderBoardView(group);
+    await waitForKanban();
+
+    const strip = document.querySelector('.board-running-tasks');
+    assert.ok(strip, 'running strip visible while task chat streams');
+    const progress = document.querySelector('.board-header__progress');
+    assert.ok(progress?.nextElementSibling?.classList.contains('board-running-tasks'));
+    const chip = document.querySelector('.board-running-tasks__chip');
+    assert.ok(chip?.textContent?.includes('W1-A'));
+    assert.ok(chip?.textContent?.includes('420 tok'));
+    assert.ok(chip?.querySelector('.board-running-tasks__control--stop'));
+    assert.ok(chip?.querySelector('.board-running-tasks__control--open'));
+
+    setStreaming(false, FIXED_TASK_CHAT_ID);
+    refreshActiveBoardIfMounted();
+    assert.equal(document.querySelector('.board-running-tasks'), null);
+  });
+
 });

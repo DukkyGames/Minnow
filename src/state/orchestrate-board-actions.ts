@@ -486,27 +486,88 @@ function skipBackgroundBoardChatLaunch(): boolean {
   );
 }
 
+/** Phase label for a running board task slot (build / test / fix / final integration). */
+export type RunningBoardTaskPhase = 'build' | 'test' | 'fix' | 'final';
+
+/** One concurrency slot occupied by a streaming or launching task chat. */
+export interface RunningBoardTaskSlot {
+  taskId: string;
+  title: string;
+  chatId: string;
+  phase: RunningBoardTaskPhase;
+  task?: BoardTask;
+  isFinalTest?: boolean;
+}
+
+function runningSlotPhaseForTask(
+  task: BoardTask,
+  chatId: string,
+): RunningBoardTaskPhase {
+  if (task.fixerChatId?.trim() === chatId) return 'fix';
+  if (task.testChatId?.trim() === chatId) return 'test';
+  if ((task.testAttempts ?? 0) > 0 && task.status === 'in_progress') return 'fix';
+  return 'build';
+}
+
 /** Running task / tester / final-integration chats occupying a concurrency slot. */
 export function countRunningTaskChats(
   board: NonNullable<ChatGroup['orchestrateBoard']>,
 ): number {
+  return listRunningBoardTaskSlots(board).length;
+}
+
+/** Enumerate active board task chats (build, test, fixer, final integration). */
+export function listRunningBoardTaskSlots(
+  board: NonNullable<ChatGroup['orchestrateBoard']>,
+): RunningBoardTaskSlot[] {
   const seen = new Set<string>();
-  let n = 0;
-  const countActive = (raw?: string): void => {
-    const id = raw?.trim();
+  const slots: RunningBoardTaskSlot[] = [];
+  const push = (
+    chatId: string | undefined,
+    slot: Omit<RunningBoardTaskSlot, 'chatId'>,
+  ): void => {
+    const id = chatId?.trim();
     if (!id || seen.has(id)) return;
-    if (isTaskChatStreaming(id)) {
-      seen.add(id);
-      n += 1;
-    }
+    if (!isTaskChatStreaming(id)) return;
+    seen.add(id);
+    slots.push({ ...slot, chatId: id });
   };
   for (const task of board.tasks) {
-    countActive(task.chatId);
-    countActive(task.testChatId);
-    countActive(task.fixerChatId);
+    const buildId = task.chatId?.trim();
+    if (buildId) {
+      push(buildId, {
+        taskId: task.id,
+        title: task.title,
+        phase: runningSlotPhaseForTask(task, buildId),
+        task,
+      });
+    }
+    const testId = task.testChatId?.trim();
+    if (testId) {
+      push(testId, {
+        taskId: task.id,
+        title: task.title,
+        phase: 'test',
+        task,
+      });
+    }
+    const fixerId = task.fixerChatId?.trim();
+    if (fixerId) {
+      push(fixerId, {
+        taskId: task.id,
+        title: task.title,
+        phase: 'fix',
+        task,
+      });
+    }
   }
-  countActive(board.finalTest?.chatId);
-  return n;
+  push(board.finalTest?.chatId, {
+    taskId: FULL_BOARD_TEST_ID,
+    title: 'Final integration test',
+    phase: 'final',
+    isFinalTest: true,
+  });
+  return slots;
 }
 
 /** True when a task-linked chat is starting or streaming (occupies a concurrency slot). */
@@ -643,6 +704,43 @@ async function resumeBoardTask(
     return;
   }
   await startTask(group, taskId, plannerChat);
+}
+
+/** Continue a stalled or setup-pending board task (MIN-222). */
+export async function continueBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  await resumeBoardTask(group, taskId, plannerChat);
+}
+
+/** Stop a running board task chat, then start it again (MIN-222). */
+export async function restartBoardTask(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  await stopTask(group, taskId, plannerChat);
+  await resumeBoardTask(group, taskId, plannerChat);
+}
+
+/** Stop one running board slot (task build/test/fixer or final integration chat). */
+export async function stopRunningBoardSlot(
+  group: ChatGroup,
+  slot: RunningBoardTaskSlot,
+  plannerChat: Chat,
+): Promise<void> {
+  if (slot.isFinalTest) {
+    const chatId = slot.chatId?.trim();
+    if (chatId) {
+      stopTaskChatSupervision(chatId);
+      stopGeneration(chatId);
+    }
+    await drainTaskQueue(group, plannerChat);
+    return;
+  }
+  await stopTask(group, slot.taskId, plannerChat);
 }
 
 async function drainTaskQueue(group: ChatGroup, plannerChat: Chat): Promise<void> {

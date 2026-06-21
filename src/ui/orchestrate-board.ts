@@ -19,7 +19,12 @@ import {
 } from '../chat/main-turn-activity';
 import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
-import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
+import { sumUsageSegments } from '../chat/orchestrate/stats-math';
+import {
+  isActiveChatStreaming,
+  isChatStreaming,
+  subscribeChatStreamActivity,
+} from '../chat/streaming-state';
 import {
   getSubAgentRun,
   listActiveSubAgentRuns,
@@ -38,11 +43,14 @@ import {
 import {
   activateAfk,
   cancelPendingAfk,
+  continueBoardTask,
   countRunningTaskChats,
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
+  listRunningBoardTaskSlots,
   moveTaskStatus,
+  restartBoardTask,
   setBoardExecutionMode,
   setBoardMaxConcurrent,
   startBoardAutoRun,
@@ -51,8 +59,10 @@ import {
   startTaskTestingForPlannerChat,
   startWave,
   stopBoardAutoRun,
+  stopRunningBoardSlot,
   stopTask,
   toggleWaveCollapsed,
+  type RunningBoardTaskSlot,
 } from '../state/orchestrate-board-actions.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus, RunLifecycle } from '../agents/types';
@@ -63,6 +73,7 @@ import {
   countBoardWavesProgressed,
   getBoardProgressPercent,
   getOrchestrateBoardElapsedMs,
+  isTaskStalledForRestart,
   syncOrchestrateBoardTimer,
   type OrchestrateBoardTimerContext,
 } from '../state/orchestrate-board-store';
@@ -82,6 +93,7 @@ import type {
   Chat,
   ChatGroup,
   PersistedSubAgentStatus,
+  Usage,
 } from '../types';
 
 type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
@@ -312,6 +324,7 @@ interface BoardSession {
   unsubBoard: () => void;
   unsubAgents: () => void;
   unsubMainTurn: () => void;
+  unsubStream: () => void;
 }
 
 let currentSession: BoardSession | null = null;
@@ -383,6 +396,7 @@ function disposeBoardSession(): void {
   currentSession.unsubBoard();
   currentSession.unsubAgents();
   currentSession.unsubMainTurn();
+  currentSession.unsubStream();
   currentSession = null;
   lastKanbanRefreshKey = '';
   pendingKanbanRefresh = false;
@@ -586,6 +600,10 @@ function ensureBoardSession(group: ChatGroup, plannerChat: Chat): void {
       if (run.parentChatId === plannerChat.id) scheduleBoardUiRefresh(group.id);
     }),
     unsubMainTurn: subscribeMainTurnActivity(() => scheduleBoardUiRefresh(group.id)),
+    unsubStream: subscribeChatStreamActivity((chatId) => {
+      const chat = findChatById(chatId);
+      if (chat?.boardGroupId === group.id) scheduleBoardUiRefresh(group.id);
+    }),
   };
   startBoardLiveTick();
 }
@@ -1200,6 +1218,9 @@ function buildBoardHeader(
 
   meta.appendChild(bar);
 
+  const runningStrip = buildBoardRunningTasksStrip(board, group, plannerChat);
+  if (runningStrip) meta.appendChild(runningStrip);
+
   const finalBanner = buildFinalTestBanner(board, group, plannerChat);
   if (finalBanner) meta.appendChild(finalBanner);
 
@@ -1371,6 +1392,308 @@ function formatElapsed(ms: number): string {
   if (sec < 60) return `${sec}s`;
   const min = Math.floor(sec / 60);
   return `${min}m ${sec % 60}s`;
+}
+
+/** Compact token readout for running-task chips (instrumentation family). */
+function formatRunningTaskTokens(total: number | null): string {
+  if (total == null) return '— tok';
+  if (total >= 10_000) return `${Math.round(total / 1000)}k tok`;
+  if (total >= 1000) {
+    const compact = (total / 1000).toFixed(1).replace(/\.0$/, '');
+    return `${compact}k tok`;
+  }
+  return `${total} tok`;
+}
+
+/** Sum assistant usage from a linked task chat transcript. */
+function sumChatTotalTokens(chat: Chat | undefined): number | null {
+  if (!chat) return null;
+  const segments: Usage[] = [];
+  for (const msg of chat.history) {
+    if (msg.role === 'assistant' && msg.usage) segments.push(msg.usage);
+  }
+  const ls = chat.lastStats;
+  if (
+    ls &&
+    (ls.prompt_tokens != null || ls.completion_tokens != null || ls.total_tokens != null)
+  ) {
+    segments.push({
+      prompt_tokens: ls.prompt_tokens ?? undefined,
+      completion_tokens: ls.completion_tokens ?? undefined,
+      total_tokens: ls.total_tokens ?? undefined,
+    });
+  }
+  if (!segments.length) return null;
+  return sumUsageSegments(segments).total_tokens ?? null;
+}
+
+function resolveRunningSlotElapsedMs(slot: RunningBoardTaskSlot, chat?: Chat): number {
+  const mainTurn = getMainTurnActivity(slot.chatId);
+  if (mainTurn?.startedAtMs) return Math.max(0, Date.now() - mainTurn.startedAtMs);
+  if (slot.task?.startedAt) return Math.max(0, Date.now() - slot.task.startedAt);
+  if (chat?.updatedAt) return Math.max(0, Date.now() - chat.updatedAt);
+  return 0;
+}
+
+function runningSlotShowsContinue(
+  board: BoardState,
+  slot: RunningBoardTaskSlot,
+): boolean {
+  if (slot.isFinalTest || !slot.task) return false;
+  if (isChatStreaming(slot.chatId)) return false;
+  return (
+    isTaskStalledForRestart(board, slot.task, isTaskChatActive) ||
+    isTaskChatActive(slot.chatId)
+  );
+}
+
+type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'final';
+
+const RUNNING_TASK_ICON_PATHS: Record<RunningTaskIconKind, readonly string[]> = {
+  build: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  test: ['M9 3h6', 'M10 9V3', 'M14 9V3', 'M6 21h12l-1-7H7l-1 7z'],
+  fix: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  final: ['M12 2v20', 'M2 12h20', 'M5 5l14 14', 'M19 5 5 19'],
+};
+
+const RUNNING_TASK_CONTROL_ICON_PATHS = {
+  stop: ['M6 6h12v12H6z'],
+  restart: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+  continue: ['M5 12h14', 'M12 5l7 7-7 7'],
+  open: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
+} as const;
+
+function createRunningTaskIcon(
+  kind: RunningTaskIconKind | keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  className: string,
+): SVGSVGElement {
+  const paths =
+    kind in RUNNING_TASK_ICON_PATHS
+      ? RUNNING_TASK_ICON_PATHS[kind as RunningTaskIconKind]
+      : RUNNING_TASK_CONTROL_ICON_PATHS[kind as keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS];
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of paths) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
+function createRunningTaskControlButton(
+  action: keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  label: string,
+  onClick: (e: MouseEvent) => void,
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `board-running-tasks__control board-running-tasks__control--${action}`;
+  btn.dataset.boardRunningAction = action;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.appendChild(createRunningTaskIcon(action, 'icon-svg board-running-tasks__control-icon'));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick(e);
+  });
+  return btn;
+}
+
+function buildRunningTaskChip(
+  slot: RunningBoardTaskSlot,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement {
+  const chat = findChatById(slot.chatId);
+  const chip = document.createElement('article');
+  chip.className = `board-running-tasks__chip board-running-tasks__chip--${slot.phase}`;
+  chip.dataset.boardRunningChatId = slot.chatId;
+  chip.dataset.boardRunningTaskId = slot.taskId;
+  chip.setAttribute('role', 'listitem');
+  const streaming = isChatStreaming(slot.chatId);
+  if (streaming) chip.classList.add('board-running-tasks__chip--streaming');
+  chip.setAttribute(
+    'aria-label',
+    `${slot.taskId} ${slot.title}, ${streaming ? 'running' : 'starting'}`,
+  );
+
+  const icon = document.createElement('span');
+  icon.className = `board-running-tasks__phase board-running-tasks__phase--${slot.phase}`;
+  icon.appendChild(
+    createRunningTaskIcon(slot.phase, 'icon-svg board-running-tasks__phase-icon'),
+  );
+  icon.title = slot.phase === 'final' ? 'Final integration test' : slot.phase;
+  chip.appendChild(icon);
+
+  const dot = document.createElement('span');
+  dot.className = 'board-running-tasks__dot';
+  dot.setAttribute('aria-hidden', 'true');
+  chip.appendChild(dot);
+
+  const id = document.createElement('span');
+  id.className = 'board-running-tasks__id';
+  id.textContent = slot.taskId;
+  chip.appendChild(id);
+
+  const title = document.createElement('span');
+  title.className = 'board-running-tasks__title';
+  title.textContent = slot.title;
+  title.title = slot.title;
+  chip.appendChild(title);
+
+  const stats = document.createElement('span');
+  stats.className = 'board-running-tasks__stats';
+  const elapsed = document.createElement('span');
+  elapsed.className = 'board-running-tasks__elapsed';
+  elapsed.dataset.boardRunningElapsed = 'true';
+  elapsed.textContent = formatElapsed(resolveRunningSlotElapsedMs(slot, chat));
+  const tokens = document.createElement('span');
+  tokens.className = 'board-running-tasks__tokens';
+  tokens.dataset.boardRunningTokens = 'true';
+  tokens.textContent = formatRunningTaskTokens(sumChatTotalTokens(chat));
+  stats.appendChild(elapsed);
+  stats.appendChild(tokens);
+  chip.appendChild(stats);
+
+  const controls = document.createElement('div');
+  controls.className = 'board-running-tasks__controls';
+  controls.appendChild(
+    createRunningTaskControlButton('stop', `Stop ${slot.taskId}`, () => {
+      void stopRunningBoardSlot(group, slot, plannerChat).then(() =>
+        refreshActiveBoardIfMounted(),
+      );
+    }),
+  );
+  controls.appendChild(
+    createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
+      if (slot.isFinalTest) {
+        void stopRunningBoardSlot(group, slot, plannerChat)
+          .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
+          .then(() => refreshActiveBoardIfMounted());
+        return;
+      }
+      void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
+        refreshActiveBoardIfMounted(),
+      );
+    }),
+  );
+  if (runningSlotShowsContinue(board, slot)) {
+    controls.appendChild(
+      createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
+        void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+  }
+  controls.appendChild(
+    createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
+      if (chat) switchChat(chat.id);
+    }),
+  );
+  chip.appendChild(controls);
+  return chip;
+}
+
+function buildRunningTasksStripKey(
+  board: BoardState,
+  slots: RunningBoardTaskSlot[],
+): string {
+  return slots
+    .map((slot) => {
+      const chat = findChatById(slot.chatId);
+      const tokens = sumChatTotalTokens(chat);
+      const streaming = isChatStreaming(slot.chatId) ? 1 : 0;
+      const continueVisible = runningSlotShowsContinue(board, slot) ? 1 : 0;
+      return [
+        slot.chatId,
+        slot.taskId,
+        slot.phase,
+        slot.title,
+        streaming,
+        continueVisible,
+        tokens ?? '',
+      ].join('|');
+    })
+    .join(';');
+}
+
+/** Thin strip of running task chips below the board progress bar. */
+function buildBoardRunningTasksStrip(
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement | null {
+  const slots = listRunningBoardTaskSlots(board);
+  if (!slots.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-running-tasks';
+  wrap.dataset.boardRunningKey = buildRunningTasksStripKey(board, slots);
+  wrap.setAttribute('role', 'region');
+  wrap.setAttribute('aria-label', 'Running tasks');
+
+  const strip = document.createElement('div');
+  strip.className = 'board-running-tasks__strip';
+  strip.setAttribute('role', 'list');
+  for (const slot of slots) {
+    strip.appendChild(buildRunningTaskChip(slot, board, group, plannerChat));
+  }
+  wrap.appendChild(strip);
+  return wrap;
+}
+
+function syncBoardRunningTasksStrip(
+  meta: Element,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const slots = listRunningBoardTaskSlots(board);
+  const existing = meta.querySelector('.board-running-tasks') as HTMLElement | null;
+  if (!slots.length) {
+    existing?.remove();
+    return;
+  }
+
+  const nextKey = buildRunningTasksStripKey(board, slots);
+  if (!existing) {
+    const strip = buildBoardRunningTasksStrip(board, group, plannerChat);
+    if (!strip) return;
+    const bar = meta.querySelector('.board-header__progress');
+    if (bar) {
+      bar.insertAdjacentElement('afterend', strip);
+    } else {
+      meta.appendChild(strip);
+    }
+    return;
+  }
+
+  if (existing.dataset.boardRunningKey !== nextKey) {
+    existing.replaceWith(buildBoardRunningTasksStrip(board, group, plannerChat)!);
+    return;
+  }
+
+  for (const slot of slots) {
+    const chip = existing.querySelector(
+      `[data-board-running-chat-id="${slot.chatId}"]`,
+    ) as HTMLElement | null;
+    if (!chip) continue;
+    const chat = findChatById(slot.chatId);
+    const elapsedEl = chip.querySelector('[data-board-running-elapsed="true"]');
+    if (elapsedEl) {
+      elapsedEl.textContent = formatElapsed(resolveRunningSlotElapsedMs(slot, chat));
+    }
+    const tokensEl = chip.querySelector('[data-board-running-tokens="true"]');
+    if (tokensEl) {
+      tokensEl.textContent = formatRunningTaskTokens(sumChatTotalTokens(chat));
+    }
+    chip.classList.toggle('board-running-tasks__chip--streaming', isChatStreaming(slot.chatId));
+  }
 }
 
 function buildTaskAgentBadge(badge: TaskAgentBadge): HTMLElement {
@@ -2030,6 +2353,11 @@ function refreshBoardDom(
 
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
+
+  const headerMeta = root.querySelector('.board-header__meta');
+  if (headerMeta) {
+    syncBoardRunningTasksStrip(headerMeta, board, group, plannerChat);
+  }
 
   const openPlanBtn = root.querySelector(
     '[data-board-action="open-plan"]',
