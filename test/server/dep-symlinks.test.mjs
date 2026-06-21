@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { after, before, describe, test } from 'node:test';
-import { symlinkDependencyDirs } from '../../server/worktree/dep-symlinks.js';
+import { symlinkDependencyDirs, materializeDepDirs } from '../../server/worktree/dep-symlinks.js';
 import { createWorktree, ensureIntegration } from '../../server/worktree/worktree-ops.js';
 import { getWorktreeSlotPath } from '../../server/worktree/paths.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -70,7 +70,7 @@ describe('dep-symlinks', () => {
     await fs.rm(wtDir, { recursive: true, force: true });
   });
 
-  test('createWorktree links node_modules from workspace after git worktree add', async () => {
+  test('createWorktree links node_modules from integration worktree (seed resolves to main)', async () => {
     const integrationBranch = `minnow/board/${BOARD_ID}/integration`;
     const taskBranch = `minnow/board/${BOARD_ID}/task/W1-A`;
 
@@ -95,7 +95,66 @@ describe('dep-symlinks', () => {
     const wtPath = getWorktreeSlotPath(BOARD_ID, 'task-W1-A');
     const wtNm = path.join(wtPath, 'node_modules');
     const resolved = await fs.realpath(wtNm);
+    // Integration seeds node_modules from main; realpath collapse still lands on main.
     const sourceResolved = await fs.realpath(path.join(repoDir, 'node_modules'));
     assert.equal(resolved, sourceResolved);
+  });
+
+  test('createWorktree sees integration-layer installs in node_modules', async () => {
+    const boardId = 'dep-symlink-board-33333333';
+    const integrationBranch = `minnow/board/${boardId}/integration`;
+    const taskBranch = `minnow/board/${boardId}/task/W2-A`;
+
+    assert.equal(
+      (await ensureIntegration({ boardId, branch: integrationBranch })).ok,
+      true,
+    );
+
+    const intPath = getWorktreeSlotPath(boardId, 'integration');
+    const intNm = path.join(intPath, 'node_modules');
+    await fs.rm(intNm);
+    await fs.mkdir(intNm, { recursive: true });
+    await fs.writeFile(path.join(intNm, 'integration-marker.txt'), 'from-integration\n', 'utf8');
+
+    const created = await createWorktree({
+      boardId,
+      slotId: 'task-W2-A',
+      branch: taskBranch,
+      baseRef: integrationBranch,
+    });
+    assert.equal(created.ok, true);
+
+    const wtPath = getWorktreeSlotPath(boardId, 'task-W2-A');
+    const wtNm = path.join(wtPath, 'node_modules');
+    const resolved = await fs.realpath(wtNm);
+    const intResolved = await fs.realpath(intNm);
+    assert.equal(resolved, intResolved);
+
+    const marker = await fs.readFile(path.join(wtNm, 'integration-marker.txt'), 'utf8');
+    assert.equal(marker, 'from-integration\n');
+  });
+
+  test('materializeDepDirs converts seed junction to absent dir without deleting main target', async () => {
+    const boardId = 'dep-symlink-board-44444444';
+    const integrationBranch = `minnow/board/${boardId}/integration`;
+
+    assert.equal(
+      (await ensureIntegration({ boardId, branch: integrationBranch })).ok,
+      true,
+    );
+
+    const intPath = getWorktreeSlotPath(boardId, 'integration');
+    const intNm = path.join(intPath, 'node_modules');
+    const mainNm = path.join(repoDir, 'node_modules');
+
+    const beforeInt = await fs.lstat(intNm);
+    assert.ok(beforeInt.isSymbolicLink() || beforeInt.isDirectory());
+
+    await materializeDepDirs(intPath, ['node_modules']);
+
+    await assert.rejects(() => fs.lstat(intNm));
+
+    const mainContent = await fs.readFile(path.join(mainNm, 'pkg.txt'), 'utf8');
+    assert.equal(mainContent, 'installed\n');
   });
 });

@@ -118,11 +118,34 @@ export async function symlinkDependencyDirs(sourceRoot, wtPath) {
       if (await pathExists(targetLink)) continue;
 
       try {
-        await fs.symlink(sourceDir, targetLink, symlinkType);
+        // Collapse seed junctions (integration → main) so tasks get a single-hop link.
+        const realSource = await fs.realpath(sourceDir);
+        await fs.symlink(realSource, targetLink, symlinkType);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`[dep-symlinks] failed to link ${dir} into ${wtPath}: ${message}`);
       }
+    }
+  }
+}
+
+/**
+ * Replace symlink/junction dep dirs with nothing so the next install creates a real
+ * directory in `root` instead of writing through into the link target (e.g. main
+ * workspace `node_modules`). Real directories are left untouched.
+ * @param {string} root — worktree root (absolute)
+ * @param {string[]} dirs — dependency dir names (e.g. `node_modules`)
+ */
+export async function materializeDepDirs(root, dirs) {
+  for (const dir of dirs) {
+    const depPath = path.join(root, dir);
+    try {
+      const st = await fs.lstat(depPath);
+      if (st.isSymbolicLink()) {
+        await fs.rm(depPath);
+      }
+    } catch {
+      /* missing dir — installer will create it */
     }
   }
 }

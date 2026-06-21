@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
-import { ECOSYSTEM_ENTRIES } from './dep-symlinks.js';
+import { ECOSYSTEM_ENTRIES, materializeDepDirs } from './dep-symlinks.js';
 
 const INSTALL_TIMEOUT_MS = 600_000;
 
@@ -49,6 +49,9 @@ export async function refreshDependencies(root, changedFiles, { timeout = INSTAL
       const dedupeKey = `${install.command}\0${install.args.join('\0')}`;
       if (seenCommands.has(dedupeKey)) continue;
       seenCommands.add(dedupeKey);
+
+      // Remove seed junctions so installs write into a real dir in this worktree.
+      await materializeDepDirs(root, entry.dirs);
 
       const label = `${install.command} ${install.args.join(' ')}`;
       try {

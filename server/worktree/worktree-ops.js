@@ -28,6 +28,15 @@ async function git(args, cwd = getWorkspaceRoot()) {
 const ok = (r) => r.code === 0;
 const out = (r) => `${r.stdout ?? ''}\n${r.stderr ?? ''}`.trim();
 
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function branchExists(branch) {
   const r = await git(['rev-parse', '--verify', '--quiet', branch]);
   return r.code === 0;
@@ -86,6 +95,8 @@ async function mergeBaseIntoWorktree(wtPath, baseRef) {
 export async function createWorktree({ boardId, slotId, branch, baseRef }) {
   const wtPath = getWorktreeSlotPath(boardId, slotId);
   const base = (baseRef && baseRef.trim()) || 'HEAD';
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  const depSource = (await pathExists(intPath)) ? intPath : getWorkspaceRoot();
 
   let exists = false;
   try {
@@ -118,7 +129,7 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
   if (await branchExists(branch)) {
     const w = await git(['worktree', 'add', wtPath, branch]);
     if (!ok(w)) return { ok: false, path: wtPath, branch, output: out(w) };
-    await symlinkDependencyDirs(getWorkspaceRoot(), wtPath);
+    await symlinkDependencyDirs(depSource, wtPath);
     const synced = await mergeBaseIntoWorktree(wtPath, base);
     if (!synced.ok) {
       return {
@@ -134,7 +145,7 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
 
   const r = await git(['worktree', 'add', '-b', branch, wtPath, baseSha]);
   if (!ok(r)) return { ok: false, path: wtPath, branch, output: out(r) };
-  await symlinkDependencyDirs(getWorkspaceRoot(), wtPath);
+  await symlinkDependencyDirs(depSource, wtPath);
   return { ok: true, path: wtPath, branch, created: true };
 }
 

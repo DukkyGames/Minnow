@@ -61,4 +61,50 @@ describe('dep-install', () => {
 
     await fs.rm(isolated, { recursive: true, force: true });
   });
+
+  test('refreshDependencies materializes seed junction before install', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-dep-install-mat-'));
+    const mainNm = path.join(root, 'main-nm');
+    await fs.mkdir(mainNm, { recursive: true });
+    await fs.writeFile(path.join(mainNm, 'keep.txt'), 'safe\n', 'utf8');
+
+    const wt = path.join(root, 'wt');
+    await fs.mkdir(wt, { recursive: true });
+    await fs.writeFile(
+      path.join(wt, 'package.json'),
+      JSON.stringify({ name: 'materialize-test', version: '1.0.0', dependencies: {} }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(wt, 'package-lock.json'),
+      JSON.stringify({
+        name: 'materialize-test',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: { '': { name: 'materialize-test', version: '1.0.0' } },
+      }),
+      'utf8',
+    );
+
+    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+    await fs.symlink(mainNm, path.join(wt, 'node_modules'), symlinkType);
+
+    await refreshDependencies(wt, ['package-lock.json'], { timeout: 120_000 });
+
+    // Materialize removes the seed junction; install may or may not recreate node_modules.
+    let stillJunction = false;
+    try {
+      const st = await fs.lstat(path.join(wt, 'node_modules'));
+      stillJunction = st.isSymbolicLink();
+    } catch {
+      /* absent when install did not run or failed */
+    }
+    assert.equal(stillJunction, false, 'node_modules must not remain a junction after refresh');
+
+    const keep = await fs.readFile(path.join(mainNm, 'keep.txt'), 'utf8');
+    assert.equal(keep, 'safe\n');
+
+    await fs.rm(root, { recursive: true, force: true });
+  });
 });
