@@ -42,6 +42,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { getLatestStreamingToolName } from '../api/tool-call-stream.ts';
 import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import {
@@ -170,6 +171,10 @@ import {
   syncChatItemDotsInDom,
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
+import {
+  attachToolStartIndicator,
+  type ToolStartIndicatorHandle,
+} from '../ui/stream-status';
 import {
   cancelGeneration,
   createGeneration,
@@ -578,6 +583,7 @@ async function streamCompletionTurn(
   domVisible: boolean,
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
+  onToolCallStreaming?: (toolName: string) => void,
   onStreamConnected?: () => void,
   onStreamContextActivity?: () => void,
   turnRunId?: TurnRunId,
@@ -601,6 +607,7 @@ async function streamCompletionTurn(
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
+  let lastAnnouncedToolName = '';
   const t0 = performance.now();
   let tFirst: number | null = null;
   const modelId = body.model ?? '';
@@ -666,6 +673,13 @@ async function streamCompletionTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    if (domVisible && onToolCallStreaming) {
+      const streamingName = getLatestStreamingToolName(toolAcc);
+      if (streamingName && streamingName !== lastAnnouncedToolName) {
+        lastAnnouncedToolName = streamingName;
+        onToolCallStreaming(streamingName);
+      }
+    }
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
       thoughtController?.appendReasoningDelta(reasoning);
@@ -1079,6 +1093,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let streamRow = appendStreamingAssistantRow(chat.id);
   let { wrap, bubble, cursor, streamStatus } = streamRow;
   const streamCtx = { wrap, streamStatus };
+  let toolStartIndicator: ToolStartIndicatorHandle | null = null;
+  const resetToolStartIndicator = (): void => {
+    toolStartIndicator?.dispose();
+    toolStartIndicator = null;
+  };
   let revealProse = (): void => {
     if (!isStreamDomVisible(chat.id)) return;
     revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1098,6 +1117,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamCtx.wrap = wrap;
     streamCtx.streamStatus = streamStatus;
     lastWrap = wrap;
+    resetToolStartIndicator();
     revealProse = (): void => {
       if (!isStreamDomVisible(chat.id)) return;
       revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1377,6 +1397,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           (text) => {
             livePartialText = text;
           },
+          (toolName) => {
+            if (!domVisible) return;
+            if (!toolStartIndicator) {
+              toolStartIndicator = attachToolStartIndicator({
+                wrap,
+                bubble,
+                cursor,
+                streamStatus,
+              });
+            }
+            toolStartIndicator.show(toolName);
+          },
           undefined,
           () => {
             syncTurnContextUsage(chat.id, livePartialText, thoughtController);
@@ -1410,6 +1442,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       cancelAssistantBubbleRenderDebounce();
+      resetToolStartIndicator();
       cursor.remove();
 
       const finishReason =
@@ -1640,6 +1673,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1713,6 +1747,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1750,6 +1785,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);

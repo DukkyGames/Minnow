@@ -4,6 +4,7 @@
  */
 
 import { formatThinkingDuration } from './thinking-duration';
+import { humanizeToolName } from './tool-messages';
 
 export type StreamPhase = 'generating' | 'thinking' | 'prose' | 'done';
 
@@ -123,4 +124,66 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   };
 
   return { setPhase, setThinkingElapsed, dispose };
+}
+
+/** Row parts needed to show an in-flight tool-call indicator beside streaming prose. */
+export interface ToolStartIndicatorRow {
+  wrap: HTMLElement;
+  bubble: HTMLElement;
+  cursor: HTMLElement;
+  streamStatus: StreamingStatusHandle;
+}
+
+export interface ToolStartIndicatorHandle {
+  show(toolName: string): void;
+  dispose(): void;
+}
+
+/**
+ * Inline "Calling {tool}…" spinner shown while tool_calls JSON streams in
+ * (before finalized tool-call bubbles render).
+ */
+export function attachToolStartIndicator(row: ToolStartIndicatorRow): ToolStartIndicatorHandle {
+  let indicatorEl: HTMLDivElement | null = null;
+  let labelEl: HTMLSpanElement | null = null;
+  let disposed = false;
+
+  const show = (toolName: string): void => {
+    if (disposed || !toolName.trim()) return;
+
+    row.cursor.style.display = 'none';
+    const statusEl = row.wrap.querySelector('.stream-status');
+    statusEl?.classList.add('hidden');
+
+    if (!indicatorEl) {
+      indicatorEl = document.createElement('div');
+      indicatorEl.className = 'tool-start-indicator';
+      indicatorEl.setAttribute('role', 'status');
+      indicatorEl.setAttribute('aria-live', 'polite');
+
+      const spinner = document.createElement('span');
+      spinner.className = 'tool-call-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+
+      labelEl = document.createElement('span');
+      labelEl.className = 'tool-start-indicator__label';
+
+      indicatorEl.appendChild(spinner);
+      indicatorEl.appendChild(labelEl);
+      row.bubble.insertAdjacentElement('afterend', indicatorEl);
+    }
+
+    if (labelEl) {
+      labelEl.textContent = `Calling ${humanizeToolName(toolName)}…`;
+    }
+  };
+
+  const dispose = (): void => {
+    disposed = true;
+    indicatorEl?.remove();
+    indicatorEl = null;
+    labelEl = null;
+  };
+
+  return { show, dispose };
 }

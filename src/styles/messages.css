@@ -667,6 +667,28 @@
   to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .tool-call-spinner {
+    animation: none;
+    border-top-color: var(--mn-accent);
+    opacity: 0.85;
+  }
+}
+
+/* Mid-stream tool-call hint (before finalized tool-call bubbles) */
+.tool-start-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.tool-start-indicator__label {
+  letter-spacing: 0.01em;
+}
+
 .tool-call-glyph {
   font-size: 14px;
   line-height: 1;
