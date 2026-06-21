@@ -1,5 +1,5 @@
 /**
- * Orchestrate board tools: board_init, board_update_task, board_get_state, delegate_tasks.
+ * Orchestrate board tools: board_init, board_update_task, board_get_state, delegate_tasks, board_set_autonomy.
  */
 
 import { getSubAgentRun } from '../agents/orchestrator.ts';
@@ -21,6 +21,11 @@ import {
   initBoard,
   updateTask,
 } from '../state/orchestrate-board-store.ts';
+import {
+  requestPendingAfk,
+  setBoardExecutionMode,
+  startBoardAutoRun,
+} from '../state/orchestrate-board-actions.ts';
 import { emitBoardChange } from '../state/orchestrate-board-events.ts';
 import { findChatById, scheduleSaveSessions } from '../state/sessions.ts';
 import type { BoardCategory, BoardTaskStatus, Chat, OrchestrateBoardState } from '../types.ts';
@@ -471,6 +476,39 @@ export function validateBoardReportTestResultArgs(
   };
 }
 
+const BOARD_AUTONOMY_LEVELS = new Set(['manual', 'sequential', 'auto', 'afk']);
+
+export type BoardSetAutonomyArgs = {
+  level: 'manual' | 'sequential' | 'auto' | 'afk';
+};
+
+export type ValidateBoardSetAutonomyResult =
+  | { ok: true; args: BoardSetAutonomyArgs }
+  | { ok: false; error: string };
+
+/** Validate board_set_autonomy arguments (exported for tests). */
+export function validateBoardSetAutonomyArgs(
+  args: Record<string, unknown>,
+): ValidateBoardSetAutonomyResult {
+  const raw =
+    typeof args.level === 'string'
+      ? args.level
+      : typeof args.mode === 'string'
+        ? args.mode
+        : '';
+  const level = raw.trim().toLowerCase();
+  if (!level) {
+    return { ok: false, error: 'Error: board_set_autonomy requires "level"' };
+  }
+  if (!BOARD_AUTONOMY_LEVELS.has(level)) {
+    return {
+      ok: false,
+      error: 'Error: board_set_autonomy requires level manual, sequential, auto, or afk',
+    };
+  }
+  return { ok: true, args: { level: level as BoardSetAutonomyArgs['level'] } };
+}
+
 /** Execute board_* tools; returns JSON string or Error: prefix. */
 export async function executeBoardTool(
   name: string,
@@ -499,6 +537,14 @@ export async function executeBoardTool(
       return 'Error: board tools require an active Orchestrate chat';
     }
     return executeBoardUpdateTask(plannerChat, args);
+  }
+
+  if (name === 'board_set_autonomy') {
+    const plannerChat = resolveOrchestratePlannerChat(options?.chatId);
+    if (!plannerChat) {
+      return 'Error: board tools require an active Orchestrate chat';
+    }
+    return executeBoardSetAutonomy(plannerChat, args);
   }
 
   const chat = resolveBoardPlannerChat(options?.chatId);
@@ -597,6 +643,45 @@ async function executeBoardUpdateTask(
     const message = err instanceof Error ? err.message : String(err);
     return message.startsWith('Error:') ? message : `Error: ${message}`;
   }
+}
+
+async function executeBoardSetAutonomy(
+  chat: Chat,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const validated = validateBoardSetAutonomyArgs(args);
+  if (validated.ok === false) return validated.error;
+  const group = getOrCreateBoardGroup(chat);
+  const board = group.orchestrateBoard;
+  if (!board) {
+    return 'Error: orchestrate board is not initialized';
+  }
+
+  const { level } = validated.args;
+  if (level === 'manual') {
+    setBoardExecutionMode(group, 'manual', chat);
+  } else if (level === 'afk') {
+    requestPendingAfk(group, chat);
+    return JSON.stringify({
+      level,
+      executionMode: board.executionMode ?? 'manual',
+      autoRunning: board.autoRunning === true,
+      pendingAfk: true,
+      message:
+        'AFK is pending user confirmation and will not activate until the user accepts on the board.',
+    });
+  } else {
+    setBoardExecutionMode(group, level, chat);
+    startBoardAutoRun(group, chat);
+  }
+
+  const current = group.orchestrateBoard!;
+  return JSON.stringify({
+    level,
+    executionMode: current.executionMode ?? 'manual',
+    autoRunning: current.autoRunning === true,
+    pendingAfk: current.pendingAfk === true,
+  });
 }
 
 export type DelegateTasksArgs = {

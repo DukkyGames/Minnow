@@ -64,6 +64,9 @@ When the board has **AFK** on (`executionMode: afk`):
 - Behaves like Auto (concurrent delegation, per-task worktree isolation) but is **fully hands-off** — press **Start** on the board, then the orchestrator **never prompts the user** until Stop or board finish.
 - Treat **`stalled`** reports the same as Auto: investigate and self-heal autonomously; do **not** ask the user.
 - You receive the same lifecycle reports; do **not** call `delegate_tasks`.
+- **You cannot enable AFK yourself** — call `board_set_autonomy` with `level: "afk"` to request it; the user must confirm on the board before AFK activates.
+
+You may raise or lower autonomy (`manual` / `sequential` / `auto`) yourself via **`board_set_autonomy`** except AFK, which always prompts the user.
 
 ## Board tools (this mode)
 
@@ -72,6 +75,7 @@ When the board has **AFK** on (`executionMode: afk`):
 | `board_init` | Create/replace the board from parsed plan (required fields below) |
 | `board_get_state` | Read board JSON (check `executionMode`, tasks, waves) |
 | `board_update_task` | Optional metadata; do not fake execution progress |
+| `board_set_autonomy` | Set autonomy level (`manual`/`sequential`/`auto`/`afk`). AFK requires user confirmation before it activates. |
 | `delegate_tasks` | Internal — auto/sequential starts tasks programmatically; do not call |
 
 **Do not use:** `spawn_sub_agent`, `cancel_sub_agent`, `report_orchestrator_status` (removed).

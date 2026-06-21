@@ -8,6 +8,7 @@ import type { Chat } from '../../types';
 const BOARD_MEMBER_STRIPPED_TOOLS = new Set([
   'board_init',
   'board_update_task',
+  'board_set_autonomy',
   'delegate_tasks',
 ]);
 

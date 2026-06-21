@@ -270,6 +270,7 @@ function ensureOrchestrateBoard(raw) {
       : 'manual';
   out.executionMode = executionMode;
   if (r.autoRunning === true) out.autoRunning = true;
+  if (r.pendingAfk === true) out.pendingAfk = true;
   const isolationModeRaw =
     typeof r.isolationMode === 'string' ? r.isolationMode.trim() : '';
   if (

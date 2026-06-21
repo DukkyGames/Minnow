@@ -368,6 +368,8 @@ export interface OrchestrateBoardState {
   executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
+  /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */
+  pendingAfk?: boolean;
   /**
    * True when the user pressed Stop on the board. Freezes the header timer
    * immediately and surfaces the Stopped status regardless of lagging task

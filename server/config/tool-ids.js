@@ -79,6 +79,7 @@ export const ALL_TOOL_IDS = [
   'get_sub_agent_status',
   'board_init',
   'board_update_task',
+  'board_set_autonomy',
   'board_get_state',
   'delegate_tasks',
   'bug_add',

@@ -316,6 +316,7 @@ async function executeToolInner(
   if (
     name === 'board_init' ||
     name === 'board_update_task' ||
+    name === 'board_set_autonomy' ||
     name === 'board_get_state' ||
     name === 'board_report_test_result' ||
     name === 'delegate_tasks'

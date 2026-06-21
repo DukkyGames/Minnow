@@ -1771,6 +1771,7 @@ export function setBoardExecutionMode(
   const board = group.orchestrateBoard;
   if (!board) return;
   board.executionMode = mode;
+  if (mode !== 'afk') delete board.pendingAfk;
   if (mode === 'manual') board.autoRunning = false;
   board.lastUpdatedAt = Date.now();
   // Flush stop state immediately so reload cannot resurrect auto execution.
@@ -1779,6 +1780,34 @@ export function setBoardExecutionMode(
   } else {
     scheduleSaveSessions();
   }
+  emitBoardChange(group.id);
+}
+
+/** Shared AFK activation after user confirmation (slider or pending banner). Does not start execution — user presses Start like Auto. */
+export function activateAfk(group: ChatGroup, plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  delete board.pendingAfk;
+  setBoardExecutionMode(group, 'afk', plannerChat);
+}
+
+/** Orchestrator requested AFK — show confirmation banner; mode unchanged until accepted. */
+export function requestPendingAfk(group: ChatGroup, _plannerChat: Chat): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  board.pendingAfk = true;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+}
+
+/** Dismiss orchestrator AFK request without changing execution mode. */
+export function cancelPendingAfk(group: ChatGroup): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  delete board.pendingAfk;
+  board.lastUpdatedAt = Date.now();
+  scheduleSaveSessions();
   emitBoardChange(group.id);
 }
 

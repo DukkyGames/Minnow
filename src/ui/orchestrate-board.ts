@@ -36,6 +36,8 @@ import {
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
 import {
+  activateAfk,
+  cancelPendingAfk,
   countRunningTaskChats,
   getBoardExecutionMode,
   isBoardRunning,
@@ -819,6 +821,23 @@ function boardExecutionModeToIndex(mode: string): number {
   return idx >= 0 ? idx : 0;
 }
 
+const BOARD_AFK_CONFIRM_MESSAGE =
+  'Enable AFK mode? The orchestrator will run fully hands-off and will not prompt you until you press Stop or the board finishes.';
+
+/** User-selected execution mode — AFK goes through the shared confirm + activate path. */
+function selectBoardExecutionModeFromUi(
+  group: ChatGroup,
+  mode: (typeof BOARD_EXECUTION_MODES)[number],
+  plannerChat: Chat,
+): void {
+  if (mode === 'afk') {
+    if (!window.confirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
+    activateAfk(group, plannerChat);
+    return;
+  }
+  setBoardExecutionMode(group, mode, plannerChat);
+}
+
 const BOARD_AFK_HINT_VISIBLE_MS = 2500;
 /** Must match `.board-header__exec-mode-hint` opacity transition duration. */
 const BOARD_AFK_HINT_FADE_MS = 400;
@@ -947,7 +966,7 @@ function onBoardExecModeSegmentKeydown(
   }
 
   const nextMode = segments[nextIndex] ?? 'manual';
-  setBoardExecutionMode(group, nextMode, plannerChat);
+  selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
   refreshActiveBoardIfMounted();
   const root = document.querySelector('.board-root');
   const nextBtn = root?.querySelector<HTMLButtonElement>(
@@ -993,7 +1012,7 @@ function wireBoardHeaderControls(
     segment.title = meta.title;
 
     segment.addEventListener('click', () => {
-      setBoardExecutionMode(group, meta.id, plannerChat);
+      selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
       refreshActiveBoardIfMounted();
     });
     segment.addEventListener('keydown', (event) => {
@@ -1074,6 +1093,47 @@ function wireBoardHeaderControls(
   controls.appendChild(openPlan);
 }
 
+/** Banner when the orchestrator requested AFK and awaits user confirmation. */
+function buildPendingAfkBanner(
+  group: ChatGroup,
+  board: BoardState,
+  plannerChat: Chat,
+): HTMLElement | null {
+  if (!board.pendingAfk) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-header__pending-afk';
+  wrap.setAttribute('role', 'status');
+
+  const label = document.createElement('span');
+  label.className = 'board-header__pending-afk-label';
+  label.textContent =
+    'The orchestrator requested AFK mode — fully hands-off execution with no prompts until Stop or board finish.';
+  wrap.appendChild(label);
+
+  const enableBtn = document.createElement('button');
+  enableBtn.type = 'button';
+  enableBtn.className = 'board-btn board-btn--compact board-btn--primary';
+  enableBtn.textContent = 'Enable AFK';
+  enableBtn.addEventListener('click', () => {
+    activateAfk(group, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  wrap.appendChild(enableBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'board-btn board-btn--compact';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    cancelPendingAfk(group);
+    refreshActiveBoardIfMounted();
+  });
+  wrap.appendChild(cancelBtn);
+
+  return wrap;
+}
+
 interface BoardHeaderMetrics {
   progress: number;
   done: number;
@@ -1119,6 +1179,9 @@ function buildBoardHeader(
 
   toolbar.appendChild(leading);
   toolbar.appendChild(controls);
+
+  const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
+  if (pendingAfkBanner) toolbar.appendChild(pendingAfkBanner);
 
   const meta = document.createElement('div');
   meta.className = 'board-header__meta';
