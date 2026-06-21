@@ -16,6 +16,8 @@ export type AutopilotExecutionMode = 'manual' | 'sequential' | 'auto' | 'afk';
 /** Stored isolation sentinel `auto` means derive from execution mode at resolve time. */
 export type AutopilotIsolationMode = 'auto' | 'off' | 'per-task' | 'per-wave';
 
+export type AutopilotContinueSmartRoute = 'off' | 'conservative' | 'aggressive';
+
 /** Persisted global autopilot defaults for orchestrate boards. */
 export interface AutopilotMeta {
   defaultExecutionMode: AutopilotExecutionMode;
@@ -23,6 +25,8 @@ export interface AutopilotMeta {
   isolationMode: AutopilotIsolationMode;
   maxTestAttempts: number;
   maxFinalTestAttempts: number;
+  /** When Continue should auto-route to a fresh summarized chat instead of nudging. */
+  continueSmartRoute: AutopilotContinueSmartRoute;
   heartbeatIntervalMs: number;
   progressStallMs: number;
   heartbeatDeadMs: number;
@@ -40,6 +44,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   isolationMode: 'auto',
   maxTestAttempts: FALLBACK_MAX_TEST_ATTEMPTS,
   maxFinalTestAttempts: FALLBACK_MAX_FINAL_TEST_ATTEMPTS,
+  continueSmartRoute: 'conservative',
   heartbeatIntervalMs: 7_000,
   progressStallMs: 90_000,
   heartbeatDeadMs: 30_000,
@@ -61,6 +66,12 @@ const ISOLATION_MODES = new Set<AutopilotIsolationMode>([
   'off',
   'per-task',
   'per-wave',
+]);
+
+const CONTINUE_SMART_ROUTE_MODES = new Set<AutopilotContinueSmartRoute>([
+  'off',
+  'conservative',
+  'aggressive',
 ]);
 
 let cachedAutopilot: AutopilotMeta | null = null;
@@ -93,6 +104,14 @@ function parseIsolationMode(value: unknown): AutopilotIsolationMode {
   return DEFAULT_AUTOPILOT_META.isolationMode;
 }
 
+export function parseContinueSmartRoute(value: unknown): AutopilotContinueSmartRoute {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (CONTINUE_SMART_ROUTE_MODES.has(raw as AutopilotContinueSmartRoute)) {
+    return raw as AutopilotContinueSmartRoute;
+  }
+  return DEFAULT_AUTOPILOT_META.continueSmartRoute;
+}
+
 function parseStringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -118,6 +137,7 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
       block.maxFinalTestAttempts,
       DEFAULT_AUTOPILOT_META.maxFinalTestAttempts,
     ),
+    continueSmartRoute: parseContinueSmartRoute(block.continueSmartRoute),
     heartbeatIntervalMs: clampHeartbeatIntervalMs(
       block.heartbeatIntervalMs,
       DEFAULT_AUTOPILOT_META.heartbeatIntervalMs,

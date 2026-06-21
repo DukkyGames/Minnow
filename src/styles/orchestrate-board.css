@@ -1482,6 +1482,42 @@ button.board-header__activity {
   background: color-mix(in srgb, var(--mn-danger-soft) 40%, transparent);
 }
 
+.board-task-card__prev-failure {
+  margin: 0;
+  padding: 4px 9px 6px;
+  font-size: 0.625rem;
+  line-height: 1.4;
+  color: var(--mn-fg-muted);
+  border-top: 1px solid var(--mn-border);
+}
+
+.board-task-card__prev-failure summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.board-task-card__prev-failure summary::-webkit-details-marker {
+  display: none;
+}
+
+.board-task-card__prev-failure-body {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.board-task-card__prev-failure-line {
+  margin: 0;
+  color: var(--mn-fg-muted);
+}
+
+.board-task-card__advance--recovery {
+  border-top: 1px solid var(--mn-border);
+  padding-top: 4px;
+}
+
 .board-onboarding {
   display: flex;
   flex-direction: column;

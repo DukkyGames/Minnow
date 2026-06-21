@@ -321,6 +321,13 @@ export interface BoardTask {
   testVerdict?: 'pass' | 'fail';
   /** Human summary from the Tester (shown on fail / blocked). */
   testSummary?: string;
+  /** Snapshot of the last cleared failure, for the collapsed "previous failure" link. */
+  prevFailure?: {
+    error?: string;
+    testSummary?: string;
+    testVerdict?: 'pass' | 'fail';
+    at: number;
+  };
   /**
    * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
    * build start instead of the default task seed. Persisted on the task so it

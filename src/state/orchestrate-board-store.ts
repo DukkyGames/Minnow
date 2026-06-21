@@ -457,6 +457,7 @@ export type UpdateTaskPatch = Partial<
     | 'mergePreSha'
     | 'testVerdict'
     | 'testSummary'
+    | 'prevFailure'
     | 'pendingBuildSeed'
     | 'worktreePath'
     | 'worktreeBranch'
@@ -503,6 +504,15 @@ export function updateTask(
   // Explicit `error: undefined` removes a stale failure message from the task row.
   if ('error' in patch && patch.error === undefined) {
     delete task.error;
+  }
+  if ('testVerdict' in patch && patch.testVerdict === undefined) {
+    delete task.testVerdict;
+  }
+  if ('testSummary' in patch && patch.testSummary === undefined) {
+    delete task.testSummary;
+  }
+  if ('testAttempts' in patch && patch.testAttempts === undefined) {
+    delete task.testAttempts;
   }
   if ('fixerChatId' in patch && patch.fixerChatId === undefined) {
     delete task.fixerChatId;

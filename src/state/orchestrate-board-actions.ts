@@ -721,23 +721,291 @@ async function resumeBoardTask(
   await startTask(group, taskId, plannerChat);
 }
 
-/** Continue a stalled or setup-pending board task (MIN-222). */
+/** Count assistant turns in a task chat transcript. */
+function countChatAssistantTurns(chat: Chat): number {
+  return chat.history.filter((m) => m.role === 'assistant').length;
+}
+
+/** Sum usage tokens from a task chat transcript (best-effort). */
+function sumChatHistoryTokens(chat: Chat): number {
+  let total = 0;
+  for (const msg of chat.history) {
+    if (msg.role === 'assistant' && msg.usage?.total_tokens) {
+      total += msg.usage.total_tokens;
+    }
+  }
+  const lastTotal = chat.lastStats?.total_tokens;
+  if (typeof lastTotal === 'number' && Number.isFinite(lastTotal)) {
+    total = Math.max(total, lastTotal);
+  }
+  return total;
+}
+
+const CONSERVATIVE_CONTINUE_ASSISTANT_TURNS = 24;
+const CONSERVATIVE_CONTINUE_TOKEN_THRESHOLD = 120_000;
+const AGGRESSIVE_CONTINUE_ASSISTANT_TURNS = 10;
+const AGGRESSIVE_CONTINUE_TOKEN_THRESHOLD = 50_000;
+
+/** True when Continue should hand off to a fresh summarized chat instead of nudging. */
+export function shouldRouteContinueToNewChat(chat: Chat, task: BoardTask): boolean {
+  const mode = getAutopilotMetaSync().continueSmartRoute ?? 'conservative';
+  if (mode === 'off') return false;
+  const hasAssistant = chat.history.some((m) => m.role === 'assistant');
+  if (hasAssistant && resolveTaskChatStreamOutcome(chat) === 'failed') return true;
+  const assistantTurns = countChatAssistantTurns(chat);
+  const tokens = sumChatHistoryTokens(chat);
+  if (mode === 'aggressive') {
+    return (
+      assistantTurns > AGGRESSIVE_CONTINUE_ASSISTANT_TURNS ||
+      tokens > AGGRESSIVE_CONTINUE_TOKEN_THRESHOLD
+    );
+  }
+  return (
+    assistantTurns > CONSERVATIVE_CONTINUE_ASSISTANT_TURNS ||
+    tokens > CONSERVATIVE_CONTINUE_TOKEN_THRESHOLD
+  );
+}
+
+/** Short nudge appended to an existing build chat — no full task reseed. */
+export function buildContinueNudgeMessage(task: BoardTask): string {
+  return [
+    `Continue the orchestrate task ${task.id} — ${task.title} where you left off.`,
+    "Pick up from your last step; don't restart from scratch.",
+    'Report what you changed.',
+  ].join(' ');
+}
+
+/** Compact digest of build-chat progress for summary handoff. */
+export function buildTaskProgressSummary(chat: Chat, task: BoardTask): string {
+  const excerpt = buildSynthesisExcerpt(chat).trim();
+  const messages = buildSynthesisMessages(chat);
+  const digest = messages
+    .map((m) => `${m.role}: ${m.content}`)
+    .join('\n\n')
+    .trim();
+  const parts: string[] = [];
+  if (excerpt) parts.push(`Recent excerpt:\n${excerpt}`);
+  if (digest) parts.push(`Conversation digest:\n${digest}`);
+  const testSummary = task.testSummary?.trim();
+  if (testSummary) parts.push(`Last test summary: ${testSummary}`);
+  return parts.join('\n\n') || '(no prior chat history)';
+}
+
+/** Seed for explicit move-to-new-chat handoff (summary + remaining work). */
+export function buildMoveToNewChatSeed(
+  group: ChatGroup,
+  plannerChat: Chat,
+  task: BoardTask,
+  summary: string,
+): string {
+  const board = group.orchestrateBoard!;
+  const planPath =
+    group.orchestratePlanPath?.trim() ||
+    plannerChat.orchestratePlanPath?.trim() ||
+    board.planPath;
+  const build = task.buildSpec?.trim() || '(see plan)';
+  const test = task.testSpec?.trim() || '(see plan)';
+  return [
+    'Continue this orchestrate task in a fresh chat.',
+    '',
+    `Plan: ${planPath}`,
+    `Task: ${task.id} — ${task.title}`,
+    '',
+    'Progress so far:',
+    summary.trim() || '(no prior chat history)',
+    '',
+    'Remaining work — Build:',
+    build,
+    '',
+    'Test:',
+    test,
+    '',
+    'Pick up where the previous chat left off. Do not restart from scratch unless necessary.',
+    'Report what you changed.',
+  ].join('\n');
+}
+
+type ClearTaskFailureOptions = { resetAttempts: boolean };
+
+/** Snapshot and clear stale failure UI fields (shared by all recovery actions). */
+export function clearTaskFailureState(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  opts: ClearTaskFailureOptions,
+): BoardTask {
+  const hasFailure = Boolean(
+    task.error?.trim() || task.testSummary?.trim() || task.testVerdict,
+  );
+  const patch: Parameters<typeof updateTask>[2] = {
+    error: undefined,
+    testVerdict: undefined,
+    testSummary: undefined,
+  };
+  if (hasFailure) {
+    patch.prevFailure = {
+      ...(task.error?.trim() ? { error: task.error.trim() } : {}),
+      ...(task.testSummary?.trim() ? { testSummary: task.testSummary.trim() } : {}),
+      ...(task.testVerdict ? { testVerdict: task.testVerdict } : {}),
+      at: Date.now(),
+    };
+  }
+  if (opts.resetAttempts) {
+    patch.testAttempts = undefined;
+  }
+  return updateTask(group, task.id, patch, plannerChat);
+}
+
+/** Run a continue nudge on the existing build chat (no original-prompt reseed). */
+async function runTaskChatNudge(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const task = board.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  const existingChatId = task.chatId?.trim();
+  if (!existingChatId) {
+    await startTask(group, taskId, plannerChat);
+    return;
+  }
+  if (isTaskChatActive(existingChatId)) return;
+
+  if (countRunningTaskChats(board) >= maxConcurrent(board)) {
+    enqueueTask(group.id, taskId);
+    return;
+  }
+
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  ensureStreamEndSubscription();
+
+  const { modelId } = resolvePlannerModelBinding(plannerChat);
+  if (!modelId) {
+    updateTask(
+      group,
+      taskId,
+      { error: 'Select a model for the orchestrate planner before starting tasks' },
+      plannerChat,
+    );
+    return;
+  }
+
+  const taskChat = findChatById(existingChatId);
+  if (!taskChat) {
+    await startTask(group, taskId, plannerChat);
+    return;
+  }
+
+  reserveLaunchSlot(taskChat.id);
+  try {
+    const { renderSidebar } = await import('../ui/sidebar.ts');
+    renderSidebar();
+
+    const worktreeRoot = await ensureTaskWorktree(group, task, plannerChat);
+    if (worktreeRoot) {
+      taskChat.worktreeRoot = worktreeRoot;
+      scheduleSaveSessions();
+    }
+
+    const nudge = buildContinueNudgeMessage(task);
+    refreshHeartbeatThresholds();
+    startTaskChatSupervision(taskChat.id);
+
+    void runChatTurn({
+      chat: taskChat,
+      pushUser: true,
+      rawText: nudge,
+      userText: nudge,
+      displayText: nudge,
+      historyContent: nudge,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: task.title,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message =
+        err instanceof Error ? err.message : 'Task chat failed to continue';
+      updateTask(
+        group,
+        taskId,
+        { error: message || 'Task chat failed to continue' },
+        plannerChat,
+      );
+    }).finally(() => releaseLaunchSlot(taskChat.id));
+  } catch (err) {
+    releaseLaunchSlot(taskChat.id);
+    throw err;
+  }
+}
+
+/** Continue without reseeding the original build prompt (MIN-222). */
 export async function continueBoardTask(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
 ): Promise<void> {
-  await resumeBoardTask(group, taskId, plannerChat);
+  const board = group.orchestrateBoard;
+  const task = board?.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  if (task.status === 'testing') {
+    await startTaskTesting(group, taskId, plannerChat);
+    return;
+  }
+  clearTaskFailureState(group, task, plannerChat, { resetAttempts: false });
+  const fresh = board!.tasks.find((t) => t.id === taskId)!;
+  const chatId = fresh.chatId?.trim();
+  const chat = chatId ? findChatById(chatId) : undefined;
+  if (chat && shouldRouteContinueToNewChat(chat, fresh)) {
+    await moveTaskToNewChat(group, taskId, plannerChat);
+    return;
+  }
+  await runTaskChatNudge(group, taskId, plannerChat);
 }
 
-/** Stop a running board task chat, then start it again (MIN-222). */
+/** Re-seed the original build prompt in a fresh chat (MIN-222). */
 export async function restartBoardTask(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
 ): Promise<void> {
-  await stopTask(group, taskId, plannerChat);
-  await resumeBoardTask(group, taskId, plannerChat);
+  const board = group.orchestrateBoard;
+  const task = board?.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  const buildId = task.chatId?.trim();
+  const testId = task.testChatId?.trim();
+  if (
+    (buildId && isTaskChatActive(buildId)) ||
+    (testId && isTaskChatActive(testId))
+  ) {
+    await stopTask(group, taskId, plannerChat);
+  }
+  const stopped = board!.tasks.find((t) => t.id === taskId)!;
+  clearTaskFailureState(group, stopped, plannerChat, { resetAttempts: true });
+  const seed = buildTaskSeedMessage(group, plannerChat, stopped);
+  updateTask(group, taskId, { pendingBuildSeed: seed }, plannerChat);
+  await startTask(group, taskId, plannerChat);
+}
+
+/** Summarize progress and seed a fresh build chat (MIN-222). */
+export async function moveTaskToNewChat(
+  group: ChatGroup,
+  taskId: string,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  const task = board?.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  clearTaskFailureState(group, task, plannerChat, { resetAttempts: false });
+  const fresh = board!.tasks.find((t) => t.id === taskId)!;
+  const chat = fresh.chatId?.trim() ? findChatById(fresh.chatId.trim()) : undefined;
+  const summary = chat ? buildTaskProgressSummary(chat, fresh) : '';
+  const seed = buildMoveToNewChatSeed(group, plannerChat, fresh, summary);
+  updateTask(group, taskId, { pendingBuildSeed: seed }, plannerChat);
+  await startTask(group, taskId, plannerChat);
 }
 
 /** Stop one running board slot (task build/test/fixer or final integration chat). */

@@ -468,6 +468,27 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.testSummary === 'string' && r.testSummary.trim()
       ? r.testSummary.trim()
       : undefined;
+  let prevFailure: BoardTask['prevFailure'];
+  if (r.prevFailure && typeof r.prevFailure === 'object') {
+    const pf = r.prevFailure as Record<string, unknown>;
+    const at = typeof pf.at === 'number' && Number.isFinite(pf.at) ? pf.at : undefined;
+    if (at != null) {
+      const pfError =
+        typeof pf.error === 'string' && pf.error.trim() ? pf.error.trim() : undefined;
+      const pfSummary =
+        typeof pf.testSummary === 'string' && pf.testSummary.trim()
+          ? pf.testSummary.trim()
+          : undefined;
+      const pfVerdict =
+        pf.testVerdict === 'pass' || pf.testVerdict === 'fail' ? pf.testVerdict : undefined;
+      prevFailure = {
+        at,
+        ...(pfError ? { error: pfError } : {}),
+        ...(pfSummary ? { testSummary: pfSummary } : {}),
+        ...(pfVerdict ? { testVerdict: pfVerdict } : {}),
+      };
+    }
+  }
   const pendingBuildSeed =
     typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()
       ? r.pendingBuildSeed.trim()
@@ -507,6 +528,7 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(mergePreSha ? { mergePreSha } : {}),
     ...(testVerdict ? { testVerdict } : {}),
     ...(testSummary ? { testSummary } : {}),
+    ...(prevFailure ? { prevFailure } : {}),
     ...(pendingBuildSeed ? { pendingBuildSeed } : {}),
     ...(worktreePath ? { worktreePath } : {}),
     ...(worktreeBranch ? { worktreeBranch } : {}),

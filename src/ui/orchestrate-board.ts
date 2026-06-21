@@ -51,6 +51,7 @@ import {
   isTaskChatActive,
   listRunningBoardTaskSlots,
   moveTaskStatus,
+  moveTaskToNewChat,
   restartBoardTask,
   setBoardExecutionMode,
   setBoardIsolationMode,
@@ -1491,6 +1492,7 @@ const RUNNING_TASK_CONTROL_ICON_PATHS = {
   stop: ['M6 6h12v12H6z'],
   restart: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
   continue: ['M5 12h14', 'M12 5l7 7-7 7'],
+  move: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
   open: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
 } as const;
 
@@ -1621,6 +1623,15 @@ function buildRunningTaskChip(
       }),
     );
   }
+  if (!slot.isFinalTest) {
+    controls.appendChild(
+      createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
+        void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+  }
   controls.appendChild(
     createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
       if (chat) switchChat(chat.id);
@@ -1640,6 +1651,7 @@ function buildRunningTasksStripKey(
       const tokens = sumChatTotalTokens(chat);
       const streaming = isChatStreaming(slot.chatId) ? 1 : 0;
       const continueVisible = runningSlotShowsContinue(board, slot) ? 1 : 0;
+      const moveVisible = slot.isFinalTest ? 0 : 1;
       return [
         slot.chatId,
         slot.taskId,
@@ -1647,6 +1659,7 @@ function buildRunningTasksStripKey(
         slot.title,
         streaming,
         continueVisible,
+        moveVisible,
         tokens ?? '',
       ].join('|');
     })
@@ -1801,6 +1814,88 @@ function buildStatusActionButtons(
   }
   if (task.status === 'complete' || task.status === 'failed') {
     addBtn('Reopen', 'planned', 'recycle');
+  }
+}
+
+/** True when a stopped/failed/blocked task can use recovery controls. */
+function taskShowsRecoveryActions(
+  task: BoardTask,
+  taskActive: boolean,
+  testActive: boolean,
+): boolean {
+  if (taskActive || testActive) return false;
+  if (task.status === 'failed' || task.status === 'blocked') return true;
+  if (task.status === 'in_progress' || task.status === 'testing') {
+    return Boolean(task.chatId?.trim() || task.testChatId?.trim());
+  }
+  return false;
+}
+
+function buildTaskRecoveryActions(
+  task: BoardTask,
+  group: ChatGroup,
+  plannerChat: Chat,
+  row: HTMLElement,
+): void {
+  const addRecoveryBtn = (
+    label: string,
+    icon: BoardAdvanceIconKind,
+    onClick: () => void,
+  ): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-task-card__advance-btn board-task-card__advance-btn--recovery';
+    btn.appendChild(createBoardAdvanceIcon(icon));
+    const text = document.createElement('span');
+    text.className = 'board-task-card__advance-label';
+    text.textContent = label;
+    btn.appendChild(text);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+      refreshActiveBoardIfMounted();
+    });
+    row.appendChild(btn);
+  };
+
+  addRecoveryBtn('Restart', 'recycle', () => {
+    void restartBoardTask(group, task.id, plannerChat);
+  });
+  addRecoveryBtn('Continue', 'forward', () => {
+    void continueBoardTask(group, task.id, plannerChat);
+  });
+  addRecoveryBtn('Move to new chat', 'forward', () => {
+    void moveTaskToNewChat(group, task.id, plannerChat);
+  });
+}
+
+function appendTaskPrevFailureLink(card: HTMLElement, task: BoardTask): void {
+  const prev = task.prevFailure;
+  if (!prev) return;
+  const details = document.createElement('details');
+  details.className = 'board-task-card__prev-failure';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Previous failure';
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.className = 'board-task-card__prev-failure-body';
+  if (prev.error?.trim()) {
+    const err = document.createElement('p');
+    err.className = 'board-task-card__prev-failure-line';
+    err.textContent = prev.error.trim();
+    body.appendChild(err);
+  }
+  if (prev.testVerdict || prev.testSummary?.trim()) {
+    const test = document.createElement('p');
+    test.className = 'board-task-card__prev-failure-line';
+    const verdict = prev.testVerdict ? ` (${prev.testVerdict})` : '';
+    test.textContent = `${prev.testSummary?.trim() || 'Test failure'}${verdict}`;
+    body.appendChild(test);
+  }
+  if (body.childElementCount) {
+    details.appendChild(body);
+    details.addEventListener('click', (e) => e.stopPropagation());
+    card.appendChild(details);
   }
 }
 
@@ -2063,6 +2158,13 @@ function buildTaskCard(
     footer.appendChild(advanceRow);
   }
 
+  if (taskShowsRecoveryActions(task, taskActive, testActive)) {
+    const recoveryRow = document.createElement('div');
+    recoveryRow.className = 'board-task-card__advance board-task-card__advance--recovery';
+    buildTaskRecoveryActions(task, group, plannerChat, recoveryRow);
+    footer.appendChild(recoveryRow);
+  }
+
   card.appendChild(footer);
 
   if (task.error) {
@@ -2071,6 +2173,13 @@ function buildTaskCard(
     err.textContent = task.error;
     card.appendChild(err);
   }
+  if (task.testVerdict === 'fail' && task.testSummary?.trim()) {
+    const testFail = document.createElement('p');
+    testFail.className = 'board-task-card__error board-task-card__error--test';
+    testFail.textContent = task.testSummary.trim();
+    card.appendChild(testFail);
+  }
+  appendTaskPrevFailureLink(card, task);
   return card;
 }
 

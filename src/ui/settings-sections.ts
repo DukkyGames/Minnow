@@ -48,6 +48,7 @@ import { detectConfigServer, isServerStorageMode } from '../config/storage-mode'
 import {
   loadAutopilotMeta,
   saveAutopilotMeta,
+  type AutopilotContinueSmartRoute,
   type AutopilotExecutionMode,
   type AutopilotIsolationMode,
 } from '../config/autopilot-meta';
@@ -1159,6 +1160,34 @@ async function renderAutopilotSection(): Promise<void> {
   finalAttemptsField.append(finalAttemptsLabel, finalAttemptsInput);
   testsBody.appendChild(finalAttemptsField);
 
+  const smartRouteField = el('div', 'settings-field');
+  const smartRouteLabel = el('label', 'settings-field-label', 'Continue smart-route');
+  smartRouteLabel.htmlFor = 'settingsAutopilotContinueSmartRoute';
+  const smartRouteSelect = document.createElement('select');
+  smartRouteSelect.id = 'settingsAutopilotContinueSmartRoute';
+  smartRouteSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'off', label: 'Off — always nudge existing chat' },
+    { value: 'conservative', label: 'Conservative — derailed or very large chats' },
+    { value: 'aggressive', label: 'Aggressive — lower size thresholds' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    smartRouteSelect.appendChild(option);
+  }
+  smartRouteSelect.value = meta.continueSmartRoute;
+  smartRouteField.append(
+    smartRouteLabel,
+    smartRouteSelect,
+    el(
+      'p',
+      'settings-field-hint',
+      'When Continue would bloat a derailed build chat, hand off to a fresh summarized chat instead.',
+    ),
+  );
+  testsBody.appendChild(smartRouteField);
+
   const heartbeatBody = appendSettingsGroup(
     mount,
     'Heartbeat & stall',
@@ -1268,6 +1297,11 @@ async function renderAutopilotSection(): Promise<void> {
     const value = Math.min(10, Math.max(1, Math.floor(Number(finalAttemptsInput.value) || 1)));
     finalAttemptsInput.value = String(value);
     void persist({ maxFinalTestAttempts: value });
+  });
+  smartRouteSelect.addEventListener('change', () => {
+    void persist({
+      continueSmartRoute: smartRouteSelect.value as AutopilotContinueSmartRoute,
+    });
   });
   heartbeatInput.addEventListener('change', () => {
     void persist({ heartbeatIntervalMs: Number(heartbeatInput.value) });
