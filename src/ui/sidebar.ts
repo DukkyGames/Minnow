@@ -5,7 +5,9 @@ import { isChatStreaming } from '../chat/streaming-state';
 import {
   createGroup,
   deleteGroup,
+  findBoardGroupForPlanner,
   getActiveBoardGroup,
+  getBoardGroupForChat,
   buildSortedWorkspaceSidebarEntries,
   getGroupsForWorkspace,
   openBoardGroup,
@@ -779,6 +781,26 @@ function showChatItemContextMenu(
     void import('./chat-brain-capture').then((m) => m.runChatBrainCapture(chat));
   });
 
+  const isPlannerChat = normalizeModeId(chat.modeId) === 'orchestrate';
+  let orchestrateItem: HTMLButtonElement | null = null;
+  if (isPlannerChat) {
+    orchestrateItem = document.createElement('button');
+    orchestrateItem.type = 'button';
+    orchestrateItem.textContent = 'Open in orchestrator';
+    orchestrateItem.addEventListener('click', () => {
+      menu.remove();
+      const group = getBoardGroupForChat(chat) ?? findBoardGroupForPlanner(chat.id);
+      if (group?.orchestrateBoard) {
+        void import('../state/chat-groups').then((m) => m.openBoardGroup(group.id));
+        return;
+      }
+      if (sessionState && sessionState.activeId !== chat.id) {
+        switchChat(chat.id);
+      }
+      void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
+    });
+  }
+
   const deleteItem = document.createElement('button');
   deleteItem.type = 'button';
   deleteItem.textContent = 'Delete';
@@ -794,6 +816,7 @@ function showChatItemContextMenu(
 
   menu.appendChild(renameItem);
   menu.appendChild(brainItem);
+  if (orchestrateItem) menu.appendChild(orchestrateItem);
   menu.appendChild(deleteItem);
   document.body.appendChild(menu);
 

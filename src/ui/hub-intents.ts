@@ -4,7 +4,7 @@
 
 import type { ModeId } from '../chat/modes/types';
 
-export type HubIntentId = 'build' | 'plan' | 'explain' | 'debug';
+export type HubIntentId = 'build' | 'plan' | 'explain' | 'debug' | 'orchestrate';
 
 /** Map hub intent chips to Minnow operating modes. */
 export function mapIntentModeId(intent: HubIntentId): ModeId {

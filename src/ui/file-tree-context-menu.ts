@@ -6,6 +6,7 @@ import { isFileTreeServerAvailable } from './file-tree-server';
 import { getFileTreeClipboard } from './file-tree-clipboard';
 import { pasteTargetDirForPath } from './file-tree-path';
 import { isMarkdownFilePath } from './file-markdown-path';
+import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
 import * as fileTreeOps from './file-tree-ops';
 type FileTreeEntryKind = 'file' | 'dir';
 
@@ -107,6 +108,7 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
   const pasteDisabled = offline || !hasClipboard;
   const isMarkdown = isMarkdownFilePath(ctx.path);
   const isHtml = ctx.kind === 'file' && /\.html?$/i.test(ctx.path);
+  const isPlan = ctx.kind === 'file' && isExecutableOrchestratePlan(ctx.path);
 
   const openItems: MenuItemDef[] = isMarkdown
     ? [
@@ -145,9 +147,21 @@ function buildFileMenuItems(ctx: FileTreeMenuContext): MenuItemDef[] {
       ]
     : [];
 
+  const orchestrateItem: MenuItemDef[] = isPlan
+    ? [
+        {
+          label: 'Open in orchestrator',
+          disabled: offline,
+          action: () =>
+            void import('./orchestrate-launch').then((m) => m.launchBoardFromPlan(ctx.path)),
+        },
+      ]
+    : [];
+
   return [
     ...openItems,
     ...previewItem,
+    ...orchestrateItem,
     {
       label: 'Cut',
       disabled,

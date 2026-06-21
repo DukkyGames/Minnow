@@ -6,18 +6,15 @@ import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import { mountPlanPreviewContent } from '../chat/orchestrate/plan-preview';
 import {
   isExecutableOrchestratePlan,
-  normalizeOrchestratePlanPath,
 } from '../chat/orchestrate/plan-path';
 import { executeTool } from '../tools/client';
 import { normalizeModeId } from '../chat/modes/types';
 import {
-  getBoardGroupForChat,
   getGroupsForWorkspace,
-  getOrCreateBoardGroup,
   openBoardGroup,
 } from '../state/chat-groups';
 import { getBoardProgressPercent } from '../state/orchestrate-board-store';
-import { getActiveChat, scheduleSaveSessions, sessionState } from '../state/sessions';
+import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat, ChatGroup } from '../types';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import {
@@ -26,15 +23,14 @@ import {
   shortPlanLabel,
 } from './orchestrate-plan-picker';
 import { setChatMode } from './mode-selector';
-import { createChatWithMode, switchChat } from './sidebar';
+import { launchBoardFromPlan } from './orchestrate-launch';
+import { switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
 import { teardownHub } from './hub';
 import {
   openOrchestratePlanScreen,
   teardownOrchestratePlanScreen,
 } from './orchestrate-plan-screen';
-import { setOrchestrateViewMode } from './view-mode-toggle';
-
 export const ORCHESTRATE_HUB_ROOT_ID = 'orchestrateHub';
 const ORCHESTRATE_HUB_RECENT_LIMIT = 9;
 
@@ -196,41 +192,11 @@ function openBoardGroupFromHub(groupId: string, plannerChatId?: string): void {
   openBoardGroup(groupId);
 }
 
-function resolveOrchestrateTargetChat(): Chat {
-  const active = getActiveChat();
-  const canReuse =
-    !active.history.length && !getBoardGroupForChat(active)?.orchestrateBoard;
-  if (canReuse) {
-    setChatMode('orchestrate');
-    return getActiveChat();
-  }
-  const created = createChatWithMode({ modeId: 'orchestrate' });
-  if (!created.ok || !created.chatId || !sessionState) {
-    return getActiveChat();
-  }
-  return sessionState.chats.find((c) => c.id === created.chatId) ?? getActiveChat();
-}
-
 function startBoardFromHub(planSelect: HTMLSelectElement): void {
   const path = planSelect.value.trim();
   if (!path || !isExecutableOrchestratePlan(path)) return;
   teardownOrchestrateHub();
-  const chat = resolveOrchestrateTargetChat();
-  persistOrchestratePlanPathFromSelectValue(chat, path);
-  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
-    setChatMode('orchestrate');
-  }
-  const group = getOrCreateBoardGroup(chat);
-  const norm = normalizeOrchestratePlanPath(path);
-  if (norm) {
-    group.orchestratePlanPath = norm;
-    scheduleSaveSessions();
-  }
-  const needsKickoff = !group.orchestrateBoard;
-  setOrchestrateViewMode('board');
-  if (needsKickoff) {
-    void import('./orchestrate-board-kickoff').then((m) => m.kickoffOrchestrateBoardBuild());
-  }
+  launchBoardFromPlan(path);
 }
 
 /** Re-render recent boards when session groups change (e.g. planner chat deleted). */
