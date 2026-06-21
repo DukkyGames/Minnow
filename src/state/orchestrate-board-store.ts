@@ -55,7 +55,7 @@ export function shouldOrchestrateBoardTimerRun(
   if (ctx.isStreaming && board.activeParentTurnId) return true;
   if (ctx.activeRunCount > 0) return true;
   return board.tasks.some(
-    (t) => t.status === 'in_progress' || t.status === 'testing',
+    (t) => t.status === 'in_progress' || t.status === 'testing' || t.status === 'merging',
   );
 }
 
@@ -105,6 +105,7 @@ export function syncOrchestrateBoardTimer(
 const ACTIVE_WAVE_STATUSES = new Set<BoardTaskStatus>([
   'in_progress',
   'testing',
+  'merging',
   'failed',
   'blocked',
 ]);
@@ -221,7 +222,7 @@ function formatDependencyCycleError(cycle: string[]): string {
   return `dependency cycle: ${path}`;
 }
 
-/** Planned task whose prior waves are complete (simple wave ordering). */
+/** Planned task whose deps (and wave barrier when no deps) are satisfied. */
 export function isTaskReadyForAuto(
   board: OrchestrateBoardState,
   task: BoardTask,
@@ -229,6 +230,9 @@ export function isTaskReadyForAuto(
   if (task.status !== 'planned') return false;
   if (isTaskInDependencyCycle(board, task.id)) return false;
   if (!isDepsComplete(board, task)) return false;
+  // DAG-first: explicit edges satisfied → ready now. Wave barrier only when the
+  // task declares no dependsOn (keeps legacy wave-only plans working).
+  if (task.dependsOn?.length) return true;
   return isPriorWavesComplete(board, task.wave);
 }
 
@@ -263,7 +267,8 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
       : undefined);
   if (!boardGroup?.orchestrateBoard) return;
   const existing = boardGroup.orchestrateBoard.tasks.find((t) => t.id === taskId);
-  if (!existing || existing.status === 'complete' || existing.status === 'testing') return;
+  if (!existing || existing.status === 'complete' || existing.status === 'testing' || existing.status === 'merging') return;
+  if (existing.fixerChatId === chat.id) return;
   const planner = getPlannerChatForGroup(boardGroup);
   const patch: Parameters<typeof updateTask>[2] = {
     status: 'in_progress',
@@ -445,7 +450,10 @@ export type UpdateTaskPatch = Partial<
     | 'buildSpec'
     | 'testSpec'
     | 'testChatId'
+    | 'fixerChatId'
     | 'testAttempts'
+    | 'fixerAttempts'
+    | 'mergePreSha'
     | 'testVerdict'
     | 'testSummary'
     | 'pendingBuildSeed'
@@ -494,6 +502,15 @@ export function updateTask(
   // Explicit `error: undefined` removes a stale failure message from the task row.
   if ('error' in patch && patch.error === undefined) {
     delete task.error;
+  }
+  if ('fixerChatId' in patch && patch.fixerChatId === undefined) {
+    delete task.fixerChatId;
+  }
+  if ('mergePreSha' in patch && patch.mergePreSha === undefined) {
+    delete task.mergePreSha;
+  }
+  if ('fixerAttempts' in patch && patch.fixerAttempts === undefined) {
+    delete task.fixerAttempts;
   }
   board.tasks[idx] = task;
   board.lastUpdatedAt = boardNowMs();

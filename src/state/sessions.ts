@@ -383,6 +383,7 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'planned',
   'in_progress',
   'testing',
+  'merging',
   'complete',
   'failed',
   'blocked',
@@ -439,6 +440,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
   const testChatId =
     typeof r.testChatId === 'string' && r.testChatId.trim() ? r.testChatId.trim() : undefined;
+  const fixerChatId =
+    typeof r.fixerChatId === 'string' && r.fixerChatId.trim() ? r.fixerChatId.trim() : undefined;
   const buildSpec =
     typeof r.buildSpec === 'string' && r.buildSpec.trim() ? r.buildSpec.trim() : undefined;
   const testSpec =
@@ -453,6 +456,12 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)
       ? r.testAttempts
       : undefined;
+  const fixerAttempts =
+    typeof r.fixerAttempts === 'number' && Number.isFinite(r.fixerAttempts)
+      ? r.fixerAttempts
+      : undefined;
+  const mergePreSha =
+    typeof r.mergePreSha === 'string' && r.mergePreSha.trim() ? r.mergePreSha.trim() : undefined;
   const testVerdict =
     r.testVerdict === 'pass' || r.testVerdict === 'fail' ? r.testVerdict : undefined;
   const testSummary =
@@ -489,10 +498,13 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(typeof r.error === 'string' ? { error: r.error } : {}),
     ...(chatId ? { chatId } : {}),
     ...(testChatId ? { testChatId } : {}),
+    ...(fixerChatId ? { fixerChatId } : {}),
     ...(buildSpec ? { buildSpec } : {}),
     ...(testSpec ? { testSpec } : {}),
     ...(dependsOn.length ? { dependsOn } : {}),
     ...(testAttempts !== undefined ? { testAttempts } : {}),
+    ...(fixerAttempts !== undefined ? { fixerAttempts } : {}),
+    ...(mergePreSha ? { mergePreSha } : {}),
     ...(testVerdict ? { testVerdict } : {}),
     ...(testSummary ? { testSummary } : {}),
     ...(pendingBuildSeed ? { pendingBuildSeed } : {}),

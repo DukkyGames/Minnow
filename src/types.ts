@@ -274,6 +274,7 @@ export type BoardTaskStatus =
   | 'planned'
   | 'in_progress'
   | 'testing'
+  | 'merging'
   | 'complete'
   | 'failed'
   | 'blocked';
@@ -308,8 +309,14 @@ export interface BoardTask {
   dependsOn?: string[];
   /** Linked Tester chat session id (per-task testing). */
   testChatId?: string;
+  /** Linked merge-conflict fixer chat (integration worktree). */
+  fixerChatId?: string;
   /** Build↔test retry count (incremented on each test failure). */
   testAttempts?: number;
+  /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
+  fixerAttempts?: number;
+  /** Pre-merge integration tip SHA for restore on fixer failure. */
+  mergePreSha?: string;
   /** Structured verdict from board_report_test_result (stream-end routing). */
   testVerdict?: 'pass' | 'fail';
   /** Human summary from the Tester (shown on fail / blocked). */

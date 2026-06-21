@@ -414,3 +414,47 @@ describe('orchestrate board dependency cycles', () => {
     assert.equal(isTaskReadyForAuto(board, taskB), false);
   });
 });
+
+describe('isTaskReadyForAuto DAG-first scheduling', () => {
+  test('task with satisfied deps is ready even when a same-wave sibling is incomplete', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build' },
+        { id: 'W1-C', title: 'C', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    const board = getBoardState(group)!;
+    const taskA = board.tasks.find((t) => t.id === 'W1-A')!;
+    const taskB = board.tasks.find((t) => t.id === 'W1-B')!;
+    const taskC = board.tasks.find((t) => t.id === 'W1-C')!;
+
+    taskA.status = 'complete';
+    assert.equal(isTaskReadyForAuto(board, taskC), true);
+    assert.equal(isTaskReadyForAuto(board, taskB), true);
+    taskB.status = 'in_progress';
+    assert.equal(isTaskReadyForAuto(board, taskC), true);
+  });
+
+  test('task without dependsOn still respects prior wave barrier', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W2-A', title: 'B', wave: 'W2', category: 'build' },
+      ],
+      waves: [{ id: 'W1' }, { id: 'W2' }],
+    });
+    const board = getBoardState(group)!;
+    const w2 = board.tasks.find((t) => t.id === 'W2-A')!;
+    assert.equal(isTaskReadyForAuto(board, w2), false);
+    board.tasks.find((t) => t.id === 'W1-A')!.status = 'complete';
+    assert.equal(isTaskReadyForAuto(board, w2), true);
+  });
+});

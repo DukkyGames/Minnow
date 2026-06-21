@@ -94,6 +94,8 @@ import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messa
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
+import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
+import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
 import {
   autoResize,
   handleComposerPrimaryAction,
@@ -262,6 +264,7 @@ export async function initApp(): Promise<void> {
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
+  registerOrchestrateBoardShutdownHandler();
   const { loadBugsFromStorage, migrateBugsFromChats } = await import(
     './state/bug-board-store.ts'
   );
@@ -369,6 +372,7 @@ export async function initApp(): Promise<void> {
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
   if (sessionState) {
+    await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
     await bootOrchestrateBoardResume(sessionState);
   }

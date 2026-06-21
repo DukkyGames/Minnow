@@ -87,6 +87,7 @@ const BOARD_TASK_STATUSES = new Set([
   'planned',
   'in_progress',
   'testing',
+  'merging',
   'complete',
   'failed',
   'blocked',
@@ -140,6 +141,9 @@ function ensureBoardTask(raw) {
   }
   if (typeof r.testChatId === 'string' && r.testChatId.trim()) {
     out.testChatId = r.testChatId.trim();
+  }
+  if (typeof r.fixerChatId === 'string' && r.fixerChatId.trim()) {
+    out.fixerChatId = r.fixerChatId.trim();
   }
   if (typeof r.buildSpec === 'string' && r.buildSpec.trim()) {
     out.buildSpec = r.buildSpec.trim();

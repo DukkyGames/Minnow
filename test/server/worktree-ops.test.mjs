@@ -1,0 +1,308 @@
+/**
+ * Board worktree ops: commitWorktree and checkMerged.
+ */
+
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { after, before, describe, test } from 'node:test';
+import {
+  checkMerged,
+  commitWorktree,
+  createWorktree,
+  ensureIntegration,
+  mergeIntoIntegration,
+  restoreIntegration,
+  verifyIntegrationMerge,
+} from '../../server/worktree/worktree-ops.js';
+import { getWorktreeSlotPath } from '../../server/worktree/paths.js';
+import { setWorkspaceRoot } from '../../server/workspace/root.js';
+
+const execFileAsync = promisify(execFile);
+const BOARD_ID = 'test-board-11111111';
+
+describe('worktree commit and merge checks', () => {
+  let repoDir;
+  let minnowHome;
+  let integrationBranch;
+  let taskBranch;
+
+  before(async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-wt-ops-'));
+    repoDir = path.join(root, 'repo');
+    minnowHome = path.join(root, 'minnow-home');
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(minnowHome, { recursive: true });
+    process.env.MINNOW_HOME = minnowHome;
+    await setWorkspaceRoot(repoDir);
+
+    await execFileAsync('git', ['init'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, windowsHide: true });
+    await fs.writeFile(path.join(repoDir, 'README.md'), '# base\n', 'utf8');
+    await execFileAsync('git', ['add', 'README.md'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'init'], { cwd: repoDir, windowsHide: true });
+
+    integrationBranch = `minnow/board/${BOARD_ID}/integration`;
+    taskBranch = `minnow/board/${BOARD_ID}/task/W1-A`;
+
+    const ensured = await ensureIntegration({
+      boardId: BOARD_ID,
+      branch: integrationBranch,
+    });
+    assert.equal(ensured.ok, true);
+
+    const created = await createWorktree({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+      branch: taskBranch,
+      baseRef: integrationBranch,
+    });
+    assert.equal(created.ok, true);
+  });
+
+  after(async () => {
+    delete process.env.MINNOW_HOME;
+  });
+
+  test('commitWorktree returns committed:false when there are no changes', async () => {
+    const res = await commitWorktree({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+      message: 'empty',
+    });
+    assert.equal(res.ok, true);
+    assert.equal(res.committed, false);
+  });
+
+  test('commitWorktree captures untracked files and checkMerged is true after merge', async () => {
+    const taskWt = getWorktreeSlotPath(BOARD_ID, 'task-W1-A', repoDir);
+
+    await fs.writeFile(path.join(taskWt, 'feature.txt'), 'hello\n', 'utf8');
+
+    const commit = await commitWorktree({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+      message: 'add feature',
+    });
+    assert.equal(commit.ok, true);
+    assert.equal(commit.committed, true);
+
+    const before = await checkMerged({ boardId: BOARD_ID, fromBranch: taskBranch });
+    assert.equal(before.ok, true);
+    assert.equal(before.merged, false);
+
+    const merged = await mergeIntoIntegration({
+      boardId: BOARD_ID,
+      fromBranch: taskBranch,
+      message: 'merge W1-A',
+    });
+    assert.equal(merged.ok, true);
+
+    const after = await checkMerged({ boardId: BOARD_ID, fromBranch: taskBranch });
+    assert.equal(after.ok, true);
+    assert.equal(after.merged, true);
+  });
+});
+
+describe('worktree conflict merge and verification', () => {
+  let repoDir;
+  let minnowHome;
+  let integrationBranch;
+  let branchA;
+  let branchB;
+  let postMergeASha;
+  const BOARD_ID = 'test-board-conflict-22222222';
+
+  async function git(args, cwd = repoDir) {
+    return execFileAsync('git', args, { cwd, windowsHide: true });
+  }
+
+  async function mergeHeadExists(intPath) {
+    try {
+      await git(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], intPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function parentCount(intPath) {
+    const { stdout } = await git(['rev-list', '--parents', '-n', '1', 'HEAD'], intPath);
+    const parts = stdout.trim().split(/\s+/);
+    return parts.length - 1;
+  }
+
+  before(async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-wt-conflict-'));
+    repoDir = path.join(root, 'repo');
+    minnowHome = path.join(root, 'minnow-home');
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(minnowHome, { recursive: true });
+    process.env.MINNOW_HOME = minnowHome;
+    await setWorkspaceRoot(repoDir);
+
+    await git(['init']);
+    await git(['config', 'user.email', 'test@example.com']);
+    await git(['config', 'user.name', 'Test']);
+    await fs.writeFile(path.join(repoDir, 'README.md'), '# base\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'shared.txt'), 'base\n', 'utf8');
+    await git(['add', '.']);
+    await git(['commit', '-m', 'init']);
+
+    integrationBranch = `minnow/board/${BOARD_ID}/integration`;
+    branchA = `minnow/board/${BOARD_ID}/task/W2-A`;
+    branchB = `minnow/board/${BOARD_ID}/task/W2-B`;
+
+    assert.equal(
+      (await ensureIntegration({ boardId: BOARD_ID, branch: integrationBranch })).ok,
+      true,
+    );
+
+    const wtA = getWorktreeSlotPath(BOARD_ID, 'task-W2-A', repoDir);
+    assert.equal(
+      (
+        await createWorktree({
+          boardId: BOARD_ID,
+          slotId: 'task-W2-A',
+          branch: branchA,
+          baseRef: integrationBranch,
+        })
+      ).ok,
+      true,
+    );
+    await fs.writeFile(path.join(wtA, 'shared.txt'), 'version A\n', 'utf8');
+    await fs.writeFile(path.join(wtA, 'added-by-a.txt'), 'from A\n', 'utf8');
+    await git(['add', '.'], wtA);
+    await git(['commit', '-m', 'W2-A changes'], wtA);
+
+    const wtB = getWorktreeSlotPath(BOARD_ID, 'task-W2-B', repoDir);
+    assert.equal(
+      (
+        await createWorktree({
+          boardId: BOARD_ID,
+          slotId: 'task-W2-B',
+          branch: branchB,
+          baseRef: integrationBranch,
+        })
+      ).ok,
+      true,
+    );
+    await fs.writeFile(path.join(wtB, 'shared.txt'), 'version B\n', 'utf8');
+    await fs.writeFile(path.join(wtB, 'added-by-b.txt'), 'from B\n', 'utf8');
+    await fs.rm(path.join(wtB, 'README.md'));
+    await git(['add', '-A'], wtB);
+    await git(['commit', '-m', 'W2-B changes'], wtB);
+
+    const firstMerge = await mergeIntoIntegration({
+      boardId: BOARD_ID,
+      fromBranch: branchA,
+      message: 'merge W2-A',
+    });
+    assert.equal(firstMerge.ok, true);
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+    postMergeASha = (await git(['rev-parse', 'HEAD'], intPath)).stdout.trim();
+  });
+
+  after(async () => {
+    delete process.env.MINNOW_HOME;
+  });
+
+  test('mergeIntoIntegration leaves integration mid-merge on conflict', async () => {
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+    const headBefore = (await git(['rev-parse', 'HEAD'], intPath)).stdout.trim();
+
+    const conflict = await mergeIntoIntegration({
+      boardId: BOARD_ID,
+      fromBranch: branchB,
+      message: 'merge W2-B',
+    });
+
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.conflict, true);
+    assert.ok(conflict.conflictedFiles?.length > 0);
+    assert.ok(conflict.conflictedFiles.includes('shared.txt'));
+    assert.equal(conflict.integrationSha, headBefore);
+    assert.equal(await mergeHeadExists(intPath), true);
+  });
+
+  test('resolve + commit --no-edit yields true merge verified by verifyIntegrationMerge', async () => {
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+
+    await fs.writeFile(path.join(intPath, 'shared.txt'), 'merged AB\n', 'utf8');
+    await git(['add', '-A'], intPath);
+    await git(['commit', '--no-edit'], intPath);
+
+    assert.equal(await parentCount(intPath), 2);
+
+    const merged = await checkMerged({ boardId: BOARD_ID, fromBranch: branchB });
+    assert.equal(merged.ok, true);
+    assert.equal(merged.merged, true);
+
+    await fs.access(path.join(intPath, 'added-by-b.txt'));
+    await fs.access(path.join(intPath, 'added-by-a.txt'));
+    await assert.rejects(() => fs.access(path.join(intPath, 'README.md')));
+
+    const verified = await verifyIntegrationMerge({
+      boardId: BOARD_ID,
+      fromBranch: branchB,
+    });
+    assert.equal(verified.ok, true);
+    assert.equal(verified.verified, true);
+    assert.deepEqual(verified.reasons, []);
+  });
+
+  test('fake single-parent merge fails verification; restoreIntegration resets tip', async () => {
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+
+    const reset = await restoreIntegration({ boardId: BOARD_ID, sha: postMergeASha });
+    assert.equal(reset.ok, true);
+
+    const conflict = await mergeIntoIntegration({
+      boardId: BOARD_ID,
+      fromBranch: branchB,
+      message: 'merge W2-B again',
+    });
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.conflict, true);
+    const integrationSha = conflict.integrationSha;
+    assert.ok(integrationSha);
+
+    // Simulate fixer thrash: abort in-progress merge, then commit resolved text as a
+    // normal single-parent commit (the corruption mode that bypasses ancestry).
+    await git(['merge', '--abort'], intPath);
+    await fs.writeFile(path.join(intPath, 'shared.txt'), 'fake merged\n', 'utf8');
+    await fs.writeFile(path.join(intPath, 'added-by-b.txt'), 'from B\n', 'utf8');
+    await git(['add', '-A'], intPath);
+    await git(['commit', '-m', 'fake merge without MERGE_HEAD'], intPath);
+
+    assert.equal(await parentCount(intPath), 1);
+
+    const merged = await checkMerged({ boardId: BOARD_ID, fromBranch: branchB });
+    assert.equal(merged.ok, true);
+    assert.equal(merged.merged, false);
+
+    const verified = await verifyIntegrationMerge({
+      boardId: BOARD_ID,
+      fromBranch: branchB,
+    });
+    assert.equal(verified.ok, true);
+    assert.equal(verified.verified, false);
+    assert.ok(verified.reasons?.some((r) => /ancestor/i.test(r)));
+
+    const restored = await restoreIntegration({
+      boardId: BOARD_ID,
+      sha: integrationSha,
+    });
+    assert.equal(restored.ok, true);
+    assert.equal((await git(['rev-parse', 'HEAD'], intPath)).stdout.trim(), integrationSha);
+    assert.equal((await git(['status', '--porcelain'], intPath)).stdout.trim(), '');
+    assert.equal(await mergeHeadExists(intPath), false);
+  });
+});

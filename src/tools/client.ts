@@ -20,7 +20,10 @@ import {
   filterToolsByMode,
   isToolAllowedForMode,
 } from '../chat/modes/tool-policy';
-import { applyOrchestrateAutoToolFilter } from '../chat/modes/orchestrate-tool-filter';
+import {
+  applyBoardMemberToolFilter,
+  applyOrchestrateAutoToolFilter,
+} from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { Chat } from '../types';
 import { getBoardGroupForChat } from '../state/chat-groups';
@@ -122,6 +125,8 @@ export interface ExecuteToolContext {
   workAgentId?: string | null;
   /** Override server workspace root (chats sandbox, benchmark workspace, etc.). */
   workspaceRoot?: string;
+  /** Additional allowed path roots (board worktrees under ~/.minnow/worktrees). */
+  extraPathRoots?: string[];
   /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
   benchmarkAutonomous?: boolean;
 }
@@ -544,6 +549,7 @@ export function getEnabledToolDefinitionsForChat(
 ): OpenAIFunctionDefinition[] {
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
+  defs = applyBoardMemberToolFilter(defs, chat);
   if (normalized !== 'orchestrate') return defs;
 
   const board = getBoardGroupForChat(chat)?.orchestrateBoard;

@@ -27,7 +27,7 @@ import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeVerdict } from '../tools/board-tools.ts';
 import { schedulePostTurnSynthesis } from '../synthesis/client.ts';
 import { buildSynthesisMessages, buildSynthesisExcerpt } from '../synthesis/post-turn.ts';
-import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
+import type { BoardTask, BoardTaskStatus, Chat, ChatGroup, OrchestrateBoardState, SessionState } from '../types.ts';
 import {
   assignChatToGroup,
   getBoardGroupForChat,
@@ -37,6 +37,7 @@ import {
 import { emitBoardChange } from './orchestrate-board-events.ts';
 import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask } from './orchestrate-board-store.ts';
 import {
+  isIsolationActive,
   resolveIsolationMode,
   worktreeBranchFor,
   worktreeSlotId,
@@ -49,8 +50,14 @@ import {
   ensureIntegration as ensureIntegrationWorktree,
   createWorktree as createTaskWorktreeOp,
   mergeIntoIntegration as mergeTaskIntoIntegration,
+  commitWorktree as commitTaskWorktree,
+  checkMerged as checkTaskBranchMerged,
+  restoreIntegration as restoreIntegrationWorktree,
+  verifyIntegrationMerge as verifyIntegrationMergeOp,
   cleanupBoardWorktrees as cleanupBoardWorktreesOp,
 } from './worktree-service.ts';
+
+const MAX_MERGE_FIXER_ATTEMPTS = 2;
 
 export { getBoardExecutionMode, isBoardAutoMode, isBoardRunning };
 import {
@@ -72,8 +79,99 @@ const MAX_TASK_TEST_ATTEMPTS = 3;
 const MAX_FINAL_TEST_ATTEMPTS = 3;
 const FULL_BOARD_TEST_ID = 'FULL_BOARD';
 
+/** Task columns that may still have linked chats or worktrees after reload. */
+const WORKTREE_REHYDRATE_STATUSES = new Set<BoardTaskStatus>([
+  'in_progress',
+  'testing',
+  'merging',
+]);
+
+/** Bind an absolute worktree path onto every chat linked to a board task. */
+function bindTaskWorktreeToLinkedChats(task: BoardTask, worktreeRoot: string): void {
+  const wt = worktreeRoot.trim();
+  if (!wt) return;
+  for (const chatId of [task.chatId, task.testChatId, task.fixerChatId]) {
+    const id = chatId?.trim();
+    if (!id) continue;
+    const chat = findChatById(id);
+    if (chat) chat.worktreeRoot = wt;
+  }
+}
+
+/**
+ * Re-attach isolated worktrees after reload: server ops plus persisted paths on
+ * tasks/chats. Runs before generation or board boot resume so tools stay scoped.
+ */
+export async function rehydrateBoardWorktreeRoots(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board || !isIsolationActive(board)) return;
+
+  let changed = false;
+  for (const task of board.tasks) {
+    if (!WORKTREE_REHYDRATE_STATUSES.has(task.status)) continue;
+
+    const ensured =
+      (await ensureTaskWorktree(group, task, plannerChat)) ||
+      task.worktreePath?.trim() ||
+      undefined;
+    if (!ensured) continue;
+
+    bindTaskWorktreeToLinkedChats(task, ensured);
+    changed = true;
+  }
+
+  if (changed) scheduleSaveSessions();
+}
+
+/** Rehydrate worktrees for every board with active isolated tasks (boot). */
+export async function rehydrateAllBoardWorktreeRoots(state: SessionState): Promise<void> {
+  for (const group of state.groups ?? []) {
+    if (!group.orchestrateBoard) continue;
+    const planner = getPlannerChatForGroup(group);
+    if (!planner) continue;
+    await rehydrateBoardWorktreeRoots(group, planner);
+  }
+}
+
 /** Per-board folder id → queued task ids waiting for a concurrency slot. */
 const taskQueueByGroupId = new Map<string, string[]>();
+
+/** Per-board serialized integration merges (keyed by group id). */
+const mergeQueueByGroupId = new Map<string, Promise<unknown>>();
+
+export type MergeTaskWorktreeResult =
+  | { outcome: 'merged' }
+  | { outcome: 'conflict'; conflictedFiles: string[]; integrationSha?: string }
+  | { outcome: 'skipped' }
+  | { outcome: 'error'; message: string };
+
+function boardHasActiveFixer(board: OrchestrateBoardState): boolean {
+  return board.tasks.some(
+    (t) => t.status === 'merging' && Boolean(t.fixerChatId?.trim()),
+  );
+}
+
+/** Block new merges while a fixer chat is resolving a conflict in integration. */
+async function waitForNoActiveFixer(group: ChatGroup): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  while (boardHasActiveFixer(board)) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+function enqueueBoardMerge<T>(groupId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = mergeQueueByGroupId.get(groupId) ?? Promise.resolve();
+  const run = prev.then(() => fn());
+  mergeQueueByGroupId.set(
+    groupId,
+    run.then(() => undefined).catch(() => undefined),
+  );
+  return run;
+}
 
 /** Chat ids holding a launch slot until runChatTurn registers streaming/setup. */
 const reservedLaunchChatIds = new Set<string>();
@@ -257,7 +355,7 @@ function syncTaskChatModelFromPlanner(taskChat: Chat, plannerChat: Chat): void {
   if (binding.modelId) taskChat.modelId = binding.modelId;
 }
 
-type BoardChatRole = 'build' | 'tester';
+type BoardChatRole = 'build' | 'tester' | 'fixer';
 
 function getOrCreateBoardChat(input: {
   group: ChatGroup;
@@ -266,7 +364,7 @@ function getOrCreateBoardChat(input: {
   role: BoardChatRole;
   name: string;
   taskId?: string;
-  taskChatField?: 'chatId' | 'testChatId';
+  taskChatField?: 'chatId' | 'testChatId' | 'fixerChatId';
 }): Chat {
   const { providerId, modelId } = resolvePlannerModelBinding(input.plannerChat);
   const folderId = input.group.id;
@@ -277,6 +375,7 @@ function getOrCreateBoardChat(input: {
     if (existing) {
       if (input.taskId) existing.boardTaskId = input.taskId;
       if (input.role === 'tester') existing.workAgentId = 'tester';
+      if (input.role === 'fixer') existing.workAgentId = null;
       syncTaskChatModelFromPlanner(existing, input.plannerChat);
       return existing;
     }
@@ -348,6 +447,14 @@ function ensureStreamEndSubscription(): void {
           void finalizeTaskTestingOnStreamEnd(group, taskByTest, planner)
             .then(() => safeDrain(group, planner))
             .catch((err) => reportBackgroundError('finalize-task-testing', err));
+          continue;
+        }
+
+        const taskByFixer = board.tasks.find((t) => t.fixerChatId === endedChatId);
+        if (taskByFixer) {
+          void finalizeMergeFixerOnStreamEnd(group, taskByFixer, planner)
+            .then(() => safeDrain(group, planner))
+            .catch((err) => reportBackgroundError('finalize-merge-fixer', err));
         }
       }
     });
@@ -395,6 +502,7 @@ export function countRunningTaskChats(
   for (const task of board.tasks) {
     countActive(task.chatId);
     countActive(task.testChatId);
+    countActive(task.fixerChatId);
   }
   countActive(board.finalTest?.chatId);
   return n;
@@ -647,36 +755,299 @@ async function ensureTaskWorktree(
 }
 
 /**
- * Fold a passed task's branch into integration. Awaited before marking the task
- * complete so the next task's worktree branches from an up-to-date integration tip.
- * On conflict the failure is surfaced on the task for orchestrator/fixer self-heal
- * (no user prompt, per MIN-265); never throws into the caller.
+ * Fold a passed task's branch into integration. Returns whether the merge landed.
+ * Auto-commits the task worktree first (per-task isolation only). Serialized per board.
  */
 async function mergeCompletedTaskWorktree(
   group: ChatGroup,
   task: BoardTask,
   plannerChat: Chat,
-): Promise<void> {
+): Promise<MergeTaskWorktreeResult> {
   const board = group.orchestrateBoard;
-  if (!board?.integrationBranch) return;
+  if (!board?.integrationBranch) return { outcome: 'skipped' };
   const branch = task.worktreeBranch;
-  if (!branch || branch === board.integrationBranch) return;
+  if (!branch || branch === board.integrationBranch) return { outcome: 'skipped' };
+
+  const mode = resolveIsolationMode(board);
+  const boardId = group.id;
+
+  if (mode === 'per-task') {
+    const slotId = worktreeSlotId(mode, task);
+    if (slotId) {
+      try {
+        await commitTaskWorktree({
+          boardId,
+          slotId,
+          message: `Board task ${task.id}: ${task.title}`,
+        });
+      } catch (err) {
+        reportBackgroundError('worktree-commit', err);
+      }
+    }
+  } else if (mode !== 'off') {
+    reportBackgroundError(
+      'worktree-commit',
+      new Error(`Skipping auto-commit for task ${task.id}: isolation mode is ${mode}`),
+    );
+  }
+
   try {
     const res = await mergeTaskIntoIntegration({
-      boardId: group.id,
+      boardId,
       fromBranch: branch,
       message: `Merge ${task.id} (${task.title}) into integration`,
     });
-    if (!res.ok && res.conflict) {
-      updateTask(
-        group,
-        task.id,
-        { error: `Integration merge conflict on ${branch}; orchestrator will resolve` },
-        plannerChat,
-      );
+    if (res.ok) {
+      const verified = await verifyIntegrationMergeOp({ boardId, fromBranch: branch });
+      if (verified.ok && verified.verified) return { outcome: 'merged' };
+      const reasons = verified.reasons?.join('; ') || 'Integration merge verification failed';
+      if (res.integrationSha) {
+        await restoreIntegrationWorktree({ boardId, sha: res.integrationSha }).catch((err) =>
+          reportBackgroundError('worktree-restore-integration', err),
+        );
+      }
+      return { outcome: 'error', message: reasons };
     }
+    if (res.conflict) {
+      return {
+        outcome: 'conflict',
+        conflictedFiles: res.conflictedFiles ?? [],
+        integrationSha: res.integrationSha,
+      };
+    }
+    return {
+      outcome: 'error',
+      message: res.error ?? res.output ?? 'Integration merge failed',
+    };
   } catch (err) {
     reportBackgroundError('worktree-merge', err);
+    return {
+      outcome: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Run mergeCompletedTaskWorktree on the per-board merge queue (waits for fixers). */
+function enqueueMergeCompletedTaskWorktree(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<MergeTaskWorktreeResult> {
+  return enqueueBoardMerge(group.id, async () => {
+    await waitForNoActiveFixer(group);
+    return mergeCompletedTaskWorktree(group, task, plannerChat);
+  });
+}
+
+/** Seed for a merge-conflict fixer chat (runs in the integration worktree). */
+function buildMergeFixerSeedMessage(
+  task: BoardTask,
+  conflictedFiles: string[],
+): string {
+  const branch = task.worktreeBranch?.trim() || '(unknown branch)';
+  const fileList =
+    conflictedFiles.length > 0
+      ? conflictedFiles.map((f) => `- ${f}`).join('\n')
+      : '- (run git status to list conflicted files)';
+  return [
+    `Resolve the in-progress git merge of \`${branch}\` into integration.`,
+    '',
+    'The merge is already in progress in this integration worktree (MERGE_HEAD is set).',
+    'Do not run `git merge`, `git reset`, `git checkout`, or `git merge --abort` —',
+    'those commands destroy the in-progress merge state.',
+    '',
+    'Conflicted files:',
+    fileList,
+    '',
+    'Steps:',
+    '1. Resolve conflict markers in the listed files (and handle add/delete conflicts via `git add` / `git rm`).',
+    '2. `git add` each resolved path.',
+    '3. Finish with `git commit --no-edit` (uses the prepared merge message and records both parents).',
+    '',
+    'Touch only conflicted regions. Do not run git push.',
+  ].join('\n');
+}
+
+/** Spawn a fixer chat to resolve an integration merge conflict. */
+async function startMergeConflictFixer(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  conflictedFiles: string[],
+  integrationSha?: string,
+): Promise<void> {
+  const board = group.orchestrateBoard;
+  if (!board?.integrationBranch) return;
+
+  const ensured = await ensureIntegrationWorktree({
+    boardId: group.id,
+    branch: board.integrationBranch,
+  });
+  const integrationPath = ensured.path?.trim();
+  if (!integrationPath) {
+    moveTaskStatus(group, task.id, 'blocked', plannerChat);
+    updateTask(
+      group,
+      task.id,
+      { error: 'Integration worktree missing; cannot spawn merge fixer' },
+      plannerChat,
+    );
+    return;
+  }
+
+  moveTaskStatus(group, task.id, 'merging', plannerChat);
+
+  const preSha = integrationSha?.trim() || task.mergePreSha?.trim();
+  if (preSha) {
+    updateTask(group, task.id, { mergePreSha: preSha }, plannerChat);
+  }
+
+  const fixerChat = getOrCreateBoardChat({
+    group,
+    plannerChat,
+    existingId: task.fixerChatId?.trim(),
+    role: 'fixer',
+    name: `Fix merge ${task.id}: ${task.title}`,
+    taskId: task.id,
+    taskChatField: 'fixerChatId',
+  });
+
+  fixerChat.worktreeRoot = integrationPath;
+  scheduleSaveSessions();
+
+  if (skipBackgroundBoardChatLaunch()) return;
+
+  ensureStreamEndSubscription();
+  reserveLaunchSlot(fixerChat.id);
+  try {
+    const seed = buildMergeFixerSeedMessage(task, conflictedFiles);
+    void runChatTurn({
+      chat: fixerChat,
+      pushUser: true,
+      rawText: seed,
+      userText: seed,
+      displayText: seed,
+      historyContent: seed,
+      skillId: null,
+      validAttachments: [],
+      titleSeed: `Fix merge ${task.id}`,
+      ownsGlobalStreaming: true,
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : 'Merge fixer chat failed to start';
+      updateTask(group, task.id, { error: message }, plannerChat);
+    }).finally(() => releaseLaunchSlot(fixerChat.id));
+  } catch (err) {
+    releaseLaunchSlot(fixerChat.id);
+    throw err;
+  }
+}
+
+/** Route merge fixer stream-end: confirm merge or block the task. */
+async function finalizeMergeFixerOnStreamEnd(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+): Promise<void> {
+  if (task.status !== 'merging') return;
+  const fresh = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
+  const branch = fresh.worktreeBranch?.trim();
+  if (!branch) {
+    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+    return;
+  }
+
+  const boardId = group.id;
+  const attempts = fresh.fixerAttempts ?? 0;
+
+  try {
+    const merged = await checkTaskBranchMerged({ boardId, fromBranch: branch });
+    const verified =
+      merged.ok && merged.merged
+        ? await verifyIntegrationMergeOp({ boardId, fromBranch: branch })
+        : null;
+
+    if (merged.ok && merged.merged && verified?.ok && verified.verified) {
+      updateTask(
+        group,
+        fresh.id,
+        {
+          fixerChatId: undefined,
+          error: undefined,
+          fixerAttempts: undefined,
+          mergePreSha: undefined,
+        },
+        plannerChat,
+      );
+      moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+      return;
+    }
+
+    const preSha = fresh.mergePreSha?.trim();
+    if (preSha) {
+      await restoreIntegrationWorktree({ boardId, sha: preSha }).catch((err) =>
+        reportBackgroundError('worktree-restore-integration', err),
+      );
+    }
+
+    if (attempts < MAX_MERGE_FIXER_ATTEMPTS - 1) {
+      const nextAttempts = attempts + 1;
+      updateTask(
+        group,
+        fresh.id,
+        {
+          fixerChatId: undefined,
+          fixerAttempts: nextAttempts,
+          error: undefined,
+        },
+        plannerChat,
+      );
+
+      const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+      if (mergeResult.outcome === 'conflict') {
+        await startMergeConflictFixer(
+          group,
+          fresh,
+          plannerChat,
+          mergeResult.conflictedFiles,
+          mergeResult.integrationSha,
+        );
+        return;
+      }
+
+      const retryMsg =
+        mergeResult.outcome === 'error'
+          ? mergeResult.message
+          : 'Re-merge after fixer failure did not produce a conflict for retry';
+      updateTask(
+        group,
+        fresh.id,
+        { error: retryMsg, fixerAttempts: undefined, mergePreSha: undefined },
+        plannerChat,
+      );
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+      return;
+    }
+
+    const summary =
+      fresh.error?.trim() ||
+      verified?.reasons?.join('; ') ||
+      'Merge fixer could not produce a valid integration merge after 2 attempts';
+    updateTask(
+      group,
+      fresh.id,
+      {
+        fixerChatId: undefined,
+        error: summary,
+        fixerAttempts: undefined,
+        mergePreSha: undefined,
+      },
+      plannerChat,
+    );
+    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+  } catch (err) {
+    reportBackgroundError('finalize-merge-fixer', err);
+    moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
   }
 }
 
@@ -994,9 +1365,34 @@ export async function finalizeTaskTestingOnStreamEnd(
 
   if (verdict === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
-    // Merge before complete so dependent / later-wave tasks branch from updated integration.
-    await mergeCompletedTaskWorktree(group, fresh, plannerChat);
-    moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+    const mergeResult = await enqueueMergeCompletedTaskWorktree(group, fresh, plannerChat);
+    if (mergeResult.outcome === 'merged' || mergeResult.outcome === 'skipped') {
+      moveTaskStatus(group, fresh.id, 'complete', plannerChat);
+    } else if (mergeResult.outcome === 'conflict') {
+      updateTask(
+        group,
+        fresh.id,
+        {
+          error: `Integration merge conflict on ${fresh.worktreeBranch ?? fresh.id}`,
+        },
+        plannerChat,
+      );
+      await startMergeConflictFixer(
+        group,
+        fresh,
+        plannerChat,
+        mergeResult.conflictedFiles,
+        mergeResult.integrationSha,
+      );
+    } else {
+      moveTaskStatus(group, fresh.id, 'blocked', plannerChat);
+      updateTask(
+        group,
+        fresh.id,
+        { error: mergeResult.message || 'Integration merge failed' },
+        plannerChat,
+      );
+    }
 
     const testChatId = fresh.testChatId?.trim();
     const testChat = testChatId ? findChatById(testChatId) : null;
@@ -1390,6 +1786,8 @@ export async function resumeBoardExecutionAfterReload(
   const board = group.orchestrateBoard;
   if (!board || !isBoardRunning(group)) return;
 
+  await rehydrateBoardWorktreeRoots(group, plannerChat);
+
   const attachSupervision = (chatId?: string): void => {
     if (!shouldSuperviseBoardChatOnReload(chatId)) return;
     startTaskChatSupervision(chatId!.trim());
@@ -1469,6 +1867,20 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   // Flush stop state immediately so reload cannot resurrect auto execution.
   saveSessionsNow();
   emitBoardChange(group.id);
+}
+
+/** Pause every auto/sequential board on window close (mirrors pressing Stop). */
+export function pauseAllRunningBoardsForShutdown(): void {
+  const state = sessionState;
+  if (!state?.groups?.length) return;
+  for (const group of state.groups) {
+    if (!isBoardRunning(group)) continue;
+    const plannerId = group.plannerChatId?.trim();
+    if (!plannerId) continue;
+    const planner = state.chats.find((c) => c.id === plannerId);
+    if (!planner) continue;
+    stopBoardAutoRun(group, planner);
+  }
 }
 
 /** Start all ready planned tasks up to the concurrency cap (auto-pilot / sequential). */

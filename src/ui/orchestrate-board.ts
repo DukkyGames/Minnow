@@ -1469,6 +1469,7 @@ function compactTaskChipVariant(task: BoardTask, taskStreaming: boolean): string
       return 'failed';
     case 'in_progress':
     case 'testing':
+    case 'merging':
       return 'active';
     default:
       return 'planned';
@@ -1487,6 +1488,8 @@ function compactTaskStatusLabel(task: BoardTask, taskStreaming: boolean): string
       return 'In progress';
     case 'testing':
       return 'Testing';
+    case 'merging':
+      return 'Merging';
     case 'complete':
       return 'Complete';
     case 'failed':
@@ -1513,7 +1516,7 @@ function buildWaveCompactSummary(
   laneMeta.setAttribute('aria-hidden', 'true');
   const lanes: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
     { label: 'Plan', statuses: ['planned', 'blocked'] },
-    { label: 'Run', statuses: ['in_progress'] },
+    { label: 'Run', statuses: ['in_progress', 'merging'] },
     { label: 'Test', statuses: ['testing'] },
     { label: 'Done', statuses: ['complete', 'failed'] },
   ];
@@ -1584,7 +1587,7 @@ function renderKanbanColumns(
   if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
   const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
     { label: 'Planned', statuses: ['planned', 'blocked'] },
-    { label: 'In Progress', statuses: ['in_progress'] },
+    { label: 'In Progress', statuses: ['in_progress', 'merging'] },
     { label: 'Testing', statuses: ['testing'] },
     { label: 'Complete', statuses: ['complete', 'failed'] },
   ];

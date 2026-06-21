@@ -5,6 +5,7 @@
  * actual git/path work. Kept pure so it is unit-testable and reusable by MIN-276.
  */
 
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import type { BoardTask, Chat, ChatGroup, OrchestrateBoardState } from '../types.ts';
 
 export type IsolationMode = 'off' | 'per-task' | 'per-wave';
@@ -146,4 +147,42 @@ export function resolveChatWorktreeRoot(
   const group = groups.find((g) => g.id === groupId);
   const task = group?.orchestrateBoard?.tasks.find((t) => t.id === taskId);
   return task?.worktreePath?.trim() || undefined;
+}
+
+/**
+ * Tool workspace root for a chat: isolated worktree when present, otherwise the
+ * board member chat's bound project workspace (never the live top-bar workspace).
+ */
+export function resolveChatToolWorkspaceRoot(
+  chat: Pick<Chat, 'worktreeRoot' | 'boardTaskId' | 'boardGroupId' | 'workspacePath'>,
+  groups: ChatGroup[] | undefined,
+): string | undefined {
+  const worktree = resolveChatWorktreeRoot(chat, groups);
+  if (worktree) return worktree;
+  if (!chat.boardGroupId?.trim()) return undefined;
+  const ws = chat.workspacePath?.trim();
+  return ws ? normalizeWorkspacePath(ws) : undefined;
+}
+
+/**
+ * Derive board worktree directory roots from persisted task paths so permission
+ * checks treat ~/.minnow/worktrees/… as in-scope for board-linked chats.
+ */
+export function boardWorktreesRootsFromState(
+  groups: ChatGroup[] | undefined,
+): string[] {
+  const roots = new Set<string>();
+  if (!groups?.length) return [];
+  for (const group of groups) {
+    const board = group.orchestrateBoard;
+    if (!board) continue;
+    for (const task of board.tasks) {
+      const wt = task.worktreePath?.trim();
+      if (!wt) continue;
+      const normalized = wt.replace(/\\/g, '/');
+      const match = normalized.match(/^(.+\/worktrees\/[^/]+\/[^/]+)/);
+      if (match?.[1]) roots.add(match[1]);
+    }
+  }
+  return [...roots];
 }

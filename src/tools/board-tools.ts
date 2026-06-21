@@ -46,6 +46,7 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'planned',
   'in_progress',
   'testing',
+  'merging',
   'complete',
   'failed',
   'blocked',
@@ -464,13 +465,25 @@ export async function executeBoardTool(
     return executeBoardInit(initChat, args);
   }
 
+  if (name === 'board_update_task') {
+    const plannerChat = resolveOrchestratePlannerChat(options?.chatId);
+    if (!plannerChat) {
+      const callerId = resolveActiveChatId(options?.chatId);
+      const caller = callerId ? findChatById(callerId) : null;
+      if (caller?.boardTaskId?.trim()) {
+        return (
+          "Error: Builders/testers don't move cards — report completion via your output " +
+          '(READY FOR VERIFICATION); the board advances the task.'
+        );
+      }
+      return 'Error: board tools require an active Orchestrate chat';
+    }
+    return executeBoardUpdateTask(plannerChat, args);
+  }
+
   const chat = resolveBoardPlannerChat(options?.chatId);
   if (!chat) {
     return 'Error: board tools require an active Orchestrate chat';
-  }
-
-  if (name === 'board_update_task') {
-    return executeBoardUpdateTask(chat, args);
   }
 
   if (name === 'board_get_state') {

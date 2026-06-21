@@ -4,6 +4,7 @@ import {
   allocateDevPort,
   boardIntegrationBranch,
   isIsolationActive,
+  resolveChatToolWorkspaceRoot,
   resolveChatWorktreeRoot,
   resolveIsolationMode,
   sanitizeRefFragment,
@@ -172,6 +173,45 @@ describe('resolveChatWorktreeRoot', () => {
         ],
       ),
       fromTask,
+    );
+  });
+});
+
+describe('resolveChatToolWorkspaceRoot', () => {
+  test('uses worktree when present', () => {
+    const wt = 'C:/wt/task';
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        {
+          boardGroupId: 'g',
+          boardTaskId: 'T1',
+          workspacePath: 'C:/project',
+          worktreeRoot: wt,
+        },
+        [],
+      ),
+      wt,
+    );
+  });
+
+  test('falls back to chat workspace for board members without worktree', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot(
+        {
+          boardGroupId: 'g',
+          boardTaskId: 'T1',
+          workspacePath: 'C:/project',
+        },
+        [],
+      ),
+      'C:/project',
+    );
+  });
+
+  test('returns undefined for non-board chats without worktree', () => {
+    assert.equal(
+      resolveChatToolWorkspaceRoot({ workspacePath: 'C:/project' }, []),
+      undefined,
     );
   });
 });

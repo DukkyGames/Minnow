@@ -22,7 +22,7 @@ const README_BODY = `# Minnow Chats Workspace
 This directory is a sandbox for chat-scoped files (attachments, exports, and session artifacts).
 
 - Files here stay separate from your active Code workspace unless tools are explicitly pointed at this path.
-- The server only allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, benchmark workspace, or scheduler workspace.
+- The server allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, benchmark workspace, scheduler workspace, and board task worktrees under ~/.minnow/worktrees.
 - Do not store secrets here if you sync or share ~/.minnow.
 `;
 

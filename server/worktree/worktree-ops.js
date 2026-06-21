@@ -135,8 +135,9 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
 
 /**
  * Merge a task/wave branch into the board integration branch, running the merge
- * inside the integration worktree. On conflict, aborts and reports (caller decides
- * whether to spawn a fixer sub-agent — no user prompt per MIN-265).
+ * inside the integration worktree. On conflict, leaves the merge in progress
+ * (MERGE_HEAD + conflict stages) so a fixer can resolve and `git commit --no-edit`
+ * to record a true two-parent merge.
  * @param {{ boardId: string, fromBranch: string, message?: string }} input
  */
 export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
@@ -146,15 +147,150 @@ export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
   } catch {
     return { ok: false, error: 'integration worktree missing' };
   }
+  const headBefore = await git(['rev-parse', 'HEAD'], intPath);
+  const integrationSha = ok(headBefore) ? `${headBefore.stdout ?? ''}`.trim() : null;
   const args = ['merge', '--no-edit'];
   if (message && message.trim()) args.push('-m', message.trim());
   args.push(fromBranch);
   const m = await git(args, intPath);
   if (!ok(m)) {
-    await git(['merge', '--abort'], intPath);
-    return { ok: false, conflict: true, output: out(m) };
+    const diff = await git(['diff', '--name-only', '--diff-filter=U'], intPath);
+    const conflictedFiles = `${diff.stdout ?? ''}`
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return {
+      ok: false,
+      conflict: true,
+      output: out(m),
+      conflictedFiles,
+      integrationSha: integrationSha || undefined,
+    };
   }
-  return { ok: true, output: out(m) };
+  return { ok: true, output: out(m), integrationSha: integrationSha || undefined };
+}
+
+/**
+ * Stage all changes and commit in a task/wave worktree. No empty commits.
+ * @param {{ boardId: string, slotId: string, message?: string }} input
+ */
+export async function commitWorktree({ boardId, slotId, message }) {
+  const wtPath = getWorktreeSlotPath(boardId, slotId);
+  try {
+    await fs.access(wtPath);
+  } catch {
+    return { ok: false, error: 'worktree missing' };
+  }
+  const add = await git(['add', '-A'], wtPath);
+  if (!ok(add)) return { ok: false, output: out(add) };
+  const staged = await git(['diff', '--cached', '--quiet'], wtPath);
+  if (staged.code === 0) {
+    return { ok: true, committed: false };
+  }
+  const commitMsg = (message && message.trim()) || 'Board task commit';
+  const commit = await git(['commit', '-m', commitMsg], wtPath);
+  if (!ok(commit)) return { ok: false, output: out(commit) };
+  return { ok: true, committed: true, output: out(commit) };
+}
+
+/**
+ * True when `fromBranch` is already merged into the integration branch tip.
+ * @param {{ boardId: string, fromBranch: string }} input
+ */
+export async function checkMerged({ boardId, fromBranch }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const branch = (fromBranch && fromBranch.trim()) || '';
+  if (!branch) return { ok: false, error: 'fromBranch required' };
+  const r = await git(['merge-base', '--is-ancestor', branch, 'HEAD'], intPath);
+  return { ok: true, merged: r.code === 0 };
+}
+
+/**
+ * Reset the integration worktree to a known-good tip: abort any in-progress merge,
+ * hard-reset to `sha`, and remove untracked files. Used when a merge fixer fails.
+ * @param {{ boardId: string, sha: string }} input
+ */
+export async function restoreIntegration({ boardId, sha }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const target = (sha && sha.trim()) || '';
+  if (!target) return { ok: false, error: 'sha required' };
+  const resolved = await resolveRef(target);
+  if (!resolved) return { ok: false, error: `invalid sha: ${target}` };
+
+  await git(['merge', '--abort'], intPath);
+  const reset = await git(['reset', '--hard', resolved], intPath);
+  if (!ok(reset)) return { ok: false, output: out(reset) };
+  await git(['clean', '-fd'], intPath);
+  return { ok: true, sha: resolved, output: out(reset) };
+}
+
+/**
+ * Structural checks after an integration merge (no build/typecheck).
+ * @param {{ boardId: string, fromBranch: string }} input
+ */
+export async function verifyIntegrationMerge({ boardId, fromBranch }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const branch = (fromBranch && fromBranch.trim()) || '';
+  if (!branch) return { ok: false, error: 'fromBranch required' };
+
+  const reasons = [];
+
+  const ancestor = await git(['merge-base', '--is-ancestor', branch, 'HEAD'], intPath);
+  if (ancestor.code !== 0) {
+    reasons.push(`${branch} is not an ancestor of integration HEAD`);
+  }
+
+  const markers = await git(
+    ['grep', '-lE', '^(<{7}|={7}|>{7})( |$)', 'HEAD'],
+    intPath,
+  );
+  if (ok(markers)) {
+    const files = `${markers.stdout ?? ''}`
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (files.length) {
+      reasons.push(`conflict markers remain in: ${files.join(', ')}`);
+    }
+  }
+
+  const status = await git(['status', '--porcelain'], intPath);
+  const dirty = `${status.stdout ?? ''}${status.stderr ?? ''}`.trim();
+  if (dirty) {
+    reasons.push('integration worktree has uncommitted changes');
+  }
+
+  return { ok: true, verified: reasons.length === 0, reasons };
+}
+
+/**
+ * Abort an in-progress merge inside the integration worktree (best-effort).
+ * @param {{ boardId: string }} input
+ */
+export async function abortMerge({ boardId }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const r = await git(['merge', '--abort'], intPath);
+  return { ok: ok(r) || /no merge in progress/i.test(out(r)), output: out(r) };
 }
 
 /**

@@ -4,12 +4,17 @@
  */
 
 import {
+  abortMerge,
   cleanupBoardWorktrees,
+  checkMerged,
+  commitWorktree,
   createWorktree,
   ensureIntegration,
   listWorktrees,
   mergeIntoIntegration,
   removeWorktree,
+  restoreIntegration,
+  verifyIntegrationMerge,
 } from './worktree-ops.js';
 
 function setCorsHeaders(res) {
@@ -44,6 +49,11 @@ const OPS = {
   ensure_integration: (a) => ensureIntegration(a),
   create: (a) => createWorktree(a),
   merge: (a) => mergeIntoIntegration(a),
+  commit: (a) => commitWorktree(a),
+  check_merged: (a) => checkMerged(a),
+  abort_merge: (a) => abortMerge(a),
+  restore_integration: (a) => restoreIntegration(a),
+  verify_integration: (a) => verifyIntegrationMerge(a),
   remove: (a) => removeWorktree(a),
   cleanup: (a) => cleanupBoardWorktrees(a),
   list: () => listWorktrees(),

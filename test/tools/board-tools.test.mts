@@ -330,6 +330,77 @@ describe('executeBoardTool', () => {
     assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
   });
 
+  test('board_update_task rejects calls from linked build task chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: TASK_CHAT_ID,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      chats: [
+        {
+          id: CHAT_ID,
+          name: 'Planner',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'orchestrate',
+          orchestratePlanPath: PLAN_PATH,
+          boardGroupId: BOARD_GROUP_ID,
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+        {
+          id: TASK_CHAT_ID,
+          name: 'Task W1-A',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'build',
+          boardGroupId: BOARD_GROUP_ID,
+          boardTaskId: 'W1-A',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+      ],
+      groups: [
+        {
+          id: BOARD_GROUP_ID,
+          name: 'Board',
+          workspacePath: '',
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          plannerChatId: CHAT_ID,
+          orchestratePlanPath: PLAN_PATH,
+        },
+      ],
+    });
+    await executeBoardTool('board_init', {
+      plan_path: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Implement board store',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    }, { chatId: CHAT_ID });
+
+    const out = await executeBoardTool(
+      'board_update_task',
+      { task_id: 'W1-A', status: 'complete' },
+      { chatId: TASK_CHAT_ID },
+    );
+    assert.match(
+      out,
+      /Builders\/testers don't move cards/,
+    );
+  });
+
   test('board_init happy path returns static board JSON', async () => {
     seedOrchestrateChat();
     withBoardContext();

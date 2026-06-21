@@ -13,7 +13,14 @@ export interface WorktreeOpResult {
   path?: string;
   branch?: string;
   created?: boolean;
+  committed?: boolean;
+  merged?: boolean;
   conflict?: boolean;
+  conflictedFiles?: string[];
+  integrationSha?: string;
+  verified?: boolean;
+  reasons?: string[];
+  sha?: string;
   output?: string;
   error?: string;
 }
@@ -67,6 +74,44 @@ export function mergeIntoIntegration(input: {
   message?: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('merge', input);
+}
+
+/** Stage and commit all changes in a task worktree slot (no empty commit). */
+export function commitWorktree(input: {
+  boardId: string;
+  slotId: string;
+  message?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('commit', input);
+}
+
+/** True when fromBranch is already merged into integration. */
+export function checkMerged(input: {
+  boardId: string;
+  fromBranch: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('check_merged', input);
+}
+
+/** Abort an in-progress merge in the integration worktree. */
+export function abortMerge(input: { boardId: string }): Promise<WorktreeOpResult> {
+  return postWorktree('abort_merge', input);
+}
+
+/** Reset integration worktree to a pre-merge tip (abort merge + hard reset + clean). */
+export function restoreIntegration(input: {
+  boardId: string;
+  sha: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('restore_integration', input);
+}
+
+/** Structural post-merge verification (ancestry, markers, clean tree). */
+export function verifyIntegrationMerge(input: {
+  boardId: string;
+  fromBranch: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('verify_integration', input);
 }
 
 /** Remove a single worktree slot. */
