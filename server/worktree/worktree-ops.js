@@ -11,6 +11,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
+import { symlinkDependencyDirs } from './dep-symlinks.js';
 import {
   getBoardWorktreesDir,
   getWorktreeSlotPath,
@@ -60,6 +61,7 @@ export async function ensureIntegration({ boardId, branch, baseRef }) {
   await fs.mkdir(path.dirname(intPath), { recursive: true });
   const w = await git(['worktree', 'add', intPath, branch]);
   if (!ok(w)) return { ok: false, stage: 'worktree', path: intPath, output: out(w) };
+  await symlinkDependencyDirs(getWorkspaceRoot(), intPath);
   return { ok: true, path: intPath, branch, created: true };
 }
 
@@ -115,6 +117,7 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
   if (await branchExists(branch)) {
     const w = await git(['worktree', 'add', wtPath, branch]);
     if (!ok(w)) return { ok: false, path: wtPath, branch, output: out(w) };
+    await symlinkDependencyDirs(getWorkspaceRoot(), wtPath);
     const synced = await mergeBaseIntoWorktree(wtPath, base);
     if (!synced.ok) {
       return {
@@ -130,6 +133,7 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
 
   const r = await git(['worktree', 'add', '-b', branch, wtPath, baseSha]);
   if (!ok(r)) return { ok: false, path: wtPath, branch, output: out(r) };
+  await symlinkDependencyDirs(getWorkspaceRoot(), wtPath);
   return { ok: true, path: wtPath, branch, created: true };
 }
 
