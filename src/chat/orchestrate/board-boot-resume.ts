@@ -4,16 +4,21 @@
  */
 
 import { getPlannerChatForGroup } from '../../state/chat-groups.ts';
-import { resumeBoardExecutionAfterReload } from '../../state/orchestrate-board-actions.ts';
+import {
+  recoverInterruptedMergesAfterReload,
+  resumeBoardExecutionAfterReload,
+} from '../../state/orchestrate-board-actions.ts';
 import { isBoardRunning } from '../../state/orchestrate-board-store.ts';
 import type { SessionState } from '../../types.ts';
 
 /** Resume auto/sequential delegation for boards that were running before reload. */
 export async function bootOrchestrateBoardResume(state: SessionState): Promise<void> {
   for (const group of state.groups ?? []) {
-    if (!isBoardRunning(group)) continue;
+    if (!group.orchestrateBoard) continue;
     const planner = getPlannerChatForGroup(group);
     if (!planner) continue;
+    await recoverInterruptedMergesAfterReload(group, planner);
+    if (!isBoardRunning(group)) continue;
     await resumeBoardExecutionAfterReload(group, planner);
   }
 }

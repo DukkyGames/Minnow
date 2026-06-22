@@ -2479,6 +2479,34 @@ export async function resumeBoardExecutionAfterReload(
   emitBoardChange(group.id);
 }
 
+/**
+ * Reconcile tasks stuck in `merging` after reload — supervise a live fixer or
+ * re-run finalize when its stream-end handler never fired.
+ */
+export async function recoverInterruptedMergesAfterReload(
+  group: ChatGroup,
+  plannerChat: Chat,
+): Promise<void> {
+  ensureStreamEndSubscription();
+  const board = group.orchestrateBoard;
+  if (!board) return;
+  const pending: Promise<void>[] = [];
+  for (const task of board.tasks) {
+    if (task.status !== 'merging') continue;
+    const fixerId = task.fixerChatId?.trim();
+    if (fixerId && shouldSuperviseBoardChatOnReload(fixerId)) {
+      startTaskChatSupervision(fixerId);
+      continue;
+    }
+    pending.push(
+      finalizeMergeFixerOnStreamEnd(group, task, plannerChat).catch((err) => {
+        reportBackgroundError('recover-interrupted-merge', err);
+      }),
+    );
+  }
+  await Promise.all(pending);
+}
+
 /** Begin auto/sequential execution — set running flag then kick off delegation. */
 export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   const board = group.orchestrateBoard;
