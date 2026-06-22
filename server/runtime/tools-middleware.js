@@ -20,6 +20,7 @@ import {
   blockPlanModeWrite,
   resolveModeIdFromToolsBody,
 } from '../tools/plan-write-guard.js';
+import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { toolManageCalendar } from '../calendar/tool-handler.js';
 import {
   toolDraftReply,
@@ -648,6 +649,11 @@ function resolveCommandCwd(args) {
 async function toolExecuteCommand(args) {
   if (args?.stop === true) {
     return toolStopCommand(args);
+  }
+
+  if (typeof args?.command === 'string') {
+    const hostKill = assessHostKillCommand(args.command);
+    if (hostKill) return hostKill;
   }
 
   if (args?.background === true) {
