@@ -14,6 +14,9 @@ export type IsolationMode = 'off' | 'per-task' | 'per-wave';
 /** Default base port for isolated dev servers (server may override via env). */
 export const DEFAULT_BOARD_PORT_BASE = 5200;
 
+/** Offset above {@link DEFAULT_BOARD_PORT_BASE} client port for the API server port. */
+export const DEFAULT_BOARD_API_PORT_OFFSET = 100;
+
 /**
  * Effective isolation mode: per-board override, then global default (when not `auto`),
  * then derive from execution mode.
@@ -128,11 +131,27 @@ export function allocateDevPort(base: number, used: Iterable<number>): number {
   return port;
 }
 
-/** Ports already assigned to tasks (for {@link allocateDevPort}). */
+/** Ports already assigned to tasks (client + API) for {@link allocateDevPort}. */
 export function usedDevPorts(tasks: BoardTask[]): number[] {
-  return tasks
-    .map((t) => t.devPort)
-    .filter((p): p is number => typeof p === 'number' && Number.isFinite(p));
+  const ports: number[] = [];
+  for (const t of tasks) {
+    if (typeof t.devPort === 'number' && Number.isFinite(t.devPort)) ports.push(t.devPort);
+    if (typeof t.apiPort === 'number' && Number.isFinite(t.apiPort)) ports.push(t.apiPort);
+  }
+  return ports;
+}
+
+/** Allocate a non-colliding Vite client port and Express/API port for one board task. */
+export function allocateTaskPorts(
+  base: number,
+  used: Iterable<number>,
+): { devPort: number; apiPort: number } {
+  const devPort = allocateDevPort(base, used);
+  const apiPort = allocateDevPort(
+    devPort + DEFAULT_BOARD_API_PORT_OFFSET,
+    [...used, devPort],
+  );
+  return { devPort, apiPort };
 }
 
 /**

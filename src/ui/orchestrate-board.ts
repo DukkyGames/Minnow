@@ -83,6 +83,10 @@ import {
 import { normalizeModeId } from '../chat/modes/types';
 import { subscribeBoardChanges } from '../state/orchestrate-board-events';
 import {
+  countBoardLogAlerts,
+  openBoardTimelineDrawer,
+} from './board-timeline-drawer.ts';
+import {
   findChatById,
   getActiveChat,
   getChatsSortedByUpdatedDesc,
@@ -1141,6 +1145,25 @@ function wireBoardHeaderControls(
     void import('./file-viewer').then((m) => m.openFileInViewer(planPath));
   });
 
+  const timelineBtn = document.createElement('button');
+  timelineBtn.type = 'button';
+  timelineBtn.className = 'board-btn board-btn--compact board-timeline-btn';
+  timelineBtn.textContent = 'Timeline';
+  timelineBtn.title = 'Open board event timeline';
+  timelineBtn.setAttribute('aria-label', 'Open board timeline');
+  const alerts = countBoardLogAlerts(group.id);
+  if (alerts.error > 0 || alerts.warn > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'board-timeline-btn__badge';
+    badge.textContent = String(alerts.error + alerts.warn);
+    badge.title = `${alerts.error} errors, ${alerts.warn} warnings`;
+    timelineBtn.appendChild(badge);
+  }
+  timelineBtn.addEventListener('click', () => {
+    openBoardTimelineDrawer(group.id);
+  });
+
+  controls.appendChild(timelineBtn);
   controls.appendChild(openPlan);
 }
 

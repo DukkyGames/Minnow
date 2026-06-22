@@ -456,6 +456,10 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)
       ? r.testAttempts
       : undefined;
+  const buildAttempts =
+    typeof r.buildAttempts === 'number' && Number.isFinite(r.buildAttempts)
+      ? r.buildAttempts
+      : undefined;
   const fixerAttempts =
     typeof r.fixerAttempts === 'number' && Number.isFinite(r.fixerAttempts)
       ? r.fixerAttempts
@@ -503,6 +507,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
       : undefined;
   const devPort =
     typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
+  const apiPort =
+    typeof r.apiPort === 'number' && Number.isFinite(r.apiPort) ? r.apiPort : undefined;
   return {
     id,
     title,
@@ -524,6 +530,7 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(testSpec ? { testSpec } : {}),
     ...(dependsOn.length ? { dependsOn } : {}),
     ...(testAttempts !== undefined ? { testAttempts } : {}),
+    ...(buildAttempts !== undefined ? { buildAttempts } : {}),
     ...(fixerAttempts !== undefined ? { fixerAttempts } : {}),
     ...(mergePreSha ? { mergePreSha } : {}),
     ...(testVerdict ? { testVerdict } : {}),
@@ -533,6 +540,7 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(worktreePath ? { worktreePath } : {}),
     ...(worktreeBranch ? { worktreeBranch } : {}),
     ...(devPort !== undefined ? { devPort } : {}),
+    ...(apiPort !== undefined ? { apiPort } : {}),
   };
 }
 

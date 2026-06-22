@@ -4,7 +4,7 @@
 
 import path from 'node:path';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
-import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail } from '../terminal-runner.js';
+import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
 import { resolveChatCwd } from '../workspace/chat-cwd.js';
 import { getAvailableShellProfiles } from './shell-profiles.js';
 import {
@@ -162,6 +162,23 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
   if (cancelMatch && req.method === 'POST') {
     const ok = cancelRun(cancelMatch[1]);
     sendJson(res, 200, { ok });
+    return true;
+  }
+
+  if (pathname === '/api/terminal/stop-chat-runs' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const chatId = typeof body?.chatId === 'string' ? body.chatId.trim() : '';
+      if (!chatId) {
+        sendJson(res, 400, { error: 'chatId is required' });
+        return true;
+      }
+      const result = stopActiveRunsForChat(chatId);
+      sendJson(res, 200, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: message });
+    }
     return true;
   }
 

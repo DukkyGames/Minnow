@@ -11,7 +11,11 @@
 
 import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
 import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import type {
+  BoardLogDetail,
+  BoardLogEvent,
+  BoardLogLevel,
   BoardTask,
   BoardTaskStatus,
   BoardWave,
@@ -29,6 +33,305 @@ let boardNowMs = (): number => Date.now();
 /** Override timestamp source in tests. */
 export function setBoardNowForTests(fn: (() => number) | null): void {
   boardNowMs = fn ?? (() => Date.now());
+}
+
+export const BOARD_LOG_MAX = 500;
+const BOARD_LOG_PREVIEW_MAX = 500;
+
+let boardLogSeq = 0;
+
+/** Optional disk sink, set at boot (server/Electron); undefined in unit tests. */
+let boardLogDiskSink: ((groupId: string, e: BoardLogEvent) => void) | undefined;
+
+/** Wire JSONL mirror sink at app boot; omit in tests. */
+export function setBoardLogDiskSink(fn?: typeof boardLogDiskSink): void {
+  boardLogDiskSink = fn;
+}
+
+/** Reset log sequence counter between tests. */
+export function resetBoardLogForTests(): void {
+  boardLogSeq = 0;
+}
+
+/** Set the next log sequence counter (tests with pre-seeded log ids). */
+export function setBoardLogSeqForTests(n: number): void {
+  boardLogSeq = n;
+}
+
+function truncateBoardLogPreview(value: string, max = BOARD_LOG_PREVIEW_MAX): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…`;
+}
+
+/** Append one board log row, cap the ring buffer, persist, and notify listeners. */
+export function appendBoardLog(
+  group: ChatGroup,
+  event: Omit<BoardLogEvent, 'id' | 'ts'> & { ts?: number },
+): BoardLogEvent | null {
+  const board = group.orchestrateBoard;
+  if (!board) return null;
+  const ts = event.ts ?? boardNowMs();
+  const full: BoardLogEvent = { ...event, ts, id: `${ts}-${boardLogSeq++}` };
+  const log = board.log ?? (board.log = []);
+  log.push(full);
+  if (log.length > BOARD_LOG_MAX) log.splice(0, log.length - BOARD_LOG_MAX);
+  try {
+    boardLogDiskSink?.(group.id, full);
+  } catch (err) {
+    reportBackgroundError('board-log-disk', err);
+  }
+  scheduleSaveSessions();
+  emitBoardChange(group.id);
+  return full;
+}
+
+export function logTaskStatus(
+  group: ChatGroup,
+  taskId: string,
+  from: BoardTaskStatus | undefined,
+  to: BoardTaskStatus,
+): void {
+  if (from === to) return;
+  const level: BoardLogLevel = to === 'failed' || to === 'blocked' ? 'error' : 'info';
+  appendBoardLog(group, {
+    type: 'task_status',
+    level,
+    taskId,
+    message: `${taskId}: ${from ?? '?'} → ${to}`,
+    detail: { from, to },
+  });
+}
+
+export function logBoardInit(
+  group: ChatGroup,
+  taskCount: number,
+  waveCount: number,
+): void {
+  appendBoardLog(group, {
+    type: 'board_init',
+    level: 'info',
+    message: `Board initialized (${taskCount} tasks, ${waveCount} waves)`,
+    detail: { summary: `${taskCount} tasks, ${waveCount} waves` },
+  });
+}
+
+export function logTaskError(
+  group: ChatGroup,
+  taskId: string,
+  error: string,
+): void {
+  appendBoardLog(group, {
+    type: 'task_error',
+    level: 'error',
+    taskId,
+    message: `${taskId}: ${truncateBoardLogPreview(error, 200)}`,
+    detail: { error: truncateBoardLogPreview(error) },
+  });
+}
+
+export function logTaskStarted(
+  group: ChatGroup,
+  taskId: string,
+  chatId: string,
+): void {
+  appendBoardLog(group, {
+    type: 'task_started',
+    level: 'info',
+    taskId,
+    message: `${taskId}: build chat started`,
+    detail: { chatId },
+  });
+}
+
+export function logModeChange(
+  group: ChatGroup,
+  mode: 'manual' | 'auto' | 'sequential' | 'afk',
+): void {
+  appendBoardLog(group, {
+    type: 'mode_change',
+    level: 'info',
+    message: `Execution mode → ${mode}`,
+    detail: { mode },
+  });
+}
+
+export function logAutoStart(group: ChatGroup): void {
+  appendBoardLog(group, {
+    type: 'auto_start',
+    level: 'info',
+    message: 'Auto execution started',
+  });
+}
+
+export function logAutoStop(group: ChatGroup): void {
+  appendBoardLog(group, {
+    type: 'auto_stop',
+    level: 'info',
+    message: 'Auto execution stopped by user',
+  });
+}
+
+export function logBuildVerdict(
+  group: ChatGroup,
+  taskId: string,
+  verdict: 'pass' | 'fail' | 'stopped',
+  detail?: BoardLogDetail,
+): void {
+  if (verdict === 'stopped') {
+    appendBoardLog(group, {
+      type: 'build_verdict',
+      level: 'info',
+      taskId,
+      message: `${taskId}: build stopped`,
+      detail,
+    });
+    return;
+  }
+  const level: BoardLogLevel = verdict === 'pass' ? 'info' : detail?.attempt ? 'warn' : 'error';
+  appendBoardLog(group, {
+    type: 'build_verdict',
+    level,
+    taskId,
+    message: `${taskId}: build ${verdict}`,
+    detail: { verdict, ...detail },
+  });
+}
+
+export function logTestVerdict(
+  group: ChatGroup,
+  taskId: string,
+  verdict: 'pass' | 'fail',
+  summary?: string,
+  attempt?: number,
+): void {
+  appendBoardLog(group, {
+    type: 'test_verdict',
+    level: verdict === 'pass' ? 'info' : attempt ? 'warn' : 'error',
+    taskId,
+    message: `${taskId}: test ${verdict}${summary ? ` — ${truncateBoardLogPreview(summary, 120)}` : ''}`,
+    detail: { verdict, summary: summary ? truncateBoardLogPreview(summary) : undefined, attempt },
+  });
+}
+
+export function logMergeResult(
+  group: ChatGroup,
+  taskId: string,
+  outcome: NonNullable<BoardLogDetail['outcome']>,
+  detail?: BoardLogDetail,
+): void {
+  const level: BoardLogLevel =
+    outcome === 'merged' || outcome === 'skipped' ? 'info' : 'error';
+  appendBoardLog(group, {
+    type: 'merge_result',
+    level,
+    taskId,
+    message: `${taskId}: merge ${outcome}`,
+    detail: { outcome, ...detail },
+  });
+}
+
+export function logWorktreeAllocated(
+  group: ChatGroup,
+  taskId: string,
+  branch: string,
+  devPort: number,
+  apiPort: number,
+): void {
+  appendBoardLog(group, {
+    type: 'worktree_allocated',
+    level: 'info',
+    taskId,
+    message: `${taskId}: worktree ${branch} (dev ${devPort}, api ${apiPort})`,
+    detail: { branch, devPort, apiPort },
+  });
+}
+
+export function logTaskRetry(
+  group: ChatGroup,
+  taskId: string,
+  attemptKind: 'build' | 'test' | 'fixer',
+  attempt: number,
+): void {
+  appendBoardLog(group, {
+    type: 'task_retry',
+    level: 'warn',
+    taskId,
+    message: `${taskId}: ${attemptKind} retry #${attempt}`,
+    detail: { attemptKind, attempt },
+  });
+}
+
+export function logFinalTestStarted(group: ChatGroup, chatId: string): void {
+  appendBoardLog(group, {
+    type: 'final_test_started',
+    level: 'info',
+    message: 'Final integration test started',
+    detail: { chatId },
+  });
+}
+
+export function logFinalTestVerdict(
+  group: ChatGroup,
+  verdict: 'pass' | 'fail',
+  summary?: string,
+  failingTaskIds?: string[],
+): void {
+  appendBoardLog(group, {
+    type: 'final_test_verdict',
+    level: verdict === 'pass' ? 'info' : 'error',
+    message: `Final integration test ${verdict}`,
+    detail: {
+      verdict,
+      summary: summary ? truncateBoardLogPreview(summary) : undefined,
+      failingTaskIds,
+    },
+  });
+}
+
+export function logBoardToolCall(
+  group: ChatGroup,
+  taskId: string,
+  toolName: string,
+  argsPreview: string,
+  resultPreview: string,
+  errored: boolean,
+  chatId: string,
+): void {
+  appendBoardLog(group, {
+    type: 'tool_call',
+    level: errored ? 'error' : 'info',
+    taskId,
+    message: `${taskId}: ${toolName}`,
+    detail: {
+      toolName,
+      argsPreview: truncateBoardLogPreview(argsPreview),
+      resultPreview: truncateBoardLogPreview(resultPreview),
+      chatId,
+    },
+  });
+}
+
+export function logBoardTerminalRun(
+  group: ChatGroup,
+  taskId: string,
+  command: string,
+  exitCode: number | undefined,
+  resultPreview: string,
+  errored: boolean,
+  chatId: string,
+): void {
+  appendBoardLog(group, {
+    type: 'terminal_run',
+    level: errored || (exitCode != null && exitCode !== 0) ? 'error' : 'info',
+    taskId,
+    message: `${taskId}: ${truncateBoardLogPreview(command, 120)}`,
+    detail: {
+      command: truncateBoardLogPreview(command),
+      exitCode,
+      resultPreview: truncateBoardLogPreview(resultPreview),
+      chatId,
+    },
+  });
 }
 
 export type OrchestrateBoardTimerContext = {
@@ -277,6 +580,9 @@ export function markBoardTaskInProgressFromChat(chat: Chat): void {
   };
   if (existing.error) patch.error = undefined;
   updateTask(boardGroup, taskId, patch, planner ?? undefined);
+  if (existing.status !== 'in_progress') {
+    logTaskStarted(boardGroup, taskId, chat.id);
+  }
 }
 
 /** Resolved execution mode (defaults to manual). */
@@ -430,6 +736,14 @@ export function initBoard(
   linkPlannerChatToBoardFolder(plannerChat, group);
   syncOrchestratorPlannerChatTitle(plannerChat, input.planPath);
   touchChat(plannerChat);
+  logBoardInit(group, tasks.length, waves.length);
+  if (cycles.length > 0) {
+    for (const task of tasks) {
+      if (task.status === 'blocked' && task.error) {
+        logTaskError(group, task.id, task.error);
+      }
+    }
+  }
   scheduleSaveSessions();
   emitBoardChange(group.id);
   return board;
@@ -453,6 +767,7 @@ export type UpdateTaskPatch = Partial<
     | 'testChatId'
     | 'fixerChatId'
     | 'testAttempts'
+    | 'buildAttempts'
     | 'fixerAttempts'
     | 'mergePreSha'
     | 'testVerdict'
@@ -462,6 +777,7 @@ export type UpdateTaskPatch = Partial<
     | 'worktreePath'
     | 'worktreeBranch'
     | 'devPort'
+    | 'apiPort'
   >
 >;
 
@@ -513,6 +829,9 @@ export function updateTask(
   }
   if ('testAttempts' in patch && patch.testAttempts === undefined) {
     delete task.testAttempts;
+  }
+  if ('buildAttempts' in patch && patch.buildAttempts === undefined) {
+    delete task.buildAttempts;
   }
   if ('fixerChatId' in patch && patch.fixerChatId === undefined) {
     delete task.fixerChatId;

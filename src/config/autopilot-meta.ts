@@ -24,6 +24,7 @@ export interface AutopilotMeta {
   maxConcurrentTasks: number;
   isolationMode: AutopilotIsolationMode;
   maxTestAttempts: number;
+  maxBuildAttempts: number;
   maxFinalTestAttempts: number;
   /** When Continue should auto-route to a fresh summarized chat instead of nudging. */
   continueSmartRoute: AutopilotContinueSmartRoute;
@@ -36,6 +37,7 @@ export interface AutopilotMeta {
 
 const FALLBACK_MAX_CONCURRENT = 3;
 const FALLBACK_MAX_TEST_ATTEMPTS = 3;
+const FALLBACK_MAX_BUILD_ATTEMPTS = 2;
 const FALLBACK_MAX_FINAL_TEST_ATTEMPTS = 3;
 
 export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
@@ -43,6 +45,7 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   maxConcurrentTasks: FALLBACK_MAX_CONCURRENT,
   isolationMode: 'auto',
   maxTestAttempts: FALLBACK_MAX_TEST_ATTEMPTS,
+  maxBuildAttempts: FALLBACK_MAX_BUILD_ATTEMPTS,
   maxFinalTestAttempts: FALLBACK_MAX_FINAL_TEST_ATTEMPTS,
   continueSmartRoute: 'conservative',
   heartbeatIntervalMs: 7_000,
@@ -133,6 +136,10 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
       block.maxTestAttempts,
       DEFAULT_AUTOPILOT_META.maxTestAttempts,
     ),
+    maxBuildAttempts: clampAttempts(
+      block.maxBuildAttempts,
+      DEFAULT_AUTOPILOT_META.maxBuildAttempts,
+    ),
     maxFinalTestAttempts: clampAttempts(
       block.maxFinalTestAttempts,
       DEFAULT_AUTOPILOT_META.maxFinalTestAttempts,
@@ -211,6 +218,11 @@ export function setAutopilotMetaForTests(config: Partial<AutopilotMeta>): void {
 /** Global per-task test-failure threshold (no per-board override). */
 export function resolveMaxTaskTestAttempts(): number {
   return getAutopilotMetaSync().maxTestAttempts ?? FALLBACK_MAX_TEST_ATTEMPTS;
+}
+
+/** Global per-task build-failure threshold (no per-board override). */
+export function resolveMaxTaskBuildAttempts(): number {
+  return getAutopilotMetaSync().maxBuildAttempts ?? FALLBACK_MAX_BUILD_ATTEMPTS;
 }
 
 /** Global final integration test threshold (no per-board override). */

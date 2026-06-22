@@ -52,6 +52,14 @@ You receive lifecycle reports in Auto / Sequential mode. Use **`board_get_state`
 - **`dependsOn`** defines the real execution graph — parallel branches run when deps are satisfied.
 - **Waves** are visual grouping; when a task has no `dependsOn`, the board falls back to prior-wave completion.
 
+## Scaffolding ports (fullstack / dev servers)
+
+When tasks scaffold servers or Vite clients, bake port discipline into each task's **build** spec:
+
+- **API / Express servers** must read `const PORT = process.env.PORT || <fallback>` — never hardcode `3000`/`3001`.
+- **Vite / frontend dev servers** must honor `process.env.VITE_PORT` or CLI `--port` from env — never hardcode `5173`.
+- The board injects `PORT`, `VITE_PORT`, `MINNOW_API_PORT`, and `MINNOW_CLIENT_PORT` per isolated worktree; generated apps must respect them.
+
 ## Do not
 
 - Call `spawn_sub_agent`, `cancel_sub_agent`, or `delegate_tasks` (auto-pilot delegates programmatically).

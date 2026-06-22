@@ -15,6 +15,7 @@ import { isChatTurnSetupPending } from '../chat/chat-turn-guard.ts';
 import {
   getAutopilotMetaSync,
   resolveMaxFinalTestAttempts,
+  resolveMaxTaskBuildAttempts,
   resolveMaxTaskTestAttempts,
 } from '../config/autopilot-meta.ts';
 import {
@@ -39,17 +40,18 @@ import {
   getPlannerChatForGroup,
 } from './chat-groups.ts';
 import { emitBoardChange } from './orchestrate-board-events.ts';
-import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask } from './orchestrate-board-store.ts';
+import { isTaskReadyForAuto, isTaskStalledForRestart, isBoardAutoMode, isBoardRunning, getBoardExecutionMode, syncOrchestrateBoardTimer, updateTask, logTaskStatus, logBuildVerdict, logTestVerdict, logMergeResult, logWorktreeAllocated, logTaskRetry, logModeChange, logAutoStart, logAutoStop, logFinalTestStarted, logFinalTestVerdict } from './orchestrate-board-store.ts';
 import {
   isIsolationActive,
   resolveIsolationMode,
   worktreeBranchFor,
   worktreeSlotId,
   boardIntegrationBranch,
-  allocateDevPort,
+  allocateTaskPorts,
   usedDevPorts,
   DEFAULT_BOARD_PORT_BASE,
 } from './worktree-isolation.ts';
+import { teardownBoardTaskChatResources } from './board-task-teardown.ts';
 import {
   ensureIntegration as ensureIntegrationWorktree,
   createWorktree as createTaskWorktreeOp,
@@ -194,6 +196,10 @@ function releaseLaunchSlotAndDrive(
   chatId: string,
 ): void {
   releaseLaunchSlot(chatId);
+  const chat = findChatById(chatId);
+  if (chat) {
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
+  }
   void drainTaskQueue(group, plannerChat).catch((err) =>
     reportBackgroundError('drain-after-slot-release', err),
   );
@@ -267,21 +273,53 @@ export function finalizeBoardTaskOnStreamEnd(
   const outcome = resolveTaskChatStreamOutcome(chat);
 
   if (outcome === 'stopped') {
+    logBuildVerdict(group, task.id, 'stopped');
     updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
     return;
   }
 
   if (outcome === 'failed') {
+    const errorSummary = 'Task chat ended without completing successfully';
+    if (isBoardRunning(group)) {
+      const route = applyTaskBuildFailureState(group, task, plannerChat, errorSummary);
+      if (route === 'retry') {
+        const updated =
+          group.orchestrateBoard!.tasks.find((t) => t.id === task.id) ?? task;
+        logBuildVerdict(group, task.id, 'fail', {
+          attempt: updated.buildAttempts ?? 1,
+          attemptKind: 'build',
+          summary: errorSummary,
+        });
+        const seed = buildBuildRetrySeedMessage(
+          updated,
+          updated.buildAttempts ?? 1,
+          errorSummary,
+        );
+        updateTask(
+          group,
+          task.id,
+          { pendingBuildSeed: seed, endedAt: Date.now() },
+          plannerChat,
+        );
+        teardownBoardTaskChatResources(chat, sessionState?.groups);
+        void startTask(group, task.id, plannerChat).catch((err) =>
+          reportBackgroundError('start-task-build-retry', err),
+        );
+        return;
+      }
+    }
+    logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
     moveTaskStatus(group, task.id, 'failed', plannerChat);
     updateTask(
       group,
       task.id,
       {
         endedAt: Date.now(),
-        error: 'Task chat ended without completing successfully',
+        error: errorSummary,
       },
       plannerChat,
     );
+    teardownBoardTaskChatResources(chat, sessionState?.groups);
     return;
   }
 
@@ -291,6 +329,8 @@ export function finalizeBoardTaskOnStreamEnd(
     { endedAt: Date.now(), error: undefined, testVerdict: undefined, testSummary: undefined },
     plannerChat,
   );
+  teardownBoardTaskChatResources(chat, sessionState?.groups);
+  logBuildVerdict(group, task.id, 'pass');
   moveTaskStatus(group, task.id, 'testing', plannerChat);
 
   const builderChat = findChatById(chatId);
@@ -464,6 +504,10 @@ function ensureStreamEndSubscription(): void {
 
         const taskByTest = board.tasks.find((t) => t.testChatId === endedChatId);
         if (taskByTest) {
+          const testChat = findChatById(endedChatId);
+          if (testChat) {
+            teardownBoardTaskChatResources(testChat, sessionState?.groups);
+          }
           void finalizeTaskTestingOnStreamEnd(group, taskByTest, planner)
             .then(() => safeDrain(group, planner))
             .catch((err) => reportBackgroundError('finalize-task-testing', err));
@@ -656,6 +700,27 @@ export function buildRetryBuilderSeedMessage(task: BoardTask, attempt: number, t
     build,
     '',
     `Previous attempt failed testing (${attempt}/${resolveMaxTaskTestAttempts()}): ${testSummary}`,
+    '',
+    'Fix the issues and report what you changed.',
+  ].join('\n');
+}
+
+/** Compact Builder seed after a failed build chat (auto/afk retry). */
+export function buildBuildRetrySeedMessage(
+  task: BoardTask,
+  attempt: number,
+  errorSummary: string,
+): string {
+  const build = task.buildSpec?.trim() || '(see plan)';
+  return [
+    'Fix this orchestrate task after a failed build attempt.',
+    '',
+    `Task: ${task.id} — ${task.title}`,
+    '',
+    'Build:',
+    build,
+    '',
+    `Previous build attempt failed (${attempt}/${resolveMaxTaskBuildAttempts()}): ${errorSummary}`,
     '',
     'Fix the issues and report what you changed.',
   ].join('\n');
@@ -864,6 +929,7 @@ export function clearTaskFailureState(
   }
   if (opts.resetAttempts) {
     patch.testAttempts = undefined;
+    patch.buildAttempts = undefined;
   }
   return updateTask(group, task.id, patch, plannerChat);
 }
@@ -1115,9 +1181,20 @@ async function ensureTaskWorktree(
     updateTask(
       group,
       task.id,
-      { worktreePath: path, worktreeBranch: branch, devPort: shared.devPort },
+      {
+        worktreePath: path,
+        worktreeBranch: branch,
+        devPort: shared.devPort,
+        apiPort: shared.apiPort,
+      },
       plannerChat,
     );
+    if (
+      typeof shared.devPort === 'number' &&
+      typeof shared.apiPort === 'number'
+    ) {
+      logWorktreeAllocated(group, task.id, branch, shared.devPort, shared.apiPort);
+    }
     return path;
   }
 
@@ -1130,20 +1207,28 @@ async function ensureTaskWorktree(
   if (!created.ok || !created.path) return null;
 
   const freshTask = group.orchestrateBoard?.tasks.find((t) => t.id === task.id) ?? task;
-  const devPort =
-    freshTask.devPort ??
-    allocateDevPort(DEFAULT_BOARD_PORT_BASE, usedDevPorts(board.tasks));
+  const used = usedDevPorts(board.tasks);
+  const ports =
+    typeof freshTask.devPort === 'number' &&
+    Number.isFinite(freshTask.devPort) &&
+    typeof freshTask.apiPort === 'number' &&
+    Number.isFinite(freshTask.apiPort)
+      ? { devPort: freshTask.devPort, apiPort: freshTask.apiPort }
+      : allocateTaskPorts(DEFAULT_BOARD_PORT_BASE, used);
+  const { devPort, apiPort } = ports;
   if (
     freshTask.worktreePath !== created.path ||
     freshTask.worktreeBranch !== branch ||
-    freshTask.devPort !== devPort
+    freshTask.devPort !== devPort ||
+    freshTask.apiPort !== apiPort
   ) {
     updateTask(
       group,
       task.id,
-      { worktreePath: created.path, worktreeBranch: branch, devPort },
+      { worktreePath: created.path, worktreeBranch: branch, devPort, apiPort },
       plannerChat,
     );
+    logWorktreeAllocated(group, task.id, branch, devPort, apiPort);
   }
   return created.path;
 }
@@ -1158,9 +1243,15 @@ async function mergeCompletedTaskWorktree(
   plannerChat: Chat,
 ): Promise<MergeTaskWorktreeResult> {
   const board = group.orchestrateBoard;
-  if (!board?.integrationBranch) return { outcome: 'skipped' };
+  if (!board?.integrationBranch) {
+    logMergeResult(group, task.id, 'skipped');
+    return { outcome: 'skipped' };
+  }
   const branch = task.worktreeBranch;
-  if (!branch || branch === board.integrationBranch) return { outcome: 'skipped' };
+  if (!branch || branch === board.integrationBranch) {
+    logMergeResult(group, task.id, 'skipped', { branch });
+    return { outcome: 'skipped' };
+  }
 
   const mode = resolveIsolationMode(board);
   const boardId = group.id;
@@ -1199,6 +1290,7 @@ async function mergeCompletedTaskWorktree(
         } catch (err) {
           reportBackgroundError('worktree-refresh-deps', err);
         }
+        logMergeResult(group, task.id, 'merged', { branch });
         return { outcome: 'merged' };
       }
       const reasons = verified.reasons?.join('; ') || 'Integration merge verification failed';
@@ -1207,24 +1299,30 @@ async function mergeCompletedTaskWorktree(
           reportBackgroundError('worktree-restore-integration', err),
         );
       }
+      logMergeResult(group, task.id, 'error', { branch, error: reasons });
       return { outcome: 'error', message: reasons };
     }
     if (res.conflict) {
+      logMergeResult(group, task.id, 'conflict', { branch });
       return {
         outcome: 'conflict',
         conflictedFiles: res.conflictedFiles ?? [],
         integrationSha: res.integrationSha,
       };
     }
+    const mergeErr = res.error ?? res.output ?? 'Integration merge failed';
+    logMergeResult(group, task.id, 'error', { branch, error: mergeErr });
     return {
       outcome: 'error',
-      message: res.error ?? res.output ?? 'Integration merge failed',
+      message: mergeErr,
     };
   } catch (err) {
     reportBackgroundError('worktree-merge', err);
+    const message = err instanceof Error ? err.message : String(err);
+    logMergeResult(group, task.id, 'error', { branch, error: message });
     return {
       outcome: 'error',
-      message: err instanceof Error ? err.message : String(err),
+      message,
     };
   }
 }
@@ -1399,6 +1497,7 @@ async function finalizeMergeFixerOnStreamEnd(
 
     if (attempts < MAX_MERGE_FIXER_ATTEMPTS - 1) {
       const nextAttempts = attempts + 1;
+      logTaskRetry(group, fresh.id, 'fixer', nextAttempts);
       updateTask(
         group,
         fresh.id,
@@ -1704,6 +1803,32 @@ export function applyTaskTestFailureState(
     return 'blocked';
   }
 
+  logTaskRetry(group, task.id, 'test', attempts);
+  moveTaskStatus(group, task.id, 'in_progress', plannerChat);
+  return 'retry';
+}
+
+/** Apply per-task build failure bookkeeping; returns next routing step (auto/afk only). */
+export function applyTaskBuildFailureState(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  errorSummary: string,
+): 'failed' | 'retry' {
+  const attempts = (task.buildAttempts ?? 0) + 1;
+  updateTask(
+    group,
+    task.id,
+    { buildAttempts: attempts, error: errorSummary },
+    plannerChat,
+  );
+
+  if (attempts >= resolveMaxTaskBuildAttempts()) {
+    moveTaskStatus(group, task.id, 'failed', plannerChat);
+    return 'failed';
+  }
+
+  logTaskRetry(group, task.id, 'build', attempts);
   moveTaskStatus(group, task.id, 'in_progress', plannerChat);
   return 'retry';
 }
@@ -1767,6 +1892,15 @@ export async function finalizeTaskTestingOnStreamEnd(
       );
     }
   }
+
+  const attemptNum = fresh.testAttempts ?? 0;
+  logTestVerdict(
+    group,
+    fresh.id,
+    verdict === 'pass' ? 'pass' : 'fail',
+    summary,
+    verdict === 'fail' ? attemptNum || undefined : undefined,
+  );
 
   if (verdict === 'pass') {
     updateTask(group, fresh.id, { error: undefined }, plannerChat);
@@ -1911,6 +2045,7 @@ export async function startFinalIntegrationTest(
     summary: undefined,
   };
   board.lastUpdatedAt = Date.now();
+  logFinalTestStarted(group, finalChat.id);
   scheduleSaveSessions();
   emitBoardChange(group.id);
 
@@ -2021,6 +2156,7 @@ export function finalizeFinalTestOnStreamEnd(
   const failingIds = board.finalTest.failingTaskIds ?? [];
 
   if (verdict === 'pass') {
+    logFinalTestVerdict(group, 'pass', summary);
     board.finalTest = { ...board.finalTest, status: 'passed' };
     board.lastUpdatedAt = Date.now();
     scheduleSaveSessions();
@@ -2030,6 +2166,7 @@ export function finalizeFinalTestOnStreamEnd(
   }
 
   const attempts = (board.finalTest.attempts ?? 0) + 1;
+  logFinalTestVerdict(group, 'fail', summary, failingIds);
   board.finalTest = {
     ...board.finalTest,
     status: 'failed',
@@ -2127,6 +2264,7 @@ export function moveTaskStatus(
   plannerChat?: Chat,
 ): void {
   const existing = group.orchestrateBoard?.tasks.find((t) => t.id === taskId);
+  logTaskStatus(group, taskId, existing?.status, status);
   const patch: Parameters<typeof updateTask>[2] = { status };
   if (status === 'planned' && existing?.error) {
     patch.error = undefined;
@@ -2160,6 +2298,7 @@ export function setBoardExecutionMode(
 ): void {
   const board = group.orchestrateBoard;
   if (!board) return;
+  const prevMode = getBoardExecutionMode(board);
   board.executionMode = mode;
   if (mode !== 'afk') delete board.pendingAfk;
   if (mode === 'manual') board.autoRunning = false;
@@ -2169,6 +2308,9 @@ export function setBoardExecutionMode(
     saveSessionsNow();
   } else {
     scheduleSaveSessions();
+  }
+  if (prevMode !== mode) {
+    logModeChange(group, mode);
   }
   emitBoardChange(group.id);
 }
@@ -2296,6 +2438,7 @@ export function startBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   // Clear any prior Stop so the timer resumes and the Stopped badge clears.
   board.userStopped = false;
   board.lastUpdatedAt = Date.now();
+  logAutoStart(group);
   scheduleSaveSessions();
   emitBoardChange(group.id);
   void autoDelegateNext(group, plannerChat).catch((err) =>
@@ -2312,6 +2455,7 @@ export function stopBoardAutoRun(group: ChatGroup, plannerChat: Chat): void {
   // task statuses lag behind the aborted streams (MIN-248).
   board.userStopped = true;
   board.lastUpdatedAt = Date.now();
+  logAutoStop(group);
   taskQueueByGroupId.delete(group.id);
   for (const task of board.tasks) {
     if (task.chatId) {

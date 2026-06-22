@@ -456,12 +456,25 @@ export async function toolStartBackgroundCommand(args) {
   }
 
   try {
+    const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
+    let spawnEnv;
+    try {
+      const { resolveBoardTaskSpawnEnvForCommand } = await import(
+        '../workspace/board-task-ports.js'
+      );
+      spawnEnv = await resolveBoardTaskSpawnEnvForCommand({ chatId, cwd });
+    } catch {
+      spawnEnv = undefined;
+    }
+
     const started = await createBackgroundRun({
       command,
       cwd,
       shell: process.platform === 'win32',
       source: 'agent',
+      chatId,
       logSubdir: 'dev-server',
+      ...(spawnEnv ? { env: spawnEnv } : {}),
     });
 
     const root = path.resolve(getWorkspaceRoot());

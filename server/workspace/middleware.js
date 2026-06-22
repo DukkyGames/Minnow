@@ -148,7 +148,12 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace/dev-server/stop' && req.method === 'POST') {
-      const result = await stopDevServer();
+      const body = await readJsonBody(req);
+      const workspaceRoot =
+        typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
+          ? body.workspaceRoot.trim()
+          : undefined;
+      const result = await stopDevServer(workspaceRoot);
       sendJson(res, 200, result);
       return true;
     }

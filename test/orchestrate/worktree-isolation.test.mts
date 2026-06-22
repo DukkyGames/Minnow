@@ -6,6 +6,7 @@ import {
 } from '../../src/config/autopilot-meta.ts';
 import {
   allocateDevPort,
+  allocateTaskPorts,
   boardIntegrationBranch,
   isIsolationActive,
   resolveChatToolWorkspaceRoot,
@@ -247,12 +248,26 @@ describe('dev port allocation', () => {
   test('ignores non-finite used ports', () => {
     assert.equal(allocateDevPort(5200, [Number.NaN, 5200]), 5201);
   });
-  test('usedDevPorts collects assigned ports only', () => {
+  test('usedDevPorts collects client and API ports', () => {
     const tasks = [
-      task({ id: 'A', wave: 1, devPort: 5200 }),
+      task({ id: 'A', wave: 1, devPort: 5200, apiPort: 5300 }),
       task({ id: 'B', wave: 1 }),
       task({ id: 'C', wave: 1, devPort: 5202 }),
     ];
-    assert.deepEqual(usedDevPorts(tasks).sort(), [5200, 5202]);
+    assert.deepEqual(usedDevPorts(tasks).sort(), [5200, 5202, 5300]);
+  });
+  test('allocateTaskPorts reserves non-overlapping client and API ports', () => {
+    const a = allocateTaskPorts(5200, []);
+    assert.equal(a.devPort, 5200);
+    assert.equal(a.apiPort, 5300);
+    const b = allocateTaskPorts(5200, usedDevPorts([task({ id: 'X', wave: 1, ...a })]));
+    assert.equal(b.devPort, 5201);
+    assert.equal(b.apiPort, 5301);
+    const used = new Set([...usedDevPorts([task({ id: 'X', wave: 1, ...a }), task({ id: 'Y', wave: 1, ...b })])]);
+    assert.equal(used.has(a.devPort), true);
+    assert.equal(used.has(a.apiPort), true);
+    assert.equal(used.has(b.devPort), true);
+    assert.equal(used.has(b.apiPort), true);
+    assert.equal(a.devPort, b.devPort - 1);
   });
 });

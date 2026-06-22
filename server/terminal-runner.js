@@ -152,6 +152,7 @@ async function persistTerminalHistory(chatId, record) {
  * @param {TerminalSource} [params.source]
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
+ * @param {Record<string, string>} [params.env] merged over process.env for the child
  * @returns {Promise<{ runId: string, startedAt: number }>}
  */
 export async function createRun({
@@ -162,6 +163,7 @@ export async function createRun({
   source = 'agent',
   chatId,
   toolCallId,
+  env: envOverrides,
 }) {
   const runId = crypto.randomUUID();
   const startedAt = Date.now();
@@ -213,6 +215,10 @@ export async function createRun({
         cwd,
         timeout: COMMAND_TIMEOUT_MS,
         shell: useShell,
+        env:
+          envOverrides && typeof envOverrides === 'object'
+            ? { ...process.env, ...envOverrides }
+            : undefined,
         onSpawn: (child) => {
           state.child = child;
         },
@@ -510,6 +516,23 @@ export function stopActiveRun(runId) {
 }
 
 /**
+ * Stop every non-finished agent run tied to a chat (best-effort port cleanup).
+ * @param {string} chatId
+ * @returns {{ ok: boolean, stopped: number }}
+ */
+export function stopActiveRunsForChat(chatId) {
+  const trimmed = typeof chatId === 'string' ? chatId.trim() : '';
+  if (!trimmed) return { ok: false, stopped: 0 };
+  let stopped = 0;
+  for (const state of activeRuns.values()) {
+    if (state.finished || state.chatId !== trimmed) continue;
+    stopActiveRun(state.runId);
+    stopped += 1;
+  }
+  return { ok: true, stopped };
+}
+
+/**
  * Non-finished runs still in the active registry.
  * @param {{ source?: TerminalSource, chatId?: string }} [filter]
  */
@@ -771,6 +794,7 @@ export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
  * @param {string} params.cwd
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
+ * @param {Record<string, string>} [params.env] merged over process.env for the child
  */
 export async function executeCommandBlocking({
   command,
@@ -779,6 +803,7 @@ export async function executeCommandBlocking({
   shell,
   chatId,
   toolCallId,
+  env,
 }) {
   const { runId } = await createRun({
     command,
@@ -788,6 +813,7 @@ export async function executeCommandBlocking({
     source: 'agent',
     chatId,
     toolCallId,
+    env,
   });
   return waitForRun(runId);
 }

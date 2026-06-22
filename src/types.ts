@@ -313,6 +313,8 @@ export interface BoardTask {
   fixerChatId?: string;
   /** Build↔test retry count (incremented on each test failure). */
   testAttempts?: number;
+  /** Build-failure retry count (incremented on each failed build chat in auto/afk). */
+  buildAttempts?: number;
   /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
   fixerAttempts?: number;
   /** Pre-merge integration tip SHA for restore on fixer failure. */
@@ -342,8 +344,10 @@ export interface BoardTask {
   worktreePath?: string;
   /** Git branch backing {@link worktreePath} (per-task, or the shared per-wave branch). */
   worktreeBranch?: string;
-  /** Dev-server port allocated to this task's isolated worktree (avoids port collisions). */
+  /** Vite client port allocated to this task's isolated worktree (avoids port collisions). */
   devPort?: number;
+  /** Express/API server port paired with {@link devPort} for fullstack scaffolds. */
+  apiPort?: number;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -403,6 +407,62 @@ export interface OrchestrateBoardState {
     failingTaskIds?: string[];
     summary?: string;
   };
+  /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
+  log?: BoardLogEvent[];
+}
+
+export type BoardLogLevel = 'info' | 'warn' | 'error';
+
+export type BoardLogEventType =
+  | 'board_init'
+  | 'mode_change'
+  | 'auto_start'
+  | 'auto_stop'
+  | 'task_status'
+  | 'task_started'
+  | 'build_verdict'
+  | 'test_verdict'
+  | 'merge_result'
+  | 'worktree_allocated'
+  | 'task_retry'
+  | 'task_error'
+  | 'tool_call'
+  | 'terminal_run'
+  | 'dev_server'
+  | 'final_test_started'
+  | 'final_test_verdict';
+
+export interface BoardLogEvent {
+  id: string;
+  ts: number;
+  type: BoardLogEventType;
+  level: BoardLogLevel;
+  taskId?: string;
+  message: string;
+  detail?: BoardLogDetail;
+}
+
+export interface BoardLogDetail {
+  from?: BoardTaskStatus;
+  to?: BoardTaskStatus;
+  verdict?: 'pass' | 'fail';
+  attempt?: number;
+  attemptKind?: 'build' | 'test' | 'fixer';
+  mode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  outcome?: 'merged' | 'conflict' | 'error' | 'skipped';
+  branch?: string;
+  devPort?: number;
+  apiPort?: number;
+  toolName?: string;
+  argsPreview?: string;
+  resultPreview?: string;
+  command?: string;
+  exitCode?: number;
+  runId?: string;
+  chatId?: string;
+  error?: string;
+  summary?: string;
+  failingTaskIds?: string[];
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */

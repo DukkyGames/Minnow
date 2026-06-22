@@ -233,6 +233,7 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.maxConcurrentTasks, 3);
     assert.equal(merged.autopilot.isolationMode, 'auto');
     assert.equal(merged.autopilot.maxTestAttempts, 3);
+    assert.equal(merged.autopilot.maxBuildAttempts, 2);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 3);
     assert.equal(merged.autopilot.heartbeatIntervalMs, 7000);
     assert.equal(merged.autopilot.progressStallMs, 90000);
@@ -244,6 +245,7 @@ describe('mergeConfigMeta autopilot', () => {
       autopilot: {
         maxConcurrentTasks: 99,
         maxTestAttempts: 0,
+        maxBuildAttempts: 0,
         maxFinalTestAttempts: 20,
         heartbeatIntervalMs: 500,
         progressStallMs: 5_000,
@@ -252,6 +254,7 @@ describe('mergeConfigMeta autopilot', () => {
     });
     assert.equal(merged.autopilot.maxConcurrentTasks, 20);
     assert.equal(merged.autopilot.maxTestAttempts, 1);
+    assert.equal(merged.autopilot.maxBuildAttempts, 1);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 10);
     assert.equal(merged.autopilot.heartbeatIntervalMs, 1000);
     assert.equal(merged.autopilot.progressStallMs, 10000);

@@ -24,6 +24,7 @@ import {
   recomputeWaveRollup,
   rollupWaveStatus,
   setBoardNowForTests,
+  resetBoardLogForTests,
   updateTask,
 } from '../../src/state/orchestrate-board-store.ts';
 import { flushScheduledSessionSaveForTests } from '../../src/state/sessions.ts';
@@ -89,7 +90,19 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
   "maxConcurrentTasks": 3,
-  "executionMode": "manual"
+  "executionMode": "manual",
+  "log": [
+    {
+      "id": "1710000001000-0",
+      "ts": 1710000001000,
+      "type": "board_init",
+      "level": "info",
+      "message": "Board initialized (1 tasks, 1 waves)",
+      "detail": {
+        "summary": "1 tasks, 1 waves"
+      }
+    }
+  ]
 }`;
 
 /** After W1-A moves to in_progress — wave rollup stays in_progress. */
@@ -111,6 +124,7 @@ const EXPECTED_WAVE_COMPLETE_JSON = `{
 describe('orchestrate board store rollup', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -150,6 +164,7 @@ describe('orchestrate board store rollup', () => {
 describe('orchestrate board store init and progress', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -345,6 +360,7 @@ describe('orchestrate board store init and progress', () => {
 describe('orchestrate board store events', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -379,6 +395,7 @@ describe('orchestrate board store events', () => {
 describe('orchestrate board dependency cycles', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 

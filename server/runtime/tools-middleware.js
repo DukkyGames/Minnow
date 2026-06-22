@@ -12,6 +12,7 @@ import {
   executeCommandBlocking,
   listActiveRuns,
   readCommandLogSnapshot,
+  stopActiveRunsForChat,
   waitForRunOutput,
 } from '../terminal-runner.js';
 import { toolRunImpeccable } from '../impeccable/run-impeccable.js';
@@ -646,6 +647,17 @@ function resolveCommandCwd(args) {
   return resolveSafePath(cwdUser, { write: false });
 }
 
+async function resolveBoardSpawnEnv(args, cwd, chatId) {
+  try {
+    const { resolveBoardTaskSpawnEnvForCommand } = await import(
+      '../workspace/board-task-ports.js'
+    );
+    return await resolveBoardTaskSpawnEnvForCommand({ chatId, cwd });
+  } catch {
+    return undefined;
+  }
+}
+
 async function toolExecuteCommand(args) {
   if (args?.stop === true) {
     return toolStopCommand(args);
@@ -671,6 +683,7 @@ async function toolExecuteCommand(args) {
     const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
     const toolCallId =
       typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+    const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
 
     try {
       const started = await createBackgroundRun({
@@ -681,6 +694,7 @@ async function toolExecuteCommand(args) {
         chatId,
         toolCallId,
         logSubdir: 'terminal',
+        ...(spawnEnv ? { env: spawnEnv } : {}),
       });
       const blockUntilMs = clampBlockUntilMs(args?.block_until_ms);
       const output =
@@ -723,6 +737,7 @@ async function toolExecuteCommand(args) {
 
   const chatId = typeof args?.chatId === 'string' ? args.chatId : undefined;
   const toolCallId = typeof args?.toolCallId === 'string' ? args.toolCallId : undefined;
+  const spawnEnv = await resolveBoardSpawnEnv(args, cwd, chatId);
 
   const workspaceRoot = getEffectiveWorkspaceRoot();
   const beforeSnapshot = await captureWorkspaceSnapshot(workspaceRoot);
@@ -744,6 +759,7 @@ async function toolExecuteCommand(args) {
       shell: process.platform === 'win32',
       chatId,
       toolCallId,
+      ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     if (String(output).trimStart().startsWith('Error')) {
       return output;

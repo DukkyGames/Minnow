@@ -70,6 +70,10 @@ import {
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
 import {
+  logBoardTerminalRun,
+  logBoardToolCall,
+} from '../state/orchestrate-board-store.ts';
+import {
   boardWorktreesRootsFromState,
   resolveChatToolWorkspaceRoot,
 } from '../state/worktree-isolation';
@@ -811,6 +815,59 @@ function syncTurnContextUsage(
       : null,
   );
   scheduleContextUsageRefresh();
+}
+
+/** Parse exit code from execute_command formatted output. */
+function parseTerminalExitCode(content: string): number | undefined {
+  const match = content.match(/\(exit (-?\d+)\)/);
+  if (!match) return undefined;
+  const code = Number(match[1]);
+  return Number.isFinite(code) ? code : undefined;
+}
+
+/** Log board-task tool/terminal activity when the chat is linked to a board task. */
+function maybeLogBoardToolExecution(
+  chat: Chat,
+  toolName: string,
+  args: unknown,
+  content: string,
+): void {
+  const boardTaskId = chat.boardTaskId?.trim();
+  const boardGroupId = chat.boardGroupId?.trim();
+  if (!boardTaskId || !boardGroupId || !sessionState) return;
+  const group = sessionState.groups?.find((g) => g.id === boardGroupId);
+  if (!group?.orchestrateBoard) return;
+
+  const argsPreview =
+    args && typeof args === 'object' ? JSON.stringify(args) : String(args ?? '');
+  const errored = content.trimStart().startsWith('Error');
+
+  if (toolName === 'execute_command') {
+    const command =
+      args && typeof args === 'object' && !Array.isArray(args)
+        ? String((args as Record<string, unknown>).command ?? '')
+        : '';
+    logBoardTerminalRun(
+      group,
+      boardTaskId,
+      command || toolName,
+      parseTerminalExitCode(content),
+      content,
+      errored,
+      chat.id,
+    );
+    return;
+  }
+
+  logBoardToolCall(
+    group,
+    boardTaskId,
+    toolName,
+    argsPreview,
+    content,
+    errored,
+    chat.id,
+  );
 }
 
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
@@ -1640,6 +1697,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               : {}),
             ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
           });
+          maybeLogBoardToolExecution(chat, toolName, args, toolContent);
           trackRunHistoryPush(chat, turnRunId);
           syncTurnContextUsage(chat.id, livePartialText, thoughtController);
           if (paintToolCallsInChat) {

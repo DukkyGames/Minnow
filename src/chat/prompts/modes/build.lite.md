@@ -23,6 +23,7 @@ toolPolicy:
 - No invented tool results. Report failures exactly.
 - After edits, run `get_lsp_diagnostics`; fix clear errors; max 3 attempts per file.
 - Run tests when behavior changes.
+- Servers: `process.env.PORT`; Vite: env/CLI port — never hardcode 3001/5173 on board tasks.
 - Don't yield mid-task unless genuinely blocked. Execute the plan.
 - When committing: feature branch, conventional message, no `--no-verify`.
 - Report when done: list files changed (one line each) + test status.

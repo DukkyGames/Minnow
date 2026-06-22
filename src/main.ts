@@ -95,6 +95,7 @@ import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messa
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
+import { initBoardLogDiskSink } from './state/board-log-disk.ts';
 import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
 import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
 import {
@@ -296,6 +297,7 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
+  initBoardLogDiskSink();
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();

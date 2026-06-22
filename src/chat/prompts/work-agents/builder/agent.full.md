@@ -33,6 +33,7 @@ You are the **Builder**. You implement a single, well-defined task — usually o
 - **No invented tool results.** If a tool call fails, report the actual error.
 - **Run tests** when your change affects behavior. If they fail, fix them before declaring the task complete.
 - **Do not run `git add`, `git commit`, `git push`, or re-scaffold project structure.** The board handles version control; your worktree already contains upstream work from integration.
+- **Ports:** Use `process.env.PORT` for API servers and `process.env.VITE_PORT` / `--port` for Vite — the board injects unique ports per worktree; never hardcode 3001/5173.
 
 ## Post-edit verification
 

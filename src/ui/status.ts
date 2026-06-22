@@ -3,6 +3,7 @@ import { closeMobileFileSidebar } from './file-layout';
 import { closeMobileSidebar } from './layout';
 import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
+import { closeBoardTimelineDrawer } from './board-timeline-drawer';
 
 /** Legacy settings field; when #serverUrl is absent, default LM Studio port for Vite-only mode. */
 export function serverUrl(): string {
@@ -68,6 +69,7 @@ export function setReadyStatus(): void {
 export function dismissOpenLayers(): void {
   closeModelSelectMenu();
   closeSubAgentDrawer();
+  closeBoardTimelineDrawer();
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.classList.contains('open')) {
     void import('./settings').then(({ closeDrawer }) => closeDrawer());

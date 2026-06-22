@@ -1130,8 +1130,8 @@ async function renderAutopilotSection(): Promise<void> {
 
   const testsBody = appendSettingsGroup(
     mount,
-    'Test retries',
-    'Global thresholds for per-task test failures and final integration tests.',
+    'Test & build retries',
+    'Global thresholds for per-task test/build failures and final integration tests.',
   );
 
   const taskAttemptsField = el('div', 'settings-field');
@@ -1146,6 +1146,19 @@ async function renderAutopilotSection(): Promise<void> {
   taskAttemptsInput.value = String(meta.maxTestAttempts);
   taskAttemptsField.append(taskAttemptsLabel, taskAttemptsInput);
   testsBody.appendChild(taskAttemptsField);
+
+  const buildAttemptsField = el('div', 'settings-field');
+  const buildAttemptsLabel = el('label', 'settings-field-label', 'Per-task build attempts');
+  buildAttemptsLabel.htmlFor = 'settingsAutopilotBuildAttempts';
+  const buildAttemptsInput = document.createElement('input');
+  buildAttemptsInput.type = 'number';
+  buildAttemptsInput.id = 'settingsAutopilotBuildAttempts';
+  buildAttemptsInput.className = 'settings-input';
+  buildAttemptsInput.min = '1';
+  buildAttemptsInput.max = '10';
+  buildAttemptsInput.value = String(meta.maxBuildAttempts);
+  buildAttemptsField.append(buildAttemptsLabel, buildAttemptsInput);
+  testsBody.appendChild(buildAttemptsField);
 
   const finalAttemptsField = el('div', 'settings-field');
   const finalAttemptsLabel = el('label', 'settings-field-label', 'Final test attempts');
@@ -1292,6 +1305,11 @@ async function renderAutopilotSection(): Promise<void> {
     const value = Math.min(10, Math.max(1, Math.floor(Number(taskAttemptsInput.value) || 1)));
     taskAttemptsInput.value = String(value);
     void persist({ maxTestAttempts: value });
+  });
+  buildAttemptsInput.addEventListener('change', () => {
+    const value = Math.min(10, Math.max(1, Math.floor(Number(buildAttemptsInput.value) || 1)));
+    buildAttemptsInput.value = String(value);
+    void persist({ maxBuildAttempts: value });
   });
   finalAttemptsInput.addEventListener('change', () => {
     const value = Math.min(10, Math.max(1, Math.floor(Number(finalAttemptsInput.value) || 1)));

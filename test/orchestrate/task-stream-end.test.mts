@@ -3,7 +3,11 @@
  */
 
 import assert from 'node:assert/strict';
-import { beforeEach, describe, test } from 'node:test';
+import { beforeEach, describe, test, afterEach } from 'node:test';
+import {
+  resetAutopilotMetaCache,
+  setAutopilotMetaForTests,
+} from '../../src/config/autopilot-meta.ts';
 import {
   clearTaskQueuesForTests,
   countRunningTaskChats,
@@ -99,6 +103,9 @@ function makeGroup(executionMode: 'manual' | 'auto' = 'manual'): ChatGroup {
     planner,
   );
   group.orchestrateBoard!.executionMode = executionMode;
+  if (executionMode === 'auto') {
+    group.orchestrateBoard!.autoRunning = true;
+  }
   const taskChat = makeTaskChat();
   setSessionStateForTests({
     chats: [planner, taskChat],
@@ -115,6 +122,12 @@ describe('task stream end finalization', () => {
     releaseLaunchSlotForTests(TEST_CHAT_ID);
     releaseLaunchSlotForTests(TASK_CHAT_ID);
     releaseLaunchSlotForTests(TASK_B_CHAT_ID);
+    resetAutopilotMetaCache();
+    setAutopilotMetaForTests({ maxBuildAttempts: 1 });
+  });
+
+  afterEach(() => {
+    resetAutopilotMetaCache();
   });
 
   test('resolveTaskChatStreamOutcome: completed vs stopped', () => {
@@ -158,9 +171,11 @@ describe('task stream end finalization', () => {
     assert.ok(updated.endedAt);
   });
 
-  test('failed outcome marks task failed in auto mode', () => {
+  test('failed outcome marks task failed in auto mode at build retry cap', () => {
+    setAutopilotMetaForTests({ maxBuildAttempts: 1 });
     const group = makeGroup('auto');
     const planner = makePlanner();
+    updateTask(group, 'W1-A', { buildAttempts: 1 }, planner);
     const task = group.orchestrateBoard!.tasks[0]!;
     const failedChat: Chat = {
       ...makeTaskChat(false),
