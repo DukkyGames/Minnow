@@ -210,6 +210,25 @@ export async function commitWorktree({ boardId, slotId, message }) {
 }
 
 /**
+ * Report uncommitted changes in a task/wave worktree (porcelain status).
+ * @param {{ boardId: string, slotId: string }} input
+ */
+export async function checkWorktreeDirty({ boardId, slotId }) {
+  const wtPath = getWorktreeSlotPath(boardId, slotId);
+  try {
+    await fs.access(wtPath);
+  } catch {
+    return { ok: false, error: 'worktree missing' };
+  }
+  const status = await git(['status', '--porcelain'], wtPath);
+  const files = `${status.stdout ?? ''}${status.stderr ?? ''}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return { ok: true, dirty: files.length > 0, files };
+}
+
+/**
  * True when `fromBranch` is already merged into the integration branch tip.
  * @param {{ boardId: string, fromBranch: string }} input
  */

@@ -259,7 +259,12 @@ import {
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
-import { copyHistoryForOutboundApi, clearPostToolTailBeforeSend, rollbackFailedTurnHistory } from '../chat/history';
+import {
+  copyHistoryForOutboundApi,
+  clearPostToolTailBeforeSend,
+  repairSessionHistoryTail,
+  rollbackFailedTurnHistory,
+} from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   augmentImpeccableSkillBody,
@@ -2021,16 +2026,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
     }
+    const isBoardTaskChat = Boolean(chat.boardTaskId?.trim());
     const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
-    const rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
-    if (rolledBack) {
-      recordChatMessage(chat);
-      scheduleSaveSessions();
-      renderSidebar();
-      if (isStreamDomVisible(chat.id)) {
-        renderChatFromHistory(chat);
+    let rolledBack = false;
+    if (isBoardTaskChat) {
+      const repaired = repairSessionHistoryTail(chat);
+      if (repaired) {
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+        renderSidebar();
+        if (isStreamDomVisible(chat.id)) {
+          renderChatFromHistory(chat);
+        }
+      }
+    } else {
+      rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
+      if (rolledBack) {
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+        renderSidebar();
+        if (isStreamDomVisible(chat.id)) {
+          renderChatFromHistory(chat);
+        }
       }
     }
     cancelAssistantBubbleRenderDebounce();
@@ -2138,7 +2157,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const run = findRunById(chat, turnRunId);
       const start = run?.outputHistoryStart;
       const end = run?.outputHistoryEnd;
-      const persistOutput = turnRunStatus !== 'failed';
+      const persistOutput =
+        turnRunStatus !== 'failed' || Boolean(chat.boardTaskId?.trim());
       const outputMessages =
         persistOutput &&
         start !== undefined &&

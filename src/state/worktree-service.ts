@@ -14,6 +14,8 @@ export interface WorktreeOpResult {
   branch?: string;
   created?: boolean;
   committed?: boolean;
+  dirty?: boolean;
+  files?: string[];
   merged?: boolean;
   conflict?: boolean;
   conflictedFiles?: string[];
@@ -86,6 +88,14 @@ export function commitWorktree(input: {
   message?: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('commit', input);
+}
+
+/** True when a task worktree slot has uncommitted changes. */
+export function checkWorktreeDirty(input: {
+  boardId: string;
+  slotId: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('check_dirty', input);
 }
 
 /** True when fromBranch is already merged into integration. */

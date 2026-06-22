@@ -18,6 +18,7 @@ type DeliverFn = (chatId: string, message: string, reportKey: string) => Promise
 
 const deliveredReportKeys = new Set<string>();
 const resumeInFlightByChat = new Set<string>();
+const pendingReportsByChat = new Map<string, Array<{ message: string; key: string }>>();
 
 let reportInitialized = false;
 let deliverHook: DeliverFn | null = null;
@@ -91,6 +92,30 @@ export function buildOrchestratorTaskReportMessage(
   return lines.join('\n');
 }
 
+function enqueuePendingReport(chatId: string, message: string, key: string): void {
+  const queue = pendingReportsByChat.get(chatId) ?? [];
+  if (queue.some((entry) => entry.key === key)) return;
+  queue.push({ message, key });
+  pendingReportsByChat.set(chatId, queue);
+}
+
+async function drainPendingReports(plannerChat: Chat): Promise<void> {
+  if (resumeInFlightByChat.has(plannerChat.id)) return;
+  if (isChatStreaming(plannerChat.id)) return;
+
+  const queue = pendingReportsByChat.get(plannerChat.id);
+  if (!queue?.length) return;
+
+  const next = queue.shift()!;
+  if (!queue.length) {
+    pendingReportsByChat.delete(plannerChat.id);
+  } else {
+    pendingReportsByChat.set(plannerChat.id, queue);
+  }
+
+  await deliverReport(plannerChat, next.message, next.key);
+}
+
 async function defaultDeliver(
   chatId: string,
   message: string,
@@ -108,8 +133,14 @@ async function deliverReport(
   key: string,
 ): Promise<void> {
   if (deliveredReportKeys.has(key)) return;
-  if (resumeInFlightByChat.has(plannerChat.id)) return;
-  if (isChatStreaming(plannerChat.id)) return;
+  if (resumeInFlightByChat.has(plannerChat.id)) {
+    enqueuePendingReport(plannerChat.id, message, key);
+    return;
+  }
+  if (isChatStreaming(plannerChat.id)) {
+    enqueuePendingReport(plannerChat.id, message, key);
+    return;
+  }
 
   resumeInFlightByChat.add(plannerChat.id);
   try {
@@ -132,6 +163,7 @@ async function deliverReport(
     }
   } finally {
     resumeInFlightByChat.delete(plannerChat.id);
+    void drainPendingReports(plannerChat);
   }
 }
 
@@ -190,10 +222,19 @@ export function initOrchestratorAutoReports(): void {
   unsubscribeStreamEnd?.();
   unsubscribeStreamEnd = subscribeChatStreamEnd((endedChatId) => {
     const ctx = resolveBoardContextFromTaskChat(endedChatId);
-    if (!ctx) return;
-    const { group, planner, task } = ctx;
-    if (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked') {
-      void deliverOrchestratorTaskReport(group, planner, task, task.status);
+    if (ctx) {
+      const { group, planner, task } = ctx;
+      if (task.status === 'complete' || task.status === 'failed' || task.status === 'blocked') {
+        void deliverOrchestratorTaskReport(group, planner, task, task.status);
+      }
+    }
+
+    if (!sessionState) return;
+    for (const group of sessionState.groups ?? []) {
+      if (!isBoardAutoMode(group)) continue;
+      const planner = getPlannerChatForGroup(group);
+      if (!planner || planner.id !== endedChatId) continue;
+      void drainPendingReports(planner);
     }
   });
 }
@@ -206,4 +247,5 @@ export function resetOrchestratorAutoReportsForTests(): void {
   deliverHook = null;
   deliveredReportKeys.clear();
   resumeInFlightByChat.clear();
+  pendingReportsByChat.clear();
 }

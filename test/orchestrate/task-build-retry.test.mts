@@ -178,11 +178,13 @@ describe('finalizeBoardTaskOnStreamEnd build retry', () => {
     const group = makeGroup('auto');
     const planner = makePlanner();
     const task = group.orchestrateBoard!.tasks[0]!;
+    const chatIdBefore = task.chatId;
     finalizeBoardTaskOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks[0]!;
     assert.equal(updated.status, 'in_progress');
     assert.equal(updated.buildAttempts, 1);
-    assert.ok(updated.pendingBuildSeed?.includes('failed build attempt'));
+    assert.equal(updated.chatId, chatIdBefore);
+    assert.equal(updated.pendingBuildSeed, undefined);
   });
 
   test('manual mode marks failed without retry', () => {

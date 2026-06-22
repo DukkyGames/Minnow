@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { after, before, describe, test } from 'node:test';
 import {
   checkMerged,
+  checkWorktreeDirty,
   commitWorktree,
   createWorktree,
   ensureIntegration,
@@ -80,6 +81,27 @@ describe('worktree commit and merge checks', () => {
     });
     assert.equal(res.ok, true);
     assert.equal(res.committed, false);
+  });
+
+  test('checkWorktreeDirty reports clean and dirty task worktrees', async () => {
+    const clean = await checkWorktreeDirty({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+    });
+    assert.equal(clean.ok, true);
+    assert.equal(clean.dirty, false);
+    assert.deepEqual(clean.files, []);
+
+    const taskWt = getWorktreeSlotPath(BOARD_ID, 'task-W1-A', repoDir);
+    await fs.writeFile(path.join(taskWt, 'orphan.txt'), 'partial\n', 'utf8');
+
+    const dirty = await checkWorktreeDirty({
+      boardId: BOARD_ID,
+      slotId: 'task-W1-A',
+    });
+    assert.equal(dirty.ok, true);
+    assert.equal(dirty.dirty, true);
+    assert.ok(dirty.files?.some((line) => line.includes('orphan.txt')));
   });
 
   test('commitWorktree captures untracked files and checkMerged is true after merge', async () => {

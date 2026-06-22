@@ -57,6 +57,7 @@ import {
   createWorktree as createTaskWorktreeOp,
   mergeIntoIntegration as mergeTaskIntoIntegration,
   commitWorktree as commitTaskWorktree,
+  checkWorktreeDirty as checkTaskWorktreeDirty,
   checkMerged as checkTaskBranchMerged,
   restoreIntegration as restoreIntegrationWorktree,
   verifyIntegrationMerge as verifyIntegrationMergeOp,
@@ -229,8 +230,70 @@ function stopTaskChatSupervision(chatId: string): void {
 /** How a linked task chat ended its latest assistant turn. */
 export type TaskChatStreamOutcome = 'completed' | 'stopped' | 'failed';
 
-/** Infer stream outcome from the task chat transcript (last assistant turn). */
+/** Commit orphaned task worktree changes when a build fails terminally. */
+async function commitOrphanedWorkOnTerminalFailure(
+  group: ChatGroup,
+  task: BoardTask,
+  baseError: string,
+): Promise<string> {
+  const board = group.orchestrateBoard;
+  if (!board) return baseError;
+  const mode = resolveIsolationMode(board);
+  if (mode !== 'per-task') return baseError;
+
+  const boardId = group.id;
+  const slotId = worktreeSlotId(mode, task);
+  const branch = task.worktreeBranch ?? worktreeBranchFor(mode, boardId, task);
+  if (!slotId || !branch) return baseError;
+
+  try {
+    const dirtyRes = await checkTaskWorktreeDirty({ boardId, slotId });
+    if (!dirtyRes.ok || !dirtyRes.dirty) return baseError;
+
+    const fileCount = dirtyRes.files?.length ?? 0;
+    await commitTaskWorktree({
+      boardId,
+      slotId,
+      message: `Board task ${task.id} (partial): ${task.title}`,
+    });
+    return `${baseError} Partial work committed to \`${branch}\` (${fileCount} files) — recoverable.`;
+  } catch (err) {
+    reportBackgroundError('worktree-commit-terminal-failure', err);
+    return baseError;
+  }
+}
+
+async function finalizeTerminalBuildFailure(
+  group: ChatGroup,
+  task: BoardTask,
+  plannerChat: Chat,
+  chat: Chat,
+  errorSummary: string,
+): Promise<void> {
+  const error = await commitOrphanedWorkOnTerminalFailure(group, task, errorSummary);
+  updateTask(
+    group,
+    task.id,
+    {
+      endedAt: Date.now(),
+      error,
+    },
+    plannerChat,
+  );
+  teardownBoardTaskChatResources(chat, sessionState?.groups);
+}
+
+/** Infer stream outcome from run status and the task chat transcript. */
 export function resolveTaskChatStreamOutcome(chat: Chat): TaskChatStreamOutcome {
+  const runs = chat.runs ?? [];
+  if (runs.length > 0) {
+    let latest = runs[0]!;
+    for (const run of runs) {
+      if (run.createdAt > latest.createdAt) latest = run;
+    }
+    if (latest.status === 'failed') return 'failed';
+    if (latest.status === 'stopped') return 'stopped';
+  }
   for (let i = chat.history.length - 1; i >= 0; i--) {
     const msg = chat.history[i];
     if (msg.role === 'assistant') {
@@ -290,36 +353,16 @@ export function finalizeBoardTaskOnStreamEnd(
           attemptKind: 'build',
           summary: errorSummary,
         });
-        const seed = buildBuildRetrySeedMessage(
-          updated,
-          updated.buildAttempts ?? 1,
-          errorSummary,
-        );
-        updateTask(
-          group,
-          task.id,
-          { pendingBuildSeed: seed, endedAt: Date.now() },
-          plannerChat,
-        );
-        teardownBoardTaskChatResources(chat, sessionState?.groups);
-        void startTask(group, task.id, plannerChat).catch((err) =>
-          reportBackgroundError('start-task-build-retry', err),
+        updateTask(group, task.id, { endedAt: Date.now() }, plannerChat);
+        void runTaskChatNudge(group, task.id, plannerChat, errorSummary).catch((err) =>
+          reportBackgroundError('task-chat-build-retry', err),
         );
         return;
       }
     }
     logBuildVerdict(group, task.id, 'fail', { summary: errorSummary });
     moveTaskStatus(group, task.id, 'failed', plannerChat);
-    updateTask(
-      group,
-      task.id,
-      {
-        endedAt: Date.now(),
-        error: errorSummary,
-      },
-      plannerChat,
-    );
-    teardownBoardTaskChatResources(chat, sessionState?.groups);
+    void finalizeTerminalBuildFailure(group, task, plannerChat, chat, errorSummary);
     return;
   }
 
@@ -844,12 +887,17 @@ export function shouldRouteContinueToNewChat(chat: Chat, task: BoardTask): boole
 }
 
 /** Short nudge appended to an existing build chat — no full task reseed. */
-export function buildContinueNudgeMessage(task: BoardTask): string {
-  return [
+export function buildContinueNudgeMessage(task: BoardTask, priorError?: string): string {
+  const lines = [
     `Continue the orchestrate task ${task.id} — ${task.title} where you left off.`,
     "Pick up from your last step; don't restart from scratch.",
-    'Report what you changed.',
-  ].join(' ');
+  ];
+  const err = priorError?.trim();
+  if (err) {
+    lines.push(`The prior attempt errored mid-way: ${err}`);
+  }
+  lines.push('Report what you changed.');
+  return lines.join(' ');
 }
 
 /** Compact digest of build-chat progress for summary handoff. */
@@ -939,6 +987,7 @@ async function runTaskChatNudge(
   group: ChatGroup,
   taskId: string,
   plannerChat: Chat,
+  priorError?: string,
 ): Promise<void> {
   const board = group.orchestrateBoard;
   if (!board) return;
@@ -989,7 +1038,7 @@ async function runTaskChatNudge(
       scheduleSaveSessions();
     }
 
-    const nudge = buildContinueNudgeMessage(task);
+    const nudge = buildContinueNudgeMessage(task, priorError);
     refreshHeartbeatThresholds();
     startTaskChatSupervision(taskChat.id);
 
