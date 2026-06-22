@@ -260,6 +260,7 @@ function registerServiceWorker(): void {
 export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
+  initBoardLogDiskSink();
   await runMigrationIfNeeded();
   // Load tools before any UI reads permissions (drawer + settings page rebuilds).
   await loadToolConfigFromStorage();
@@ -297,7 +298,6 @@ export async function initApp(): Promise<void> {
   initWorkAgentDevUi();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();
-  initBoardLogDiskSink();
   startSchedulerNotificationPoll();
   initNotificationProducers();
   onWelcomeServerAvailabilityChanged();

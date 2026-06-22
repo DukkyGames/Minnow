@@ -2,6 +2,7 @@
  * Wire the board log JSONL mirror to the local tool server.
  */
 
+import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { setBoardLogDiskSink } from './orchestrate-board-store.ts';
 import type { BoardLogEvent } from '../types.ts';
 
@@ -12,8 +13,15 @@ export function initBoardLogDiskSink(): void {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupId, event }),
-    }).catch(() => {
-      /* mirror is best-effort */
+    }).then((res) => {
+      if (!res.ok) {
+        reportBackgroundError(
+          'board-log-disk',
+          new Error(`board-log mirror HTTP ${res.status}`),
+        );
+      }
+    }).catch((err) => {
+      reportBackgroundError('board-log-disk', err);
     });
   });
 }

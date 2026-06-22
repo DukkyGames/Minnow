@@ -6,9 +6,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 
-const LOG_DIR = path.join(getMinnowHome(), 'logs', 'orchestrate');
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const PRUNE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Resolve log dir on each call so MINNOW_HOME overrides apply after module load. */
+function orchestrateLogDir() {
+  return path.join(getMinnowHome(), 'logs', 'orchestrate');
+}
 
 function sanitizeGroupId(groupId) {
   const trimmed = typeof groupId === 'string' ? groupId.trim() : '';
@@ -20,11 +24,11 @@ function sanitizeGroupId(groupId) {
 function logFilePath(groupId) {
   const safe = sanitizeGroupId(groupId);
   if (!safe) return null;
-  return path.join(LOG_DIR, `${safe}.jsonl`);
+  return path.join(orchestrateLogDir(), `${safe}.jsonl`);
 }
 
 async function ensureLogDir() {
-  await fs.mkdir(LOG_DIR, { recursive: true });
+  await fs.mkdir(orchestrateLogDir(), { recursive: true });
 }
 
 async function rotateIfNeeded(filePath) {
@@ -41,13 +45,14 @@ async function rotateIfNeeded(filePath) {
 /** Remove rotated JSONL files older than {@link PRUNE_AGE_MS}. Best-effort at boot. */
 export async function pruneBoardLogFiles() {
   try {
-    await ensureLogDir();
+    const logDir = orchestrateLogDir();
+    await fs.mkdir(logDir, { recursive: true });
     const now = Date.now();
-    const entries = await fs.readdir(LOG_DIR, { withFileTypes: true });
+    const entries = await fs.readdir(logDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (!entry.name.endsWith('.bak')) continue;
-      const full = path.join(LOG_DIR, entry.name);
+      const full = path.join(logDir, entry.name);
       const stat = await fs.stat(full);
       if (now - stat.mtimeMs > PRUNE_AGE_MS) {
         await fs.unlink(full).catch(() => {});
