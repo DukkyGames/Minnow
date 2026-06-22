@@ -187,6 +187,18 @@ function releaseLaunchSlot(chatId: string): void {
   reservedLaunchChatIds.delete(chatId);
 }
 
+/** Release a task-chat launch slot, then re-drain the board now that capacity is free. */
+function releaseLaunchSlotAndDrive(
+  group: ChatGroup,
+  plannerChat: Chat,
+  chatId: string,
+): void {
+  releaseLaunchSlot(chatId);
+  void drainTaskQueue(group, plannerChat).catch((err) =>
+    reportBackgroundError('drain-after-slot-release', err),
+  );
+}
+
 function isLaunchReserved(chatId: string): boolean {
   return reservedLaunchChatIds.has(chatId);
 }
@@ -935,9 +947,9 @@ async function runTaskChatNudge(
         { error: message || 'Task chat failed to continue' },
         plannerChat,
       );
-    }).finally(() => releaseLaunchSlot(taskChat.id));
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, taskChat.id));
   } catch (err) {
-    releaseLaunchSlot(taskChat.id);
+    releaseLaunchSlotAndDrive(group, plannerChat, taskChat.id);
     throw err;
   }
 }
@@ -1325,9 +1337,9 @@ async function startMergeConflictFixer(
     }).catch((err) => {
       const message = err instanceof Error ? err.message : 'Merge fixer chat failed to start';
       updateTask(group, task.id, { error: message }, plannerChat);
-    }).finally(() => releaseLaunchSlot(fixerChat.id));
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id));
   } catch (err) {
-    releaseLaunchSlot(fixerChat.id);
+    releaseLaunchSlotAndDrive(group, plannerChat, fixerChat.id);
     throw err;
   }
 }
@@ -1553,9 +1565,9 @@ export async function startTask(
         { error: message || 'Task chat failed to start' },
         plannerChat,
       );
-    }).finally(() => releaseLaunchSlot(taskChat.id));
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, taskChat.id));
   } catch (err) {
-    releaseLaunchSlot(taskChat.id);
+    releaseLaunchSlotAndDrive(group, plannerChat, taskChat.id);
     throw err;
   }
 }
@@ -1654,9 +1666,9 @@ export async function startTaskTesting(
         { error: message || 'Tester chat failed to start' },
         plannerChat,
       );
-    }).finally(() => releaseLaunchSlot(testChat.id));
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, testChat.id));
   } catch (err) {
-    releaseLaunchSlot(testChat.id);
+    releaseLaunchSlotAndDrive(group, plannerChat, testChat.id);
     throw err;
   }
 }
@@ -1925,9 +1937,9 @@ export async function startFinalIntegrationTest(
       ownsGlobalStreaming: true,
     }).catch(() => {
       /* surfaced in chat history */
-    }).finally(() => releaseLaunchSlot(finalChat.id));
+    }).finally(() => releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id));
   } catch (err) {
-    releaseLaunchSlot(finalChat.id);
+    releaseLaunchSlotAndDrive(group, plannerChat, finalChat.id);
     throw err;
   }
 }

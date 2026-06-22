@@ -324,6 +324,38 @@ describe('build→test handoff slot accounting', () => {
     assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-C']);
   });
 
+  test('slot release after handoff re-drains stranded tester queue item', async () => {
+    const group = makeGroup('auto');
+    const planner = makePlanner();
+    const board = group.orchestrateBoard!;
+    board.maxConcurrentTasks = 1;
+    updateTask(
+      group,
+      'W1-A',
+      { status: 'testing', chatId: TASK_CHAT_ID, testChatId: TEST_CHAT_ID },
+      planner,
+    );
+    // Build chat still holds its launch slot when stream-end enqueues the tester.
+    reserveLaunchSlotForTests(TASK_CHAT_ID);
+    assert.equal(countRunningTaskChats(board), 1);
+
+    enqueueTaskForTests(GROUP_ID, 'W1-A');
+
+    await drainTaskQueueForTests(group, planner);
+    assert.equal(countRunningTaskChats(board), 1);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-A']);
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await drainTaskQueueForTests(group, planner);
+    assert.equal(countRunningTaskChats(board), 1);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), ['W1-A']);
+
+    releaseLaunchSlotForTests(TASK_CHAT_ID);
+    await drainTaskQueueForTests(group, planner);
+    assert.equal(countRunningTaskChats(board), 0);
+    assert.deepEqual(getTaskQueueForTests(GROUP_ID), []);
+  });
+
   test('drainTaskQueue promotes in-testing tasks ahead of queued builds in auto mode', async () => {
     const group = makeGroup('auto');
     const planner = makePlanner();

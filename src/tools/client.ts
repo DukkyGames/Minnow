@@ -550,11 +550,11 @@ export function getEnabledToolDefinitionsForChat(
 ): OpenAIFunctionDefinition[] {
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
-  defs = applyBoardMemberToolFilter(defs, chat);
+  const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;
 
-  const board = getBoardGroupForChat(chat)?.orchestrateBoard;
-  return applyOrchestrateAutoToolFilter(defs, board?.executionMode);
+  return applyOrchestrateAutoToolFilter(defs, executionMode);
 }
 
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
