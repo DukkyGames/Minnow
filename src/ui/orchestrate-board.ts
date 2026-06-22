@@ -100,6 +100,7 @@ import type {
 } from '../types';
 
 type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
+import { BOARD_CATEGORY_ICON_PATHS, createBoardCategoryIcon } from './board-category-icons';
 import { switchChat } from './sidebar';
 import {
   populateOrchestratePlanSelect,
@@ -1482,9 +1483,9 @@ function runningSlotShowsContinue(
 type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'final';
 
 const RUNNING_TASK_ICON_PATHS: Record<RunningTaskIconKind, readonly string[]> = {
-  build: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
-  test: ['M9 3h6', 'M10 9V3', 'M14 9V3', 'M6 21h12l-1-7H7l-1 7z'],
-  fix: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  build: [BOARD_CATEGORY_ICON_PATHS.build!],
+  test: [BOARD_CATEGORY_ICON_PATHS.test!],
+  fix: [BOARD_CATEGORY_ICON_PATHS.fix!],
   final: ['M12 2v20', 'M2 12h20', 'M5 5l14 14', 'M19 5 5 19'],
 };
 
@@ -2068,7 +2069,11 @@ function buildTaskCard(
   const categoryBadge = deriveTaskCategoryBadge(task);
   const chip = document.createElement('span');
   chip.className = `board-task-card__cat bt--${categoryBadge.cssVariant}`;
-  chip.textContent = categoryBadge.label;
+  const icon = createBoardCategoryIcon(categoryBadge.cssVariant, 'board-task-card__cat-icon');
+  if (icon) chip.appendChild(icon);
+  const labelSpan = document.createElement('span');
+  labelSpan.textContent = categoryBadge.label;
+  chip.appendChild(labelSpan);
   trail.appendChild(chip);
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));

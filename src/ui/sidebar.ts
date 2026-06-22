@@ -14,6 +14,7 @@ import {
   renameGroup,
   toggleGroupCollapsed,
 } from '../state/chat-groups';
+import { createBoardCategoryIcon } from './board-category-icons';
 import { isChatAppForeground } from './chat-mount';
 import { syncComposerFromStreamingState } from './composer-send';
 import {
@@ -372,6 +373,11 @@ export function appendChatRow(
   const nameSpan = document.createElement('span');
   nameSpan.className = 'chat-item-name';
   nameSpan.textContent = chat.name;
+
+  if (inGroup && chat.category) {
+    const catIcon = createBoardCategoryIcon(chat.category, 'chat-item-board-cat-icon');
+    if (catIcon) titleRow.appendChild(catIcon);
+  }
   titleRow.appendChild(nameSpan);
 
   if (!inGroup) {

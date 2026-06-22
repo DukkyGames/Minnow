@@ -568,6 +568,16 @@
   font-weight: 500;
 }
 
+.chat-item-board-cat-icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  fill: currentColor;
+  stroke: none;
+  fill-rule: evenodd;
+  color: var(--mn-fg-muted);
+}
+
 @media (pointer: coarse) {
   .chat-item-row.chat-item-row--in-group {
     padding-top: 6px;

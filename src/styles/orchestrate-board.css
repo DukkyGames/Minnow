@@ -405,6 +405,9 @@ button.board-header__activity {
 .board-running-tasks__phase-icon {
   width: 11px;
   height: 11px;
+  fill: currentColor;
+  stroke: none;
+  fill-rule: evenodd;
 }
 
 .board-running-tasks__dot {
@@ -493,6 +496,11 @@ button.board-header__activity {
 .board-running-tasks__control-icon {
   width: 13px;
   height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1367,7 +1375,9 @@ button.board-header__activity {
 }
 
 .board-task-card__cat {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
@@ -1377,6 +1387,15 @@ button.board-header__activity {
   text-transform: uppercase;
   color: var(--mn-fg-muted);
   background: transparent;
+}
+
+.board-task-card__cat-icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  fill: currentColor;
+  stroke: none;
+  fill-rule: evenodd;
 }
 
 .bt--build {
