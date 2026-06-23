@@ -2257,7 +2257,7 @@
 
   <aside class="file-sidebar" id="fileSidebar" aria-label="Project files">
     <div class="file-sidebar-header">
-      <span class="file-sidebar-title">Files</span>
+      <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
       <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files" onclick="toggleFileSidebarLayout()">
         <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
       </button>
@@ -2273,29 +2273,39 @@
           <path d="M6.5 17.5a8 8 0 1 1 11.3-11.3"/>
         </svg>
       </button>
-    </div>
-    <div class="file-tree-search-wrap">
-      <input type="search" id="fileTreeSearch" class="file-tree-search"
-        placeholder="Filter files…" autocomplete="off"
-        aria-label="Filter files by name" role="searchbox" />
-      <button type="button" class="icon-btn file-tree-search-clear hidden"
-        id="btnFileTreeSearchClear" aria-label="Clear filter" title="Clear filter">
-        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <button type="button" class="icon-btn git-panel-toggle" id="btnGitPanelToggle" aria-label="Source control" title="Source control" aria-pressed="false">
+        <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="6" cy="6" r="2.5"/>
+          <circle cx="18" cy="18" r="2.5"/>
+          <path d="M6 8.5v3a4 4 0 0 0 4 4h4"/>
+        </svg>
       </button>
     </div>
-    <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" role="region"
-      aria-labelledby="fileTreeMoveConfirmTitle" hidden>
-      <div class="file-tree-move-confirm__content">
-        <p id="fileTreeMoveConfirmTitle" class="file-tree-move-confirm__title" data-move-title>Move file?</p>
-        <p class="file-tree-move-confirm__body" data-move-body></p>
-        <p class="file-tree-move-confirm__paths" data-move-paths></p>
+    <div class="file-sidebar-files-view" id="fileSidebarFilesView">
+      <div class="file-tree-search-wrap">
+        <input type="search" id="fileTreeSearch" class="file-tree-search"
+          placeholder="Filter files…" autocomplete="off"
+          aria-label="Filter files by name" role="searchbox" />
+        <button type="button" class="icon-btn file-tree-search-clear hidden"
+          id="btnFileTreeSearchClear" aria-label="Clear filter" title="Clear filter">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="file-tree-move-confirm__actions">
-        <button type="button" class="file-tree-move-confirm__btn" data-move-cancel>Cancel</button>
-        <button type="button" class="file-tree-move-confirm__btn file-tree-move-confirm__btn--primary" data-move-confirm>Move</button>
+      <div id="fileTreeMoveConfirm" class="file-tree-move-confirm hidden" role="region"
+        aria-labelledby="fileTreeMoveConfirmTitle" hidden>
+        <div class="file-tree-move-confirm__content">
+          <p id="fileTreeMoveConfirmTitle" class="file-tree-move-confirm__title" data-move-title>Move file?</p>
+          <p class="file-tree-move-confirm__body" data-move-body></p>
+          <p class="file-tree-move-confirm__paths" data-move-paths></p>
+        </div>
+        <div class="file-tree-move-confirm__actions">
+          <button type="button" class="file-tree-move-confirm__btn" data-move-cancel>Cancel</button>
+          <button type="button" class="file-tree-move-confirm__btn file-tree-move-confirm__btn--primary" data-move-confirm>Move</button>
+        </div>
       </div>
+      <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
     </div>
-    <div class="file-tree-host" id="fileTreeHost" role="tree"></div>
+    <div id="gitPanelRoot" class="git-panel-root" hidden></div>
   </aside>
 </div>
 <script>

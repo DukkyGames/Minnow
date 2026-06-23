@@ -1085,6 +1085,7 @@ export function switchChat(id: string): void {
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
   syncViewModeToggleFromActiveChat();
+  void import('./git-panel').then((m) => m.syncGitPanelFromOrchestrator());
   syncWorkAgentDevFromActiveChat();
   syncReefWidgetSettingsFromActiveChat();
   onModelRoutingActiveChatChanged(chat.id);

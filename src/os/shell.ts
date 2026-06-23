@@ -4,6 +4,7 @@ import '../styles/minnowos-wallpaper.css';
 import '../styles/minnowos-windows.css';
 import '../styles/minnowos-apps.css';
 import '../styles/scheduler-side-panel.css';
+import '../styles/git-panel.css';
 import '../styles/research-page.css';
 
 import { initAppHost } from './app-host';

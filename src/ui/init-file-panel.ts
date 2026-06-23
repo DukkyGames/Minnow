@@ -43,6 +43,8 @@ import { getLocalServerAvailable } from '../tools/client';
 import { refreshWorkspaceUi } from './workspace-button';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncViewModeToggleFromActiveChat } from './view-mode-toggle';
+import { initGitPanel, syncGitPanelFromOrchestrator } from './git-panel';
+import { startFileTreeGitStatusPoll } from './file-tree';
 
 let resizerBound = false;
 
@@ -121,6 +123,8 @@ export function onFilePanelServerAvailabilityChanged(): void {
     void refreshFileTree();
     void syncOrchestratePlanStripFromActiveChat();
     syncViewModeToggleFromActiveChat();
+    syncGitPanelFromOrchestrator();
+    startFileTreeGitStatusPoll();
   } else {
     renderFileTree();
   }
@@ -172,6 +176,11 @@ export async function initFilePanel(): Promise<void> {
   registerFileTreeFilterRender(renderFileTree);
   registerFileTreeServerCheck(isLocalServerAvailable);
   initFileTreeSearch();
+
+  initGitPanel();
+  if (getLocalServerAvailable()) {
+    startFileTreeGitStatusPoll();
+  }
 
   window.addEventListener('resize', () => {
     if (!isMobileLayout()) closeMobileFileSidebar();
