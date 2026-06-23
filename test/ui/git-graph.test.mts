@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  annotateBranchLineSegments,
+  annotateCommitLines,
   annotateMainTrunkSegments,
   assignCommitVisuals,
   buildMainlineSet,
@@ -96,10 +98,10 @@ describe('annotateMainTrunkSegments', () => {
       ),
     );
 
-    assert.equal(visuals[0].trunkSegment, 'none');
-    assert.equal(visuals[1].trunkSegment, 'down');
-    assert.equal(visuals[2].trunkSegment, 'both');
-    assert.equal(visuals[3].trunkSegment, 'up');
+    assert.equal(visuals[0].mainLine, 'none');
+    assert.equal(visuals[1].mainLine, 'down');
+    assert.equal(visuals[2].mainLine, 'both');
+    assert.equal(visuals[3].mainLine, 'up');
   });
 
   it('draws a through segment on branch rows between main commits', () => {
@@ -121,10 +123,75 @@ describe('annotateMainTrunkSegments', () => {
       ),
     );
 
-    assert.equal(visuals[0].trunkSegment, 'down');
-    assert.equal(visuals[1].trunkSegment, 'through');
-    assert.equal(visuals[2].trunkSegment, 'both');
-    assert.equal(visuals[3].trunkSegment, 'up');
+    assert.equal(visuals[0].mainLine, 'down');
+    assert.equal(visuals[1].mainLine, 'through');
+    assert.equal(visuals[2].mainLine, 'both');
+    assert.equal(visuals[3].mainLine, 'up');
+  });
+});
+
+describe('annotateBranchLineSegments', () => {
+  it('connects named branch commits across rows in between', () => {
+    const visuals = annotateBranchLineSegments(
+      assignCommitVisuals(
+        [
+          commit('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', [
+            'dddddddddddddddddddddddddddddddddddddddd',
+          ], { refs: ['feature/test'] }),
+          commit('dddddddddddddddddddddddddddddddddddddddd', [
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ], { refs: ['feature/test'] }),
+        ],
+        'main',
+      ),
+    );
+
+    assert.equal(visuals[0].branchLine?.segment, 'down');
+    assert.equal(visuals[1].branchLine?.segment, 'up');
+  });
+
+  it('does not connect separate branches that share only a fallback key', () => {
+    const visuals = annotateBranchLineSegments(
+      assignCommitVisuals(
+        [
+          commit('dddddddddddddddddddddddddddddddddddddddd', ['cccccccccccccccccccccccccccccccccccccccc'], {
+            refs: ['feature/a'],
+          }),
+          commit('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', ['ffffffffffffffffffffffffffffffffffffffff'], {
+            refs: ['feature/b'],
+          }),
+        ],
+        'main',
+      ),
+    );
+
+    assert.equal(visuals[0].branchLine, undefined);
+    assert.equal(visuals[1].branchLine, undefined);
+  });
+
+  it('bridges named branch commits separated by main commits', () => {
+    const visuals = annotateCommitLines(
+      assignCommitVisuals(
+        [
+          commit('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', [
+            'dddddddddddddddddddddddddddddddddddddddd',
+          ], { refs: ['feature/test'] }),
+          commit('cccccccccccccccccccccccccccccccccccccccc', [
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          ], { refs: ['HEAD -> main'] }),
+          commit('dddddddddddddddddddddddddddddddddddddddd', [
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ], { refs: ['feature/test'] }),
+        ],
+        'main',
+      ),
+    );
+
+    assert.equal(visuals[0].branchLine?.segment, 'down');
+    assert.equal(visuals[1].branchLine?.segment, 'through');
+    assert.equal(visuals[2].branchLine?.segment, 'up');
+    assert.equal(visuals[1].isMain, true);
+    assert.equal(visuals[1].mainLine, 'none');
   });
 });
 

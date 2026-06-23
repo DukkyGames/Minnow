@@ -132,8 +132,24 @@ export function parseBranchList(text) {
  * Parse one `git log --format="%H %P %s %an %ar %D"` line.
  * Subject and author are ambiguous when both contain spaces; author is taken as the
  * final token before relative time (sufficient for typical single-token author names).
+ * Refs (%D) follow the relative time and may be bare (`origin/foo, bar`) or wrapped in parens.
  * @param {string} line
  */
+const LOG_RELATIVE_TIME =
+  /^(.*) (\d+ seconds? ago|\d+ minutes? ago|\d+ hours? ago|\d+ days? ago|\d+ weeks? ago|\d+ months? ago|\d+ years? ago|just now)(?:\s+(.+))?\s*$/i;
+
+/** Split a git decorator field into individual ref strings. */
+function splitLogRefList(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return [];
+  const inner =
+    trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed.slice(1, -1) : trimmed;
+  return inner
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+}
+
 export function parseLogLine(line) {
   const trimmed = String(line ?? '').trimEnd();
   if (!trimmed || trimmed.length < 42) return null;
@@ -154,30 +170,28 @@ export function parseLogLine(line) {
 
   let remainder = trimmed.slice(pos).trimStart();
   let refs = [];
-
-  const parenRefMatch = remainder.match(/^(.*) (\([^)]+\))\s*$/);
-  if (parenRefMatch) {
-    refs = parenRefMatch[2]
-      .slice(1, -1)
-      .split(',')
-      .map((r) => r.trim())
-      .filter(Boolean);
-    remainder = parenRefMatch[1];
-  } else {
-    const headRefMatch = remainder.match(/^(.*) (HEAD -> \S+)\s*$/);
-    if (headRefMatch) {
-      refs = [headRefMatch[2]];
-      remainder = headRefMatch[1];
-    }
-  }
-
   let relativeTime = '';
-  const timeMatch = remainder.match(
-    /^(.*) (\d+ seconds? ago|\d+ minutes? ago|\d+ hours? ago|\d+ days? ago|\d+ weeks? ago|\d+ months? ago|\d+ years? ago|just now)\s*$/i,
-  );
-  if (timeMatch) {
-    relativeTime = timeMatch[2];
-    remainder = timeMatch[1];
+
+  const timeDecorMatch = remainder.match(LOG_RELATIVE_TIME);
+  if (timeDecorMatch) {
+    relativeTime = timeDecorMatch[2];
+    remainder = timeDecorMatch[1];
+    if (timeDecorMatch[3]) {
+      refs = splitLogRefList(timeDecorMatch[3]);
+    }
+  } else {
+    // Fallback for lines that omit a relative-time token.
+    const parenRefMatch = remainder.match(/^(.*) (\([^)]+\))\s*$/);
+    if (parenRefMatch) {
+      refs = splitLogRefList(parenRefMatch[2]);
+      remainder = parenRefMatch[1];
+    } else {
+      const headRefMatch = remainder.match(/^(.*) (HEAD -> .+)\s*$/);
+      if (headRefMatch) {
+        refs = splitLogRefList(headRefMatch[2]);
+        remainder = headRefMatch[1];
+      }
+    }
   }
 
   const lastSpace = remainder.lastIndexOf(' ');
