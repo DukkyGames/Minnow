@@ -53,6 +53,63 @@
   color: var(--mn-fg-muted);
 }
 
+.git-panel-cwd-wrap,
+.git-panel-branch-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.git-panel-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.git-panel-field-row .git-panel-cwd-select,
+.git-panel-field-row .git-panel-branch-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-panel-toolbar-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-toolbar-btn:hover:not(:disabled) {
+    background: var(--mn-accent-soft);
+  }
+}
+
+.git-panel-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.git-panel-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-panel-sync-row .git-panel-ahead-behind {
+  flex: 1;
+  min-width: 0;
+}
+
 .git-panel-cwd-select {
   width: 100%;
   font-family: var(--font-mono);
@@ -64,14 +121,8 @@
   color: var(--mn-fg);
 }
 
-.git-panel-branch-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 6px;
-}
-
 .git-panel-branch-select {
+  width: 100%;
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -112,6 +163,49 @@
   color: var(--mn-accent-fg, #fff);
 }
 
+.git-panel-action-btn--ai {
+  margin-left: auto;
+  padding: 2px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mn-accent-ink);
+  border-color: var(--mn-accent-border);
+  background: var(--mn-accent-soft);
+}
+
+.git-panel-action-btn--icon .git-panel-action-btn__icon {
+  width: 12px;
+  height: 12px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0);
+  opacity: 0.88;
+}
+
+html[data-theme$='-dark'] .git-panel-action-btn--icon .git-panel-action-btn__icon {
+  filter: brightness(0) invert(1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-panel-action-btn--ai:hover:not(:disabled) {
+    background: var(--mn-accent);
+    border-color: var(--mn-accent);
+  }
+
+  .git-panel-action-btn--ai:hover:not(:disabled) .git-panel-action-btn__icon {
+    filter: brightness(0) invert(1);
+    opacity: 1;
+  }
+}
+
+.git-panel-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .git-panel-status {
   margin: 0;
   font-size: 12px;
@@ -145,6 +239,7 @@
 .git-panel-commit-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 

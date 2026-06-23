@@ -2,6 +2,8 @@
  * Git operations for /api/git (MIN-198). All ops accept optional `cwd` (defaults to workspace root).
  */
 
+import path from 'node:path';
+
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -221,10 +223,41 @@ export async function status({ cwd } = {}) {
   return { ok: true, ...parsed };
 }
 
-/** `git diff [--cached] -- <path>` */
-export async function diff({ cwd, cached, path: filePath } = {}) {
+/** Unstaged tracked changes plus untracked file diffs (for commit message generation). */
+async function diffWorkingTree(repoCwd) {
+  const parts = [];
+
+  const unstaged = await git(['diff'], repoCwd);
+  if (unstaged.code !== 0) {
+    return { ok: false, error: processError(unstaged) };
+  }
+  if (unstaged.stdout?.trim()) parts.push(unstaged.stdout.trimEnd());
+
+  const statusResult = await git(['status', '--porcelain=v1'], repoCwd);
+  if (statusResult.code !== 0) {
+    return { ok: false, error: processError(statusResult) };
+  }
+
+  const nullDev = process.platform === 'win32' ? 'NUL' : '/dev/null';
+  for (const line of (statusResult.stdout ?? '').split('\n')) {
+    if (!line.startsWith('?? ')) continue;
+    const filePath = line.slice(3).trim();
+    if (!filePath) continue;
+    const untracked = await git(['diff', '--no-index', '--', nullDev, filePath], repoCwd);
+    if (untracked.stdout?.trim()) parts.push(untracked.stdout.trimEnd());
+  }
+
+  return { ok: true, patch: parts.join('\n\n') };
+}
+
+/** `git diff [--cached] [-- <path>]` or full working-tree diff when `workingTree` is true */
+export async function diff({ cwd, cached, path: filePath, workingTree } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
+
+  if (workingTree) {
+    return diffWorkingTree(repo.cwd);
+  }
 
   const args = ['diff'];
   if (cached) args.push('--cached');
@@ -302,13 +335,25 @@ export async function discard({ cwd, paths } = {}) {
   return { ok: true };
 }
 
-/** `git commit -m <msg>` */
+/** `git commit -m <msg>` — auto-stages all changes when the index is empty */
 export async function commit({ cwd, message } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     return { ok: false, error: 'message is required' };
+  }
+
+  const cachedQuiet = await git(['diff', '--cached', '--quiet'], repo.cwd);
+  if (cachedQuiet.code === 0) {
+    const wtStatus = await git(['status', '--porcelain'], repo.cwd);
+    if (!(wtStatus.stdout ?? '').trim()) {
+      return { ok: false, error: 'nothing to commit, working tree clean' };
+    }
+    const addAll = await git(['add', '-A'], repo.cwd);
+    if (addAll.code !== 0) {
+      return { ok: false, error: processError(addAll) };
+    }
   }
 
   const result = await git(['commit', '-m', message], repo.cwd);
@@ -405,6 +450,96 @@ export async function branches({ cwd } = {}) {
 
   const parsed = parseBranchList(result.stdout);
   return { ok: true, ...parsed };
+}
+
+/** `git branch [-d|-D] <branch>` */
+export async function deleteBranch({ cwd, branch, force } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!branch || typeof branch !== 'string' || !branch.trim()) {
+    return { ok: false, error: 'branch is required' };
+  }
+
+  const name = branch.trim();
+  const currentResult = await git(['branch', '--show-current'], repo.cwd);
+  if (currentResult.code === 0 && (currentResult.stdout ?? '').trim() === name) {
+    return { ok: false, error: 'Cannot delete the current branch' };
+  }
+
+  const args = ['branch', force ? '-D' : '-d', name];
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
+}
+
+/** `git worktree add [-b <branch>] <path> [<start-point>]` */
+export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!branch || typeof branch !== 'string' || !branch.trim()) {
+    return { ok: false, error: 'branch is required' };
+  }
+
+  const branchName = branch.trim();
+  const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
+  if (rootResult.code !== 0) {
+    return { ok: false, error: processError(rootResult) };
+  }
+  const repoRoot = (rootResult.stdout ?? '').trim();
+
+  let targetPath =
+    typeof worktreePath === 'string' && worktreePath.trim()
+      ? worktreePath.trim()
+      : path.join(repoRoot, '.worktrees', branchName.replace(/[^a-zA-Z0-9._-]+/g, '-'));
+
+  const args = ['worktree', 'add', '-b', branchName, targetPath];
+  if (baseRef && String(baseRef).trim()) {
+    args.push(String(baseRef).trim());
+  }
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true, path: targetPath, branch: branchName };
+}
+
+/** `git worktree remove [--force] <path>` */
+export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
+  const repo = await requireGitRepo(cwd);
+  if (!repo.ok) return repo;
+
+  if (!worktreePath || typeof worktreePath !== 'string' || !worktreePath.trim()) {
+    return { ok: false, error: 'path is required' };
+  }
+
+  const targetPath = worktreePath.trim();
+  const rootResult = await git(['rev-parse', '--show-toplevel'], repo.cwd);
+  if (rootResult.code !== 0) {
+    return { ok: false, error: processError(rootResult) };
+  }
+  const repoRoot = (rootResult.stdout ?? '').trim();
+  const norm = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (norm(targetPath) === norm(repoRoot)) {
+    return { ok: false, error: 'Cannot remove the main worktree' };
+  }
+
+  const args = ['worktree', 'remove'];
+  if (force) args.push('--force');
+  args.push(targetPath);
+
+  const result = await git(args, repo.cwd);
+  if (result.code !== 0) {
+    return { ok: false, error: processError(result) };
+  }
+
+  return { ok: true };
 }
 
 /** `git checkout [-b] <branch>` */

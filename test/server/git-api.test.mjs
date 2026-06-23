@@ -13,11 +13,14 @@ import { after, before, describe, test } from 'node:test';
 import {
   branches,
   commit,
+  deleteBranch,
   diff,
   log,
   show,
   stage,
   status,
+  worktreeAdd,
+  worktreeRemove,
 } from '../../server/git/git-ops.js';
 import { handleGitRequest } from '../../server/git/middleware.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -102,7 +105,34 @@ describe('git API', () => {
     assert.ok(history.commits?.some((c) => c.subject === 'add new file'));
   });
 
+  test('commit auto-stages all changes when index is empty', async () => {
+    await fs.writeFile(path.join(repoDir, 'auto.txt'), 'auto\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'tracked.txt'), 'v3\n', 'utf8');
+
+    const committed = await commit({ cwd: repoDir, message: 'commit without staging' });
+    assert.equal(committed.ok, true);
+    assert.match(committed.sha ?? '', /^[0-9a-f]{40}$/);
+
+    const after = await status({ cwd: repoDir });
+    assert.equal(after.ok, true);
+    assert.equal(after.staged?.length ?? 0, 0);
+    assert.equal(after.unstaged?.length ?? 0, 0);
+    assert.equal(after.untracked?.length ?? 0, 0);
+  });
+
+  test('diff workingTree includes unstaged and untracked changes', async () => {
+    await fs.writeFile(path.join(repoDir, 'wt-mod.txt'), 'mod\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'wt-new.txt'), 'new\n', 'utf8');
+
+    const patch = await diff({ cwd: repoDir, workingTree: true });
+    assert.equal(patch.ok, true);
+    assert.match(patch.patch ?? '', /wt-mod\.txt/);
+    assert.match(patch.patch ?? '', /wt-new\.txt/);
+  });
+
   test('diff and show return patch output', async () => {
+    await fs.writeFile(path.join(repoDir, 'tracked.txt'), 'v4\n', 'utf8');
+
     const patch = await diff({ cwd: repoDir, path: 'tracked.txt' });
     assert.equal(patch.ok, true);
     assert.match(patch.patch ?? '', /tracked\.txt/);
@@ -122,6 +152,40 @@ describe('git API', () => {
     assert.equal(listed.ok, true);
     assert.ok(listed.current);
     assert.ok(listed.local?.includes(listed.current));
+  });
+
+  test('deleteBranch removes a non-current branch', async () => {
+    const before = await branches({ cwd: repoDir });
+    const original = before.current;
+    assert.ok(original);
+
+    await execFileAsync('git', ['checkout', '-b', 'to-delete'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+    await execFileAsync('git', ['checkout', original], { cwd: repoDir, windowsHide: true });
+
+    const removed = await deleteBranch({ cwd: repoDir, branch: 'to-delete' });
+    assert.equal(removed.ok, true);
+
+    const after = await branches({ cwd: repoDir });
+    assert.ok(!after.local?.includes('to-delete'));
+  });
+
+  test('worktreeAdd and worktreeRemove manage linked worktrees', async () => {
+    const added = await worktreeAdd({
+      cwd: repoDir,
+      branch: 'wt-feature',
+      path: path.join(repoDir, '.worktrees', 'wt-feature'),
+    });
+    assert.equal(added.ok, true);
+    assert.equal(added.branch, 'wt-feature');
+
+    const removed = await worktreeRemove({
+      cwd: repoDir,
+      path: path.join(repoDir, '.worktrees', 'wt-feature'),
+    });
+    assert.equal(removed.ok, true);
   });
 
   test('POST /api/git status honors cwd', async () => {
