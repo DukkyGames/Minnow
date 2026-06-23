@@ -3,7 +3,13 @@ import {
   isDesktopChatActive,
   isDesktopResearchActive,
 } from './desktop-state';
-import { handleDesktopSend, wireDesktopComposerControls } from './desktop-chat';
+import {
+  autoResizeDesktopComposer,
+} from './desktop-composer-resize';
+import {
+  handleDesktopSend,
+  wireDesktopComposerControls,
+} from './desktop-chat';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
 import { handleDesktopResearchSubmit } from './research-desktop';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
@@ -95,11 +101,15 @@ export function renderConcierge(container: HTMLElement): void {
   const field = composer.querySelector('#desktopInput') as HTMLTextAreaElement;
   const sendBtn = composer.querySelector('#desktopSendBtn') as HTMLButtonElement;
 
-  wireDesktopComposerControls();
+  wireDesktopComposerControls(field);
 
   function syncUi(): void {
     sendBtn.disabled = !field.value.trim();
   }
+
+  const resizeField = (): void => {
+    autoResizeDesktopComposer(field);
+  };
 
   async function submit(text?: string): Promise<void> {
     const q = (text ?? field.value).trim();
@@ -110,6 +120,7 @@ export function renderConcierge(container: HTMLElement): void {
       field.dispatchEvent(new window.Event('input', { bubbles: true }));
       await handleDesktopSend();
       field.value = '';
+      autoResizeDesktopComposer(field);
       syncUi();
       return;
     }
@@ -123,6 +134,7 @@ export function renderConcierge(container: HTMLElement): void {
     }
 
     field.value = '';
+    autoResizeDesktopComposer(field);
     await activateDesktopChat({ seed: q });
     syncUi();
   }
@@ -139,5 +151,6 @@ export function renderConcierge(container: HTMLElement): void {
   sendBtn.addEventListener('click', () => void submit());
 
   container.appendChild(conciergeWrap);
+  resizeField();
   syncUi();
 }

@@ -986,7 +986,7 @@
 
 .mn-os-desktop-input-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   width: 100%;
   margin-top: 15px;
@@ -1059,15 +1059,15 @@
 .mn-os-desktop-input-wrap {
   position: relative;
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   min-width: 0;
 }
 
 .mn-os-desktop-field {
-  flex: 1;
-  min-width: 0;
+  --desktop-composer-max-lines: 8;
+  width: 100%;
+  min-height: calc(1.35em + 20px);
+  display: block;
+  box-sizing: border-box;
   background: none;
   border: none;
   outline: none;
@@ -1075,8 +1075,14 @@
   font-size: 16px;
   padding: 10px 4px;
   resize: none;
-  max-height: 160px;
   line-height: 1.35;
+  overflow-y: hidden;
+  max-height: calc(var(--desktop-composer-max-lines) * 1.35em + 20px);
+}
+
+.mn-os-desktop-field.mn-os-desktop-field--scrollable {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .mn-os-desktop-field::placeholder {

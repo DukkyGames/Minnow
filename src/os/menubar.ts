@@ -70,7 +70,29 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   const brand = document.createElement('span');
   brand.className = 'mn-os-mb-brand';
-  brand.textContent = 'MinnowOS';
+  brand.textContent = 'Minnow';
+
+  const statusPill = document.createElement('div');
+  statusPill.className = 'mn-os-mb-status status-pill';
+  statusPill.setAttribute('role', 'status');
+  statusPill.setAttribute('aria-live', 'polite');
+  const statusDot = document.createElement('div');
+  statusDot.className = 's-dot';
+  statusDot.id = 'osStatusDot';
+  statusDot.setAttribute('aria-hidden', 'true');
+  const statusText = document.createElement('span');
+  statusText.id = 'osStatusText';
+  statusText.textContent = 'Loading models…';
+  statusPill.append(statusDot, statusText);
+  // Mirror legacy topbar pill when menubar mounts after early boot status updates.
+  const legacyDot = document.getElementById('sDot');
+  const legacyText = document.getElementById('sText');
+  if (legacyDot && legacyText) {
+    statusDot.className = legacyDot.className;
+    statusText.textContent = legacyText.textContent?.trim() || 'Loading models…';
+    const title = legacyText.getAttribute('title');
+    if (title) statusText.setAttribute('title', title);
+  }
 
   const desktopBtn = document.createElement('button');
   desktopBtn.type = 'button';
@@ -81,12 +103,15 @@ export function renderMenubar(root: HTMLElement): () => void {
   desktopBtn.addEventListener('click', () => navigateToDesktop());
 
   const sep = document.createElement('span');
-  sep.className = 'mn-os-mb-sep';
+  sep.className = 'mn-os-mb-sep mn-os-mb-app-sep';
   sep.hidden = true;
 
   const appName = document.createElement('span');
   appName.className = 'mn-os-mb-appname';
   appName.hidden = true;
+
+  const statusSep = document.createElement('span');
+  statusSep.className = 'mn-os-mb-sep mn-os-mb-status-sep';
 
   const chatToggle = document.createElement('button');
   chatToggle.type = 'button';
@@ -110,7 +135,7 @@ export function renderMenubar(root: HTMLElement): () => void {
     void import('../ui/layout').then((m) => m.toggleSidebarLayout());
   });
 
-  left.append(brand, desktopBtn, sep, appName, chatToggle);
+  left.append(brand, desktopBtn, sep, appName, statusSep, statusPill, chatToggle);
 
   const right = document.createElement('div');
   right.className = 'mn-os-mb-right';
@@ -128,28 +153,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   chipText.className = 'mn-os-mb-chip-text';
   modelChip.append(chipDot, chipText);
   const cleanupModelChip = initOsModelChipMenu(modelChip, chipDot, chipText);
-
-  const statusPill = document.createElement('div');
-  statusPill.className = 'mn-os-mb-status status-pill';
-  statusPill.setAttribute('role', 'status');
-  statusPill.setAttribute('aria-live', 'polite');
-  const statusDot = document.createElement('div');
-  statusDot.className = 's-dot';
-  statusDot.id = 'osStatusDot';
-  statusDot.setAttribute('aria-hidden', 'true');
-  const statusText = document.createElement('span');
-  statusText.id = 'osStatusText';
-  statusText.textContent = 'Loading models…';
-  statusPill.append(statusDot, statusText);
-  // Mirror legacy topbar pill when menubar mounts after early boot status updates.
-  const legacyDot = document.getElementById('sDot');
-  const legacyText = document.getElementById('sText');
-  if (legacyDot && legacyText) {
-    statusDot.className = legacyDot.className;
-    statusText.textContent = legacyText.textContent?.trim() || 'Loading models…';
-    const title = legacyText.getAttribute('title');
-    if (title) statusText.setAttribute('title', title);
-  }
 
   const schedulerBtn = document.createElement('button');
   schedulerBtn.type = 'button';
@@ -181,7 +184,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   timeEl.className = 'mn-os-mb-time mn-os-mono';
   timeEl.textContent = formatClock(new Date());
 
-  right.append(workspaceSlot, modelChip, statusPill, schedulerBtn, bell, settingsBtn, timeEl);
+  right.append(workspaceSlot, modelChip, schedulerBtn, bell, settingsBtn, timeEl);
   root.append(left, right);
 
   function syncMenubar(): void {

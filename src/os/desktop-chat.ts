@@ -35,6 +35,9 @@ import { renderChatFromHistory } from '../ui/messages';
 import { setStatus } from '../ui/status';
 import { isDesktopChatActive } from './desktop-state';
 import { renderDesktopChatRail } from '../ui/desktop-chat-rail';
+import { autoResizeDesktopComposer } from './desktop-composer-resize';
+
+export { autoResizeDesktopComposer, DESKTOP_COMPOSER_MAX_LINES } from './desktop-composer-resize';
 
 const DESKTOP_CHAT_MOUNT = '#desktopChatCol';
 
@@ -245,23 +248,21 @@ export async function bootstrapDesktopChat(options?: DesktopChatActivateOptions)
   input?.focus();
 }
 
-function autoResizeDesktopComposer(textarea: HTMLTextAreaElement): void {
-  textarea.style.height = 'auto';
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
-}
-
-/** Wire desktop composer controls (call once from concierge render). */
-export function wireDesktopComposerControls(): void {
-  const input = document.getElementById('desktopInput') as HTMLTextAreaElement | null;
+export function wireDesktopComposerControls(inputEl?: HTMLTextAreaElement | null): void {
+  const input =
+    inputEl ?? (document.getElementById('desktopInput') as HTMLTextAreaElement | null);
   if (!input || input.dataset.desktopComposerBound === '1') return;
   input.dataset.desktopComposerBound = '1';
 
   initComposerSteerInputListener(input);
   initComposerSlashPicker(input);
-  input.addEventListener('input', () => {
+  const onInput = (): void => {
     autoResizeDesktopComposer(input);
     syncDesktopComposerSendState();
-  });
+  };
+  input.addEventListener('input', onInput);
+  window.addEventListener('resize', () => autoResizeDesktopComposer(input));
+  requestAnimationFrame(() => autoResizeDesktopComposer(input));
   const fileInput = document.getElementById('fileInput') as HTMLInputElement | null;
   document.getElementById('btnDesktopAttach')?.addEventListener('click', () => {
     fileInput?.click();
