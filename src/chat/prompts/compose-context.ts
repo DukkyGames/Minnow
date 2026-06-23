@@ -14,7 +14,8 @@ import {
   getUserRulesPayloadForSend,
   loadUserRules,
 } from '../../config/user-rules';
-import { getExpertSelection } from '../../state/sessions';
+import { getExpertSelection, sessionState } from '../../state/sessions';
+import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
 import { BUILT_IN_TOOLS } from '../../tools/definitions';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';
 import { loadToolConfig } from '../../tools/config';
@@ -124,11 +125,12 @@ export async function buildComposeContext(
       })) || null;
   }
 
+  const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
   const ctx: ComposeContext = {
     profile,
     customConfigId: meta.activePromptConfigId,
     customConfig,
-    cwd: resolveComposeCwd(),
+    cwd: worktreeCwd ?? resolveComposeCwd(),
     modeId,
     orchestratePlanPath,
     expertId: null,

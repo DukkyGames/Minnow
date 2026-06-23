@@ -1,0 +1,182 @@
+/**
+ * buildComposeContext cwd resolution — worktree-isolated board task chats.
+ */
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+
+import { buildComposeContext } from '../../src/chat/prompts/compose-context.ts';
+import {
+  registerPromptFilesFromRaw,
+  resetPromptRegistry,
+} from '../../src/chat/prompts/prompt-loader.ts';
+import { composeSystemPrompt } from '../../src/chat/prompts/prompt-composer.ts';
+import {
+  DEFAULT_PROMPT_META,
+  resetPromptMetaCache,
+  setPromptMetaCacheForTests,
+} from '../../src/config/prompt-meta.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
+import {
+  resetWorkspaceStateForTests,
+  setWorkspaceFromServer,
+} from '../../src/state/workspace.ts';
+import type { Chat } from '../../src/types.ts';
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+const PROMPTS_ROOT = path.join(REPO_ROOT, 'src', 'chat', 'prompts');
+
+const CHAT_ID = '11111111-1111-1111-1111-111111111111';
+const GROUP_ID = 'grp_11111111-1111-1111-1111-111111111111';
+const TASK_ID = 'W1-FOUNDATION';
+const MAIN_REPO = 'C:/Users/dukky/Documents/Development/GB Todo';
+const WORKTREE_DIRECT = 'C:/Users/dukky/.minnow/worktrees/gb-todo/grp_932/task-W1-FOUNDATION';
+const WORKTREE_FROM_TASK = 'C:/Users/dukky/.minnow/worktrees/gb-todo/grp_932/task-from-board';
+
+function baseChat(overrides: Partial<Chat> = {}): Chat {
+  return {
+    id: CHAT_ID,
+    name: 'Builder task',
+    modelId: '',
+    modeId: 'build',
+    history: [],
+    updatedAt: 1,
+    memoryEnabled: false,
+    workAgentId: 'builder',
+    ...overrides,
+  };
+}
+
+async function loadShippedPromptsRaw(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  async function walk(dir: string, prefix = ''): Promise<void> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === '_example') continue;
+        await walk(full, rel);
+      } else if (entry.name.endsWith('.md')) {
+        out[`./${rel.replace(/\\/g, '/')}`] = await fs.readFile(full, 'utf8');
+      }
+    }
+  }
+  await walk(PROMPTS_ROOT);
+  return out;
+}
+
+describe('buildComposeContext cwd', () => {
+  beforeEach(() => {
+    resetPromptMetaCache();
+    setPromptMetaCacheForTests({ ...DEFAULT_PROMPT_META });
+    resetWorkspaceStateForTests();
+    setWorkspaceFromServer({
+      path: MAIN_REPO,
+      label: 'GB Todo',
+      isDefault: false,
+    });
+    setSessionStateForTests(null);
+  });
+
+  afterEach(() => {
+    resetPromptMetaCache();
+    resetWorkspaceStateForTests();
+    setSessionStateForTests(null);
+  });
+
+  it('uses chat.worktreeRoot instead of the global workspace', async () => {
+    const chat = baseChat({ worktreeRoot: WORKTREE_DIRECT });
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.cwd, WORKTREE_DIRECT);
+    assert.notEqual(ctx.cwd, MAIN_REPO);
+  });
+
+  it('falls back to board task worktreePath when worktreeRoot is unset', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: CHAT_ID,
+      sidebarCollapsed: false,
+      chats: [],
+      groups: [
+        {
+          id: GROUP_ID,
+          name: 'Board',
+          workspacePath: MAIN_REPO,
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          orchestrateBoard: {
+            planPath: 'plan.md',
+            executionMode: 'auto',
+            tasks: [
+              {
+                id: TASK_ID,
+                title: 'Foundation',
+                wave: 'W1',
+                category: 'build',
+                status: 'in_progress',
+                worktreePath: WORKTREE_FROM_TASK,
+              },
+            ],
+            waves: [{ id: 'W1', status: 'in_progress' }],
+            finalTest: { status: 'pending' },
+          },
+        },
+      ],
+    });
+    const chat = baseChat({
+      boardGroupId: GROUP_ID,
+      boardTaskId: TASK_ID,
+    });
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.cwd, WORKTREE_FROM_TASK);
+    assert.notEqual(ctx.cwd, MAIN_REPO);
+  });
+
+  it('uses resolveComposeCwd for a plain chat without worktree isolation', async () => {
+    const chat = baseChat();
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.cwd, MAIN_REPO);
+  });
+});
+
+describe('builder prompt cwd rendering', () => {
+  beforeEach(async () => {
+    resetPromptRegistry();
+    registerPromptFilesFromRaw(await loadShippedPromptsRaw());
+  });
+
+  it('shows worktree path and relative-cd rule in composed builder prompt', () => {
+    const prompt = composeSystemPrompt({
+      profile: 'full',
+      customConfigId: null,
+      customConfig: null,
+      cwd: WORKTREE_DIRECT,
+      modeId: 'build',
+      orchestratePlanPath: null,
+      expertId: null,
+      workAgentId: 'builder',
+      workAgentLabel: 'Builder',
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['execute_command', 'save_file'],
+      enabledToolSummaries: 'execute_command: Run shell\nsave_file: Write file',
+      infoPresetId: 'general-assistant',
+      planGranularity: 'medium',
+      userMessagePreview: 'Scaffold frontend',
+      includeChatHistorySummary: false,
+    });
+
+    assert.match(prompt, /Working directory: `C:\/Users\/dukky\/\.minnow\/worktrees\/gb-todo\/grp_932\/task-W1-FOUNDATION`/);
+    assert.match(prompt, /isolated git worktree/);
+    assert.match(prompt, /Never.*`cd` to an absolute project path/);
+    assert.doesNotMatch(prompt, /GB Todo/);
+  });
+});
