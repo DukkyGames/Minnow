@@ -6,6 +6,7 @@ import {
   branches,
   checkout,
   commit,
+  deleteBranch,
   diff,
   discard,
   fetch,
@@ -17,6 +18,8 @@ import {
   stageAll,
   status,
   unstage,
+  worktreeAdd,
+  worktreeRemove,
 } from './git-ops.js';
 
 function setCorsHeaders(res) {
@@ -61,6 +64,9 @@ const OPS = {
   log: (a) => log(a),
   branches: (a) => branches(a),
   checkout: (a) => checkout(a),
+  deleteBranch: (a) => deleteBranch(a),
+  worktreeAdd: (a) => worktreeAdd(a),
+  worktreeRemove: (a) => worktreeRemove(a),
   show: (a) => show(a),
 };
 

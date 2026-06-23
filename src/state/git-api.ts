@@ -36,6 +36,7 @@ export interface GitOpResult {
   local?: string[];
   remote?: string[];
   stat?: string;
+  path?: string;
 }
 
 async function postGit(
@@ -69,6 +70,8 @@ export function gitDiff(input?: {
   cwd?: string;
   cached?: boolean;
   path?: string;
+  /** Unstaged + untracked diffs for commit message generation */
+  workingTree?: boolean;
 }): Promise<GitOpResult> {
   return postGit('diff', input ?? {});
 }
@@ -138,6 +141,31 @@ export function gitCheckout(input: {
   cwd?: string;
 }): Promise<GitOpResult> {
   return postGit('checkout', input);
+}
+
+export function gitDeleteBranch(input: {
+  branch: string;
+  force?: boolean;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('deleteBranch', input);
+}
+
+export function gitWorktreeAdd(input: {
+  branch: string;
+  path?: string;
+  baseRef?: string;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('worktreeAdd', input);
+}
+
+export function gitWorktreeRemove(input: {
+  path: string;
+  force?: boolean;
+  cwd?: string;
+}): Promise<GitOpResult> {
+  return postGit('worktreeRemove', input);
 }
 
 export function gitShow(input: {

@@ -36,13 +36,17 @@ import {
 
   gitStage,
 
-  gitStageAll,
-
   gitStatus,
 
   gitUnstage,
 
   gitShow,
+
+  gitDeleteBranch,
+
+  gitWorktreeAdd,
+
+  gitWorktreeRemove,
 
   type GitFileEntry,
 
@@ -68,6 +72,8 @@ import { parseUnifiedPatchToDiffLines } from './git-patch-parse';
 
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 
+import { fetchGitCommitMessage } from './git-commit-message-client';
+
 
 
 const POLL_MS = 5000;
@@ -81,14 +87,20 @@ let scrollMount: HTMLElement | null = null;
 let bodyMount: HTMLElement | null = null;
 
 let branchSelect: HTMLSelectElement | null = null;
+let branchDeleteBtn: HTMLButtonElement | null = null;
 
 let cwdSelect: HTMLSelectElement | null = null;
+let worktreeDeleteBtn: HTMLButtonElement | null = null;
 
 let cwdWrap: HTMLElement | null = null;
 
 let aheadBehindEl: HTMLElement | null = null;
 
 let commitInput: HTMLTextAreaElement | null = null;
+
+let aiGenerateBtn: HTMLButtonElement | null = null;
+
+let generateMessageAbort: AbortController | null = null;
 
 let statusEl: HTMLElement | null = null;
 
@@ -117,6 +129,7 @@ let refreshing = false;
 let panelCwd: string | undefined;
 
 let knownWorktrees: ParsedWorktree[] = [];
+let currentBranchName = '';
 
 
 
@@ -168,12 +181,106 @@ function normalizePath(p: string): string {
 
 }
 
-
-
 function pathsEqual(a: string, b: string): boolean {
 
   return normalizePath(a) === normalizePath(b);
 
+}
+
+
+
+function createToolbarIconBtn(label: string, title: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'git-panel-toolbar-btn';
+  btn.textContent = label;
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+  return btn;
+}
+
+function isMainWorktreePath(worktreePath: string): boolean {
+  const ws = getWorkspacePath().trim();
+  return Boolean(ws && pathsEqual(worktreePath, ws));
+}
+
+function syncBranchDeleteButton(): void {
+  if (!branchDeleteBtn || !branchSelect) return;
+  const selected = branchSelect.value;
+  const canDelete = Boolean(selected && selected !== currentBranchName);
+  branchDeleteBtn.disabled = !canDelete;
+}
+
+function syncWorktreeDeleteButton(): void {
+  if (!worktreeDeleteBtn || !cwdSelect) return;
+  const selected = cwdSelect.value;
+  const canDelete = Boolean(selected && !isMainWorktreePath(selected));
+  worktreeDeleteBtn.disabled = !canDelete;
+}
+
+async function handleAddBranch(): Promise<void> {
+  const name = window.prompt('New branch name');
+  if (!name?.trim()) return;
+  await runGitOp(() =>
+    gitCheckout({ branch: name.trim(), create: true, cwd: getEffectiveCwdArg() }),
+  );
+}
+
+async function handleDeleteBranch(): Promise<void> {
+  if (!branchSelect) return;
+  const name = branchSelect.value;
+  if (!name || name === currentBranchName) return;
+  if (!window.confirm(`Delete branch "${name}"?`)) return;
+
+  const cwd = getEffectiveCwdArg();
+  const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }));
+  if (ok) return;
+
+  if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
+  await runGitOp(() => gitDeleteBranch({ branch: name, force: true, cwd }));
+}
+
+async function handleAddWorktree(): Promise<void> {
+  const branch = window.prompt('New worktree branch name');
+  if (!branch?.trim()) return;
+
+  const cwd = getEffectiveCwdArg();
+  const addResult = await gitWorktreeAdd({ branch: branch.trim(), cwd });
+  if (!addResult.ok) {
+    setStatus(addResult.error ?? 'Could not add worktree', true);
+    return;
+  }
+
+  setStatus('');
+  if (addResult.path) {
+    panelCwd = addResult.path;
+  }
+  await refreshGitPanel();
+  void syncFileTreeGitPollCwd();
+}
+
+async function handleDeleteWorktree(): Promise<void> {
+  if (!cwdSelect) return;
+  const targetPath = cwdSelect.value;
+  if (!targetPath || isMainWorktreePath(targetPath)) return;
+  if (!window.confirm(`Remove worktree at ${targetPath}?`)) return;
+
+  const cwd = getEffectiveCwdArg();
+  const ok = await runGitOp(() => gitWorktreeRemove({ path: targetPath, cwd }));
+  if (ok) {
+    const ws = getWorkspacePath().trim();
+    panelCwd = ws || undefined;
+    return;
+  }
+
+  if (!window.confirm('Worktree has uncommitted changes. Force remove?')) return;
+  const forced = await runGitOp(() =>
+    gitWorktreeRemove({ path: targetPath, force: true, cwd }),
+  );
+  if (forced) {
+    const ws = getWorkspacePath().trim();
+    panelCwd = ws || undefined;
+  }
 }
 
 
@@ -269,6 +376,10 @@ function ensurePanelDom(): HTMLElement {
 
   cwdLabel.htmlFor = 'gitPanelCwdSelect';
 
+  const cwdFieldRow = document.createElement('div');
+
+  cwdFieldRow.className = 'git-panel-field-row';
+
   cwdSelect = document.createElement('select');
 
   cwdSelect.id = 'gitPanelCwdSelect';
@@ -283,27 +394,81 @@ function ensurePanelDom(): HTMLElement {
 
     panelCwd = value || undefined;
 
+    syncWorktreeDeleteButton();
+
     void refreshGitPanel();
 
     void syncFileTreeGitPollCwd();
 
   });
 
-  cwdWrap.append(cwdLabel, cwdSelect);
+  const worktreeAddBtn = createToolbarIconBtn('+', 'Add worktree');
+
+  worktreeAddBtn.addEventListener('click', () => void handleAddWorktree());
+
+  worktreeDeleteBtn = createToolbarIconBtn('−', 'Remove worktree');
+
+  worktreeDeleteBtn.disabled = true;
+
+  worktreeDeleteBtn.addEventListener('click', () => void handleDeleteWorktree());
+
+  cwdFieldRow.append(cwdSelect, worktreeAddBtn, worktreeDeleteBtn);
+
+  cwdWrap.append(cwdLabel, cwdFieldRow);
 
 
 
-  const branchRow = document.createElement('div');
+  const branchWrap = document.createElement('div');
 
-  branchRow.className = 'git-panel-branch-row';
+  branchWrap.className = 'git-panel-branch-wrap';
+
+  const branchLabel = document.createElement('label');
+
+  branchLabel.className = 'git-panel-cwd-label';
+
+  branchLabel.textContent = 'Branch';
+
+  branchLabel.htmlFor = 'gitPanelBranchSelect';
+
+  const branchFieldRow = document.createElement('div');
+
+  branchFieldRow.className = 'git-panel-field-row';
 
   branchSelect = document.createElement('select');
+
+  branchSelect.id = 'gitPanelBranchSelect';
 
   branchSelect.className = 'git-panel-branch-select';
 
   branchSelect.title = 'Current branch';
 
-  branchSelect.addEventListener('change', () => void handleBranchChange());
+  branchSelect.addEventListener('change', () => {
+
+    syncBranchDeleteButton();
+
+    void handleBranchChange();
+
+  });
+
+  const branchAddBtn = createToolbarIconBtn('+', 'New branch');
+
+  branchAddBtn.addEventListener('click', () => void handleAddBranch());
+
+  branchDeleteBtn = createToolbarIconBtn('−', 'Delete branch');
+
+  branchDeleteBtn.disabled = true;
+
+  branchDeleteBtn.addEventListener('click', () => void handleDeleteBranch());
+
+  branchFieldRow.append(branchSelect, branchAddBtn, branchDeleteBtn);
+
+  branchWrap.append(branchLabel, branchFieldRow);
+
+
+
+  const branchRow = document.createElement('div');
+
+  branchRow.className = 'git-panel-sync-row';
 
 
 
@@ -337,9 +502,9 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  branchRow.append(branchSelect, aheadBehindEl, pullBtn, pushBtn);
+  branchRow.append(aheadBehindEl, pullBtn, pushBtn);
 
-  toolbar.append(cwdWrap, branchRow);
+  toolbar.append(cwdWrap, branchWrap, branchRow);
 
 
 
@@ -391,6 +556,34 @@ function ensurePanelDom(): HTMLElement {
 
   commitActions.className = 'git-panel-commit-actions';
 
+  aiGenerateBtn = document.createElement('button');
+
+  aiGenerateBtn.type = 'button';
+
+  aiGenerateBtn.className = 'git-panel-action-btn git-panel-action-btn--ai git-panel-action-btn--icon';
+
+  aiGenerateBtn.title = 'Generate commit message with AI';
+
+  aiGenerateBtn.setAttribute('aria-label', 'Generate commit message with AI');
+
+  const aiGenerateIcon = document.createElement('img');
+
+  aiGenerateIcon.className = 'icon-img git-panel-action-btn__icon';
+
+  aiGenerateIcon.src = '/icons/sparkles.png';
+
+  aiGenerateIcon.width = 12;
+
+  aiGenerateIcon.height = 12;
+
+  aiGenerateIcon.alt = '';
+
+  aiGenerateIcon.setAttribute('aria-hidden', 'true');
+
+  aiGenerateBtn.append(aiGenerateIcon);
+
+  aiGenerateBtn.addEventListener('click', () => void handleGenerateCommitMessage());
+
   const commitBtn = document.createElement('button');
 
   commitBtn.type = 'button';
@@ -415,7 +608,7 @@ function ensurePanelDom(): HTMLElement {
 
 
 
-  commitActions.append(commitBtn, commitPushBtn);
+  commitActions.append(commitBtn, commitPushBtn, aiGenerateBtn);
 
   commitBox.append(commitInput, commitActions);
 
@@ -519,31 +712,126 @@ async function handleBranchChange(): Promise<void> {
 
   const value = branchSelect.value;
 
-  if (value === '__new__') {
+  if (!value) return;
 
-    const name = window.prompt('New branch name');
+  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }));
 
-    if (!name?.trim()) {
+}
 
-      await refreshBranchSelect();
+
+
+async function handleGenerateCommitMessage(): Promise<void> {
+
+  if (!commitInput) return;
+
+  generateMessageAbort?.abort();
+
+  const controller = new AbortController();
+
+  generateMessageAbort = controller;
+
+  if (aiGenerateBtn) {
+
+    aiGenerateBtn.disabled = true;
+
+    aiGenerateBtn.setAttribute('aria-busy', 'true');
+
+  }
+
+  try {
+
+    const cwd = getEffectiveCwdArg();
+
+    const status = await gitStatus(cwd);
+
+    if (!status.ok) {
+
+      setStatus(status.error ?? 'Could not read git status', true);
 
       return;
 
     }
 
-    await runGitOp(() =>
+    const staged = status.staged ?? [];
+    const unstaged = status.unstaged ?? [];
+    const untracked = status.untracked ?? [];
+    const allChanges = [...staged, ...unstaged, ...untracked];
 
-      gitCheckout({ branch: name.trim(), create: true, cwd: getEffectiveCwdArg() }),
+    if (allChanges.length === 0) {
+      setStatus('No changes to commit', true);
+      return;
+    }
 
-    );
+    const useStagedOnly = staged.length > 0;
+    const diffResult = useStagedOnly
+      ? await gitDiff({ cached: true, cwd })
+      : await gitDiff({ workingTree: true, cwd });
 
-    return;
+    if (!diffResult.ok || !diffResult.patch?.trim()) {
+      setStatus(diffResult.error ?? 'Could not read diff', true);
+      return;
+    }
+
+    setStatus('Generating commit message…');
+
+    const result = await fetchGitCommitMessage({
+      stagedPaths: useStagedOnly
+        ? staged.map((file) => file.path)
+        : allChanges.map((file) => file.path),
+
+      patch: diffResult.patch,
+
+      signal: controller.signal,
+
+      onPartial: (text) => {
+
+        commitInput!.value = text;
+
+      },
+
+    });
+
+    if (controller.signal.aborted) return;
+
+    if (result.error) {
+
+      setStatus(result.error, true);
+
+      return;
+
+    }
+
+    if (result.text) {
+
+      commitInput.value = result.text;
+
+      commitInput.focus();
+
+      setStatus('');
+
+      return;
+
+    }
+
+    setStatus('No commit message generated', true);
+
+  } finally {
+
+    if (generateMessageAbort === controller) {
+
+      generateMessageAbort = null;
+
+    }
+
+    if (aiGenerateBtn) {
+
+      aiGenerateBtn.disabled = false;
+
+      aiGenerateBtn.removeAttribute('aria-busy');
+
+    }
 
   }
-
-  if (!value) return;
-
-  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }));
 
 }
 
@@ -1012,19 +1300,7 @@ function renderSections(status: GitOpResult): void {
   }
 
   if (unstaged.length > 0) {
-
-    bodyMount.appendChild(
-
-      buildSection('Changes', unstaged, false, {
-
-        label: 'Stage All',
-
-        fn: () => gitStageAll(getEffectiveCwdArg()),
-
-      }),
-
-    );
-
+    bodyMount.appendChild(buildSection('Changes', unstaged, false));
   }
 
   if (untracked.length > 0) {
@@ -1077,7 +1353,7 @@ async function refreshBranchSelect(): Promise<void> {
 
   if (!result.ok) return;
 
-
+  currentBranchName = result.current ?? '';
 
   for (const branch of result.local ?? []) {
 
@@ -1093,15 +1369,7 @@ async function refreshBranchSelect(): Promise<void> {
 
   }
 
-
-
-  const newOpt = document.createElement('option');
-
-  newOpt.value = '__new__';
-
-  newOpt.textContent = 'New branch…';
-
-  branchSelect.appendChild(newOpt);
+  syncBranchDeleteButton();
 
 }
 
@@ -1121,7 +1389,25 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
     knownWorktrees = ws ? [{ path: ws, head: '', branch: undefined, detached: false }] : [];
 
-    cwdWrap.hidden = true;
+    cwdWrap.hidden = knownWorktrees.length === 0;
+
+    if (knownWorktrees.length > 0) {
+
+      cwdSelect.replaceChildren();
+
+      const opt = document.createElement('option');
+
+      opt.value = knownWorktrees[0].path;
+
+      opt.textContent = formatWorktreeOptionLabel(knownWorktrees[0], ws);
+
+      opt.selected = true;
+
+      cwdSelect.appendChild(opt);
+
+      syncWorktreeDeleteButton();
+
+    }
 
     return;
 
@@ -1131,17 +1417,9 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
   knownWorktrees = parseWorktreeListPorcelain(listResult.output);
 
-  if (knownWorktrees.length <= 1) {
+  cwdWrap.hidden = knownWorktrees.length === 0;
 
-    cwdWrap.hidden = true;
-
-    return;
-
-  }
-
-
-
-  cwdWrap.hidden = false;
+  if (knownWorktrees.length === 0) return;
 
   const selected = panelCwd ?? ws;
 
@@ -1166,6 +1444,8 @@ async function refreshWorktreeDropdown(): Promise<void> {
     cwdSelect.appendChild(opt);
 
   }
+
+  syncWorktreeDeleteButton();
 
 }
 
@@ -1468,6 +1748,7 @@ export function resetGitPanelForTests(): void {
   panelCwd = undefined;
 
   knownWorktrees = [];
+  currentBranchName = '';
 
   stopPolling();
 
@@ -1480,14 +1761,22 @@ export function resetGitPanelForTests(): void {
   bodyMount = null;
 
   branchSelect = null;
+  branchDeleteBtn = null;
 
   cwdSelect = null;
+  worktreeDeleteBtn = null;
 
   cwdWrap = null;
 
   aheadBehindEl = null;
 
   commitInput = null;
+
+  aiGenerateBtn = null;
+
+  generateMessageAbort?.abort();
+
+  generateMessageAbort = null;
 
   statusEl = null;
 
