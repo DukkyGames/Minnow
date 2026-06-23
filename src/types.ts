@@ -398,6 +398,10 @@ export interface OrchestrateBoardState {
   isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** User dismissed the finish dashboard to view the kanban again. */
+  dashboardDismissed?: boolean;
+  /** Cached markdown finish report (summary, next steps, how-to-run). */
+  finishReport?: string;
   /** Full-board integration test after all tasks complete. */
   finalTest?: {
     status: 'pending' | 'in_progress' | 'passed' | 'failed';

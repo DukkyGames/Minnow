@@ -6,6 +6,7 @@ import {
   buildOrchestrateCompletionMessage,
   isOrchestratePlanComplete,
 } from './plan-complete.ts';
+import { buildDeterministicFinishReport } from './finish-stats.ts';
 import { emitBoardChange } from '../../state/orchestrate-board-events.ts';
 import {
   findGroupById,
@@ -43,6 +44,9 @@ export async function maybeEmitOrchestratePlanComplete(groupId: string): Promise
 
   if (board.completionShownAt != null) return;
   board.completionShownAt = Date.now();
+  if (!board.finishReport?.trim()) {
+    board.finishReport = buildDeterministicFinishReport(planner, board);
+  }
   emitBoardChange(groupId);
 
   const text = buildOrchestrateCompletionMessage(planner, board, board.completionShownAt);

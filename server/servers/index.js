@@ -2,10 +2,11 @@
  * Managed local servers API bootstrap.
  */
 
-import { autoStartEnabledServers, ensureServersLayout } from './manager.js';
+import { autoProvisionEnabledServers, autoStartEnabledServers, ensureServersLayout } from './manager.js';
 
 export { createServersMiddleware } from './routes.js';
 export {
+  autoProvisionEnabledServers,
   autoStartEnabledServers,
   getInstallStatus,
   getManagedSearxngUrl,
@@ -28,4 +29,5 @@ export { BUILTIN_SERVERS, getServerDef, listServerDefs } from './catalog.js';
 export async function initServersApi() {
   await ensureServersLayout();
   void autoStartEnabledServers();
+  void autoProvisionEnabledServers();
 }

@@ -12,10 +12,13 @@ import { after, before, describe, test } from 'node:test';
 import {
   checkMerged,
   checkWorktreeDirty,
+  commitIntegration,
   commitWorktree,
   createWorktree,
   ensureIntegration,
+  integrationStats,
   mergeIntoIntegration,
+  pushIntegration,
   refreshIntegrationDeps,
   restoreIntegration,
   verifyIntegrationMerge,
@@ -183,6 +186,45 @@ describe('worktree commit and merge checks', () => {
       attempted.some((cmd) => /^npm install/.test(cmd)),
       `expected npm install attempt, got ${attempted}`,
     );
+  });
+
+  test('integrationStats returns numstat for merged integration branch', async () => {
+    const initSha = (
+      await execFileAsync('git', ['rev-list', '--max-count=1', '--reverse', 'HEAD'], {
+        cwd: repoDir,
+        windowsHide: true,
+      })
+    ).stdout.trim();
+    const stats = await integrationStats({
+      boardId: BOARD_ID,
+      baseRef: initSha,
+    });
+    assert.equal(stats.ok, true);
+    assert.ok((stats.fileCount ?? 0) >= 1);
+    assert.ok((stats.additions ?? 0) >= 1);
+    assert.equal(stats.hasRemote, false);
+  });
+
+  test('commitIntegration stages untracked files in integration worktree', async () => {
+    const intPath = getWorktreeSlotPath(BOARD_ID, 'integration', repoDir);
+    await fs.writeFile(path.join(intPath, 'dashboard-note.txt'), 'finish\n', 'utf8');
+
+    const commit = await commitIntegration({
+      boardId: BOARD_ID,
+      message: 'integration finish',
+    });
+    assert.equal(commit.ok, true);
+    assert.equal(commit.committed, true);
+  });
+
+  test('pushIntegration soft-fails when no origin remote', async () => {
+    const push = await pushIntegration({
+      boardId: BOARD_ID,
+      branch: integrationBranch,
+    });
+    assert.equal(push.ok, false);
+    assert.equal(push.pushed, false);
+    assert.equal(push.error, 'no_remote');
   });
 });
 

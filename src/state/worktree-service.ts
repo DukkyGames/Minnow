@@ -28,6 +28,13 @@ export interface WorktreeOpResult {
   ran?: string[];
   failed?: string[];
   skipped?: string;
+  url?: string;
+  pushed?: boolean;
+  additions?: number;
+  deletions?: number;
+  fileCount?: number;
+  hasRemote?: boolean;
+  hasGh?: boolean;
 }
 
 async function postWorktree(
@@ -148,4 +155,38 @@ export function cleanupBoardWorktrees(input: {
   boardId: string;
 }): Promise<WorktreeOpResult> {
   return postWorktree('cleanup', input);
+}
+
+/** Numstat diff for the integration branch vs its base ref. */
+export function integrationStats(input: {
+  boardId: string;
+  baseRef?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('integration_stats', input);
+}
+
+/** Stage and commit all changes in the integration worktree. */
+export function commitIntegration(input: {
+  boardId: string;
+  message?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('commit_integration', input);
+}
+
+/** Push the integration branch to origin. */
+export function pushIntegration(input: {
+  boardId: string;
+  branch: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('push_integration', input);
+}
+
+/** Open a GitHub PR for the integration branch via gh. */
+export function openIntegrationPr(input: {
+  boardId: string;
+  branch: string;
+  title?: string;
+  body?: string;
+}): Promise<WorktreeOpResult> {
+  return postWorktree('open_pr', input);
 }

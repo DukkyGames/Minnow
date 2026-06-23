@@ -367,6 +367,10 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.completionShownAt === 'number') {
     out.completionShownAt = r.completionShownAt;
   }
+  if (r.dashboardDismissed === true) out.dashboardDismissed = true;
+  if (typeof r.finishReport === 'string' && r.finishReport.trim()) {
+    out.finishReport = r.finishReport.trim();
+  }
   const executionModeRaw =
     typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
   const executionMode =
@@ -3012,7 +3016,7 @@ export function defaultSearchConfig() {
   return {
     provider: 'searxng',
     fallbackChain: ['tavily', 'brave', 'duckduckgo'],
-    searxngUrl: 'http://localhost:8080',
+    searxngUrl: 'http://localhost:8899',
     keys: { braveApiKey: '', tavilyApiKey: '' },
     resultCount: 10,
   };
@@ -3214,7 +3218,7 @@ const DEFAULT_SERVER_PORTS = {
 export function defaultServersConfig() {
   return {
     searxng: {
-      enabled: false,
+      enabled: true,
       autoStart: true,
       port: DEFAULT_SERVER_PORTS.searxng,
     },

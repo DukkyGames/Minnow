@@ -7,6 +7,10 @@ import {
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
 import {
+  renderFinishDashboard,
+  syncFinishDashboard,
+} from './orchestrate-finish-dashboard';
+import {
   deriveTaskCardActivity,
   type TaskCardActivity,
   type TaskCardSubAgentHint,
@@ -17,7 +21,7 @@ import {
   getMainTurnActivity,
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import { isOrchestrateBoardFinished, isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
 import { sumUsageSegments } from '../chat/orchestrate/stats-math';
 import {
@@ -81,7 +85,7 @@ import {
   type OrchestrateBoardTimerContext,
 } from '../state/orchestrate-board-store';
 import { normalizeModeId } from '../chat/modes/types';
-import { subscribeBoardChanges } from '../state/orchestrate-board-events';
+import { subscribeBoardChanges, emitBoardChange } from '../state/orchestrate-board-events';
 import {
   countBoardLogAlerts,
   openBoardTimelineDrawer,
@@ -569,9 +573,11 @@ function mountKanbanInMain(
 ): void {
   const planPanel = main.querySelector('.board-plan-panel');
   const oldKanban = main.querySelector('.board-kanban-waves');
+  const oldDashboard = main.querySelector('.board-finish-dashboard');
   // Preserve the user's manual scroll across the live-tick rebuild (MIN-259).
   const savedScroll = oldKanban ? captureBoardScrollPositions(oldKanban) : null;
   const newKanban = renderKanban(board, group, plannerChat);
+  if (oldDashboard) oldDashboard.remove();
   if (oldKanban) {
     oldKanban.replaceWith(newKanban);
   } else if (planPanel) {
@@ -581,6 +587,63 @@ function mountKanbanInMain(
   }
   if (savedScroll) restoreBoardScrollPositions(newKanban, savedScroll);
   syncBoardTaskPlanPanel(main, board, group);
+}
+
+/** True when the finish dashboard should replace the kanban (MIN-208). */
+function shouldShowFinishDashboard(board: BoardState): boolean {
+  return isOrchestrateBoardFinished(board) && board.dashboardDismissed !== true;
+}
+
+function mountFinishDashboardInMain(
+  main: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const oldKanban = main.querySelector('.board-kanban-waves');
+  const existing = main.querySelector('.board-finish-dashboard');
+  if (existing instanceof HTMLElement) {
+    syncFinishDashboard(existing, group, plannerChat, board);
+    return;
+  }
+  if (oldKanban) oldKanban.remove();
+  const dashboard = renderFinishDashboard(group, plannerChat, board);
+  const planPanel = main.querySelector('.board-plan-panel');
+  if (planPanel) {
+    main.insertBefore(dashboard, planPanel);
+  } else {
+    main.prepend(dashboard);
+  }
+}
+
+function mountBoardMainSurface(
+  main: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  if (shouldShowFinishDashboard(board)) {
+    mountFinishDashboardInMain(main, board, group, plannerChat);
+    return;
+  }
+  mountKanbanInMain(main, board, group, plannerChat);
+}
+
+/** Keep the header Board ⇄ Dashboard toggle label in sync after live refresh. */
+function syncBoardDashboardToggle(root: HTMLElement, board: BoardState): void {
+  const toggle = root.querySelector(
+    '[data-board-action="dashboard-toggle"]',
+  ) as HTMLButtonElement | null;
+  if (!toggle) return;
+  const showingDashboard = shouldShowFinishDashboard(board);
+  toggle.textContent = showingDashboard ? 'Board' : 'Dashboard';
+  toggle.title = showingDashboard
+    ? 'Return to the kanban board'
+    : 'Open the finish dashboard';
+  toggle.setAttribute(
+    'aria-label',
+    showingDashboard ? 'Back to board' : 'Open finish dashboard',
+  );
 }
 
 /** Refresh board UI when store or sub-agents change (stable handler per folder). */
@@ -1165,6 +1228,34 @@ function wireBoardHeaderControls(
 
   controls.appendChild(timelineBtn);
   controls.appendChild(openPlan);
+
+  if (isOrchestrateBoardFinished(board)) {
+    const dashToggle = document.createElement('button');
+    dashToggle.type = 'button';
+    dashToggle.className = 'board-btn board-btn--compact board-header__dashboard-toggle';
+    dashToggle.dataset.boardAction = 'dashboard-toggle';
+    const showingDashboard = shouldShowFinishDashboard(board);
+    dashToggle.textContent = showingDashboard ? 'Board' : 'Dashboard';
+    dashToggle.title = showingDashboard
+      ? 'Return to the kanban board'
+      : 'Open the finish dashboard';
+    dashToggle.setAttribute(
+      'aria-label',
+      showingDashboard ? 'Back to board' : 'Open finish dashboard',
+    );
+    dashToggle.addEventListener('click', () => {
+      if (shouldShowFinishDashboard(board)) {
+        board.dashboardDismissed = true;
+      } else {
+        board.dashboardDismissed = false;
+      }
+      touchChat(plannerChat);
+      scheduleSaveSessions();
+      emitBoardChange(group.id);
+      refreshActiveBoardIfMounted();
+    });
+    controls.appendChild(dashToggle);
+  }
 }
 
 /** Banner when the orchestrator requested AFK and awaits user confirmation. */
@@ -2600,21 +2691,37 @@ function refreshBoardDom(
 
   const main = root.querySelector('.board-main');
   if (main instanceof HTMLElement) {
-    ensureKanbanInteractionReleaseListener();
-    const kanbanKey = buildKanbanRefreshKey(board, plannerChat, group);
-    const kanbanFocused = isKanbanFormControlFocused();
-    if (kanbanKey !== lastKanbanRefreshKey) {
-      if (kanbanFocused) {
-        pendingKanbanRefresh = true;
+    if (shouldShowFinishDashboard(board)) {
+      const dashboard = main.querySelector('.board-finish-dashboard');
+      if (dashboard instanceof HTMLElement) {
+        syncFinishDashboard(dashboard, group, plannerChat, board);
       } else {
-        mountKanbanInMain(main, board, group, plannerChat);
-        lastKanbanRefreshKey = kanbanKey;
+        mountBoardMainSurface(main, board, group, plannerChat);
+      }
+      syncBoardDashboardToggle(root, board);
+    } else {
+      ensureKanbanInteractionReleaseListener();
+      const kanbanKey = buildKanbanRefreshKey(board, plannerChat, group);
+      const kanbanFocused = isKanbanFormControlFocused();
+      const surfaceKey = `kanban:${kanbanKey}`;
+      if (main.querySelector('.board-finish-dashboard')) {
+        mountBoardMainSurface(main, board, group, plannerChat);
+        lastKanbanRefreshKey = surfaceKey;
+        pendingKanbanRefresh = false;
+      } else if (surfaceKey !== lastKanbanRefreshKey) {
+        if (kanbanFocused) {
+          pendingKanbanRefresh = true;
+        } else {
+          mountBoardMainSurface(main, board, group, plannerChat);
+          lastKanbanRefreshKey = surfaceKey;
+          pendingKanbanRefresh = false;
+        }
+      } else if (pendingKanbanRefresh && !kanbanFocused) {
+        mountBoardMainSurface(main, board, group, plannerChat);
+        lastKanbanRefreshKey = surfaceKey;
         pendingKanbanRefresh = false;
       }
-    } else if (pendingKanbanRefresh && !kanbanFocused) {
-      mountKanbanInMain(main, board, group, plannerChat);
-      lastKanbanRefreshKey = kanbanKey;
-      pendingKanbanRefresh = false;
+      syncBoardDashboardToggle(root, board);
     }
   }
 
@@ -3188,7 +3295,7 @@ export function renderBoardView(group: ChatGroup): void {
 
   const main = document.createElement('div');
   main.className = 'board-main';
-  main.appendChild(renderKanban(board, group, plannerChat));
+  mountBoardMainSurface(main, board, group, plannerChat);
 
   root.appendChild(header);
   root.appendChild(main);

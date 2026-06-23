@@ -2533,3 +2533,325 @@ button.board-header__activity {
   }
 }
 
+/* Finish dashboard (MIN-208): centered completion panel in board-main */
+.board-main:has(.board-finish-dashboard) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px 36px;
+}
+
+.board-finish-dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+.board-finish-dashboard__panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: min(52rem, 100%);
+  padding: 28px 32px 24px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--mn-surface-1, var(--mn-bg, var(--bg)));
+}
+
+.board-finish-dashboard__hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.board-finish-dashboard__badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--mn-success, var(--success)) 38%, var(--mn-border));
+  border-radius: var(--radius-md, 10px);
+  background: color-mix(in srgb, var(--mn-success, var(--success)) 12%, var(--mn-bg, var(--bg)));
+  color: var(--mn-success, var(--success));
+  font: 600 17px/1 var(--font-ui, system-ui, sans-serif);
+}
+
+.board-finish-dashboard__hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.board-finish-dashboard__title {
+  margin: 0;
+  font: 600 1.125rem/1.25 var(--font-ui, system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  color: var(--mn-fg, var(--text));
+}
+
+.board-finish-dashboard__subtitle {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-finish-dashboard__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.board-finish-dashboard__section-title {
+  margin: 0;
+  font: 600 11px/1.3 var(--font-ui, system-ui, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-finish-dashboard__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  background: color-mix(in srgb, var(--mn-bg, var(--bg)) 72%, var(--mn-surface-1, var(--surface)));
+}
+
+.board-finish-dashboard__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border-right: 1px solid var(--mn-border);
+}
+
+.board-finish-dashboard__stat:last-child {
+  border-right: none;
+}
+
+.board-finish-dashboard__stat-label {
+  font: 600 10px/1.3 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-finish-dashboard__stat-value {
+  font: 600 1.0625rem/1.2 var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg, var(--text));
+}
+
+.board-finish-dashboard__issues-none {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-finish-dashboard__issues-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-finish-dashboard__issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+}
+
+.board-finish-dashboard__issue-id {
+  font: 600 12px/1.3 var(--font-mono, ui-monospace, monospace);
+  color: var(--mn-danger, var(--danger));
+}
+
+.board-finish-dashboard__issue-text {
+  flex: 1 1 12rem;
+}
+
+.board-finish-dashboard__issue-link {
+  font-size: 12px;
+  color: var(--mn-accent, var(--accent));
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.board-finish-dashboard__report {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+/* Full panel width: override chat bubble 72ch cap inside the finish dashboard */
+.board-finish-dashboard__report.msg-bubble.msg-bubble--md {
+  max-width: 100%;
+  width: 100%;
+}
+
+.board-finish-dashboard__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.board-finish-dashboard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.board-finish-dashboard__commit-split {
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: auto;
+  position: relative;
+}
+
+.board-finish-dashboard__commit-primary {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.board-finish-dashboard__commit-caret {
+  min-width: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border-strong, var(--mn-border));
+  border-left: none;
+  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+  background: var(--mn-bg, var(--bg));
+  cursor: pointer;
+  font-size: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-finish-dashboard__commit-caret:hover:not(:disabled) {
+    background: var(--mn-surface-elevated, var(--surface-elevated));
+  }
+}
+
+.board-finish-dashboard__commit-caret:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.board-finish-dashboard__commit-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 5;
+  margin-top: 4px;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--mn-bg, var(--bg));
+  box-shadow: var(--mn-shadow, 0 4px 16px oklch(0.1 0.02 250 / 0.12));
+}
+
+.board-finish-dashboard__commit-menuitem {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .board-finish-dashboard__commit-menuitem:hover:not(:disabled) {
+    background: var(--mn-surface-elevated, var(--surface-elevated));
+  }
+}
+
+.board-finish-dashboard__commit-menuitem:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.board-finish-dashboard__git-status {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mn-fg-muted, var(--text-dim));
+}
+
+.board-finish-dashboard__git-status[data-kind='ok'] {
+  color: var(--mn-success, var(--success));
+}
+
+.board-finish-dashboard__git-status[data-kind='err'] {
+  color: var(--mn-danger, var(--danger));
+}
+
+.board-header__dashboard-toggle {
+  margin-left: 4px;
+}
+
+@media (max-width: 720px) {
+  .board-main:has(.board-finish-dashboard) {
+    padding: 16px 12px 24px;
+    align-items: stretch;
+  }
+
+  .board-finish-dashboard__panel {
+    padding: 20px 18px 18px;
+    gap: 18px;
+  }
+
+  .board-finish-dashboard__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .board-finish-dashboard__stat:nth-child(2) {
+    border-right: none;
+  }
+
+  .board-finish-dashboard__stat:nth-child(1),
+  .board-finish-dashboard__stat:nth-child(2) {
+    border-bottom: 1px solid var(--mn-border);
+  }
+
+  .board-finish-dashboard__commit-split {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .board-finish-dashboard__commit-primary {
+    flex: 1;
+  }
+}
+

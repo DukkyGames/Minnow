@@ -474,6 +474,27 @@ export async function autoStartEnabledServers() {
   }
 }
 
+/** Provision then start enabled+autoStart servers flagged for auto-provision when not yet installed. */
+export async function autoProvisionEnabledServers() {
+  const config = await readResource('servers');
+  for (const def of listServerDefs()) {
+    if (!def.defaultAutoProvision) continue;
+    const entry = config[def.id];
+    if (!entry?.enabled || !entry?.autoStart) continue;
+    const install = await def.provisioner.getInstallStatus();
+    if (install.installed) continue;
+    void (async () => {
+      try {
+        await installServer(def.id);
+        await startServer(def.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[servers] auto-provision ${def.id} failed: ${message}`);
+      }
+    })();
+  }
+}
+
 /** Stop every managed server process (server shutdown). */
 export function shutdownAllServers() {
   for (const [, state] of processes) {

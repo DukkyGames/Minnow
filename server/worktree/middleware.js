@@ -61,6 +61,10 @@ const OPS = {
   remove: (a) => removeWorktree(a),
   cleanup: (a) => cleanupBoardWorktrees(a),
   list: () => listWorktrees(),
+  integration_stats: (a) => integrationStats(a),
+  commit_integration: (a) => commitIntegration(a),
+  push_integration: (a) => pushIntegration(a),
+  open_pr: (a) => openPr(a),
 };
 
 export async function handleWorktreeRequest(req, res, pathname) {

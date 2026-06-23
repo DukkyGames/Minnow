@@ -10,6 +10,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
+import { parseGitNumstat } from '../tools/git-change-stats.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { refreshDependencies } from './dep-install.js';
 import { symlinkDependencyDirs } from './dep-symlinks.js';
@@ -384,6 +385,117 @@ export async function cleanupBoardWorktrees({ boardId }) {
     }
   }
   return { ok: true, removed, keptIntegration };
+}
+
+/**
+ * Diff stats for the integration worktree vs its base ref (`git diff --numstat`).
+ * Also reports whether `origin` and `gh` are available for push/PR actions.
+ * @param {{ boardId: string, baseRef?: string }} input
+ */
+export async function integrationStats({ boardId, baseRef }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const base = (baseRef && baseRef.trim()) || 'HEAD';
+  const diff = await git(['diff', '--numstat', `${base}...HEAD`], intPath);
+  if (!ok(diff)) return { ok: false, output: out(diff) };
+  const parsed = parseGitNumstat(diff.stdout ?? '');
+
+  const remote = await git(['remote', 'get-url', 'origin'], intPath);
+  const hasRemote = ok(remote) && Boolean(`${remote.stdout ?? ''}`.trim());
+
+  let hasGh = false;
+  try {
+    const gh = await runProcess('gh', ['--version'], { cwd: intPath, timeout: 10_000 });
+    hasGh = gh.code === 0;
+  } catch {
+    hasGh = false;
+  }
+
+  return {
+    ok: true,
+    additions: parsed.additions,
+    deletions: parsed.deletions,
+    fileCount: parsed.paths.length,
+    hasRemote,
+    hasGh,
+  };
+}
+
+/**
+ * Stage and commit all changes in the board integration worktree (no empty commits).
+ * @param {{ boardId: string, message?: string }} input
+ */
+export async function commitIntegration({ boardId, message }) {
+  return commitWorktree({ boardId, slotId: 'integration', message });
+}
+
+/**
+ * Push the integration branch to `origin` (soft-fails when no remote).
+ * @param {{ boardId: string, branch: string }} input
+ */
+export async function pushIntegration({ boardId, branch }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const remote = await git(['remote', 'get-url', 'origin'], intPath);
+  if (!ok(remote) || !`${remote.stdout ?? ''}`.trim()) {
+    return {
+      ok: false,
+      pushed: false,
+      error: 'no_remote',
+      output: 'No origin remote configured',
+    };
+  }
+  const b = (branch && branch.trim()) || '';
+  if (!b) return { ok: false, error: 'branch required' };
+  const push = await git(['push', '-u', 'origin', b], intPath);
+  if (!ok(push)) return { ok: false, pushed: false, output: out(push) };
+  return { ok: true, pushed: true, output: out(push) };
+}
+
+/**
+ * Open a GitHub PR for the integration branch via `gh pr create` (soft-fails when gh is absent).
+ * @param {{ boardId: string, branch: string, title?: string, body?: string }} input
+ */
+export async function openPr({ boardId, branch, title, body }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing' };
+  }
+  const b = (branch && branch.trim()) || '';
+  if (!b) return { ok: false, error: 'branch required' };
+
+  let ghAvailable = false;
+  try {
+    const gh = await runProcess('gh', ['--version'], { cwd: intPath, timeout: 10_000 });
+    ghAvailable = gh.code === 0;
+  } catch {
+    ghAvailable = false;
+  }
+  if (!ghAvailable) {
+    return { ok: false, error: 'gh_unavailable', output: 'GitHub CLI (gh) is not installed' };
+  }
+
+  const args = ['pr', 'create', '--head', b];
+  const titleText = (title && title.trim()) || `Orchestrate: ${b}`;
+  const bodyText = (body && body.trim()) || '';
+  args.push('--title', titleText);
+  if (bodyText) args.push('--body', bodyText);
+
+  const r = await runProcess('gh', args, { cwd: intPath, timeout: 120_000 });
+  const text = out(r);
+  const urlMatch = text.match(/https?:\/\/\S+/);
+  if (!ok(r)) return { ok: false, output: text, error: 'gh_failed' };
+  return { ok: true, url: urlMatch?.[0], output: text };
 }
 
 /** Raw `git worktree list --porcelain` for the active repo. */

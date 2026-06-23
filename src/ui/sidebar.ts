@@ -40,7 +40,7 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import type { Chat } from '../types';
+import type { BoardTask, Chat, ChatGroup } from '../types';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
@@ -93,6 +93,108 @@ import {
   syncChatItemDotsInDom,
 } from './chat-item-dot';
 import { acknowledgeChatViewed } from '../notifications/acknowledge';
+
+/** True when every task in a wave is complete (sidebar auto-collapse). */
+function isWaveComplete(tasks: BoardTask[], waveId: number | string): boolean {
+  const wt = tasks.filter((t) => t.wave === waveId);
+  return wt.length > 0 && wt.every((t) => t.status === 'complete');
+}
+
+function toggleSidebarWaveCollapsed(group: ChatGroup, waveId: number | string): void {
+  const wave = group.orchestrateBoard?.waves.find((w) => w.id === waveId);
+  if (!wave) return;
+  wave.collapsed = !(wave.collapsed ?? false);
+  scheduleSaveSessions();
+}
+
+function appendWaveSubgroupHeader(
+  container: HTMLElement,
+  waveId: number | string,
+  collapsed: boolean,
+  onToggle: () => void,
+): void {
+  const head = document.createElement('div');
+  head.className = 'chat-wave-subgroup-header';
+  head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+
+  const caret = document.createElement('button');
+  caret.type = 'button';
+  caret.className = 'chat-wave-subgroup-header__caret';
+  caret.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  caret.setAttribute(
+    'aria-label',
+    collapsed ? `Expand wave ${waveId} chats` : `Collapse wave ${waveId} chats`,
+  );
+  caret.textContent = collapsed ? '▸' : '▾';
+  caret.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onToggle();
+    renderSidebar();
+  });
+
+  const label = document.createElement('span');
+  label.textContent = `Wave ${waveId}`;
+
+  head.appendChild(caret);
+  head.appendChild(label);
+  container.appendChild(head);
+}
+
+function appendBoardGroupWaveMembers(
+  membersEl: HTMLElement,
+  group: ChatGroup,
+  members: Chat[],
+  highlightChatId: string | null,
+): void {
+  const board = group.orchestrateBoard;
+  if (!board) return;
+
+  const plannerId = group.plannerChatId?.trim();
+  const taskById = new Map(board.tasks.map((t) => [t.id, t]));
+  const rendered = new Set<string>();
+
+  if (plannerId) {
+    const planner = members.find((c) => c.id === plannerId);
+    if (planner) {
+      appendChatRow(membersEl, planner, highlightChatId, { inGroup: true });
+      rendered.add(planner.id);
+    }
+  }
+
+  for (const wave of board.waves) {
+    const waveChats = members.filter((c) => {
+      if (rendered.has(c.id)) return false;
+      const taskId = c.boardTaskId?.trim();
+      if (!taskId) return false;
+      const task = taskById.get(taskId);
+      return task?.wave === wave.id;
+    });
+    if (waveChats.length === 0) continue;
+
+    const collapsed = isWaveComplete(board.tasks, wave.id) || (wave.collapsed ?? false);
+    appendWaveSubgroupHeader(membersEl, wave.id, collapsed, () => {
+      toggleSidebarWaveCollapsed(group, wave.id);
+    });
+
+    for (const chat of waveChats) rendered.add(chat.id);
+
+    if (!collapsed) {
+      const waveMembersEl = document.createElement('div');
+      waveMembersEl.className = 'chat-wave-members';
+      for (const chat of waveChats) {
+        appendChatRow(waveMembersEl, chat, highlightChatId, { inGroup: true });
+      }
+      membersEl.appendChild(waveMembersEl);
+    }
+  }
+
+  for (const chat of members) {
+    if (rendered.has(chat.id)) continue;
+    if (plannerId && chat.id === plannerId) continue;
+    if (chat.boardTaskId?.trim()) continue;
+    appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+  }
+}
 
 // ─── Multi-select state ───────────────────────────────────────────────────────
 
@@ -634,8 +736,12 @@ export function renderSidebar(): void {
         membersEl.className = 'chat-group-members';
         membersEl.setAttribute('role', 'group');
         membersEl.setAttribute('aria-label', `${group.name} chats`);
-        for (const chat of members) {
-          appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+        if (group.orchestrateBoard) {
+          appendBoardGroupWaveMembers(membersEl, group, members, highlightChatId);
+        } else {
+          for (const chat of members) {
+            appendChatRow(membersEl, chat, highlightChatId, { inGroup: true });
+          }
         }
         list.appendChild(membersEl);
       }

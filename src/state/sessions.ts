@@ -743,6 +743,10 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
+    ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
+    ...(typeof r.finishReport === 'string' && r.finishReport.trim()
+      ? { finishReport: r.finishReport.trim() }
+      : {}),
     ...(finalTest ? { finalTest } : {}),
     ...(typeof r.isolationMode === 'string' &&
     (r.isolationMode === 'off' ||
