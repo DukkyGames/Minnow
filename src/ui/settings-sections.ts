@@ -68,6 +68,7 @@ import { mountMemoryEmbeddingsPanel } from './settings-memory-embeddings';
 import { mountMemorySynthesisSettingsPanel } from './settings-memory-synthesis';
 import { renderAudioSettingsSection } from './settings-audio';
 import { renderNotificationsSettingsSection } from './settings-notifications';
+import { renderNetworkAccessSettings } from './settings-network';
 import { mountMemoryProposalsPanel } from './memory-proposals-panel';
 import { renderAgentPacksSettingsSection } from './settings-agent-packs';
 import { renderSkillsSettingsSection } from './settings-skills';
@@ -314,6 +315,14 @@ async function renderGeneralSection(): Promise<void> {
     linkToSettingsSection('Tools', 'tools'),
   );
   connection.appendChild(cross);
+
+  const network = appendSettingsGroup(
+    mount,
+    'Network access',
+    'Let other devices on your Wi‑Fi open Minnow in a browser while this PC runs npm start.',
+    'general.network',
+  );
+  await renderNetworkAccessSettings(network);
 
   const drawerHint = appendSettingsGroup(
     mount,

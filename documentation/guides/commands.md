@@ -119,6 +119,7 @@ Other `scripts/*.mjs` cover stepwise feature smokes, Electron launch, token/CSS 
 | `MINNOW_ELECTRON=1` | Internal flag set when running under Electron. |
 | `TOOLS_ALLOW_ALL_PATHS=1` | Let file/git tools resolve outside the workspace root (use with care). |
 | `MINNOW_OAUTH_REDIRECT_BASE` | Override the OAuth redirect base URL. |
+| `MINNOW_NETWORK` | `local` (default) or `lan` — bind dev server to loopback vs all interfaces. Overrides `config.json` → `server.networkAccess`. Restart after changing Settings. On Windows, allow inbound TCP on the dev port in Firewall if LAN clients cannot connect. |
 | `MINNOW_DEBUG` | Verbose server logging. |
 | `MINNOW_I_UNDERSTAND_UNSAFE_AUTOMATION` | Allow UI-only tools in headless runs. |
 | `MINNOW_PLUGIN_UNSAFE` | Allow unsigned/unsafe tool plugins. |

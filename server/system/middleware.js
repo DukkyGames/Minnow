@@ -5,6 +5,7 @@
 import { probeVram } from './vram.js';
 import { detectHardware } from './hardware.js';
 import { listDeadHosts } from '../generations/host-cooldown.js';
+import { getNetworkStatus } from './network.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -49,6 +50,15 @@ export async function handleSystemRequest(req, res, pathname) {
 
   if (pathname === '/api/system/host-health' && req.method === 'GET') {
     sendJson(res, 200, { hosts: listDeadHosts() });
+    return true;
+  }
+
+  if (pathname === '/api/system/network' && req.method === 'GET') {
+    const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const port = Number(parsed.searchParams.get('port')) || Number(process.env.PORT) || 5173;
+    const localUrl = parsed.searchParams.get('localUrl') ?? undefined;
+    const payload = await getNetworkStatus({ port, localUrl: localUrl ?? undefined });
+    sendJson(res, 200, payload);
     return true;
   }
 

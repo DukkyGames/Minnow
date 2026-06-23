@@ -34,6 +34,12 @@ import {
   resolveSafePath,
   runWithPathAccess,
 } from './server/runtime/path-access.js';
+import { readConfigJson } from './server/config/store.js';
+import {
+  initNetworkAccess,
+  resolveNetworkAccess,
+  resolveViteHost,
+} from './server/network/access.js';
 
 const PORT = Number(process.env.PORT) || 5173;
 
@@ -126,11 +132,16 @@ function launchElectronShell(port, localUrl, appRoot) {
 
 async function main() {
   const appRoot = getAppRoot();
+  const configMeta = (await readConfigJson('config.json')) ?? {};
+  const networkAccess = resolveNetworkAccess(configMeta);
+  initNetworkAccess(configMeta);
+
   const vite = await createServer({
     configFile: path.join(appRoot, 'vite.config.ts'),
     server: {
       port: PORT,
       strictPort: false,
+      host: resolveViteHost(networkAccess),
     },
     plugins: [
       {
@@ -160,7 +171,18 @@ async function main() {
   await vite.listen();
   const urls = vite.resolvedUrls?.local ?? [`http://localhost:${PORT}/`];
   const localUrl = urls[0];
+  const networkUrls = vite.resolvedUrls?.network ?? [];
   console.log(`Minnow dev server: ${localUrl}`);
+  if (networkAccess === 'lan') {
+    if (networkUrls.length > 0) {
+      console.log(`LAN access enabled — open from other devices:`);
+      for (const url of networkUrls) {
+        console.log(`  ${url}`);
+      }
+    } else {
+      console.log('LAN access enabled — no external network interfaces detected');
+    }
+  }
   console.log(`Config API: ${localUrl.replace(/\/$/, '')}/api/config/ping`);
   console.log(`Providers API: ${localUrl.replace(/\/$/, '')}/api/providers`);
   console.log(`Generations API: ${localUrl.replace(/\/$/, '')}/api/generations`);
@@ -181,7 +203,10 @@ async function main() {
   console.log(`Scheduler API: ${localUrl.replace(/\/$/, '')}/api/scheduler/ping`);
   console.log(`Calendar API: ${localUrl.replace(/\/$/, '')}/api/calendar/ping`);
   console.log(`Email API: ${localUrl.replace(/\/$/, '')}/api/email/ping`);
-  const schedulerBaseUrl = localUrl.replace(/\/$/, '');
+  const schedulerBaseUrl =
+    networkAccess === 'lan' && networkUrls.length > 0
+      ? networkUrls[0].replace(/\/$/, '')
+      : localUrl.replace(/\/$/, '');
   setSchedulerServerBaseUrl(schedulerBaseUrl);
   setOAuthRedirectBase(schedulerBaseUrl);
   await startSchedulerTickLoop({ baseUrl: schedulerBaseUrl });

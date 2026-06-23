@@ -1759,6 +1759,21 @@ export function mergeConfigMeta(existing, patch) {
     base.editorSettings = existing;
   }
 
+  if (p.server && typeof p.server === 'object') {
+    const existingServer =
+      base.server && typeof base.server === 'object'
+        ? { .../** @type {Record<string, unknown>} */ (base.server) }
+        : { networkAccess: 'local' };
+    const s = /** @type {Record<string, unknown>} */ (p.server);
+    if (typeof s.networkAccess === 'string') {
+      const mode = s.networkAccess.trim().toLowerCase();
+      if (mode === 'local' || mode === 'lan') {
+        existingServer.networkAccess = mode;
+      }
+    }
+    base.server = existingServer;
+  }
+
   if (p.browser && typeof p.browser === 'object') {
     const existingBrowser =
       base.browser && typeof base.browser === 'object'

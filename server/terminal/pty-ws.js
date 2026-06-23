@@ -11,17 +11,7 @@ import {
   resizePtySession,
   destroyPtySession,
 } from './pty-host.js';
-
-/** @param {import('http').IncomingMessage} req */
-function isLoopback(req) {
-  const addr = req.socket?.remoteAddress ?? '';
-  return (
-    addr === '127.0.0.1' ||
-    addr === '::1' ||
-    addr === '::ffff:127.0.0.1' ||
-    addr.endsWith('127.0.0.1')
-  );
-}
+import { getNetworkAccess, isClientAllowed } from '../network/access.js';
 
 /**
  * Attach PTY WebSocket server to the Vite HTTP server.
@@ -36,7 +26,7 @@ export function attachPtyWebSocketServer(httpServer) {
       return;
     }
 
-    if (!isLoopback(req)) {
+    if (!isClientAllowed(req, getNetworkAccess())) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
