@@ -1,26 +1,12 @@
-import { resolveConciergePlan } from './concierge-agent';
 import {
   activateDesktopChat,
   isDesktopChatActive,
-  isDesktopExpertsActive,
   isDesktopResearchActive,
 } from './desktop-state';
 import { handleDesktopSend, wireDesktopComposerControls } from './desktop-chat';
 import { handleSkillPickerKeydown, isSkillPickerOpen } from '../ui/skill-picker';
 import { handleDesktopResearchSubmit } from './research-desktop';
-import { getAppById } from './app-registry';
-import { CONCIERGE_LINES } from './intent-routing';
 import { MINNOW_GLYPH_HEADER_HTML } from '../ui/minnow-glyph';
-import type { AppId, LaunchOptions } from './types';
-
-const CONCIERGE_CHIPS = [
-  'Build a feature',
-  'Research a topic',
-  'Benchmark two models',
-  'Adjust my theme',
-] as const;
-
-type ConciergePhase = 'idle' | 'thinking' | 'done';
 
 /** Build the full desktop composer bar (textarea, attach, voice, context ring, send). */
 function buildDesktopComposer(): HTMLElement {
@@ -95,17 +81,10 @@ function buildDesktopComposer(): HTMLElement {
   return root;
 }
 
-/** Render the desktop concierge composer + chips. */
-export function renderConcierge(
-  container: HTMLElement,
-  onLaunch: (appId: AppId, options: LaunchOptions) => void,
-): void {
+/** Render the desktop launcher composer. */
+export function renderConcierge(container: HTMLElement): void {
   container.replaceChildren();
   container.className = 'mn-os-concierge-mount';
-
-  let phase: ConciergePhase = 'idle';
-  let lineText = '';
-  let whimsicalTimer: ReturnType<typeof setTimeout> | undefined;
 
   const conciergeWrap = document.createElement('div');
   conciergeWrap.className = 'mn-os-concierge';
@@ -113,54 +92,18 @@ export function renderConcierge(
   const composer = buildDesktopComposer();
   conciergeWrap.appendChild(composer);
 
-  const status = document.createElement('div');
-  status.className = 'mn-os-cc-status';
-
-  const statusDot = document.createElement('span');
-  statusDot.className = 'mn-os-cc-dot';
-  const statusLine = document.createElement('span');
-  statusLine.className = 'mn-os-mono';
-  status.appendChild(statusDot);
-  status.appendChild(statusLine);
-  conciergeWrap.appendChild(status);
-
-  const chipsWrap = document.createElement('div');
-  chipsWrap.className = 'mn-os-cc-chips';
-
   const field = composer.querySelector('#desktopInput') as HTMLTextAreaElement;
   const sendBtn = composer.querySelector('#desktopSendBtn') as HTMLButtonElement;
 
   wireDesktopComposerControls();
 
-  function clearWhimsicalTimer(): void {
-    if (whimsicalTimer !== undefined) {
-      clearTimeout(whimsicalTimer);
-      whimsicalTimer = undefined;
-    }
-  }
-
   function syncUi(): void {
-    composer.classList.toggle('is-busy', phase !== 'idle');
-    const inSurfaceMode =
-      isDesktopChatActive() || isDesktopResearchActive() || isDesktopExpertsActive();
-    field.disabled = phase !== 'idle' && !inSurfaceMode;
-    const hasText = Boolean(field.value.trim());
-    sendBtn.disabled = (!hasText && phase === 'idle') || phase === 'thinking';
-    sendBtn.setAttribute('aria-busy', phase === 'thinking' ? 'true' : 'false');
-    status.classList.toggle('is-visible', phase !== 'idle');
-    statusLine.textContent = lineText;
-    chipsWrap.hidden = phase !== 'idle' || inSurfaceMode;
-  }
-
-  function showWhimsicalLine(): void {
-    const pick = CONCIERGE_LINES[Math.floor(Math.random() * CONCIERGE_LINES.length)];
-    lineText = pick ?? 'Understanding your request…';
-    syncUi();
+    sendBtn.disabled = !field.value.trim();
   }
 
   async function submit(text?: string): Promise<void> {
     const q = (text ?? field.value).trim();
-    if (!q || phase === 'thinking') return;
+    if (!q) return;
 
     if (isDesktopChatActive()) {
       field.value = q;
@@ -179,53 +122,9 @@ export function renderConcierge(
       return;
     }
 
-    phase = 'thinking';
-    clearWhimsicalTimer();
-    lineText = 'Understanding your request…';
+    field.value = '';
+    await activateDesktopChat({ seed: q });
     syncUi();
-    showWhimsicalLine();
-    whimsicalTimer = setTimeout(showWhimsicalLine, 900);
-
-    try {
-      const plan = await resolveConciergePlan(q);
-      const app = getAppById(plan.appId);
-      clearWhimsicalTimer();
-
-      if (plan.appId === 'chat') {
-        lineText = 'Starting chat…';
-        phase = 'done';
-        syncUi();
-        const seed = plan.seed?.trim() || q;
-        field.value = '';
-        await activateDesktopChat({ seed });
-      } else if (plan.appId === 'research') {
-        lineText = 'Starting research…';
-        phase = 'done';
-        syncUi();
-        const { appId, ...options } = plan;
-        onLaunch(appId, options);
-        field.value = '';
-      } else {
-        lineText = app ? `Opening ${app.name}…` : 'Opening app…';
-        phase = 'done';
-        syncUi();
-        const { appId, ...options } = plan;
-        onLaunch(appId, options);
-        field.value = '';
-      }
-    } catch {
-      clearWhimsicalTimer();
-      lineText = 'Could not plan — starting chat…';
-      phase = 'done';
-      syncUi();
-      field.value = '';
-      await activateDesktopChat({ seed: q });
-    } finally {
-      phase = 'idle';
-      lineText = '';
-      clearWhimsicalTimer();
-      syncUi();
-    }
   }
 
   field.addEventListener('input', () => syncUi());
@@ -239,20 +138,6 @@ export function renderConcierge(
   });
   sendBtn.addEventListener('click', () => void submit());
 
-  for (const label of CONCIERGE_CHIPS) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'mn-os-cc-chip';
-    chip.textContent = label;
-    chip.addEventListener('click', () => {
-      field.value = label;
-      syncUi();
-      void submit(label);
-    });
-    chipsWrap.appendChild(chip);
-  }
-
-  conciergeWrap.appendChild(chipsWrap);
   container.appendChild(conciergeWrap);
   syncUi();
 }

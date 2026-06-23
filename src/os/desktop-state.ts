@@ -53,7 +53,7 @@ const COMPOSER_PLACEHOLDER_RESEARCH = 'What would you like to research?';
 const COMPOSER_PLACEHOLDER_EXPERTS = 'Message an expert…';
 
 const HERO_SUB_IDLE =
-  "What should we get into? Tell me, and I'll open the right app.";
+  "What should we get into? Tell me below — we'll start in chat.";
 const HERO_GREET_RESEARCH = 'Deep research.';
 const HERO_SUB_RESEARCH =
   "What would you like to research? I'll gather sources and synthesize a report.";

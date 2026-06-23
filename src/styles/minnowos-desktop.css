@@ -38,7 +38,7 @@
 
 .mn-os-desk-hero {
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -71,9 +71,15 @@
 
 /* ---------- concierge ---------- */
 
+.mn-os-concierge-mount {
+  /* Hero uses align-items: center — without stretch the mount shrink-wraps to ~min-content. */
+  align-self: stretch;
+  width: 100%;
+  max-width: 760px;
+}
+
 .mn-os-concierge {
   width: 100%;
-  max-width: 600px;
 }
 
 .mn-os-cc-input {
@@ -935,7 +941,7 @@
   left: 50%;
   bottom: var(--os-composer-dock-bottom);
   transform: translateX(-50%);
-  width: min(720px, calc(100% - 48px));
+  width: min(760px, calc(100% - 48px));
   z-index: 12;
   pointer-events: none;
   opacity: 0;
@@ -982,6 +988,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   margin-top: 15px;
   margin-bottom: 15px;
   padding: 6px 8px;
