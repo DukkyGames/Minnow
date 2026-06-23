@@ -145,9 +145,7 @@ let selectedCommitSha: string | null = null;
 
 let graphHandle: ReturnType<typeof renderGitGraph> | null = null;
 
-const graphOptions: { cwd?: string; onSelectCommit?: (sha: string) => void; compact?: boolean } = {
-  compact: true,
-};
+const graphOptions: { cwd?: string; onSelectCommit?: (sha: string) => void } = {};
 
 
 

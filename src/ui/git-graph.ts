@@ -1,20 +1,20 @@
 /**
- * Commit history graph for the git source control panel (MIN-198 P2).
+ * Commit history list for the git source control panel (MIN-198 P2).
  *
- * Integration: mount via `renderGitGraph(host, options)` on `#gitGraphMount`
- * inside [`git-panel.ts`](./git-panel.ts). Pass `onSelectCommit` to show diffs.
+ * Each row shows a branch-colored dot (accent for main) and indents
+ * commits that are not on the mainline.
  */
 
 import { gitLog, type GitCommitEntry } from '../state/git-api';
 
 const LOG_COUNT = 200;
-const LANE_COLORS = 8;
+const BRANCH_COLORS = 7;
+/** Extra left padding for commits on a side branch. */
+const BRANCH_INDENT_PX = 14;
 
 export interface GitGraphOptions {
   cwd?: string;
   onSelectCommit?: (sha: string) => void;
-  /** Single-dot rows for narrow sidebars (no multi-lane connectors). */
-  compact?: boolean;
 }
 
 export interface GitGraphHandle {
@@ -22,141 +22,192 @@ export interface GitGraphHandle {
   destroy: () => void;
 }
 
-/** Per-commit lane layout metadata used when rendering rows. */
-interface CommitLayout {
+/** Visual metadata attached to each commit row. */
+export interface CommitVisual {
   commit: GitCommitEntry;
-  lane: number;
-  laneCount: number;
-  mergeFrom: number[];
-  branchTo: number[];
-  activeAbove: boolean[];
-  activeBelow: boolean[];
+  branchKey: string;
+  isMain: boolean;
+  indentPx: number;
+  colorIndex: number;
   isHead: boolean;
+  /** Vertical main-trunk line segment drawn in the left gutter. */
+  trunkSegment: 'none' | 'up' | 'down' | 'both' | 'through';
 }
 
-/** Whether any ref string marks this commit as current HEAD. */
 function commitIsHead(refs: string[]): boolean {
   return refs.some((r) => /\bHEAD\b/.test(r));
 }
 
-/** Lane color token cycling through --git-lane-N custom properties. */
-function laneColorVar(laneIndex: number): string {
-  return `var(--git-lane-${laneIndex % LANE_COLORS})`;
+/** Parse a git log ref string into a short branch name, when possible. */
+export function normalizeBranchRef(ref: string): string | null {
+  const trimmed = ref.trim();
+  if (!trimmed || trimmed.startsWith('tag:')) return null;
+
+  const headMatch = trimmed.match(/^HEAD -> (.+)$/);
+  if (headMatch) return headMatch[1];
+
+  if (trimmed.startsWith('origin/')) {
+    const remote = trimmed.slice('origin/'.length);
+    if (remote === 'HEAD') return null;
+    return remote;
+  }
+
+  if (trimmed.startsWith('remotes/origin/')) {
+    const remote = trimmed.slice('remotes/origin/'.length);
+    if (remote === 'HEAD') return null;
+    return remote;
+  }
+
+  return trimmed;
+}
+
+function extractBranchRefs(refs: string[]): string[] {
+  const names: string[] = [];
+  for (const ref of refs) {
+    const name = normalizeBranchRef(ref);
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+/** Prefer `main`, then `master`, otherwise the branch at HEAD. */
+export function detectTrunkBranch(commits: GitCommitEntry[]): string {
+  for (const trunk of ['main', 'master']) {
+    for (const commit of commits) {
+      if (extractBranchRefs(commit.refs).includes(trunk)) return trunk;
+    }
+  }
+
+  const headCommit = commits.find((c) => commitIsHead(c.refs));
+  const headBranches = headCommit ? extractBranchRefs(headCommit.refs) : [];
+  return headBranches[0] ?? 'main';
+}
+
+/** Hashes on the trunk via first-parent walk from the newest trunk tip. */
+export function buildMainlineSet(commits: GitCommitEntry[], trunkBranch: string): Set<string> {
+  const byHash = new Map(commits.map((c) => [c.hash, c]));
+  const tip =
+    commits.find((c) => commitIsHead(c.refs) && extractBranchRefs(c.refs).includes(trunkBranch)) ??
+    commits.find((c) => extractBranchRefs(c.refs).includes(trunkBranch)) ??
+    commits[0];
+
+  const mainline = new Set<string>();
+  let hash: string | undefined = tip?.hash;
+  while (hash) {
+    mainline.add(hash);
+    hash = byHash.get(hash)?.parents[0];
+  }
+  return mainline;
 }
 
 /**
- * Greedy lane assignment (newest-first log order).
- * Each commit takes the leftmost lane waiting for it; branch parents open lanes;
- * merge commits close extra lanes into the primary lane.
+ * Assign each commit a branch key, dot color, and indent.
+ * Mainline commits use the accent color with no indent; side branches are indented.
  */
-export function computeCommitLayouts(commits: GitCommitEntry[]): CommitLayout[] {
-  if (commits.length === 0) return [];
+export function assignCommitVisuals(
+  commits: GitCommitEntry[],
+  trunkBranch = detectTrunkBranch(commits),
+): CommitVisual[] {
+  const mainline = buildMainlineSet(commits, trunkBranch);
+  const assigned = new Map<string, string>();
+  const branchColor = new Map<string, number>();
+  let nextColor = 1;
 
-  const hashSet = new Set(commits.map((c) => c.hash));
-  const activeTips = new Map<number, string>();
-  const freeLanes: number[] = [];
-  let maxLane = 0;
+  for (let i = 0; i < commits.length; i++) {
+    const commit = commits[i];
 
-  const partial: Array<{
-    commit: GitCommitEntry;
-    lane: number;
-    mergeFrom: number[];
-    branchTo: number[];
-  }> = [];
-
-  for (const commit of commits) {
-    const waiting = [...activeTips.entries()]
-      .filter(([, hash]) => hash === commit.hash)
-      .map(([lane]) => lane)
-      .sort((a, b) => a - b);
-
-    let lane: number;
-    let mergeFrom: number[] = [];
-
-    if (waiting.length > 0) {
-      lane = waiting[0];
-      mergeFrom = waiting.slice(1);
-      for (const l of waiting) activeTips.delete(l);
-    } else if (freeLanes.length > 0) {
-      lane = freeLanes.shift()!;
-    } else {
-      lane = maxLane;
-      maxLane += 1;
+    if (mainline.has(commit.hash)) {
+      assigned.set(commit.hash, trunkBranch);
+      continue;
     }
 
-    const parents = commit.parents.filter((p) => hashSet.has(p));
-    const branchTo: number[] = [];
-
-    if (parents.length > 0) {
-      activeTips.set(lane, parents[0]);
-    } else {
-      freeLanes.push(lane);
-      freeLanes.sort((a, b) => a - b);
+    const refs = extractBranchRefs(commit.refs).filter((name) => name !== trunkBranch);
+    if (refs.length > 0) {
+      assigned.set(commit.hash, refs[0]);
+      continue;
     }
 
-    for (let i = 1; i < parents.length; i++) {
-      let parentLane: number;
-      if (freeLanes.length > 0) {
-        parentLane = freeLanes.shift()!;
-      } else {
-        parentLane = maxLane;
-        maxLane += 1;
-      }
-      activeTips.set(parentLane, parents[i]);
-      branchTo.push(parentLane);
-    }
-
-    partial.push({ commit, lane, mergeFrom, branchTo });
-  }
-
-  const laneCount = Math.max(1, maxLane);
-  const activeBetween: boolean[][] = commits.map(() => Array(laneCount).fill(false));
-
-  for (let i = 0; i < commits.length - 1; i++) {
-    const curr = partial[i];
-    const next = partial[i + 1];
-    const nextHash = commits[i + 1].hash;
-
-    if (
-      curr.commit.parents[0] === nextHash &&
-      curr.lane === next.lane
-    ) {
-      activeBetween[i][curr.lane] = true;
-    }
-
-    for (const branchLane of curr.branchTo) {
-      if (next.lane === branchLane && curr.commit.parents.includes(nextHash)) {
-        activeBetween[i][branchLane] = true;
+    if (i > 0) {
+      const newer = commits[i - 1];
+      const newerBranch = assigned.get(newer.hash);
+      if (newerBranch && newerBranch !== trunkBranch && newer.parents.includes(commit.hash)) {
+        assigned.set(commit.hash, newerBranch);
+        continue;
       }
     }
 
-    for (const mergeLane of next.mergeFrom) {
-      activeBetween[i][mergeLane] = true;
+    const parent = commit.parents[0];
+    const parentBranch = parent ? assigned.get(parent) : undefined;
+    if (parentBranch && parentBranch !== trunkBranch) {
+      assigned.set(commit.hash, parentBranch);
+      continue;
     }
+
+    assigned.set(commit.hash, 'branch');
   }
 
-  return partial.map((entry, index) => {
-    const activeBelowRaw = activeBetween[index] ?? Array(laneCount).fill(false);
-    const activeBelow =
-      index === partial.length - 1
-        ? Array(laneCount).fill(false)
-        : activeBelowRaw;
-    const activeAbove =
-      index > 0
-        ? (activeBetween[index - 1] ?? Array(laneCount).fill(false))
-        : Array(laneCount).fill(false);
+  return commits.map((commit) => {
+    const branchKey = assigned.get(commit.hash) ?? trunkBranch;
+    const isMain = branchKey === trunkBranch;
+
+    if (!isMain && !branchColor.has(branchKey)) {
+      branchColor.set(branchKey, nextColor++);
+    }
 
     return {
-      commit: entry.commit,
-      lane: entry.lane,
-      laneCount,
-      mergeFrom: entry.mergeFrom,
-      branchTo: entry.branchTo,
-      activeAbove,
-      activeBelow,
-      isHead: commitIsHead(entry.commit.refs),
+      commit,
+      branchKey,
+      isMain,
+      indentPx: isMain ? 0 : BRANCH_INDENT_PX,
+      colorIndex: isMain ? 0 : (branchColor.get(branchKey) ?? 1),
+      isHead: commitIsHead(commit.refs),
+      trunkSegment: 'none' as const,
     };
   });
+}
+
+type TrunkSegment = CommitVisual['trunkSegment'];
+
+function mergeTrunkSegment(current: TrunkSegment, add: 'up' | 'down'): TrunkSegment {
+  if (current === 'through') return 'through';
+  if (add === 'up') {
+    if (current === 'down') return 'both';
+    return current === 'none' ? 'up' : current;
+  }
+  if (current === 'up') return 'both';
+  return current === 'none' ? 'down' : current;
+}
+
+/** Mark rows that sit on the vertical line between consecutive main commits. */
+export function annotateMainTrunkSegments(visuals: CommitVisual[]): CommitVisual[] {
+  const mainIndices = visuals
+    .map((visual, index) => (visual.isMain ? index : -1))
+    .filter((index) => index >= 0);
+
+  const segments: TrunkSegment[] = visuals.map(() => 'none');
+
+  for (let k = 0; k < mainIndices.length - 1; k++) {
+    const start = mainIndices[k];
+    const end = mainIndices[k + 1];
+
+    segments[start] = mergeTrunkSegment(segments[start], 'down');
+
+    for (let i = start + 1; i < end; i++) {
+      segments[i] = 'through';
+    }
+
+    segments[end] = mergeTrunkSegment(segments[end], 'up');
+  }
+
+  return visuals.map((visual, index) => ({
+    ...visual,
+    trunkSegment: segments[index],
+  }));
+}
+
+function branchColorVar(colorIndex: number): string {
+  if (colorIndex === 0) return 'var(--mn-accent)';
+  return `var(--git-lane-${((colorIndex - 1) % BRANCH_COLORS) + 1})`;
 }
 
 function renderRefChip(ref: string): HTMLElement {
@@ -167,93 +218,84 @@ function renderRefChip(ref: string): HTMLElement {
   return chip;
 }
 
-function renderRow(
-  layout: CommitLayout,
-  onSelect?: (sha: string) => void,
-  compact = false,
-): HTMLElement {
+function renderRow(visual: CommitVisual, onSelect?: (sha: string) => void): HTMLElement {
   const row = document.createElement('div');
   row.className = 'git-graph__row';
-  if (compact) row.classList.add('git-graph__row--compact');
-  row.dataset.sha = layout.commit.hash;
-  row.title = layout.commit.subject;
+  if (!visual.isMain) row.classList.add('git-graph__row--branch');
+  row.dataset.sha = visual.commit.hash;
+  row.title = `${visual.commit.subject} (${visual.branchKey})`;
 
   if (onSelect) {
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
-    row.addEventListener('click', () => onSelect(layout.commit.hash));
+    row.addEventListener('click', () => onSelect(visual.commit.hash));
     row.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        onSelect(layout.commit.hash);
+        onSelect(visual.commit.hash);
       }
     });
   }
 
+  const dot = document.createElement('span');
+  dot.className = 'git-graph__dot';
+  dot.setAttribute('aria-hidden', 'true');
+  if (visual.isMain) dot.classList.add('git-graph__dot--main');
+  else dot.classList.add('git-graph__dot--branch');
+  if (visual.isHead) dot.classList.add('git-graph__dot--head');
+  dot.style.setProperty('--branch-color', branchColorVar(visual.colorIndex));
+
+  const marker = document.createElement('div');
+  marker.className = 'git-graph__marker';
+  marker.appendChild(dot);
+
+  if (visual.trunkSegment !== 'none') {
+    const line = document.createElement('span');
+    line.className = `git-graph__trunk-line git-graph__trunk-line--${visual.trunkSegment}`;
+    line.setAttribute('aria-hidden', 'true');
+    row.appendChild(line);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'git-graph__body';
+
   const content = document.createElement('div');
   content.className = 'git-graph__content';
 
+  if (visual.indentPx > 0) {
+    body.style.setProperty('--git-branch-indent', `${visual.indentPx}px`);
+  }
+
   const subject = document.createElement('span');
   subject.className = 'git-graph__subject';
-  subject.textContent = layout.commit.subject;
+  subject.textContent = visual.commit.subject;
 
   const meta = document.createElement('div');
   meta.className = 'git-graph__meta';
 
   const author = document.createElement('span');
   author.className = 'git-graph__author';
-  author.textContent = layout.commit.author;
+  author.textContent = visual.commit.author;
 
   const time = document.createElement('span');
   time.className = 'git-graph__time';
-  time.textContent = layout.commit.relativeTime;
+  time.textContent = visual.commit.relativeTime;
 
   meta.append(author, time);
 
-  const refsEl = document.createElement('div');
-  refsEl.className = 'git-graph__refs';
-  for (const ref of layout.commit.refs) {
-    refsEl.appendChild(renderRefChip(ref));
-  }
-
-  content.append(subject, meta, refsEl);
-
-  const lanesEl = document.createElement('div');
-  lanesEl.className = compact ? 'git-graph__lanes git-graph__lanes--compact' : 'git-graph__lanes';
-
-  if (compact) {
-    const dot = document.createElement('div');
-    dot.className = 'git-graph__dot';
-    dot.style.setProperty('--lane-color', laneColorVar(layout.lane));
-    if (layout.isHead) dot.classList.add('git-graph__dot--head');
-    dot.setAttribute('aria-hidden', 'true');
-    lanesEl.appendChild(dot);
-  } else {
-    lanesEl.style.setProperty('--lane-count', String(layout.laneCount));
-    lanesEl.style.setProperty('--dot-lane', String(layout.lane));
-
-    for (let lane = 0; lane < layout.laneCount; lane++) {
-      const laneEl = document.createElement('div');
-      laneEl.className = 'git-graph__lane';
-      laneEl.style.setProperty('--lane-color', laneColorVar(lane));
-
-      if (layout.activeAbove[lane]) laneEl.classList.add('git-graph__lane--above');
-      if (layout.activeBelow[lane]) laneEl.classList.add('git-graph__lane--below');
-      if (layout.mergeFrom.includes(lane)) laneEl.classList.add('git-graph__lane--merge');
-      if (layout.branchTo.includes(lane)) laneEl.classList.add('git-graph__lane--branch');
-
-      lanesEl.appendChild(laneEl);
+  if (visual.commit.refs.length > 0) {
+    const refsEl = document.createElement('div');
+    refsEl.className = 'git-graph__refs';
+    for (const ref of visual.commit.refs) {
+      refsEl.appendChild(renderRefChip(ref));
     }
-
-    const dot = document.createElement('div');
-    dot.className = 'git-graph__dot';
-    dot.style.setProperty('--lane-color', laneColorVar(layout.lane));
-    if (layout.isHead) dot.classList.add('git-graph__dot--head');
-    dot.setAttribute('aria-hidden', 'true');
-    lanesEl.appendChild(dot);
+    content.append(subject, meta, refsEl);
+  } else {
+    content.append(subject, meta);
   }
 
-  row.append(content, lanesEl);
+  row.append(body);
+  body.append(marker, content);
   return row;
 }
 
@@ -268,23 +310,22 @@ function renderEmpty(host: HTMLElement, message: string): void {
 
 function renderGraph(
   host: HTMLElement,
-  layouts: CommitLayout[],
+  visuals: CommitVisual[],
   onSelect?: (sha: string) => void,
-  compact = false,
 ): void {
-  host.className = compact ? 'git-graph git-graph--compact git-panel-graph-mount' : 'git-graph git-panel-graph-mount';
+  host.className = 'git-graph git-panel-graph-mount';
   host.replaceChildren();
 
   const list = document.createElement('div');
   list.className = 'git-graph__list';
-  for (const layout of layouts) {
-    list.appendChild(renderRow(layout, onSelect, compact));
+  for (const visual of visuals) {
+    list.appendChild(renderRow(visual, onSelect));
   }
   host.appendChild(list);
 }
 
 /**
- * Render a commit lane graph into `host`.
+ * Render commit history into `host`.
  * Fetches up to 200 commits via `gitLog`; call `refresh` after cwd changes.
  */
 export function renderGitGraph(
@@ -308,8 +349,8 @@ export function renderGitGraph(
       return;
     }
 
-    const layouts = computeCommitLayouts(commits);
-    renderGraph(host, layouts, options.onSelectCommit, options.compact === true);
+    const visuals = annotateMainTrunkSegments(assignCommitVisuals(commits));
+    renderGraph(host, visuals, options.onSelectCommit);
   };
 
   const destroy = (): void => {

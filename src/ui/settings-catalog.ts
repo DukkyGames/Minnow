@@ -39,7 +39,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 
 /** Category descriptions (search keywords / future catalog hints; not shown in UI). */
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
-  general: 'Notifications, terminal behavior, audio devices, and where settings are saved.',
+  general: 'Notifications, terminal behavior, LAN access, audio devices, and where settings are saved.',
   appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'Composer modes, personas, workers, and tool policies.',
@@ -142,6 +142,10 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['scheduler', 'research', 'synthesis'],
   }),
   field('general.notifications.sound', 'Notification sounds', 'general', 'general'),
+  field('general.network', 'Network access', 'general', 'general', {
+    keywords: ['lan', 'wifi', 'local network', 'remote', 'phone', 'tablet', '0.0.0.0'],
+    description: 'Let other devices on your Wi-Fi open Minnow in a browser while this PC runs npm start.',
+  }),
   field('general.chat.terminal', 'Terminal behavior', 'general', 'general', {
     keywords: ['shell', 'background command'],
   }),

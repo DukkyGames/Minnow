@@ -348,6 +348,7 @@ export function openSettings(
   }
 
   if (wasAlreadyOpen && route.category === activeCategory && !section && !options?.searchKey) {
+    void refreshCategoryAreas(route.category);
     return;
   }
 
