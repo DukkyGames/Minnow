@@ -13,13 +13,13 @@ import {
 function clampMaxToolTurns(value) {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return 100;
-  return Math.min(128, Math.max(1, Math.round(n)));
+  return Math.min(500, Math.max(1, Math.round(n)));
 }
 
 describe('chat.maxToolTurns clamp (client contract)', () => {
-  test('clampMaxToolTurns enforces [1, 128]', () => {
+  test('clampMaxToolTurns enforces [1, 500]', () => {
     assert.equal(clampMaxToolTurns(0), 1);
-    assert.equal(clampMaxToolTurns(200), 128);
+    assert.equal(clampMaxToolTurns(600), 500);
     assert.equal(clampMaxToolTurns(24), 24);
     assert.equal(clampMaxToolTurns('nope'), 100);
   });
@@ -55,9 +55,9 @@ describe('config.json chat.maxToolTurns merge', () => {
     assert.equal(merged.chat.generationMaxDurationMs, 3_600_000);
   });
 
-  test('mergeConfigMeta clamps chat.maxToolTurns to 128', () => {
-    const merged = mergeConfigMeta({}, { chat: { maxToolTurns: 200 } });
-    assert.equal(merged.chat.maxToolTurns, 128);
+  test('mergeConfigMeta clamps chat.maxToolTurns to 500', () => {
+    const merged = mergeConfigMeta({}, { chat: { maxToolTurns: 600 } });
+    assert.equal(merged.chat.maxToolTurns, 500);
   });
 
   test('mergeConfigMeta clamps chat.maxToolTurns to at least 1', () => {

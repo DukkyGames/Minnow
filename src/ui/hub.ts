@@ -408,31 +408,38 @@ function buildHubDom(activeChat: Chat): HTMLElement {
   const intentDefs: { id: HubIntentId; title: string; sub: string; icon: string }[] = [
     {
       id: 'build',
-      title: 'Build a feature',
+      title: 'Build',
       sub: 'Scaffold and implement',
       icon:
         '<img class="icon-img hub-intent__icon-img" src="/icons/hub-build.png" width="18" height="18" alt="" aria-hidden="true">',
     },
     {
       id: 'plan',
-      title: 'Plan a change',
+      title: 'Plan',
       sub: 'Map it before code',
       icon:
         '<img class="icon-img hub-intent__icon-img" src="/icons/hub-plan.png" width="18" height="18" alt="" aria-hidden="true">',
     },
     {
       id: 'debug',
-      title: 'Debug an issue',
+      title: 'Debug',
       sub: 'Reproduce and fix',
       icon:
         '<img class="icon-img hub-intent__icon-img" src="/icons/benchmark.png" width="18" height="18" alt="" aria-hidden="true">',
     },
     {
       id: 'explain',
-      title: 'Explain this repo',
+      title: 'Explain',
       sub: 'Get oriented fast',
       icon:
         '<img class="icon-img hub-intent__icon-img" src="/icons/expert-lab.png" width="18" height="18" alt="" aria-hidden="true">',
+    },
+    {
+      id: 'orchestrate',
+      title: 'Orchestrate',
+      sub: 'Run a plan as a board',
+      icon:
+        '<img class="icon-img hub-intent__icon-img" src="/icons/orchestrate.png" width="18" height="18" alt="" aria-hidden="true">',
     },
   ];
   for (const def of intentDefs) {
@@ -448,7 +455,14 @@ function buildHubDom(activeChat: Chat): HTMLElement {
     `;
     btn.querySelector('.hub-intent__title')!.textContent = def.title;
     btn.querySelector('.hub-intent__sub')!.textContent = def.sub;
-    btn.addEventListener('click', () => applyIntent(def.id));
+    btn.addEventListener('click', () => {
+      if (def.id === 'orchestrate') {
+        teardownHub();
+        void import('./orchestrate-hub').then((m) => m.renderOrchestrateHub());
+        return;
+      }
+      applyIntent(def.id);
+    });
     intents.appendChild(btn);
   }
 

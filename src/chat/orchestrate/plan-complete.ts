@@ -10,6 +10,11 @@ export function isOrchestratePlanComplete(board: OrchestrateBoardState): boolean
   return tasks.length > 0 && tasks.every((t) => t.status === 'complete');
 }
 
+/** True when all tasks are complete and the final integration test passed. */
+export function isOrchestrateBoardFinished(board: OrchestrateBoardState): boolean {
+  return isOrchestratePlanComplete(board) && board.finalTest?.status === 'passed';
+}
+
 /** True when orchestration still has incomplete tasks. */
 export function hasIncompleteOrchestrateWork(board: OrchestrateBoardState): boolean {
   return board.tasks.some((t) => t.status !== 'complete');

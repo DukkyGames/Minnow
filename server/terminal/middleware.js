@@ -2,7 +2,10 @@
  * HTTP middleware for /api/terminal/* (SSE streaming command output).
  */
 
-import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail } from '../terminal-runner.js';
+import path from 'node:path';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
+import { subscribeRun, getRun, createRun, cancelRun, getTerminalHistoryForChat, readRunLogTail, stopActiveRunsForChat } from '../terminal-runner.js';
+import { resolveChatCwd } from '../workspace/chat-cwd.js';
 import { getAvailableShellProfiles } from './shell-profiles.js';
 import {
   createPtySession,
@@ -75,10 +78,28 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
       const chatId = typeof body?.chatId === 'string' ? body.chatId : undefined;
       const toolCallId =
         typeof body?.toolCallId === 'string' ? body.toolCallId : undefined;
-      const cwd =
-        typeof body?.cwd === 'string' && body.cwd.trim()
-          ? body.cwd.trim()
-          : projectRoot;
+
+      let base = projectRoot;
+      if (body?.workspaceRoot != null) {
+        if (typeof body.workspaceRoot !== 'string' || !body.workspaceRoot.trim()) {
+          sendJson(res, 400, { error: 'Invalid workspaceRoot' });
+          return true;
+        }
+        try {
+          base = await validateAllowedWorkspaceRoot(body.workspaceRoot);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          sendJson(res, 400, { error: message });
+          return true;
+        }
+      } else if (source === 'agent' && chatId) {
+        const chatRoot = await resolveChatCwd(chatId);
+        if (chatRoot) base = chatRoot;
+      }
+
+      const relativeCwd =
+        typeof body?.cwd === 'string' && body.cwd.trim() ? body.cwd.trim() : '';
+      const cwd = relativeCwd ? path.resolve(base, relativeCwd) : base;
 
       const argv = Array.isArray(body?.args)
         ? body.args.filter((a) => typeof a === 'string')
@@ -141,6 +162,23 @@ export async function handleTerminalRequest(req, res, pathname, projectRoot) {
   if (cancelMatch && req.method === 'POST') {
     const ok = cancelRun(cancelMatch[1]);
     sendJson(res, 200, { ok });
+    return true;
+  }
+
+  if (pathname === '/api/terminal/stop-chat-runs' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const chatId = typeof body?.chatId === 'string' ? body.chatId.trim() : '';
+      if (!chatId) {
+        sendJson(res, 400, { error: 'chatId is required' });
+        return true;
+      }
+      const result = stopActiveRunsForChat(chatId);
+      sendJson(res, 200, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: message });
+    }
     return true;
   }
 

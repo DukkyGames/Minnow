@@ -1,6 +1,6 @@
 {
   "searxng": {
-    "enabled": false,
+    "enabled": true,
     "autoStart": true,
     "port": 8899
   },

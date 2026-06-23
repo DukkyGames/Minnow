@@ -465,8 +465,8 @@
 
 .hub-intents {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 22px;
 }
 
@@ -546,7 +546,7 @@ html[data-theme$='-dark'] .hub-intent__icon .hub-intent__icon-img {
 }
 
 .hub-intent__title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--mn-fg);
   text-align: left;
@@ -556,7 +556,7 @@ html[data-theme$='-dark'] .hub-intent__icon .hub-intent__icon-img {
 }
 
 .hub-intent__sub {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--mn-fg-subtle);
   text-align: left;
   overflow: hidden;
@@ -566,11 +566,11 @@ html[data-theme$='-dark'] .hub-intent__icon .hub-intent__icon-img {
 
 @media (max-width: 720px) {
   .hub-intent__title {
-    font-size: 12px;
+    font-size: 10px;
   }
 
   .hub-intent__sub {
-    font-size: 10px;
+    font-size: 9px;
   }
 }
 

@@ -15,6 +15,7 @@ import * as llamaCppProvisioner from './llama-cpp.js';
  * @property {ManagedServerKind} kind
  * @property {number} defaultPort
  * @property {boolean} defaultAutoStart
+ * @property {boolean} [defaultAutoProvision]
  * @property {string} healthPath
  * @property {object} provisioner
  */
@@ -28,6 +29,7 @@ export const BUILTIN_SERVERS = {
     kind: 'python-venv',
     defaultPort: 8899,
     defaultAutoStart: true,
+    defaultAutoProvision: true,
     healthPath: '/healthz',
     provisioner: searxngProvisioner,
   },

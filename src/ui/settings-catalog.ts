@@ -56,7 +56,7 @@ export const SETTINGS_CATEGORY_AREAS: Record<
   general: ['general', 'audio'],
   appearance: ['appearance'],
   models: ['providers', 'model-routing', 'sampler', 'thinking', 'usage'],
-  agents: ['modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents'],
+  agents: ['modes', 'experts', 'work-agents', 'agent-packs', 'sub-agents', 'autopilot'],
   knowledge: ['prompting', 'rules', 'memory'],
   integrations: [
     'search',
@@ -218,6 +218,14 @@ export const SETTINGS_FIELD_CATALOG: SettingsFieldEntry[] = [
     keywords: ['spawn', 'subagent'],
   }),
   field('agents.subAgents.maxTurns', 'Sub-agent max tool turns', 'agents', 'sub-agents'),
+  field('agents.autopilot', 'Orchestrator autopilot', 'agents', 'autopilot', {
+    keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
+    description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',
+  }),
+  field('agents.autopilot.executionMode', 'Default execution mode', 'agents', 'autopilot'),
+  field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
+  field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
+  field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
 
   // —— Knowledge ——
   field('knowledge.prompting', 'Prompt profiles', 'knowledge', 'prompting', {

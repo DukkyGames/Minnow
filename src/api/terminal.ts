@@ -40,6 +40,10 @@ export async function startTerminalRun(body: {
   chatId: string;
   source: 'user' | 'agent';
   toolCallId?: string;
+  /** Allow-listed workspace root; agent runs default to chat worktree when omitted. */
+  workspaceRoot?: string;
+  /** Working directory relative to workspaceRoot (or server base when omitted). */
+  cwd?: string;
 }): Promise<TerminalRunStart> {
   const res = await fetch('/api/terminal/run', {
     method: 'POST',

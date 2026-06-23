@@ -84,6 +84,7 @@ import { loadToolSecurityMeta } from './config/tool-security-meta';
 import { loadBrowserMeta } from './config/browser-meta';
 import { loadChatMeta } from './config/chat-meta';
 import { applySamplerMetaToDrawer, loadSamplerMeta } from './config/sampler-meta';
+import { loadAutopilotMeta } from './config/autopilot-meta';
 import {
   getActiveChat,
   loadSessionsFromStorage,
@@ -94,6 +95,9 @@ import { clearChat, renderChatFromHistory, renderStatsForChat } from './ui/messa
 import { refreshHubLiveData } from './ui/hub';
 import { bootGenerationResumeForChats } from './chat/generation-resume';
 import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
+import { initBoardLogDiskSink } from './state/board-log-disk.ts';
+import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
+import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
 import {
   autoResize,
   handleComposerPrimaryAction,
@@ -256,12 +260,14 @@ function registerServiceWorker(): void {
 export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
+  initBoardLogDiskSink();
   await runMigrationIfNeeded();
   // Load tools before any UI reads permissions (drawer + settings page rebuilds).
   await loadToolConfigFromStorage();
   await initPromptSystem();
   await initWorkAgentSystem();
   await loadSessionsFromStorage();
+  registerOrchestrateBoardShutdownHandler();
   const { loadBugsFromStorage, migrateBugsFromChats } = await import(
     './state/bug-board-store.ts'
   );
@@ -323,6 +329,7 @@ export async function initApp(): Promise<void> {
   await loadSamplerMeta()
     .then(applySamplerMetaToDrawer)
     .catch(() => undefined);
+  await loadAutopilotMeta().catch(() => undefined);
   await loadThinkingMeta().catch(() => undefined);
   await initTerminalPanel();
   onTerminalServerAvailabilityChanged();
@@ -369,6 +376,7 @@ export async function initApp(): Promise<void> {
   updateModelLoadUnloadButtons();
   renderChatFromHistory(getActiveChat());
   if (sessionState) {
+    await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
     await bootOrchestrateBoardResume(sessionState);
   }

@@ -94,7 +94,7 @@ export function syncToolCallKillButtons(activeRunIds: Set<string>): void {
   }
 }
 
-function humanizeToolName(name: string): string {
+export function humanizeToolName(name: string): string {
   return TOOL_LABEL_MAP.get(name) ?? name.replace(/_/g, ' ');
 }
 

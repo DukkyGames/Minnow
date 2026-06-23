@@ -2,6 +2,7 @@
  * Composer microphone button — batch provider STT or live local Whisper streaming.
  */
 
+import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { getActiveComposerSurface } from './composer-surface';
 import { autoResize } from './input';
 import { setStatus } from './status';
@@ -51,6 +52,14 @@ const MIC_BUTTON_MARKUP =
   '</svg>' +
   '<span class="composer-mic-btn__spinner" aria-hidden="true"></span>';
 
+function resizeComposerInput(input: HTMLTextAreaElement): void {
+  if (input.id === 'desktopInput') {
+    autoResizeDesktopComposer(input);
+    return;
+  }
+  autoResize(input);
+}
+
 /** Insert transcribed text at the caret in a textarea (batch path). */
 function insertTranscript(input: HTMLTextAreaElement, text: string): void {
   const trimmed = text.trim();
@@ -67,7 +76,7 @@ function insertTranscript(input: HTMLTextAreaElement, text: string): void {
   const caret = before.length + spacer.length + trimmed.length;
   input.setSelectionRange(caret, caret);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  autoResize(input);
+  resizeComposerInput(input);
   input.focus();
 }
 
@@ -219,7 +228,7 @@ function renderDictation(input: HTMLTextAreaElement): void {
   if (!dictationRange) return;
   dictationRange.render(input);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  autoResize(input);
+  resizeComposerInput(input);
   input.focus();
 }
 

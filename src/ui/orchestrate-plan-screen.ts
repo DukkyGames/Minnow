@@ -7,7 +7,6 @@ import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
 import { mountPlanPreviewContent } from '../chat/orchestrate/plan-preview';
 import {
   isExecutableOrchestratePlan,
-  normalizeOrchestratePlanPath,
 } from '../chat/orchestrate/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import { isFirstUserMessagePending } from '../chat/titles/schedule';
@@ -17,11 +16,9 @@ import {
 } from '../chat/main-turn-activity';
 import { isChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
-import { getOrCreateBoardGroup } from '../state/chat-groups';
 import {
   findChatById,
   getActiveChat,
-  scheduleSaveSessions,
   sessionState,
 } from '../state/sessions';
 import type { Chat } from '../types';
@@ -38,13 +35,10 @@ import {
   renderOrchestrateHub,
   teardownOrchestrateHub,
 } from './orchestrate-hub';
-import {
-  persistOrchestratePlanPathFromSelectValue,
-  shortPlanLabel,
-} from './orchestrate-plan-picker';
+import { shortPlanLabel } from './orchestrate-plan-picker';
+import { launchBoardFromPlan } from './orchestrate-launch';
 import { createChatWithMode, switchChat } from './sidebar';
 import { renderChatFromHistory } from './messages';
-import { setOrchestrateViewMode } from './view-mode-toggle';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -423,33 +417,7 @@ async function startPlanningFromPrompt(promptText: string): Promise<void> {
 function openBoardWithPlan(planPath: string): void {
   teardownOrchestratePlanScreen();
   teardownOrchestrateHub();
-  const active = getActiveChat();
-  const canReuse =
-    !active.history.length && normalizeModeId(active.modeId) === 'orchestrate';
-  let chat = active;
-  if (!canReuse) {
-    const created = createChatWithMode({ modeId: 'orchestrate' });
-    if (created.ok && created.chatId && sessionState) {
-      chat =
-        sessionState.chats.find((c) => c.id === created.chatId) ?? getActiveChat();
-      if (sessionState.activeId !== chat.id) switchChat(chat.id);
-    }
-  }
-  persistOrchestratePlanPathFromSelectValue(chat, planPath);
-  if (normalizeModeId(chat.modeId) !== 'orchestrate') {
-    setChatMode('orchestrate');
-  }
-  const group = getOrCreateBoardGroup(chat);
-  const norm = normalizeOrchestratePlanPath(planPath);
-  if (norm) {
-    group.orchestratePlanPath = norm;
-    scheduleSaveSessions();
-  }
-  const needsKickoff = !group.orchestrateBoard;
-  setOrchestrateViewMode('board');
-  if (needsKickoff) {
-    void import('./orchestrate-board').then((m) => m.kickoffOrchestrateBoardBuild());
-  }
+  launchBoardFromPlan(planPath);
 }
 
 function suspendToViewChat(chat: Chat): void {

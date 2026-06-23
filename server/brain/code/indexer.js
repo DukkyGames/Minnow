@@ -195,11 +195,22 @@ export async function listIndexableFiles(root, includeGlobs, excludeGlobs) {
     if (glob.trim()) args.push('--glob', glob);
   }
   args.push(root);
-  const { stdout } = await execFileAsync(rgPath, args, {
-    cwd: root,
-    maxBuffer: 32 * 1024 * 1024,
-    windowsHide: true,
-  });
+  let stdout = '';
+  try {
+    const result = await execFileAsync(rgPath, args, {
+      cwd: root,
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true,
+    });
+    stdout = result.stdout ?? '';
+  } catch (err) {
+    // Ripgrep exits 1 when no files match the include globs — treat as empty.
+    const code = err && typeof err === 'object' ? err.code : undefined;
+    if (code === 1) {
+      return [];
+    }
+    throw err;
+  }
   const rel = stdout
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/\\/g, '/'))

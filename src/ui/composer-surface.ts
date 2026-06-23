@@ -3,6 +3,7 @@
  */
 
 import { isDesktopChatActive } from '../os/desktop-state';
+import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { getForegroundAppId } from '../os/instances';
 import type { AppId } from '../os/types';
 import { isChatAppForeground } from './chat-mount';
@@ -66,5 +67,10 @@ export function resolveComposerSurface(
 export function clearComposerInput(input: HTMLTextAreaElement | null | undefined): void {
   if (!input) return;
   input.value = '';
-  input.style.height = 'auto';
+  input.style.height = '0px';
+  input.style.overflowY = 'hidden';
+  input.classList.remove('mn-os-desktop-field--scrollable');
+  if (input.id === 'desktopInput') {
+    autoResizeDesktopComposer(input);
+  }
 }

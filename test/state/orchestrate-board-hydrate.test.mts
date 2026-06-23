@@ -137,6 +137,22 @@ describe('orchestrate board hydration', () => {
     assert.equal(isBoardRunning(group), true);
   });
 
+  test('restores afk executionMode and autoRunning', () => {
+    const [group] = hydrateSessionGroupsForTests([
+      {
+        ...PERSISTED_GROUP,
+        orchestrateBoard: {
+          ...PERSISTED_GROUP.orchestrateBoard,
+          executionMode: 'afk',
+          autoRunning: true,
+        },
+      },
+    ]);
+    assert.equal(group.orchestrateBoard?.executionMode, 'afk');
+    assert.equal(group.orchestrateBoard?.autoRunning, true);
+    assert.equal(isBoardRunning(group), true);
+  });
+
   test('drops autoRunning when false and coerces unknown executionMode to manual', () => {
     const [group] = hydrateSessionGroupsForTests([
       {
@@ -165,6 +181,37 @@ describe('orchestrate board hydration', () => {
       },
     ]);
     assert.equal(isBoardRunning(group), false);
+  });
+
+  test('restores board diagnostic log events on reload', () => {
+    const log = [
+      {
+        id: '1710000001000-0',
+        ts: 1710000001000,
+        type: 'task_status',
+        level: 'info',
+        taskId: 'W1-A',
+        message: 'W1-A: planned → in_progress',
+        detail: { from: 'planned', to: 'in_progress' },
+      },
+      {
+        id: '1710000001000-1',
+        ts: 1710000001001,
+        type: 'auto_start',
+        level: 'info',
+        message: 'Auto-pilot started',
+      },
+    ];
+    const [group] = hydrateSessionGroupsForTests([
+      {
+        ...PERSISTED_GROUP,
+        orchestrateBoard: {
+          ...PERSISTED_GROUP.orchestrateBoard,
+          log,
+        },
+      },
+    ]);
+    assert.deepEqual(group.orchestrateBoard?.log, log);
   });
 });
 

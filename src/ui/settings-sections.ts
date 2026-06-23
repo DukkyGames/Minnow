@@ -45,6 +45,13 @@ import {
   saveUserRules,
 } from '../config/user-rules';
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
+import {
+  loadAutopilotMeta,
+  saveAutopilotMeta,
+  type AutopilotContinueSmartRoute,
+  type AutopilotExecutionMode,
+  type AutopilotIsolationMode,
+} from '../config/autopilot-meta';
 import { listProviders } from '../providers/store';
 import { getActiveChat } from '../state/sessions';
 import { renderProvidersSettingsSection } from './settings-providers';
@@ -113,6 +120,11 @@ import {
 } from './settings-entity-editor';
 import { mountReefWidgetLlmSettings } from './reef-widget-settings';
 import { renderModelRoutingSection } from './settings-model-routing';
+import {
+  appendProviderModelFields,
+  fillModelSelect,
+  fillProviderSelect,
+} from './settings-model-binding';
 import { renderSearchSettingsSection } from './settings-search-section';
 import { renderServersSettingsSection } from './settings-servers-section';
 import { renderDeepResearchSettingsSection } from './settings-research-section';
@@ -1040,6 +1052,297 @@ async function renderSubAgentsSection(): Promise<void> {
     void persistGlobal({ checkInNudgeMs: value });
   });
 
+}
+
+async function renderAutopilotSection(): Promise<void> {
+  const mount = clearMount('settingsAutopilotBody');
+  if (!mount) return;
+  const generation = beginAsyncSectionRender('autopilot');
+
+  const meta = await loadAutopilotMeta();
+  if (isAsyncSectionRenderStale('autopilot', generation)) return;
+
+  const defaultsBody = appendSettingsGroup(
+    mount,
+    'Board defaults',
+    'New orchestrate boards inherit these values. Per-board overrides stay on the board header.',
+  );
+
+  const modeField = el('div', 'settings-field');
+  const modeLabel = el('label', 'settings-field-label', 'Default execution mode');
+  modeLabel.htmlFor = 'settingsAutopilotExecMode';
+  const modeSelect = document.createElement('select');
+  modeSelect.id = 'settingsAutopilotExecMode';
+  modeSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'manual', label: 'Manual' },
+    { value: 'sequential', label: 'Sequential' },
+    { value: 'auto', label: 'Auto' },
+    { value: 'afk', label: 'AFK' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    modeSelect.appendChild(option);
+  }
+  modeSelect.value = meta.defaultExecutionMode;
+  modeField.append(modeLabel, modeSelect);
+  defaultsBody.appendChild(modeField);
+
+  const isoField = el('div', 'settings-field');
+  const isoLabel = el('label', 'settings-field-label', 'Default isolation mode');
+  isoLabel.htmlFor = 'settingsAutopilotIsolation';
+  const isoSelect = document.createElement('select');
+  isoSelect.id = 'settingsAutopilotIsolation';
+  isoSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'auto', label: 'Auto (derive from execution mode)' },
+    { value: 'off', label: 'Off' },
+    { value: 'per-task', label: 'Per-task' },
+    { value: 'per-wave', label: 'Per-wave' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    isoSelect.appendChild(option);
+  }
+  isoSelect.value = meta.isolationMode;
+  isoField.append(isoLabel, isoSelect);
+  defaultsBody.appendChild(isoField);
+
+  const concField = el('div', 'settings-field');
+  const concLabel = el('label', 'settings-field-label', 'Max concurrent tasks');
+  concLabel.htmlFor = 'settingsAutopilotConcurrency';
+  const concInput = document.createElement('input');
+  concInput.type = 'number';
+  concInput.id = 'settingsAutopilotConcurrency';
+  concInput.className = 'settings-input';
+  concInput.min = '1';
+  concInput.max = '20';
+  concInput.step = '1';
+  concInput.value = String(meta.maxConcurrentTasks);
+  concField.append(
+    concLabel,
+    concInput,
+    el('p', 'settings-field-hint', 'Applies in Auto and AFK modes (sequential always uses 1).'),
+  );
+  defaultsBody.appendChild(concField);
+
+  const testsBody = appendSettingsGroup(
+    mount,
+    'Test & build retries',
+    'Global thresholds for per-task test/build failures and final integration tests.',
+  );
+
+  const taskAttemptsField = el('div', 'settings-field');
+  const taskAttemptsLabel = el('label', 'settings-field-label', 'Per-task test attempts');
+  taskAttemptsLabel.htmlFor = 'settingsAutopilotTaskAttempts';
+  const taskAttemptsInput = document.createElement('input');
+  taskAttemptsInput.type = 'number';
+  taskAttemptsInput.id = 'settingsAutopilotTaskAttempts';
+  taskAttemptsInput.className = 'settings-input';
+  taskAttemptsInput.min = '1';
+  taskAttemptsInput.max = '10';
+  taskAttemptsInput.value = String(meta.maxTestAttempts);
+  taskAttemptsField.append(taskAttemptsLabel, taskAttemptsInput);
+  testsBody.appendChild(taskAttemptsField);
+
+  const buildAttemptsField = el('div', 'settings-field');
+  const buildAttemptsLabel = el('label', 'settings-field-label', 'Per-task build attempts');
+  buildAttemptsLabel.htmlFor = 'settingsAutopilotBuildAttempts';
+  const buildAttemptsInput = document.createElement('input');
+  buildAttemptsInput.type = 'number';
+  buildAttemptsInput.id = 'settingsAutopilotBuildAttempts';
+  buildAttemptsInput.className = 'settings-input';
+  buildAttemptsInput.min = '1';
+  buildAttemptsInput.max = '10';
+  buildAttemptsInput.value = String(meta.maxBuildAttempts);
+  buildAttemptsField.append(buildAttemptsLabel, buildAttemptsInput);
+  testsBody.appendChild(buildAttemptsField);
+
+  const finalAttemptsField = el('div', 'settings-field');
+  const finalAttemptsLabel = el('label', 'settings-field-label', 'Final test attempts');
+  finalAttemptsLabel.htmlFor = 'settingsAutopilotFinalAttempts';
+  const finalAttemptsInput = document.createElement('input');
+  finalAttemptsInput.type = 'number';
+  finalAttemptsInput.id = 'settingsAutopilotFinalAttempts';
+  finalAttemptsInput.className = 'settings-input';
+  finalAttemptsInput.min = '1';
+  finalAttemptsInput.max = '10';
+  finalAttemptsInput.value = String(meta.maxFinalTestAttempts);
+  finalAttemptsField.append(finalAttemptsLabel, finalAttemptsInput);
+  testsBody.appendChild(finalAttemptsField);
+
+  const smartRouteField = el('div', 'settings-field');
+  const smartRouteLabel = el('label', 'settings-field-label', 'Continue smart-route');
+  smartRouteLabel.htmlFor = 'settingsAutopilotContinueSmartRoute';
+  const smartRouteSelect = document.createElement('select');
+  smartRouteSelect.id = 'settingsAutopilotContinueSmartRoute';
+  smartRouteSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'off', label: 'Off — always nudge existing chat' },
+    { value: 'conservative', label: 'Conservative — derailed or very large chats' },
+    { value: 'aggressive', label: 'Aggressive — lower size thresholds' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    smartRouteSelect.appendChild(option);
+  }
+  smartRouteSelect.value = meta.continueSmartRoute;
+  smartRouteField.append(
+    smartRouteLabel,
+    smartRouteSelect,
+    el(
+      'p',
+      'settings-field-hint',
+      'When Continue would bloat a derailed build chat, hand off to a fresh summarized chat instead.',
+    ),
+  );
+  testsBody.appendChild(smartRouteField);
+
+  const heartbeatBody = appendSettingsGroup(
+    mount,
+    'Heartbeat & stall',
+    'Supervision thresholds for orchestrate task chats (build, test, fix, final).',
+  );
+
+  const appendMsField = (
+    container: HTMLElement,
+    id: string,
+    label: string,
+    value: number,
+    hint: string,
+  ): HTMLInputElement => {
+    const field = el('div', 'settings-field');
+    const labelEl = el('label', 'settings-field-label', label);
+    labelEl.htmlFor = id;
+    const wrap = el('span', 'settings-kv-input-wrap');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = id;
+    input.className = 'settings-input';
+    input.step = '1000';
+    input.value = String(value);
+    wrap.appendChild(input);
+    wrap.appendChild(el('span', 'settings-kv-suffix', 'ms'));
+    field.append(labelEl, wrap, el('p', 'settings-field-hint', hint));
+    container.appendChild(field);
+    return input;
+  };
+
+  const heartbeatInput = appendMsField(
+    heartbeatBody,
+    'settingsAutopilotHeartbeatInterval',
+    'Heartbeat interval',
+    meta.heartbeatIntervalMs,
+    'How often the supervisor checks task chat progress.',
+  );
+  const stallInput = appendMsField(
+    heartbeatBody,
+    'settingsAutopilotProgressStall',
+    'Progress stall',
+    meta.progressStallMs,
+    'Mark stalled when no progress for this long.',
+  );
+  const deadInput = appendMsField(
+    heartbeatBody,
+    'settingsAutopilotHeartbeatDead',
+    'Heartbeat dead',
+    meta.heartbeatDeadMs,
+    'Treat heartbeat as dead after this silence.',
+  );
+
+  const plannerBody = appendSettingsGroup(
+    mount,
+    'Planner model fallback',
+    'Task chats use the planner chat model when set; otherwise the composer model; then this default.',
+  );
+  const { providerSelect, modelSelect } = appendProviderModelFields(
+    plannerBody,
+    { provider: 'settingsAutopilotPlannerProvider', model: 'settingsAutopilotPlannerModel' },
+    { provider: 'Provider', model: 'Model' },
+  );
+  await fillProviderSelect(providerSelect, meta.plannerProviderId || '', {
+    includeEmptyOption: true,
+  });
+  await fillModelSelect(
+    modelSelect,
+    meta.plannerProviderId,
+    meta.plannerModelId || '',
+  );
+
+  appendSettingsCrosslinks(mount, [
+    { label: 'Per-board overrides on the orchestrate board', sectionId: 'modes' },
+    { label: 'Configure models in Providers', sectionId: 'providers' },
+  ]);
+
+  const persist = async (patch: Parameters<typeof saveAutopilotMeta>[0]): Promise<void> => {
+    try {
+      await saveAutopilotMeta(patch);
+      setStatus('ok', 'Autopilot settings saved');
+    } catch {
+      setStatus('err', 'Save failed — use npm start');
+    }
+  };
+
+  modeSelect.addEventListener('change', () => {
+    void persist({
+      defaultExecutionMode: modeSelect.value as AutopilotExecutionMode,
+    });
+  });
+  isoSelect.addEventListener('change', () => {
+    void persist({
+      isolationMode: isoSelect.value as AutopilotIsolationMode,
+    });
+  });
+  concInput.addEventListener('change', () => {
+    const value = Math.min(20, Math.max(1, Math.floor(Number(concInput.value) || 1)));
+    concInput.value = String(value);
+    void persist({ maxConcurrentTasks: value });
+  });
+  taskAttemptsInput.addEventListener('change', () => {
+    const value = Math.min(10, Math.max(1, Math.floor(Number(taskAttemptsInput.value) || 1)));
+    taskAttemptsInput.value = String(value);
+    void persist({ maxTestAttempts: value });
+  });
+  buildAttemptsInput.addEventListener('change', () => {
+    const value = Math.min(10, Math.max(1, Math.floor(Number(buildAttemptsInput.value) || 1)));
+    buildAttemptsInput.value = String(value);
+    void persist({ maxBuildAttempts: value });
+  });
+  finalAttemptsInput.addEventListener('change', () => {
+    const value = Math.min(10, Math.max(1, Math.floor(Number(finalAttemptsInput.value) || 1)));
+    finalAttemptsInput.value = String(value);
+    void persist({ maxFinalTestAttempts: value });
+  });
+  smartRouteSelect.addEventListener('change', () => {
+    void persist({
+      continueSmartRoute: smartRouteSelect.value as AutopilotContinueSmartRoute,
+    });
+  });
+  heartbeatInput.addEventListener('change', () => {
+    void persist({ heartbeatIntervalMs: Number(heartbeatInput.value) });
+  });
+  stallInput.addEventListener('change', () => {
+    void persist({ progressStallMs: Number(stallInput.value) });
+  });
+  deadInput.addEventListener('change', () => {
+    void persist({ heartbeatDeadMs: Number(deadInput.value) });
+  });
+  providerSelect.addEventListener('change', async () => {
+    await fillModelSelect(modelSelect, providerSelect.value, modelSelect.value);
+    void persist({
+      plannerProviderId: providerSelect.value,
+      plannerModelId: modelSelect.value,
+    });
+  });
+  modelSelect.addEventListener('change', () => {
+    void persist({
+      plannerProviderId: providerSelect.value,
+      plannerModelId: modelSelect.value,
+    });
+  });
 }
 
 /** Main and sub-agent tool-loop caps (Settings → Tools). */
@@ -2130,6 +2433,9 @@ export async function refreshSettingsSection(
       break;
     case 'sub-agents':
       await renderSubAgentsSection();
+      break;
+    case 'autopilot':
+      await renderAutopilotSection();
       break;
     case 'memory':
       await renderMemorySection();

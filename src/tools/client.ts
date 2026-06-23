@@ -20,7 +20,10 @@ import {
   filterToolsByMode,
   isToolAllowedForMode,
 } from '../chat/modes/tool-policy';
-import { applyOrchestrateAutoToolFilter } from '../chat/modes/orchestrate-tool-filter';
+import {
+  applyBoardMemberToolFilter,
+  applyOrchestrateAutoToolFilter,
+} from '../chat/modes/orchestrate-tool-filter';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import type { Chat } from '../types';
 import { getBoardGroupForChat } from '../state/chat-groups';
@@ -122,6 +125,8 @@ export interface ExecuteToolContext {
   workAgentId?: string | null;
   /** Override server workspace root (chats sandbox, benchmark workspace, etc.). */
   workspaceRoot?: string;
+  /** Additional allowed path roots (board worktrees under ~/.minnow/worktrees). */
+  extraPathRoots?: string[];
   /** Benchmark runs bypass Ask permission modals and path-ack prompts. */
   benchmarkAutonomous?: boolean;
 }
@@ -311,6 +316,7 @@ async function executeToolInner(
   if (
     name === 'board_init' ||
     name === 'board_update_task' ||
+    name === 'board_set_autonomy' ||
     name === 'board_get_state' ||
     name === 'board_report_test_result' ||
     name === 'delegate_tasks'
@@ -544,10 +550,11 @@ export function getEnabledToolDefinitionsForChat(
 ): OpenAIFunctionDefinition[] {
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
+  const executionMode = getBoardGroupForChat(chat)?.orchestrateBoard?.executionMode;
+  defs = applyBoardMemberToolFilter(defs, chat, executionMode);
   if (normalized !== 'orchestrate') return defs;
 
-  const board = getBoardGroupForChat(chat)?.orchestrateBoard;
-  return applyOrchestrateAutoToolFilter(defs, board?.executionMode);
+  return applyOrchestrateAutoToolFilter(defs, executionMode);
 }
 
 /** Alias for send path — built-in, MCP, and plugin tools after mode + permission filters. */
@@ -621,6 +628,13 @@ async function executeStreamingCodeTool(
     return `Error: ${name} requires valid arguments`;
   }
 
+  const workspaceRoot =
+    context.workspaceRoot?.trim() || (await resolveToolWorkspaceRoot());
+  const relativeCwd =
+    name === 'execute_command' && typeof args.cwd === 'string'
+      ? args.cwd.trim()
+      : undefined;
+
   try {
     const { getChatAbort } = await import('../app-state');
     return await runCommandWithTerminalStream(mapped.command, {
@@ -630,6 +644,8 @@ async function executeStreamingCodeTool(
       displayLabel: mapped.label,
       args: mapped.argv,
       shell: mapped.shell,
+      workspaceRoot,
+      cwd: relativeCwd || undefined,
       abortSignal: context.chatId
         ? getChatAbort(context.chatId)?.signal
         : undefined,

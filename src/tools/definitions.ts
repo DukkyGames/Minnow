@@ -1049,6 +1049,26 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
   {
+    id: 'board_set_autonomy',
+    label: 'Board set autonomy',
+    description:
+      'Set board execution autonomy (manual, sequential, auto, or afk). AFK requires explicit user confirmation before it activates.',
+    category: 'agents',
+    serverRequired: false,
+    definition: toolSchema(
+      'board_set_autonomy',
+      'Change orchestrate board autonomy level. manual stops auto-run; sequential/auto start delegation. afk requests hands-off mode but needs user confirmation on the board before it takes effect.',
+      {
+        level: {
+          type: 'string',
+          enum: ['manual', 'sequential', 'auto', 'afk'],
+          description: 'Target autonomy level',
+        },
+      },
+      ['level'],
+    ),
+  },
+  {
     id: 'board_get_state',
     label: 'Board get state',
     description: 'Return full Orchestrate board JSON for resume or UI.',

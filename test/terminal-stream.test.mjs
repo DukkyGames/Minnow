@@ -3,6 +3,8 @@
  * Usage: node test/terminal-stream.test.mjs http://localhost:5173
  */
 
+import path from 'node:path';
+
 const BASE = process.argv[2] ?? 'http://localhost:5173';
 const CHAT_A = '11111111-1111-1111-1111-111111111111';
 const CHAT_B = '22222222-2222-2222-2222-222222222222';
@@ -89,12 +91,20 @@ async function drainRunStream(runId) {
   await res.text();
 }
 
-async function ensureTestChats() {
+async function readMetaCwdFromRun(body) {
+  const res = await fetch(`${BASE}/api/terminal/stream/${body.runId}`);
+  const events = await readStreamResponse(res);
+  const meta = events.find((e) => e.type === 'meta');
+  return meta?.cwd;
+}
+
+async function ensureTestChats(worktreeRoot) {
   const getRes = await fetch(`${BASE}/api/config/sessions`);
   const state = getRes.ok ? await getRes.json() : { version: 1, chats: [], activeId: CHAT_A };
   const chats = Array.isArray(state.chats) ? [...state.chats] : [];
   for (const id of [CHAT_A, CHAT_B]) {
-    if (!chats.some((c) => c.id === id)) {
+    const existing = chats.find((c) => c.id === id);
+    if (!existing) {
       chats.push({
         id,
         name: `Test ${id.slice(0, 8)}`,
@@ -104,16 +114,17 @@ async function ensureTestChats() {
         lastStats: null,
         modelInfo: {},
         updatedAt: Date.now(),
+        ...(id === CHAT_A && worktreeRoot ? { worktreeRoot } : {}),
       });
+    } else if (id === CHAT_A && worktreeRoot) {
+      existing.worktreeRoot = worktreeRoot;
     }
   }
   const putRes = await fetch(`${BASE}/api/config/sessions`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      version: 1,
-      activeId: CHAT_A,
-      sidebarCollapsed: false,
+      ...state,
       chats,
     }),
   });
@@ -163,6 +174,82 @@ async function testHistoryScopedToChat() {
   assert(idsB.includes('CHAT_A'), 'history A command is CHAT_A');
 }
 
+async function testUserRunUsesGlobalCwd() {
+  const runRes = await fetch(`${BASE}/api/terminal/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'echo cwd_probe',
+      chatId: CHAT_A,
+      source: 'user',
+    }),
+  });
+  const body = await runRes.json();
+  const cwd = await readMetaCwdFromRun(body);
+  await drainRunStream(body.runId);
+  assert(typeof cwd === 'string' && cwd.length > 0, 'meta.cwd present for user run');
+  return cwd;
+}
+
+async function testAgentRunResolvesWorktreeFromChat(projectRoot) {
+  const worktreeRoot = projectRoot;
+  await ensureTestChats(worktreeRoot);
+
+  const runRes = await fetch(`${BASE}/api/terminal/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'echo agent_worktree',
+      chatId: CHAT_A,
+      source: 'agent',
+    }),
+  });
+  const body = await runRes.json();
+  const cwd = await readMetaCwdFromRun(body);
+  await drainRunStream(body.runId);
+  assert(
+    path.resolve(cwd) === path.resolve(worktreeRoot),
+    'agent run without workspaceRoot uses chat worktreeRoot',
+  );
+}
+
+async function testAgentExplicitWorkspaceRootAndRelativeCwd(projectRoot) {
+  const runRes = await fetch(`${BASE}/api/terminal/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'echo subdir',
+      chatId: CHAT_A,
+      source: 'agent',
+      workspaceRoot: projectRoot,
+      cwd: 'src',
+    }),
+  });
+  const body = await runRes.json();
+  const cwd = await readMetaCwdFromRun(body);
+  await drainRunStream(body.runId);
+  assert(
+    path.resolve(cwd) === path.resolve(projectRoot, 'src'),
+    'agent run resolves cwd relative to workspaceRoot',
+  );
+}
+
+async function testInvalidWorkspaceRoot400() {
+  const res = await fetch(`${BASE}/api/terminal/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'echo bad_root',
+      chatId: CHAT_A,
+      source: 'agent',
+      workspaceRoot: 'C:/not-an-allowed-minnow-workspace-root',
+    }),
+  });
+  const body = await res.json();
+  assert(res.status === 400, 'non-allow-listed workspaceRoot returns 400');
+  assert(typeof body.error === 'string', 'error message present');
+}
+
 async function main() {
   console.log(`Terminal stream tests @ ${BASE}\n`);
 
@@ -191,6 +278,18 @@ async function main() {
 
   console.log('\nhistory_scoped_to_chat');
   await testHistoryScopedToChat();
+
+  console.log('\nuser_run_uses_global_cwd');
+  const projectRoot = await testUserRunUsesGlobalCwd();
+
+  console.log('\nagent_run_resolves_worktree_from_chat');
+  await testAgentRunResolvesWorktreeFromChat(projectRoot);
+
+  console.log('\nagent_explicit_workspace_root_and_relative_cwd');
+  await testAgentExplicitWorkspaceRootAndRelativeCwd(projectRoot);
+
+  console.log('\ninvalid_workspace_root_400');
+  await testInvalidWorkspaceRoot400();
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

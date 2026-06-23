@@ -10,6 +10,7 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { readResource, writeResource } from '../../server/config/store.js';
 import { ensureMinnowLayout } from '../../server/config/home.js';
 import {
+  autoProvisionEnabledServers,
   autoStartEnabledServers,
   getServerJob,
   installServer,
@@ -200,5 +201,40 @@ describe('server manager', () => {
 
     await autoStartEnabledServers();
     assert.deepEqual(startedIds, []);
+  });
+
+  it('autoProvisionEnabledServers installs then starts enabled+autoStart when not installed', async () => {
+    await fsp.rm(getServerVenvDir('searxng'), { recursive: true, force: true });
+    await fsp.rm(getServerMetaPath('searxng'), { force: true });
+    await fsp.rm(path.join(getServerDir('searxng'), 'src', 'searx'), { recursive: true, force: true });
+
+    const config = await readResource('servers');
+    config.searxng.enabled = true;
+    config.searxng.autoStart = true;
+    config.searxng.port = FIXED_PORT;
+    await writeResource('servers', config);
+    await writeSearxngSettings(FIXED_PORT);
+
+    setInstallProvisionOverrideForTests(async (_serverId, onProgress) => {
+      onProgress?.('mock auto-provision step');
+      await seedSearxngInstalled();
+    });
+    setManagerSpawnOverrideForTests(() => createMockChild());
+    setManagerFetchOverrideForTests(async () => ({ status: 200 }));
+
+    await autoProvisionEnabledServers();
+
+    const deadline = Date.now() + 10_000;
+    let job = getServerJob('searxng');
+    let row = (await listServers()).find((s) => s.id === 'searxng');
+    while (Date.now() < deadline && (job?.phase !== 'done' || row?.running !== true)) {
+      await new Promise((r) => setTimeout(r, 50));
+      job = getServerJob('searxng');
+      row = (await listServers()).find((s) => s.id === 'searxng');
+    }
+
+    assert.equal(job?.phase, 'done');
+    assert.equal(row?.installed, true);
+    assert.equal(row?.running, true);
   });
 });

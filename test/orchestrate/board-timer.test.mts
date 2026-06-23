@@ -98,6 +98,58 @@ describe('orchestrate board timer', () => {
     );
   });
 
+  test('timer freezes the instant the user stops, even with tasks still in_progress', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'Task A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    const board = group.orchestrateBoard!;
+    board.tasks[0].status = 'in_progress';
+
+    // Run the timer for 5s while the task streams.
+    board.activeParentTurnId = 'turn-1';
+    setBoardNowForTests(() => T0);
+    syncOrchestrateBoardTimer(group, chat, {
+      isStreaming: true,
+      activeRunCount: 1,
+      userStopped: false,
+    });
+    assert.equal(board.timerSegmentStartedAt, T0);
+
+    // User presses Stop at T1: persist the flag and close the segment now.
+    board.userStopped = true;
+    setBoardNowForTests(() => T1);
+    syncOrchestrateBoardTimer(group, chat, {
+      isStreaming: false,
+      activeRunCount: 0,
+      userStopped: true,
+    });
+    assert.equal(board.timerAccumulatedMs, 5_000);
+    assert.equal(board.timerSegmentStartedAt, undefined);
+
+    // Even though the task is still in_progress, the timer must not resume on a
+    // later tick because userStopped short-circuits shouldOrchestrateBoardTimerRun.
+    assert.equal(
+      shouldOrchestrateBoardTimerRun(board, {
+        isStreaming: false,
+        activeRunCount: 0,
+        userStopped: true,
+      }),
+      false,
+    );
+    setBoardNowForTests(() => T2);
+    syncOrchestrateBoardTimer(group, chat, {
+      isStreaming: false,
+      activeRunCount: 0,
+      userStopped: true,
+    });
+    assert.equal(board.timerSegmentStartedAt, undefined);
+    assert.equal(getOrchestrateBoardElapsedMs(board, T2), 5_000);
+  });
+
   test('syncOrchestrateBoardTimer accumulates only while active', () => {
     const chat = makeChat();
     const group = makeGroup();

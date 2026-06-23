@@ -3,12 +3,17 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import { DEFAULT_BRAIN_CODE_CONFIG } from '../../../server/brain/code/config.js';
 import {
   buildSymbolId,
   elideSignature,
   flattenDocumentSymbols,
   hashSymbolSpan,
+  listIndexableFiles,
   symbolKindName,
 } from '../../../server/brain/code/indexer.js';
 
@@ -63,5 +68,35 @@ describe('code indexer helpers', () => {
     const sig = elideSignature('foo', 'function', long);
     assert.ok(sig.length <= 120);
     assert.match(sig, /…$/);
+  });
+});
+
+describe('listIndexableFiles', () => {
+  /** @type {string} */
+  let tempRoot;
+
+  before(async () => {
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-brain-indexer-'));
+  });
+
+  after(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  it('returns empty array when no files match include globs (ripgrep exit 1)', async () => {
+    const root = path.join(tempRoot, 'markdown-only');
+    await fs.mkdir(path.join(root, 'documentation', 'plans'), { recursive: true });
+    await fs.writeFile(
+      path.join(root, 'documentation', 'plans', 'notes.md'),
+      '# Notes\n',
+      'utf8',
+    );
+
+    const files = await listIndexableFiles(
+      root,
+      DEFAULT_BRAIN_CODE_CONFIG.includeGlobs,
+      DEFAULT_BRAIN_CODE_CONFIG.excludeGlobs,
+    );
+    assert.deepEqual(files, []);
   });
 });

@@ -42,6 +42,7 @@ import {
   tryNonStreamingFallback,
   type StreamMetaAccumulator,
 } from '../api/chat';
+import { getLatestStreamingToolName } from '../api/tool-call-stream.ts';
 import { foldLeadingAssistantPreamble } from '../api/provider-message-normalize';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
 import {
@@ -68,6 +69,14 @@ import {
   patchMainTurnActivity,
 } from '../chat/main-turn-activity';
 import { getBoardGroupForChat } from '../state/chat-groups';
+import {
+  logBoardTerminalRun,
+  logBoardToolCall,
+} from '../state/orchestrate-board-store.ts';
+import {
+  boardWorktreesRootsFromState,
+  resolveChatToolWorkspaceRoot,
+} from '../state/worktree-isolation';
 import {
   getActiveChat,
   isExpertChat,
@@ -167,6 +176,10 @@ import {
 } from '../ui/chat-item-dot';
 import { renderSidebar } from '../ui/sidebar';
 import {
+  attachToolStartIndicator,
+  type ToolStartIndicatorHandle,
+} from '../ui/stream-status';
+import {
   cancelGeneration,
   createGeneration,
   GenerationNotFoundError,
@@ -246,7 +259,12 @@ import {
 } from './client';
 import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
-import { copyHistoryForOutboundApi, clearPostToolTailBeforeSend, rollbackFailedTurnHistory } from '../chat/history';
+import {
+  copyHistoryForOutboundApi,
+  clearPostToolTailBeforeSend,
+  repairSessionHistoryTail,
+  rollbackFailedTurnHistory,
+} from '../chat/history';
 import { indexOfLastUserMessage } from '../chat/history-truncate-core';
 import {
   augmentImpeccableSkillBody,
@@ -574,6 +592,7 @@ async function streamCompletionTurn(
   domVisible: boolean,
   onFirstProseDelta?: () => void,
   onPartialText?: (fullText: string) => void,
+  onToolCallStreaming?: (toolName: string) => void,
   onStreamConnected?: () => void,
   onStreamContextActivity?: () => void,
   turnRunId?: TurnRunId,
@@ -597,6 +616,7 @@ async function streamCompletionTurn(
   let fullText = '';
   let streamMeta: StreamMetaAccumulator = {};
   let toolAcc: ToolCallAccumulator = {};
+  let lastAnnouncedToolName = '';
   const t0 = performance.now();
   let tFirst: number | null = null;
   const modelId = body.model ?? '';
@@ -662,6 +682,13 @@ async function streamCompletionTurn(
   function handleChunk(chunk: ChatCompletionChunk): void {
     streamMeta = mergeStreamMeta(streamMeta, chunk);
     toolAcc = mergeToolCallDelta(toolAcc, chunk);
+    if (domVisible && onToolCallStreaming) {
+      const streamingName = getLatestStreamingToolName(toolAcc);
+      if (streamingName && streamingName !== lastAnnouncedToolName) {
+        lastAnnouncedToolName = streamingName;
+        onToolCallStreaming(streamingName);
+      }
+    }
     const reasoning = extractReasoningDelta(chunk);
     if (reasoning) {
       thoughtController?.appendReasoningDelta(reasoning);
@@ -793,6 +820,59 @@ function syncTurnContextUsage(
       : null,
   );
   scheduleContextUsageRefresh();
+}
+
+/** Parse exit code from execute_command formatted output. */
+function parseTerminalExitCode(content: string): number | undefined {
+  const match = content.match(/\(exit (-?\d+)\)/);
+  if (!match) return undefined;
+  const code = Number(match[1]);
+  return Number.isFinite(code) ? code : undefined;
+}
+
+/** Log board-task tool/terminal activity when the chat is linked to a board task. */
+function maybeLogBoardToolExecution(
+  chat: Chat,
+  toolName: string,
+  args: unknown,
+  content: string,
+): void {
+  const boardTaskId = chat.boardTaskId?.trim();
+  const boardGroupId = chat.boardGroupId?.trim();
+  if (!boardTaskId || !boardGroupId || !sessionState) return;
+  const group = sessionState.groups?.find((g) => g.id === boardGroupId);
+  if (!group?.orchestrateBoard) return;
+
+  const argsPreview =
+    args && typeof args === 'object' ? JSON.stringify(args) : String(args ?? '');
+  const errored = content.trimStart().startsWith('Error');
+
+  if (toolName === 'execute_command') {
+    const command =
+      args && typeof args === 'object' && !Array.isArray(args)
+        ? String((args as Record<string, unknown>).command ?? '')
+        : '';
+    logBoardTerminalRun(
+      group,
+      boardTaskId,
+      command || toolName,
+      parseTerminalExitCode(content),
+      content,
+      errored,
+      chat.id,
+    );
+    return;
+  }
+
+  logBoardToolCall(
+    group,
+    boardTaskId,
+    toolName,
+    argsPreview,
+    content,
+    errored,
+    chat.id,
+  );
 }
 
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
@@ -1075,6 +1155,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let streamRow = appendStreamingAssistantRow(chat.id);
   let { wrap, bubble, cursor, streamStatus } = streamRow;
   const streamCtx = { wrap, streamStatus };
+  let toolStartIndicator: ToolStartIndicatorHandle | null = null;
+  const resetToolStartIndicator = (): void => {
+    toolStartIndicator?.dispose();
+    toolStartIndicator = null;
+  };
   let revealProse = (): void => {
     if (!isStreamDomVisible(chat.id)) return;
     revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1094,6 +1179,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamCtx.wrap = wrap;
     streamCtx.streamStatus = streamStatus;
     lastWrap = wrap;
+    resetToolStartIndicator();
     revealProse = (): void => {
       if (!isStreamDomVisible(chat.id)) return;
       revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1373,6 +1459,18 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           (text) => {
             livePartialText = text;
           },
+          (toolName) => {
+            if (!domVisible) return;
+            if (!toolStartIndicator) {
+              toolStartIndicator = attachToolStartIndicator({
+                wrap,
+                bubble,
+                cursor,
+                streamStatus,
+              });
+            }
+            toolStartIndicator.show(toolName);
+          },
           undefined,
           () => {
             syncTurnContextUsage(chat.id, livePartialText, thoughtController);
@@ -1406,6 +1504,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
 
       cancelAssistantBubbleRenderDebounce();
+      resetToolStartIndicator();
       cursor.remove();
 
       const finishReason =
@@ -1547,6 +1646,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? assertUiDesignerToolAllowed(tc.function.name, uiDesignerCtx.mode)
             : null;
           const toolName = tc.function.name;
+          const scopedWorkspaceRoot = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
+          const boardWorktreeRoots = boardWorktreesRootsFromState(sessionState?.groups);
           const toolOut = planBlock
             ? { content: planBlock }
             : await executeTool(toolName, args, {
@@ -1554,6 +1655,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
                 toolCallId: tc.id,
                 modeId: toolLoopModeId,
                 workAgentId: chat.workAgentId ?? null,
+                // Isolated board task chats (MIN-275) scope tools to their worktree.
+                ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
+                ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
               });
           let toolContent = toolOut.content;
           try {
@@ -1598,6 +1702,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               : {}),
             ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
           });
+          maybeLogBoardToolExecution(chat, toolName, args, toolContent);
           trackRunHistoryPush(chat, turnRunId);
           syncTurnContextUsage(chat.id, livePartialText, thoughtController);
           if (paintToolCallsInChat) {
@@ -1631,6 +1736,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1704,6 +1810,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1741,6 +1848,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         streamCtx.wrap = wrap;
         streamCtx.streamStatus = streamStatus;
         lastWrap = wrap;
+        resetToolStartIndicator();
         revealProse = (): void => {
           if (!isStreamDomVisible(chat.id)) return;
           revealAssistantProseBubble(streamCtx.wrap, bubble, streamCtx.streamStatus);
@@ -1918,16 +2026,30 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.currentGenerationId = undefined;
       scheduleSaveSessions();
     }
+    const isBoardTaskChat = Boolean(chat.boardTaskId?.trim());
     const failedRun = turnRunId ? findRunById(chat, turnRunId) : undefined;
     const failedForkIndex =
       failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, pushUser);
-    const rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
-    if (rolledBack) {
-      recordChatMessage(chat);
-      scheduleSaveSessions();
-      renderSidebar();
-      if (isStreamDomVisible(chat.id)) {
-        renderChatFromHistory(chat);
+    let rolledBack = false;
+    if (isBoardTaskChat) {
+      const repaired = repairSessionHistoryTail(chat);
+      if (repaired) {
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+        renderSidebar();
+        if (isStreamDomVisible(chat.id)) {
+          renderChatFromHistory(chat);
+        }
+      }
+    } else {
+      rolledBack = rollbackFailedTurnHistory(chat, failedForkIndex);
+      if (rolledBack) {
+        recordChatMessage(chat);
+        scheduleSaveSessions();
+        renderSidebar();
+        if (isStreamDomVisible(chat.id)) {
+          renderChatFromHistory(chat);
+        }
       }
     }
     cancelAssistantBubbleRenderDebounce();
@@ -2035,7 +2157,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const run = findRunById(chat, turnRunId);
       const start = run?.outputHistoryStart;
       const end = run?.outputHistoryEnd;
-      const persistOutput = turnRunStatus !== 'failed';
+      const persistOutput =
+        turnRunStatus !== 'failed' || Boolean(chat.boardTaskId?.trim());
       const outputMessages =
         persistOutput &&
         start !== undefined &&

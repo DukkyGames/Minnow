@@ -22,6 +22,7 @@ import {
   generationTimeoutMessage,
   readGenerationUpstreamTimeouts,
 } from './timeouts.js';
+import { upstreamFetch } from './upstream-fetch.js';
 
 /**
  * Start pumping an upstream chat/completions response into state chunks.
@@ -171,7 +172,7 @@ async function attemptCandidateStream({
   try {
     markStreaming(state);
 
-    const upstream = await fetch(url, {
+    const upstream = await upstreamFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

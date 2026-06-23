@@ -17,7 +17,7 @@ import {
 } from '../generations/timeouts.js';
 
 const DEFAULT_CHAT_MAX_TOOL_TURNS = 100;
-const MAX_CHAT_MAX_TOOL_TURNS = 128;
+const MAX_CHAT_MAX_TOOL_TURNS = 500;
 const DEFAULT_SUB_AGENT_MAX_TOOL_TURNS = 100;
 
 const PLACEHOLDER_CHAT_NAME = 'New chat';
@@ -87,11 +87,114 @@ const BOARD_TASK_STATUSES = new Set([
   'planned',
   'in_progress',
   'testing',
+  'merging',
   'complete',
   'failed',
   'blocked',
 ]);
 const BOARD_CATEGORIES = new Set(['build', 'fix', 'test', 'research']);
+
+const BOARD_LOG_MAX = 500;
+const BOARD_LOG_LEVELS = new Set(['info', 'warn', 'error']);
+const BOARD_LOG_TYPES = new Set([
+  'board_init',
+  'mode_change',
+  'auto_start',
+  'auto_stop',
+  'task_status',
+  'task_started',
+  'build_verdict',
+  'test_verdict',
+  'merge_result',
+  'worktree_allocated',
+  'task_retry',
+  'task_error',
+  'tool_call',
+  'terminal_run',
+  'dev_server',
+  'final_test_started',
+  'final_test_verdict',
+]);
+const BOARD_LOG_DETAIL_STRING_KEYS = new Set([
+  'branch',
+  'toolName',
+  'argsPreview',
+  'resultPreview',
+  'command',
+  'runId',
+  'chatId',
+  'error',
+  'summary',
+]);
+const BOARD_LOG_DETAIL_NUMBER_KEYS = new Set(['attempt', 'devPort', 'apiPort', 'exitCode']);
+const BOARD_LOG_DETAIL_STATUS_KEYS = new Set(['from', 'to']);
+const BOARD_LOG_DETAIL_ENUMS = {
+  verdict: new Set(['pass', 'fail']),
+  attemptKind: new Set(['build', 'test', 'fixer']),
+  mode: new Set(['manual', 'auto', 'sequential', 'afk']),
+  outcome: new Set(['merged', 'conflict', 'error', 'skipped']),
+};
+const BOARD_LOG_STRING_MAX = 2000;
+
+function truncateBoardLogString(value, max = BOARD_LOG_STRING_MAX) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max)}…`;
+}
+
+function ensureBoardLogDetail(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const out = {};
+  for (const key of BOARD_LOG_DETAIL_STRING_KEYS) {
+    if (typeof r[key] === 'string' && r[key].trim()) {
+      out[key] = truncateBoardLogString(r[key]);
+    }
+  }
+  for (const key of BOARD_LOG_DETAIL_NUMBER_KEYS) {
+    if (typeof r[key] === 'number' && Number.isFinite(r[key])) {
+      out[key] = r[key];
+    }
+  }
+  for (const key of BOARD_LOG_DETAIL_STATUS_KEYS) {
+    const val = typeof r[key] === 'string' ? r[key] : '';
+    if (BOARD_TASK_STATUSES.has(val)) out[key] = val;
+  }
+  for (const [key, allowed] of Object.entries(BOARD_LOG_DETAIL_ENUMS)) {
+    if (typeof r[key] === 'string' && allowed.has(r[key])) {
+      out[key] = r[key];
+    }
+  }
+  if (Array.isArray(r.failingTaskIds)) {
+    const failingTaskIds = [];
+    for (const item of r.failingTaskIds) {
+      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
+    }
+    if (failingTaskIds.length) out.failingTaskIds = failingTaskIds;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function ensureBoardLogEvent(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const ts = typeof r.ts === 'number' && Number.isFinite(r.ts) ? r.ts : null;
+  const typeRaw = typeof r.type === 'string' ? r.type.trim() : '';
+  if (!id || ts === null || !BOARD_LOG_TYPES.has(typeRaw)) return null;
+  const levelRaw = typeof r.level === 'string' ? r.level.trim() : 'info';
+  const level = BOARD_LOG_LEVELS.has(levelRaw) ? levelRaw : 'info';
+  const message =
+    typeof r.message === 'string' ? truncateBoardLogString(r.message, BOARD_LOG_STRING_MAX) : '';
+  const out = { id, ts, type: typeRaw, level, message };
+  if (typeof r.taskId === 'string' && r.taskId.trim()) {
+    out.taskId = r.taskId.trim();
+  }
+  const detail = ensureBoardLogDetail(r.detail);
+  if (detail) out.detail = detail;
+  return out;
+}
 
 function ensureBoardWaveId(raw) {
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
@@ -141,6 +244,9 @@ function ensureBoardTask(raw) {
   if (typeof r.testChatId === 'string' && r.testChatId.trim()) {
     out.testChatId = r.testChatId.trim();
   }
+  if (typeof r.fixerChatId === 'string' && r.fixerChatId.trim()) {
+    out.fixerChatId = r.fixerChatId.trim();
+  }
   if (typeof r.buildSpec === 'string' && r.buildSpec.trim()) {
     out.buildSpec = r.buildSpec.trim();
   }
@@ -157,6 +263,9 @@ function ensureBoardTask(raw) {
   if (typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)) {
     out.testAttempts = r.testAttempts;
   }
+  if (typeof r.buildAttempts === 'number' && Number.isFinite(r.buildAttempts)) {
+    out.buildAttempts = r.buildAttempts;
+  }
   if (r.testVerdict === 'pass' || r.testVerdict === 'fail') {
     out.testVerdict = r.testVerdict;
   }
@@ -165,6 +274,18 @@ function ensureBoardTask(raw) {
   }
   if (typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()) {
     out.pendingBuildSeed = r.pendingBuildSeed.trim();
+  }
+  if (typeof r.worktreePath === 'string' && r.worktreePath.trim()) {
+    out.worktreePath = r.worktreePath.trim();
+  }
+  if (typeof r.worktreeBranch === 'string' && r.worktreeBranch.trim()) {
+    out.worktreeBranch = r.worktreeBranch.trim();
+  }
+  if (typeof r.devPort === 'number' && Number.isFinite(r.devPort)) {
+    out.devPort = r.devPort;
+  }
+  if (typeof r.apiPort === 'number' && Number.isFinite(r.apiPort)) {
+    out.apiPort = r.apiPort;
   }
   return out;
 }
@@ -246,18 +367,48 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.completionShownAt === 'number') {
     out.completionShownAt = r.completionShownAt;
   }
+  if (r.dashboardDismissed === true) out.dashboardDismissed = true;
+  if (typeof r.finishReport === 'string' && r.finishReport.trim()) {
+    out.finishReport = r.finishReport.trim();
+  }
   const executionModeRaw =
     typeof r.executionMode === 'string' ? r.executionMode.trim() : '';
   const executionMode =
     executionModeRaw === 'auto' ||
     executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential'
+    executionModeRaw === 'sequential' ||
+    executionModeRaw === 'afk'
       ? executionModeRaw
       : 'manual';
   out.executionMode = executionMode;
   if (r.autoRunning === true) out.autoRunning = true;
+  if (r.pendingAfk === true) out.pendingAfk = true;
+  const isolationModeRaw =
+    typeof r.isolationMode === 'string' ? r.isolationMode.trim() : '';
+  if (
+    isolationModeRaw === 'off' ||
+    isolationModeRaw === 'per-task' ||
+    isolationModeRaw === 'per-wave'
+  ) {
+    out.isolationMode = isolationModeRaw;
+  }
+  if (typeof r.integrationBranch === 'string' && r.integrationBranch.trim()) {
+    out.integrationBranch = r.integrationBranch.trim();
+  }
   const finalTest = ensureOrchestrateFinalTest(r.finalTest);
   if (finalTest) out.finalTest = finalTest;
+  if (r.userStopped === true) out.userStopped = true;
+  if (typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()) {
+    out.isolationBaseRef = r.isolationBaseRef.trim();
+  }
+  if (Array.isArray(r.log)) {
+    const log = [];
+    for (const item of r.log) {
+      const e = ensureBoardLogEvent(item);
+      if (e) log.push(e);
+    }
+    if (log.length) out.log = log.slice(-BOARD_LOG_MAX);
+  }
   return out;
 }
 
@@ -467,6 +618,16 @@ function ensureChatShape(raw) {
     ...(typeof row.boardGroupId === 'string' && row.boardGroupId.trim()
       ? { boardGroupId: row.boardGroupId.trim() }
       : {}),
+    ...(typeof row.boardTaskId === 'string' && row.boardTaskId.trim()
+      ? { boardTaskId: row.boardTaskId.trim() }
+      : {}),
+    ...(typeof row.worktreeRoot === 'string' && row.worktreeRoot.trim()
+      ? { worktreeRoot: row.worktreeRoot.trim() }
+      : {}),
+    ...(typeof row.workAgentId === 'string' && row.workAgentId.trim()
+      ? { workAgentId: row.workAgentId.trim() }
+      : {}),
+    ...(row.workAgentAuto === false ? { workAgentAuto: false } : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(runs?.length ? { runs } : {}),
@@ -1149,6 +1310,131 @@ export function mergeConfigMeta(existing, patch) {
         existingSampler.maxTokens = mt;
       }
       base.sampler = existingSampler;
+    }
+  }
+
+  if (p.autopilot !== undefined) {
+    const AUTOPILOT_EXECUTION_MODES = new Set(['manual', 'sequential', 'auto', 'afk']);
+    const AUTOPILOT_ISOLATION_MODES = new Set(['auto', 'off', 'per-task', 'per-wave']);
+    const clampAutopilotConcurrency = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(20, Math.max(1, Math.round(n)));
+    };
+    const clampAutopilotAttempts = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(10, Math.max(1, Math.round(n)));
+    };
+    const clampHeartbeatIntervalMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(60_000, Math.max(1_000, Math.round(n)));
+    };
+    const clampProgressStallMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(1_800_000, Math.max(10_000, Math.round(n)));
+    };
+    const clampHeartbeatDeadMs = (value, fallback) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(300_000, Math.max(5_000, Math.round(n)));
+    };
+
+    if (p.autopilot === null) {
+      base.autopilot = {
+        defaultExecutionMode: 'manual',
+        maxConcurrentTasks: 3,
+        isolationMode: 'auto',
+        maxTestAttempts: 3,
+        maxBuildAttempts: 2,
+        maxFinalTestAttempts: 3,
+        heartbeatIntervalMs: 7000,
+        progressStallMs: 90000,
+        heartbeatDeadMs: 30000,
+        plannerProviderId: '',
+        plannerModelId: '',
+      };
+    } else if (typeof p.autopilot === 'object') {
+      const existingAutopilot =
+        base.autopilot && typeof base.autopilot === 'object'
+          ? { .../** @type {Record<string, unknown>} */ (base.autopilot) }
+          : {
+              defaultExecutionMode: 'manual',
+              maxConcurrentTasks: 3,
+              isolationMode: 'auto',
+              maxTestAttempts: 3,
+              maxBuildAttempts: 2,
+              maxFinalTestAttempts: 3,
+              heartbeatIntervalMs: 7000,
+              progressStallMs: 90000,
+              heartbeatDeadMs: 30000,
+              plannerProviderId: '',
+              plannerModelId: '',
+            };
+      const a = /** @type {Record<string, unknown>} */ (p.autopilot);
+      if (typeof a.defaultExecutionMode === 'string') {
+        const mode = a.defaultExecutionMode.trim();
+        if (AUTOPILOT_EXECUTION_MODES.has(mode)) {
+          existingAutopilot.defaultExecutionMode = mode;
+        }
+      }
+      if (a.maxConcurrentTasks !== undefined) {
+        existingAutopilot.maxConcurrentTasks = clampAutopilotConcurrency(
+          a.maxConcurrentTasks,
+          existingAutopilot.maxConcurrentTasks ?? 3,
+        );
+      }
+      if (typeof a.isolationMode === 'string') {
+        const iso = a.isolationMode.trim();
+        if (AUTOPILOT_ISOLATION_MODES.has(iso)) {
+          existingAutopilot.isolationMode = iso;
+        }
+      }
+      if (a.maxTestAttempts !== undefined) {
+        existingAutopilot.maxTestAttempts = clampAutopilotAttempts(
+          a.maxTestAttempts,
+          existingAutopilot.maxTestAttempts ?? 3,
+        );
+      }
+      if (a.maxBuildAttempts !== undefined) {
+        existingAutopilot.maxBuildAttempts = clampAutopilotAttempts(
+          a.maxBuildAttempts,
+          existingAutopilot.maxBuildAttempts ?? 2,
+        );
+      }
+      if (a.maxFinalTestAttempts !== undefined) {
+        existingAutopilot.maxFinalTestAttempts = clampAutopilotAttempts(
+          a.maxFinalTestAttempts,
+          existingAutopilot.maxFinalTestAttempts ?? 3,
+        );
+      }
+      if (a.heartbeatIntervalMs !== undefined) {
+        existingAutopilot.heartbeatIntervalMs = clampHeartbeatIntervalMs(
+          a.heartbeatIntervalMs,
+          existingAutopilot.heartbeatIntervalMs ?? 7000,
+        );
+      }
+      if (a.progressStallMs !== undefined) {
+        existingAutopilot.progressStallMs = clampProgressStallMs(
+          a.progressStallMs,
+          existingAutopilot.progressStallMs ?? 90000,
+        );
+      }
+      if (a.heartbeatDeadMs !== undefined) {
+        existingAutopilot.heartbeatDeadMs = clampHeartbeatDeadMs(
+          a.heartbeatDeadMs,
+          existingAutopilot.heartbeatDeadMs ?? 30000,
+        );
+      }
+      if (typeof a.plannerProviderId === 'string') {
+        existingAutopilot.plannerProviderId = a.plannerProviderId.trim();
+      }
+      if (typeof a.plannerModelId === 'string') {
+        existingAutopilot.plannerModelId = a.plannerModelId.trim();
+      }
+      base.autopilot = existingAutopilot;
     }
   }
 
@@ -2730,7 +3016,7 @@ export function defaultSearchConfig() {
   return {
     provider: 'searxng',
     fallbackChain: ['tavily', 'brave', 'duckduckgo'],
-    searxngUrl: 'http://localhost:8080',
+    searxngUrl: 'http://localhost:8899',
     keys: { braveApiKey: '', tavilyApiKey: '' },
     resultCount: 10,
   };
@@ -2932,7 +3218,7 @@ const DEFAULT_SERVER_PORTS = {
 export function defaultServersConfig() {
   return {
     searxng: {
-      enabled: false,
+      enabled: true,
       autoStart: true,
       port: DEFAULT_SERVER_PORTS.searxng,
     },
