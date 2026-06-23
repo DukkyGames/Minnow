@@ -19,6 +19,7 @@ import {
   copyTextToClipboard,
   shouldCopyTerminalSelectionOnKeydown,
 } from './terminal-copy-shortcut';
+import {
   buildHistoryClearInput,
   buildHistoryReplaceInput,
   resolveHistoryNavigation,

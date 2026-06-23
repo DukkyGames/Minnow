@@ -146,10 +146,10 @@
 
 /* `display: flex` on buttons can override the native [hidden] rule — hide via view + attribute */
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-desktop,
-.mn-os-menubar[data-view='desktop'] .mn-os-mb-sep,
+.mn-os-menubar[data-view='desktop'] .mn-os-mb-app-sep,
 .mn-os-menubar[data-view='desktop'] .mn-os-mb-appname,
 .mn-os-mb-desktop[hidden],
-.mn-os-mb-sep[hidden],
+.mn-os-mb-app-sep[hidden],
 .mn-os-mb-appname[hidden] {
   display: none !important;
 }
@@ -217,17 +217,17 @@
 
 /* Operational status (Ready, loading models, errors) — mirrors legacy .status-pill */
 .mn-os-mb-status.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
   font-size: 12px;
   color: var(--os-text-dim);
-  max-width: min(14rem, 30vw);
+  white-space: nowrap;
 }
 
 .mn-os-mb-status #osStatusText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  overflow: visible;
 }
 
 /* OS menubar model picker popover */

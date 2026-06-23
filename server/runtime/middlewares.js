@@ -38,7 +38,10 @@ import { createEmailMiddleware } from '../email/middleware.js';
 import { createOAuthMiddleware } from '../oauth/middleware.js';
 import { createWebhooksMiddleware } from '../webhooks/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
+import { createGitMiddleware } from '../git/middleware.js';
+import { createWorktreeMiddleware } from '../worktree/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
+import { createOrchestrateMiddleware } from '../orchestrate/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
 
@@ -52,6 +55,9 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createCompareMiddleware());
   connectApp.use(createEvalsMiddleware());
   connectApp.use(createWorkspaceMiddleware());
+  connectApp.use(createGitMiddleware());
+  connectApp.use(createWorktreeMiddleware());
+  connectApp.use(createOrchestrateMiddleware());
   connectApp.use(createChatsWorkspaceMiddleware());
   connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());

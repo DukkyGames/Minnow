@@ -29,7 +29,7 @@ export interface SearchConfig {
 export const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   provider: 'searxng',
   fallbackChain: ['tavily', 'brave', 'duckduckgo'],
-  searxngUrl: 'http://localhost:8080',
+  searxngUrl: 'http://localhost:8899',
   keys: { braveApiKey: '', tavilyApiKey: '' },
   resultCount: 10,
 };

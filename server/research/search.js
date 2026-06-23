@@ -20,7 +20,7 @@ let lastSearchError = null;
 let lastSearchProvider = null;
 
 const DEFAULT_FALLBACK_CHAIN = ['tavily', 'brave', 'duckduckgo'];
-const DEFAULT_SEARXNG_URL = 'http://localhost:8080';
+const DEFAULT_SEARXNG_URL = 'http://localhost:8899';
 const DEFAULT_RESULT_COUNT = 10;
 
 /**

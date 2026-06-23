@@ -11,7 +11,7 @@ import {
 import type { MemoryEmbeddingsConfig, MemoryEmbeddingsStatus } from '../memory/types';
 import { fillProviderSelect } from './settings-model-binding';
 
-type StatusFn = (kind: 'ok' | 'err', message: string) => void;
+type StatusFn = (kind: 'ok' | 'err' | 'spin', message: string) => void;
 
 let bindingsDone = false;
 

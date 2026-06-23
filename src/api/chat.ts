@@ -171,6 +171,8 @@ export function mergeToolCallDelta(
   return next;
 }
 
+export { getLatestStreamingToolName } from './tool-call-stream.ts';
+
 /** Turn a streaming accumulator into complete `ToolCall` rows (sorted by index). */
 export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[] {
   return Object.keys(acc)

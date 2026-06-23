@@ -18,8 +18,10 @@ export interface ToolApprovalContext {
   workAgentId?: string | null;
   /** Active composer mode (General always prompts before tool execution). */
   modeId?: string;
-  /** Override workspace for path-outside checks (benchmark sandbox, etc.). */
+  /** Override workspace for path-outside checks (benchmark sandbox, worktree, etc.). */
   workspaceRoot?: string;
+  /** Additional allowed roots (board worktrees under ~/.minnow/worktrees). */
+  extraPathRoots?: string[];
   /** Benchmark runs proceed without approval or path-ack modals. */
   benchmarkAutonomous?: boolean;
 }

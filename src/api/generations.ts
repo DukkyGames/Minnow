@@ -44,6 +44,15 @@ export function formatGenerationErrorMessage(message: string): string {
   ) {
     return 'The connection to the model was interrupted (timeout or server restart). Try again.';
   }
+  if (
+    trimmed === 'UND_ERR_BODY_TIMEOUT' ||
+    trimmed === 'UND_ERR_HEADERS_TIMEOUT' ||
+    trimmed === 'UND_ERR_CONNECT_TIMEOUT' ||
+    lower.includes('und_err_body_timeout') ||
+    lower.includes('und_err_headers_timeout')
+  ) {
+    return 'The model stopped sending data for several minutes (connection timed out). Try again, shorten context, or adjust Generation timeouts in Settings → Tools.';
+  }
   return trimmed;
 }
 

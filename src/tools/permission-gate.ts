@@ -19,6 +19,19 @@ import { resolveEffectivePermission } from './permission-resolve';
 
 export type { ToolApprovalContext };
 
+function isPathInAllowedRoots(
+  userPath: string,
+  workspaceRoot: string,
+  extraRoots: string[] | undefined,
+): boolean {
+  if (isPathUnderWorkspace(userPath, workspaceRoot)) return true;
+  for (const root of extraRoots ?? []) {
+    const trimmed = root.trim();
+    if (trimmed && isPathUnderWorkspace(userPath, trimmed)) return true;
+  }
+  return false;
+}
+
 /** Result of the pre-execution gate: proceed or return this tool message instead. */
 export async function maybeBlockToolForUserApproval(
   permissionToolId: string,
@@ -54,7 +67,9 @@ export async function maybeBlockToolForUserApproval(
   const pathStrings = extractPathLikeArgs(execName, args);
   const pathsOutsideWorkspace =
     fsMeta.filesystemAccess === 'workspace' && workspaceRoot.trim().length > 0
-      ? pathStrings.filter((p) => !isPathUnderWorkspace(p, workspaceRoot))
+      ? pathStrings.filter(
+          (p) => !isPathInAllowedRoots(p, workspaceRoot, context.extraPathRoots),
+        )
       : [];
 
   const needsPathAck = pathsOutsideWorkspace.length > 0;
@@ -74,7 +89,7 @@ export async function maybeBlockToolForUserApproval(
     needsPathAck && fsMeta.filesystemAccess === 'workspace'
       ? `${
           perm === 'full' ? 'Tool permission is Full, but these paths are outside the workspace:\n' : 'Paths outside the workspace:\n'
-        }${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nThe server will reject these unless you enable full filesystem access in Settings.`
+        }${pathsOutsideWorkspace.map((p) => `• ${p}`).join('\n')}\n\nBoard worktrees under ~/.minnow/worktrees are allowed by the server. Other paths may be rejected unless you enable full filesystem access in Settings.`
       : '';
 
   const decision = await enqueueToolApproval({
@@ -107,13 +122,14 @@ export function toolInvocationWouldPrompt(
   perm: ToolPermissionMode,
   filesystemAccess: 'workspace' | 'full',
   workspaceRoot: string,
+  extraPathRoots: string[] = [],
 ): boolean {
   if (perm === 'off') return false;
   const pathStrings = extractPathLikeArgs(toolName, args);
   const needsPathAck =
     filesystemAccess === 'workspace' &&
     workspaceRoot.trim().length > 0 &&
-    pathStrings.some((p) => !isPathUnderWorkspace(p, workspaceRoot));
+    pathStrings.some((p) => !isPathInAllowedRoots(p, workspaceRoot, extraPathRoots));
   const needsPermissionAck = perm === 'ask';
   return needsPathAck || needsPermissionAck;
 }

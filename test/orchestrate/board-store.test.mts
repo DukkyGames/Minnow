@@ -14,13 +14,17 @@ import {
   applyOpenBoardWaveCollapse,
   countBoardTasksProgressed,
   countBoardWavesProgressed,
+  getBoardExecutionMode,
   getBoardProgressPercent,
   getBoardState,
   initBoard,
+  isBoardAutoMode,
+  isBoardRunning,
   isTaskReadyForAuto,
   recomputeWaveRollup,
   rollupWaveStatus,
   setBoardNowForTests,
+  resetBoardLogForTests,
   updateTask,
 } from '../../src/state/orchestrate-board-store.ts';
 import { flushScheduledSessionSaveForTests } from '../../src/state/sessions.ts';
@@ -86,7 +90,19 @@ const EXPECTED_INIT_BOARD_JSON = `{
   "lastUpdatedAt": 1710000001000,
   "timerAccumulatedMs": 0,
   "maxConcurrentTasks": 3,
-  "executionMode": "manual"
+  "executionMode": "manual",
+  "log": [
+    {
+      "id": "1710000001000-0",
+      "ts": 1710000001000,
+      "type": "board_init",
+      "level": "info",
+      "message": "Board initialized (1 tasks, 1 waves)",
+      "detail": {
+        "summary": "1 tasks, 1 waves"
+      }
+    }
+  ]
 }`;
 
 /** After W1-A moves to in_progress — wave rollup stays in_progress. */
@@ -108,6 +124,7 @@ const EXPECTED_WAVE_COMPLETE_JSON = `{
 describe('orchestrate board store rollup', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -147,6 +164,7 @@ describe('orchestrate board store rollup', () => {
 describe('orchestrate board store init and progress', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -342,6 +360,7 @@ describe('orchestrate board store init and progress', () => {
 describe('orchestrate board store events', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -376,6 +395,7 @@ describe('orchestrate board store events', () => {
 describe('orchestrate board dependency cycles', () => {
   beforeEach(() => {
     setBoardNowForTests(() => FIXED_NOW);
+    resetBoardLogForTests();
     clearBoardListenersForTests();
   });
 
@@ -412,5 +432,78 @@ describe('orchestrate board dependency cycles', () => {
     assert.equal(board.waves[0]?.status, 'in_progress');
     assert.equal(isTaskReadyForAuto(board, taskA), false);
     assert.equal(isTaskReadyForAuto(board, taskB), false);
+  });
+});
+
+describe('isTaskReadyForAuto DAG-first scheduling', () => {
+  test('task with satisfied deps is ready even when a same-wave sibling is incomplete', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build' },
+        { id: 'W1-C', title: 'C', wave: 'W1', category: 'build', dependsOn: ['W1-A'] },
+      ],
+      waves: [{ id: 'W1' }],
+    });
+    const board = getBoardState(group)!;
+    const taskA = board.tasks.find((t) => t.id === 'W1-A')!;
+    const taskB = board.tasks.find((t) => t.id === 'W1-B')!;
+    const taskC = board.tasks.find((t) => t.id === 'W1-C')!;
+
+    taskA.status = 'complete';
+    assert.equal(isTaskReadyForAuto(board, taskC), true);
+    assert.equal(isTaskReadyForAuto(board, taskB), true);
+    taskB.status = 'in_progress';
+    assert.equal(isTaskReadyForAuto(board, taskC), true);
+  });
+
+  test('task without dependsOn still respects prior wave barrier', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W2-A', title: 'B', wave: 'W2', category: 'build' },
+      ],
+      waves: [{ id: 'W1' }, { id: 'W2' }],
+    });
+    const board = getBoardState(group)!;
+    const w2 = board.tasks.find((t) => t.id === 'W2-A')!;
+    assert.equal(isTaskReadyForAuto(board, w2), false);
+    board.tasks.find((t) => t.id === 'W1-A')!.status = 'complete';
+    assert.equal(isTaskReadyForAuto(board, w2), true);
+  });
+});
+
+describe('execution mode afk', () => {
+  test('getBoardExecutionMode returns afk when set', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    group.orchestrateBoard!.executionMode = 'afk';
+    assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'afk');
+  });
+
+  test('isBoardAutoMode and isBoardRunning recognise afk', () => {
+    const chat = makeChat();
+    const group = makeGroup();
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    group.orchestrateBoard!.executionMode = 'afk';
+    assert.equal(isBoardAutoMode(group), true);
+    assert.equal(isBoardRunning(group), false);
+    group.orchestrateBoard!.autoRunning = true;
+    assert.equal(isBoardRunning(group), true);
   });
 });

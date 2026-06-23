@@ -7,6 +7,10 @@ import {
   type OrchestratorActivity,
 } from '../chat/orchestrate/last-activity';
 import {
+  renderFinishDashboard,
+  syncFinishDashboard,
+} from './orchestrate-finish-dashboard';
+import {
   deriveTaskCardActivity,
   type TaskCardActivity,
   type TaskCardSubAgentHint,
@@ -17,9 +21,14 @@ import {
   getMainTurnActivity,
   subscribeMainTurnActivity,
 } from '../chat/main-turn-activity';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
+import { isOrchestrateBoardFinished, isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete';
 import { isUserStoppedChat } from '../chat/orchestrate/user-stopped.ts';
-import { isActiveChatStreaming, isChatStreaming } from '../chat/streaming-state';
+import { sumUsageSegments } from '../chat/orchestrate/stats-math';
+import {
+  isActiveChatStreaming,
+  isChatStreaming,
+  subscribeChatStreamActivity,
+} from '../chat/streaming-state';
 import {
   getSubAgentRun,
   listActiveSubAgentRuns,
@@ -31,17 +40,25 @@ import {
   getRunSupervision,
   type RunSupervision,
 } from '../agents/controller/wrapper';
+import { getAutopilotMetaSync } from '../config/autopilot-meta.ts';
 import {
   getActiveBoardGroup,
   getPlannerChatForGroup,
 } from '../state/chat-groups.ts';
 import {
+  activateAfk,
+  cancelPendingAfk,
+  continueBoardTask,
   countRunningTaskChats,
   getBoardExecutionMode,
   isBoardRunning,
   isTaskChatActive,
+  listRunningBoardTaskSlots,
   moveTaskStatus,
+  moveTaskToNewChat,
+  restartBoardTask,
   setBoardExecutionMode,
+  setBoardIsolationMode,
   setBoardMaxConcurrent,
   startBoardAutoRun,
   startFinalIntegrationTestForPlannerChat,
@@ -49,8 +66,10 @@ import {
   startTaskTestingForPlannerChat,
   startWave,
   stopBoardAutoRun,
+  stopRunningBoardSlot,
   stopTask,
   toggleWaveCollapsed,
+  type RunningBoardTaskSlot,
 } from '../state/orchestrate-board-actions.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentStatus, RunLifecycle } from '../agents/types';
@@ -61,11 +80,16 @@ import {
   countBoardWavesProgressed,
   getBoardProgressPercent,
   getOrchestrateBoardElapsedMs,
+  isTaskStalledForRestart,
   syncOrchestrateBoardTimer,
   type OrchestrateBoardTimerContext,
 } from '../state/orchestrate-board-store';
 import { normalizeModeId } from '../chat/modes/types';
-import { subscribeBoardChanges } from '../state/orchestrate-board-events';
+import { subscribeBoardChanges, emitBoardChange } from '../state/orchestrate-board-events';
+import {
+  countBoardLogAlerts,
+  openBoardTimelineDrawer,
+} from './board-timeline-drawer.ts';
 import {
   findChatById,
   getActiveChat,
@@ -80,9 +104,11 @@ import type {
   Chat,
   ChatGroup,
   PersistedSubAgentStatus,
+  Usage,
 } from '../types';
 
 type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
+import { BOARD_CATEGORY_ICON_PATHS, createBoardCategoryIcon } from './board-category-icons';
 import { switchChat } from './sidebar';
 import {
   populateOrchestratePlanSelect,
@@ -108,7 +134,11 @@ import {
 } from './orchestrate-board-init-split';
 import { isOrchestrateHubMounted, teardownOrchestrateHub } from './orchestrate-hub';
 import { teardownHub } from './hub';
-import { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
+import { kickoffOrchestrateBoardBuild } from './orchestrate-board-kickoff';
+import {
+  isBoardKickoffInProgress,
+  isBoardOnboardingGitSetupActive,
+} from './orchestrate-board-onboarding-state';
 
 /** Agent status chip on a kanban task card. */
 export type TaskAgentBadgeVariant = 'active' | 'failed' | 'complete';
@@ -153,6 +183,15 @@ export function getBoardTaskRunIds(task: BoardTask): string[] {
 }
 
 export { isUserStoppedChat };
+
+/**
+ * True when the user stopped this board. Prefers the persisted board flag
+ * (set the moment Stop is pressed, survives reloads and the live tick) and
+ * falls back to the planner transcript for boards saved before the flag.
+ */
+function isBoardUserStopped(board: BoardState, plannerChat: Chat): boolean {
+  return board.userStopped === true || isUserStoppedChat(plannerChat);
+}
 
 /** Badge copy for tasks linked to a sub-agent run (Active / Failed / Complete / Cancelled). */
 export function deriveTaskAgentBadge(
@@ -297,6 +336,7 @@ interface BoardSession {
   unsubBoard: () => void;
   unsubAgents: () => void;
   unsubMainTurn: () => void;
+  unsubStream: () => void;
 }
 
 let currentSession: BoardSession | null = null;
@@ -319,11 +359,12 @@ function stopBoardLiveTick(): void {
 function boardTimerContextForChat(
   chat: Chat,
   activeRunCount: number,
+  board: BoardState,
 ): OrchestrateBoardTimerContext {
   return {
     isStreaming: isChatStreaming(chat.id),
     activeRunCount,
-    userStopped: isUserStoppedChat(chat),
+    userStopped: isBoardUserStopped(board, chat),
   };
 }
 
@@ -347,7 +388,7 @@ function tickOrchestrateBoardSession(): void {
   syncOrchestrateBoardTimer(
     group,
     planner,
-    boardTimerContextForChat(planner, activeRuns.length),
+    boardTimerContextForChat(planner, activeRuns.length, group.orchestrateBoard),
   );
   if (!isOrchestrateHubMounted() && (isOrchestrateBoardViewActive() || isOrchestrateInitSplitChromeActive())) {
     refreshActiveBoardIfMounted();
@@ -367,6 +408,7 @@ function disposeBoardSession(): void {
   currentSession.unsubBoard();
   currentSession.unsubAgents();
   currentSession.unsubMainTurn();
+  currentSession.unsubStream();
   currentSession = null;
   lastKanbanRefreshKey = '';
   pendingKanbanRefresh = false;
@@ -481,6 +523,48 @@ function ensureKanbanInteractionReleaseListener(): void {
   });
 }
 
+/** Capture scrollTop/scrollLeft of keyed scroll containers so a rebuild doesn't reset them. */
+function captureBoardScrollPositions(
+  root: ParentNode,
+): Map<string, { top: number; left: number }> {
+  const positions = new Map<string, { top: number; left: number }>();
+  const nodes = root.querySelectorAll<HTMLElement>('[data-board-scroll-key]');
+  // The root itself can be a keyed scroll container (e.g. the .board-kanban-waves
+  // wave stack), which querySelectorAll on descendants would miss.
+  const all =
+    root instanceof HTMLElement && root.dataset.boardScrollKey
+      ? [root, ...nodes]
+      : [...nodes];
+  for (const node of all) {
+    const key = node.dataset.boardScrollKey;
+    if (!key) continue;
+    if (node.scrollTop === 0 && node.scrollLeft === 0) continue;
+    positions.set(key, { top: node.scrollTop, left: node.scrollLeft });
+  }
+  return positions;
+}
+
+/** Restore previously-captured scroll positions onto the rebuilt scroll containers. */
+function restoreBoardScrollPositions(
+  root: ParentNode,
+  positions: Map<string, { top: number; left: number }>,
+): void {
+  if (positions.size === 0) return;
+  const nodes = root.querySelectorAll<HTMLElement>('[data-board-scroll-key]');
+  const all =
+    root instanceof HTMLElement && root.dataset.boardScrollKey
+      ? [root, ...nodes]
+      : [...nodes];
+  for (const node of all) {
+    const key = node.dataset.boardScrollKey;
+    if (!key) continue;
+    const saved = positions.get(key);
+    if (!saved) continue;
+    if (saved.top) node.scrollTop = saved.top;
+    if (saved.left) node.scrollLeft = saved.left;
+  }
+}
+
 function mountKanbanInMain(
   main: HTMLElement,
   board: BoardState,
@@ -488,8 +572,12 @@ function mountKanbanInMain(
   plannerChat: Chat,
 ): void {
   const planPanel = main.querySelector('.board-plan-panel');
-  const newKanban = renderKanban(board, group, plannerChat);
   const oldKanban = main.querySelector('.board-kanban-waves');
+  const oldDashboard = main.querySelector('.board-finish-dashboard');
+  // Preserve the user's manual scroll across the live-tick rebuild (MIN-259).
+  const savedScroll = oldKanban ? captureBoardScrollPositions(oldKanban) : null;
+  const newKanban = renderKanban(board, group, plannerChat);
+  if (oldDashboard) oldDashboard.remove();
   if (oldKanban) {
     oldKanban.replaceWith(newKanban);
   } else if (planPanel) {
@@ -497,7 +585,65 @@ function mountKanbanInMain(
   } else {
     main.prepend(newKanban);
   }
+  if (savedScroll) restoreBoardScrollPositions(newKanban, savedScroll);
   syncBoardTaskPlanPanel(main, board, group);
+}
+
+/** True when the finish dashboard should replace the kanban (MIN-208). */
+function shouldShowFinishDashboard(board: BoardState): boolean {
+  return isOrchestrateBoardFinished(board) && board.dashboardDismissed !== true;
+}
+
+function mountFinishDashboardInMain(
+  main: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const oldKanban = main.querySelector('.board-kanban-waves');
+  const existing = main.querySelector('.board-finish-dashboard');
+  if (existing instanceof HTMLElement) {
+    syncFinishDashboard(existing, group, plannerChat, board);
+    return;
+  }
+  if (oldKanban) oldKanban.remove();
+  const dashboard = renderFinishDashboard(group, plannerChat, board);
+  const planPanel = main.querySelector('.board-plan-panel');
+  if (planPanel) {
+    main.insertBefore(dashboard, planPanel);
+  } else {
+    main.prepend(dashboard);
+  }
+}
+
+function mountBoardMainSurface(
+  main: HTMLElement,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  if (shouldShowFinishDashboard(board)) {
+    mountFinishDashboardInMain(main, board, group, plannerChat);
+    return;
+  }
+  mountKanbanInMain(main, board, group, plannerChat);
+}
+
+/** Keep the header Board ⇄ Dashboard toggle label in sync after live refresh. */
+function syncBoardDashboardToggle(root: HTMLElement, board: BoardState): void {
+  const toggle = root.querySelector(
+    '[data-board-action="dashboard-toggle"]',
+  ) as HTMLButtonElement | null;
+  if (!toggle) return;
+  const showingDashboard = shouldShowFinishDashboard(board);
+  toggle.textContent = showingDashboard ? 'Board' : 'Dashboard';
+  toggle.title = showingDashboard
+    ? 'Return to the kanban board'
+    : 'Open the finish dashboard';
+  toggle.setAttribute(
+    'aria-label',
+    showingDashboard ? 'Back to board' : 'Open finish dashboard',
+  );
 }
 
 /** Refresh board UI when store or sub-agents change (stable handler per folder). */
@@ -525,6 +671,10 @@ function ensureBoardSession(group: ChatGroup, plannerChat: Chat): void {
       if (run.parentChatId === plannerChat.id) scheduleBoardUiRefresh(group.id);
     }),
     unsubMainTurn: subscribeMainTurnActivity(() => scheduleBoardUiRefresh(group.id)),
+    unsubStream: subscribeChatStreamActivity((chatId) => {
+      const chat = findChatById(chatId);
+      if (chat?.boardGroupId === group.id) scheduleBoardUiRefresh(group.id);
+    }),
   };
   startBoardLiveTick();
 }
@@ -724,6 +874,196 @@ function createBoardHeaderIconButton(
 
 const BOARD_ICON_PLAN =
   'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8';
+
+/** Autonomy stops (least → most autonomous). */
+const BOARD_EXECUTION_MODES = ['manual', 'sequential', 'auto', 'afk'] as const;
+
+const BOARD_EXECUTION_MODE_META: ReadonlyArray<{
+  id: (typeof BOARD_EXECUTION_MODES)[number];
+  label: string;
+  title: string;
+}> = [
+  {
+    id: 'manual',
+    label: 'Manual',
+    title: 'You start each task from the board',
+  },
+  {
+    id: 'sequential',
+    label: 'Sequential',
+    title: 'Orchestrator runs one task at a time',
+  },
+  {
+    id: 'auto',
+    label: 'Auto',
+    title: 'Orchestrator runs tasks concurrently',
+  },
+  {
+    id: 'afk',
+    label: 'AFK',
+    title: 'Fully autonomous until Stop or the board finishes',
+  },
+] as const;
+
+function boardExecutionModeToIndex(mode: string): number {
+  const idx = BOARD_EXECUTION_MODES.indexOf(mode as (typeof BOARD_EXECUTION_MODES)[number]);
+  return idx >= 0 ? idx : 0;
+}
+
+const BOARD_AFK_CONFIRM_MESSAGE =
+  'Enable AFK mode? The orchestrator will run fully hands-off and will not prompt you until you press Stop or the board finishes.';
+
+/** User-selected execution mode — AFK goes through the shared confirm + activate path. */
+function selectBoardExecutionModeFromUi(
+  group: ChatGroup,
+  mode: (typeof BOARD_EXECUTION_MODES)[number],
+  plannerChat: Chat,
+): void {
+  if (mode === 'afk') {
+    if (!window.confirm(BOARD_AFK_CONFIRM_MESSAGE)) return;
+    activateAfk(group, plannerChat);
+    return;
+  }
+  setBoardExecutionMode(group, mode, plannerChat);
+}
+
+const BOARD_AFK_HINT_VISIBLE_MS = 2500;
+/** Must match `.board-header__exec-mode-hint` opacity transition duration. */
+const BOARD_AFK_HINT_FADE_MS = 400;
+
+let boardAfkHintDismissTimer: ReturnType<typeof setTimeout> | null = null;
+let boardAfkHintFadeTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncedExecMode: string | null = null;
+let boardAfkHintShownForSession = false;
+
+function clearBoardAfkHintTimers(): void {
+  if (boardAfkHintDismissTimer !== null) {
+    clearTimeout(boardAfkHintDismissTimer);
+    boardAfkHintDismissTimer = null;
+  }
+  if (boardAfkHintFadeTimer !== null) {
+    clearTimeout(boardAfkHintFadeTimer);
+    boardAfkHintFadeTimer = null;
+  }
+}
+
+function hideBoardAfkHint(hint: HTMLElement, instant = true): void {
+  clearBoardAfkHintTimers();
+  hint.classList.remove('is-visible');
+  if (instant) {
+    hint.hidden = true;
+    hint.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function finishBoardAfkHintFade(hint: HTMLElement): void {
+  boardAfkHintFadeTimer = null;
+  hint.hidden = true;
+  hint.setAttribute('aria-hidden', 'true');
+}
+
+/** Fade out, then remove from layout once the opacity transition completes. */
+function dismissBoardAfkHint(hint: HTMLElement): void {
+  if (boardAfkHintFadeTimer !== null) return;
+  hint.classList.remove('is-visible');
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) {
+    finishBoardAfkHintFade(hint);
+    return;
+  }
+
+  const onTransitionEnd = (event: TransitionEvent): void => {
+    if (event.target !== hint || event.propertyName !== 'opacity') return;
+    hint.removeEventListener('transitionend', onTransitionEnd);
+    finishBoardAfkHintFade(hint);
+  };
+  hint.addEventListener('transitionend', onTransitionEnd);
+  boardAfkHintFadeTimer = setTimeout(() => {
+    hint.removeEventListener('transitionend', onTransitionEnd);
+    finishBoardAfkHintFade(hint);
+  }, BOARD_AFK_HINT_FADE_MS + 80);
+}
+
+/** Brief AFK callout: visible ~2.5s, then fades out without shifting toolbar layout. */
+function showBoardAfkHint(hint: HTMLElement): void {
+  clearBoardAfkHintTimers();
+  hint.hidden = false;
+  hint.setAttribute('aria-hidden', 'false');
+  hint.classList.remove('is-visible');
+  // Two frames so the browser paints opacity 0 before transitioning to 1.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      hint.classList.add('is-visible');
+    });
+  });
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const visibleMs = reducedMotion ? 1200 : BOARD_AFK_HINT_VISIBLE_MS;
+
+  boardAfkHintDismissTimer = setTimeout(() => {
+    boardAfkHintDismissTimer = null;
+    dismissBoardAfkHint(hint);
+  }, visibleMs);
+}
+
+function syncBoardExecModeUi(root: ParentNode, currentMode: string): void {
+  const idx = boardExecutionModeToIndex(currentMode);
+  const segments = root.querySelectorAll<HTMLButtonElement>(
+    '.board-header__exec-mode-segment',
+  );
+  segments.forEach((btn, i) => {
+    btn.setAttribute('aria-checked', i === idx ? 'true' : 'false');
+  });
+  const hint = root.querySelector('.board-header__exec-mode-hint') as HTMLElement | null;
+  if (!hint) return;
+
+  if (currentMode !== 'afk') {
+    hideBoardAfkHint(hint);
+    lastSyncedExecMode = currentMode;
+    boardAfkHintShownForSession = false;
+    return;
+  }
+
+  const enteredAfk = lastSyncedExecMode !== 'afk';
+  lastSyncedExecMode = 'afk';
+  if (enteredAfk || !boardAfkHintShownForSession) {
+    boardAfkHintShownForSession = true;
+    showBoardAfkHint(hint);
+  }
+}
+
+function onBoardExecModeSegmentKeydown(
+  event: KeyboardEvent,
+  modeId: string,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const segments = BOARD_EXECUTION_MODES;
+  const currentIndex = segments.indexOf(modeId as (typeof BOARD_EXECUTION_MODES)[number]);
+  if (currentIndex < 0) return;
+
+  let nextIndex = currentIndex;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = Math.min(currentIndex + 1, segments.length - 1);
+    event.preventDefault();
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = Math.max(currentIndex - 1, 0);
+    event.preventDefault();
+  } else {
+    return;
+  }
+
+  const nextMode = segments[nextIndex] ?? 'manual';
+  selectBoardExecutionModeFromUi(group, nextMode, plannerChat);
+  refreshActiveBoardIfMounted();
+  const root = document.querySelector('.board-root');
+  const nextBtn = root?.querySelector<HTMLButtonElement>(
+    `.board-header__exec-mode-segment[data-exec-mode="${nextMode}"]`,
+  );
+  nextBtn?.focus();
+}
+
 function wireBoardHeaderControls(
   controls: HTMLElement,
   planPath: string,
@@ -732,42 +1072,70 @@ function wireBoardHeaderControls(
   plannerChat: Chat,
 ): void {
   controls.replaceChildren();
+  clearBoardAfkHintTimers();
+  lastSyncedExecMode = null;
+  boardAfkHintShownForSession = false;
 
-  // Execution mode select (Manual / Auto / Sequential)
+  // Execution mode segments (Manual → Sequential → Auto → AFK)
   const currentMode = getBoardExecutionMode(board);
-  const modeWrapper = document.createElement('label');
+  const modeWrapper = document.createElement('div');
   modeWrapper.className = 'board-header__exec-mode';
-  modeWrapper.title = 'Execution mode: Manual (user-driven), Auto (concurrent auto-start), Sequential (one at a time)';
-  const modeSelect = document.createElement('select');
-  modeSelect.className = 'board-header__exec-mode-select';
-  modeSelect.dataset.boardAction = 'auto-pilot';
-  modeSelect.setAttribute('aria-label', 'Execution mode');
-  for (const [value, label] of [['manual', 'Manual'], ['auto', 'Auto'], ['sequential', 'Sequential']] as const) {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = label;
-    if (value === currentMode) opt.selected = true;
-    modeSelect.appendChild(opt);
+
+  const modeGroup = document.createElement('div');
+  modeGroup.className = 'board-header__exec-mode-segments';
+  modeGroup.dataset.boardAction = 'auto-pilot';
+  modeGroup.setAttribute('role', 'radiogroup');
+  modeGroup.setAttribute('aria-label', 'Execution autonomy');
+
+  for (const meta of BOARD_EXECUTION_MODE_META) {
+    const segment = document.createElement('button');
+    segment.type = 'button';
+    segment.className = 'board-header__exec-mode-segment';
+    segment.dataset.execMode = meta.id;
+    segment.setAttribute('role', 'radio');
+    segment.setAttribute(
+      'aria-checked',
+      meta.id === currentMode ? 'true' : 'false',
+    );
+    segment.textContent = meta.label;
+    segment.title = meta.title;
+
+    segment.addEventListener('click', () => {
+      selectBoardExecutionModeFromUi(group, meta.id, plannerChat);
+      refreshActiveBoardIfMounted();
+    });
+    segment.addEventListener('keydown', (event) => {
+      onBoardExecModeSegmentKeydown(event, meta.id, group, plannerChat);
+    });
+
+    modeGroup.appendChild(segment);
   }
-  modeSelect.addEventListener('change', () => {
-    const mode = modeSelect.value as 'manual' | 'auto' | 'sequential';
-    setBoardExecutionMode(group, mode, plannerChat);
-    refreshActiveBoardIfMounted();
-  });
-  modeWrapper.appendChild(modeSelect);
+
+  const afkHint = document.createElement('p');
+  afkHint.className = 'board-header__exec-mode-hint';
+  afkHint.setAttribute('role', 'status');
+  afkHint.textContent =
+    'Hands-off. Press Start; the orchestrator will not prompt you until Stop or the board finishes.';
+  afkHint.hidden = true;
+  afkHint.setAttribute('aria-hidden', 'true');
+
+  modeWrapper.appendChild(modeGroup);
+  modeWrapper.appendChild(afkHint);
   controls.appendChild(modeWrapper);
 
-  // Max concurrent stepper (only editable in Auto mode)
+  // Max concurrent stepper (editable in Auto and AFK modes)
   const concWrapper = document.createElement('label');
   concWrapper.className = 'board-header__concurrency';
-  concWrapper.title = 'Max concurrent tasks (Auto mode only)';
+  concWrapper.title = 'Max concurrent tasks (Auto and AFK modes)';
   const concInput = document.createElement('input');
   concInput.type = 'number';
   concInput.className = 'board-header__concurrency-input';
   concInput.min = '1';
   concInput.max = '20';
-  concInput.value = String(board.maxConcurrentTasks ?? 3);
-  concInput.disabled = currentMode !== 'auto';
+  concInput.value = String(
+    board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
+  );
+  concInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
   concInput.setAttribute('aria-label', 'Max concurrent tasks');
   concInput.addEventListener('change', () => {
     const val = Number(concInput.value);
@@ -779,8 +1147,35 @@ function wireBoardHeaderControls(
   concWrapper.appendChild(concInput);
   controls.appendChild(concWrapper);
 
-  // Start / Stop button (only shown in auto or sequential mode)
-  if (currentMode === 'auto' || currentMode === 'sequential') {
+  // Isolation mode override (Auto = global default or derive from execution mode)
+  const isoWrapper = document.createElement('label');
+  isoWrapper.className = 'board-header__isolation';
+  isoWrapper.title = 'Worktree isolation (Auto uses Settings default or execution mode)';
+  const isoSelect = document.createElement('select');
+  isoSelect.className = 'board-header__isolation-select';
+  isoSelect.setAttribute('aria-label', 'Isolation mode');
+  for (const opt of [
+    { value: 'auto', label: 'Auto' },
+    { value: 'off', label: 'Off' },
+    { value: 'per-task', label: 'Per-task' },
+    { value: 'per-wave', label: 'Per-wave' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    isoSelect.appendChild(option);
+  }
+  isoSelect.value = board.isolationMode ?? 'auto';
+  isoSelect.addEventListener('change', () => {
+    const val = isoSelect.value as 'auto' | 'off' | 'per-task' | 'per-wave';
+    setBoardIsolationMode(group, val, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  isoWrapper.appendChild(isoSelect);
+  controls.appendChild(isoWrapper);
+
+  // Start / Stop button (shown in sequential, auto, and afk modes)
+  if (currentMode !== 'manual') {
     const running = isBoardRunning(group);
     const runBtn = document.createElement('button');
     runBtn.type = 'button';
@@ -813,7 +1208,95 @@ function wireBoardHeaderControls(
     void import('./file-viewer').then((m) => m.openFileInViewer(planPath));
   });
 
+  const timelineBtn = document.createElement('button');
+  timelineBtn.type = 'button';
+  timelineBtn.className = 'board-btn board-btn--compact board-timeline-btn';
+  timelineBtn.textContent = 'Timeline';
+  timelineBtn.title = 'Open board event timeline';
+  timelineBtn.setAttribute('aria-label', 'Open board timeline');
+  const alerts = countBoardLogAlerts(group.id);
+  if (alerts.error > 0 || alerts.warn > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'board-timeline-btn__badge';
+    badge.textContent = String(alerts.error + alerts.warn);
+    badge.title = `${alerts.error} errors, ${alerts.warn} warnings`;
+    timelineBtn.appendChild(badge);
+  }
+  timelineBtn.addEventListener('click', () => {
+    openBoardTimelineDrawer(group.id);
+  });
+
+  controls.appendChild(timelineBtn);
   controls.appendChild(openPlan);
+
+  if (isOrchestrateBoardFinished(board)) {
+    const dashToggle = document.createElement('button');
+    dashToggle.type = 'button';
+    dashToggle.className = 'board-btn board-btn--compact board-header__dashboard-toggle';
+    dashToggle.dataset.boardAction = 'dashboard-toggle';
+    const showingDashboard = shouldShowFinishDashboard(board);
+    dashToggle.textContent = showingDashboard ? 'Board' : 'Dashboard';
+    dashToggle.title = showingDashboard
+      ? 'Return to the kanban board'
+      : 'Open the finish dashboard';
+    dashToggle.setAttribute(
+      'aria-label',
+      showingDashboard ? 'Back to board' : 'Open finish dashboard',
+    );
+    dashToggle.addEventListener('click', () => {
+      if (shouldShowFinishDashboard(board)) {
+        board.dashboardDismissed = true;
+      } else {
+        board.dashboardDismissed = false;
+      }
+      touchChat(plannerChat);
+      scheduleSaveSessions();
+      emitBoardChange(group.id);
+      refreshActiveBoardIfMounted();
+    });
+    controls.appendChild(dashToggle);
+  }
+}
+
+/** Banner when the orchestrator requested AFK and awaits user confirmation. */
+function buildPendingAfkBanner(
+  group: ChatGroup,
+  board: BoardState,
+  plannerChat: Chat,
+): HTMLElement | null {
+  if (!board.pendingAfk) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-header__pending-afk';
+  wrap.setAttribute('role', 'status');
+
+  const label = document.createElement('span');
+  label.className = 'board-header__pending-afk-label';
+  label.textContent =
+    'The orchestrator requested AFK mode — fully hands-off execution with no prompts until Stop or board finish.';
+  wrap.appendChild(label);
+
+  const enableBtn = document.createElement('button');
+  enableBtn.type = 'button';
+  enableBtn.className = 'board-btn board-btn--compact board-btn--primary';
+  enableBtn.textContent = 'Enable AFK';
+  enableBtn.addEventListener('click', () => {
+    activateAfk(group, plannerChat);
+    refreshActiveBoardIfMounted();
+  });
+  wrap.appendChild(enableBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'board-btn board-btn--compact';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    cancelPendingAfk(group);
+    refreshActiveBoardIfMounted();
+  });
+  wrap.appendChild(cancelBtn);
+
+  return wrap;
 }
 
 interface BoardHeaderMetrics {
@@ -862,6 +1345,9 @@ function buildBoardHeader(
   toolbar.appendChild(leading);
   toolbar.appendChild(controls);
 
+  const pendingAfkBanner = buildPendingAfkBanner(group, board, plannerChat);
+  if (pendingAfkBanner) toolbar.appendChild(pendingAfkBanner);
+
   const meta = document.createElement('div');
   meta.className = 'board-header__meta';
   meta.appendChild(buildBoardHeaderBench(metrics, board));
@@ -878,6 +1364,9 @@ function buildBoardHeader(
   bar.appendChild(fill);
 
   meta.appendChild(bar);
+
+  const runningStrip = buildBoardRunningTasksStrip(board, group, plannerChat);
+  if (runningStrip) meta.appendChild(runningStrip);
 
   const finalBanner = buildFinalTestBanner(board, group, plannerChat);
   if (finalBanner) meta.appendChild(finalBanner);
@@ -1029,7 +1518,7 @@ function boardHeaderMetrics(
   syncOrchestrateBoardTimer(
     group,
     plannerChat,
-    boardTimerContextForChat(plannerChat, activeRunCount),
+    boardTimerContextForChat(plannerChat, activeRunCount, board),
   );
   const progress = getBoardProgressPercent(board);
   const wavesComplete = countBoardWavesProgressed(board);
@@ -1050,6 +1539,320 @@ function formatElapsed(ms: number): string {
   if (sec < 60) return `${sec}s`;
   const min = Math.floor(sec / 60);
   return `${min}m ${sec % 60}s`;
+}
+
+/** Compact token readout for running-task chips (instrumentation family). */
+function formatRunningTaskTokens(total: number | null): string {
+  if (total == null) return '— tok';
+  if (total >= 10_000) return `${Math.round(total / 1000)}k tok`;
+  if (total >= 1000) {
+    const compact = (total / 1000).toFixed(1).replace(/\.0$/, '');
+    return `${compact}k tok`;
+  }
+  return `${total} tok`;
+}
+
+/** Sum assistant usage from a linked task chat transcript. */
+function sumChatTotalTokens(chat: Chat | undefined): number | null {
+  if (!chat) return null;
+  const segments: Usage[] = [];
+  for (const msg of chat.history) {
+    if (msg.role === 'assistant' && msg.usage) segments.push(msg.usage);
+  }
+  const ls = chat.lastStats;
+  if (
+    ls &&
+    (ls.prompt_tokens != null || ls.completion_tokens != null || ls.total_tokens != null)
+  ) {
+    segments.push({
+      prompt_tokens: ls.prompt_tokens ?? undefined,
+      completion_tokens: ls.completion_tokens ?? undefined,
+      total_tokens: ls.total_tokens ?? undefined,
+    });
+  }
+  if (!segments.length) return null;
+  return sumUsageSegments(segments).total_tokens ?? null;
+}
+
+function resolveRunningSlotElapsedMs(slot: RunningBoardTaskSlot, chat?: Chat): number {
+  const mainTurn = getMainTurnActivity(slot.chatId);
+  if (mainTurn?.startedAtMs) return Math.max(0, Date.now() - mainTurn.startedAtMs);
+  if (slot.task?.startedAt) return Math.max(0, Date.now() - slot.task.startedAt);
+  if (chat?.updatedAt) return Math.max(0, Date.now() - chat.updatedAt);
+  return 0;
+}
+
+function runningSlotShowsContinue(
+  board: BoardState,
+  slot: RunningBoardTaskSlot,
+): boolean {
+  if (slot.isFinalTest || !slot.task) return false;
+  if (isChatStreaming(slot.chatId)) return false;
+  return (
+    isTaskStalledForRestart(board, slot.task, isTaskChatActive) ||
+    isTaskChatActive(slot.chatId)
+  );
+}
+
+type RunningTaskIconKind = 'build' | 'test' | 'fix' | 'final';
+
+const RUNNING_TASK_ICON_PATHS: Record<RunningTaskIconKind, readonly string[]> = {
+  build: [BOARD_CATEGORY_ICON_PATHS.build!],
+  test: [BOARD_CATEGORY_ICON_PATHS.test!],
+  fix: [BOARD_CATEGORY_ICON_PATHS.fix!],
+  final: ['M12 2v20', 'M2 12h20', 'M5 5l14 14', 'M19 5 5 19'],
+};
+
+const RUNNING_TASK_CONTROL_ICON_PATHS = {
+  stop: ['M6 6h12v12H6z'],
+  restart: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+  continue: ['M5 12h14', 'M12 5l7 7-7 7'],
+  move: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
+  open: ['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],
+} as const;
+
+function createRunningTaskIcon(
+  kind: RunningTaskIconKind | keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  className: string,
+): SVGSVGElement {
+  const paths =
+    kind in RUNNING_TASK_ICON_PATHS
+      ? RUNNING_TASK_ICON_PATHS[kind as RunningTaskIconKind]
+      : RUNNING_TASK_CONTROL_ICON_PATHS[kind as keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS];
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of paths) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
+function createRunningTaskControlButton(
+  action: keyof typeof RUNNING_TASK_CONTROL_ICON_PATHS,
+  label: string,
+  onClick: (e: MouseEvent) => void,
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `board-running-tasks__control board-running-tasks__control--${action}`;
+  btn.dataset.boardRunningAction = action;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.appendChild(createRunningTaskIcon(action, 'icon-svg board-running-tasks__control-icon'));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick(e);
+  });
+  return btn;
+}
+
+function buildRunningTaskChip(
+  slot: RunningBoardTaskSlot,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement {
+  const chat = findChatById(slot.chatId);
+  const chip = document.createElement('article');
+  chip.className = `board-running-tasks__chip board-running-tasks__chip--${slot.phase}`;
+  chip.dataset.boardRunningChatId = slot.chatId;
+  chip.dataset.boardRunningTaskId = slot.taskId;
+  chip.setAttribute('role', 'listitem');
+  const streaming = isChatStreaming(slot.chatId);
+  if (streaming) chip.classList.add('board-running-tasks__chip--streaming');
+  chip.setAttribute(
+    'aria-label',
+    `${slot.taskId} ${slot.title}, ${streaming ? 'running' : 'starting'}`,
+  );
+
+  const icon = document.createElement('span');
+  icon.className = `board-running-tasks__phase board-running-tasks__phase--${slot.phase}`;
+  icon.appendChild(
+    createRunningTaskIcon(slot.phase, 'icon-svg board-running-tasks__phase-icon'),
+  );
+  icon.title = slot.phase === 'final' ? 'Final integration test' : slot.phase;
+  chip.appendChild(icon);
+
+  const dot = document.createElement('span');
+  dot.className = 'board-running-tasks__dot';
+  dot.setAttribute('aria-hidden', 'true');
+  chip.appendChild(dot);
+
+  const id = document.createElement('span');
+  id.className = 'board-running-tasks__id';
+  id.textContent = slot.taskId;
+  chip.appendChild(id);
+
+  const title = document.createElement('span');
+  title.className = 'board-running-tasks__title';
+  title.textContent = slot.title;
+  title.title = slot.title;
+  chip.appendChild(title);
+
+  const stats = document.createElement('span');
+  stats.className = 'board-running-tasks__stats';
+  const elapsed = document.createElement('span');
+  elapsed.className = 'board-running-tasks__elapsed';
+  elapsed.dataset.boardRunningElapsed = 'true';
+  elapsed.textContent = formatElapsed(resolveRunningSlotElapsedMs(slot, chat));
+  const tokens = document.createElement('span');
+  tokens.className = 'board-running-tasks__tokens';
+  tokens.dataset.boardRunningTokens = 'true';
+  tokens.textContent = formatRunningTaskTokens(sumChatTotalTokens(chat));
+  stats.appendChild(elapsed);
+  stats.appendChild(tokens);
+  chip.appendChild(stats);
+
+  const controls = document.createElement('div');
+  controls.className = 'board-running-tasks__controls';
+  controls.appendChild(
+    createRunningTaskControlButton('stop', `Stop ${slot.taskId}`, () => {
+      void stopRunningBoardSlot(group, slot, plannerChat).then(() =>
+        refreshActiveBoardIfMounted(),
+      );
+    }),
+  );
+  controls.appendChild(
+    createRunningTaskControlButton('restart', `Restart ${slot.taskId}`, () => {
+      if (slot.isFinalTest) {
+        void stopRunningBoardSlot(group, slot, plannerChat)
+          .then(() => startFinalIntegrationTestForPlannerChat(plannerChat))
+          .then(() => refreshActiveBoardIfMounted());
+        return;
+      }
+      void restartBoardTask(group, slot.taskId, plannerChat).then(() =>
+        refreshActiveBoardIfMounted(),
+      );
+    }),
+  );
+  if (runningSlotShowsContinue(board, slot)) {
+    controls.appendChild(
+      createRunningTaskControlButton('continue', `Continue ${slot.taskId}`, () => {
+        void continueBoardTask(group, slot.taskId, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+  }
+  if (!slot.isFinalTest) {
+    controls.appendChild(
+      createRunningTaskControlButton('move', `Move ${slot.taskId} to new chat`, () => {
+        void moveTaskToNewChat(group, slot.taskId, plannerChat).then(() =>
+          refreshActiveBoardIfMounted(),
+        );
+      }),
+    );
+  }
+  controls.appendChild(
+    createRunningTaskControlButton('open', `Open chat for ${slot.taskId}`, () => {
+      if (chat) switchChat(chat.id);
+    }),
+  );
+  chip.appendChild(controls);
+  return chip;
+}
+
+function buildRunningTasksStripKey(
+  board: BoardState,
+  slots: RunningBoardTaskSlot[],
+): string {
+  return slots
+    .map((slot) => {
+      const chat = findChatById(slot.chatId);
+      const tokens = sumChatTotalTokens(chat);
+      const streaming = isChatStreaming(slot.chatId) ? 1 : 0;
+      const continueVisible = runningSlotShowsContinue(board, slot) ? 1 : 0;
+      const moveVisible = slot.isFinalTest ? 0 : 1;
+      return [
+        slot.chatId,
+        slot.taskId,
+        slot.phase,
+        slot.title,
+        streaming,
+        continueVisible,
+        moveVisible,
+        tokens ?? '',
+      ].join('|');
+    })
+    .join(';');
+}
+
+/** Thin strip of running task chips below the board progress bar. */
+function buildBoardRunningTasksStrip(
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): HTMLElement | null {
+  const slots = listRunningBoardTaskSlots(board);
+  if (!slots.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'board-running-tasks';
+  wrap.dataset.boardRunningKey = buildRunningTasksStripKey(board, slots);
+  wrap.setAttribute('role', 'region');
+  wrap.setAttribute('aria-label', 'Running tasks');
+
+  const strip = document.createElement('div');
+  strip.className = 'board-running-tasks__strip';
+  strip.setAttribute('role', 'list');
+  for (const slot of slots) {
+    strip.appendChild(buildRunningTaskChip(slot, board, group, plannerChat));
+  }
+  wrap.appendChild(strip);
+  return wrap;
+}
+
+function syncBoardRunningTasksStrip(
+  meta: Element,
+  board: BoardState,
+  group: ChatGroup,
+  plannerChat: Chat,
+): void {
+  const slots = listRunningBoardTaskSlots(board);
+  const existing = meta.querySelector('.board-running-tasks') as HTMLElement | null;
+  if (!slots.length) {
+    existing?.remove();
+    return;
+  }
+
+  const nextKey = buildRunningTasksStripKey(board, slots);
+  if (!existing) {
+    const strip = buildBoardRunningTasksStrip(board, group, plannerChat);
+    if (!strip) return;
+    const bar = meta.querySelector('.board-header__progress');
+    if (bar) {
+      bar.insertAdjacentElement('afterend', strip);
+    } else {
+      meta.appendChild(strip);
+    }
+    return;
+  }
+
+  if (existing.dataset.boardRunningKey !== nextKey) {
+    existing.replaceWith(buildBoardRunningTasksStrip(board, group, plannerChat)!);
+    return;
+  }
+
+  for (const slot of slots) {
+    const chip = existing.querySelector(
+      `[data-board-running-chat-id="${slot.chatId}"]`,
+    ) as HTMLElement | null;
+    if (!chip) continue;
+    const chat = findChatById(slot.chatId);
+    const elapsedEl = chip.querySelector('[data-board-running-elapsed="true"]');
+    if (elapsedEl) {
+      elapsedEl.textContent = formatElapsed(resolveRunningSlotElapsedMs(slot, chat));
+    }
+    const tokensEl = chip.querySelector('[data-board-running-tokens="true"]');
+    if (tokensEl) {
+      tokensEl.textContent = formatRunningTaskTokens(sumChatTotalTokens(chat));
+    }
+    chip.classList.toggle('board-running-tasks__chip--streaming', isChatStreaming(slot.chatId));
+  }
 }
 
 function buildTaskAgentBadge(badge: TaskAgentBadge): HTMLElement {
@@ -1126,6 +1929,88 @@ function buildStatusActionButtons(
   }
   if (task.status === 'complete' || task.status === 'failed') {
     addBtn('Reopen', 'planned', 'recycle');
+  }
+}
+
+/** True when a stopped/failed/blocked task can use recovery controls. */
+function taskShowsRecoveryActions(
+  task: BoardTask,
+  taskActive: boolean,
+  testActive: boolean,
+): boolean {
+  if (taskActive || testActive) return false;
+  if (task.status === 'failed' || task.status === 'blocked') return true;
+  if (task.status === 'in_progress' || task.status === 'testing') {
+    return Boolean(task.chatId?.trim() || task.testChatId?.trim());
+  }
+  return false;
+}
+
+function buildTaskRecoveryActions(
+  task: BoardTask,
+  group: ChatGroup,
+  plannerChat: Chat,
+  row: HTMLElement,
+): void {
+  const addRecoveryBtn = (
+    label: string,
+    icon: BoardAdvanceIconKind,
+    onClick: () => void,
+  ): void => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-task-card__advance-btn board-task-card__advance-btn--recovery';
+    btn.appendChild(createBoardAdvanceIcon(icon));
+    const text = document.createElement('span');
+    text.className = 'board-task-card__advance-label';
+    text.textContent = label;
+    btn.appendChild(text);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+      refreshActiveBoardIfMounted();
+    });
+    row.appendChild(btn);
+  };
+
+  addRecoveryBtn('Restart', 'recycle', () => {
+    void restartBoardTask(group, task.id, plannerChat);
+  });
+  addRecoveryBtn('Continue', 'forward', () => {
+    void continueBoardTask(group, task.id, plannerChat);
+  });
+  addRecoveryBtn('Move to new chat', 'forward', () => {
+    void moveTaskToNewChat(group, task.id, plannerChat);
+  });
+}
+
+function appendTaskPrevFailureLink(card: HTMLElement, task: BoardTask): void {
+  const prev = task.prevFailure;
+  if (!prev) return;
+  const details = document.createElement('details');
+  details.className = 'board-task-card__prev-failure';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Previous failure';
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.className = 'board-task-card__prev-failure-body';
+  if (prev.error?.trim()) {
+    const err = document.createElement('p');
+    err.className = 'board-task-card__prev-failure-line';
+    err.textContent = prev.error.trim();
+    body.appendChild(err);
+  }
+  if (prev.testVerdict || prev.testSummary?.trim()) {
+    const test = document.createElement('p');
+    test.className = 'board-task-card__prev-failure-line';
+    const verdict = prev.testVerdict ? ` (${prev.testVerdict})` : '';
+    test.textContent = `${prev.testSummary?.trim() || 'Test failure'}${verdict}`;
+    body.appendChild(test);
+  }
+  if (body.childElementCount) {
+    details.appendChild(body);
+    details.addEventListener('click', (e) => e.stopPropagation());
+    card.appendChild(details);
   }
 }
 
@@ -1298,7 +2183,11 @@ function buildTaskCard(
   const categoryBadge = deriveTaskCategoryBadge(task);
   const chip = document.createElement('span');
   chip.className = `board-task-card__cat bt--${categoryBadge.cssVariant}`;
-  chip.textContent = categoryBadge.label;
+  const icon = createBoardCategoryIcon(categoryBadge.cssVariant, 'board-task-card__cat-icon');
+  if (icon) chip.appendChild(icon);
+  const labelSpan = document.createElement('span');
+  labelSpan.textContent = categoryBadge.label;
+  chip.appendChild(labelSpan);
   trail.appendChild(chip);
   if (agentBadge) {
     trail.appendChild(buildTaskAgentBadge(agentBadge));
@@ -1388,6 +2277,13 @@ function buildTaskCard(
     footer.appendChild(advanceRow);
   }
 
+  if (taskShowsRecoveryActions(task, taskActive, testActive)) {
+    const recoveryRow = document.createElement('div');
+    recoveryRow.className = 'board-task-card__advance board-task-card__advance--recovery';
+    buildTaskRecoveryActions(task, group, plannerChat, recoveryRow);
+    footer.appendChild(recoveryRow);
+  }
+
   card.appendChild(footer);
 
   if (task.error) {
@@ -1396,6 +2292,13 @@ function buildTaskCard(
     err.textContent = task.error;
     card.appendChild(err);
   }
+  if (task.testVerdict === 'fail' && task.testSummary?.trim()) {
+    const testFail = document.createElement('p');
+    testFail.className = 'board-task-card__error board-task-card__error--test';
+    testFail.textContent = task.testSummary.trim();
+    card.appendChild(testFail);
+  }
+  appendTaskPrevFailureLink(card, task);
   return card;
 }
 
@@ -1410,6 +2313,7 @@ function compactTaskChipVariant(task: BoardTask, taskStreaming: boolean): string
       return 'failed';
     case 'in_progress':
     case 'testing':
+    case 'merging':
       return 'active';
     default:
       return 'planned';
@@ -1428,6 +2332,8 @@ function compactTaskStatusLabel(task: BoardTask, taskStreaming: boolean): string
       return 'In progress';
     case 'testing':
       return 'Testing';
+    case 'merging':
+      return 'Merging';
     case 'complete':
       return 'Complete';
     case 'failed':
@@ -1454,7 +2360,7 @@ function buildWaveCompactSummary(
   laneMeta.setAttribute('aria-hidden', 'true');
   const lanes: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
     { label: 'Plan', statuses: ['planned', 'blocked'] },
-    { label: 'Run', statuses: ['in_progress'] },
+    { label: 'Run', statuses: ['in_progress', 'merging'] },
     { label: 'Test', statuses: ['testing'] },
     { label: 'Done', statuses: ['complete', 'failed'] },
   ];
@@ -1517,12 +2423,15 @@ function renderKanbanColumns(
   tasks: BoardTask[],
   group: ChatGroup,
   plannerChat: Chat,
+  scrollKeyPrefix = '',
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'kanban-grid';
+  // Stable key lets us restore horizontal scroll (phone lane swipe) across rebuilds.
+  if (scrollKeyPrefix) grid.dataset.boardScrollKey = `grid:${scrollKeyPrefix}`;
   const columns: Array<{ label: string; statuses: BoardTaskStatus[] }> = [
     { label: 'Planned', statuses: ['planned', 'blocked'] },
-    { label: 'In Progress', statuses: ['in_progress'] },
+    { label: 'In Progress', statuses: ['in_progress', 'merging'] },
     { label: 'Testing', statuses: ['testing'] },
     { label: 'Complete', statuses: ['complete', 'failed'] },
   ];
@@ -1543,6 +2452,8 @@ function renderKanbanColumns(
     column.appendChild(h);
     const list = document.createElement('div');
     list.className = 'kanban-column__list';
+    // Stable key (wave + lane) so manual scrollTop survives live-tick rebuilds.
+    if (scrollKeyPrefix) list.dataset.boardScrollKey = `list:${scrollKeyPrefix}:${col.label}`;
     let entranceIndex = 0;
     const staggerEntrance =
       isOrchestrateInitSplitChromeActive() && isChatStreaming(plannerChat.id);
@@ -1636,7 +2547,7 @@ async function populateKanbanWaves(
     const body = document.createElement('div');
     body.className = 'board-wave-block__body';
     body.hidden = collapsed;
-    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat));
+    body.appendChild(renderKanbanColumns(waveTasks, group, plannerChat, `w${wave.id}`));
     block.appendChild(body);
     wrap.appendChild(block);
   }
@@ -1649,6 +2560,8 @@ function renderKanban(
 ): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'board-kanban-waves';
+  // Stable key so the wave stack's vertical scroll survives live-tick rebuilds (MIN-259).
+  wrap.dataset.boardScrollKey = 'kanban-waves';
   void populateKanbanWaves(wrap, board, group, plannerChat);
   return wrap;
 }
@@ -1669,7 +2582,7 @@ function refreshBoardDom(
   );
   const isStreaming = isChatStreaming(plannerChat.id);
   const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
-  const userStopped = isUserStoppedChat(plannerChat);
+  const userStopped = isBoardUserStopped(board, plannerChat);
   const headerStatus = deriveBoardHeaderStatus(
     board,
     isStreaming,
@@ -1700,6 +2613,11 @@ function refreshBoardDom(
   const bar = root.querySelector('.board-header__progress');
   if (bar) bar.setAttribute('aria-valuenow', String(metrics.progress));
 
+  const headerMeta = root.querySelector('.board-header__meta');
+  if (headerMeta) {
+    syncBoardRunningTasksStrip(headerMeta, board, group, plannerChat);
+  }
+
   const openPlanBtn = root.querySelector(
     '[data-board-action="open-plan"]',
   ) as HTMLButtonElement | null;
@@ -1713,25 +2631,29 @@ function refreshBoardDom(
   }
 
   const currentMode = getBoardExecutionMode(board);
-  const execModeSelect = root.querySelector(
-    '[data-board-action="auto-pilot"]',
-  ) as HTMLSelectElement | null;
-  if (execModeSelect) {
-    execModeSelect.value = currentMode;
-  }
+  syncBoardExecModeUi(root, currentMode);
   const concurrencyInput = root.querySelector(
     '.board-header__concurrency-input',
   ) as HTMLInputElement | null;
   if (concurrencyInput) {
-    concurrencyInput.value = String(board.maxConcurrentTasks ?? 3);
-    concurrencyInput.disabled = currentMode !== 'auto';
+    concurrencyInput.value = String(
+      board.maxConcurrentTasks ?? getAutopilotMetaSync().maxConcurrentTasks ?? 3,
+    );
+    concurrencyInput.disabled = currentMode !== 'auto' && currentMode !== 'afk';
+  }
+
+  const isolationSelect = root.querySelector(
+    '.board-header__isolation-select',
+  ) as HTMLSelectElement | null;
+  if (isolationSelect) {
+    isolationSelect.value = board.isolationMode ?? 'auto';
   }
 
   // Sync Start/Stop button: add if needed, remove when mode switches to manual
   const controls = root.querySelector('.board-header__controls') as HTMLElement | null;
   if (controls) {
     let runBtn = controls.querySelector('.board-header__run-btn') as HTMLButtonElement | null;
-    if (currentMode === 'auto' || currentMode === 'sequential') {
+    if (currentMode !== 'manual') {
       const running = isBoardRunning(group);
       if (!runBtn) {
         runBtn = document.createElement('button');
@@ -1769,47 +2691,51 @@ function refreshBoardDom(
 
   const main = root.querySelector('.board-main');
   if (main instanceof HTMLElement) {
-    ensureKanbanInteractionReleaseListener();
-    const kanbanKey = buildKanbanRefreshKey(board, plannerChat, group);
-    const kanbanFocused = isKanbanFormControlFocused();
-    if (kanbanKey !== lastKanbanRefreshKey) {
-      if (kanbanFocused) {
-        pendingKanbanRefresh = true;
+    if (shouldShowFinishDashboard(board)) {
+      const dashboard = main.querySelector('.board-finish-dashboard');
+      if (dashboard instanceof HTMLElement) {
+        syncFinishDashboard(dashboard, group, plannerChat, board);
       } else {
-        mountKanbanInMain(main, board, group, plannerChat);
-        lastKanbanRefreshKey = kanbanKey;
+        mountBoardMainSurface(main, board, group, plannerChat);
+      }
+      syncBoardDashboardToggle(root, board);
+    } else {
+      ensureKanbanInteractionReleaseListener();
+      const kanbanKey = buildKanbanRefreshKey(board, plannerChat, group);
+      const kanbanFocused = isKanbanFormControlFocused();
+      const surfaceKey = `kanban:${kanbanKey}`;
+      if (main.querySelector('.board-finish-dashboard')) {
+        mountBoardMainSurface(main, board, group, plannerChat);
+        lastKanbanRefreshKey = surfaceKey;
+        pendingKanbanRefresh = false;
+      } else if (surfaceKey !== lastKanbanRefreshKey) {
+        if (kanbanFocused) {
+          pendingKanbanRefresh = true;
+        } else {
+          mountBoardMainSurface(main, board, group, plannerChat);
+          lastKanbanRefreshKey = surfaceKey;
+          pendingKanbanRefresh = false;
+        }
+      } else if (pendingKanbanRefresh && !kanbanFocused) {
+        mountBoardMainSurface(main, board, group, plannerChat);
+        lastKanbanRefreshKey = surfaceKey;
         pendingKanbanRefresh = false;
       }
-    } else if (pendingKanbanRefresh && !kanbanFocused) {
-      mountKanbanInMain(main, board, group, plannerChat);
-      lastKanbanRefreshKey = kanbanKey;
-      pendingKanbanRefresh = false;
+      syncBoardDashboardToggle(root, board);
     }
   }
 
 }
 
-function sendBoardMessage(text: string): void {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
-  input.value = text;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  void import('../chat/messaging').then((m) => m.sendMessage());
-}
+export { kickoffOrchestrateBoardBuild, BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
 
-/** Parse the active plan and call board_init (hub / plan screen entry). */
-export function kickoffOrchestrateBoardBuild(): void {
-  sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
-}
-
-export { BOARD_ONBOARDING_KICKOFF_MESSAGE } from './orchestrate-board-kickoff';
-
-/** Busy phases shown in the onboarding status strip (plan fetch vs board_init stream). */
-export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'init';
+/** Busy phases shown in the onboarding status strip (plan fetch vs git setup vs board_init stream). */
+export type BoardOnboardingBusyPhase = 'idle' | 'plans' | 'git-setup' | 'init';
 
 const BOARD_ONBOARDING_BUSY_LABEL: Record<Exclude<BoardOnboardingBusyPhase, 'idle'>, string> =
   {
     plans: 'Loading plans',
+    'git-setup': 'Setting up git',
     init: 'Initializing board',
   };
 
@@ -1837,6 +2763,7 @@ export function resolveBoardOnboardingBusyPhase(
   plansLoading: boolean,
 ): BoardOnboardingBusyPhase {
   if (plansLoading) return 'plans';
+  if (isBoardOnboardingGitSetupActive()) return 'git-setup';
   if (isActiveChatStreaming()) return 'init';
   return 'idle';
 }
@@ -1921,22 +2848,25 @@ export function syncBoardOnboardingBusyUI(
   const preview = wrap.querySelector('[data-board-onboarding-preview]');
   const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
+  const busySetup = phase === 'init' || phase === 'git-setup';
+  const boardInit = phase === 'init';
+
   wrap.dataset.boardOnboardingBusy = phase === 'idle' ? '' : phase;
   if (panel instanceof HTMLElement) {
-    panel.classList.toggle('board-onboarding__panel--busy', phase === 'init');
+    panel.classList.toggle('board-onboarding__panel--busy', busySetup);
   }
   if (setup instanceof HTMLElement) {
-    setup.classList.toggle('hidden', phase === 'init');
-    setup.hidden = phase === 'init';
+    setup.classList.toggle('hidden', busySetup);
+    setup.hidden = busySetup;
   }
   if (initLead instanceof HTMLElement) {
-    initLead.classList.toggle('hidden', phase !== 'init');
-    initLead.hidden = phase !== 'init';
+    initLead.classList.toggle('hidden', !boardInit);
+    initLead.hidden = !boardInit;
   }
   if (initProgress instanceof HTMLElement) {
-    initProgress.classList.toggle('hidden', phase !== 'init');
-    initProgress.hidden = phase !== 'init';
-    initProgress.setAttribute('aria-hidden', phase === 'init' ? 'false' : 'true');
+    initProgress.classList.toggle('hidden', !boardInit);
+    initProgress.hidden = !boardInit;
+    initProgress.setAttribute('aria-hidden', boardInit ? 'false' : 'true');
   }
   if (initPlan && planSelect) {
     initPlan.textContent = formatBoardOnboardingPlanDisplay(planSelect.value);
@@ -1961,7 +2891,7 @@ export function syncBoardOnboardingBusyUI(
   }
 
   if (preview) {
-    preview.classList.toggle('hidden', phase !== 'init');
+    preview.classList.toggle('hidden', !boardInit);
   }
 }
 
@@ -1981,9 +2911,10 @@ function syncBoardOnboardingControls(
   plansLoading: boolean,
 ): void {
   const streaming = isActiveChatStreaming();
+  const kickoffBusy = isBoardKickoffInProgress();
   const path = sel.value.trim();
   const executable = isExecutableOrchestratePlan(path);
-  const busy = plansLoading || streaming;
+  const busy = streaming || kickoffBusy || plansLoading;
   sel.disabled = busy;
   sel.setAttribute('aria-busy', plansLoading ? 'true' : 'false');
   refreshBtn.disabled = busy;
@@ -2233,7 +3164,7 @@ export async function mountBoardOnboardingPanel(
   startBtn.addEventListener('click', () => {
     if (startBtn.disabled) return;
     persistOrchestratePlanPathFromSelectValue(chat, sel.value);
-    sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+    void kickoffOrchestrateBoardBuild();
   });
 
   openPlanBtn.addEventListener('click', () => {
@@ -2346,7 +3277,7 @@ export function renderBoardView(group: ChatGroup): void {
     board,
     isStreaming,
     activeRuns.length,
-    isUserStoppedChat(plannerChat),
+    isBoardUserStopped(board, plannerChat),
   );
   const activity = deriveOrchestratorLastActivity(plannerChat, isStreaming);
   const metrics = boardHeaderMetrics(group, plannerChat, board, activeRuns.length);
@@ -2364,7 +3295,7 @@ export function renderBoardView(group: ChatGroup): void {
 
   const main = document.createElement('div');
   main.className = 'board-main';
-  main.appendChild(renderKanban(board, group, plannerChat));
+  mountBoardMainSurface(main, board, group, plannerChat);
 
   root.appendChild(header);
   root.appendChild(main);

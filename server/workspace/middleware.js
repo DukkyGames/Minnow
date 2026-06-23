@@ -5,6 +5,7 @@
 import {
   buildRecentWorkspaceList,
   getWorkspaceInfo,
+  getWorkspaceRoot,
   removeRecentWorkspacePath,
   setWorkspaceRoot,
   validateWorkspacePath,
@@ -23,7 +24,7 @@ import {
   stopDevServer,
 } from '../dev-server/manager.js';
 import { readDevServerSettings, writeDevServerSettings } from '../dev-server/settings.js';
-import { getWorkspaceRoot } from './root.js';
+import { getWorkspaceGitStatus } from './git-status.js';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -94,6 +95,13 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       return true;
     }
 
+    if (pathname === '/api/workspace/git-status' && req.method === 'GET') {
+      const workspaceRoot = searchParams.get('workspaceRoot')?.trim() || undefined;
+      const status = await getWorkspaceGitStatus(workspaceRoot);
+      sendJson(res, 200, { ok: true, ...status });
+      return true;
+    }
+
     if (pathname === '/api/workspace/loc' && req.method === 'GET') {
       const result = await countWorkspaceLoc();
       if (!result.ok) {
@@ -140,7 +148,12 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace/dev-server/stop' && req.method === 'POST') {
-      const result = await stopDevServer();
+      const body = await readJsonBody(req);
+      const workspaceRoot =
+        typeof body?.workspaceRoot === 'string' && body.workspaceRoot.trim()
+          ? body.workspaceRoot.trim()
+          : undefined;
+      const result = await stopDevServer(workspaceRoot);
       sendJson(res, 200, result);
       return true;
     }

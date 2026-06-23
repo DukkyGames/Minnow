@@ -11,7 +11,7 @@ import { wireDesktopResearchControls } from './research-desktop';
 import { windowManager } from './window-manager';
 import { createOsIcon } from './icons';
 import { ICON_CHEVRON_LEFT } from '../constants';
-import type { AppId, DesktopPrefs, LaunchOptions } from './types';
+import type { DesktopPrefs } from './types';
 
 function greetingFor(d: Date): string {
   const h = d.getHours();
@@ -77,7 +77,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const greetSub = document.createElement('p');
   greetSub.className = 'mn-os-greet-sub';
-  greetSub.textContent = "What should we get into? Tell me, and I'll open the right app.";
+  greetSub.textContent = "What should we get into? Tell me below — we'll start in chat.";
 
   hero.append(greetTime, greet, greetSub);
 
@@ -89,8 +89,7 @@ export function renderDesktop(root: HTMLElement): () => void {
 
   const conciergeMount = document.createElement('div');
   conciergeMount.className = 'mn-os-concierge-mount';
-  const onLaunch = (appId: AppId, options: LaunchOptions) => launchApp(appId, options);
-  renderConcierge(conciergeMount, onLaunch);
+  renderConcierge(conciergeMount);
   hero.appendChild(conciergeMount);
 
   const desktopChat = document.createElement('div');

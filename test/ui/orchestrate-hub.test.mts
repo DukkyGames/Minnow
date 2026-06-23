@@ -104,6 +104,61 @@ describe('orchestrate hub mount', () => {
     assert.equal(btn.getAttribute('aria-pressed'), 'false');
   });
 
+  test('refreshOrchestrateHubPlanList re-populates the plan dropdown (MIN-215)', async () => {
+    const window = new Window();
+    globalThis.document = window.document;
+    globalThis.HTMLElement = window.HTMLElement;
+    // The refresh helper guards on these constructors; expose them for instanceof.
+    (globalThis as Record<string, unknown>).HTMLSelectElement = window.HTMLSelectElement;
+    (globalThis as Record<string, unknown>).HTMLButtonElement = window.HTMLButtonElement;
+
+    const area = document.createElement('main');
+    area.id = 'chatArea';
+    document.body.appendChild(area);
+    document.body.appendChild(
+      Object.assign(document.createElement('button'), { id: 'btnOrchestrate' }),
+    );
+
+    const chat = createEmptyChatObject('m1');
+    setSessionStateForTests({
+      version: 4,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const hub = await import('../../src/ui/orchestrate-hub.ts');
+    hub.renderOrchestrateHub();
+    const flush = async () => {
+      for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
+    };
+    // Let the initial (server-off) plan load settle before mutating the select.
+    await flush();
+
+    const sel = document.getElementById('orchestrateHubPlanSelect') as HTMLSelectElement;
+    assert.ok(sel, 'plan select exists');
+
+    // Simulate a stale dropdown entry that a fresh load must clear.
+    const stale = document.createElement('option');
+    stale.value = 'documentation/plans/stale.md';
+    sel.appendChild(stale);
+    assert.ok(
+      [...sel.options].some((o) => o.value === 'documentation/plans/stale.md'),
+      'stale option present before refresh',
+    );
+
+    await hub.refreshOrchestrateHubPlanList();
+
+    assert.ok(
+      ![...sel.options].some((o) => o.value === 'documentation/plans/stale.md'),
+      'stale option cleared after plan-list refresh',
+    );
+
+    // No-op (and no throw) once the hub is torn down.
+    hub.toggleOrchestrateHubFromTopbar();
+    await hub.refreshOrchestrateHubPlanList();
+  });
+
   test('board live refresh does not replace an open orchestrate hub', async () => {
     const window = new Window();
     globalThis.document = window.document;

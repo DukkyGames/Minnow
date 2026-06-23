@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { beforeEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { spawnSubAgent, resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
 import {
@@ -22,12 +22,24 @@ import {
   setBoardNowForTests,
 } from '../../src/state/orchestrate-board-store.ts';
 import {
+  resolveBoardMaxConcurrent,
+} from '../../src/state/orchestrate-board-actions.ts';
+import {
+  resetAutopilotMetaCache,
+  resolveMaxFinalTestAttempts,
+  resolveMaxTaskTestAttempts,
+  setAutopilotMetaForTests,
+} from '../../src/config/autopilot-meta.ts';
+import {
   setSessionStateForTests,
+  findChatById,
 } from '../../src/state/sessions.ts';
+import { getOrCreateBoardGroup } from '../../src/state/chat-groups.ts';
 import {
   executeBoardTool,
   setBoardExecutorContext,
   validateBoardInitArgs,
+  validateBoardSetAutonomyArgs,
   validateBoardUpdateTaskArgs,
 } from '../../src/tools/board-tools.ts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
@@ -223,6 +235,7 @@ describe('executeBoardTool', () => {
     setBoardNowForTests(() => FIXED_NOW);
     setSessionStateForTests(null);
     setBoardExecutorContext(null);
+    resetAutopilotMetaCache();
   });
 
   test('rejects when chat is not linked to an orchestrate board', async () => {
@@ -328,6 +341,77 @@ describe('executeBoardTool', () => {
 
     const out = await executeBoardTool('board_get_state', {}, { chatId: TASK_CHAT_ID });
     assert.equal(out, EXPECTED_BOARD_INIT_RESULT);
+  });
+
+  test('board_update_task rejects calls from linked build task chat', async () => {
+    setSessionStateForTests({
+      version: 5,
+      activeId: TASK_CHAT_ID,
+      sidebarCollapsed: false,
+      lastActiveChatIdByWorkspace: {},
+      chats: [
+        {
+          id: CHAT_ID,
+          name: 'Planner',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'orchestrate',
+          orchestratePlanPath: PLAN_PATH,
+          boardGroupId: BOARD_GROUP_ID,
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+        {
+          id: TASK_CHAT_ID,
+          name: 'Task W1-A',
+          workspacePath: '',
+          modelId: 'test-model',
+          modeId: 'build',
+          boardGroupId: BOARD_GROUP_ID,
+          boardTaskId: 'W1-A',
+          history: [],
+          lastStats: null,
+          modelInfo: {},
+          updatedAt: 1710000000000,
+        },
+      ],
+      groups: [
+        {
+          id: BOARD_GROUP_ID,
+          name: 'Board',
+          workspacePath: '',
+          collapsed: false,
+          order: 0,
+          createdAt: 1,
+          plannerChatId: CHAT_ID,
+          orchestratePlanPath: PLAN_PATH,
+        },
+      ],
+    });
+    await executeBoardTool('board_init', {
+      plan_path: PLAN_PATH,
+      tasks: [
+        {
+          id: 'W1-A',
+          title: 'Implement board store',
+          wave: 'W1',
+          category: 'build',
+        },
+      ],
+      waves: [{ id: 'W1' }],
+    }, { chatId: CHAT_ID });
+
+    const out = await executeBoardTool(
+      'board_update_task',
+      { task_id: 'W1-A', status: 'complete' },
+      { chatId: TASK_CHAT_ID },
+    );
+    assert.match(
+      out,
+      /Builders\/testers don't move cards/,
+    );
   });
 
   test('board_init happy path returns static board JSON', async () => {
@@ -518,6 +602,61 @@ describe('validateBoardInitArgs — dependsOn', () => {
     if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
   });
 
+  test('accepts dependsOn wrapped as { item: string }', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-B',
+          title: 'B',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { item: 'W1-A' },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[1]?.dependsOn, ['W1-A']);
+  });
+
+  test('accepts dependsOn wrapped as { item: string[] }', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        { id: 'W1-B', title: 'B', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-C',
+          title: 'C',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { item: ['W1-A', 'W1-B'] },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.args.tasks[2]?.dependsOn, ['W1-A', 'W1-B']);
+  });
+
+  test('rejects malformed dependsOn object', () => {
+    const r = validateBoardInitArgs({
+      ...base,
+      tasks: [
+        { id: 'W1-A', title: 'A', wave: 'W1', category: 'build' },
+        {
+          id: 'W1-B',
+          title: 'B',
+          wave: 'W1',
+          category: 'build',
+          dependsOn: { notItem: 'W1-A' },
+        } as unknown as { id: string; title: string; wave: string; category: string },
+      ],
+    }, null);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /invalid dependsOn/);
+  });
+
   test('detects 2-node cycle', () => {
     const r = validateBoardInitArgs({
       ...base,
@@ -637,5 +776,161 @@ describe('isTaskReadyForAuto with dependsOn', () => {
 
     taskA.status = 'complete';
     assert.equal(isTaskReadyForAuto(board, taskB), true);
+  });
+});
+
+// ─── board_set_autonomy ───────────────────────────────────────────────────
+
+const BOARD_INIT_PAYLOAD = {
+  plan_path: PLAN_PATH,
+  tasks: [
+    {
+      id: 'W1-A',
+      title: 'Implement board store',
+      wave: 'W1',
+      category: 'build',
+    },
+  ],
+  waves: [{ id: 'W1' }],
+};
+
+async function seedInitializedBoard() {
+  seedOrchestrateChat();
+  withBoardContext();
+  await executeBoardTool('board_init', BOARD_INIT_PAYLOAD);
+}
+
+describe('validateBoardSetAutonomyArgs', () => {
+  for (const level of ['manual', 'sequential', 'auto', 'afk'] as const) {
+    test(`accepts level ${level}`, () => {
+      const r = validateBoardSetAutonomyArgs({ level });
+      assert.equal(r.ok, true);
+      if (r.ok) assert.equal(r.args.level, level);
+    });
+  }
+
+  test('accepts mode alias', () => {
+    const r = validateBoardSetAutonomyArgs({ mode: 'Auto' });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.args.level, 'auto');
+  });
+
+  test('rejects missing level', () => {
+    const r = validateBoardSetAutonomyArgs({});
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'Error: board_set_autonomy requires "level"');
+  });
+
+  test('rejects invalid level', () => {
+    const r = validateBoardSetAutonomyArgs({ level: 'turbo' });
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(
+        r.error,
+        'Error: board_set_autonomy requires level manual, sequential, auto, or afk',
+      );
+    }
+  });
+});
+
+describe('executeBoardSetAutonomy', () => {
+  beforeEach(() => {
+    setBoardNowForTests(() => FIXED_NOW);
+    setSessionStateForTests(null);
+    setBoardExecutorContext(null);
+  });
+
+  test('auto sets executionMode and autoRunning', async () => {
+    await seedInitializedBoard();
+    const out = await executeBoardTool('board_set_autonomy', { level: 'auto' });
+    assert.equal(
+      out,
+      '{"level":"auto","executionMode":"auto","autoRunning":true,"pendingAfk":false}',
+    );
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
+    assert.equal(group.orchestrateBoard?.autoRunning, true);
+  });
+
+  test('sequential sets executionMode and autoRunning', async () => {
+    await seedInitializedBoard();
+    const out = await executeBoardTool('board_set_autonomy', { level: 'sequential' });
+    assert.equal(
+      out,
+      '{"level":"sequential","executionMode":"sequential","autoRunning":true,"pendingAfk":false}',
+    );
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    assert.equal(group.orchestrateBoard?.executionMode, 'sequential');
+    assert.equal(group.orchestrateBoard?.autoRunning, true);
+  });
+
+  test('afk sets pendingAfk without changing executionMode', async () => {
+    await seedInitializedBoard();
+    const out = await executeBoardTool('board_set_autonomy', { level: 'afk' });
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.level, 'afk');
+    assert.equal(parsed.executionMode, 'manual');
+    assert.equal(parsed.autoRunning, false);
+    assert.equal(parsed.pendingAfk, true);
+    assert.match(parsed.message, /pending user confirmation/i);
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    assert.equal(group.orchestrateBoard?.executionMode, 'manual');
+    assert.equal(group.orchestrateBoard?.pendingAfk, true);
+  });
+
+  test('rejects non-planner caller', async () => {
+    seedOrchestrateChat({ modeId: 'build' });
+    withBoardContext();
+    const out = await executeBoardTool('board_set_autonomy', { level: 'auto' });
+    assert.equal(out, 'Error: board tools require an active Orchestrate chat');
+  });
+});
+
+describe('autopilot resolution', () => {
+  afterEach(() => {
+    resetAutopilotMetaCache();
+  });
+
+  test('resolveBoardMaxConcurrent: board ?? global ?? fallback', () => {
+    setAutopilotMetaForTests({ maxConcurrentTasks: 8 });
+    const board = {
+      planPath: PLAN_PATH,
+      tasks: [],
+      waves: [],
+      startedAt: 1,
+      lastUpdatedAt: 1,
+      executionMode: 'auto' as const,
+    };
+    assert.equal(resolveBoardMaxConcurrent(board), 8);
+    assert.equal(resolveBoardMaxConcurrent({ ...board, maxConcurrentTasks: 5 }), 5);
+    resetAutopilotMetaCache();
+    assert.equal(resolveBoardMaxConcurrent(board), 3);
+    assert.equal(resolveBoardMaxConcurrent({ ...board, executionMode: 'sequential' }), 1);
+  });
+
+  test('test thresholds read global meta only', () => {
+    setAutopilotMetaForTests({ maxTestAttempts: 5, maxFinalTestAttempts: 4 });
+    assert.equal(resolveMaxTaskTestAttempts(), 5);
+    assert.equal(resolveMaxFinalTestAttempts(), 4);
+    resetAutopilotMetaCache();
+    assert.equal(resolveMaxTaskTestAttempts(), 3);
+    assert.equal(resolveMaxFinalTestAttempts(), 3);
+  });
+
+  test('initBoard inherits global default execution mode', () => {
+    setAutopilotMetaForTests({ defaultExecutionMode: 'auto', maxConcurrentTasks: 6 });
+    seedOrchestrateChat();
+    const chat = findChatById(CHAT_ID)!;
+    const group = getOrCreateBoardGroup(chat);
+    initBoard(group, chat, {
+      planPath: PLAN_PATH,
+      tasks: [{ id: 'W1-A', title: 'T', wave: 'W1', category: 'build' }],
+      waves: [{ id: 'W1' }],
+    });
+    assert.equal(group.orchestrateBoard?.executionMode, 'auto');
+    assert.equal(group.orchestrateBoard?.maxConcurrentTasks, 6);
   });
 });

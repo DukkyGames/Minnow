@@ -36,6 +36,7 @@ import { ensurePinnedSkill } from '../skills/pinned-skill';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
+import { resolveChatWorktreeRoot } from './worktree-isolation';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
   runSessionCodeChangeBackfill,
@@ -76,6 +77,10 @@ import type {
   AssistantMessage,
   AssistantToolCallMessage,
   BoardCategory,
+  BoardLogDetail,
+  BoardLogEvent,
+  BoardLogEventType,
+  BoardLogLevel,
   BoardTask,
   BoardTaskStatus,
   BoardWave,
@@ -382,12 +387,129 @@ const BOARD_TASK_STATUSES = new Set<BoardTaskStatus>([
   'planned',
   'in_progress',
   'testing',
+  'merging',
   'complete',
   'failed',
   'blocked',
 ]);
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
+
+/** Keep in sync with {@link BOARD_LOG_MAX} in orchestrate-board-store and server validators. */
+const BOARD_LOG_MAX = 500;
+const BOARD_LOG_LEVELS = new Set<BoardLogLevel>(['info', 'warn', 'error']);
+const BOARD_LOG_TYPES = new Set<BoardLogEventType>([
+  'board_init',
+  'mode_change',
+  'auto_start',
+  'auto_stop',
+  'task_status',
+  'task_started',
+  'build_verdict',
+  'test_verdict',
+  'merge_result',
+  'worktree_allocated',
+  'task_retry',
+  'task_error',
+  'tool_call',
+  'terminal_run',
+  'dev_server',
+  'final_test_started',
+  'final_test_verdict',
+]);
+const BOARD_LOG_DETAIL_STRING_KEYS = new Set<keyof BoardLogDetail>([
+  'branch',
+  'toolName',
+  'argsPreview',
+  'resultPreview',
+  'command',
+  'runId',
+  'chatId',
+  'error',
+  'summary',
+]);
+const BOARD_LOG_DETAIL_NUMBER_KEYS = new Set<keyof BoardLogDetail>([
+  'attempt',
+  'devPort',
+  'apiPort',
+  'exitCode',
+]);
+const BOARD_LOG_DETAIL_STATUS_KEYS = new Set<keyof BoardLogDetail>(['from', 'to']);
+const BOARD_LOG_DETAIL_ENUMS: Record<string, Set<string>> = {
+  verdict: new Set(['pass', 'fail']),
+  attemptKind: new Set(['build', 'test', 'fixer']),
+  mode: new Set(['manual', 'auto', 'sequential', 'afk']),
+  outcome: new Set(['merged', 'conflict', 'error', 'skipped']),
+};
+const BOARD_LOG_STRING_MAX = 2000;
+
+function truncateBoardLogString(value: string, max = BOARD_LOG_STRING_MAX): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…`;
+}
+
+function ensureBoardLogDetail(raw: unknown): BoardLogDetail | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: BoardLogDetail = {};
+  for (const key of BOARD_LOG_DETAIL_STRING_KEYS) {
+    if (typeof r[key] === 'string' && (r[key] as string).trim()) {
+      (out as Record<string, string>)[key] = truncateBoardLogString(r[key] as string);
+    }
+  }
+  for (const key of BOARD_LOG_DETAIL_NUMBER_KEYS) {
+    if (typeof r[key] === 'number' && Number.isFinite(r[key])) {
+      (out as Record<string, number>)[key] = r[key] as number;
+    }
+  }
+  for (const key of BOARD_LOG_DETAIL_STATUS_KEYS) {
+    const val = typeof r[key] === 'string' ? r[key] : '';
+    if (BOARD_TASK_STATUSES.has(val as BoardTaskStatus)) {
+      (out as Record<string, BoardTaskStatus>)[key] = val as BoardTaskStatus;
+    }
+  }
+  for (const [key, allowed] of Object.entries(BOARD_LOG_DETAIL_ENUMS)) {
+    if (typeof r[key] === 'string' && allowed.has(r[key] as string)) {
+      (out as Record<string, string>)[key] = r[key] as string;
+    }
+  }
+  if (Array.isArray(r.failingTaskIds)) {
+    const failingTaskIds: string[] = [];
+    for (const item of r.failingTaskIds) {
+      if (typeof item === 'string' && item.trim()) failingTaskIds.push(item.trim());
+    }
+    if (failingTaskIds.length) out.failingTaskIds = failingTaskIds;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function ensureBoardLogEvent(raw: unknown): BoardLogEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' ? r.id.trim() : '';
+  const ts = typeof r.ts === 'number' && Number.isFinite(r.ts) ? r.ts : null;
+  const typeRaw = typeof r.type === 'string' ? r.type.trim() : '';
+  if (!id || ts === null || !BOARD_LOG_TYPES.has(typeRaw as BoardLogEventType)) return null;
+  const levelRaw = typeof r.level === 'string' ? r.level.trim() : 'info';
+  const level = BOARD_LOG_LEVELS.has(levelRaw as BoardLogLevel)
+    ? (levelRaw as BoardLogLevel)
+    : 'info';
+  const message =
+    typeof r.message === 'string' ? truncateBoardLogString(r.message, BOARD_LOG_STRING_MAX) : '';
+  const out: BoardLogEvent = {
+    id,
+    ts,
+    type: typeRaw as BoardLogEventType,
+    level,
+    message,
+  };
+  if (typeof r.taskId === 'string' && r.taskId.trim()) {
+    out.taskId = r.taskId.trim();
+  }
+  const detail = ensureBoardLogDetail(r.detail);
+  if (detail) out.detail = detail;
+  return out;
+}
 
 function ensureBoardWaveId(raw: unknown): number | string | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
@@ -438,6 +560,8 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.chatId === 'string' && r.chatId.trim() ? r.chatId.trim() : undefined;
   const testChatId =
     typeof r.testChatId === 'string' && r.testChatId.trim() ? r.testChatId.trim() : undefined;
+  const fixerChatId =
+    typeof r.fixerChatId === 'string' && r.fixerChatId.trim() ? r.fixerChatId.trim() : undefined;
   const buildSpec =
     typeof r.buildSpec === 'string' && r.buildSpec.trim() ? r.buildSpec.trim() : undefined;
   const testSpec =
@@ -452,16 +576,59 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     typeof r.testAttempts === 'number' && Number.isFinite(r.testAttempts)
       ? r.testAttempts
       : undefined;
+  const buildAttempts =
+    typeof r.buildAttempts === 'number' && Number.isFinite(r.buildAttempts)
+      ? r.buildAttempts
+      : undefined;
+  const fixerAttempts =
+    typeof r.fixerAttempts === 'number' && Number.isFinite(r.fixerAttempts)
+      ? r.fixerAttempts
+      : undefined;
+  const mergePreSha =
+    typeof r.mergePreSha === 'string' && r.mergePreSha.trim() ? r.mergePreSha.trim() : undefined;
   const testVerdict =
     r.testVerdict === 'pass' || r.testVerdict === 'fail' ? r.testVerdict : undefined;
   const testSummary =
     typeof r.testSummary === 'string' && r.testSummary.trim()
       ? r.testSummary.trim()
       : undefined;
+  let prevFailure: BoardTask['prevFailure'];
+  if (r.prevFailure && typeof r.prevFailure === 'object') {
+    const pf = r.prevFailure as Record<string, unknown>;
+    const at = typeof pf.at === 'number' && Number.isFinite(pf.at) ? pf.at : undefined;
+    if (at != null) {
+      const pfError =
+        typeof pf.error === 'string' && pf.error.trim() ? pf.error.trim() : undefined;
+      const pfSummary =
+        typeof pf.testSummary === 'string' && pf.testSummary.trim()
+          ? pf.testSummary.trim()
+          : undefined;
+      const pfVerdict =
+        pf.testVerdict === 'pass' || pf.testVerdict === 'fail' ? pf.testVerdict : undefined;
+      prevFailure = {
+        at,
+        ...(pfError ? { error: pfError } : {}),
+        ...(pfSummary ? { testSummary: pfSummary } : {}),
+        ...(pfVerdict ? { testVerdict: pfVerdict } : {}),
+      };
+    }
+  }
   const pendingBuildSeed =
     typeof r.pendingBuildSeed === 'string' && r.pendingBuildSeed.trim()
       ? r.pendingBuildSeed.trim()
       : undefined;
+  const worktreePath =
+    typeof r.worktreePath === 'string' && r.worktreePath.trim()
+      ? r.worktreePath.trim()
+      : undefined;
+  const worktreeBranch =
+    typeof r.worktreeBranch === 'string' && r.worktreeBranch.trim()
+      ? r.worktreeBranch.trim()
+      : undefined;
+  const devPort =
+    typeof r.devPort === 'number' && Number.isFinite(r.devPort) ? r.devPort : undefined;
+  const apiPort =
+    typeof r.apiPort === 'number' && Number.isFinite(r.apiPort) ? r.apiPort : undefined;
   return {
     id,
     title,
@@ -478,13 +645,22 @@ function ensureBoardTask(raw: unknown): BoardTask | null {
     ...(typeof r.error === 'string' ? { error: r.error } : {}),
     ...(chatId ? { chatId } : {}),
     ...(testChatId ? { testChatId } : {}),
+    ...(fixerChatId ? { fixerChatId } : {}),
     ...(buildSpec ? { buildSpec } : {}),
     ...(testSpec ? { testSpec } : {}),
     ...(dependsOn.length ? { dependsOn } : {}),
     ...(testAttempts !== undefined ? { testAttempts } : {}),
+    ...(buildAttempts !== undefined ? { buildAttempts } : {}),
+    ...(fixerAttempts !== undefined ? { fixerAttempts } : {}),
+    ...(mergePreSha ? { mergePreSha } : {}),
     ...(testVerdict ? { testVerdict } : {}),
     ...(testSummary ? { testSummary } : {}),
+    ...(prevFailure ? { prevFailure } : {}),
     ...(pendingBuildSeed ? { pendingBuildSeed } : {}),
+    ...(worktreePath ? { worktreePath } : {}),
+    ...(worktreeBranch ? { worktreeBranch } : {}),
+    ...(devPort !== undefined ? { devPort } : {}),
+    ...(apiPort !== undefined ? { apiPort } : {}),
   };
 }
 
@@ -539,10 +715,20 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
   const executionMode =
     executionModeRaw === 'auto' ||
     executionModeRaw === 'manual' ||
-    executionModeRaw === 'sequential'
+    executionModeRaw === 'sequential' ||
+    executionModeRaw === 'afk'
       ? executionModeRaw
       : 'manual';
   const finalTest = ensureOrchestrateFinalTest(r.finalTest);
+  let log: BoardLogEvent[] | undefined;
+  if (Array.isArray(r.log)) {
+    const parsed: BoardLogEvent[] = [];
+    for (const item of r.log) {
+      const event = ensureBoardLogEvent(item);
+      if (event) parsed.push(event);
+    }
+    if (parsed.length) log = parsed.slice(-BOARD_LOG_MAX);
+  }
   return {
     planPath,
     tasks,
@@ -551,12 +737,31 @@ function ensureOrchestrateBoard(raw: unknown): OrchestrateBoardState | undefined
     lastUpdatedAt,
     executionMode,
     ...(r.autoRunning === true ? { autoRunning: true } : {}),
+    ...(r.pendingAfk === true ? { pendingAfk: true } : {}),
     ...(activeParentTurnId ? { activeParentTurnId } : {}),
     ...(timerAccumulatedMs !== undefined ? { timerAccumulatedMs } : {}),
     ...(timerSegmentStartedAt !== undefined ? { timerSegmentStartedAt } : {}),
     ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(completionShownAt !== undefined ? { completionShownAt } : {}),
+    ...(r.dashboardDismissed === true ? { dashboardDismissed: true } : {}),
+    ...(typeof r.finishReport === 'string' && r.finishReport.trim()
+      ? { finishReport: r.finishReport.trim() }
+      : {}),
     ...(finalTest ? { finalTest } : {}),
+    ...(typeof r.isolationMode === 'string' &&
+    (r.isolationMode === 'off' ||
+      r.isolationMode === 'per-task' ||
+      r.isolationMode === 'per-wave')
+      ? { isolationMode: r.isolationMode }
+      : {}),
+    ...(typeof r.integrationBranch === 'string' && r.integrationBranch.trim()
+      ? { integrationBranch: r.integrationBranch.trim() }
+      : {}),
+    ...(r.userStopped === true ? { userStopped: true } : {}),
+    ...(typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()
+      ? { isolationBaseRef: r.isolationBaseRef.trim() }
+      : {}),
+    ...(log ? { log } : {}),
   };
 }
 
@@ -815,6 +1020,9 @@ export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
     ...(typeof raw.boardTaskId === 'string' && raw.boardTaskId.trim()
       ? { boardTaskId: raw.boardTaskId.trim() }
       : {}),
+    ...(typeof raw.worktreeRoot === 'string' && raw.worktreeRoot.trim()
+      ? { worktreeRoot: raw.worktreeRoot.trim() }
+      : {}),
     ...(orchestrateBoard ? { orchestrateBoard } : {}),
     ...(viewMode ? { viewMode } : {}),
     terminalHistory: ensureTerminalHistory(raw.terminalHistory),
@@ -951,6 +1159,7 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     state.version = 5;
   }
   repairPlannerChatFolderMembership(state);
+  repairBoardChatWorktreeRoots(state);
   if (
     rawSession.codeChangeTotalsByWorkspace &&
     typeof rawSession.codeChangeTotalsByWorkspace === 'object'
@@ -961,6 +1170,15 @@ function parseSessionStateFromJson(parsed: RawSessionJson | null): SessionState 
     state.lastActiveChatIdByApp = {};
   }
   return state;
+}
+
+/** Backfill chat.worktreeRoot from the linked board task after session load. */
+function repairBoardChatWorktreeRoots(state: SessionState): void {
+  for (const chat of state.chats) {
+    if (chat.worktreeRoot?.trim()) continue;
+    const root = resolveChatWorktreeRoot(chat, state.groups);
+    if (root) chat.worktreeRoot = root;
+  }
 }
 
 /** Planners linked via boardGroupId appear under their board folder in the sidebar. */

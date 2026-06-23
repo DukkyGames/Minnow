@@ -274,6 +274,7 @@ export type BoardTaskStatus =
   | 'planned'
   | 'in_progress'
   | 'testing'
+  | 'merging'
   | 'complete'
   | 'failed'
   | 'blocked';
@@ -308,12 +309,27 @@ export interface BoardTask {
   dependsOn?: string[];
   /** Linked Tester chat session id (per-task testing). */
   testChatId?: string;
+  /** Linked merge-conflict fixer chat (integration worktree). */
+  fixerChatId?: string;
   /** Build↔test retry count (incremented on each test failure). */
   testAttempts?: number;
+  /** Build-failure retry count (incremented on each failed build chat in auto/afk). */
+  buildAttempts?: number;
+  /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
+  fixerAttempts?: number;
+  /** Pre-merge integration tip SHA for restore on fixer failure. */
+  mergePreSha?: string;
   /** Structured verdict from board_report_test_result (stream-end routing). */
   testVerdict?: 'pass' | 'fail';
   /** Human summary from the Tester (shown on fail / blocked). */
   testSummary?: string;
+  /** Snapshot of the last cleared failure, for the collapsed "previous failure" link. */
+  prevFailure?: {
+    error?: string;
+    testSummary?: string;
+    testVerdict?: 'pass' | 'fail';
+    at: number;
+  };
   /**
    * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
    * build start instead of the default task seed. Persisted on the task so it
@@ -321,6 +337,17 @@ export interface BoardTask {
    * startTask when the build actually launches.
    */
   pendingBuildSeed?: string;
+  /**
+   * Absolute path to this task's git worktree when board isolation is active
+   * (MIN-275). Unset when isolation is `off` or the worktree has been cleaned up.
+   */
+  worktreePath?: string;
+  /** Git branch backing {@link worktreePath} (per-task, or the shared per-wave branch). */
+  worktreeBranch?: string;
+  /** Vite client port allocated to this task's isolated worktree (avoids port collisions). */
+  devPort?: number;
+  /** Express/API server port paired with {@link devPort} for fullstack scaffolds. */
+  apiPort?: number;
 }
 
 /** Wave rollup row (status derived from tasks). */
@@ -349,11 +376,32 @@ export interface OrchestrateBoardState {
   /** Max concurrent task chats (default 3). */
   maxConcurrentTasks?: number;
   /** Manual board vs auto-pilot delegation (default manual). */
-  executionMode?: 'manual' | 'auto' | 'sequential';
+  executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
   /** True when the user has pressed Start in auto/sequential mode. */
   autoRunning?: boolean;
+  /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */
+  pendingAfk?: boolean;
+  /**
+   * True when the user pressed Stop on the board. Freezes the header timer
+   * immediately and surfaces the Stopped status regardless of lagging task
+   * statuses. Cleared when the user starts execution again.
+   */
+  userStopped?: boolean;
+  /**
+   * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
+   * resolved from {@link executionMode} (sequential/manual → off, auto/afk → per-task).
+   */
+  isolationMode?: 'off' | 'per-task' | 'per-wave';
+  /** Board integration branch that task/wave branches merge into; minted at first isolated start. */
+  integrationBranch?: string;
+  /** Base branch/commit the integration branch was created from (cleanup/reset reference). */
+  isolationBaseRef?: string;
   /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
+  /** User dismissed the finish dashboard to view the kanban again. */
+  dashboardDismissed?: boolean;
+  /** Cached markdown finish report (summary, next steps, how-to-run). */
+  finishReport?: string;
   /** Full-board integration test after all tasks complete. */
   finalTest?: {
     status: 'pending' | 'in_progress' | 'passed' | 'failed';
@@ -363,6 +411,62 @@ export interface OrchestrateBoardState {
     failingTaskIds?: string[];
     summary?: string;
   };
+  /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
+  log?: BoardLogEvent[];
+}
+
+export type BoardLogLevel = 'info' | 'warn' | 'error';
+
+export type BoardLogEventType =
+  | 'board_init'
+  | 'mode_change'
+  | 'auto_start'
+  | 'auto_stop'
+  | 'task_status'
+  | 'task_started'
+  | 'build_verdict'
+  | 'test_verdict'
+  | 'merge_result'
+  | 'worktree_allocated'
+  | 'task_retry'
+  | 'task_error'
+  | 'tool_call'
+  | 'terminal_run'
+  | 'dev_server'
+  | 'final_test_started'
+  | 'final_test_verdict';
+
+export interface BoardLogEvent {
+  id: string;
+  ts: number;
+  type: BoardLogEventType;
+  level: BoardLogLevel;
+  taskId?: string;
+  message: string;
+  detail?: BoardLogDetail;
+}
+
+export interface BoardLogDetail {
+  from?: BoardTaskStatus;
+  to?: BoardTaskStatus;
+  verdict?: 'pass' | 'fail';
+  attempt?: number;
+  attemptKind?: 'build' | 'test' | 'fixer';
+  mode?: 'manual' | 'auto' | 'sequential' | 'afk';
+  outcome?: 'merged' | 'conflict' | 'error' | 'skipped';
+  branch?: string;
+  devPort?: number;
+  apiPort?: number;
+  toolName?: string;
+  argsPreview?: string;
+  resultPreview?: string;
+  command?: string;
+  exitCode?: number;
+  runId?: string;
+  chatId?: string;
+  error?: string;
+  summary?: string;
+  failingTaskIds?: string[];
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */
@@ -533,6 +637,12 @@ export interface Chat {
   boardGroupId?: string;
   /** Orchestrate board task id when this chat is a per-task worker thread. */
   boardTaskId?: string;
+  /**
+   * Per-request tool workspace root override (MIN-275). When set, this chat's tool
+   * calls run scoped to this absolute path (its git worktree) instead of the global
+   * Code workspace, isolating concurrent board task chats. Unset = shared workspace.
+   */
+  worktreeRoot?: string;
   /** @deprecated Migrated to ~/.minnow/bugs/state.json — stripped on load. */
   bugBoard?: BugBoardState;
   /**

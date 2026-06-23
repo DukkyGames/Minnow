@@ -118,7 +118,7 @@ describe('config API CRUD', () => {
   test('GET servers returns default searxng entry', async () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/config/servers');
     assert.equal(res.status, 200);
-    assert.equal(res.json.searxng.enabled, false);
+    assert.equal(res.json.searxng.enabled, true);
     assert.equal(res.json.searxng.autoStart, true);
     assert.equal(res.json.searxng.port, 8899);
   });

@@ -8,9 +8,12 @@ import { resetSubAgentOrchestrator } from '../../src/agents/orchestrator.ts';
 import {
   buildOrchestratorTaskReportMessage,
   deliverOrchestratorTaskReport,
+  initOrchestratorAutoReports,
   resetOrchestratorAutoReportsForTests,
   setOrchestratorReportDeliverHook,
 } from '../../src/agents/controller/report.ts';
+import { setStreaming } from '../../src/app-state.ts';
+import { notifyChatStreamEnded } from '../../src/chat/streaming-state.ts';
 import {
   getBoardExecutionMode,
   isBoardAutoMode,
@@ -226,6 +229,34 @@ describe('orchestrator auto reports', () => {
     assert.equal(deliveries.length, 1);
     setOrchestratorReportDeliverHook(null);
   });
+
+  test('queues concurrent failure reports while planner is streaming and drains on idle', async () => {
+    initOrchestratorAutoReports();
+    const { planner, group } = seedBoard('auto');
+    const taskA = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    const taskB = group.orchestrateBoard!.tasks.find((t) => t.id === 'W2-A')!;
+    taskA.status = 'failed';
+    taskB.status = 'failed';
+
+    const deliveries: string[] = [];
+    setOrchestratorReportDeliverHook(async (_chatId, message) => {
+      deliveries.push(message);
+    });
+
+    setStreaming(true, planner.id);
+    await deliverOrchestratorTaskReport(group, planner, taskA, 'failed');
+    await deliverOrchestratorTaskReport(group, planner, taskB, 'failed');
+    assert.equal(deliveries.length, 0);
+
+    setStreaming(false, planner.id);
+    notifyChatStreamEnded(planner.id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(deliveries.length, 2);
+    assert.ok(deliveries.some((m) => m.includes('W1-A')));
+    assert.ok(deliveries.some((m) => m.includes('W2-A')));
+    setOrchestratorReportDeliverHook(null);
+  });
 });
 
 // ─── Sequential mode and setBoardExecutionMode widening ──────────────────
@@ -237,11 +268,13 @@ describe('sequential execution mode', () => {
     assert.equal(getBoardExecutionMode(group.orchestrateBoard), 'sequential');
   });
 
-  test('isBoardAutoMode true for both auto and sequential', () => {
+  test('isBoardAutoMode true for auto, sequential, and afk', () => {
     const { group } = seedBoard('manual');
     group.orchestrateBoard!.executionMode = 'auto';
     assert.equal(isBoardAutoMode(group), true);
     group.orchestrateBoard!.executionMode = 'sequential';
+    assert.equal(isBoardAutoMode(group), true);
+    group.orchestrateBoard!.executionMode = 'afk';
     assert.equal(isBoardAutoMode(group), true);
     group.orchestrateBoard!.executionMode = 'manual';
     assert.equal(isBoardAutoMode(group), false);

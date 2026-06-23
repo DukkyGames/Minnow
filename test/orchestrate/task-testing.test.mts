@@ -166,7 +166,7 @@ describe('board_report_test_result tolerant inputs', () => {
 describe('finalizeTaskTestingOnStreamEnd', () => {
   beforeEach(() => setSessionStateForTests(null));
 
-  test('pass moves task to complete', () => {
+  test('pass moves task to complete', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     updateTask(
@@ -176,7 +176,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
       planner,
     );
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
     assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 
@@ -191,7 +191,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.equal(updated!.testAttempts, 1);
   });
 
-  test('recovers verdict from transcript VERDICT marker when tool call lost', () => {
+  test('recovers verdict from transcript VERDICT marker when tool call lost', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     const testChat: Chat = {
@@ -213,11 +213,11 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
     setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
     assert.equal(group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!.status, 'complete');
   });
 
-  test('no marker and no verdict still fails', () => {
+  test('no marker and no verdict still fails', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     const testChat: Chat = {
@@ -237,13 +237,13 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     updateTask(group, 'W1-A', { testChatId: TEST_CHAT_ID }, planner);
     setSessionStateForTests({ chats: [planner, testChat], groups: [group], activeChatId: PLANNER_ID });
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated.status, 'in_progress');
     assert.equal(updated.testAttempts, 1);
   });
 
-  test('retry persists the failure-aware builder seed on the task', () => {
+  test('retry persists the failure-aware builder seed on the task', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     updateTask(
@@ -253,7 +253,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
       planner,
     );
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated.status, 'in_progress');
     // The next Builder start must seed from the failure summary, not the original
@@ -263,7 +263,7 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
     assert.match(updated.pendingBuildSeed!, /typecheck failed in foo\.ts/);
   });
 
-  test('third fail marks blocked', () => {
+  test('third fail marks blocked', async () => {
     const group = makeGroup({ 'W1-A': 'testing' });
     const planner = makePlanner();
     updateTask(
@@ -273,10 +273,45 @@ describe('finalizeTaskTestingOnStreamEnd', () => {
       planner,
     );
     const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
-    finalizeTaskTestingOnStreamEnd(group, task, planner);
+    await finalizeTaskTestingOnStreamEnd(group, task, planner);
     const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
     assert.equal(updated!.status, 'blocked');
     assert.match(updated!.error ?? '', /still broken/);
+  });
+
+  test('afk mode third fail blocks and delivers stalled report', async () => {
+    const { setOrchestratorReportDeliverHook } = await import(
+      '../../src/agents/controller/report.ts'
+    );
+    const deliveries: string[] = [];
+    setOrchestratorReportDeliverHook(async (_chatId, message) => {
+      deliveries.push(message);
+    });
+
+    const group = makeGroup({ 'W1-A': 'testing' });
+    const planner = makePlanner();
+    group.orchestrateBoard!.executionMode = 'afk';
+    group.orchestrateBoard!.autoRunning = true;
+
+    updateTask(
+      group,
+      'W1-A',
+      { testAttempts: 2, testVerdict: 'fail', testSummary: 'still broken' },
+      planner,
+    );
+    const task = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    const route = applyTaskTestFailureState(group, task, planner, 'still broken');
+    assert.equal(route, 'blocked');
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const updated = group.orchestrateBoard!.tasks.find((t) => t.id === 'W1-A')!;
+    assert.equal(updated!.status, 'blocked');
+    assert.equal(deliveries.length, 1);
+    assert.match(deliveries[0]!, /stalled/i);
+    assert.match(deliveries[0]!, /self-heal/i);
+
+    setOrchestratorReportDeliverHook(null);
   });
 });
 
