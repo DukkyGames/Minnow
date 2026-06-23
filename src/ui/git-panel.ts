@@ -74,6 +74,8 @@ import { renderUnifiedPromptDiff } from './prompt-diff-unified';
 
 import { fetchGitCommitMessage } from './git-commit-message-client';
 
+import { showToast } from './toast';
+
 
 
 const POLL_MS = 5000;
@@ -221,8 +223,10 @@ function syncWorktreeDeleteButton(): void {
 async function handleAddBranch(): Promise<void> {
   const name = window.prompt('New branch name');
   if (!name?.trim()) return;
-  await runGitOp(() =>
-    gitCheckout({ branch: name.trim(), create: true, cwd: getEffectiveCwdArg() }),
+  const branch = name.trim();
+  await runGitOp(
+    () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
+    { successMessage: `Created branch ${branch}` },
   );
 }
 
@@ -233,11 +237,15 @@ async function handleDeleteBranch(): Promise<void> {
   if (!window.confirm(`Delete branch "${name}"?`)) return;
 
   const cwd = getEffectiveCwdArg();
-  const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }));
+  const ok = await runGitOp(() => gitDeleteBranch({ branch: name, cwd }), {
+    successMessage: `Deleted branch ${name}`,
+  });
   if (ok) return;
 
   if (!window.confirm(`Branch "${name}" is not fully merged. Force delete?`)) return;
-  await runGitOp(() => gitDeleteBranch({ branch: name, force: true, cwd }));
+  await runGitOp(() => gitDeleteBranch({ branch: name, force: true, cwd }), {
+    successMessage: `Deleted branch ${name}`,
+  });
 }
 
 async function handleAddWorktree(): Promise<void> {
@@ -247,11 +255,14 @@ async function handleAddWorktree(): Promise<void> {
   const cwd = getEffectiveCwdArg();
   const addResult = await gitWorktreeAdd({ branch: branch.trim(), cwd });
   if (!addResult.ok) {
-    setStatus(addResult.error ?? 'Could not add worktree', true);
+    const error = addResult.error ?? 'Could not add worktree';
+    setStatus(error, true);
+    showToast(error, 'error');
     return;
   }
 
   setStatus('');
+  showToast('Worktree added', 'success');
   if (addResult.path) {
     panelCwd = addResult.path;
   }
@@ -266,7 +277,9 @@ async function handleDeleteWorktree(): Promise<void> {
   if (!window.confirm(`Remove worktree at ${targetPath}?`)) return;
 
   const cwd = getEffectiveCwdArg();
-  const ok = await runGitOp(() => gitWorktreeRemove({ path: targetPath, cwd }));
+  const ok = await runGitOp(() => gitWorktreeRemove({ path: targetPath, cwd }), {
+    successMessage: 'Worktree removed',
+  });
   if (ok) {
     const ws = getWorkspacePath().trim();
     panelCwd = ws || undefined;
@@ -274,8 +287,9 @@ async function handleDeleteWorktree(): Promise<void> {
   }
 
   if (!window.confirm('Worktree has uncommitted changes. Force remove?')) return;
-  const forced = await runGitOp(() =>
-    gitWorktreeRemove({ path: targetPath, force: true, cwd }),
+  const forced = await runGitOp(
+    () => gitWorktreeRemove({ path: targetPath, force: true, cwd }),
+    { successMessage: 'Worktree removed' },
   );
   if (forced) {
     const ws = getWorkspacePath().trim();
@@ -486,7 +500,9 @@ function ensurePanelDom(): HTMLElement {
 
   pullBtn.textContent = 'Pull';
 
-  pullBtn.addEventListener('click', () => void runGitOp(() => gitPull(getEffectiveCwdArg())));
+  pullBtn.addEventListener('click', () =>
+    void runGitOp(() => gitPull(getEffectiveCwdArg()), { successMessage: 'Pulled changes' }),
+  );
 
 
 
@@ -498,7 +514,9 @@ function ensurePanelDom(): HTMLElement {
 
   pushBtn.textContent = 'Push';
 
-  pushBtn.addEventListener('click', () => void runGitOp(() => gitPush({ cwd: getEffectiveCwdArg() })));
+  pushBtn.addEventListener('click', () =>
+    void runGitOp(() => gitPush({ cwd: getEffectiveCwdArg() }), { successMessage: 'Pushed changes' }),
+  );
 
 
 
@@ -714,7 +732,9 @@ async function handleBranchChange(): Promise<void> {
 
   if (!value) return;
 
-  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }));
+  await runGitOp(() => gitCheckout({ branch: value, cwd: getEffectiveCwdArg() }), {
+    successMessage: `Switched to ${value}`,
+  });
 
 }
 
@@ -809,6 +829,8 @@ async function handleGenerateCommitMessage(): Promise<void> {
 
       setStatus('');
 
+      showToast('Commit message generated', 'success');
+
       return;
 
     }
@@ -851,7 +873,9 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
   const cwd = getEffectiveCwdArg();
 
-  const ok = await runGitOp(() => gitCommit({ message, cwd }));
+  const ok = await runGitOp(() => gitCommit({ message, cwd }), {
+    successMessage: andPush ? undefined : 'Committed changes',
+  });
 
   if (!ok) return;
 
@@ -859,7 +883,7 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
   if (andPush) {
 
-    await runGitOp(() => gitPush({ cwd }));
+    await runGitOp(() => gitPush({ cwd }), { successMessage: 'Committed and pushed' });
 
   }
 
@@ -867,19 +891,43 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
 
 
-async function runGitOp(fn: () => Promise<GitOpResult>): Promise<boolean> {
+type RunGitOpOptions = {
+
+  successMessage?: string;
+
+};
+
+
+
+async function runGitOp(
+
+  fn: () => Promise<GitOpResult>,
+
+  options?: RunGitOpOptions,
+
+): Promise<boolean> {
 
   const result = await fn();
 
   if (!result.ok) {
 
-    setStatus(result.error ?? 'Git operation failed', true);
+    const error = result.error ?? 'Git operation failed';
+
+    setStatus(error, true);
+
+    showToast(error, 'error');
 
     return false;
 
   }
 
   setStatus('');
+
+  if (options?.successMessage) {
+
+    showToast(options.successMessage, 'success');
+
+  }
 
   await refreshGitPanel();
 
@@ -969,13 +1017,21 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
   stageBtn.addEventListener('click', () => {
 
-    void runGitOp(() =>
+    void runGitOp(
 
-      staged
+      () =>
 
-        ? gitUnstage({ paths: [entry.path], cwd: getEffectiveCwdArg() })
+        staged
 
-        : gitStage({ paths: [entry.path], cwd: getEffectiveCwdArg() }),
+          ? gitUnstage({ paths: [entry.path], cwd: getEffectiveCwdArg() })
+
+          : gitStage({ paths: [entry.path], cwd: getEffectiveCwdArg() }),
+
+      {
+
+        successMessage: staged ? `Unstaged ${entry.path}` : `Staged ${entry.path}`,
+
+      },
 
     );
 
@@ -997,7 +1053,9 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
     if (!window.confirm(`Discard changes to ${entry.path}?`)) return;
 
-    void runGitOp(() => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwdArg() }));
+    void runGitOp(() => gitDiscard({ paths: [entry.path], cwd: getEffectiveCwdArg() }), {
+      successMessage: `Discarded changes to ${entry.path}`,
+    });
 
   });
 
@@ -1021,7 +1079,7 @@ function buildSection(
 
   staged: boolean,
 
-  bulkAction?: { label: string; fn: () => Promise<GitOpResult> },
+  bulkAction?: { label: string; fn: () => Promise<GitOpResult>; successMessage?: string },
 
 ): HTMLElement {
 
@@ -1061,7 +1119,7 @@ function buildSection(
 
       e.stopPropagation();
 
-      void runGitOp(bulkAction.fn);
+      void runGitOp(bulkAction.fn, { successMessage: bulkAction.successMessage });
 
     });
 
@@ -1292,6 +1350,8 @@ function renderSections(status: GitOpResult): void {
         label: 'Unstage All',
 
         fn: () => gitUnstage({ paths: staged.map((f) => f.path), cwd: getEffectiveCwdArg() }),
+
+        successMessage: 'Unstaged all changes',
 
       }),
 

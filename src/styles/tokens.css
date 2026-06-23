@@ -31,9 +31,9 @@ body {
   --bp-mobile: 640px;
   --bp-wide: 900px;
   --topbar-h: 52px;
-  --sidebar-w: 240px;
+  --sidebar-w: 300px;
   --sidebar-rail: 48px;
-  --file-sidebar-w: 260px;
+  --file-sidebar-w: 350px;
   --file-sidebar-rail: 48px;
   --viewer-min-w: 280px;
   --split-ratio: 0.55;

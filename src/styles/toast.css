@@ -1,0 +1,46 @@
+/* Ephemeral action toasts (git panel, etc.) */
+
+.mn-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  z-index: 100010;
+  max-width: min(92vw, 28rem);
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface-2);
+  color: var(--mn-fg);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+  transition:
+    opacity 0.2s var(--ease-out),
+    transform 0.2s var(--ease-out);
+  pointer-events: none;
+}
+
+.mn-toast--success {
+  border-color: var(--mn-success-border);
+  background: var(--mn-success-soft);
+  color: var(--mn-fg);
+}
+
+.mn-toast--error {
+  border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-fg);
+}
+
+.mn-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-toast {
+    transition: none;
+  }
+}

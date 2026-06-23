@@ -45,6 +45,7 @@ import './styles/orchestrate-plan-selector.css';
 import './styles/composer-pinned-skill.css';
 import './styles/view-mode-toggle.css';
 import './styles/orchestrate-board.css';
+import './styles/toast.css';
 import './styles/bug-board.css';
 import './styles/hub.css';
 import './styles/orchestrate-hub.css';
